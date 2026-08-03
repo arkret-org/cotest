@@ -101,7 +101,11 @@ async fn upload_and_inspect_keys(
             .http()
             .post(server.url("/_arkret/self/keys/query"))
             .bearer_auth(token)
-            .json(&json!({"device_keys": {(actor_id): [KEYS_DEVICE_ID]}})),
+            .json(&serde_json::from_value::<
+                arkret_models_crypto::KeysQueryRequestBody,
+            >(
+                json!({"device_keys": {(actor_id): [KEYS_DEVICE_ID]}})
+            )?),
         StatusCode::OK,
     )
     .await?;
@@ -122,11 +126,13 @@ async fn upload_and_inspect_keys(
             .http()
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(token)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_crypto::KeysClaimRequestBody,
+            >(json!({
                 "one_time_keys": {
                     (actor_id): {(KEYS_DEVICE_ID): "signed_curve25519"}
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;

@@ -89,11 +89,14 @@ pub async fn register_account(
     device_id: &str,
 ) -> Result<String> {
     let device_id = canonical_device_id(device_id);
-    let body = json!({
-        "principal_id": did,
-        "display_name": handle.trim_start_matches('@'),
-        "device_id": device_id
-    });
+    let body = arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
+        principal_id: arkret_identifiers::Did::new(did.to_owned())?,
+        display_name: Some(handle.trim_start_matches('@').to_owned()),
+        device_id: Some(arkret_identifiers::DeviceId::new(device_id.clone())?),
+        proof: None,
+        identity_creation: None,
+        policy_evidence: None,
+    };
     expect_json(
         server.account_registration_request().json(&body),
         StatusCode::OK,
@@ -114,7 +117,10 @@ pub async fn register_account_with_localpart(
     expect_json(
         server
             .account_localpart_request(did)?
-            .json(&json!({ "localpart": localpart, "is_primary": true })),
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "localpart": localpart,
+                "is_primary": true
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -127,11 +133,11 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
         server
             .http()
             .post(server.url("/_soland/gate/auth/dev-login"))
-            .json(&json!({
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
                 "actor": actor,
                 "device_id": device_id,
                 "display_name": device_id
-            })),
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -192,7 +198,9 @@ pub async fn create_realm(
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .json(&json!({"events": events})),
+            .json(&serde_json::from_value::<
+                arkret_wire::EventsSubmitBatchRequestBody,
+            >(json!({"events": events}))?),
         StatusCode::OK,
     )
     .await?;
@@ -230,7 +238,9 @@ pub async fn create_realm_with_signing_seed(
             .http()
             .post(server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .json(&json!({"events": events})),
+            .json(&serde_json::from_value::<
+                arkret_wire::EventsSubmitBatchRequestBody,
+            >(json!({"events": events}))?),
         StatusCode::OK,
     )
     .await?;

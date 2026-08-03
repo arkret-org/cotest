@@ -272,7 +272,9 @@ async fn ack_to_device(
             .http()
             .post(server.url("/_arkret/self/device_messages/ack"))
             .bearer_auth(recipient_token)
-            .json(&json!({ "ack_token": ack_token })),
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckRequestBody,
+            >(json!({ "ack_token": ack_token }))?),
         StatusCode::OK,
     )
     .await?;

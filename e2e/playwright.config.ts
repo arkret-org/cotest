@@ -39,6 +39,7 @@ const workers = workersEnv
   : 2;
 
 export default defineConfig({
+  globalSetup: "./global-setup.ts",
   testDir: "./tests",
   timeout: 180_000,
   expect: {

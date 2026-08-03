@@ -56,21 +56,23 @@ impl TestActorClient {
     }
 
     pub fn contact_request_prepare(&self, target: &str) -> Result<ContactOperationRequestBody> {
-        let operation_id = ProtocolOperationId::new(next_typed_id("operation"))
-            .map_err(anyhow::Error::msg)?;
-        let idempotency_key = ProtocolOpaqueId::new(next_typed_id("idempotency"))
-            .map_err(anyhow::Error::msg)?;
-        Ok(ContactOperationRequestBody::Prepare(ContactPrepareRequestBody {
-            phase: ContactPreparePhase::Prepare,
-            operation_id,
-            idempotency_key,
-            peer: ContactPeer::Human {
-                principal_id: Did::new(target.to_owned())?,
+        let operation_id =
+            ProtocolOperationId::new(next_typed_id("operation")).map_err(anyhow::Error::msg)?;
+        let idempotency_key =
+            ProtocolOpaqueId::new(next_typed_id("idempotency")).map_err(anyhow::Error::msg)?;
+        Ok(ContactOperationRequestBody::Prepare(
+            ContactPrepareRequestBody {
+                phase: ContactPreparePhase::Prepare,
+                operation_id,
+                idempotency_key,
+                peer: ContactPeer::Human {
+                    principal_id: Did::new(target.to_owned())?,
+                },
+                granted_to_peer_scopes: vec![ContactScope::DirectMessage],
+                introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
+                message: None,
             },
-            granted_to_peer_scopes: vec![ContactScope::DirectMessage],
-            introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
-            message: None,
-        }))
+        ))
     }
 
     pub async fn request_contact(&self, target: &str) -> Result<RequestAcceptanceReceipt> {
@@ -84,7 +86,9 @@ impl TestActorClient {
         let prepared = self.sdk.contacts_request(&request).await?;
         let prepared_replay = self.sdk.contacts_request(&request).await?;
         if serde_json::to_value(&prepared)? != serde_json::to_value(prepared_replay)? {
-            return Err(anyhow!("Contact request prepare replay changed its outcome"));
+            return Err(anyhow!(
+                "Contact request prepare replay changed its outcome"
+            ));
         }
         let (prepared_operation_id, reservation_handle, event_draft) = match prepared {
             ContactOperationOutcome::Prepared {
@@ -97,9 +101,16 @@ impl TestActorClient {
                     },
             } => (operation_id, reservation_handle, event_draft),
             ContactOperationOutcome::Failed { outcome } => {
-                return Err(anyhow!("Contact request prepare failed: {:?}", outcome.reason));
+                return Err(anyhow!(
+                    "Contact request prepare failed: {:?}",
+                    outcome.reason
+                ));
             }
-            _ => return Err(anyhow!("Contact request prepare returned the wrong result kind")),
+            _ => {
+                return Err(anyhow!(
+                    "Contact request prepare returned the wrong result kind"
+                ));
+            }
         };
         if prepared_operation_id != operation_id {
             return Err(anyhow!("Contact request prepare changed operation_id"));
@@ -124,18 +135,21 @@ impl TestActorClient {
                         ..
                     },
             } => Ok(request_acceptance_receipt),
-            ContactOperationOutcome::Failed { outcome } => {
-                Err(anyhow!("Contact request commit failed: {:?}", outcome.reason))
-            }
-            _ => Err(anyhow!("Contact request commit returned the wrong result kind")),
+            ContactOperationOutcome::Failed { outcome } => Err(anyhow!(
+                "Contact request commit failed: {:?}",
+                outcome.reason
+            )),
+            _ => Err(anyhow!(
+                "Contact request commit returned the wrong result kind"
+            )),
         }
     }
 
     pub async fn accept_contact(&self, request_receipt: RequestAcceptanceReceipt) -> Result<()> {
-        let operation_id = ProtocolOperationId::new(next_typed_id("operation"))
-            .map_err(anyhow::Error::msg)?;
-        let idempotency_key = ProtocolOpaqueId::new(next_typed_id("idempotency"))
-            .map_err(anyhow::Error::msg)?;
+        let operation_id =
+            ProtocolOperationId::new(next_typed_id("operation")).map_err(anyhow::Error::msg)?;
+        let idempotency_key =
+            ProtocolOpaqueId::new(next_typed_id("idempotency")).map_err(anyhow::Error::msg)?;
         let request = ContactAcceptRequestBody::Prepare(ContactAcceptPrepareRequestBody {
             phase: ContactPreparePhase::Prepare,
             operation_id: operation_id.clone(),
@@ -156,9 +170,16 @@ impl TestActorClient {
                     },
             } => (operation_id, reservation_handle, event_draft),
             ContactOperationOutcome::Failed { outcome } => {
-                return Err(anyhow!("Contact accept prepare failed: {:?}", outcome.reason));
+                return Err(anyhow!(
+                    "Contact accept prepare failed: {:?}",
+                    outcome.reason
+                ));
             }
-            _ => return Err(anyhow!("Contact accept prepare returned the wrong result kind")),
+            _ => {
+                return Err(anyhow!(
+                    "Contact accept prepare returned the wrong result kind"
+                ));
+            }
         };
         if prepared_operation_id != operation_id {
             return Err(anyhow!("Contact accept prepare changed operation_id"));
@@ -174,10 +195,13 @@ impl TestActorClient {
             ContactOperationOutcome::Accepted {
                 outcome: ContactAcceptedOutcome::Response { .. },
             } => Ok(()),
-            ContactOperationOutcome::Failed { outcome } => {
-                Err(anyhow!("Contact accept commit failed: {:?}", outcome.reason))
-            }
-            _ => Err(anyhow!("Contact accept commit returned the wrong result kind")),
+            ContactOperationOutcome::Failed { outcome } => Err(anyhow!(
+                "Contact accept commit failed: {:?}",
+                outcome.reason
+            )),
+            _ => Err(anyhow!(
+                "Contact accept commit returned the wrong result kind"
+            )),
         }
     }
 
@@ -383,7 +407,9 @@ impl TestActorClient {
         let events = realm_bootstrap_event_batch(&self.actor, &realm_id, payload)?;
         let event_response = expect_json(
             self.post("/_arkret/self/events")
-                .json(&json!({"events": events})),
+                .json(&serde_json::from_value::<
+                    arkret_wire::EventsSubmitBatchRequestBody,
+                >(json!({"events": events}))?),
             StatusCode::OK,
         )
         .await?;

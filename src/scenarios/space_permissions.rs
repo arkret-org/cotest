@@ -28,10 +28,9 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     .await?;
 
     expect_api_error(
-        server
-            .http()
-            .post(server.url("/_soland/self/spaces"))
-            .json(&json!({"title": "No Auth"})),
+        server.http().post(server.url("/_soland/self/spaces")).json(
+            &crate::harness::NonProtocolTestBody::new(json!({"title": "No Auth"})),
+        ),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )
@@ -148,7 +147,9 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-realms"))
-            .json(&json!({"query": "Private Space"})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectorySearchRealmsRequestBody,
+            >(json!({"query": "Private Space"}))?),
         StatusCode::OK,
     )
     .await?;

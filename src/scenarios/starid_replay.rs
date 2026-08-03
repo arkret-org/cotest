@@ -29,6 +29,7 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
+use crate::harness::NonProtocolTestBody;
 use crate::scenarios::_helpers::external_binary::{STARID_SPEC, spawn_required};
 
 /// Spawn `starid`, submit one valid DID create, then submit the **identical**
@@ -45,14 +46,14 @@ pub async fn starid_rejects_replayed_inception_run() -> Result<()> {
     // Pin every input deterministically so the second submission is byte-for-
     // byte identical — that's what makes this a replay rather than a fresh
     // request. `version_time` is the only field that would otherwise drift.
-    let body = json!({
+    let body = NonProtocolTestBody::new(json!({
         "host": "starid.cotest.local",
         "did_public_key_multibase":   "z6MkpTHR8VNsBxYAAWHut2Geadd9jSrW1aD2RJUDg9wQfVAR",
         "update_public_key_multibase": "z6MkrJVnaZkeFzdQDPj9hf3wHd1qxqEsktRkPmCnaGc4MwS5",
         "did_key_id": "did-key-1",
         "update_key_id": "update-key-1",
         "version_time": "2026-01-01T00:00:00.000Z",
-    });
+    }));
 
     // First submission: must succeed.
     let first = client

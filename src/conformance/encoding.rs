@@ -250,11 +250,10 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
                 == Some(arkret_wire::CellFamilyId::IDENTITY_ACCOUNTABILITY_V1)
         })
         .ok_or_else(|| anyhow!("accountability grant SDK cell write is missing"))?;
-    let actual_descriptor: Value = serde_json::from_str(
-        write
-            .cell_subject_rule
-            .ok_or_else(|| anyhow!("accountability grant subject rule is missing"))?,
-    )?;
+    let actual_descriptor = write
+        .cell_subject_rule
+        .ok_or_else(|| anyhow!("accountability grant subject rule is missing"))?
+        .to_json_value();
     if actual_descriptor
         != vector
             .get("source_descriptor")

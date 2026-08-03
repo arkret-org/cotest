@@ -11,20 +11,23 @@
 //!     Event and does not advance the Seal frontier;
 //!   * with a durable PostgreSQL backend the declaration survives a full process restart.
 use anyhow::{Result, anyhow};
+use arkret_models_collaboration::governance::realm_governance::{
+    RealmLinkCreateRequestBody, RealmPolicyServerReplaceRequestBody,
+};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{ArkretServer, TestActorClient, TestServerGroup, expect_json};
 use crate::transcripts::record_vector_event;
 
-fn declaration_body(host: &str) -> Value {
-    json!({
+fn declaration_body(host: &str) -> Result<RealmPolicyServerReplaceRequestBody> {
+    Ok(serde_json::from_value(json!({
         "policy_server_did": format!("did:web:{host}"),
         "policy_server_url": format!("https://{host}/_arkret/self/policy/check"),
         "cache_ttl_seconds": 60,
         "timeout_ms": 1500,
         "on_timeout": "fail_closed",
-    })
+    }))?)
 }
 
 async fn create_policy_realm(
@@ -116,7 +119,7 @@ async fn delete_policy_server(
 async fn put_policy_server(
     client: &TestActorClient,
     realm_id: &str,
-    body: &Value,
+    body: &RealmPolicyServerReplaceRequestBody,
 ) -> Result<(StatusCode, Value)> {
     let response = client
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
@@ -129,14 +132,15 @@ async fn put_policy_server(
 }
 
 async fn link_governed_by(client: &TestActorClient, realm_id: &str, target: &str) -> Result<()> {
+    let request = serde_json::from_value::<RealmLinkCreateRequestBody>(json!({
+        "target_realm_id": target,
+        "link_kind": "governed_by",
+        "status": "active",
+    }))?;
     let body = expect_json(
         client
             .post(&format!("/_arkret/self/realms/{realm_id}/links"))
-            .json(&json!({
-                "target_realm_id": target,
-                "link_kind": "governed_by",
-                "status": "active",
-            })),
+            .json(&request),
         StatusCode::OK,
     )
     .await?;
@@ -175,7 +179,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     // The org declares: durable Control Move + newly accepted Seal.
     let seal_before = accepted_seal_id(&alice, &org_realm).await?;
     let (status, view) =
-        put_policy_server(&alice, &org_realm, &declaration_body("org-policy.example")).await?;
+        put_policy_server(&alice, &org_realm, &declaration_body("org-policy.example")?).await?;
     assert_eq!(status, StatusCode::OK, "org PUT: {view}");
     assert_eq!(view["from_org_fallback"], false);
     let declared = policy_server_events(&alice, &org_realm).await?;
@@ -221,7 +225,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     let (status, direct) = put_policy_server(
         &alice,
         &child_realm,
-        &declaration_body("child-policy.example"),
+        &declaration_body("child-policy.example")?,
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "child PUT: {direct}");
@@ -323,7 +327,7 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
     let (status, view) = put_policy_server(
         &alice,
         &realm_id,
-        &declaration_body("restart-policy.example"),
+        &declaration_body("restart-policy.example")?,
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "PUT before restart: {view}");

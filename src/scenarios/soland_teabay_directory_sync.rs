@@ -72,7 +72,9 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
     // Baseline: nobody named "Alice Wonderland" yet.
     let before: Value = http
         .post(&teabay_search_url)
-        .json(&json!({"query": "Alice Wonderland"}))
+        .json(&serde_json::from_value::<
+            arkret_models_discovery::DirectorySearchActorsRequestBody,
+        >(json!({"query": "Alice Wonderland"}))?)
         .send()
         .await?
         .json()
@@ -92,10 +94,10 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
     // automatically with the registered dev token).
     let profile_resp = alice
         .post("/_soland/self/account/profile")
-        .json(&json!({
+        .json(&crate::harness::NonProtocolTestBody::new(json!({
             "display_name": "Alice Wonderland",
             "bio": "Down the rabbit hole.",
-        }))
+        })))
         .send()
         .await?;
     if !profile_resp.status().is_success() {
@@ -113,7 +115,9 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
         || async {
             let after: Value = http
                 .post(&teabay_search_url)
-                .json(&json!({"query": "Alice Wonderland"}))
+                .json(&serde_json::from_value::<
+                    arkret_models_discovery::DirectorySearchActorsRequestBody,
+                >(json!({"query": "Alice Wonderland"}))?)
                 .send()
                 .await?
                 .json()

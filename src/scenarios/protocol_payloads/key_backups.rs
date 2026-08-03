@@ -31,9 +31,9 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json, wire_negative_from_sdk};
 
 pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
@@ -59,7 +59,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     put_backup(server, token, actor_id).await?;
     list_backups(server, token).await?;
     describe_backup_operations(server).await?;
-    unlock_backup_requires_body_proof(server, token).await?;
+    unlock_backup_requires_body_proof(server, token, actor_id).await?;
     principal_signing_unlock_reaches_trust_anchor(server, token, actor_id).await?;
     Ok(())
 }
@@ -223,13 +223,25 @@ async fn describe_backup_operations(server: &ArkretServer) -> Result<()> {
 
 /// Spec §7.7.1 / §7.8 — a bearer token alone MUST NOT release the full
 /// ciphertext: unlock is refused without a body proof.
-async fn unlock_backup_requires_body_proof(server: &ArkretServer, token: &str) -> Result<()> {
+async fn unlock_backup_requires_body_proof(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<()> {
+    let baseline = KeysBackupsUnlockRequestBody {
+        proof: unlock_proof(actor_id)?,
+    };
     let body = expect_json(
         server
             .http()
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
-            .json(&json!({})),
+            .json(&wire_negative_from_sdk(&baseline, |value| {
+                value
+                    .as_object_mut()
+                    .expect("SDK body is an object")
+                    .remove("proof");
+            })?),
         StatusCode::UNPROCESSABLE_ENTITY,
     )
     .await?;

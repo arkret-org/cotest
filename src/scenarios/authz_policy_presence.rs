@@ -27,15 +27,18 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
     let denied_before_grant = expect_json(
-        bob.post("/_arkret/self/authz/check").json(&json!({
-            "actor_id": bob.actor,
-            "action": "ak.realm.admin",
-            "resource": {
-                "kind": "realm",
-                "id": realm_id,
-                "realm_id": realm_id
-            }
-        })),
+        bob.post("/_arkret/self/authz/check")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
+            >(json!({
+                "actor_id": bob.actor,
+                "action": "ak.realm.admin",
+                "resource": {
+                    "kind": "realm",
+                    "id": realm_id,
+                    "realm_id": realm_id
+                }
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -141,15 +144,18 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     );
 
     let allowed_after_grant = expect_json(
-        bob.post("/_arkret/self/authz/check").json(&json!({
-            "actor_id": bob.actor,
-            "action": "ak.realm.admin",
-            "resource": {
-                "kind": "realm",
-                "id": realm_id,
-                "realm_id": realm_id
-            }
-        })),
+        bob.post("/_arkret/self/authz/check")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
+            >(json!({
+                "actor_id": bob.actor,
+                "action": "ak.realm.admin",
+                "resource": {
+                    "kind": "realm",
+                    "id": realm_id,
+                    "realm_id": realm_id
+                }
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -248,15 +254,18 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     assert_eq!(revoked_manage["status"], "accepted");
 
     let denied_after_revoke = expect_json(
-        bob.post("/_arkret/self/authz/check").json(&json!({
-            "actor_id": bob.actor,
-            "action": "ak.realm.admin",
-            "resource": {
-                "kind": "realm",
-                "id": realm_id,
-                "realm_id": realm_id
-            }
-        })),
+        bob.post("/_arkret/self/authz/check")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
+            >(json!({
+                "actor_id": bob.actor,
+                "action": "ak.realm.admin",
+                "resource": {
+                    "kind": "realm",
+                    "id": realm_id,
+                    "realm_id": realm_id
+                }
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -274,11 +283,15 @@ async fn expect_authz_check_hard_deny(
     reason_code: &str,
 ) -> Result<()> {
     let denied = expect_json(
-        client.post("/_arkret/self/authz/check").json(&json!({
-            "actor_id": actor_id,
-            "action": action,
-            "resource": resource
-        })),
+        client
+            .post("/_arkret/self/authz/check")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
+            >(json!({
+                "actor_id": actor_id,
+                "action": action,
+                "resource": resource
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -330,13 +343,15 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let push_registration = expect_json(
         alice
             .post("/_arkret/edge/push/register-device")
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_integration::PushRegisterDeviceRequestBody,
+            >(json!({
                 "device_id": alice.device_id.as_str(),
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
                 "app_id": "inkson"
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -345,11 +360,13 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let push_unregister = expect_json(
         alice
             .post("/_arkret/edge/push/unregister-device")
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_integration::PushUnregisterDeviceRequestBody,
+            >(json!({
                 "device_id": alice.device_id.as_str(),
                 "push_key": "opaque",
                 "app_id": "inkson"
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -357,20 +374,22 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
 
     let policy_realm_id = alice.create_realm("Presence Policy Check Realm").await?;
     let policy_document = expect_json(
-        alice.post("/_soland/self/policies").json(&json!({
-            "policy_id": "ak:policy:presence-policy-allow",
-            "scope": policy_realm_id,
-            "subject_ref": alice.actor,
-            "policy_kind": "ak.message.create",
-            // Realm-scoped resource constraint: soland matches `resource.kind`
-            // against the request's `source.service_kind`, so leave `kind` unset
-            // (the policy applies to the realm regardless of calling service) and
-            // constrain only on realm_id.
-            "resource": {"realm_id": policy_realm_id},
-            "effect": "allow",
-            "actions": ["ak.message.create"],
-            "obligations": []
-        })),
+        alice
+            .post("/_soland/self/policies")
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "policy_id": "ak:policy:presence-policy-allow",
+                "scope": policy_realm_id,
+                "subject_ref": alice.actor,
+                "policy_kind": "ak.message.create",
+                // Realm-scoped resource constraint: soland matches `resource.kind`
+                // against the request's `source.service_kind`, so leave `kind` unset
+                // (the policy applies to the realm regardless of calling service) and
+                // constrain only on realm_id.
+                "resource": {"realm_id": policy_realm_id},
+                "effect": "allow",
+                "actions": ["ak.message.create"],
+                "obligations": []
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -379,7 +398,9 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let allow_policy = expect_json(
         alice
             .post("/_arkret/self/policy/check")
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
+            >(json!({
                 "request_id": "req-allow",
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -390,7 +411,7 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
                     "service_kind": "principal_server",
                     "signed_transport": true
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -408,7 +429,9 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let review_policy = expect_json(
         alice
             .post("/_arkret/self/policy/check")
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
+            >(json!({
                 "request_id": "req-review",
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
@@ -419,7 +442,7 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
                     "service_kind": "principal_server",
                     "signed_transport": true
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -427,37 +450,44 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(review_policy["reason_code"], "review_required");
     assert!(review_policy["signature"].is_object());
 
+    let policy_baseline = serde_json::from_value::<
+        arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
+    >(json!({
+        "request_id": "req-invalid",
+        "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
+        "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "action": "ak.message.create",
+        "actor_id": alice.actor.as_str(),
+        "source": {
+            "service_id": "did:web:soland.cotest.local",
+            "service_kind": "principal_server",
+            "signed_transport": true
+        }
+    }))?;
+    let invalid_actor_body = crate::harness::wire_negative_from_sdk(&policy_baseline, |body| {
+        body["actor_id"] = json!("alice")
+    })?;
     expect_api_error(
         alice
             .post("/_arkret/self/policy/check")
-            .json(&json!({
-                "request_id": "req-invalid",
-                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
-                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "ak.message.create",
-                // `actor_id` is a typed Did; a bare "alice" parses as JSON but
-                // violates the declared schema, so it is rejected as
-                // `schema_violation` (422) before any semantic policy validation.
-                "actor_id": "alice",
-                "source": {
-                    "service_id": "did:web:soland.cotest.local",
-                    "service_kind": "principal_server",
-                    "signed_transport": true
-                }
-            })),
+            .json(&invalid_actor_body),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
     )
     .await?;
 
     let ice = expect_json(
-        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
-            "realm_id": policy_realm_id,
-            "call_id": "ak:call:01964137-0000-7000-8000-000000000001",
-            "actor_id": alice.actor.as_str(),
-            "device_id": alice.device_id.as_str(),
-            "mode": "p2p"
-        })),
+        alice
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
+            >(json!({
+                "realm_id": policy_realm_id,
+                "call_id": "ak:call:01964137-0000-7000-8000-000000000001",
+                "actor_id": alice.actor.as_str(),
+                "device_id": alice.device_id.as_str(),
+                "mode": "p2p"
+            }))?),
         StatusCode::OK,
     )
     .await?;

@@ -29,17 +29,19 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert!(initial["policies"].as_array().unwrap().is_empty());
 
     let policy = expect_json(
-        alice.post("/_soland/self/policies").json(&json!({
-            "scope": realm_id,
-            "subject_ref": bob.actor,
-            "policy_kind": "ak.message.create",
-            "effect": "hard_deny",
-            "actions": ["ak.message.create"],
-            // Realm-scoped resource: soland matches resource.kind against the
-            // request source.service_kind, so constrain on realm_id only.
-            "resource": {"realm_id": realm_id},
-            "obligations": [{"kind": "audit", "channel": "mod-log"}]
-        })),
+        alice
+            .post("/_soland/self/policies")
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "scope": realm_id,
+                "subject_ref": bob.actor,
+                "policy_kind": "ak.message.create",
+                "effect": "hard_deny",
+                "actions": ["ak.message.create"],
+                // Realm-scoped resource: soland matches resource.kind against the
+                // request source.service_kind, so constrain on realm_id only.
+                "resource": {"realm_id": realm_id},
+                "obligations": [{"kind": "audit", "channel": "mod-log"}]
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -50,14 +52,16 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     // Negative vector: the legacy `deny` decision is no longer a valid wire
     // effect (v1 enum is allow/soft_deny/hard_deny/quarantine/require_review).
     expect_api_error(
-        alice.post("/_soland/self/policies").json(&json!({
-            "scope": realm_id,
-            "subject_ref": bob.actor,
-            "policy_kind": "ak.message.create",
-            "effect": "deny",
-            "actions": ["ak.message.create"],
-            "resource": {"kind": "realm", "realm_id": realm_id}
-        })),
+        alice
+            .post("/_soland/self/policies")
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "scope": realm_id,
+                "subject_ref": bob.actor,
+                "policy_kind": "ak.message.create",
+                "effect": "deny",
+                "actions": ["ak.message.create"],
+                "resource": {"kind": "realm", "realm_id": realm_id}
+            }))),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
@@ -86,18 +90,21 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     .await?;
 
     let denied = expect_json(
-        bob.post("/_arkret/self/policy/check").json(&json!({
-            "request_id": "ak:request:policy-deny",
-            "request_canonical_digest": REQUEST_HASH,
-            "action": "ak.message.create",
-            "actor_id": bob.actor,
-            "realm_id": realm_id,
-            "source": {
-                "service_id": "did:web:soland.cotest.local",
-                "service_kind": "principal_server",
-                "signed_transport": true
-            }
-        })),
+        bob.post("/_arkret/self/policy/check")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
+            >(json!({
+                "request_id": "ak:request:policy-deny",
+                "request_canonical_digest": REQUEST_HASH,
+                "action": "ak.message.create",
+                "actor_id": bob.actor,
+                "realm_id": realm_id,
+                "source": {
+                    "service_id": "did:web:soland.cotest.local",
+                    "service_kind": "principal_server",
+                    "signed_transport": true
+                }
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -118,35 +125,40 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     );
 
     let inactive = expect_json(
-        alice.post("/_soland/self/policies").json(&json!({
-            "policy_id": policy_id,
-            "scope": realm_id,
-            "subject_ref": bob.actor,
-            "policy_kind": "ak.message.create",
-            "effect": "hard_deny",
-            "actions": ["ak.message.create"],
-            "resource": {"kind": "realm", "realm_id": realm_id},
-            "obligations": [{"kind": "audit", "channel": "mod-log"}],
-            "active": false
-        })),
+        alice
+            .post("/_soland/self/policies")
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "policy_id": policy_id,
+                "scope": realm_id,
+                "subject_ref": bob.actor,
+                "policy_kind": "ak.message.create",
+                "effect": "hard_deny",
+                "actions": ["ak.message.create"],
+                "resource": {"kind": "realm", "realm_id": realm_id},
+                "obligations": [{"kind": "audit", "channel": "mod-log"}],
+                "active": false
+            }))),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(inactive["active"], false);
 
     let allowed = expect_json(
-        bob.post("/_arkret/self/policy/check").json(&json!({
-            "request_id": "ak:request:policy-allow",
-            "request_canonical_digest": REQUEST_HASH,
-            "action": "ak.message.create",
-            "actor_id": bob.actor,
-            "realm_id": realm_id,
-            "source": {
-                "service_id": "did:web:soland.cotest.local",
-                "service_kind": "principal_server",
-                "signed_transport": true
-            }
-        })),
+        bob.post("/_arkret/self/policy/check")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
+            >(json!({
+                "request_id": "ak:request:policy-allow",
+                "request_canonical_digest": REQUEST_HASH,
+                "action": "ak.message.create",
+                "actor_id": bob.actor,
+                "realm_id": realm_id,
+                "source": {
+                    "service_id": "did:web:soland.cotest.local",
+                    "service_kind": "principal_server",
+                    "signed_transport": true
+                }
+            }))?),
         StatusCode::OK,
     )
     .await?;

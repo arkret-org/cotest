@@ -25,6 +25,8 @@ use arkret::identity::{DidDocument, DidResolver};
 use arkret_wire::Did;
 use serde::Deserialize;
 
+use crate::harness::NonProtocolTestBody;
+
 /// Env var the joint runner exports when `-StartMockDidHost` is used.
 pub const DID_HOST_BASE_URL_ENV: &str = "COTEST_MOCK_DID_HOST_BASE_URL";
 
@@ -268,6 +270,7 @@ impl DidHostClient {
     }
 
     async fn control(&self, path: &str, body: serde_json::Value) -> Result<DidHostDid> {
+        let body = NonProtocolTestBody::new(body);
         let response = self
             .http
             .post(format!("{}{path}", self.base_url))

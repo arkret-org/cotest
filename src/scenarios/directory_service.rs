@@ -86,7 +86,9 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
 
     let not_found = http
         .post(directory.url("/_arkret/find/directory/resolve-handle"))
-        .json(&json!({ "handle": "absent.example" }))
+        .json(&serde_json::from_value::<
+            arkret_models_discovery::DirectoryResolveHandleRequestBody,
+        >(json!({ "handle": "absent.example" }))?)
         .send()
         .await?;
     assert_eq!(not_found.status(), StatusCode::NOT_FOUND);

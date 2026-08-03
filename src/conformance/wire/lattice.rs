@@ -9,12 +9,10 @@ use crate::conformance::{required_str, validate_profile};
 
 /// Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors.
 ///
-/// Cross-checks `tests/fixtures/event-kind-lattice-dispatch-fixture.json`
-/// against the LIVE event-kind-registry (registry/event-kind-registry.json).
-/// The fixture declares EXPECTED canonical lattices per cell-family AND the
-/// validator confirms the live registry matches. Drift from either side
-/// fails loudly. Pattern mirrors `discovery_profile_fixture` cross-checking
-/// operation-registry.surface_groups.
+/// Cross-checks the SDK's generated event-kind descriptors against the
+/// independently executable lattice registry. The fixture contains only
+/// invariant and negative-mutation metadata; it does not mirror protocol
+/// registry data.
 ///
 /// Validator pins:
 /// * every active+reducer_input+durable_event kind that declares `cell_family` declares a `lattice`
@@ -22,9 +20,7 @@ use crate::conformance::{required_str, validate_profile};
 /// * cell_family namespace prefix is `ak.component.`;
 /// * a single cell_family is bound to exactly one lattice across all kinds that declare it;
 /// * bottom mode ∈ {reject, expose, inert};
-/// * every family in `expected_cell_family_lattice_bindings.<lattice>` MUST resolve to that lattice
-///   in the live registry; conversely, every live cell_family that appears in the registry MUST be
-///   listed under the correct lattice in the expected bindings.
+/// * the generated descriptor closure and executable registry closure match exactly.
 pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -48,65 +44,50 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     // and is normative in event-kind-registry.json.
     const VALID_BOTTOM_MODES: &[&str] = &["reject", "expose", "inert"];
 
-    // Walk the live registry and build cell_family → set<lattice>.
-    let registry = crate::conformance::load_artifact_json("registry/event-kind-registry.json")?;
-    let event_kinds = registry
-        .get("event_kinds")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("event-kind-registry missing event_kinds[]"))?;
+    // Walk the SDK-generated descriptors and build cell_family → set<lattice>.
     let mut family_to_lattice: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut family_to_bottom: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut all_live_families: BTreeSet<String> = BTreeSet::new();
-    for entry in event_kinds {
-        let status = entry.get("status").and_then(Value::as_str).unwrap_or("");
-        let wire_scope = entry
-            .get("wire_scope")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        if status != "active"
-            || entry.get("reducer_input").and_then(Value::as_bool) != Some(true)
-            || wire_scope != "durable_event"
+    for descriptor in arkret_wire::EVENT_KIND_DESCRIPTORS {
+        if !descriptor.reducer_input
+            || descriptor.wire_scope != arkret_wire::EventWireScope::DurableEvent
         {
             continue;
         }
-        let writes = entry
-            .get("cell_writes")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten();
-        for write in std::iter::once(entry)
-            .filter(|row| row.get("cell_family").is_some())
-            .chain(writes)
-        {
-            if write.get("cell_family").is_none() {
-                if entry.get("event_kind").and_then(Value::as_str)
-                    != Some("ak.state.conflict_recovery")
-                    || write.pointer("/cell_ref/kind").and_then(Value::as_str) != Some("cell_ref")
-                    || write
-                        .pointer("/effect_projection/kind")
-                        .and_then(Value::as_str)
-                        != Some("reset")
+        for write in descriptor.cell_writes {
+            let Some(family_id) = write.cell_family else {
+                if descriptor.kind != "ak.state.conflict_recovery"
+                    || write.cell_ref_rule.is_none()
+                    || write.effect_projection_rule.is_none_or(|rule| {
+                        rule.operator() != Some(arkret_wire::EventCellRuleOperator::Reset)
+                    })
                 {
                     bail!("dynamic cell write is not the closed conflict-recovery reset");
                 }
                 continue;
-            }
-            let family = required_str(write, "cell_family")?;
+            };
+            let family = family_id.as_str();
             if !family.starts_with("ak.component.") {
                 bail!(
-                    "live event-kind-registry: cell_family {family} does not start with `ak.component.`"
+                    "SDK event-kind descriptor: cell_family {family} does not start with `ak.component.`"
                 );
             }
-            let lattice = required_str(write, "lattice")?;
+            let lattice = write
+                .lattice
+                .ok_or_else(|| anyhow!("SDK cell write {family} omits lattice"))?
+                .as_str();
             if !CORE_LATTICES.contains(&lattice) {
                 bail!(
-                    "live event-kind-registry: cell_family {family} declares non-core lattice {lattice}"
+                    "SDK event-kind descriptor: cell_family {family} declares non-core lattice {lattice}"
                 );
             }
-            let bottom = required_str(write, "bottom")?;
+            let bottom = write
+                .bottom
+                .ok_or_else(|| anyhow!("SDK cell write {family} omits bottom"))?
+                .as_str();
             if !VALID_BOTTOM_MODES.contains(&bottom) {
                 bail!(
-                    "live event-kind-registry: cell_family {family} declares invalid bottom={bottom}"
+                    "SDK event-kind descriptor: cell_family {family} declares invalid bottom={bottom}"
                 );
             }
             family_to_lattice
@@ -124,64 +105,41 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
     for (family, lattices) in &family_to_lattice {
         if lattices.len() > 1 {
             bail!(
-                "live event-kind-registry: cell_family {family} bound to multiple lattices {lattices:?} — only one allowed"
+                "SDK event-kind descriptors bind cell_family {family} to multiple lattices {lattices:?}"
             );
         }
     }
 
-    // Walk the expected bindings and confirm every declared family resolves
-    // to the expected lattice in the live registry.
-    let expected_bindings = fixture
-        .get("expected_cell_family_lattice_bindings")
-        .ok_or_else(|| anyhow!("fixture missing expected_cell_family_lattice_bindings"))?;
-    let expected_pairs: &[(&str, &str)] = &[
-        ("or_set_families", "or_set"),
-        ("cas_register_families", "cas_register"),
-        ("fsm_families", "fsm"),
-        ("ordered_log_families", "ordered_log"),
-        ("mv_register_families", "mv_register"),
-    ];
-    let mut all_expected_families: BTreeSet<String> = BTreeSet::new();
-    for (group, expected_lattice) in expected_pairs {
-        let arr = expected_bindings
-            .get(*group)
-            .and_then(Value::as_array)
-            .ok_or_else(|| anyhow!("expected_cell_family_lattice_bindings.{group} missing"))?;
-        for v in arr {
-            let family = v.as_str().ok_or_else(|| {
-                anyhow!("expected_cell_family_lattice_bindings.{group} entry must be a string")
-            })?;
-            if !all_expected_families.insert(family.to_owned()) {
-                bail!(
-                    "expected_cell_family_lattice_bindings: cell_family {family} listed under multiple lattices"
-                );
-            }
-            let live_lattices = family_to_lattice.get(family).ok_or_else(|| {
-                anyhow!(
-                    "expected family {family} (group={group}) not present in live event-kind-registry"
-                )
-            })?;
-            // Single lattice already enforced above.
-            let live = live_lattices
-                .iter()
-                .next()
-                .expect("non-empty by construction");
-            if live != *expected_lattice {
-                bail!(
-                    "cell_family {family}: live lattice={live} != expected lattice={expected_lattice} (group={group})"
-                );
-            }
-        }
+    let executable_bindings = arkret_lattice_registry::lattice_bindings_for_sdk_registry();
+    let executable_families = executable_bindings
+        .iter()
+        .map(|(family, ..)| *family)
+        .collect::<BTreeSet<_>>();
+    if executable_families != all_live_families.iter().map(String::as_str).collect() {
+        bail!("SDK descriptor and executable lattice registry family closures differ");
     }
-    // Conversely: every live family covered by some expected group.
-    for family in &all_live_families {
-        if !all_expected_families.contains(family) {
-            bail!(
-                "live cell_family {family} not declared under any expected_cell_family_lattice_bindings group"
-            );
+    for (family, lattice, bottom) in executable_bindings {
+        let descriptor_lattice = family_to_lattice
+            .get(family)
+            .and_then(|values| values.iter().next())
+            .ok_or_else(|| anyhow!("executable family {family} is absent from SDK descriptors"))?;
+        let descriptor_bottom = family_to_bottom
+            .get(family)
+            .and_then(|values| values.iter().next())
+            .ok_or_else(|| anyhow!("executable family {family} omits bottom mode"))?;
+        if descriptor_lattice != lattice.as_wire_str()
+            || descriptor_bottom
+                != match bottom {
+                    arkret_state::state::BottomMode::Reject => "reject",
+                    arkret_state::state::BottomMode::Expose => "expose",
+                    arkret_state::state::BottomMode::Inert => "inert",
+                }
+        {
+            bail!("SDK descriptor and executable lattice binding differ for {family}");
         }
     }
     validate_canonical_fsm_contracts(&family_to_lattice)?;
+    let registry = crate::conformance::load_artifact_json("registry/event-kind-registry.json")?;
     validate_actor_private_contracts(&registry, &all_live_families)?;
 
     // Vectors — structural sanity (each scope is recognised, each outcome
@@ -215,34 +173,10 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
                 covered_invariants.insert(name);
             }
             (
-                "expected_or_set_families_resolve_to_or_set_in_live_registry",
-                "expected_cell_family_lattice_bindings.or_set_families",
-                "lattice_match",
-            )
-            | (
-                "expected_cas_register_families_resolve_to_cas_register_in_live_registry",
-                "expected_cell_family_lattice_bindings.cas_register_families",
-                "lattice_match",
-            )
-            | (
-                "expected_fsm_families_resolve_to_fsm_in_live_registry",
-                "expected_cell_family_lattice_bindings.fsm_families",
-                "lattice_match",
-            )
-            | (
-                "expected_ordered_log_families_resolve_to_ordered_log_in_live_registry",
-                "expected_cell_family_lattice_bindings.ordered_log_families",
-                "lattice_match",
-            )
-            | (
-                "expected_mv_register_families_resolve_to_mv_register_in_live_registry",
-                "expected_cell_family_lattice_bindings.mv_register_families",
-                "lattice_match",
+                "sdk_descriptors_match_executable_lattice_registry",
+                "sdk_and_executable_registry",
+                "exact_closure",
             ) => {
-                let lat = required_str(expected, "lattice")?;
-                if !CORE_LATTICES.contains(&lat) {
-                    bail!("vector {name} expected.lattice {lat} not in core set");
-                }
                 covered_invariants.insert(name);
             }
             (other_name, other_scope, other_outcome) => bail!(
@@ -260,11 +194,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         "no_cell_family_appears_in_two_distinct_lattices",
         "cell_family_namespace_is_ak_component",
         "bottom_mode_is_reject_or_expose",
-        "expected_or_set_families_resolve_to_or_set_in_live_registry",
-        "expected_cas_register_families_resolve_to_cas_register_in_live_registry",
-        "expected_fsm_families_resolve_to_fsm_in_live_registry",
-        "expected_ordered_log_families_resolve_to_ordered_log_in_live_registry",
-        "expected_mv_register_families_resolve_to_mv_register_in_live_registry",
+        "sdk_descriptors_match_executable_lattice_registry",
     ] {
         if !covered_invariants.contains(required) {
             bail!("event_kind_lattice_dispatch fixture missing required vector {required}");

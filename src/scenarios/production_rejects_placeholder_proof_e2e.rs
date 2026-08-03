@@ -44,6 +44,7 @@ use anyhow::{Context, Result, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
+use crate::harness::NonProtocolTestBody;
 use crate::scenarios::_helpers::external_binary::{
     SOLAND_SPEC, skip_reason, try_spawn_with_extra_env,
 };
@@ -210,7 +211,9 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     let dev_login_url = proc.url("/_soland/gate/auth/dev-login");
     let dev_login_resp = client
         .post(&dev_login_url)
-        .json(&json!({"actor": actor, "device_id": "cotest-dev"}))
+        .json(&NonProtocolTestBody::new(
+            json!({"actor": actor, "device_id": "cotest-dev"}),
+        ))
         .send()
         .await
         .context("POST /_soland/gate/auth/dev-login probe on production soland")?;

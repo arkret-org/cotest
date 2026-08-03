@@ -24,52 +24,68 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let call_id = "ak:call:01964137-0000-7000-8000-000000000001";
 
     expect_api_error(
-        carol.post("/_arkret/self/rtc/ice-config").json(&json!({
-            "realm_id": realm_id,
-            "call_id": call_id,
-            "actor_id": carol.actor.as_str(),
-            "device_id": carol.device_id.as_str(),
-            "mode": "p2p"
-        })),
+        carol
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
+            >(json!({
+                "realm_id": realm_id,
+                "call_id": call_id,
+                "actor_id": carol.actor.as_str(),
+                "device_id": carol.device_id.as_str(),
+                "mode": "p2p"
+            }))?),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
     .await?;
 
     expect_api_error(
-        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
-            "realm_id": realm_id,
-            "call_id": "not-a-call-id",
-            "actor_id": alice.actor.as_str(),
-            "device_id": alice.device_id.as_str(),
-            "mode": "p2p"
-        })),
+        alice
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
+            >(json!({
+                "realm_id": realm_id,
+                "call_id": "not-a-call-id",
+                "actor_id": alice.actor.as_str(),
+                "device_id": alice.device_id.as_str(),
+                "mode": "p2p"
+            }))?),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
     .await?;
 
     expect_api_error(
-        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
-            "realm_id": realm_id,
-            "call_id": call_id,
-            "actor_id": carol.actor.as_str(),
-            "device_id": alice.device_id.as_str(),
-            "mode": "p2p"
-        })),
+        alice
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
+            >(json!({
+                "realm_id": realm_id,
+                "call_id": call_id,
+                "actor_id": carol.actor.as_str(),
+                "device_id": alice.device_id.as_str(),
+                "mode": "p2p"
+            }))?),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
     .await?;
 
     let ice = expect_json(
-        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
-            "realm_id": realm_id,
-            "call_id": call_id,
-            "actor_id": alice.actor.as_str(),
-            "device_id": alice.device_id.as_str(),
-            "mode": "p2p"
-        })),
+        alice
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
+            >(json!({
+                "realm_id": realm_id,
+                "call_id": call_id,
+                "actor_id": alice.actor.as_str(),
+                "device_id": alice.device_id.as_str(),
+                "mode": "p2p"
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -126,13 +142,17 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert!(!turn_username.contains("alice"));
 
     let turn_only = expect_json(
-        alice.post("/_arkret/self/rtc/ice-config").json(&json!({
-            "realm_id": realm_id,
-            "call_id": "ak:call:01964137-0000-7000-8000-000000000002",
-            "actor_id": alice.actor.as_str(),
-            "device_id": alice.device_id.as_str(),
-            "mode": "turn"
-        })),
+        alice
+            .post("/_arkret/self/rtc/ice-config")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
+            >(json!({
+                "realm_id": realm_id,
+                "call_id": "ak:call:01964137-0000-7000-8000-000000000002",
+                "actor_id": alice.actor.as_str(),
+                "device_id": alice.device_id.as_str(),
+                "mode": "turn"
+            }))?),
         StatusCode::OK,
     )
     .await?;

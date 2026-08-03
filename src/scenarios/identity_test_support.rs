@@ -75,7 +75,9 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&json!({"did": actor})),
+            .json(&serde_json::from_value::<
+                arkret_models_identity::identity::IdentityResolveRequestBody,
+            >(json!({"did": actor}))?),
         StatusCode::OK,
     )
     .await?;

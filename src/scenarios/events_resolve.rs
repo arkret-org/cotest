@@ -29,7 +29,9 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let seal_only = expect_json(
         alice
             .post("/_arkret/self/events/resolve")
-            .json(&json!({"seal_refs": [missing_seal]})),
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
+            >(json!({"seal_refs": [missing_seal]}))?),
         StatusCode::OK,
     )
     .await?;
@@ -43,11 +45,15 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let missing_event = "ak:event:01904100-0000-7000-8000-00000000e502";
     let missing_digest = format!("sha256:{}", "2".repeat(64));
     let mixed = expect_json(
-        alice.post("/_arkret/self/events/resolve").json(&json!({
-            "event_ids": [missing_event],
-            "event_digests": [missing_digest],
-            "seal_refs": [missing_seal]
-        })),
+        alice
+            .post("/_arkret/self/events/resolve")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
+            >(json!({
+                "event_ids": [missing_event],
+                "event_digests": [missing_digest],
+                "seal_refs": [missing_seal]
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -73,7 +79,9 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let at_budget_outcome = expect_json(
         alice
             .post("/_arkret/self/events/resolve")
-            .json(&json!({"event_ids": at_budget})),
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
+            >(json!({"event_ids": at_budget}))?),
         StatusCode::OK,
     )
     .await?;
@@ -83,10 +91,14 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     );
 
     let over_budget = expect_response(
-        alice.post("/_arkret/self/events/resolve").json(&json!({
-            "event_ids": at_budget,
-            "seal_refs": [missing_seal]
-        })),
+        alice
+            .post("/_arkret/self/events/resolve")
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
+            >(json!({
+                "event_ids": at_budget,
+                "seal_refs": [missing_seal]
+            }))?),
         StatusCode::FORBIDDEN,
     )
     .await?;

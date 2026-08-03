@@ -179,13 +179,15 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let before = realm_event_kinds(&alice, &realm_id).await?;
     let response = alice
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
-        .json(&json!({
+        .json(&serde_json::from_value::<
+            arkret_models_collaboration::governance::realm_governance::RealmPolicyServerReplaceRequestBody,
+        >(json!({
             "policy_server_did": "did:web:spotcheck-policy.example",
             "policy_server_url": "https://spotcheck-policy.example/_arkret/self/policy/check",
             "cache_ttl_seconds": 60,
             "timeout_ms": 1500,
             "on_timeout": "fail_closed",
-        }))
+        }))?)
         .send()
         .await?;
     let replace_status = response.status();
@@ -239,12 +241,14 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         let before = realm_event_kinds(&alice, &realm_id).await?;
         let response = alice
             .post("/_arkret/self/moderation/report")
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
+            >(json!({
                 "realm_id": realm_id,
                 "target_ref": realm_id,
                 "reporter": alice.actor,
                 "report_reason_code": "spam",
-            }))
+            }))?)
             .send()
             .await?;
         let report_status = response.status();
@@ -285,12 +289,14 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let before = realm_event_kinds(&alice, &realm_id).await?;
     let response = alice
         .post("/_arkret/edge/push/register-device")
-        .json(&json!({
-            "principal_id": alice.actor,
+        .json(&serde_json::from_value::<
+            arkret_models_integration::PushRegisterDeviceRequestBody,
+        >(json!({
             "device_id": alice.device_id,
-            "push_route": "https://push.example/spotcheck",
-            "provider": "webpush",
-        }))
+            "push_gateway": "https://push.example/spotcheck",
+            "push_key": "cotest-spotcheck-key",
+            "platform": "web",
+        }))?)
         .send()
         .await?;
     let push_status = response.status();
@@ -327,7 +333,12 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let before = realm_event_kinds(&alice, &realm_id).await?;
     let response = alice
         .put("/_arkret/self/account_data/client.durable-effect-spotcheck")
-        .json(&json!({"value": {"spotcheck": true}}))
+        .json(
+            &arkret_models_identity::account::AccountDataReplaceRequestBody {
+                expected_revision: 0,
+                content: json!({"spotcheck": true}),
+            },
+        )
         .send()
         .await?;
     let private_status = response.status();

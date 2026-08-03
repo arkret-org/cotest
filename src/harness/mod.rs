@@ -16,6 +16,7 @@ mod client;
 mod event_builder;
 mod proof;
 mod server;
+mod wire_body;
 
 pub use assertions::{
     RecordedResponse, account_subscribe_delta_from_text, eventually,
@@ -44,6 +45,7 @@ pub use proof::{
 };
 pub use server::{ArkretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};
+pub use wire_body::{NonProtocolTestBody, wire_negative_from_sdk};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
 

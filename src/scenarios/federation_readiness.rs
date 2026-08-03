@@ -33,7 +33,9 @@ pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()>
         server_a
             .http()
             .post(server_a.url("/_arkret/root/identity/resolve"))
-            .json(&json!({"did": "did:web:alice.example"})),
+            .json(&serde_json::from_value::<
+                arkret_models_identity::identity::IdentityResolveRequestBody,
+            >(json!({"did": "did:web:alice.example"}))?),
         StatusCode::OK,
     )
     .await?;

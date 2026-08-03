@@ -962,7 +962,22 @@ async fn call_live_soland(
         request = request.header(key, value);
     }
     if let Some(body) = body {
-        request = request.json(&body);
+        request = match case.operation_id.as_str() {
+            "ak.self.events.command.submit" => request.json(&serde_json::from_value::<
+                arkret_wire::EventsSubmitBatchRequestBody,
+            >(body)?),
+            "ak.find.directory.query.search_realms" => request.json(&serde_json::from_value::<
+                arkret_models_discovery::DirectorySearchRealmsRequestBody,
+            >(body)?),
+            "ak.self.signal.command.send" => request.json(&serde_json::from_value::<
+                arkret_wire::SignalEnvelope,
+            >(body)?),
+            operation_id => {
+                return Err(anyhow!(
+                    "live mock-parity request {operation_id} has no SDK request-body binding"
+                ));
+            }
+        };
     }
     let response = request.send().await?;
     let status = response.status().as_u16();

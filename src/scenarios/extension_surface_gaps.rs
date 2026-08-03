@@ -5,7 +5,7 @@ use arkret::{
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{TestServerGroup, expect_api_error, expect_json};
+use crate::harness::{NonProtocolTestBody, TestServerGroup, expect_api_error, expect_json};
 
 pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-applet").await?;
@@ -60,10 +60,10 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
     expect_api_error(
         alice
             .post(&format!("/_arkret/self/realms/{realm_id}/applets"))
-            .json(&json!({
+            .json(&NonProtocolTestBody::new(json!({
                 "applet_id": "ak:applet:board",
                 "manifest": {"name": "Board"}
-            })),
+            }))),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )
@@ -147,10 +147,10 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     expect_api_error(
         alice
             .post(&format!("/_arkret/self/realms/{realm_id}/agents"))
-            .json(&json!({
+            .json(&NonProtocolTestBody::new(json!({
                 "agent_id": "did:web:agent.example",
                 "display_name": "Planner"
-            })),
+            }))),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )

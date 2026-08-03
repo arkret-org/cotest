@@ -77,7 +77,11 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&json!({"invite_token": "ak:invite-token:invalid"})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectoryResolveRealmRequestBody,
+            >(
+                json!({"invite_token": "ak:invite-token:invalid"})
+            )?),
         StatusCode::NOT_FOUND,
     )
     .await?;
@@ -86,7 +90,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&json!({"invite_token": invite_token})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectoryResolveRealmRequestBody,
+            >(json!({"invite_token": invite_token}))?),
         StatusCode::OK,
     )
     .await?;
@@ -103,7 +109,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-realms"))
-            .json(&json!({"query": "Listed Directory Realm"})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectorySearchRealmsRequestBody,
+            >(json!({"query": "Listed Directory Realm"}))?),
         StatusCode::OK,
     )
     .await?;
@@ -120,7 +128,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-realms"))
-            .json(&json!({"query": "Unlisted Directory Realm"})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectorySearchRealmsRequestBody,
+            >(json!({"query": "Unlisted Directory Realm"}))?),
         StatusCode::OK,
     )
     .await?;
@@ -130,7 +140,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&json!({"realm_id": unlisted_realm_id})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectoryResolveRealmRequestBody,
+            >(json!({"realm_id": unlisted_realm_id}))?),
         StatusCode::OK,
     )
     .await?;

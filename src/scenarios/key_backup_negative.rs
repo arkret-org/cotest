@@ -10,7 +10,9 @@ use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::harness::{ArkretServer, TestServerGroup, expect_json, expect_response};
+use crate::harness::{
+    ArkretServer, TestServerGroup, expect_json, expect_response, wire_negative_from_sdk,
+};
 
 const BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-0000000000d3";
 const DEVICE_A: &str = "ak:device:01975510-0000-7000-8000-0000000000a1";
@@ -39,11 +41,13 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )
     .await?;
 
-    let mut missing_ciphertext = backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?;
-    missing_ciphertext
-        .as_object_mut()
-        .ok_or_else(|| anyhow!("backup body was not an object"))?
-        .remove("ciphertext");
+    let missing_ciphertext_baseline = backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?;
+    let missing_ciphertext = wire_negative_from_sdk(&missing_ciphertext_baseline, |value| {
+        value
+            .as_object_mut()
+            .expect("SDK key backup is an object")
+            .remove("ciphertext");
+    })?;
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
@@ -102,10 +106,11 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     .await?;
     assert_eq!(replayed, accepted, "same key and body must replay exactly");
 
-    let mut conflicting = accepted_body.clone();
-    conflicting["plaintext_commitment"] = Value::String(
-        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
-    );
+    let conflicting = wire_negative_from_sdk(&accepted_body, |value| {
+        value["plaintext_commitment"] = Value::String(
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+        );
+    })?;
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
@@ -116,7 +121,8 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )
     .await?;
 
-    let signed_fields = accepted_body
+    let accepted_value = serde_json::to_value(&accepted_body)?;
+    let signed_fields = accepted_value
         .pointer("/auth_data/signed_fields")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("key backup auth_data.signed_fields is missing"))?;
@@ -167,11 +173,13 @@ async fn reject_digest_mismatch_on_put(
     actor: &str,
 ) -> Result<()> {
     let id = "ak:backup:01975510-0000-7000-8000-0000000000d5";
-    let mut body = backup_body(actor, DEVICE_A, id)?;
-    body["ciphertext"] = Value::String("tampered-ciphertext".to_owned());
-    body["ciphertext_digest"] = Value::String(
-        "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
-    );
+    let baseline = backup_body(actor, DEVICE_A, id)?;
+    let body = wire_negative_from_sdk(&baseline, |value| {
+        value["ciphertext"] = Value::String("tampered-ciphertext".to_owned());
+        value["ciphertext_digest"] = Value::String(
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),
+        );
+    })?;
     expect_backup_error(
         server
             .http()
@@ -185,7 +193,7 @@ async fn reject_digest_mismatch_on_put(
     .await
 }
 
-fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
+fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBackup> {
     let created_at = ts("2026-05-18T00:00:00.000Z")?;
     let backup = KeyBackup {
         backup_id: BackupId::new(backup_id.to_owned())?,
@@ -269,7 +277,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<Value> {
         recovery_policy_ref: None,
         extra: Default::default(),
     };
-    Ok(serde_json::to_value(backup)?)
+    Ok(backup)
 }
 
 fn key_backup_signed_fields() -> Vec<String> {

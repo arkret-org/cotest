@@ -21,7 +21,9 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&json!({"did": "did:web:alice.example"})),
+            .json(&serde_json::from_value::<
+                arkret_models_identity::identity::IdentityResolveRequestBody,
+            >(json!({"did": "did:web:alice.example"}))?),
         StatusCode::OK,
     )
     .await?;
@@ -63,7 +65,9 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&json!({"did": actor_id})),
+            .json(&serde_json::from_value::<
+                arkret_models_identity::identity::IdentityResolveRequestBody,
+            >(json!({"did": actor_id}))?),
         StatusCode::OK,
     )
     .await?;

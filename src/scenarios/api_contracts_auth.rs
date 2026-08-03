@@ -43,29 +43,33 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .account_registration_request()
-            .json(&json!({"principal_id": "bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"})),
+            .json(&crate::harness::NonProtocolTestBody::new(json!({"principal_id": "bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"}))),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
     )
     .await?;
 
     let registered = expect_json(
-        server.account_registration_request().json(&json!({
-            "principal_id": "did:web:alice-auth.example",
-            "display_name": "alice-auth",
-            "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
-        })),
+        server
+            .account_registration_request()
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "principal_id": "did:web:alice-auth.example",
+                "display_name": "alice-auth",
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
+            }))),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(registered["principal_id"], "did:web:alice-auth.example");
 
     let second_device = expect_json(
-        server.account_registration_request().json(&json!({
-            "principal_id": "did:web:alice-auth.example",
-            "display_name": "alice-auth",
-            "device_id": "ak:device:01904100-0000-7000-8000-0000000000a2"
-        })),
+        server
+            .account_registration_request()
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "principal_id": "did:web:alice-auth.example",
+                "display_name": "alice-auth",
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a2"
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -78,11 +82,11 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_soland/gate/auth/dev-login"))
-            .json(&json!({
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
                 "actor": "did:web:alice-auth.example",
                 "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "display_name": "Alice"
-            })),
+            }))),
         StatusCode::OK,
     )
     .await?;

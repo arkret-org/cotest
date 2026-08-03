@@ -47,18 +47,19 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
     // Construct a body that *would* be shape-valid if the transport were
     // signed. We aren't testing the verify chain here — we're testing that
     // the request never reaches it without a Signature/Signature-Input pair.
-    let body = json!({
-        "resource_kind": "space",
-        "resource_id": "cotest-tb3-unsigned-resource",
-        "principal_server_did": "did:web:soland.cotest.local",
-        "discovery_state": {
-            "discoverability": "public",
-            "directory_services": ["did:web:teabay.cotest.local"],
-            "proof": { "detached_jws": "" }
-        },
-        "source_refs": ["urn:cotest:tb3:source-ref:1"],
-        "as_of": arkret_canonical::format_timestamp_canonical(Utc::now()),
-    });
+    let body =
+        serde_json::from_value::<arkret_models_discovery::DirectoryAnnounceRequestBody>(json!({
+            "resource_kind": "space",
+            "resource_id": "cotest-tb3-unsigned-resource",
+            "principal_server_did": "did:web:soland.cotest.local",
+            "discovery_state": {
+                "discoverability": "public",
+                "directory_services": ["did:web:teabay.cotest.local"],
+                "proof": { "detached_jws": "" }
+            },
+            "source_refs": ["urn:cotest:tb3:source-ref:1"],
+            "as_of": arkret_canonical::format_timestamp_canonical(Utc::now()),
+        }))?;
 
     // Notice: no Signature-Input / Signature / Content-Digest headers. This
     // is precisely the wire-shape of an attacker replaying / fabricating an

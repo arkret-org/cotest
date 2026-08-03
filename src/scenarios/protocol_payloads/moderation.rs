@@ -17,14 +17,16 @@ pub async fn run(
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(token)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
+            >(json!({
                 // soland validates that the reported target exists; point at the
                 // adapter message Event authored in the events/keys setup phase.
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000101",
                 "target_ref": target_event_id,
                 "report_reason_code": "spam",
                 "reporter": actor_id
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;

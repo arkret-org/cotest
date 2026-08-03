@@ -45,7 +45,9 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/self/keys/query"))
-            .json(&json!({"device_keys": {}})),
+            .json(&serde_json::from_value::<
+                arkret_models_crypto::KeysQueryRequestBody,
+            >(json!({"device_keys": {}}))?),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -97,11 +99,13 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_crypto::KeysClaimRequestBody,
+            >(json!({
                 "one_time_keys": {
                     (&alice_did): {(alice_device): "signed_curve25519"}
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -115,11 +119,13 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_crypto::KeysClaimRequestBody,
+            >(json!({
                 "one_time_keys": {
                     (&alice_did): {(alice_device): "signed_curve25519"}
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -147,7 +153,9 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .http()
             .post(server.url("/_arkret/self/device_messages"))
             .header("Idempotency-Key", "device-noauth")
-            .json(&json!({"messages": {}})),
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendRequestBody,
+            >(json!({"messages": {}}))?),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -228,9 +236,11 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .http()
             .post(server.url("/_arkret/self/device_messages/ack"))
             .bearer_auth(&token)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckRequestBody,
+            >(json!({
                 "ack_token": delivered["ack_token"].as_str().unwrap()
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -479,16 +489,23 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     // and `deny_unknown_fields`, so it structurally cannot carry a plaintext
     // `content` field — a push that tries to violates the declared schema and
     // is rejected as `schema_violation` (422) before any rule evaluation.
+    let push_baseline =
+        serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
+            "notification": {
+                "push_target_id": "ak:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
+                "wakeup_kind": "message",
+                "timing_profile_hint": "default",
+                "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]
+            }
+        }))?;
+    let plaintext_push = crate::harness::wire_negative_from_sdk(&push_baseline, |body| {
+        body["notification"]["content"] = json!({"body": "plaintext leak"});
+    })?;
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/edge/push/notify"))
-            .json(&json!({
-                "notification": {
-                    "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}],
-                    "content": {"body": "plaintext leak"}
-                }
-            })),
+            .json(&plaintext_push),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
     )
@@ -497,14 +514,16 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/edge/push/notify"))
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_integration::PushNotifyRequestBody,
+            >(json!({
                 "notification": {
                     "push_target_id": "ak:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -524,12 +543,14 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
+            >(json!({
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
                 "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:alice.example"
-            })),
+            }))?),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -539,12 +560,14 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&alice)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
+            >(json!({
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
                 "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
-            })),
+            }))?),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -554,12 +577,14 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&bob)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
+            >(json!({
                 "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
                 "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
-            })),
+            }))?),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )

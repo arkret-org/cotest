@@ -2,7 +2,7 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ArkretServer, expect_api_error};
+use crate::harness::{ArkretServer, NonProtocolTestBody, expect_api_error};
 
 pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     let server = ArkretServer::spawn("schema-registry").await?;
@@ -24,19 +24,21 @@ pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     .await?;
 
     expect_api_error(
-        alice.post("/_arkret/self/schemas").json(&json!({
-            "schema_id": schema_id,
-            "kind": "morph",
-            "version": "1",
-            "name": "Widget schema",
-            "definition": {
-                "$id": schema_id,
-                "type": "object",
-                "properties": {
-                    "status": {"type": "string"}
+        alice
+            .post("/_arkret/self/schemas")
+            .json(&NonProtocolTestBody::new(json!({
+                "schema_id": schema_id,
+                "kind": "morph",
+                "version": "1",
+                "name": "Widget schema",
+                "definition": {
+                    "$id": schema_id,
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string"}
+                    }
                 }
-            }
-        })),
+            }))),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )

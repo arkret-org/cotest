@@ -22,13 +22,15 @@ async fn register_device(server: &ArkretServer, token: &str) -> Result<String> {
             .http()
             .post(server.url("/_arkret/edge/push/register-device"))
             .bearer_auth(token)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_integration::PushRegisterDeviceRequestBody,
+            >(json!({
                 "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "push_gateway": "https://push.example",
                 "push_key": "opaque",
                 "platform": "desktop",
                 "app_id": "inkson"
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -46,14 +48,16 @@ async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Res
         server
             .http()
             .post(server.url("/_arkret/edge/push/notify"))
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_integration::PushNotifyRequestBody,
+            >(json!({
                 "notification": {
                     "push_target_id": push_target_id,
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"}, {"device_id": "ak:device:01904100-0000-7000-8000-00000000dead"}]
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;

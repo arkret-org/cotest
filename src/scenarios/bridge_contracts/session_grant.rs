@@ -19,11 +19,13 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     let server = ArkretServer::spawn("session-grant-presentation").await?;
 
     expect_json(
-        server.account_registration_request().json(&json!({
-            "principal_id": principal_id,
-            "display_name": "Alice Session Grant",
-            "device_id": device_id
-        })),
+        server
+            .account_registration_request()
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "principal_id": principal_id,
+                "display_name": "Alice Session Grant",
+                "device_id": device_id
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -39,13 +41,15 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
                 "X-Arkret-Session-Grant-Proof",
                 "client.session-key.push-proof.jwt",
             )
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_integration::PushRegisterDeviceRequestBody,
+            >(json!({
                 "device_id": device_id,
                 "push_gateway": "https://floria.example/_arkret/edge/push/notify",
                 "push_key": "webpush:opaque-token",
                 "platform": "web",
                 "app_id": "inkson"
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;

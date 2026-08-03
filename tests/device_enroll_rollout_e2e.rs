@@ -87,11 +87,13 @@ async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/keys/query"))
             .bearer_auth(&token)
-            .json(&json!({
+            .json(&serde_json::from_value::<
+                arkret_models_crypto::KeysQueryRequestBody,
+            >(json!({
                 "device_keys": {
                     principal_id: [enrolled_device]
                 }
-            })),
+            }))?),
         StatusCode::OK,
     )
     .await?;
@@ -209,7 +211,9 @@ async fn register_webvh_principal(
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&json!({"did": prepared.did})),
+            .json(&serde_json::from_value::<
+                arkret_models_identity::identity::IdentityResolveRequestBody,
+            >(json!({"did": prepared.did}))?),
         StatusCode::OK,
     )
     .await?;

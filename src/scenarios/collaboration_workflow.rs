@@ -32,11 +32,13 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .await?;
 
     let bob_second_device = expect_json(
-        server.account_registration_request().json(&json!({
-            "principal_id": BOB_DID,
-            "display_name": BOB_HANDLE.trim_start_matches('@'),
-            "device_id": "ak:device:01904100-0000-7000-8000-0000000000b2"
-        })),
+        server
+            .account_registration_request()
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
+                "principal_id": BOB_DID,
+                "display_name": BOB_HANDLE.trim_start_matches('@'),
+                "device_id": "ak:device:01904100-0000-7000-8000-0000000000b2"
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -51,7 +53,11 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-users"))
-            .json(&json!({"query": BOB_HANDLE.trim_start_matches('@')})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectorySearchUsersRequestBody,
+            >(
+                json!({"query": BOB_HANDLE.trim_start_matches('@')})
+            )?),
         StatusCode::OK,
     )
     .await?;
@@ -82,7 +88,11 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let visible_bob = expect_json(
         alice
             .post("/_arkret/find/directory/search-users")
-            .json(&json!({"query": BOB_HANDLE.trim_start_matches('@')})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectorySearchUsersRequestBody,
+            >(
+                json!({"query": BOB_HANDLE.trim_start_matches('@')})
+            )?),
         StatusCode::OK,
     )
     .await?;
@@ -106,7 +116,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&json!({"realm_id": realm_id})),
+            .json(&serde_json::from_value::<
+                arkret_models_discovery::DirectoryResolveRealmRequestBody,
+            >(json!({"realm_id": realm_id}))?),
         StatusCode::NOT_FOUND,
     )
     .await?;

@@ -17,6 +17,7 @@ use arkret_wire::{
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use cotest::harness::NonProtocolTestBody;
 use cotest::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, bootstrap_required};
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
@@ -79,7 +80,11 @@ fn recovery_client(
         .build()?)
 }
 
-async fn post_json(http: &reqwest::Client, url: String, body: Value) -> Result<Value> {
+async fn post_json(
+    http: &reqwest::Client,
+    url: String,
+    body: NonProtocolTestBody,
+) -> Result<Value> {
     let response = http.post(&url).json(&body).send().await?;
     let status = response.status();
     let text = response.text().await?;
@@ -163,13 +168,13 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let binding = post_json(
         &http,
         format!("{coauth_base}/_coauth/account/test/debug/bind-principal"),
-        json!({
+        NonProtocolTestBody::new(json!({
             "actor_id": bootstrap.principal_id(),
             "audience": description.service_id,
             "key_log_head": head,
             "enrollment_authority_ref": bootstrap.enrollment_authority_ref()?,
             "account_handle": "joint-recovery",
-        }),
+        })),
     )
     .await?;
     assert_eq!(binding["actor_id"], bootstrap.principal_id());
@@ -181,12 +186,12 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let grant = post_json(
         &http,
         format!("{coauth_base}/_coauth/account/test/debug/issue-dpop-grant"),
-        json!({
+        NonProtocolTestBody::new(json!({
             "actor_id": bootstrap.principal_id(),
             "device_id": FOUNDING_DEVICE,
             "dpop_jwk": dpop_public_jwk(&device_key),
             "audience": description.service_id,
-        }),
+        })),
     )
     .await?;
     assert_eq!(grant["dpop_jkt"], holder_jkt);
@@ -254,12 +259,12 @@ async fn enrollment_authority_recovery_uses_real_joint_bootstrap() -> Result<()>
     let replacement_grant = post_json(
         &http,
         format!("{coauth_base}/_coauth/account/test/debug/issue-dpop-grant"),
-        json!({
+        NonProtocolTestBody::new(json!({
             "actor_id": bootstrap.principal_id(),
             "device_id": REPLACEMENT_DEVICE,
             "dpop_jwk": dpop_public_jwk(&replacement_key),
             "audience": description.service_id,
-        }),
+        })),
     )
     .await?;
     let replacement_grant_jwt = replacement_grant["grant_jwt"]
