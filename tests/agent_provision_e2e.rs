@@ -3695,7 +3695,9 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
     provisioned: &P,
     fragment: &str,
 ) -> Result<arkret::AgentKeyPairOutcome> {
-    prepare_agent_pcr_recovery(server, token, provisioned).await?;
+    prepare_agent_pcr_recovery(server, token, provisioned)
+        .await
+        .with_context(|| format!("prepare PCR recovery before pairing key fragment {fragment}"))?;
     let body = build_agent_key_pair_request_as(server, token, provisioned, fragment).await?;
     // `agent_key_pair` drives `ak.gate.account.command.pair_agent_key`, bound to
     // `POST /_arkret/gate/account/agent-key-pair`: the controller submits the
