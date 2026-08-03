@@ -2802,29 +2802,50 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                 realm_id,
                 provisioned.controller_authorization_ref(),
                 "ak.mls.genesis",
-                json!({
-                    "mls_group_id": group_id,
-                    "effective_scope": {"kind": "realm", "realm_id": realm_id},
-                    "epoch": 0,
-                    "creator_principal_id": agent_id,
-                    "creator_device_id": ALICE_DEVICE,
-                    "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
-                    "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
-                    "ratchet_tree_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
-                    "governance_binding": {
-                        "binding_version": 1,
-                        "encoding_profile": "cbor-deterministic-rfc8949-v1",
-                        "realm_id": realm_id,
-                        "effective_scope": {"kind": "realm", "realm_id": realm_id},
-                        "mls_group_id": group_id,
-                        "previous_epoch": 0,
-                        "next_epoch": 0,
-                        "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                        "binding_profile": "ak.profile.mls_governance_binding.full.v1",
-                        "reducer_profile": "ak.reducer.core.v1"
-                    },
-                    "created_at": "2026-05-02T00:00:01.000Z"
-                }),
+                {
+                    let realm_id = arkret::RealmId::new(realm_id.to_owned())?;
+                    let group_info_digest =
+                        arkret::Hash::new(format!("sha256:{}", "3".repeat(64)))?;
+                    let ratchet_tree_digest =
+                        arkret::Hash::new(format!("sha256:{}", "4".repeat(64)))?;
+                    serde_json::to_value(
+                        arkret_models_collaboration::events_payloads::mls::MlsGenesisPayload {
+                            mls_group_id: arkret::MlsGroupId::new(group_id.clone())?,
+                            effective_scope: arkret_wire::ScopeRef::Realm {
+                                realm_id: realm_id.clone(),
+                            },
+                            epoch: Default::default(),
+                            creator_principal_id: Did::new(agent_id.to_owned())?,
+                            creator_device_id: DeviceId::new(ALICE_DEVICE.to_owned())?,
+                            cipher_suite: non_empty(
+                                "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+                            )?,
+                            group_info_ref: arkret::BlobRef::new(format!(
+                                "ak:blob:sha256:{}",
+                                "3".repeat(64)
+                            ))?,
+                            group_info_digest,
+                            ratchet_tree_ref: arkret::BlobRef::new(format!(
+                                "ak:blob:sha256:{}",
+                                "4".repeat(64)
+                            ))?,
+                            ratchet_tree_digest,
+                            initial_keypackage_refs: None,
+                            governance_binding:
+                                arkret_models_crypto::MlsGovernanceBindingPayload::realm(
+                                    realm_id,
+                                    group_id.clone(),
+                                    0,
+                                    0,
+                                    arkret::Hash::new(format!("sha256:{}", "2".repeat(64)))?,
+                                    arkret_wire::ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1,
+                                    arkret_wire::CORE_REDUCER_PROFILE,
+                                )?,
+                            created_at: DateTime::parse_from_rfc3339("2026-05-02T00:00:01.000Z")?
+                                .with_timezone(&Utc),
+                        },
+                    )?
+                },
             )
             .await?;
             mls_created = true;
