@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
-use cotest::harness::{ArkretServer, register_account};
+use cotest::harness::{ArkretServer, expect_json, register_account};
 use cotest::scenarios::identity_test_support::{
     actor_did_for_service, authorize_device_public_key,
 };
@@ -1025,21 +1025,18 @@ async fn prepare_live_publication_body(
         intents: Vec::new(),
     };
     let request_digest = arkret_canonical::canonical_sha256(&request)?;
-    let response = server
-        .http()
-        .post(server.url("/_arkret/self/authorization-leases"))
-        .bearer_auth(&ctx.alice_token)
-        .header("Idempotency-Key", format!("cotest-parity-{request_digest}"))
-        .json(&request)
-        .send()
-        .await?;
-    let status = response.status();
-    let text = response.text().await?;
-    if status != reqwest::StatusCode::OK {
-        bail!("Realm bootstrap lease issuance returned {status}: {text}");
-    }
+    let value = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/authorization-leases"))
+            .bearer_auth(&ctx.alice_token)
+            .header("Idempotency-Key", format!("cotest-parity-{request_digest}"))
+            .json(&request),
+        reqwest::StatusCode::OK,
+    )
+    .await?;
     let outcome: arkret_wire::AuthorizationLeaseIssueOutcome =
-        serde_json::from_str(&text).context("decode Realm bootstrap lease outcome")?;
+        serde_json::from_value(value).context("decode Realm bootstrap lease outcome")?;
     outcome
         .validate_against_request(&request)
         .context("validate Realm bootstrap lease outcome")?;
