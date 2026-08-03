@@ -3689,9 +3689,104 @@ async fn pair_agent_runtime_key_as<P: PairingOutcome>(
     // `agent_key_pair` drives `ak.gate.account.command.pair_agent_key`, bound to
     // `POST /_arkret/gate/account/agent-key-pair`: the controller submits the
     // durable `ak.agent.key.authorize` event that clears `pending_runtime_key`.
-    Ok(bearer_sdk_client(server, token)?
-        .agent_key_pair(&body)
-        .await?)
+    let client = bearer_sdk_client(server, token)?;
+    let pending = client.agent_key_pair(&body).await?;
+    if pending.activation_state
+        != arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingAcceptedFrontier
+    {
+        return Err(anyhow!(
+            "first Agent pairing commit did not await an accepted frontier: {:?}",
+            pending.activation_state
+        ));
+    }
+    advance_managed_agent_pcr_seal(
+        server,
+        token,
+        provisioned.principal_control_realm_id().as_str(),
+    )
+    .await?;
+    let active = client.agent_key_pair(&body).await?;
+    if !active.is_active() {
+        return Err(anyhow!(
+            "Agent pairing retry did not activate after successor Seal: {:?}",
+            active.activation_state
+        ));
+    }
+    Ok(active)
+}
+
+async fn advance_managed_agent_pcr_seal(
+    server: &ArkretServer,
+    token: &str,
+    realm_id: &str,
+) -> Result<()> {
+    let client = bearer_sdk_client(server, token)?;
+    let events = client.events_query_all_pages(realm_id).await?.events;
+    let seal_key = format!("{}|{realm_id}", server.base_url());
+    let predecessor = MANAGED_AGENT_PCR_SEALS
+        .lock()
+        .expect("managed Agent PCR Seal lock")
+        .get(&seal_key)
+        .cloned()
+        .ok_or_else(|| anyhow!("managed Agent PCR predecessor Seal is missing"))?;
+    let frontier = managed_agent_frontier(server, token, realm_id)
+        .await?
+        .ok_or_else(|| anyhow!("managed Agent PCR frontier is missing"))?;
+    if frontier.seal_id != predecessor.id {
+        return Err(anyhow!(
+            "managed Agent PCR predecessor mismatch: frontier {}, local {}",
+            frontier.seal_id,
+            predecessor.id
+        ));
+    }
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+        [24_u8; 32],
+        Did::new(ALICE_DID.to_owned())?,
+        alice_device_verification_method(),
+    );
+    let mut hlc =
+        arkret::HlcGenerator::new(realm_id, ALICE_DEVICE, b"cotest-managed-agent-pcr-seal");
+    let seal = arkret_bootstrap::build_managed_agent_pcr_event_seal(
+        &events,
+        Some(&predecessor),
+        hlc.generate(),
+        &signer,
+        &cotest::publication::project_cells,
+    )?;
+    let outcome = client.events_submit_seal(&seal).await?;
+    if outcome.seal_id != seal.id {
+        return Err(anyhow!(
+            "managed Agent PCR successor Seal id changed at admission: expected {}, got {}",
+            seal.id,
+            outcome.seal_id
+        ));
+    }
+    MANAGED_AGENT_PCR_SEALS
+        .lock()
+        .expect("managed Agent PCR Seal lock")
+        .insert(seal_key, seal.clone());
+    let expected_seal_id = seal.id;
+    eventually(
+        "managed Agent PCR successor Seal coverage",
+        Duration::from_secs(30),
+        Duration::from_millis(250),
+        || {
+            let expected_seal_id = expected_seal_id.clone();
+            async move {
+                let current = managed_agent_frontier(server, token, realm_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("managed Agent PCR successor frontier is missing"))?;
+                if current.seal_id != expected_seal_id {
+                    return Err(anyhow!(
+                        "managed Agent PCR successor frontier is still {}",
+                        current.seal_id
+                    ));
+                }
+                Ok(())
+            }
+        },
+    )
+    .await
 }
 
 async fn build_agent_key_pair_request_as<P: PairingOutcome>(
