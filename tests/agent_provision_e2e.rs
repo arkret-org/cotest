@@ -1447,9 +1447,9 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         Some(pair.authorize_event_ref.as_str())
     );
     let signing_key = runtime_signing_key();
-    let verification_method = format!("{agent_did}#runtime-key-1");
-    let builder = runtime_key_request_builder(&server, &prov, &signing_key)?
-        .verification_method(verification_method.clone());
+    let endpoint_device_id = runtime_endpoint_device_id("runtime-key-1")?;
+    let verification_method = format!("{agent_did}#{endpoint_device_id}");
+    let builder = runtime_key_request_builder(&server, &prov, &signing_key, endpoint_device_id)?;
     assert_eq!(
         status.authorized_verification_method.as_deref(),
         Some(verification_method.as_str())
@@ -3566,6 +3566,17 @@ fn runtime_signing_key_for_fragment(fragment: &str) -> SigningKey {
     }
 }
 
+fn runtime_endpoint_device_id(fragment: &str) -> Result<DeviceId> {
+    let suffix = match fragment {
+        "runtime-key-1" => 1,
+        "runtime-key-2" => 2,
+        "runtime-key-3" => 3,
+        _ => 4,
+    };
+    DeviceId::new(format!("ak:device:01970000-0000-7000-8000-{suffix:012x}"))
+        .map_err(anyhow::Error::msg)
+}
+
 trait PairingOutcome {
     fn agent_id(&self) -> &arkret::Did;
     fn principal_control_realm_id(&self) -> &arkret::RealmId;
@@ -3612,6 +3623,7 @@ fn runtime_key_request_builder<'a, P: PairingOutcome>(
     server: &ArkretServer,
     provisioned: &P,
     signing_key: &'a SigningKey,
+    endpoint_device_id: DeviceId,
 ) -> Result<arkret_signatures::agent::RuntimeKeyRequestBuilder<'a>> {
     let pairing_code = provisioned
         .pairing_code()
@@ -3632,6 +3644,7 @@ fn runtime_key_request_builder<'a, P: PairingOutcome>(
             pairing_code,
             pairing_expires_at: provisioned.expires_at(),
         },
+        endpoint_device_id,
     )
     .proof_expires_at(proof_expires_at))
 }
@@ -3644,12 +3657,14 @@ fn build_runtime_approval_request<P: PairingOutcome>(
     provisioned: &P,
 ) -> Result<arkret::AgentRuntimeApprovalRequestBody> {
     let signing_key = runtime_signing_key();
-    Ok(
-        runtime_key_request_builder(server, provisioned, &signing_key)?
-            .verification_method(format!("{}#runtime-key-1", provisioned.agent_id()))
-            .build_approval_request()?
-            .body,
-    )
+    Ok(runtime_key_request_builder(
+        server,
+        provisioned,
+        &signing_key,
+        runtime_endpoint_device_id("runtime-key-1")?,
+    )?
+    .build_approval_request()?
+    .body)
 }
 
 async fn pair_agent_runtime_key<P: PairingOutcome>(
@@ -3714,9 +3729,10 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     let controller_id = arkret::Did::new(ALICE_DID.to_owned())
         .map_err(|err| anyhow!("alice did invalid: {err}"))?;
     let signing_key = runtime_signing_key_for_fragment(fragment);
-    let verification_method = format!("{agent_did}#{fragment}");
-    let builder = runtime_key_request_builder(server, provisioned, &signing_key)?
-        .verification_method(verification_method.clone());
+    let endpoint_device_id = runtime_endpoint_device_id(fragment)?;
+    let verification_method = format!("{agent_did}#{endpoint_device_id}");
+    let builder =
+        runtime_key_request_builder(server, provisioned, &signing_key, endpoint_device_id)?;
     let approval_request = builder.build_approval_request()?.body;
     bearer_sdk_client(server, token)?
         .agent_runtime_approval_request(&approval_request)
