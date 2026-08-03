@@ -45,9 +45,10 @@ use arkret::{
 };
 use arkret_models_collaboration::agent_signer_evidence::AgentLifecycleStatus;
 use arkret_models_collaboration::protocol_journey::{
-    SidecarAttachPhase, SidecarCommitPhase, SidecarContextRef, SidecarEnsureAttachRequestBody,
-    SidecarEnsureCommitRequestBody, SidecarEnsurePrepareRequestBody, SidecarPreparePhase,
-    SidecarPreparedEventDraft, SidecarPreparedOutcome,
+    SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAccessReadiness, SidecarAttachPhase,
+    SidecarCommitPhase, SidecarContextRef, SidecarEnsureAttachRequestBody,
+    SidecarEnsureCommitRequestBody, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
+    SidecarPreparePhase, SidecarPreparedEventDraft, SidecarPreparedOutcome,
 };
 use arkret_signatures::{
     Ed25519PayloadSigner, PublicKeyMaterial, SignEventOptions, sign_event,
@@ -335,10 +336,17 @@ struct SidecarCoordinates {
     private_relation_id: RelationId,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct SidecarContextCoordinates {
+    target_ref: String,
+    private_strand_id: StrandId,
+    private_relation_id: RelationId,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct SidecarDurableState {
     coordinates: Option<SidecarCoordinates>,
-    context_targets: BTreeSet<String>,
+    contexts: BTreeMap<String, SidecarContextCoordinates>,
     accepted_event_ids: BTreeSet<EventId>,
     controller_membership: bool,
 }
@@ -349,11 +357,24 @@ struct SidecarPreparedRecord {
     prepared: SidecarPreparedOutcome,
 }
 
+#[derive(Clone)]
+struct SidecarReservationRecord {
+    device_id: String,
+    prepared: SidecarPreparedOutcome,
+}
+
+#[derive(Clone)]
+struct SidecarAcceptedRecord {
+    request_hash: String,
+    outcome: SidecarEnsureOutcome,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SidecarStateSnapshot {
     durable: SidecarDurableState,
     idempotency_records: usize,
     reservations: usize,
+    accepted_records: usize,
     staged_write_epoch: u64,
     atomic_commit_epoch: u64,
 }
@@ -364,7 +385,8 @@ struct SidecarExecutableModel {
     lifecycle: AgentLifecycleStatus,
     durable: SidecarDurableState,
     idempotency: BTreeMap<String, SidecarPreparedRecord>,
-    reservations: BTreeMap<String, SidecarPreparedOutcome>,
+    reservations: BTreeMap<String, SidecarReservationRecord>,
+    accepted: BTreeMap<String, SidecarAcceptedRecord>,
     staged_write_epoch: u64,
     atomic_commit_epoch: u64,
 }
@@ -382,6 +404,7 @@ impl SidecarExecutableModel {
             durable: SidecarDurableState::default(),
             idempotency: BTreeMap::new(),
             reservations: BTreeMap::new(),
+            accepted: BTreeMap::new(),
             staged_write_epoch: 0,
             atomic_commit_epoch: 0,
         }
@@ -403,6 +426,7 @@ impl SidecarExecutableModel {
             durable: self.durable.clone(),
             idempotency_records: self.idempotency.len(),
             reservations: self.reservations.len(),
+            accepted_records: self.accepted.len(),
             staged_write_epoch: self.staged_write_epoch,
             atomic_commit_epoch: self.atomic_commit_epoch,
         }
@@ -423,12 +447,21 @@ impl SidecarExecutableModel {
         &mut self,
         request: &SidecarEnsurePrepareRequestBody,
     ) -> SidecarModelResult<SidecarPreparedOutcome> {
+        self.prepare_on_device(request, "device-primary")
+    }
+
+    fn prepare_on_device(
+        &mut self,
+        request: &SidecarEnsurePrepareRequestBody,
+        device_id: &str,
+    ) -> SidecarModelResult<SidecarPreparedOutcome> {
         // Authorization and lifecycle checks intentionally precede all durable
         // existence reads, which is the privacy boundary being exercised.
         self.authorize(request)?;
         let request_hash = arkret_canonical::canonical_sha256(request)
             .map_err(|_| SidecarModelError::ModelInvariant)?;
-        if let Some(cached) = self.idempotency.get(request.idempotency_key.as_str()) {
+        let ledger_key = device_ledger_key(device_id, request.idempotency_key.as_str());
+        if let Some(cached) = self.idempotency.get(&ledger_key) {
             return if cached.request_hash == request_hash {
                 Ok(cached.prepared.clone())
             } else {
@@ -436,17 +469,30 @@ impl SidecarExecutableModel {
             };
         }
 
-        let prepared = build_fixed_sidecar_prepare(request, self.durable.coordinates.as_ref())?;
+        let context_key = normalized_context_key(request)?;
+        let existing_context = self.durable.contexts.get(&context_key);
+        let prepared = build_fixed_sidecar_prepare(
+            request,
+            device_id,
+            self.durable.coordinates.as_ref(),
+            existing_context,
+        )?;
         validate_prepared_outcome(&prepared, request)?;
         let handle = prepared_reservation_handle(&prepared).to_string();
         self.idempotency.insert(
-            request.idempotency_key.to_string(),
+            ledger_key,
             SidecarPreparedRecord {
                 request_hash,
                 prepared: prepared.clone(),
             },
         );
-        self.reservations.insert(handle, prepared.clone());
+        self.reservations.insert(
+            handle,
+            SidecarReservationRecord {
+                device_id: device_id.to_owned(),
+                prepared: prepared.clone(),
+            },
+        );
         self.staged_write_epoch += 1;
         Ok(prepared)
     }
@@ -455,12 +501,35 @@ impl SidecarExecutableModel {
         &mut self,
         request: &SidecarEnsureCommitRequestBody,
         public_key: &PublicKeyMaterial,
-    ) -> SidecarModelResult<()> {
-        let prepared = self
+    ) -> SidecarModelResult<SidecarEnsureOutcome> {
+        self.commit_new_on_device(request, public_key, "device-primary")
+    }
+
+    fn commit_new_on_device(
+        &mut self,
+        request: &SidecarEnsureCommitRequestBody,
+        public_key: &PublicKeyMaterial,
+        device_id: &str,
+    ) -> SidecarModelResult<SidecarEnsureOutcome> {
+        let request_hash = arkret_canonical::canonical_sha256(request)
+            .map_err(|_| SidecarModelError::ModelInvariant)?;
+        let ledger_key = device_ledger_key(device_id, request.idempotency_key.as_str());
+        if let Some(cached) = self.accepted.get(&ledger_key) {
+            return if cached.request_hash == request_hash {
+                Ok(cached.outcome.clone())
+            } else {
+                Err(SidecarModelError::IdempotencyConflict)
+            };
+        }
+        let reservation = self
             .reservations
             .get(request.reservation_handle.as_str())
             .cloned()
             .ok_or(SidecarModelError::ReservationMismatch)?;
+        if reservation.device_id != device_id {
+            return Err(SidecarModelError::ReservationMismatch);
+        }
+        let prepared = reservation.prepared;
         let SidecarPreparedOutcome::New {
             operation_id,
             reservation_handle,
@@ -496,37 +565,83 @@ impl SidecarExecutableModel {
             private_strand_id: private_strand_id.clone(),
             private_relation_id: private_relation_id.clone(),
         };
+        let context = context_coordinates_from_event(&request.context_attach_event)?;
+        let context_key = normalized_context_key_from_event(&request.context_attach_event)?;
         let mut next = self.durable.clone();
-        if next.coordinates.is_some() {
+        if let Some(existing) = &next.coordinates {
+            if existing.sidecar_id != coordinates.sidecar_id
+                || existing.backing_circle_id != coordinates.backing_circle_id
+            {
+                return Err(SidecarModelError::BranchMismatch);
+            }
+        } else {
+            next.coordinates = Some(coordinates.clone());
+            next.controller_membership = true;
+        }
+        if let Some(existing) = next.contexts.get(&context_key)
+            && existing != &context
+        {
             return Err(SidecarModelError::BranchMismatch);
         }
-        next.coordinates = Some(coordinates);
-        next.controller_membership = true;
-        next.context_targets
-            .insert(context_target_from_event(&request.context_attach_event)?);
+        next.contexts.insert(context_key, context);
         next.accepted_event_ids.insert(create_event_id.clone());
         next.accepted_event_ids
             .insert(context_attach_event_id.clone());
 
-        // One assignment is the modeled atomic commit point. No durable field
-        // is touched until both signed Events and their causal link validate.
+        let outcome = accepted_sidecar_outcome(
+            operation_id.clone(),
+            SidecarAcceptedPhase::Commit,
+            &coordinates,
+        );
+        // The durable projection, finalized reservation, and accepted replay
+        // ledger become visible as one modeled transaction after every check.
         self.durable = next;
         self.reservations
             .remove(request.reservation_handle.as_str());
+        self.accepted.insert(
+            ledger_key,
+            SidecarAcceptedRecord {
+                request_hash,
+                outcome: outcome.clone(),
+            },
+        );
         self.atomic_commit_epoch += 1;
-        Ok(())
+        Ok(outcome)
     }
 
     fn commit_existing(
         &mut self,
         request: &SidecarEnsureAttachRequestBody,
         public_key: &PublicKeyMaterial,
-    ) -> SidecarModelResult<()> {
-        let prepared = self
+    ) -> SidecarModelResult<SidecarEnsureOutcome> {
+        self.commit_existing_on_device(request, public_key, "device-primary")
+    }
+
+    fn commit_existing_on_device(
+        &mut self,
+        request: &SidecarEnsureAttachRequestBody,
+        public_key: &PublicKeyMaterial,
+        device_id: &str,
+    ) -> SidecarModelResult<SidecarEnsureOutcome> {
+        let request_hash = arkret_canonical::canonical_sha256(request)
+            .map_err(|_| SidecarModelError::ModelInvariant)?;
+        let ledger_key = device_ledger_key(device_id, request.idempotency_key.as_str());
+        if let Some(cached) = self.accepted.get(&ledger_key) {
+            return if cached.request_hash == request_hash {
+                Ok(cached.outcome.clone())
+            } else {
+                Err(SidecarModelError::IdempotencyConflict)
+            };
+        }
+        let reservation = self
             .reservations
             .get(request.reservation_handle.as_str())
             .cloned()
             .ok_or(SidecarModelError::ReservationMismatch)?;
+        if reservation.device_id != device_id {
+            return Err(SidecarModelError::ReservationMismatch);
+        }
+        let prepared = reservation.prepared;
         let SidecarPreparedOutcome::Existing {
             operation_id,
             reservation_handle,
@@ -558,22 +673,132 @@ impl SidecarExecutableModel {
             return Err(SidecarModelError::BranchMismatch);
         }
 
-        let mut next = self.durable.clone();
-        next.coordinates = Some(SidecarCoordinates {
+        let coordinates = SidecarCoordinates {
             sidecar_id: sidecar_id.clone(),
             backing_circle_id: backing_circle_id.clone(),
             private_strand_id: private_strand_id.clone(),
             private_relation_id: private_relation_id.clone(),
-        });
-        next.context_targets
-            .insert(context_target_from_event(&request.context_attach_event)?);
+        };
+        let context = context_coordinates_from_event(&request.context_attach_event)?;
+        if context.private_strand_id != coordinates.private_strand_id
+            || context.private_relation_id != coordinates.private_relation_id
+        {
+            return Err(SidecarModelError::DraftMismatch);
+        }
+        let context_key = normalized_context_key_from_event(&request.context_attach_event)?;
+        let mut next = self.durable.clone();
+        if let Some(existing) = next.contexts.get(&context_key)
+            && existing != &context
+        {
+            return Err(SidecarModelError::BranchMismatch);
+        }
+        next.contexts.insert(context_key, context);
         next.accepted_event_ids
             .insert(context_attach_event_id.clone());
+        let outcome = accepted_sidecar_outcome(
+            operation_id.clone(),
+            SidecarAcceptedPhase::Attach,
+            &coordinates,
+        );
         self.durable = next;
         self.reservations
             .remove(request.reservation_handle.as_str());
+        self.accepted.insert(
+            ledger_key,
+            SidecarAcceptedRecord {
+                request_hash,
+                outcome: outcome.clone(),
+            },
+        );
         self.atomic_commit_epoch += 1;
-        Ok(())
+        Ok(outcome)
+    }
+}
+
+fn device_ledger_key(device_id: &str, idempotency_key: &str) -> String {
+    format!("{device_id}\u{0}{idempotency_key}")
+}
+
+fn unique_reservation_handle(
+    request: &SidecarEnsurePrepareRequestBody,
+    device_id: &str,
+) -> SidecarModelResult<ProtocolOpaqueId> {
+    let digest = arkret_canonical::canonical_sha256(&json!({
+        "operation_id": request.operation_id,
+        "controller_id": request.controller_id,
+        "device_id": device_id,
+        "context": request.context_ref,
+    }))
+    .map_err(|_| SidecarModelError::ModelInvariant)?;
+    let digest = digest
+        .strip_prefix("sha256:")
+        .ok_or(SidecarModelError::ModelInvariant)?;
+    ProtocolOpaqueId::new(format!("sidecar-reservation-{}", &digest[..32]))
+        .map_err(|_| SidecarModelError::ModelInvariant)
+}
+
+fn normalized_context_key(request: &SidecarEnsurePrepareRequestBody) -> SidecarModelResult<String> {
+    let normalized = match &request.context_ref {
+        SidecarContextRef::Relation { relation_id } => json!({
+            "realm_id": request.source_realm_id,
+            "relation_id": relation_id,
+        }),
+        SidecarContextRef::Strand { strand_id } => json!({
+            "realm_id": request.source_realm_id,
+            "strand_id": strand_id,
+        }),
+    };
+    arkret_canonical::canonical_sha256(&normalized).map_err(|_| SidecarModelError::ModelInvariant)
+}
+
+fn normalized_context_key_from_event(event: &Event) -> SidecarModelResult<String> {
+    let target = context_target_from_event(event)?;
+    let normalized = if target.starts_with("ak:strand:") {
+        json!({"realm_id": event.realm_id, "strand_id": target})
+    } else if target.starts_with("ak:relation:") {
+        json!({"realm_id": event.realm_id, "relation_id": target})
+    } else {
+        return Err(SidecarModelError::DraftMismatch);
+    };
+    arkret_canonical::canonical_sha256(&normalized).map_err(|_| SidecarModelError::ModelInvariant)
+}
+
+fn context_coordinates_from_event(event: &Event) -> SidecarModelResult<SidecarContextCoordinates> {
+    let private_strand_id = event
+        .payload
+        .get("private_strand")
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_str)
+        .ok_or(SidecarModelError::DraftMismatch)?;
+    let private_relation_id = event
+        .payload
+        .get("relation")
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_str)
+        .ok_or(SidecarModelError::DraftMismatch)?;
+    Ok(SidecarContextCoordinates {
+        target_ref: context_target_from_event(event)?,
+        private_strand_id: StrandId::new(private_strand_id)
+            .map_err(|_| SidecarModelError::DraftMismatch)?,
+        private_relation_id: RelationId::new(private_relation_id)
+            .map_err(|_| SidecarModelError::DraftMismatch)?,
+    })
+}
+
+fn accepted_sidecar_outcome(
+    operation_id: ProtocolOperationId,
+    accepted_phase: SidecarAcceptedPhase,
+    coordinates: &SidecarCoordinates,
+) -> SidecarEnsureOutcome {
+    SidecarEnsureOutcome::Accepted {
+        operation_id,
+        accepted_phase,
+        ok: SidecarAcceptedOk,
+        sidecar_id: coordinates.sidecar_id.clone(),
+        private_strand_id: coordinates.private_strand_id.clone(),
+        private_relation_id: coordinates.private_relation_id.clone(),
+        access_readiness: SidecarAccessReadiness::KeyMaterialPending,
+        pending_access_reconciliations: Vec::new(),
     }
 }
 
@@ -605,10 +830,23 @@ fn fixed_prepare_request(
     idempotency_key: &str,
     second_context: bool,
 ) -> Result<SidecarEnsurePrepareRequestBody> {
+    fixed_prepare_request_for_operation(
+        controller_id,
+        idempotency_key,
+        second_context,
+        "ak:operation:cotest.sidecar.ensure",
+    )
+}
+
+fn fixed_prepare_request_for_operation(
+    controller_id: &Did,
+    idempotency_key: &str,
+    second_context: bool,
+    operation_id: &str,
+) -> Result<SidecarEnsurePrepareRequestBody> {
     Ok(SidecarEnsurePrepareRequestBody {
         phase: SidecarPreparePhase::Prepare,
-        operation_id: ProtocolOperationId::new("ak:operation:cotest.sidecar.ensure")
-            .map_err(anyhow::Error::msg)?,
+        operation_id: ProtocolOperationId::new(operation_id).map_err(anyhow::Error::msg)?,
         idempotency_key: ProtocolOpaqueId::new(idempotency_key).map_err(anyhow::Error::msg)?,
         source_realm_id: RealmId::new("ak:realm:01964137-0000-7000-8000-000000000100")?,
         controller_id: controller_id.clone(),
@@ -624,16 +862,30 @@ fn fixed_prepare_request(
 
 fn build_fixed_sidecar_prepare(
     request: &SidecarEnsurePrepareRequestBody,
+    device_id: &str,
     existing: Option<&SidecarCoordinates>,
+    existing_context: Option<&SidecarContextCoordinates>,
 ) -> SidecarModelResult<SidecarPreparedOutcome> {
     let created_at = fixed_sidecar_time();
     let expires_at = created_at + chrono::Duration::minutes(10);
     let coordinates = match existing {
-        Some(existing) => SidecarCoordinates {
-            sidecar_id: existing.sidecar_id.clone(),
-            backing_circle_id: existing.backing_circle_id.clone(),
-            ..fixed_sidecar_coordinates(true).map_err(|_| SidecarModelError::ModelInvariant)?
-        },
+        Some(existing) => {
+            let context_coordinates = match existing_context {
+                Some(context) => SidecarCoordinates {
+                    sidecar_id: existing.sidecar_id.clone(),
+                    backing_circle_id: existing.backing_circle_id.clone(),
+                    private_strand_id: context.private_strand_id.clone(),
+                    private_relation_id: context.private_relation_id.clone(),
+                },
+                None => SidecarCoordinates {
+                    sidecar_id: existing.sidecar_id.clone(),
+                    backing_circle_id: existing.backing_circle_id.clone(),
+                    ..fixed_sidecar_coordinates(true)
+                        .map_err(|_| SidecarModelError::ModelInvariant)?
+                },
+            };
+            context_coordinates
+        }
         None => fixed_sidecar_coordinates(false).map_err(|_| SidecarModelError::ModelInvariant)?,
     };
     let context_target = match &request.context_ref {
@@ -642,8 +894,10 @@ fn build_fixed_sidecar_prepare(
     };
     let create_event_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000107")
         .map_err(|_| SidecarModelError::ModelInvariant)?;
-    let context_attach_event_id = EventId::new(if existing.is_some() {
+    let context_attach_event_id = EventId::new(if existing_context.is_some() {
         "ak:event:01964137-0000-7000-8000-000000000109"
+    } else if existing.is_some() {
+        "ak:event:01964137-0000-7000-8000-000000000113"
     } else {
         "ak:event:01964137-0000-7000-8000-000000000108"
     })
@@ -690,12 +944,7 @@ fn build_fixed_sidecar_prepare(
         }),
     )?;
     let context_attach_event_draft = fixed_sidecar_draft(&attach_event)?;
-    let reservation_handle = ProtocolOpaqueId::new(if existing.is_some() {
-        "cotest-sidecar-existing-reservation"
-    } else {
-        "cotest-sidecar-new-reservation"
-    })
-    .map_err(|_| SidecarModelError::ModelInvariant)?;
+    let reservation_handle = unique_reservation_handle(request, device_id)?;
 
     if existing.is_some() {
         Ok(SidecarPreparedOutcome::Existing {
@@ -1105,7 +1354,7 @@ fn assert_new_commit_failure_is_write_free(
 ) -> Result<()> {
     let before = model.snapshot();
     let observed = model.commit_new(request, public_key);
-    if observed != Err(expected) || model.snapshot() != before {
+    if !matches!(observed, Err(error) if error == expected) || model.snapshot() != before {
         bail!(
             "Sidecar negative commit was not write-free: expected {expected:?}, got {observed:?}"
         );
@@ -1139,6 +1388,8 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let SidecarPreparedOutcome::New {
         operation_id,
         reservation_handle,
+        private_strand_id: initial_private_strand_id,
+        private_relation_id: initial_private_relation_id,
         create_event_draft,
         context_attach_event_draft,
         ..
@@ -1240,18 +1491,80 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         SidecarModelError::AfterLinkMismatch,
     )?;
 
-    model
-        .commit_new(
-            &commit(create_event.clone(), attach_event.clone()),
-            &public_key,
-        )
+    let commit_request = commit(create_event.clone(), attach_event.clone());
+    let accepted = model
+        .commit_new(&commit_request, &public_key)
         .map_err(|error| anyhow!("{error:?}"))?;
     if model.atomic_commit_epoch != 1
         || !model.durable.controller_membership
         || model.durable.accepted_event_ids.len() != 2
-        || model.durable.context_targets.len() != 1
+        || model.durable.contexts.len() != 1
     {
         bail!("Sidecar New commit did not publish one complete atomic projection");
+    }
+    let accepted_snapshot = model.snapshot();
+    let accepted_replay = model
+        .commit_new(&commit_request, &public_key)
+        .map_err(|error| anyhow!("{error:?}"))?;
+    if serde_json::to_vec(&accepted_replay)? != serde_json::to_vec(&accepted)?
+        || model.snapshot() != accepted_snapshot
+    {
+        bail!("exact Sidecar commit replay did not return the original Accepted outcome");
+    }
+    let mut conflicting_commit = commit_request.clone();
+    conflicting_commit
+        .context_attach_event
+        .unsigned
+        .insert("different-request-bytes".to_owned(), Value::Bool(true));
+    if !matches!(
+        model.commit_new(&conflicting_commit, &public_key),
+        Err(SidecarModelError::IdempotencyConflict)
+    ) || model.snapshot() != accepted_snapshot
+    {
+        bail!("Sidecar commit idempotency conflict changed staged or durable state");
+    }
+
+    let same_context_request = fixed_prepare_request_for_operation(
+        &controller,
+        "cotest-sidecar-prepare-same-context",
+        false,
+        "ak:operation:cotest.sidecar.ensure.same-context",
+    )?;
+    let same_context = model
+        .prepare(&same_context_request)
+        .map_err(|error| anyhow!("{error:?}"))?;
+    let SidecarPreparedOutcome::Existing {
+        operation_id: same_operation_id,
+        reservation_handle: same_reservation_handle,
+        private_strand_id: same_private_strand_id,
+        private_relation_id: same_private_relation_id,
+        context_attach_event_draft: same_context_draft,
+        ..
+    } = same_context
+    else {
+        bail!("same normalized context did not return Existing");
+    };
+    if same_private_strand_id != *initial_private_strand_id
+        || same_private_relation_id != *initial_private_relation_id
+    {
+        bail!("same normalized context allocated replacement private coordinates");
+    }
+    let same_context_event =
+        sign_prepared_draft(&same_context_draft, &signer, &verification_method)
+            .map_err(|error| anyhow!("{error:?}"))?;
+    let same_context_attach = SidecarEnsureAttachRequestBody {
+        phase: SidecarAttachPhase::Attach,
+        operation_id: same_operation_id,
+        idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-commit-same-context")
+            .map_err(anyhow::Error::msg)?,
+        reservation_handle: same_reservation_handle,
+        context_attach_event: same_context_event,
+    };
+    model
+        .commit_existing(&same_context_attach, &public_key)
+        .map_err(|error| anyhow!("{error:?}"))?;
+    if model.durable.contexts.len() != 1 {
+        bail!("same-context attach duplicated its private projection");
     }
 
     let existing_request =
@@ -1289,14 +1602,139 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         reservation_handle,
         context_attach_event: attach_event,
     };
-    model
+    let accepted_attach = model
         .commit_existing(&attach, &public_key)
         .map_err(|error| anyhow!("{error:?}"))?;
-    if model.atomic_commit_epoch != 2
-        || model.durable.accepted_event_ids.len() != 3
-        || model.durable.context_targets.len() != 2
+    if model.atomic_commit_epoch != 3
+        || model.durable.accepted_event_ids.len() != 4
+        || model.durable.contexts.len() != 2
     {
         bail!("Sidecar Existing attach was not one atomic context-only commit");
+    }
+    let attach_snapshot = model.snapshot();
+    let attach_replay = model
+        .commit_existing(&attach, &public_key)
+        .map_err(|error| anyhow!("{error:?}"))?;
+    if serde_json::to_vec(&attach_replay)? != serde_json::to_vec(&accepted_attach)?
+        || model.snapshot() != attach_snapshot
+    {
+        bail!("exact Sidecar attach replay did not return the original Accepted outcome");
+    }
+    let mut conflicting_attach = attach.clone();
+    conflicting_attach
+        .context_attach_event
+        .unsigned
+        .insert("different-attach-bytes".to_owned(), Value::Bool(true));
+    if !matches!(
+        model.commit_existing(&conflicting_attach, &public_key),
+        Err(SidecarModelError::IdempotencyConflict)
+    ) || model.snapshot() != attach_snapshot
+    {
+        bail!("Sidecar attach idempotency conflict changed staged or durable state");
+    }
+
+    let mut concurrent =
+        SidecarExecutableModel::new(controller.clone(), true, AgentLifecycleStatus::Active);
+    let device_a_request = fixed_prepare_request_for_operation(
+        &controller,
+        "cotest-sidecar-concurrent-prepare",
+        false,
+        "ak:operation:cotest.sidecar.concurrent-a",
+    )?;
+    let device_b_request = fixed_prepare_request_for_operation(
+        &controller,
+        "cotest-sidecar-concurrent-prepare",
+        false,
+        "ak:operation:cotest.sidecar.concurrent-b",
+    )?;
+    let device_a = concurrent
+        .prepare_on_device(&device_a_request, "device-a")
+        .map_err(|error| anyhow!("{error:?}"))?;
+    let device_b = concurrent
+        .prepare_on_device(&device_b_request, "device-b")
+        .map_err(|error| anyhow!("{error:?}"))?;
+    let SidecarPreparedOutcome::New {
+        operation_id: operation_a,
+        reservation_handle: handle_a,
+        sidecar_id: sidecar_a,
+        backing_circle_id: circle_a,
+        private_strand_id: strand_a,
+        private_relation_id: relation_a,
+        create_event_draft: create_a,
+        context_attach_event_draft: attach_a,
+        ..
+    } = device_a
+    else {
+        bail!("device A concurrent prepare was not New");
+    };
+    let SidecarPreparedOutcome::New {
+        operation_id: operation_b,
+        reservation_handle: handle_b,
+        sidecar_id: sidecar_b,
+        backing_circle_id: circle_b,
+        private_strand_id: strand_b,
+        private_relation_id: relation_b,
+        create_event_draft: create_b,
+        context_attach_event_draft: attach_b,
+        ..
+    } = device_b
+    else {
+        bail!("device B concurrent prepare was not New");
+    };
+    if handle_a == handle_b
+        || concurrent.reservations.len() != 2
+        || sidecar_a != sidecar_b
+        || circle_a != circle_b
+        || strand_a != strand_b
+        || relation_a != relation_b
+    {
+        bail!("concurrent device reservations overwrote or diverged fixed coordinates");
+    }
+    let concurrent_commit = |operation_id: ProtocolOperationId,
+                             reservation_handle: ProtocolOpaqueId,
+                             create_draft: &SidecarPreparedEventDraft,
+                             attach_draft: &SidecarPreparedEventDraft|
+     -> Result<SidecarEnsureCommitRequestBody> {
+        Ok(SidecarEnsureCommitRequestBody {
+            phase: SidecarCommitPhase::Commit,
+            operation_id,
+            idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-concurrent-commit")
+                .map_err(anyhow::Error::msg)?,
+            reservation_handle,
+            create_event: sign_prepared_draft(create_draft, &signer, &verification_method)
+                .map_err(|error| anyhow!("{error:?}"))?,
+            context_attach_event: sign_prepared_draft(attach_draft, &signer, &verification_method)
+                .map_err(|error| anyhow!("{error:?}"))?,
+        })
+    };
+    let commit_a = concurrent_commit(operation_a, handle_a, &create_a, &attach_a)?;
+    let commit_b = concurrent_commit(operation_b, handle_b, &create_b, &attach_b)?;
+    let accepted_a = concurrent
+        .commit_new_on_device(&commit_a, &public_key, "device-a")
+        .map_err(|error| anyhow!("{error:?}"))?;
+    let accepted_b = concurrent
+        .commit_new_on_device(&commit_b, &public_key, "device-b")
+        .map_err(|error| anyhow!("{error:?}"))?;
+    let accepted_coordinates = |outcome: &SidecarEnsureOutcome| match outcome {
+        SidecarEnsureOutcome::Accepted {
+            sidecar_id,
+            private_strand_id,
+            private_relation_id,
+            ..
+        } => Some((
+            sidecar_id.clone(),
+            private_strand_id.clone(),
+            private_relation_id.clone(),
+        )),
+        SidecarEnsureOutcome::Prepared { .. } => None,
+    };
+    if accepted_coordinates(&accepted_a) != accepted_coordinates(&accepted_b)
+        || concurrent.durable.contexts.len() != 1
+        || concurrent.reservations.len() != 0
+        || concurrent.accepted.len() != 2
+        || concurrent.atomic_commit_epoch != 2
+    {
+        bail!("concurrent device commits did not converge on one Sidecar context");
     }
     Ok(())
 }
