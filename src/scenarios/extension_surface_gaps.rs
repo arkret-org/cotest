@@ -117,9 +117,13 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
 
     let requested_operation = "ak.self.events.command.submit";
     let provision = AgentProvisionRequestBody::Prepare {
-        display_name: Some("Planner".to_owned()),
+        operation_id: arkret::ProtocolOperationId::new(
+            "ak:operation:extension-surface-agent-provision",
+        )
+        .expect("fixture operation id"),
+        idempotency_key: arkret::ProtocolOpaqueId::new("extension-surface-agent-provision")
+            .expect("fixture idempotency key"),
         slug: "planner".to_owned(),
-        avatar_blob_ref: None,
         requested_scope: AgentKeyScope {
             actions: vec![
                 requested_operation.to_owned(),

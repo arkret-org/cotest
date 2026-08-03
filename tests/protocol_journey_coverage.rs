@@ -115,8 +115,8 @@ fn known_latest_protocol_drifts_cannot_be_reported_green() -> Result<()> {
         &by_id,
         "PJ16",
         "tests/agent_provision_e2e.rs",
-        "build_agent_provision_event_drafts",
-        "closed Event pair",
+        "build_agent_provision_event_draft",
+        "single closed provision Event",
     )?;
     Ok(())
 }

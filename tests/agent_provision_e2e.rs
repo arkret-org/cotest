@@ -3,7 +3,7 @@
 //!
 //! Exercises controller-authored provisioning through the public agent HTTP
 //! surface. The test obtains server-allocated coordinates, asks the SDK to
-//! build and sign the closed Event pair, then commits that pair through the
+//! build and sign the single closed provision Event, then commits it through the
 //! ordinary admission pipeline:
 //!   1. `ak.self.agent.command.provision` prepare + commit -> active lifecycle intent with a
 //!      `pending_runtime_key` runtime_state + pairing (key-management.md §3.6.1).
@@ -62,6 +62,7 @@ use arkret_models_identity::artifacts_device_identity::{
     CrossSigningPublish, KeyFormat, PublishedKey, SubordinateSignedKey, SubordinateSignedKeyBinding,
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
+use arkret_models_identity::handle::HandleVisibility;
 use arkret_wire::{
     AuthoritySetIssuer, AuthoritySetIssuerRole, AuthorizationRef, Base64UrlString, DidUrl,
     EventKind, NonEmptyString, OpaqueLocalId, ProtocolOpaqueId, ProtocolOperationId,
@@ -111,6 +112,8 @@ static CONTROLLER_SEAL_BASES: LazyLock<Mutex<HashMap<String, arkret::SealBasis>>
 static CONTROLLER_SEALS: LazyLock<Mutex<HashMap<String, arkret::Seal>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 static MANAGED_AGENT_PCR_SEALS: LazyLock<Mutex<HashMap<String, arkret::Seal>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static AGENT_PROVISION_EVENT_REFS: LazyLock<Mutex<HashMap<String, arkret::EventId>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
@@ -2409,6 +2412,15 @@ async fn submit_delegated_agent_event(
         event.actor_seq = 0;
         event.hlc = Some(Hlc::new("01970e589d21-0001-a13f9c2e")?);
         event.prev_refs.clear();
+        let provision_event_id = AGENT_PROVISION_EVENT_REFS
+            .lock()
+            .expect("Agent provision Event ref lock")
+            .get(agent_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("accepted Agent provision Event ref is missing"))?;
+        event.refs = vec![arkret_bootstrap::managed_agent_provision_ref(
+            provision_event_id,
+        )];
     } else {
         let seal_frontier = managed_agent_frontier(server, token, realm_id)
             .await?
@@ -3303,23 +3315,27 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
 }
 
 /// Complete the controller-owned two-phase provisioning protocol. All
-/// canonical payloads, nested proof transcripts, effects and Event envelopes
-/// come from `arkret-bootstrap`; this fixture only supplies live frontier stamps
-/// and transports the typed requests.
+/// canonical payload and Event envelope come from `arkret-bootstrap`; this
+/// fixture only supplies live frontier stamps and transports typed requests.
 async fn provision_agent(
     server: &ArkretServer,
     token: &str,
-    display_name: &str,
+    _display_name: &str,
     slug: &str,
     pairing_ttl_ms: Option<u64>,
 ) -> Result<arkret::AgentProvisionComplete> {
     let client = bearer_sdk_client(server, token)?;
     let requested_scope = test_agent_requested_scope();
+    let operation_id =
+        ProtocolOperationId::new(format!("ak:operation:{}", uuid::Uuid::now_v7().simple()))
+            .map_err(anyhow::Error::msg)?;
+    let idempotency_key = ProtocolOpaqueId::new(uuid::Uuid::now_v7().simple().to_string())
+        .map_err(anyhow::Error::msg)?;
     let prepared = client
         .agent_provision(&arkret::AgentProvisionRequestBody::Prepare {
-            display_name: Some(display_name.to_owned()),
+            operation_id: operation_id.clone(),
+            idempotency_key: idempotency_key.clone(),
             slug: slug.to_owned(),
-            avatar_blob_ref: None,
             requested_scope: requested_scope.clone(),
             pairing_ttl_ms,
         })
@@ -3329,19 +3345,22 @@ async fn provision_agent(
         agent_id,
         principal_control_realm_id,
         controller_realm_id,
+        allocation_handle,
         controller_authorization_ref,
         requested_scope_digest,
     ) = match prepared {
-        arkret::AgentProvisionOutcome::AwaitingControllerEvents {
+        arkret::AgentProvisionOutcome::AwaitingControllerEvent {
             agent_id,
             principal_control_realm_id,
             controller_realm_id,
+            allocation_handle,
             controller_authorization_ref,
             requested_scope_digest,
         } => (
             agent_id,
             principal_control_realm_id,
             controller_realm_id,
+            allocation_handle,
             controller_authorization_ref,
             requested_scope_digest,
         ),
@@ -3370,87 +3389,64 @@ async fn provision_agent(
     let now = DateTime::<Utc>::from_timestamp(Utc::now().timestamp(), 0)
         .ok_or_else(|| anyhow!("current timestamp is outside the wire range"))?;
     let timestamp_hex = format!("{:012x}", now.timestamp_millis());
-    let verification_method = controller_verification_method();
-    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
-        [21_u8; 32],
-        controller_id.clone(),
-        verification_method.clone(),
-    );
-    let mut events = arkret_bootstrap::build_agent_provision_event_drafts(
-        &controller_id,
-        &controller_realm_id,
-        &agent_id,
-        slug,
-        arkret_bootstrap::AgentProvisionEventDraftOptions {
-            created_at: now,
-            accountability_actor_seq: actor_seq,
-            accountability_hlc: arkret::Hlc::new(format!(
-                "{timestamp_hex}-{:04x}-a13f9c2e",
-                actor_seq & 0xffff
-            ))?,
-            selector_actor_seq: actor_seq + 1,
-            selector_hlc: arkret::Hlc::new(format!(
-                "{timestamp_hex}-{:04x}-a13f9c2e",
-                (actor_seq + 1) & 0xffff
-            ))?,
-        },
-        &signer,
-    )?;
-    events.accountability_grant.prev_refs = actor_frontier.frontier_event_ids;
-    events.selector_claim.prev_refs = vec![events.accountability_grant.event_id.clone()];
     let realm_seal_basis = CONTROLLER_SEAL_BASES
         .lock()
         .expect("controller Seal basis lock")
         .get(&server.url("/"))
         .cloned()
         .ok_or_else(|| anyhow!("controller Realm Seal basis is missing"))?;
+    let mut event = arkret_bootstrap::build_agent_provision_event_draft(
+        &controller_id,
+        &controller_realm_id,
+        &agent_id,
+        &principal_control_realm_id,
+        &controller_authorization_ref,
+        slug,
+        &requested_scope_digest,
+        HandleVisibility::Private,
+        None,
+        arkret_bootstrap::AgentProvisionEventDraftOptions {
+            created_at: now,
+            actor_seq,
+            hlc: arkret::Hlc::new(format!(
+                "{timestamp_hex}-{:04x}-a13f9c2e",
+                actor_seq & 0xffff
+            ))?,
+            prev_refs: actor_frontier.frontier_event_ids,
+            seal_basis: Some(realm_seal_basis),
+        },
+    )?;
     let device_verification_method = alice_device_verification_method();
     let device_event_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         [24_u8; 32],
         controller_id.clone(),
         device_verification_method.clone(),
     );
-    for event in [&mut events.accountability_grant, &mut events.selector_claim] {
-        event.seal_basis = Some(realm_seal_basis.clone());
-        event.proofs.clear();
-        arkret::signatures::sign_event(
-            event,
-            &device_event_signer,
-            &device_verification_method,
-            arkret::signatures::SignEventOptions::new().with_created_at(now),
-        )?;
-    }
-    let provision_event_ids = [
-        events.accountability_grant.event_id.clone(),
-        events.selector_claim.event_id.clone(),
-    ];
-    let accountability_grant = prepare_controller_initial_submission(
+    arkret::signatures::sign_event(
+        &mut event,
+        &device_event_signer,
+        &device_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(now),
+    )?;
+    let provision_event_id = event.event_id.clone();
+    let verification_method = controller_verification_method();
+    let provision_event = prepare_controller_initial_submission(
         &client,
-        &events.accountability_grant,
+        &event,
         &SigningKey::from_bytes(&[21_u8; 32]),
         &verification_method,
     )
     .await
-    .context("prepare accountability publication evidence")?;
-    let selector_claim = prepare_controller_initial_submission(
-        &client,
-        &events.selector_claim,
-        &SigningKey::from_bytes(&[21_u8; 32]),
-        &verification_method,
-    )
-    .await
-    .context("prepare selector publication evidence")?;
+    .context("prepare provision publication evidence")?;
     let commit = arkret::AgentProvisionRequestBody::Commit {
+        operation_id,
+        idempotency_key,
         agent_id,
         principal_control_realm_id,
-        display_name: Some(display_name.to_owned()),
+        allocation_handle,
         slug: slug.to_owned(),
-        avatar_blob_ref: None,
         requested_scope,
-        provision_events: Box::new(arkret::AgentProvisionEvents {
-            accountability_grant,
-            selector_claim,
-        }),
+        provision_event: Box::new(provision_event),
         pairing_ttl_ms,
     };
     let committed = client
@@ -3475,37 +3471,37 @@ async fn provision_agent(
         StatusCode::OK,
     )
     .await?;
-    for event_id in provision_event_ids {
-        let event = replayed["events"]
-            .as_array()
-            .and_then(|events| {
-                events
-                    .iter()
-                    .find(|event| event["event_id"].as_str() == Some(event_id.as_str()))
-            })
-            .cloned()
-            .ok_or_else(|| anyhow!("provision Event {event_id} was not persisted for replay"))?;
-        let event: arkret::Event = serde_json::from_value(event)?;
-        event.validate_proof_bindings().map_err(|error| {
-            anyhow!("replayed provision Event {event_id} failed SDK proof verification: {error}")
+    let event = replayed["events"]
+        .as_array()
+        .and_then(|events| {
+            events
+                .iter()
+                .find(|event| event["event_id"].as_str() == Some(provision_event_id.as_str()))
+        })
+        .cloned()
+        .ok_or_else(|| {
+            anyhow!("provision Event {provision_event_id} was not persisted for replay")
         })?;
-        let public_key = arkret::signatures::PublicKeyMaterial::Ed25519Raw {
-            bytes: SigningKey::from_bytes(&[24_u8; 32])
-                .verifying_key()
-                .to_bytes()
-                .to_vec(),
-        };
-        let canonical_bytes = arkret::canonical::canonical_json_bytes(&event.digest_payload()?)?;
-        arkret::signatures::verify_eddsa_detached_jws_proof(
-            event
-                .proofs
-                .first()
-                .ok_or_else(|| anyhow!("replayed provision Event {event_id} has no proof"))?,
-            &canonical_bytes,
-            &event.actor_id,
-            &public_key,
-        )?;
-    }
+    let event: arkret::Event = serde_json::from_value(event)?;
+    event.validate_proof_bindings().map_err(|error| {
+        anyhow!("replayed provision Event failed SDK proof verification: {error}")
+    })?;
+    let public_key = arkret::signatures::PublicKeyMaterial::Ed25519Raw {
+        bytes: SigningKey::from_bytes(&[24_u8; 32])
+            .verifying_key()
+            .to_bytes()
+            .to_vec(),
+    };
+    let canonical_bytes = arkret::canonical::canonical_json_bytes(&event.digest_payload()?)?;
+    arkret::signatures::verify_eddsa_detached_jws_proof(
+        event
+            .proofs
+            .first()
+            .ok_or_else(|| anyhow!("replayed provision Event has no proof"))?,
+        &canonical_bytes,
+        &event.actor_id,
+        &public_key,
+    )?;
     match committed {
         arkret::AgentProvisionOutcome::Complete { outcome } => {
             if outcome.controller_authorization_ref != controller_authorization_ref {
@@ -3513,6 +3509,10 @@ async fn provision_agent(
                     "agent provision commit changed controller_authorization_ref"
                 ));
             }
+            AGENT_PROVISION_EVENT_REFS
+                .lock()
+                .expect("Agent provision Event ref lock")
+                .insert(outcome.agent_id.to_string(), provision_event_id);
             Ok(outcome)
         }
         unexpected => Err(anyhow!(
