@@ -240,19 +240,19 @@ async function publishCrossSigning(
   const pskKid = fixture.principalSigningKeyId;
   const principalSigningKey = {
     kid: pskKid,
-    alg: "Ed25519",
+    algorithm: "Ed25519",
     public_key: fixture.psk.publicKeyMultibase,
     key_format: "multibase",
   };
   const selfSigningKey = {
     kid: fixture.sskKid,
-    alg: "Ed25519",
+    algorithm: "Ed25519",
     public_key: fixture.ssk.publicKeyMultibase,
     key_format: "multibase",
   };
   const userSigningKey = {
     kid: `${fixture.did}#ak_user_signing_v1`,
-    alg: "Ed25519",
+    algorithm: "Ed25519",
     public_key: fixture.usk.publicKeyMultibase,
     key_format: "multibase",
   };
@@ -280,7 +280,7 @@ async function publishCrossSigning(
           ...selfSigningKey,
           binding: {
             verification_method: pskKid,
-            alg: "Ed25519",
+            signature_algorithm: "Ed25519",
             signature: ed25519SignatureB64url(
               fixture.psk.privateKey,
               crossSigningBindingInput({
@@ -299,7 +299,7 @@ async function publishCrossSigning(
           ...userSigningKey,
           binding: {
             verification_method: pskKid,
-            alg: "Ed25519",
+            signature_algorithm: "Ed25519",
             signature: ed25519SignatureB64url(
               fixture.psk.privateKey,
               crossSigningBindingInput({

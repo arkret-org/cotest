@@ -40,7 +40,7 @@ const fixturePath = resolve(
   "../../fixtures/cross-signing-binding-golden.json",
 );
 
-type KeyRecord = { kid: string; alg: string; public_key: string };
+type KeyRecord = { kid: string; algorithm: string; public_key: string };
 
 type CrossSigningVector = {
   name: string;

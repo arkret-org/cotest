@@ -317,6 +317,7 @@ export async function createRealmApi(
       data.discoverability ?? (data.public ? "public" : "listed"),
     default_join_rule: data.default_join_rule ?? "invite",
     history_visibility: data.history_visibility ?? "shared",
+    reducer_profile: "ak.reducer.core.v1",
     encryption_profile: data.encryption_profile ?? "none",
     ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
     ...(data.sync_endpoints ? { sync_endpoints: data.sync_endpoints } : {}),
@@ -2164,14 +2165,17 @@ export async function submitSignedEventApi(
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
-        headers: authHeaders(token),
-        data: {
+        headers: {
+          ...authHeaders(token),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
           event: envelope,
           authorization_lease: authorizationLease,
           ...(controlProposalReceipt
             ? { control_proposal_receipt: controlProposalReceipt }
             : {}),
-        },
+        }),
       },
     );
     const text = await response.text();
@@ -2292,10 +2296,13 @@ export async function submitSignedEventBatchApi(
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
-        headers: authHeaders(token),
-        data: {
-          events: submissions,
+        headers: {
+          ...authHeaders(token),
+          "content-type": "application/json",
         },
+        data: canonicalJson({
+          events: submissions,
+        }),
       },
     );
     const text = await response.text();
@@ -2403,14 +2410,17 @@ export async function rawSubmitSignedEventApi(
     const response = await request.post(
       `${solandBaseUrl(opts.server)}/_arkret/self/events`,
       {
-        headers: authHeaders(token),
-        data: {
+        headers: {
+          ...authHeaders(token),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
           event: envelope,
           authorization_lease: authorizationLease,
           ...(controlProposalReceipt
             ? { control_proposal_receipt: controlProposalReceipt }
             : {}),
-        },
+        }),
       },
     );
     const responseText = await response.text();
@@ -2453,11 +2463,14 @@ async function issueControlProposalReceiptApi(
   const response = await request.post(
     `${solandBaseUrl(server)}/_arkret/self/control-proposal-receipts`,
     {
-      headers: authHeaders(token),
-      data: {
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
         event,
         authorization_lease: authorizationLease,
-      },
+      }),
     },
   );
   const text = await response.text();
@@ -2591,9 +2604,10 @@ async function issueAuthorizationLeasesApi(
     {
       headers: {
         ...authHeaders(token),
+        "content-type": "application/json",
         "idempotency-key": `cotest-lease-${requestDigest}`,
       },
-      data: requestBody,
+      data: canonicalJson(requestBody),
     },
   );
 }

@@ -42,6 +42,18 @@ export default async function verifyBuildIdentity(config: FullConfig) {
   try {
     const page = await browser.newPage();
     await page.goto(baseURL, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(
+      () => {
+        const root = document.documentElement;
+        return (
+          root.hasAttribute("data-inkson-build-id") &&
+          root.hasAttribute("data-arkret-event-registry-sha256") &&
+          root.hasAttribute("data-arkret-sdk-source-sha256")
+        );
+      },
+      undefined,
+      { timeout: 30_000 },
+    );
     const identity = await page.locator("html").evaluate((root) => ({
       buildId: root.getAttribute("data-inkson-build-id"),
       registrySha: root.getAttribute("data-arkret-event-registry-sha256"),
