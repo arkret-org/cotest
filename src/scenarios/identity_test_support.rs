@@ -6,7 +6,10 @@ use arkret_bootstrap::{
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_identifiers::{DeviceId, Did, EventId, Hlc, RealmId};
-use arkret_models_crypto::{AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody};
+use arkret_models_crypto::{
+    AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
+    keys_upload_signing_input,
+};
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
@@ -20,7 +23,6 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
-use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -117,21 +119,21 @@ pub(crate) fn signed_keys_upload_body(
 ) -> Result<KeysUploadRequestBody> {
     let one_time_keys = signed_algorithm_key_records(actor, one_time_keys, false)?;
     let fallback_keys = signed_algorithm_key_records(actor, fallback_keys, true)?;
-    let signing_input = keys_upload_signing_input(device_id, &one_time_keys, &fallback_keys)?;
-    let signature = signing_key.sign(&signing_input);
-    let device_public_key =
-        ed25519_pubkey_to_did_key_multibase(&signing_key.verifying_key().to_bytes());
-    Ok(KeysUploadRequestBody {
+    let unsigned = KeysUploadUnsignedRequest {
         device_id: DeviceId::new(device_id.to_owned()).context("invalid keys/upload device id")?,
         one_time_keys,
         fallback_keys,
-        device_signature: KeyOperationSignature {
-            kid: NonEmptyString::new(format!("did:key:{device_public_key}#{device_public_key}"))
-                .unwrap(),
-            signature_algorithm: Some(NonEmptyString::new("Ed25519").unwrap()),
-            sig: Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes())).unwrap(),
-        },
-    })
+    };
+    let signing_input = keys_upload_signing_input(&unsigned)?;
+    let signature = signing_key.sign(&signing_input);
+    let device_public_key =
+        ed25519_pubkey_to_did_key_multibase(&signing_key.verifying_key().to_bytes());
+    Ok(unsigned.into_signed(KeyOperationSignature {
+        kid: NonEmptyString::new(format!("did:key:{device_public_key}#{device_public_key}"))
+            .unwrap(),
+        signature_algorithm: Some(NonEmptyString::new("Ed25519").unwrap()),
+        sig: Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes())).unwrap(),
+    }))
 }
 
 fn signed_algorithm_key_records(
@@ -188,21 +190,6 @@ fn signed_algorithm_key_records(
         .collect()
 }
 
-pub(crate) fn keys_upload_signing_input(
-    device_id: &str,
-    one_time_keys: &impl Serialize,
-    fallback_keys: &impl Serialize,
-) -> Result<Vec<u8>> {
-    let body = json!({
-        "device_id": device_id,
-        "one_time_keys": one_time_keys,
-        "fallback_keys": fallback_keys,
-    });
-    let canonical = canonical_json_bytes(&body)?;
-    let mut input = b"ak.keys-upload-v1\n".to_vec();
-    input.extend_from_slice(&canonical);
-    Ok(input)
-}
 async fn bootstrap_test_device_authorization(
     server: &ArkretServer,
     token: &str,
