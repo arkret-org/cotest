@@ -43,7 +43,7 @@ use arkret_models_collaboration::events_payloads::{
     KeyBackupActiveSeries, KeyBackupActiveSeriesAuthData, KeyBackupActiveSeriesFrontierGeneration,
     KeyBackupActiveSeriesFrontierRef, KeyBackupActiveSeriesTrustBinding, SignatureMaterial,
 };
-use arkret_models_collaboration::protocol_journey::{
+use arkret_models_collaboration::sidecar_operations::{
     SidecarContextRef, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
     SidecarEnsureRequestBody, SidecarPreparePhase, SidecarPreparedOutcome,
 };
@@ -1547,15 +1547,15 @@ async fn agent_participation_selection_is_persisted_without_server_authored_even
     let agent_did = provision_and_pair_agent(&server, &token, "Reply Assistant", "reply").await?;
 
     let controller = bearer_sdk_client(&server, &token)?;
-    let target_scope = arkret::protocol_journey::ParticipationScope::Realm {
+    let target_scope = arkret::ParticipationScope::Realm {
         realm_id: arkret::RealmId::new(realm_id)?,
     };
     let outcome = controller
         .agent_participation_replace(
             &agent_did,
-            &arkret::protocol_journey::ParticipationReplaceRequestBody {
+            &arkret::ParticipationReplaceRequestBody {
                 target_scope: target_scope.clone(),
-                selection: arkret::protocol_journey::ParticipationBits {
+                selection: arkret::ParticipationBits {
                     reply_message: true,
                     reaction_add: false,
                     reaction_remove: false,

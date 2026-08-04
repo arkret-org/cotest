@@ -44,19 +44,19 @@ use arkret::{
     agent_sidecar_exchange_event_set_digest, recover_agent_sidecar_context_locators,
 };
 use arkret_models_collaboration::agent_signer_evidence::AgentLifecycleStatus;
-use arkret_models_collaboration::protocol_journey::{
-    SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAccessReadiness, SidecarAttachPhase,
-    SidecarCommitPhase, SidecarContextRef, SidecarEnsureAttachRequestBody,
-    SidecarEnsureCommitRequestBody, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
-    SidecarPreparePhase, SidecarPreparedEventDraft, SidecarPreparedOutcome,
+use arkret_models_collaboration::sidecar_operations::{
+    SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAttachPhase, SidecarCommitPhase,
+    SidecarContextRef, SidecarEnsureAttachRequestBody, SidecarEnsureCommitRequestBody,
+    SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody, SidecarPreparePhase,
+    SidecarPreparedEventDraft, SidecarPreparedOutcome,
 };
 use arkret_signatures::{
     Ed25519PayloadSigner, PublicKeyMaterial, SignEventOptions, sign_event,
     verify_ed25519_detached_jws_proof,
 };
 use arkret_wire::{
-    Base64UrlString, CapabilityActionId, EventRequirements, ProfileId, ProtocolOpaqueId,
-    ProtocolOperationId, RelationId,
+    Base64UrlString, CapabilityActionId, EventRequirements, IdempotencyKey, ProfileId,
+    ProtocolOperationId, RelationId, ReservationHandle,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -723,7 +723,7 @@ fn device_ledger_key(device_id: &str, idempotency_key: &str) -> String {
 fn unique_reservation_handle(
     request: &SidecarEnsurePrepareRequestBody,
     device_id: &str,
-) -> SidecarModelResult<ProtocolOpaqueId> {
+) -> SidecarModelResult<ReservationHandle> {
     let digest = arkret_canonical::canonical_sha256(&json!({
         "operation_id": request.operation_id,
         "controller_id": request.controller_id,
@@ -734,7 +734,7 @@ fn unique_reservation_handle(
     let digest = digest
         .strip_prefix("sha256:")
         .ok_or(SidecarModelError::ModelInvariant)?;
-    ProtocolOpaqueId::new(format!("sidecar-reservation-{}", &digest[..32]))
+    ReservationHandle::new(format!("sidecar-reservation-{}", &digest[..32]))
         .map_err(|_| SidecarModelError::ModelInvariant)
 }
 
@@ -798,7 +798,7 @@ fn accepted_sidecar_outcome(
         sidecar_id: coordinates.sidecar_id.clone(),
         private_strand_id: coordinates.private_strand_id.clone(),
         private_relation_id: coordinates.private_relation_id.clone(),
-        access_readiness: SidecarAccessReadiness::KeyMaterialPending,
+        access_readiness: AgentSidecarAccessReadiness::KeyMaterialPending,
         pending_access_reconciliations: Vec::new(),
     }
 }
@@ -848,7 +848,7 @@ fn fixed_prepare_request_for_operation(
     Ok(SidecarEnsurePrepareRequestBody {
         phase: SidecarPreparePhase::Prepare,
         operation_id: ProtocolOperationId::new(operation_id).map_err(anyhow::Error::msg)?,
-        idempotency_key: ProtocolOpaqueId::new(idempotency_key).map_err(anyhow::Error::msg)?,
+        idempotency_key: IdempotencyKey::new(idempotency_key).map_err(anyhow::Error::msg)?,
         source_realm_id: RealmId::new("ak:realm:01964137-0000-7000-8000-000000000100")?,
         controller_id: controller_id.clone(),
         context_ref: SidecarContextRef::Strand {
@@ -1241,7 +1241,7 @@ fn validate_prepared_outcome(
     Ok(())
 }
 
-fn prepared_reservation_handle(prepared: &SidecarPreparedOutcome) -> &ProtocolOpaqueId {
+fn prepared_reservation_handle(prepared: &SidecarPreparedOutcome) -> &ReservationHandle {
     match prepared {
         SidecarPreparedOutcome::New {
             reservation_handle, ..
@@ -1428,7 +1428,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         |create_event: Event, context_attach_event: Event| SidecarEnsureCommitRequestBody {
             phase: SidecarCommitPhase::Commit,
             operation_id: operation_id.clone(),
-            idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-commit-new")
+            idempotency_key: IdempotencyKey::new("cotest-sidecar-commit-new")
                 .expect("fixed Sidecar commit idempotency key"),
             reservation_handle: reservation_handle.clone(),
             create_event,
@@ -1556,7 +1556,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let same_context_attach = SidecarEnsureAttachRequestBody {
         phase: SidecarAttachPhase::Attach,
         operation_id: same_operation_id,
-        idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-commit-same-context")
+        idempotency_key: IdempotencyKey::new("cotest-sidecar-commit-same-context")
             .map_err(anyhow::Error::msg)?,
         reservation_handle: same_reservation_handle,
         context_attach_event: same_context_event,
@@ -1598,7 +1598,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let attach = SidecarEnsureAttachRequestBody {
         phase: SidecarAttachPhase::Attach,
         operation_id,
-        idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-commit-existing")
+        idempotency_key: IdempotencyKey::new("cotest-sidecar-commit-existing")
             .map_err(anyhow::Error::msg)?,
         reservation_handle,
         context_attach_event: attach_event,
@@ -1692,14 +1692,14 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         bail!("concurrent device reservations overwrote or diverged fixed coordinates");
     }
     let concurrent_commit = |operation_id: ProtocolOperationId,
-                             reservation_handle: ProtocolOpaqueId,
+                             reservation_handle: ReservationHandle,
                              create_draft: &SidecarPreparedEventDraft,
                              attach_draft: &SidecarPreparedEventDraft|
      -> Result<SidecarEnsureCommitRequestBody> {
         Ok(SidecarEnsureCommitRequestBody {
             phase: SidecarCommitPhase::Commit,
             operation_id,
-            idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-concurrent-commit")
+            idempotency_key: IdempotencyKey::new("cotest-sidecar-concurrent-commit")
                 .map_err(anyhow::Error::msg)?,
             reservation_handle,
             create_event: sign_prepared_draft(create_draft, &signer, &verification_method)

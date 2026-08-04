@@ -168,16 +168,12 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         bail!("direct conversation resolver HTTP binding drifted");
     }
     if operation.request_schema_ref
-        != Some(
-            "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_request",
-        )
+        != Some("schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_request")
     {
         bail!("direct conversation request schema ref drifted");
     }
     if operation.response_schema_ref
-        != Some(
-            "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_outcome",
-        )
+        != Some("schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_outcome")
     {
         bail!("direct conversation response schema ref drifted");
     }
@@ -342,13 +338,13 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
 fn validate_resolve_request_shape(value: &Value) -> Result<()> {
     let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
     let validator = env.compile(
-        "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_request",
+        "schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_request",
     )?;
     if !validator.is_valid(value) {
-        bail!("direct conversation request does not match the canonical journey schema");
+        bail!("direct conversation request does not match the canonical operation schema");
     }
     serde_json::from_value::<
-        arkret_models_collaboration::protocol_journey::DirectConversationResolveRequestBody,
+        arkret_models_collaboration::operation_control::DirectConversationResolveRequestBody,
     >(value.clone())?;
     Ok(())
 }
@@ -356,13 +352,13 @@ fn validate_resolve_request_shape(value: &Value) -> Result<()> {
 fn validate_resolve_response_shape(value: &Value) -> Result<()> {
     let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
     let validator = env.compile(
-        "schemas/protocol-journey-wire.schema.json#/$defs/direct_conversation_resolve_outcome",
+        "schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_outcome",
     )?;
     if !validator.is_valid(value) {
-        bail!("direct conversation response does not match the canonical journey schema");
+        bail!("direct conversation response does not match the canonical operation schema");
     }
     serde_json::from_value::<
-        arkret_models_collaboration::protocol_journey::DirectConversationResolveOutcome,
+        arkret_models_collaboration::operation_control::DirectConversationResolveOutcome,
     >(value.clone())?;
     Ok(())
 }

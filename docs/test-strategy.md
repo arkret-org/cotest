@@ -1,9 +1,5 @@
 # cotest Test Strategy
 
-跨 endpoint、跨服务和跨加密 epoch 的纵向覆盖另见
-[`protocol-journey-coverage.md`](./protocol-journey-coverage.md)。其机器真源使用
-`protocol_journey_id=PJ01..PJ18`，与 Agent Journeys 场景内部 checkpoint 编号隔离。
-
 `cotest` is a black-box Arkret server conformance suite. Each scenario starts
 the server processes it needs, creates test actors through public APIs, and
 asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.

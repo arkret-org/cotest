@@ -1,12 +1,12 @@
 use anyhow::{Result, anyhow};
 use arkret::ContactIntroductionEvidence;
-use arkret::protocol_journey::{
+use arkret::contact_operations::{
     ContactAcceptAction, ContactAcceptPrepareRequestBody, ContactAcceptRequestBody,
     ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
     ContactOperationRequestBody, ContactPeer, ContactPreparePhase, ContactPrepareRequestBody,
-    ContactPreparedEventDraft, ContactPreparedOutcome, ContactScope, ProtocolOpaqueId,
-    ProtocolOperationId, RequestAcceptanceReceipt,
+    ContactPreparedEventDraft, ContactPreparedOutcome, ContactScope, RequestAcceptanceReceipt,
 };
+use arkret::{IdempotencyKey, ProtocolOperationId};
 use arkret_http_client::Client as SdkClient;
 use arkret_identifiers::{Did, Hash, Hlc};
 use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
@@ -60,7 +60,7 @@ impl TestActorClient {
         let operation_id =
             ProtocolOperationId::new(next_typed_id("operation")).map_err(anyhow::Error::msg)?;
         let idempotency_key =
-            ProtocolOpaqueId::new(next_typed_id("idempotency")).map_err(anyhow::Error::msg)?;
+            IdempotencyKey::new(next_typed_id("idempotency")).map_err(anyhow::Error::msg)?;
         Ok(ContactOperationRequestBody::Prepare(
             ContactPrepareRequestBody {
                 phase: ContactPreparePhase::Prepare,
@@ -150,7 +150,7 @@ impl TestActorClient {
         let operation_id =
             ProtocolOperationId::new(next_typed_id("operation")).map_err(anyhow::Error::msg)?;
         let idempotency_key =
-            ProtocolOpaqueId::new(next_typed_id("idempotency")).map_err(anyhow::Error::msg)?;
+            IdempotencyKey::new(next_typed_id("idempotency")).map_err(anyhow::Error::msg)?;
         let request = ContactAcceptRequestBody::Prepare(ContactAcceptPrepareRequestBody {
             phase: ContactPreparePhase::Prepare,
             operation_id: operation_id.clone(),

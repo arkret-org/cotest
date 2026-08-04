@@ -4,13 +4,13 @@ use anyhow::{Result, anyhow};
 use arkret::{
     AgentSidecarDisplayMode, AgentSidecarExchangeOrigin, Did, RealmId, SidecarId, StrandId,
 };
-use arkret_models_collaboration::protocol_journey::{
+use arkret_models_collaboration::sidecar_operations::{
     SidecarCommitPhase, SidecarContextRef, SidecarEnsureCommitRequestBody,
     SidecarEnsurePrepareRequestBody, SidecarEnsureRequestBody, SidecarPreparePhase,
 };
 use arkret_wire::{
-    CapabilityActionId, Event, EventKind, Hlc, ProfileId, ProtocolOpaqueId, ProtocolOperationId,
-    ScopeRef,
+    CapabilityActionId, Event, EventKind, Hlc, IdempotencyKey, ProfileId, ProtocolOperationId,
+    ReservationHandle, ScopeRef,
 };
 
 pub async fn agent_sidecar_run() -> Result<()> {
@@ -33,7 +33,7 @@ pub async fn agent_sidecar_run() -> Result<()> {
     let prepare = SidecarEnsureRequestBody::Prepare(SidecarEnsurePrepareRequestBody {
         phase: SidecarPreparePhase::Prepare,
         operation_id: operation_id.clone(),
-        idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-scaffold-prepare")
+        idempotency_key: IdempotencyKey::new("cotest-sidecar-scaffold-prepare")
             .map_err(anyhow::Error::msg)?,
         source_realm_id: source_realm_id.clone(),
         controller_id: controller_id.clone(),
@@ -77,9 +77,9 @@ pub async fn agent_sidecar_run() -> Result<()> {
     let commit = SidecarEnsureRequestBody::Commit(SidecarEnsureCommitRequestBody {
         phase: SidecarCommitPhase::Commit,
         operation_id,
-        idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-scaffold-commit")
+        idempotency_key: IdempotencyKey::new("cotest-sidecar-scaffold-commit")
             .map_err(anyhow::Error::msg)?,
-        reservation_handle: ProtocolOpaqueId::new("cotest-sidecar-reservation")
+        reservation_handle: ReservationHandle::new("cotest-sidecar-reservation")
             .map_err(anyhow::Error::msg)?,
         create_event,
         context_attach_event,

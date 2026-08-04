@@ -10,7 +10,9 @@ use arkret_models_collaboration::governance::agent_participation::{
     AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome,
     effective_participation, fold_ceiling_chain, validate_agent_participation_tightens,
 };
-use arkret_models_collaboration::protocol_journey::{ParticipationBits, ParticipationScope};
+use arkret_models_collaboration::governance::agent_participation::{
+    ParticipationBits, ParticipationScope,
+};
 use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
 use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
