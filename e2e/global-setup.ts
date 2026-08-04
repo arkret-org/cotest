@@ -45,6 +45,7 @@ export default async function verifyBuildIdentity(config: FullConfig) {
     const identity = await page.locator("html").evaluate((root) => ({
       buildId: root.getAttribute("data-inkson-build-id"),
       registrySha: root.getAttribute("data-arkret-event-registry-sha256"),
+      sdkSourceSha: root.getAttribute("data-arkret-sdk-source-sha256"),
     }));
     if (!identity.buildId?.match(new RegExp(`\\b${expectedSourceSha}(?:\\+dirty)?$`))) {
       throw new Error(
@@ -56,19 +57,34 @@ export default async function verifyBuildIdentity(config: FullConfig) {
         `Inkson registry mismatch: expected ${expectedRegistrySha}, loaded ${identity.registrySha ?? "<missing>"}`,
       );
     }
+    if (!identity.sdkSourceSha?.match(/^[0-9a-f]{64}$/)) {
+      throw new Error(
+        `Inkson SDK source identity is missing or invalid: ${identity.sdkSourceSha ?? "<missing>"}`,
+      );
+    }
 
     const response = await page.request.get(`${solandBaseUrl}/_arkret/describe`);
     if (!response.ok()) {
       throw new Error(`Soland describe failed during build identity gate: ${response.status()}`);
     }
     const describe = (await response.json()) as {
-      x_arkret_build_identity?: { event_kind_registry_sha256?: string };
+      x_arkret_build_identity?: {
+        event_kind_registry_sha256?: string;
+        sdk_source_sha256?: string;
+      };
     };
     const serverRegistrySha =
       describe.x_arkret_build_identity?.event_kind_registry_sha256;
     if (serverRegistrySha !== expectedRegistrySha) {
       throw new Error(
         `Soland registry mismatch: expected ${expectedRegistrySha}, loaded ${serverRegistrySha ?? "<missing>"}`,
+      );
+    }
+    const serverSdkSourceSha =
+      describe.x_arkret_build_identity?.sdk_source_sha256;
+    if (serverSdkSourceSha !== identity.sdkSourceSha) {
+      throw new Error(
+        `Inkson/Soland SDK build mismatch: Inkson ${identity.sdkSourceSha}, Soland ${serverSdkSourceSha ?? "<missing>"}`,
       );
     }
   } finally {

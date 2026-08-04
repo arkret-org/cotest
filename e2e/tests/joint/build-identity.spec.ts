@@ -42,15 +42,25 @@ test("@fully-implemented loaded Inkson bundle matches source and SDK registry", 
     "data-arkret-event-registry-sha256",
     expectedRegistrySha,
   );
+  const inksonSdkSourceSha = await root.getAttribute(
+    "data-arkret-sdk-source-sha256",
+  );
+  expect(inksonSdkSourceSha).toMatch(/^[0-9a-f]{64}$/);
 
   const describeResponse = await request.get(
     `${solandBaseUrl()}/_arkret/describe`,
   );
   expect(describeResponse.ok()).toBeTruthy();
   const describe = (await describeResponse.json()) as {
-    x_arkret_build_identity?: { event_kind_registry_sha256?: string };
+    x_arkret_build_identity?: {
+      event_kind_registry_sha256?: string;
+      sdk_source_sha256?: string;
+    };
   };
   expect(
     describe.x_arkret_build_identity?.event_kind_registry_sha256,
   ).toBe(expectedRegistrySha);
+  expect(describe.x_arkret_build_identity?.sdk_source_sha256).toBe(
+    inksonSdkSourceSha,
+  );
 });
