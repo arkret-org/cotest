@@ -135,7 +135,7 @@
       "drift": {
         "kind": "signature_mismatch",
         "signature": {
-          "alg": "EdDSA",
+          "signature_algorithm": "Ed25519",
           "kid": "did:web:hub.example#key-1",
           "value": "deadbeef-not-a-real-sig"
         },

@@ -116,7 +116,8 @@ function printUsage() {
       '        "claim_kind": "conformance_verified",',
       '        "verification_run_id": "<run id>",',
       '        "verifier_did": "did:...",',
-      '        "signature": "eddsa-jcs-b64url:<signature>",',
+      '        "signature_algorithm": "Ed25519",',
+      '        "signature": "<base64url signature>",',
       '        "expires_at": "<RFC3339 optional>"',
       '      }',
       '    ]',
@@ -268,7 +269,7 @@ function signedProfileStatement(entry) {
 function signProfileEntry(privateKey, entry) {
   const statement = canonicalJson(signedProfileStatement(entry));
   const signature = sign(null, Buffer.from(statement, 'utf8'), privateKey);
-  return `eddsa-jcs-b64url:${signature.toString('base64url')}`;
+  return signature.toString('base64url');
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +364,7 @@ function main(argv) {
       if (signingConfig.validUntil) {
         entry.expires_at = signingConfig.validUntil;
       }
+      entry.signature_algorithm = 'Ed25519';
       entry.signature = signProfileEntry(signingConfig.privateKey, entry);
       verified.push(entry);
     }

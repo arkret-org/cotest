@@ -162,7 +162,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       created_by: signerDid,
       created_at: "2026-05-31T00:00:00.000Z",
       signature: {
-        alg: "EdDSA",
+        alg: "Ed25519",
         signer_did: signerDid,
         signature: "deterministic-conformance-fixture",
       },

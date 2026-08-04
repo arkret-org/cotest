@@ -20,7 +20,7 @@
 //
 // The DPoP proof shape mirrors exactly what soland's verifier accepts
 // (soland: crates/http/src/routing/identity/auth_grant_dpop.rs):
-//   * compact JWS, header `{typ:"dpop+jwt", alg:"EdDSA", jwk:<public OKP jwk>}`
+//   * compact JWS, header `{typ:"dpop+jwt", alg:"Ed25519", jwk:<public OKP jwk>}`
 //   * claims `{htm, htu, ath, jti, iat}`
 //   * `ath = base64url(sha256(grant_jwt))` (unpadded)
 // and the embedded JWK thumbprint equals the grant's `cnf.jkt`.
@@ -155,7 +155,7 @@ export function mintDpopProof(args: {
 }): string {
   const header = {
     typ: "dpop+jwt",
-    alg: "EdDSA",
+    alg: "Ed25519",
     jwk: args.deviceKey.publicJwk,
   };
   const iat = Math.floor(Date.now() / 1000) + (args.iatSkewSeconds ?? 0);

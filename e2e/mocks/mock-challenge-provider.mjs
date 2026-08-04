@@ -34,7 +34,7 @@ const challengesLog = new InspectLog("challenges");
 
 function signProof(proof) {
   const header = {
-    alg: "EdDSA",
+    alg: "Ed25519",
     typ: "challenge+jws",
     kid: "mock-challenge-provider-key-1",
   };

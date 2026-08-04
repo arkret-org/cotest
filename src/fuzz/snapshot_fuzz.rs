@@ -51,7 +51,7 @@ pub struct FuzzSnapshotManifestInput {
     pub root_anchor_ref: String,
     pub chunk_count: u32,
     pub total_bytes: u64,
-    pub digest_alg: String,
+    pub digest_algorithm: String,
     pub digest_value: String,
     pub hlc_physical_ms: u64,
     pub hlc_logical: u32,
@@ -67,10 +67,7 @@ impl FuzzSnapshotManifestInput {
             "root_anchor_ref": self.root_anchor_ref,
             "chunk_count": self.chunk_count,
             "total_bytes": self.total_bytes,
-            "digest": {
-                "alg": self.digest_alg,
-                "value": self.digest_value,
-            },
+            "digest": format!("{}:{}", self.digest_algorithm, self.digest_value),
             "hlc": {
                 "physical_ms": self.hlc_physical_ms,
                 "logical": self.hlc_logical,
@@ -107,7 +104,7 @@ pub fn fuzz_snapshot_manifest(data: &[u8]) -> Result<(), String> {
 #[derive(Debug, Arbitrary)]
 pub struct FuzzSnapshotChunkHeaderInput {
     pub chunk_id: u32,
-    pub digest_alg: String,
+    pub digest_algorithm: String,
     pub digest_value: String,
     pub bytes_b64url: String,
     pub include_compression: bool,
@@ -118,10 +115,7 @@ impl FuzzSnapshotChunkHeaderInput {
     fn to_json(&self) -> Value {
         let mut header = json!({
             "chunk_id": self.chunk_id,
-            "digest": {
-                "alg": self.digest_alg,
-                "value": self.digest_value,
-            },
+            "digest": format!("{}:{}", self.digest_algorithm, self.digest_value),
             "bytes": self.bytes_b64url,
         });
         if self.include_compression {

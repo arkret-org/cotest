@@ -767,10 +767,9 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>
                         "{}#{MOCK_PARITY_ALICE_DEVICE_ID}",
                         ctx.alice_did
                     ),
-                    "alg": "EdDSA",
                     "envelope_digest": format!("sha256:{}", "0".repeat(64)),
                     "created_at": arkret_canonical::format_timestamp_canonical(sent_at),
-                    "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
+                    "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
                 }
             });
             cotest::harness::attach_signal_proof_value(

@@ -1043,7 +1043,7 @@ function joinReceiptProof(args: {
     verification_method: verificationMethod,
     created_at: args.createdAt,
   });
-  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+  const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
   const signingInput = `${protectedHeader}.${base64urlJsonCanonical(binding)}`;
   const signature =
     signWithRegisteredEventSigner(
@@ -1058,7 +1058,7 @@ function joinReceiptProof(args: {
     ).toString("base64url");
   return {
     kind: "detached_jws",
-    alg: "EdDSA",
+    alg: "Ed25519",
     verification_method: verificationMethod,
     payload_digest: args.receiptDigest,
     created_at: args.createdAt,
@@ -2076,7 +2076,7 @@ export function buildCapabilityGrantProof(args: {
     verification_method: verificationMethod,
     created_at: args.createdAt,
   };
-  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+  const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
   const signingInput = `${protectedHeader}.${bindingPayload}`;
   const signature =
@@ -2092,7 +2092,7 @@ export function buildCapabilityGrantProof(args: {
     ).toString("base64url");
   return {
     kind: "detached_jws",
-    alg: "EdDSA",
+    alg: "Ed25519",
     verification_method: verificationMethod,
     payload_digest: payloadDigest,
     created_at: args.createdAt,
@@ -2538,7 +2538,7 @@ export function localPrincipalControlProposalReceipt(
       verification_method: verificationMethod,
       created_at: memberWithoutSignature.received_at,
     };
-    const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+    const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
     const signingInput = `${protectedHeader}.${base64urlJsonCanonical(
       transcript,
     )}`;
@@ -2556,7 +2556,7 @@ export function localPrincipalControlProposalReceipt(
     member = {
       ...memberWithoutSignature,
       signature: {
-        alg: "EdDSA",
+        alg: "Ed25519",
         verification_method: verificationMethod,
         payload_digest: payloadDigest,
         created_at: memberWithoutSignature.received_at,

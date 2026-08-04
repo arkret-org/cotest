@@ -60,7 +60,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
             "kind": "ak.message.create",
             "realm_id": "ak:realm:01970e58-0003-7000-8000-000000000011",
             "content": {"kind": "ak.content.text", "body": "covered"},
-            "proofs": [{"alg": "none"}],
+            "proofs": [{"fixture_marker": "not_covered"}],
             "unsigned": {"hint": "not covered"}
         });
         let payload = super::canonical_proof_payload(&event)?;

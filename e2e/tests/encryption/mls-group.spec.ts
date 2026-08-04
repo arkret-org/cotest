@@ -222,7 +222,7 @@ function crossSigningBindingInput(args: {
       trust_domain: args.trustDomain,
       subordinate_key_kind: args.subordinateKeyKind,
       subordinate_kid: args.subordinateKid,
-      subordinate_alg: args.subordinateAlg,
+      subordinate_algorithm: args.subordinateAlg,
       subordinate_public_key: args.subordinatePublicKey,
       generation: args.generation,
     }),
@@ -240,19 +240,19 @@ async function publishCrossSigning(
   const pskKid = fixture.principalSigningKeyId;
   const principalSigningKey = {
     kid: pskKid,
-    alg: "EdDSA",
+    alg: "Ed25519",
     public_key: fixture.psk.publicKeyMultibase,
     key_format: "multibase",
   };
   const selfSigningKey = {
     kid: fixture.sskKid,
-    alg: "EdDSA",
+    alg: "Ed25519",
     public_key: fixture.ssk.publicKeyMultibase,
     key_format: "multibase",
   };
   const userSigningKey = {
     kid: `${fixture.did}#ak_user_signing_v1`,
-    alg: "EdDSA",
+    alg: "Ed25519",
     public_key: fixture.usk.publicKeyMultibase,
     key_format: "multibase",
   };
@@ -280,7 +280,7 @@ async function publishCrossSigning(
           ...selfSigningKey,
           binding: {
             verification_method: pskKid,
-            alg: "EdDSA",
+            alg: "Ed25519",
             signature: ed25519SignatureB64url(
               fixture.psk.privateKey,
               crossSigningBindingInput({
@@ -288,7 +288,7 @@ async function publishCrossSigning(
                 trustDomain,
                 subordinateKeyKind: "self_signing",
                 subordinateKid: selfSigningKey.kid,
-                subordinateAlg: selfSigningKey.alg,
+                subordinateAlg: selfSigningKey.algorithm,
                 subordinatePublicKey: selfSigningKey.public_key,
                 generation,
               }),
@@ -299,7 +299,7 @@ async function publishCrossSigning(
           ...userSigningKey,
           binding: {
             verification_method: pskKid,
-            alg: "EdDSA",
+            alg: "Ed25519",
             signature: ed25519SignatureB64url(
               fixture.psk.privateKey,
               crossSigningBindingInput({
@@ -307,7 +307,7 @@ async function publishCrossSigning(
                 trustDomain,
                 subordinateKeyKind: "user_signing",
                 subordinateKid: userSigningKey.kid,
-                subordinateAlg: userSigningKey.alg,
+                subordinateAlg: userSigningKey.algorithm,
                 subordinatePublicKey: userSigningKey.public_key,
                 generation,
               }),
@@ -348,17 +348,17 @@ async function publishCrossSigning(
         device_public_key: deviceKey.multibase,
         hpke_key: hpkeKeyMultibase,
         algorithms: TEST_DEVICE_ALGORITHMS,
-        device_key_algorithm: "EdDSA",
+        device_key_algorithm: "Ed25519",
         device_signature: {
           kid: `${fixture.did}#${user.deviceId}`,
-          alg: "EdDSA",
+          alg: "Ed25519",
           sig: buildDevicePossessionSignature({
             identity,
             deviceId: user.deviceId,
             devicePublicKeyMultibase: deviceKey.multibase,
             hpkeKeyMultibase,
             algorithms: TEST_DEVICE_ALGORITHMS,
-            deviceKeyAlgorithm: "EdDSA",
+            deviceKeyAlgorithm: "Ed25519",
             authorizedBy: user.deviceId,
             notBefore,
             privateKey: deviceKey.privateKey,
@@ -912,7 +912,7 @@ test.describe("MLS group encryption", () => {
     };
     const deviceSignature = {
       kid: `${bob.did}#${bob.deviceId}`,
-      alg: "EdDSA",
+      alg: "Ed25519",
       sig: nodeSign(
         null,
         Buffer.concat([
@@ -1133,7 +1133,7 @@ test.describe("MLS group encryption", () => {
             ...claimEnvelopeUnsigned,
             signature: {
               kid: aliceFixture.sskKid,
-              alg: "EdDSA",
+              alg: "Ed25519",
               sig: ed25519SignatureB64url(
                 aliceFixture.ssk.privateKey,
                 canonicalBytes(claimEnvelopeUnsigned),

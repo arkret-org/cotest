@@ -189,7 +189,6 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         source_refs: vec!["ak:event:0196419b-0000-7000-8000-000000000001".to_owned()],
         proofs: vec![PayloadProof {
             kind: "detached_jws".to_owned(),
-            alg: "EdDSA".to_owned(),
             verification_method: crate::fixture_did_url("did:web:directory.acme.example#key-1"),
             payload_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000001",

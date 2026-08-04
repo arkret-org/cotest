@@ -5,7 +5,7 @@
 //
 // Two flavors are exported:
 //   - createRsaKeyPair(kid, alg = "RS256")
-//   - createEd25519KeyPair(kid, alg = "EdDSA")
+//   - createEd25519KeyPair(kid, alg = "Ed25519")
 //
 // Both return { publicKey, privateKey, jwks } so the caller can stash the
 // objects and pass them to signing helpers below.
@@ -28,7 +28,7 @@ export function createRsaKeyPair(kid, { modulusLength = 2048, alg = "RS256" } = 
   return { publicKey, privateKey, jwks };
 }
 
-export function createEd25519KeyPair(kid, { alg = "EdDSA" } = {}) {
+export function createEd25519KeyPair(kid, { alg = "Ed25519" } = {}) {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const publicJwk = publicKey.export({ format: "jwk" });
   const jwks = {

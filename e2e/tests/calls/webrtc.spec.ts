@@ -152,7 +152,7 @@ test.describe("calls — canonical wire", () => {
     for (const env of [...bobView, ...aliceView]) {
       const proof = env.proof as Record<string, unknown>;
       expect(proof.kind).toBe("detached_jws");
-      expect(proof.alg).toBe("EdDSA");
+      expect(proof.alg).toBe("Ed25519");
       expect(proof.verification_method).toBe(
         `${env.sender_actor_id}#${env.sender_device_id}`,
       );

@@ -74,7 +74,7 @@
         "binding": {
           "status": "bound",
           "method": "oidc_binding_proof",
-          "proof_jws": "eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJhY2N0X2FsaWNlIn0.signature"
+          "proof_jws": "eyJhbGciOiJFZDI1NTE5In0.eyJzdWIiOiJhY2N0X2FsaWNlIn0.signature"
         }
       }
     },

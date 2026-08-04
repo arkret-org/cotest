@@ -76,7 +76,7 @@ function dpopHeadersSource(
 type PairingPublicKey = {
   kty: "OKP";
   kid: string;
-  alg: "EdDSA";
+  alg: "Ed25519";
   key: string;
 };
 
@@ -202,7 +202,7 @@ test.describe("multi-device pairing + revocation", () => {
     const newDevicePubkey: PairingPublicKey = {
       kty: "OKP",
       kid: newDeviceId,
-      alg: "EdDSA",
+      alg: "Ed25519",
       key: newDeviceKey.rawPublicKey.toString("base64url"),
     };
     const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
@@ -309,7 +309,7 @@ test.describe("multi-device pairing + revocation", () => {
           device_public_key: device2Key.multibase,
           hpke_key: "z6LSCotestE2eDeviceHpkeKey",
           algorithms: TEST_DEVICE_ALGORITHMS,
-          device_key_algorithm: "EdDSA",
+          device_key_algorithm: "Ed25519",
           device_signature: deviceAuthorizeSignature({
             identity,
             principalId: alice.did,
@@ -385,7 +385,7 @@ test.describe("multi-device pairing + revocation", () => {
             device_public_key: staleDeviceKey.multibase,
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
-            device_key_algorithm: "EdDSA",
+            device_key_algorithm: "Ed25519",
             device_signature: deviceAuthorizeSignature({
               identity: { ...identity, generation: identity.generation + 1 },
               principalId: alice.did,
@@ -437,7 +437,7 @@ test.describe("multi-device pairing + revocation", () => {
             device_public_key: forgedDeviceKey.multibase,
             hpke_key: "z6LSCotestE2eDeviceHpkeKey",
             algorithms: TEST_DEVICE_ALGORITHMS,
-            device_key_algorithm: "EdDSA",
+            device_key_algorithm: "Ed25519",
             device_signature: deviceAuthorizeSignature({
               identity,
               principalId: alice.did,
@@ -1473,7 +1473,7 @@ test.describe("multi-device pairing + revocation", () => {
     const device2Pubkey: PairingPublicKey = {
       kty: "OKP",
       kid: device2Id,
-      alg: "EdDSA",
+      alg: "Ed25519",
       key: device2Key.rawPublicKey.toString("base64url"),
     };
     const clientNonce = base64url(`client-nonce:${device2Id}`);
@@ -1729,7 +1729,7 @@ async function promoteDeviceToVerified(
       device_public_key: deviceKey.multibase,
       hpke_key: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
-      device_key_algorithm: "EdDSA",
+      device_key_algorithm: "Ed25519",
       device_signature: deviceAuthorizeSignature({
         identity,
         principalId: user.did,
@@ -1920,7 +1920,7 @@ async function deliverPairingRequest(
   const newDevicePubkey: PairingPublicKey = {
     kty: "OKP",
     kid: requestingDeviceId,
-    alg: "EdDSA",
+    alg: "Ed25519",
     key: newDeviceKey.rawPublicKey.toString("base64url"),
   };
   const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
@@ -2078,7 +2078,7 @@ async function authorizeDeviceWithCrossSigning(
         device_public_key: deviceKey.multibase,
         hpke_key: "z6LSCotestE2eDeviceHpkeKey",
         algorithms: TEST_DEVICE_ALGORITHMS,
-        device_key_algorithm: "EdDSA",
+        device_key_algorithm: "Ed25519",
         device_signature: deviceAuthorizeSignature({
           identity,
           principalId: user.did,
@@ -2261,7 +2261,7 @@ function buildMlsWelcomeEnvelope(args: {
           ...claimEnvelopeUnsigned,
           signature: {
             kid: args.identity.ssk.verificationMethod,
-            alg: "EdDSA",
+            alg: "Ed25519",
             sig: nodeSign(
               null,
               canonicalBytes(claimEnvelopeUnsigned),
@@ -2335,7 +2335,7 @@ async function uploadDeviceKeyPackages(
   };
   const deviceSignature = {
     kid: `${user.did}#${deviceId}`,
-    alg: "EdDSA",
+    alg: "Ed25519",
     sig: nodeSign(
       null,
       Buffer.concat([
@@ -2382,14 +2382,14 @@ function deviceAuthorizeSignature(args: {
 }): Record<string, string> {
   return {
     kid: `${args.principalId}#${args.deviceId}`,
-    alg: "EdDSA",
+    alg: "Ed25519",
     sig: buildDevicePossessionSignature({
       identity: args.identity,
       deviceId: args.deviceId,
       devicePublicKeyMultibase: args.devicePublicKeyMultibase,
       hpkeKeyMultibase: "z6LSCotestE2eDeviceHpkeKey",
       algorithms: TEST_DEVICE_ALGORITHMS,
-      deviceKeyAlgorithm: "EdDSA",
+      deviceKeyAlgorithm: "Ed25519",
       authorizedBy: args.authorizedBy,
       notBefore: args.notBefore,
       recoverySessionId: args.recoverySessionId,

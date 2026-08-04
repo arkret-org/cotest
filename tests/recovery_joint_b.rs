@@ -35,7 +35,7 @@ fn dpop_public_jwk(signing: &SigningKey) -> Value {
         "x": URL_SAFE_NO_PAD.encode(signing.verifying_key().as_bytes()),
         "use": "sig",
         "key_ops": ["verify"],
-        "alg": "EdDSA",
+        "alg": "Ed25519",
     })
 }
 

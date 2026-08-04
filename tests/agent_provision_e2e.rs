@@ -958,7 +958,7 @@ async fn run_security_rotation_restart_matrix(
         auth_data: ClientStepAttestationAuthData {
             verification_method: DidUrl::new(format!("{ALICE_DID}#{RECOVERY_REPLACEMENT_DEVICE}"))
                 .map_err(anyhow::Error::msg)?,
-            alg: "EdDSA".to_owned(),
+            signature_algorithm: "Ed25519".to_owned(),
             signature: String::new(),
             signed_fields: CLIENT_STEP_ATTESTATION_SIGNED_FIELDS
                 .iter()
@@ -1459,7 +1459,7 @@ async fn agent_runtime_key_request_status_poll_e2e() -> Result<()> {
         status.authorized_verification_method.as_deref(),
         Some(verification_method.as_str())
     );
-    let local_digest = builder.public_key_digest()?;
+    let local_digest = builder.runtime_request_public_key_digest()?;
     assert_eq!(
         status.authorized_public_key_digest.as_deref(),
         Some(local_digest.as_str())
@@ -1683,7 +1683,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             .into_iter()
             .map(non_empty)
             .collect::<Result<Vec<_>>>()?,
-        device_key_algorithm: Some(non_empty("EdDSA")?),
+        device_key_algorithm: Some(non_empty("Ed25519")?),
         authorized_by: DeviceOrPrincipalRef::Did(principal_id.clone()),
         scopes: None,
         not_before: control_created_at,
@@ -1780,7 +1780,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
 
     let key_record = |kid: String, key: &SigningKey| PublishedKey {
         kid: DidUrl::new(kid).unwrap(),
-        alg: NonEmptyString::new("EdDSA").unwrap(),
+        algorithm: NonEmptyString::new("Ed25519").unwrap(),
         public_key: NonEmptyString::new(ed25519_pubkey_to_did_key_multibase(
             key.verifying_key().as_bytes(),
         ))
@@ -1795,23 +1795,23 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         principal_signing_key: key_record(psk_kid.as_str().to_owned(), &psk),
         self_signing_key: SubordinateSignedKey {
             kid: ssk_record.kid,
-            alg: ssk_record.alg,
+            algorithm: ssk_record.algorithm,
             public_key: ssk_record.public_key,
             key_format: ssk_record.key_format,
             binding: SubordinateSignedKeyBinding {
                 verification_method: psk_kid.clone(),
-                alg: non_empty("EdDSA")?,
+                signature_algorithm: non_empty("Ed25519")?,
                 signature: non_empty("pending")?,
             },
         },
         user_signing_key: SubordinateSignedKey {
             kid: usk_record.kid,
-            alg: usk_record.alg,
+            algorithm: usk_record.algorithm,
             public_key: usk_record.public_key,
             key_format: usk_record.key_format,
             binding: SubordinateSignedKeyBinding {
                 verification_method: psk_kid,
-                alg: non_empty("EdDSA")?,
+                signature_algorithm: non_empty("Ed25519")?,
                 signature: non_empty("pending")?,
             },
         },
@@ -1849,7 +1849,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     let algorithms = TEST_DEVICE_ALGORITHMS.map(str::to_owned).to_vec();
     let cross_signing_binding = DeviceCrossSigningBinding {
         verification_method: did_url(ssk_kid.to_owned())?,
-        alg: non_empty("EdDSA")?,
+        signature_algorithm: non_empty("Ed25519")?,
         ssk_generation: std::num::NonZeroU64::new(1).unwrap(),
         signature: base64_url(sign_ed25519_b64url(
             &ssk,
@@ -1872,7 +1872,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             .into_iter()
             .map(non_empty)
             .collect::<Result<Vec<_>>>()?,
-        device_key_algorithm: Some(non_empty("EdDSA")?),
+        device_key_algorithm: Some(non_empty("Ed25519")?),
         authorized_by: DeviceOrPrincipalRef::DeviceId(device_id),
         scopes: None,
         not_before: canonical_now(),
@@ -1937,14 +1937,14 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             verification_method: recovery_verification_method,
             public_key_multibase: recovery_public_key_multibase,
             key_agreement_ref: recovery_key_agreement_ref.clone(),
-            alg: RecoveryKeySignatureAlgorithm::Ed25519,
+            signature_algorithm: RecoveryKeySignatureAlgorithm::Ed25519,
             not_before: issued_at - TimeDelta::minutes(1),
             expires_at: issued_at + TimeDelta::days(365),
             revoked_at: None,
         }]),
         recovery_key_agreements: Some(vec![RecoveryKeyAgreementEntry {
             key_agreement_ref: recovery_key_agreement_ref,
-            alg: RecoveryKeyAgreementAlgorithm::X25519,
+            key_agreement_algorithm: RecoveryKeyAgreementAlgorithm::X25519,
             public_key_multibase: non_empty(
                 recovery_material.backup_hpke_public_key_multikey.clone(),
             )?,
@@ -2184,7 +2184,7 @@ async fn live_cross_signing_recovery_create_request(
         device_public_key: non_empty(device_public_key)?,
         hpke_key: non_empty(TEST_DEVICE_HPKE_KEY)?,
         algorithms,
-        device_key_algorithm: Some(non_empty("EdDSA")?),
+        device_key_algorithm: Some(non_empty("Ed25519")?),
         authorized_by: DeviceOrPrincipalRef::Did(principal.clone()),
         scopes: None,
         not_before: canonical_now(),
@@ -2193,7 +2193,7 @@ async fn live_cross_signing_recovery_create_request(
         proof: None,
         cross_signing_binding: Some(DeviceCrossSigningBinding {
             verification_method: ssk_verification_method.clone(),
-            alg: non_empty("EdDSA")?,
+            signature_algorithm: non_empty("Ed25519")?,
             ssk_generation: std::num::NonZeroU64::new(1).unwrap(),
             signature: Base64UrlString::new(
                 URL_SAFE_NO_PAD.encode(ssk_key.sign(&binding_input).to_bytes()),
@@ -3488,7 +3488,7 @@ async fn provision_agent(
             .to_vec(),
     };
     let canonical_bytes = arkret::canonical::canonical_json_bytes(&event.digest_payload()?)?;
-    arkret::signatures::verify_eddsa_detached_jws_proof(
+    arkret::signatures::verify_ed25519_detached_jws_proof(
         event
             .proofs
             .first()
@@ -3840,7 +3840,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     bearer_sdk_client(server, token)?
         .agent_runtime_approval_request(&approval_request)
         .await?;
-    let runtime_public_key_digest = builder.public_key_digest()?;
+    let runtime_public_key_digest = builder.runtime_request_public_key_digest()?;
     let pairing_binding_digest =
         arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
             arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
@@ -4000,14 +4000,13 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         expires_at: disclosure_issued_at + chrono::Duration::minutes(5),
         proofs: vec![arkret::Proof {
             kind: "detached_jws".to_owned(),
-            alg: "EdDSA".to_owned(),
             verification_method: controller_vm.clone(),
             event_digest: arkret::Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: disclosure_issued_at,
             domain: None,
             audience: None,
             proof_purpose: None,
-            jws: "eyJhbGciOiJFZERTQSJ9..AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ".to_owned(),
+            jws: "eyJhbGciOiJFZDI1NTE5In0..AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ".to_owned(),
         }],
     };
     requested_scope_disclosure.proofs[0].event_digest =
@@ -4232,7 +4231,6 @@ async fn prepare_initial_submission_for_notary(
         absolute_due_at: received_at + policy.absolute_horizon,
         authority_set_ref: authority_set_ref.clone(),
         signature: arkret_wire::PayloadSignature {
-            alg: "EdDSA".to_owned(),
             verification_method: verification_method.clone(),
             extra: Default::default(),
             payload_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))?,

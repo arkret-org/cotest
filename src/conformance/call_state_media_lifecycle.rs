@@ -28,7 +28,7 @@ use arkret_identifiers::{BlobRef, CallId, Did, EventId, GrantId, Hash, PolicyId,
 use arkret_models_collaboration::events_payloads::call::{
     CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
-    CallRecordingEncryptionAlg, CallRecordingEncryptionContext, CallRecordingId,
+    CallRecordingEncryptionAlgorithm, CallRecordingEncryptionContext, CallRecordingId,
     CallRecordingRetention, CallRecordingState, CallRecordingTransition, CallStatePayload,
     CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, CallTranscriptState,
     CallTranscriptTransition, RecordingStartPayload,
@@ -230,7 +230,8 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         duration_ms: 42_000,
         media_type: "video/mp4".to_owned(),
         encryption: CallRecordingEncryption {
-            alg: CallRecordingEncryptionAlg::MlsExporterAeadXchacha20poly1305Stream,
+            encryption_algorithm:
+                CallRecordingEncryptionAlgorithm::MlsExporterAeadXchacha20poly1305Stream,
             exporter_label: ExporterLabelId::RTC_RECORDING_KEY_V1.to_owned(),
             context: CallRecordingEncryptionContext {
                 realm_id: realm_id(),

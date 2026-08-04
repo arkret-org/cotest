@@ -70,7 +70,7 @@
         "signature": {
           "issuer": "did:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
-          "alg": "EdDSA"
+          "signature_algorithm": "Ed25519"
         }
       }
     },
@@ -141,7 +141,7 @@
         "signature": {
           "issuer": "did:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
-          "alg": "EdDSA"
+          "signature_algorithm": "Ed25519"
         }
       }
     }
@@ -174,7 +174,7 @@
         "signature": {
           "issuer": "did:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
-          "alg": "EdDSA"
+          "signature_algorithm": "Ed25519"
         },
         "expected_rejection_reason": "compaction_dropped_bottom_diagnostics"
       }
@@ -200,7 +200,7 @@
         "signature": {
           "issuer": "did:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
-          "alg": "EdDSA"
+          "signature_algorithm": "Ed25519"
         },
         "expected_rejection_reason": "state_root_drifted_from_effective_view"
       }

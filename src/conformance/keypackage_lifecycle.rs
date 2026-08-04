@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::{DeviceId, Did, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::{
     MlsKeypackagePayload, MlsWelcomePayload, validate_mls_welcome_claim_envelope,
@@ -194,7 +194,7 @@ fn claim_record_value(
         "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
         "device_signature": {
             "kid": format!("{}#{}", principal_id.as_str(), device_id.as_str()),
-            "alg": "EdDSA",
+            "signature_algorithm": "Ed25519",
             "sig": "c2ln"
         },
         "revocation_status": "active"
@@ -872,7 +872,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "created_at": "2026-06-19T00:00:00.000Z",
         "device_signature": {
             "kid": "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
-            "alg": "EdDSA",
+            "signature_algorithm": "Ed25519",
             "sig": "c2ln"
         }
     })
@@ -921,7 +921,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "created_at": "2026-05-25T00:00:00.000Z",
             "signature": {
                 "kid": "did:web:alice.example#ak_self_signing_v1",
-                "alg": "EdDSA",
+                "signature_algorithm": "Ed25519",
                 "sig": "c2ln"
             }
         },
@@ -1188,12 +1188,11 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     request["holder_acceptance_proof"] = json!({
         "kind": "detached_jws",
         "verification_method": "did:webvh:z6mkfixture:alice.example#ak_self_signing_v1",
-        "alg": "EdDSA",
         "payload_digest": required_str(vector, "payload_digest")?,
         "created_at": "2026-07-31T00:00:00.000Z",
         "audience": required_str(vector, "authority_service_id")?,
         "proof_purpose": "holder_acceptance",
-        "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
+        "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
     });
     let typed: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(request.clone())?;
@@ -1264,12 +1263,17 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
 pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
     validate_keypackage_lifecycle_fixture_metadata(&keypackage_fixture()?)?;
 
-    run_keypackage_exhaustion_claim_limits_vector()?;
-    run_keypackage_last_resort_claim_and_reuse_vector()?;
-    run_keypackage_last_resort_forced_rotation_vector()?;
-    run_keypackage_last_resort_affinity_and_optionality_vector()?;
-    run_keypackage_self_claim_authorization_idempotency_vector()?;
-    run_mls_welcome_keypackage_hash_vector()?;
+    run_keypackage_exhaustion_claim_limits_vector()
+        .context("keypackage exhaustion/claim-limits vector")?;
+    run_keypackage_last_resort_claim_and_reuse_vector()
+        .context("keypackage last-resort claim/reuse vector")?;
+    run_keypackage_last_resort_forced_rotation_vector()
+        .context("keypackage last-resort forced-rotation vector")?;
+    run_keypackage_last_resort_affinity_and_optionality_vector()
+        .context("keypackage last-resort affinity/optionality vector")?;
+    run_keypackage_self_claim_authorization_idempotency_vector()
+        .context("keypackage self-claim authorization/idempotency vector")?;
+    run_mls_welcome_keypackage_hash_vector().context("MLS welcome KeyPackage hash vector")?;
     Ok(())
 }
 

@@ -245,7 +245,7 @@ function signedRealmKeyShareEnvelope(args: {
     key_scope: keyScope,
     sender_device_signature: {
       verification_method: `${args.senderDid}#${args.senderDeviceId}`,
-      alg: "EdDSA",
+      alg: "Ed25519",
       transcript_digest: sha256Hash(canonicalJson(transcript)),
       signature: base64url(`rrk-share-sig-${randomUUID()}`),
     },

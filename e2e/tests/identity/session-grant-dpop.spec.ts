@@ -43,7 +43,7 @@ import {
 const VIEWER_PATH = "/_arkret/self/account/viewer";
 
 function grantLikeJwtWithoutDpop(): string {
-  const header = Buffer.from(JSON.stringify({ alg: "EdDSA", typ: "JWT" })).toString("base64url");
+  const header = Buffer.from(JSON.stringify({ alg: "Ed25519", typ: "JWT" })).toString("base64url");
   const payload = Buffer.from(JSON.stringify({ type: "ak.session.grant" })).toString("base64url");
   return `${header}.${payload}.signature`;
 }

@@ -103,7 +103,7 @@ export async function setupTwoPartyCallRealm(
 // Event proof binding). This helper mints a REAL ed25519 keypair per
 // (actor, device) and produces a real signature so the relay's
 // `validate_production` + `event_digest == canonical(envelope_without_proof)`
-// gates pass AND a real receiver running `verify_eddsa_detached_jws_proof`
+// gates pass AND a real receiver running `verify_ed25519_detached_jws_proof`
 // against this device's public key accepts it. The public key is exported via
 // `deviceVerifyingKeyHex` so a conformance verifier can prove the signature is
 // genuine, not a shape stub.
@@ -225,7 +225,7 @@ export function buildSignalEnvelope(args: {
     proof: {
       kind: "detached_jws",
       verification_method: `${args.actorDid}#${args.deviceId}`,
-      alg: "EdDSA",
+      alg: "Ed25519",
       envelope_digest: `sha256:${"0".repeat(64)}`,
       created_at: canonicalEventTimestamp(sentAt),
       jws: "",
@@ -307,7 +307,7 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
     verification_method: proof.verification_method,
     created_at: proof.created_at,
   };
-  const protectedHeader = base64urlJsonCanonical({ alg: "EdDSA" });
+  const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
   const signingInput = `${protectedHeader}.${bindingPayload}`;
   const signature = base64url(

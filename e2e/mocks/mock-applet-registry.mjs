@@ -133,7 +133,9 @@ function registrationEpochHash(packageBase, evidence) {
     },
     webhook_auth: {
       ...packageBase.webhook_auth,
-      accepted_algs: [...packageBase.webhook_auth.accepted_algs].sort(),
+      accepted_signature_algorithms: [
+        ...packageBase.webhook_auth.accepted_signature_algorithms,
+      ].sort(),
     },
     security_policy: securityPolicy,
   };
@@ -217,7 +219,7 @@ function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
     verification_method: verificationMethod,
     created_at: createdAt,
   };
-  const protectedHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
+  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString("base64url");
   const signingInput = `${protectedHeader}.${Buffer.from(canonicalJson(binding), "utf8").toString(
     "base64url",
   )}`;
@@ -226,7 +228,7 @@ function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
   );
   return {
     kind: "detached_jws",
-    alg: "EdDSA",
+    alg: "Ed25519",
     verification_method: verificationMethod,
     event_digest: eventDigest,
     created_at: createdAt,
@@ -235,7 +237,7 @@ function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
 }
 
 function detachedJws(binding, signingKey) {
-  const protectedHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
+  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString("base64url");
   const signingInput = `${protectedHeader}.${Buffer.from(
     canonicalJson(binding),
     "utf8",
@@ -317,7 +319,7 @@ function signedGhostProvisionEvents({
     ...grantWithoutProof,
     proof: {
       kind: "detached_jws",
-      alg: "EdDSA",
+      alg: "Ed25519",
       verification_method: verificationMethod,
       payload_digest: payloadDigest,
       created_at: createdAt,
@@ -550,7 +552,7 @@ function signedPackage(body) {
   const webhookAuth = body.webhook_auth ?? {
     kind: "http_message_signature",
     key_ref: `${serviceId}#applet-service-key`,
-    accepted_algs: ["EdDSA"],
+    accepted_signature_algorithms: ["ed25519"],
   };
   const webhookPublicJwk =
     body.service_signing_public_jwk ?? developmentAppletPublicJwk(webhookAuth.key_ref);
@@ -667,7 +669,7 @@ function signedPackage(body) {
   // Detached JWS per RFC 7515 appendix F, matching the SDK contract
   // (arkret-rust-sdk signatures/proof.rs): wire form is `header..signature`
   // with an empty payload segment, signed over `header.BASE64URL(payload)`.
-  const jwsHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
+  const jwsHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString("base64url");
   const signingInput = `${jwsHeader}.${Buffer.from(canonicalJson(sealedForSignature), "utf8").toString("base64url")}`;
   const signature = sign(null, Buffer.from(signingInput, "utf8"), privateKey).toString(
     "base64url",
@@ -677,7 +679,7 @@ function signedPackage(body) {
     ...sealed,
     proof: {
       kind: "detached_jws",
-      alg: "EdDSA",
+      alg: "Ed25519",
       verification_method: `${registryDid}#mock-applet-registry-key-1`,
       event_digest: payloadDigest,
       created_at: createdAt,

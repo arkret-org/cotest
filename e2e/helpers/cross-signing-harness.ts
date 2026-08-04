@@ -61,7 +61,7 @@ export function generateCrossSigningKey(): CrossSigningKey {
   };
 }
 
-/// EdDSA-sign `message` with `key` and return the detached signature as
+/// Ed25519-sign `message` with `key` and return the detached signature as
 /// base64url (no padding) — the encoding soland's `ed25519_verify` decodes.
 function signB64url(message: Buffer, key: CrossSigningKey): string {
   return sign(null, message, key.privateKey).toString("base64url");
@@ -89,7 +89,7 @@ export function crossSigningBindingInput(args: {
     trust_domain: args.trustDomain,
     subordinate_key_kind: args.subordinateKind,
     subordinate_kid: args.subordinateKid,
-    subordinate_alg: args.subordinateAlg,
+    subordinate_algorithm: args.subordinateAlg,
     subordinate_public_key: args.subordinatePublicKey,
     generation: args.generation,
   });
@@ -211,7 +211,7 @@ export function buildCrossSigningPublishPayload(
     trustDomain: identity.trustDomain,
     subordinateKind: "self_signing",
     subordinateKid: identity.ssk.verificationMethod,
-    subordinateAlg: "EdDSA",
+    subordinateAlg: "Ed25519",
     subordinatePublicKey: identity.ssk.multibase,
     generation: identity.generation,
   });
@@ -220,7 +220,7 @@ export function buildCrossSigningPublishPayload(
     trustDomain: identity.trustDomain,
     subordinateKind: "user_signing",
     subordinateKid: identity.usk.verificationMethod,
-    subordinateAlg: "EdDSA",
+    subordinateAlg: "Ed25519",
     subordinatePublicKey: identity.usk.multibase,
     generation: identity.generation,
   });
@@ -229,29 +229,29 @@ export function buildCrossSigningPublishPayload(
     trust_domain: identity.trustDomain,
     principal_signing_key: {
       kid: identity.psk.verificationMethod,
-      alg: "EdDSA",
+      alg: "Ed25519",
       public_key: identity.psk.multibase,
       key_format: "multibase",
     },
     self_signing_key: {
       kid: identity.ssk.verificationMethod,
-      alg: "EdDSA",
+      alg: "Ed25519",
       public_key: identity.ssk.multibase,
       key_format: "multibase",
       binding: {
         verification_method: identity.psk.verificationMethod,
-        alg: "EdDSA",
+        alg: "Ed25519",
         signature: signB64url(selfSigningInput, identity.psk),
       },
     },
     user_signing_key: {
       kid: identity.usk.verificationMethod,
-      alg: "EdDSA",
+      alg: "Ed25519",
       public_key: identity.usk.multibase,
       key_format: "multibase",
       binding: {
         verification_method: identity.psk.verificationMethod,
-        alg: "EdDSA",
+        alg: "Ed25519",
         signature: signB64url(userSigningInput, identity.psk),
       },
     },
@@ -292,7 +292,7 @@ export function buildDeviceCrossSigningBinding(args: {
   });
   return {
     verification_method: args.identity.ssk.verificationMethod,
-    alg: "EdDSA",
+    alg: "Ed25519",
     ssk_generation: args.identity.generation,
     signature: signB64url(input, args.identity.ssk),
   };

@@ -128,7 +128,7 @@ pub(crate) fn signed_keys_upload_body(
         device_signature: KeyOperationSignature {
             kid: NonEmptyString::new(format!("did:key:{device_public_key}#{device_public_key}"))
                 .unwrap(),
-            alg: Some(NonEmptyString::new("EdDSA").unwrap()),
+            signature_algorithm: Some(NonEmptyString::new("Ed25519").unwrap()),
             sig: Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes())).unwrap(),
         },
     })
@@ -176,7 +176,7 @@ fn signed_algorithm_key_records(
                 "signature".to_owned(),
                 json!({
                     "kid": format!("{actor}#ak_self_signing_v1"),
-                    "alg": "EdDSA",
+                    "signature_algorithm": "Ed25519",
                     "sig": URL_SAFE_NO_PAD.encode(signing_key.sign(&signature_input).to_bytes()),
                 }),
             );
@@ -268,7 +268,7 @@ async fn bootstrap_test_device_authorization(
                 .map_err(anyhow::Error::msg)?,
             NonEmptyString::new("ak.mls.v1").map_err(anyhow::Error::msg)?,
         ],
-        device_key_algorithm: Some(NonEmptyString::new("EdDSA").map_err(anyhow::Error::msg)?),
+        device_key_algorithm: Some(NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?),
         authorized_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::Did(principal.clone()),
         scopes: None,
         not_before: created_at,

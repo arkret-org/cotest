@@ -412,7 +412,6 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
 
     let mut proof = Proof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
         verification_method: input.verification_method,
         event_digest,
         created_at,
@@ -424,7 +423,7 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let binding_bytes = proof
         .canonical_binding_bytes(&actor)
         .context("encode event proof binding")?;
-    proof.jws = arkret_signatures::proof::sign_eddsa_detached_jws(&signing_key, &binding_bytes)
+    proof.jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding_bytes)
         .map_err(|err| anyhow::anyhow!("sign event proof: {err}"))?;
 
     serde_json::to_value(proof).context("serialize event proof")
@@ -470,7 +469,6 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         actor_id: Did::new(actor_id.to_owned()).context("parse consent actor DID")?,
         signature: PayloadProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
-            alg: "EdDSA".to_owned(),
             verification_method: input.verification_method.clone(),
             payload_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
                 .context("build placeholder payload digest")?,
@@ -493,7 +491,7 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         None => development_event_signing_key(&input.verification_method),
     };
     request.signature.jws =
-        arkret_signatures::proof::sign_eddsa_detached_jws(&signing_key, &binding)
+        arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
             .map_err(|error| anyhow::anyhow!("sign MIMI consent proof: {error}"))?;
     serde_json::to_value(request.signature).context("serialize MIMI consent proof")
 }
@@ -682,7 +680,7 @@ mod tests {
         };
 
         assert_eq!(proof.verification_method, verification_method);
-        arkret_signatures::proof::verify_eddsa_detached_jws_proof(
+        arkret_signatures::proof::verify_ed25519_detached_jws_proof(
             &proof,
             &canonical_bytes,
             &actor,

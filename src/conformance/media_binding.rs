@@ -339,9 +339,9 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
         bail!("participant_binding required tuple drifted (expected 9 fields)");
     }
 
-    // Real EdDSA verification (no longer a field-presence stub): reconstruct
+    // Real Ed25519 verification (no longer a field-presence stub): reconstruct
     // the §3 signing_input and verify `sig` against the issuer key.
-    run_participant_binding_eddsa_vector()
+    run_participant_binding_ed25519_vector()
 }
 
 /// Canonical participant_binding signing_input
@@ -383,7 +383,7 @@ fn participant_binding_signing_input(
     Ok(input)
 }
 
-/// VECT-MB-5b — REAL EdDSA golden vector for `participant_binding.sig` and the
+/// VECT-MB-5b — REAL Ed25519 golden vector for `participant_binding.sig` and the
 /// `service_signature.sig` (which reuses the SAME signing_input, §3.1).
 ///
 /// Fixed issuer seed + fixed 7-tuple ⇒ a deterministic golden signature. The
@@ -395,7 +395,7 @@ fn participant_binding_signing_input(
 ///   3. the domain label is load-bearing — verifying the same `sig` under the ICE-config label
 ///      (`ak.media.ice_config.v1`) MUST fail (cross-purpose signature confusion is rejected);
 ///   4. `service_signature.sig` over the identical input verifies with the same issuer key.
-fn run_participant_binding_eddsa_vector() -> Result<()> {
+fn run_participant_binding_ed25519_vector() -> Result<()> {
     // Fixed golden inputs.
     const ISSUER_SEED: [u8; 32] = [
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,

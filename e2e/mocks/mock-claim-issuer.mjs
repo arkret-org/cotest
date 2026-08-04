@@ -29,7 +29,7 @@ const publicJwk = publicKey.export({ format: "jwk" });
 const issuesLog = new InspectLog("issues");
 
 function signPresentation(presentation) {
-  const header = { alg: "EdDSA", typ: "vc+jws", kid: "mock-claim-issuer-key-1" };
+  const header = { alg: "Ed25519", typ: "vc+jws", kid: "mock-claim-issuer-key-1" };
   const enc = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(presentation))}`;
   const sig = cryptoSign(null, Buffer.from(enc), privateKey);
   return `${enc}.${b64url(sig)}`;

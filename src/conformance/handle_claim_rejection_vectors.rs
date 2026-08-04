@@ -96,24 +96,22 @@ fn base_claim() -> Value {
         "proofs": [
             {
                 "kind": "detached_jws",
-                "alg": "EdDSA",
                 "verification_method": "did:web:coauth.acme.example#key-1",
                 "payload_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "created_at": "2026-05-20T00:00:00.000Z",
-                "jws": "eyJhbGciOiJFZERTQSJ9..signature"
+                "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
             },
             // binding_state=verified claims MUST also carry a
             // holder_acceptance proof (handle-claim.schema.json allOf[0]).
             {
                 "kind": "detached_jws",
-                "alg": "EdDSA",
                 "verification_method": "did:web:alice.principal.example#key-1",
                 "proof_purpose": "holder_acceptance",
                 "payload_digest":
                     "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "created_at": "2026-05-20T00:00:00.000Z",
-                "jws": "eyJhbGciOiJFZERTQSJ9..signature"
+                "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
             }
         ]
     })

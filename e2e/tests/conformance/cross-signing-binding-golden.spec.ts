@@ -89,7 +89,7 @@ test.describe("cross-signing / device-trust signing-input parity (TS mirror vs S
         trustDomain: payload.trust_domain,
         subordinateKind: "self_signing",
         subordinateKid: payload.self_signing_key.kid,
-        subordinateAlg: payload.self_signing_key.alg,
+        subordinateAlg: payload.self_signing_key.algorithm,
         subordinatePublicKey: payload.self_signing_key.public_key,
         generation: payload.generation,
       }).toString("base64");
@@ -98,7 +98,7 @@ test.describe("cross-signing / device-trust signing-input parity (TS mirror vs S
         trustDomain: payload.trust_domain,
         subordinateKind: "user_signing",
         subordinateKid: payload.user_signing_key.kid,
-        subordinateAlg: payload.user_signing_key.alg,
+        subordinateAlg: payload.user_signing_key.algorithm,
         subordinatePublicKey: payload.user_signing_key.public_key,
         generation: payload.generation,
       }).toString("base64");

@@ -18,35 +18,35 @@
       "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ak:user:alice#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "alice_user_signing": {
         "key_id": "did:ak:user:alice#user-signing",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_master": {
         "key_id": "did:ak:user:bob#master",
         "signed_by": "did:ak:user:alice#user-signing",
         "signature_b64": "U0lHX0FMSUNFX1VTRVJfU0lHTl9PVl9CT0JfTUFTVA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX01BU1RFUl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_self_signing": {
         "key_id": "did:ak:user:bob#self-signing",
         "signed_by": "did:ak:user:bob#master",
         "signature_b64": "U0lHX0JPQl9NQVNURVJfT1ZfU0VMRl9TSUdOMDAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX1NFTEZfU0lHTl8wMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_device_leaf": {
         "key_id": "did:ak:dev:dev_bob_01#leaf",
         "signed_by": "did:ak:user:bob#self-signing",
         "signature_b64": "U0lHX0JPQl9TRUxGX1NJR05fT1ZfTEVBRl8wMDAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX0RFVl8wMV9MRUFGXzAwMDAwMDAwMDAwMDAwMDA"
       },
       "expected": {
@@ -69,35 +69,35 @@
       "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ak:user:alice#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "alice_user_signing": {
         "key_id": "did:ak:user:alice#user-signing",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_master": {
         "key_id": "did:ak:user:bob#master",
         "signed_by": "did:ak:user:alice#user-signing",
         "signature_b64": "U0lHX0FMSUNFX1VTRVJfU0lHTl9PVl9CT0JfTUFTVA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX01BU1RFUl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_self_signing": {
         "key_id": "did:ak:user:bob#self-signing",
         "signed_by": "did:ak:user:bob#master",
         "signature_b64": "U0lHX0JPQl9NQVNURVJfT1ZfU0VMRl9TSUdOMDAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX1NFTEZfU0lHTl8wMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_device_leaf": {
         "key_id": "did:ak:dev:dev_bob_NEW#leaf",
         "signed_by": "did:ak:user:bob#self-signing",
         "signature_b64": "U0lHX0JPQl9TRUxGX09WX05FV19MRUFGXzAwMDAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX0RFVl9ORVdfTEVBRl8wMDAwMDAwMDAwMDAwMDA"
       },
       "expected": {
@@ -114,7 +114,7 @@
       "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ak:user:alice#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA",
         "revoked": true,
         "revoked_at": "2026-05-09T00:00:00.000Z"
@@ -123,14 +123,14 @@
         "key_id": "did:ak:user:alice#user-signing",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_master": {
         "key_id": "did:ak:user:bob#master",
         "signed_by": "did:ak:user:alice#user-signing",
         "signature_b64": "U0lHX0FMSUNFX1VTRVJfU0lHTl9PVl9CT0JfTUFTVA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX01BU1RFUl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "expected": {
@@ -146,21 +146,21 @@
       "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ak:user:alice#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "alice_user_signing": {
         "key_id": "did:ak:user:alice#user-signing",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
       },
       "bob_user_signing_old": {
         "key_id": "did:ak:user:bob#user-signing",
         "signed_by": "did:ak:user:alice#user-signing",
         "signature_b64": "U0lHX0FMSUNFX1VTSUdfT1ZfQk9CX1VTSUdfT0xEMA",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX1VTSUdfT0xEXzAwMDAwMDAwMDAwMDAwMDAwMDA",
         "rotated": true,
         "rotated_at": "2026-05-09T00:00:00.000Z"
@@ -169,7 +169,7 @@
         "key_id": "did:ak:user:bob#user-signing",
         "signed_by": null,
         "signature_b64": null,
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "Qk9CX1VTSUdfTkVXXzAwMDAwMDAwMDAwMDAwMDAwMDA",
         "needs_re_anchor": true
       },
@@ -187,14 +187,14 @@
       "trusted_actor_id": "did:web:bob.example",
       "alice_master": {
         "key_id": "did:ak:user:alice#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "QUxJQ0VfTUFTVEVSXzAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "alice_user_signing": {
         "key_id": "did:ak:user:alice#user-signing",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX0FMSUNFX01BU1RFUl9PVl9VU0VSU0lHTjAwMDA",
-        "alg": "rsa-1024-sha1",
+        "algorithm": "rsa-1024-sha1",
         "public_b64": "QUxJQ0VfVVNFUl9TSUdOXzAwMDAwMDAwMDAwMDAwMDA"
       },
       "expected": {

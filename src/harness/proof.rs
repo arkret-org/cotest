@@ -252,7 +252,6 @@ mod tests {
             },
             "proofs": [{
                 "kind": "detached_jws",
-                "alg": "EdDSA",
                 "verification_method": "did:web:alice.example#device",
                 "event_digest": "",
                 "created_at": "2026-07-07T00:00:00.000Z",
@@ -301,10 +300,9 @@ mod tests {
             "proof": {
                 "kind": "detached_jws",
                 "verification_method": "did:web:alice.example#ak:device:019f3b1c-76c8-7000-8000-000000000001",
-                "alg": "EdDSA",
                 "envelope_digest": format!("sha256:{}", "0".repeat(64)),
                 "created_at": "2026-07-07T00:00:00.000Z",
-                "jws": "eyJhbGciOiJFZERTQSJ9..c2ln"
+                "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
             }
         });
 
@@ -312,7 +310,7 @@ mod tests {
 
         let typed: arkret_wire::SignalEnvelope = serde_json::from_value(envelope).unwrap();
         typed.validate_structural().unwrap();
-        arkret_signatures::proof::verify_eddsa_signal_proof(
+        arkret_signatures::proof::verify_ed25519_signal_proof(
             &typed,
             &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
                 bytes: signing_key.verifying_key().to_bytes().to_vec(),

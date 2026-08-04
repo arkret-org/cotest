@@ -154,7 +154,7 @@ function sha256Hex(input) {
 }
 
 function signDeliveryReceipt({ pusher_id, payload }) {
-  const header = { alg: "EdDSA", typ: "JWT", kid: "mock-push-gateway-key-1" };
+  const header = { alg: "Ed25519", typ: "JWT", kid: "mock-push-gateway-key-1" };
   const now = Math.floor(Date.now() / 1000);
   const claims = {
     iss: issuer,

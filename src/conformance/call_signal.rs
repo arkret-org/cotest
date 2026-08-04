@@ -21,7 +21,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{CallId, DeviceId, Did, Hash, RealmId};
 use arkret_models_collaboration::call_signal::CallSignalPlaintext;
 use arkret_signatures::PublicKeyMaterial;
-use arkret_signatures::proof::verify_eddsa_signal_proof;
+use arkret_signatures::proof::verify_ed25519_signal_proof;
 use arkret_wire::signal::{SIGNAL_AEAD_PURPOSE, SIGNAL_AEAD_SCHEME};
 use arkret_wire::{
     ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
@@ -197,7 +197,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     envelope
         .validate_structural()
         .map_err(|err| anyhow!("a canonical call-signal envelope must validate: {err}"))?;
-    verify_eddsa_signal_proof(&envelope, &public)
+    verify_ed25519_signal_proof(&envelope, &public)
         .map_err(|err| anyhow!("the sender-style signal proof MUST verify: {err}"))?;
 
     // Negative: tampering the ciphertext changes `envelope_digest`, so the
@@ -223,7 +223,7 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
             .to_bytes()
             .to_vec(),
     };
-    if verify_eddsa_signal_proof(&envelope, &wrong).is_ok() {
+    if verify_ed25519_signal_proof(&envelope, &wrong).is_ok() {
         bail!("proof verified under the wrong public key — signature is not actually checked");
     }
     Ok(())
@@ -348,7 +348,6 @@ fn signed_call_signal_envelope(
         proof: SignalProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: crate::fixture_did_url(format!("{actor_id}#{device_id}")),
-            alg: "EdDSA".to_owned(),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: sent_at(),
             domain: None,

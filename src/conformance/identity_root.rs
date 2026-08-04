@@ -202,7 +202,7 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
         device_status: Some(DeviceStatus::Active),
         cross_signing_binding: Some(QueryDeviceCrossSigningBinding {
             verification_method: did_url("did:webvh:z6mkfixture:alice.example#ak_self_signing_v1")?,
-            alg: Some(non_empty("EdDSA")?),
+            signature_algorithm: Some(non_empty("Ed25519")?),
             ssk_generation: 1,
             signature: base64_url("c2ln")?,
         }),
@@ -290,7 +290,7 @@ fn validate_bootstrap_helpers() -> Result<()> {
             non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?,
             non_empty("ak.mls.v1")?,
         ],
-        device_key_algorithm: Some(non_empty("EdDSA")?),
+        device_key_algorithm: Some(non_empty("Ed25519")?),
         authorized_by: DeviceOrPrincipalRef::Did(authority.authority_did.clone()),
         scopes: None,
         not_before: created_at,
@@ -492,7 +492,6 @@ fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Re
     let digest = Hash::new(event.event_digest()?)?;
     event.proofs = vec![Proof {
         kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
         verification_method: verification_method.clone(),
         event_digest: digest,
         created_at: event.created_at,

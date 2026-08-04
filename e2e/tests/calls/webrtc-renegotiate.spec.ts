@@ -60,7 +60,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
 
     const signature = body.signature as Record<string, unknown>;
     expect(signature, "ICE config MUST be signed").toBeTruthy();
-    expect(signature.alg).toBe("EdDSA");
+    expect(signature.alg).toBe("Ed25519");
     // The signing_input is prefixed by the spec domain label — distinct from
     // ak.media.participant_binding.v1 (media-service-binding.md §3.1).
     expect(signature.signature_input).toBe("ak.media.ice_config.v1");

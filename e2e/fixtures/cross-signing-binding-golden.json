@@ -8,29 +8,29 @@
         "trust_domain": "ak:trust_domain:soland.local",
         "principal_signing_key": {
           "kid": "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRLnRA1z9RfmT#z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRLnRA1z9RfmT",
-          "alg": "EdDSA",
+          "algorithm": "Ed25519",
           "public_key": "z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRLnRA1z9RfmT",
           "key_format": "multibase"
         },
         "self_signing_key": {
           "kid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK#z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-          "alg": "EdDSA",
+          "algorithm": "Ed25519",
           "public_key": "z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
           "key_format": "multibase",
           "binding": {
             "verification_method": "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRLnRA1z9RfmT#z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRLnRA1z9RfmT",
-            "alg": "EdDSA",
+            "signature_algorithm": "Ed25519",
             "signature": "c2lnLXNlbGY"
           }
         },
         "user_signing_key": {
           "kid": "did:key:z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG#z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
-          "alg": "EdDSA",
+          "algorithm": "Ed25519",
           "public_key": "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
           "key_format": "multibase",
           "binding": {
             "verification_method": "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRLnRA1z9RfmT#z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRLnRA1z9RfmT",
-            "alg": "EdDSA",
+            "signature_algorithm": "Ed25519",
             "signature": "c2lnLXVzZXI"
           }
         },
@@ -38,8 +38,8 @@
         "generation": 1,
         "issued_at": "2026-07-09T00:00:00.000Z"
       },
-      "expected_self_signing_input_b64": "YWsuY3Jvc3Mtc2lnbmluZy1iaW5kLXYxCnsiZ2VuZXJhdGlvbiI6MSwicHJpbmNpcGFsX2lkIjoiZGlkOndlYjphbGljZS5leGFtcGxlLmNvbSIsInN1Ym9yZGluYXRlX2FsZyI6IkVkRFNBIiwic3Vib3JkaW5hdGVfa2V5X2tpbmQiOiJzZWxmX3NpZ25pbmciLCJzdWJvcmRpbmF0ZV9raWQiOiJkaWQ6a2V5Ono2TWtoYVhnQlpEdm90RGtMNTI1N2ZhaXp0aUdpQzJRdEtMR3Bibm5FR3RhMmRvSyN6Nk1raGFYZ0JaRHZvdERrTDUyNTdmYWl6dGlHaUMyUXRLTEdwYm5uRUd0YTJkb0siLCJzdWJvcmRpbmF0ZV9wdWJsaWNfa2V5IjoiejZNa2hhWGdCWkR2b3REa0w1MjU3ZmFpenRpR2lDMlF0S0xHcGJubkVHdGEyZG9LIiwidHJ1c3RfZG9tYWluIjoiYWs6dHJ1c3RfZG9tYWluOnNvbGFuZC5sb2NhbCJ9",
-      "expected_user_signing_input_b64": "YWsuY3Jvc3Mtc2lnbmluZy1iaW5kLXYxCnsiZ2VuZXJhdGlvbiI6MSwicHJpbmNpcGFsX2lkIjoiZGlkOndlYjphbGljZS5leGFtcGxlLmNvbSIsInN1Ym9yZGluYXRlX2FsZyI6IkVkRFNBIiwic3Vib3JkaW5hdGVfa2V5X2tpbmQiOiJ1c2VyX3NpZ25pbmciLCJzdWJvcmRpbmF0ZV9raWQiOiJkaWQ6a2V5Ono2TWtqY2hoZlVzRDZtbXZuaThtQ2RYSHcyMTZYcm05YlFlMm1CSDFQNVJEalZKRyN6Nk1ramNoaGZVc0Q2bW12bmk4bUNkWEh3MjE2WHJtOWJRZTJtQkgxUDVSRGpWSkciLCJzdWJvcmRpbmF0ZV9wdWJsaWNfa2V5IjoiejZNa2pjaGhmVXNENm1tdm5pOG1DZFhIdzIxNlhybTliUWUybUJIMVA1UkRqVkpHIiwidHJ1c3RfZG9tYWluIjoiYWs6dHJ1c3RfZG9tYWluOnNvbGFuZC5sb2NhbCJ9"
+      "expected_self_signing_input_b64": "YWsuY3Jvc3Mtc2lnbmluZy1iaW5kLXYxCnsiZ2VuZXJhdGlvbiI6MSwicHJpbmNpcGFsX2lkIjoiZGlkOndlYjphbGljZS5leGFtcGxlLmNvbSIsInN1Ym9yZGluYXRlX2FsZ29yaXRobSI6IkVkMjU1MTkiLCJzdWJvcmRpbmF0ZV9rZXlfa2luZCI6InNlbGZfc2lnbmluZyIsInN1Ym9yZGluYXRlX2tpZCI6ImRpZDprZXk6ejZNa2hhWGdCWkR2b3REa0w1MjU3ZmFpenRpR2lDMlF0S0xHcGJubkVHdGEyZG9LI3o2TWtoYVhnQlpEdm90RGtMNTI1N2ZhaXp0aUdpQzJRdEtMR3Bibm5FR3RhMmRvSyIsInN1Ym9yZGluYXRlX3B1YmxpY19rZXkiOiJ6Nk1raGFYZ0JaRHZvdERrTDUyNTdmYWl6dGlHaUMyUXRLTEdwYm5uRUd0YTJkb0siLCJ0cnVzdF9kb21haW4iOiJhazp0cnVzdF9kb21haW46c29sYW5kLmxvY2FsIn0=",
+      "expected_user_signing_input_b64": "YWsuY3Jvc3Mtc2lnbmluZy1iaW5kLXYxCnsiZ2VuZXJhdGlvbiI6MSwicHJpbmNpcGFsX2lkIjoiZGlkOndlYjphbGljZS5leGFtcGxlLmNvbSIsInN1Ym9yZGluYXRlX2FsZ29yaXRobSI6IkVkMjU1MTkiLCJzdWJvcmRpbmF0ZV9rZXlfa2luZCI6InVzZXJfc2lnbmluZyIsInN1Ym9yZGluYXRlX2tpZCI6ImRpZDprZXk6ejZNa2pjaGhmVXNENm1tdm5pOG1DZFhIdzIxNlhybTliUWUybUJIMVA1UkRqVkpHI3o2TWtqY2hoZlVzRDZtbXZuaThtQ2RYSHcyMTZYcm05YlFlMm1CSDFQNVJEalZKRyIsInN1Ym9yZGluYXRlX3B1YmxpY19rZXkiOiJ6Nk1ramNoaGZVc0Q2bW12bmk4bUNkWEh3MjE2WHJtOWJRZTJtQkgxUDVSRGpWSkciLCJ0cnVzdF9kb21haW4iOiJhazp0cnVzdF9kb21haW46c29sYW5kLmxvY2FsIn0="
     }
   ],
   "device_trust_vectors": [

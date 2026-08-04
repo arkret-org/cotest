@@ -332,7 +332,6 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         reason_code: ControlProposalRejectReason::PolicyDenied,
         authority_set_ref: receipt.authority_set_ref.clone(),
         proofs: vec![PayloadSignature {
-            alg: "EdDSA".to_owned(),
             verification_method: crate::fixture_did_url(
                 "did:webvh:z6mkfixture:authority-a.example#notary",
             ),
@@ -434,7 +433,6 @@ fn member(
         absolute_due_at: absolute_due_at.parse()?,
         authority_set_ref,
         signature: PayloadSignature {
-            alg: "EdDSA".to_owned(),
             verification_method: DidUrl::new(verification_method).map_err(anyhow::Error::msg)?,
             payload_digest: hash('0'),
             created_at: received_at,

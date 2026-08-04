@@ -430,17 +430,17 @@ export async function seedDirectConversationIdentityArkret(
         device_public_key: deviceKey.multibase,
         hpke_key: hpkeKeyMultibase,
         algorithms: TEST_DEVICE_ALGORITHMS,
-        device_key_algorithm: "EdDSA",
+        device_key_algorithm: "Ed25519",
         device_signature: {
           kid: `${user.did}#${user.deviceId}`,
-          alg: "EdDSA",
+          alg: "Ed25519",
           sig: buildDevicePossessionSignature({
             identity,
             deviceId: user.deviceId,
             devicePublicKeyMultibase: deviceKey.multibase,
             hpkeKeyMultibase,
             algorithms: TEST_DEVICE_ALGORITHMS,
-            deviceKeyAlgorithm: "EdDSA",
+            deviceKeyAlgorithm: "Ed25519",
             authorizedBy: user.deviceId,
             notBefore,
             privateKey: deviceKey.privateKey,
@@ -528,7 +528,7 @@ async function uploadDirectConversationKeyPackage(
   };
   const deviceSignature = {
     kid: `${user.did}#${user.deviceId}`,
-    alg: "EdDSA",
+    alg: "Ed25519",
     sig: nodeSign(
       null,
       Buffer.concat([

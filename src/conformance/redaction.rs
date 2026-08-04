@@ -519,7 +519,7 @@ fn sample_event_with_id(event_id: &str) -> Value {
         "actor_id": "did:web:alice.example",
         "kind": "ak.message.create",
         "content": {"kind": "ak.content.text", "body": "secret"},
-        "proofs": [{"alg": "none"}]
+        "proofs": [{"fixture_marker": "not_covered"}]
     })
 }
 

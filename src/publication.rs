@@ -48,7 +48,6 @@ fn issuer_proof(
 ) -> PayloadProof {
     PayloadProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
         verification_method,
         payload_digest,
         created_at,
@@ -77,7 +76,6 @@ fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalR
         absolute_due_at: received_at + policy.absolute_horizon,
         authority_set_ref: authority_set_ref.clone(),
         signature: PayloadSignature {
-            alg: "EdDSA".to_owned(),
             verification_method: DidUrl::new("did:webvh:z6mkfixture:authority.example#key-1")
                 .map_err(anyhow::Error::msg)?,
             payload_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))

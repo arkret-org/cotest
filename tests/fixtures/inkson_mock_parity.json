@@ -42,8 +42,8 @@
         "new_device_pubkey": {
           "kty": "OKP",
           "kid": "ak:device:01999999-0000-7000-8000-000000000452",
-          "alg": "EdDSA",
-          "public_key": "emtleQ"
+          "algorithm": "Ed25519",
+          "key": "emtleQ"
         },
         "challenge_signature": "c2ln",
         "display_name": "Paired Phone",
@@ -62,7 +62,7 @@
         "new_device_pubkey": {
           "kty": "OKP",
           "kid": "ak:device:01964137-0000-7000-8000-0000000000b2",
-          "alg": "EdDSA",
+          "algorithm": "Ed25519",
           "key": "z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH"
         },
         "client_nonce": "Y290ZXN0LWRldmljZS1wYWlyaW5nLW5vbmNl",

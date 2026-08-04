@@ -621,7 +621,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       capabilities: ["ak.message.create"],
       webhook_auth: {
         kind: "http_message_signature",
-        accepted_algs: ["EdDSA"],
+        accepted_signature_algorithms: ["ed25519"],
       },
     });
     const sourceServiceId = signed.applet_package.service_id;
@@ -851,7 +851,7 @@ async function signPackage(
       service_signing_private_jwk: serviceSigningKey.privateKey.export({ format: "jwk" }),
       webhook_auth: {
         kind: "http_message_signature",
-        accepted_algs: ["EdDSA"],
+        accepted_signature_algorithms: ["ed25519"],
         ...requestedWebhookAuth,
         key_ref: `${built.did}#applet-service-key`,
       },
@@ -1159,7 +1159,7 @@ function appletEventProof(
     verification_method: verificationMethod,
     created_at: canonicalTimestamp(new Date(createdAt)),
   });
-  const jwsHeader = Buffer.from('{"alg":"EdDSA"}', "utf8").toString("base64url");
+  const jwsHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString("base64url");
   const signingInput = `${jwsHeader}.${Buffer.from(binding, "utf8").toString("base64url")}`;
   const signature = sign(
     null,
@@ -1168,7 +1168,7 @@ function appletEventProof(
   );
   return {
     kind: "detached_jws",
-    alg: "EdDSA",
+    alg: "Ed25519",
     verification_method: verificationMethod,
     event_digest: eventDigest,
     created_at: createdAt,

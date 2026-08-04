@@ -4,8 +4,8 @@
   "comment": "Round 22 — AnchorerWorker production signing path (Ed25519MoveSigner) per soland/src/routing/anchor_admin.rs::service_admin_signer + arkret-rust-sdk/crates/signatures/src/signer.rs. Validates the deterministic-vs-ephemeral seed contract: (a) configured-seed signer is byte-deterministic (same seed + same canonical body ⇒ same JWS signature segment) so anchor signatures replay across restart; (b) ephemeral-seed signer is non-deterministic across runs because the seed is fresh randomness; (c) different seeds produce different signatures even for the same canonical body (key-binding); (d) signature verifies via verify_ed25519_move_signature using the signer's derived verifying key (round-trip closure). Each vector pins a normative input (seed source + canonical-body hash) and the outcome shape; no real ed25519 ops run here — covered by SDK signature crate unit tests. The validator is structural.",
   "encoder": {
     "signer": "Ed25519MoveSigner",
-    "alg": "EdDSA",
-    "wire_form": "MoveSignature{alg: EdDSA, jws: <header>..<sig>, payload_digest: sha256:<hex>}",
+    "signature_algorithm": "Ed25519",
+    "wire_form": "MoveSignature{jws: <header>..<sig>, payload_digest: sha256:<hex>}",
     "seed_source_kinds": ["configured", "ephemeral", "service_id_derived"]
   },
   "vectors": [

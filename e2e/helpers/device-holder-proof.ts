@@ -13,7 +13,7 @@
 // key into soland's directory, then sign the holder proof with the SAME key.
 //
 // This module drives the holder proof: canonical `SoftLogoutDidProofClaims`
-// signed as an EdDSA detached JWS with the device key, plus the
+// signed as an Ed25519 detached JWS with the device key, plus the
 //      `soft_logout_restore_request_canonical_digest` binding, byte-mirroring the
 //      Rust structs in refresh.rs.
 //
@@ -146,9 +146,9 @@ export function buildHolderProofRefreshBody(args: {
   };
   const payloadBytes = Buffer.from(canonicalJson(claims), "utf8");
 
-  // EdDSA detached JWS: protected header carries alg + kid; payload segment is
+  // Ed25519 detached JWS: protected header carries alg + kid; payload segment is
   // empty; signature is over `b64u(header).b64u(payloadBytes)`.
-  const header = { alg: "EdDSA", kid: holderKeyId };
+  const header = { alg: "Ed25519", kid: holderKeyId };
   const headerB64 = base64urlJsonCanonical(header);
   const payloadB64 = payloadBytes.toString("base64url");
   const signingInput = `${headerB64}.${payloadB64}`;

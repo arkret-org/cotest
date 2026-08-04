@@ -95,7 +95,7 @@
         "recovery_capability": "cap:01js0rc0d100000000000000",
         "issuer_did": "did:web:operator.example",
         "anchorer_endorsement": {
-          "alg": "EdDSA",
+          "signature_algorithm": "Ed25519",
           "anchorer_did": "did:web:hub.example"
         },
         "value": {

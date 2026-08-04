@@ -56,35 +56,12 @@ pub struct FuzzSealDeepInput {
     pub sealed_at: String,
     pub hlc: String,
     pub include_signature: bool,
-    pub sig_alg: ArbSigAlg,
     pub sig_value: String,
     pub sig_key: String,
     pub predecessor_count: u8,
     pub delta_count: u8,
     pub predecessor_template: String,
     pub delta_template: String,
-}
-
-#[derive(Debug, Arbitrary)]
-pub enum ArbSigAlg {
-    Ed,
-    Es256,
-    Es384,
-    Es512,
-    /// Unknown alg — should be a typed `Err`, not a panic.
-    Junk,
-}
-
-impl ArbSigAlg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Ed => "EdDSA",
-            Self::Es256 => "ES256",
-            Self::Es384 => "ES384",
-            Self::Es512 => "ES512",
-            Self::Junk => "Foo",
-        }
-    }
 }
 
 impl FuzzSealDeepInput {
@@ -111,7 +88,6 @@ impl FuzzSealDeepInput {
         });
         if self.include_signature {
             envelope["notary_signature"] = json!({
-                "alg": self.sig_alg.as_str(),
                 "value": self.sig_value,
                 "key": self.sig_key,
             });

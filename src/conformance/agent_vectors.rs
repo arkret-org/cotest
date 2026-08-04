@@ -542,7 +542,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         bail!("same binding retry changed stable projection ids");
     }
     let different_key = serde_json::json!({
-        "alg": "EdDSA",
+        "algorithm": "Ed25519",
         "key": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
         "kid": "runtime-1",
         "kty": "OKP"
@@ -768,12 +768,11 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "grant_status": "active",
         "proof": {
             "kind": "detached_jws",
-            "alg": "EdDSA",
             "verification_method": "did:web:alice.example#key-1",
             "payload_digest": format!("sha256:{}", "0".repeat(64)),
             "created_at": "2026-07-12T00:00:00.000Z",
             "proof_purpose": "issuer_attestation",
-            "jws": "eyJhbGciOiJFZERTQSJ9..sig"
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..sig"
         }
     });
     let decoded: arkret_models_collaboration::governance::accountability::AccountabilityGrantPayload = serde_json::from_value(grant)

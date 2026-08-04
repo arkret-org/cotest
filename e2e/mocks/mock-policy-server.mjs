@@ -104,7 +104,7 @@ function signTranscript({ action, actor, target, decision, reason, obligations, 
   // Synthetic JWT-shaped transcript so consumers can verify the
   // decision with the /jwks key. Ed25519 signs the raw concatenated
   // header.payload buffer.
-  const header = { alg: "EdDSA", typ: "JWT", kid: "mock-policy-server-key-1" };
+  const header = { alg: "Ed25519", typ: "JWT", kid: "mock-policy-server-key-1" };
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: serviceId,

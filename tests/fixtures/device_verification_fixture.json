@@ -8,7 +8,7 @@
     "self_signing_key_form": "did:ak:user:<actor>#self-signing",
     "user_signing_key_form": "did:ak:user:<actor>#user-signing",
     "device_leaf_form": "did:ak:dev:<device_id>#leaf",
-    "sas_alg": "ECDH-X25519 + HKDF-SHA256 (8 bytes per emoji slot)",
+    "sas_algorithm": "ECDH-X25519 + HKDF-SHA256 (8 bytes per emoji slot)",
     "emoji_alphabet_size": 64
   },
   "vectors": [
@@ -18,12 +18,12 @@
       "actor_id": "did:web:alice.example",
       "master_key": {
         "key_id": "did:ak:user:alice#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "TUFTVEVSX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDAwMDA"
       },
       "self_signing_key": {
         "key_id": "did:ak:user:alice#self-signing",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "U0VMRl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX01BU1RFUl9TRUxGX1NJR04wMDAwMDAwMDAwMDA"
@@ -31,7 +31,7 @@
       "device_leaf_keys": [
         {
           "key_id": "did:ak:dev:dev_alice_01#leaf",
-          "alg": "ed25519",
+          "algorithm": "Ed25519",
           "public_b64": "TEVBRl9BTElDRV9ERVZfMDFfMDAwMDAwMDAwMDAwMDA",
           "signed_by": "did:ak:user:alice#self-signing",
           "signature_b64": "U0lHX1NFTEZfTEVBRl9BTElDRV9ERVZfMDEwMDAwMDA"
@@ -50,14 +50,14 @@
       "trusted_did": "did:web:bob.example",
       "user_signing_key": {
         "key_id": "did:ak:user:alice#user-signing",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "VVNFUl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX01BU1RFUl9VU0VSX1NJR04wMDAwMDAwMDAwMDA"
       },
       "trusted_user_master": {
         "key_id": "did:ak:user:bob#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "TUFTVEVSX0JPQl8wMDAwMDAwMDAwMDAwMDAwMDAwMDA",
         "signed_by": "did:ak:user:alice#user-signing",
         "signature_b64": "U0lHX1VTRVJfU0lHTl9NQVNURVJfQk9CMDAwMDAwMDA"
@@ -101,14 +101,14 @@
       "actor_id": "did:web:alice.example",
       "master_key": {
         "key_id": "did:ak:user:alice#master",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "T0xEX01BU1RFUl9BTElDRV8wMDAwMDAwMDAwMDAwMDA",
         "revoked": true,
         "revoked_at": "2026-04-01T00:00:00.000Z"
       },
       "self_signing_key": {
         "key_id": "did:ak:user:alice#self-signing",
-        "alg": "ed25519",
+        "algorithm": "Ed25519",
         "public_b64": "U0VMRl9TSUdOX0FMSUNFXzAwMDAwMDAwMDAwMDAwMDA",
         "signed_by": "did:ak:user:alice#master",
         "signature_b64": "U0lHX01BU1RFUl9TRUxGX1NJR04wMDAwMDAwMDAwMDA"

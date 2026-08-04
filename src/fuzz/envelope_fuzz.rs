@@ -185,7 +185,6 @@ pub struct FuzzSignalInput {
     pub aad_digest: String,
     pub proof_kind: String,
     pub verification_method: String,
-    pub proof_alg: ArbSigAlg,
     pub envelope_digest: String,
     pub proof_created_at: String,
     pub jws: String,
@@ -206,27 +205,6 @@ impl ArbSignalClass {
             Self::Moderation => "moderation",
             Self::Session => "session",
             Self::Junk => "presence",
-        }
-    }
-}
-
-#[derive(Debug, Arbitrary)]
-pub enum ArbSigAlg {
-    Ed,
-    Es256,
-    Es384,
-    Es512,
-    Junk,
-}
-
-impl ArbSigAlg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Ed => "EdDSA",
-            Self::Es256 => "ES256",
-            Self::Es384 => "ES384",
-            Self::Es512 => "ES512",
-            Self::Junk => "Foo",
         }
     }
 }
@@ -266,7 +244,6 @@ impl FuzzSignalInput {
             "proof": {
                 "kind": self.proof_kind,
                 "verification_method": self.verification_method,
-                "alg": self.proof_alg.as_str(),
                 "envelope_digest": self.envelope_digest,
                 "created_at": self.proof_created_at,
                 "jws": self.jws,

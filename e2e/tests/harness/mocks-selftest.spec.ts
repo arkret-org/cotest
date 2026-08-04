@@ -400,7 +400,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     // The retired field must stay absent; this negative vector is the one place
     // allowed to name it.
     expect(body.applet_package.receive_ephemeral).toBeUndefined(); // stale-literal-allow
-    expect(body.applet_package.webhook_auth.accepted_algs).toContain("EdDSA");
+    expect(body.applet_package.webhook_auth.accepted_signature_algorithms).toContain("ed25519");
     expect(body.applet_package.ghost_policy.enabled).toBe(true);
     expect(body.applet_package.delegation_policy.enabled).toBe(false);
     expect(body.applet_package.e2ee_policy.enabled).toBe(false);

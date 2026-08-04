@@ -51,13 +51,12 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     let transcript = challenge.delete_intent_transcript(Some(reason.as_str()));
     let canonical = canonical_json_bytes(&transcript)
         .map_err(|error| anyhow!("delete-intent transcript is not canonical: {error}"))?;
-    let jws = arkret_signatures::sign_eddsa_detached_jws(
+    let jws = arkret_signatures::sign_ed25519_detached_jws(
         &SigningKey::from_bytes(&TEST_PRINCIPAL_SIGNING_KEY_SEED),
         &canonical,
     )?;
     let proof = PayloadProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
-        alg: "EdDSA".to_owned(),
         verification_method,
         payload_digest: challenge
             .delete_intent_digest(Some(reason.as_str()))

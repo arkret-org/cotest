@@ -11,22 +11,23 @@ use arkret_models_collaboration::agent_signer_evidence::{
     AgentAuthorizationStatus, AgentCurrentObservation, AgentDetachedJws,
     AgentEventAdmissionReceipt, AgentEvidenceOuterAttestation, AgentKeyCellEntry,
     AgentLifecycleProvenance, AgentLifecycleStatus, AgentLifecycleWitness, AgentSignerEvidence,
-    AgentSnapshotLease, ControllerAccountEligibility, ControllerAccountGateAttestation,
-    ControllerAccountGateBasis, ControllerAccountStatus,
+    AgentSigningPublicKey, AgentSnapshotLease, ControllerAccountEligibility,
+    ControllerAccountGateAttestation, ControllerAccountGateBasis, ControllerAccountStatus,
 };
 use arkret_signatures::agent_evidence::{
     AgentEvidenceCommonContext, AgentEvidenceRejectedReason, AgentEvidenceStateVerificationContext,
     AgentSignerEvidenceVerdict, CurrentAgentSignerEvidenceValidationContext,
     HistoricalAgentSignerEvidenceValidationContext, SignerPrincipalKind, SignerRegime,
     agent_authorization_cell_ref, agent_signing_key_binding_digest,
-    agent_signing_public_key_runtime_digest, build_agent_signing_key_binding,
-    dispatch_signer_regime, validate_current_agent_signer_evidence,
-    validate_historical_agent_signer_evidence, verify_agent_evidence_state,
+    agent_signing_public_key_digest, agent_signing_public_key_runtime_request_digest,
+    build_agent_signing_key_binding, dispatch_signer_regime,
+    validate_current_agent_signer_evidence, validate_historical_agent_signer_evidence,
+    verify_agent_evidence_state,
 };
-use arkret_signatures::{PublicKeyMaterial, sign_eddsa_detached_jws};
+use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
-    Did, DidUrl, Event, EventId, EventKind, Hash, Hlc, NonEmptyString, NotarySig, PayloadSignature,
-    ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId, SealKind,
+    Base64UrlString, Did, DidUrl, Event, EventId, EventKind, Hash, Hlc, NonEmptyString, NotarySig,
+    PayloadSignature, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId, SealKind,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -593,9 +594,8 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         &controller_signing,
     )
     .map_err(|reason| anyhow!("binding: {reason:?}"))?;
-    let authorize_public_key_digest =
-        agent_signing_public_key_runtime_digest(&verification_method, &binding.public_key)
-            .map_err(|reason| anyhow!("runtime key digest: {reason:?}"))?;
+    let authorize_public_key_digest = agent_signing_public_key_digest(&binding.public_key)
+        .map_err(|reason| anyhow!("signing key digest: {reason:?}"))?;
     let binding_digest =
         agent_signing_key_binding_digest(&binding).map_err(|reason| anyhow!("{reason:?}"))?;
 
@@ -927,7 +927,6 @@ fn make_seal(
         previous_state_root: None,
         previous_digest_algorithm: None,
         notary_signature: NotarySig::Single(PayloadSignature {
-            alg: "EdDSA".to_owned(),
             verification_method: verification_method.clone(),
             payload_digest: hash_byte(0x63)?,
             created_at: sealed_at,
@@ -996,7 +995,7 @@ fn sign_domain(
     signing_bytes.extend(canonical);
     let jws = match protected_kid {
         Some(kid) => detached_jws_with_kid(signing_key, &signing_bytes, kid)?,
-        None => sign_eddsa_detached_jws(signing_key, &signing_bytes)
+        None => sign_ed25519_detached_jws(signing_key, &signing_bytes)
             .map_err(|error| anyhow!(error.to_string()))?,
     };
     Ok(AgentDetachedJws {
@@ -1007,7 +1006,7 @@ fn sign_domain(
 
 fn detached_jws_with_kid(key: &SigningKey, payload: &[u8], kid: &DidUrl) -> Result<String> {
     let protected = arkret_canonical::canonical_json_bytes(&serde_json::json!({
-        "alg": "EdDSA",
+        "alg": "Ed25519",
         "kid": kid,
     }))?;
     let protected = arkret_canonical::base64url_encode(protected);
@@ -1058,6 +1057,9 @@ fn contains_forbidden_local_identity(value: &Value) -> bool {
 }
 
 fn validate_binding_requirements(fixture: &Value) -> Result<()> {
+    let vector = fixture
+        .get("binding_vector")
+        .context("binding_vector missing")?;
     let requirements = fixture
         .pointer("/binding_vector/requirements")
         .and_then(Value::as_array)
@@ -1076,6 +1078,39 @@ fn validate_binding_requirements(fixture: &Value) -> Result<()> {
         != Some(expected.as_slice())
     {
         bail!("Agent signer binding requirements drifted");
+    }
+    let verification_method = DidUrl::new(
+        vector
+            .get("verification_method")
+            .and_then(Value::as_str)
+            .context("binding_vector.verification_method missing")?,
+    )
+    .map_err(anyhow::Error::msg)?;
+    let public_key = AgentSigningPublicKey {
+        kty: nes("OKP")?,
+        algorithm: nes("Ed25519")?,
+        key: Base64UrlString::new(
+            vector
+                .get("public_key")
+                .and_then(Value::as_str)
+                .context("binding_vector.public_key missing")?,
+        )
+        .map_err(anyhow::Error::msg)?,
+    };
+    let authorization_digest = agent_signing_public_key_digest(&public_key)
+        .map_err(|reason| anyhow!("binding raw-key digest: {reason:?}"))?;
+    let runtime_request_digest =
+        agent_signing_public_key_runtime_request_digest(&verification_method, &public_key)
+            .map_err(|reason| anyhow!("binding runtime-request digest: {reason:?}"))?;
+    if vector.get("public_key_digest").and_then(Value::as_str)
+        != Some(authorization_digest.as_str())
+        || vector
+            .get("runtime_request_public_key_digest")
+            .and_then(Value::as_str)
+            != Some(runtime_request_digest.as_str())
+        || authorization_digest == runtime_request_digest
+    {
+        bail!("Agent signer raw-key and runtime-request digest domains drifted");
     }
     Ok(())
 }

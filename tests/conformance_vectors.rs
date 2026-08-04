@@ -810,7 +810,6 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         )?],
         proofs: vec![Proof {
             kind: "detached_jws".to_owned(),
-            alg: "EdDSA".to_owned(),
             verification_method: cotest::fixture_did_url("did:web:principal.acme.example#key-1"),
             event_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000088",

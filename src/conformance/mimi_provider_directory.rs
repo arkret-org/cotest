@@ -71,7 +71,6 @@ fn validate_directory(
     }
     let expected_controller = format!("{}#", directory.service_id.as_str());
     if proof.kind != "detached_jws"
-        || proof.alg != "EdDSA"
         || !proof
             .verification_method
             .as_str()
@@ -87,7 +86,6 @@ fn validate_directory(
         bail!("MIMI provider-directory payload digest does not bind the unsigned projection");
     }
     let signature = arkret_wire::PayloadSignature {
-        alg: proof.alg.clone(),
         verification_method: proof.verification_method.clone(),
         payload_digest: proof.payload_digest.clone(),
         created_at: proof.created_at,
@@ -105,7 +103,6 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
     let placeholder = PayloadProof {
         kind: "detached_jws".to_owned(),
         verification_method: verification_method.clone(),
-        alg: "EdDSA".to_owned(),
         payload_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         created_at: Utc::now(),
         domain: None,
@@ -154,7 +151,6 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
     directory.proof = ProviderDirectoryProof(PayloadProof {
         kind: "detached_jws".to_owned(),
         verification_method: signature.verification_method,
-        alg: signature.alg,
         payload_digest: signature.payload_digest,
         created_at: signature.created_at,
         domain: None,

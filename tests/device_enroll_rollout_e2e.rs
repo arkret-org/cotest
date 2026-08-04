@@ -286,7 +286,7 @@ fn service_attested_device_authorize_event(
             non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?,
             non_empty("ak.mls.v1")?,
         ],
-        device_key_algorithm: Some(non_empty("EdDSA")?),
+        device_key_algorithm: Some(non_empty("Ed25519")?),
         authorized_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::Did(authority_did.clone()),
         scopes: None,
         not_before: "2026-06-17T00:00:00.000Z".parse()?,

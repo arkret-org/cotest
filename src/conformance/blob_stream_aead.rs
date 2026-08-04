@@ -166,8 +166,11 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
     if raw["scheme"].as_str() != Some(SCHEME_STREAM) {
         bail!("stream roundtrip produced scheme {}", raw["scheme"]);
     }
-    if raw["alg"].as_str() != Some(ALG_STREAM_XCHACHA) {
-        bail!("stream roundtrip produced alg {}", raw["alg"]);
+    if raw["encryption_algorithm"].as_str() != Some(ALG_STREAM_XCHACHA) {
+        bail!(
+            "stream roundtrip produced encryption_algorithm {}",
+            raw["encryption_algorithm"]
+        );
     }
     if stream.segment_bytes != u64::from(CONFORMANCE_SEGMENT_SIZE) || stream.segment_count != 3 {
         bail!(

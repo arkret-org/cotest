@@ -1380,7 +1380,7 @@ fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Resu
     require_str_eq(
         vector,
         "/inclusion_list/signature/alg",
-        "EdDSA",
+        "Ed25519",
         vector_name,
     )?;
     let payload_digest = required_pointer_str(

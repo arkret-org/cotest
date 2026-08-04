@@ -295,13 +295,12 @@ fn event_submission(
         // `verification_method` is a DID URL, never a bare DID. This fixture
         // used `principal` itself, which no receiver could resolve to a key.
         verification_method: crate::fixture_did_url(format!("{principal}#cotest")),
-        alg: "EdDSA".to_owned(),
         event_digest,
         created_at: now,
         domain: None,
         audience: None,
         proof_purpose: None,
-        jws: "eyJhbGciOiJFZERTQSJ9..c2lnbmF0dXJl".to_owned(),
+        jws: "eyJhbGciOiJFZDI1NTE5In0..c2lnbmF0dXJl".to_owned(),
     });
     let authorization_lease =
         crate::publication::authorization_lease_for(&event, "ak.realm.admin", RiskTier::High)?;

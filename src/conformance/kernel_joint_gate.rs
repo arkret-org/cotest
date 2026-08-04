@@ -729,7 +729,6 @@ fn sample_seal(notary_seq: u64, delta_byte: u8, verification_method: &DidUrl) ->
         previous_state_root: None,
         previous_digest_algorithm: None,
         notary_signature: NotarySig::Single(PayloadSignature {
-            alg: "EdDSA".to_owned(),
             verification_method: verification_method.clone(),
             payload_digest: repeated_hash(0x55),
             created_at: sealed_at,

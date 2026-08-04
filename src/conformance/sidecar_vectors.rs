@@ -52,7 +52,7 @@ use arkret_models_collaboration::protocol_journey::{
 };
 use arkret_signatures::{
     Ed25519PayloadSigner, PublicKeyMaterial, SignEventOptions, sign_event,
-    verify_eddsa_detached_jws_proof,
+    verify_ed25519_detached_jws_proof,
 };
 use arkret_wire::{
     Base64UrlString, CapabilityActionId, EventRequirements, ProfileId, ProtocolOpaqueId,
@@ -1296,7 +1296,7 @@ fn sign_prepared_draft(
     let public_key = PublicKeyMaterial::Ed25519Raw {
         bytes: signer.verifying_key().to_bytes().to_vec(),
     };
-    verify_eddsa_detached_jws_proof(&event.proofs[0], &before, &event.actor_id, &public_key)
+    verify_ed25519_detached_jws_proof(&event.proofs[0], &before, &event.actor_id, &public_key)
         .map_err(|_| SidecarModelError::ProofMismatch)?;
     Ok(event)
 }
@@ -1331,7 +1331,7 @@ fn validate_signed_draft(
         return Err(SidecarModelError::DraftMismatch);
     }
     for proof in &event.proofs {
-        verify_eddsa_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
+        verify_ed25519_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
             .map_err(|_| SidecarModelError::ProofMismatch)?;
     }
     Ok(())

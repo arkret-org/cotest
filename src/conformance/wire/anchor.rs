@@ -152,9 +152,9 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
             let signature = compaction
                 .get("signature")
                 .ok_or_else(|| anyhow!("vector {name} signed_compaction missing signature"))?;
-            let alg = required_str(signature, "alg")?;
-            if alg != "EdDSA" {
-                bail!("vector {name} signed_compaction signature.alg must be EdDSA, got {alg}");
+            let signature_algorithm = required_str(signature, "signature_algorithm")?;
+            if signature_algorithm != "Ed25519" {
+                bail!("vector {name} signed_compaction signature.signature_algorithm must be Ed25519, got {signature_algorithm}");
             }
         }
 
@@ -581,8 +581,8 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
                 let endorsement = repair.get("anchorer_endorsement").ok_or_else(|| {
                     anyhow!("vector {name} manual repair missing anchorer_endorsement")
                 })?;
-                if required_str(endorsement, "alg")? != "EdDSA" {
-                    bail!("vector {name} anchorer_endorsement.alg must be EdDSA");
+                if required_str(endorsement, "signature_algorithm")? != "Ed25519" {
+                    bail!("vector {name} anchorer_endorsement.signature_algorithm must be Ed25519");
                 }
                 let _ = required_str(endorsement, "anchorer_did")?;
                 covered_manual_repair = true;

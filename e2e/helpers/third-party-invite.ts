@@ -217,7 +217,7 @@ export function signSubjectProof(args: {
   });
   return {
     verification_method: args.subject.verificationMethod,
-    alg: "EdDSA",
+    alg: "Ed25519",
     // soland subject_proof transcript_digest = `sha256:<hex>` over the raw
     // transcript byte string (sha256_digest(transcript)), NOT over canonical
     // JSON — hash the bytes directly.

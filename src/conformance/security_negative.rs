@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
 use arkret_identifiers::Did;
-use arkret_signatures::proof::{PublicKeyMaterial, verify_eddsa_detached_jws_proof};
+use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
 use arkret_wire::Proof;
 use serde_json::{Value, json};
 use url::Url;
@@ -122,7 +122,7 @@ fn verify_event_proof_signature(
         .and_then(|value| Did::new(value).map_err(Into::into))
         .map_err(|_| "invalid_signature")?;
     let canonical_bytes = canonical_event_payload_bytes(event).map_err(|_| "invalid_signature")?;
-    verify_eddsa_detached_jws_proof(proof, &canonical_bytes, &actor_id, public_key)
+    verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &actor_id, public_key)
         .map_err(|_| "invalid_signature")
 }
 
@@ -357,7 +357,7 @@ impl SecurityCoverage {
 mod tests {
     use arkret_canonical::base64url::base64url_encode;
     use arkret_identifiers::Hash;
-    use arkret_signatures::proof::sign_eddsa_detached_jws;
+    use arkret_signatures::proof::sign_ed25519_detached_jws;
     use arkret_wire::proof_kind;
     use chrono::{TimeZone, Utc};
     use ed25519_dalek::SigningKey;
@@ -390,7 +390,6 @@ mod tests {
         let actor_id = Did::new(event["actor_id"].as_str().unwrap()).unwrap();
         let mut proof = Proof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
-            alg: "EdDSA".to_owned(),
             verification_method: crate::fixture_did_url("did:web:alice.example#device"),
             event_digest: Hash::new(sha256_prefixed(&canonical)).unwrap(),
             created_at: Utc.with_ymd_and_hms(2026, 5, 2, 0, 0, 0).unwrap(),
@@ -400,7 +399,7 @@ mod tests {
             jws: String::new(),
         };
         let binding_bytes = proof.canonical_binding_bytes(&actor_id).unwrap();
-        proof.jws = sign_eddsa_detached_jws(signing_key, &binding_bytes).unwrap();
+        proof.jws = sign_ed25519_detached_jws(signing_key, &binding_bytes).unwrap();
         proof
     }
 
@@ -467,7 +466,7 @@ mod tests {
         let event = sample_event();
         let canonical = canonical_event_payload_bytes(&event).unwrap();
         let mut proof = signed_proof(&event, &signing_key);
-        proof.jws = sign_eddsa_detached_jws(&signing_key, &canonical).unwrap();
+        proof.jws = sign_ed25519_detached_jws(&signing_key, &canonical).unwrap();
         assert_eq!(
             verify_event_proof_signature(&event, &proof, &public_key(&signing_key)),
             Err("invalid_signature"),

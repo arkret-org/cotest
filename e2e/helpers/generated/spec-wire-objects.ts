@@ -43,15 +43,18 @@ export type RealmObject = {
   "default_discoverability": "public" | "listed" | "restricted" | "unlisted" | "invite_only" | "secret";
   "default_join_rule": "public" | "invite" | "knock" | "restricted" | "knock_restricted" | "closed";
   "history_visibility": "world_readable" | "shared" | "invited" | "joined" | "restricted";
+  "reducer_profile": string;
   "encryption_profile": "none" | "mls_rfc9420" | "external";
   "content_scheme"?: "mls_rfc9420" | "mls_exporter_aead_v1";
   "content_encryption_floor"?: "allow_plaintext" | "e2ee_required";
   "metadata_encryption_floor"?: "allow_plaintext" | "e2ee_required";
   "agent_participation"?: {
-    "native_agent"?: {
-      "reply"?: boolean;
-      "accept_third_party_mention"?: boolean;
-      "act_on_behalf"?: boolean;
+    "native_agent": {
+      "reply_message": boolean;
+      "reaction_add": boolean;
+      "reaction_remove": boolean;
+      "accept_third_party_mention": boolean;
+      "act_on_behalf": boolean;
     };
   };
   "durability_policy"?: {
@@ -409,7 +412,6 @@ export type InviteDeliveryRequestBody = {
     "proofs": Array<{
       "kind": "detached_jws";
       "verification_method": string;
-      "alg": "EdDSA" | "ES256" | "ML-DSA-65";
       "event_digest": string;
       "created_at": string;
       "domain"?: string;
@@ -419,7 +421,6 @@ export type InviteDeliveryRequestBody = {
     }>;
     "requirements"?: {
       "schema"?: string[];
-      "reducer"?: string;
       "features"?: string[];
       "critical_extensions"?: Array<{
         "id": string;
@@ -458,7 +459,6 @@ export type InviteDeliveryRequestBody = {
         "proof": {
           "kind": "detached_jws";
           "verification_method": string;
-          "alg": "EdDSA" | "ES256" | "ML-DSA-65";
           "payload_digest": string;
           "created_at": string;
           "domain"?: string;
@@ -509,7 +509,6 @@ export type InviteDeliveryRequestBody = {
       "proofs": Array<{
         "kind": "detached_jws";
         "verification_method": string;
-        "alg": "EdDSA" | "ES256" | "ML-DSA-65";
         "payload_digest": string;
         "created_at": string;
         "domain"?: string;
@@ -539,7 +538,6 @@ export type InviteDeliveryRequestBody = {
       "proofs": Array<{
         "kind": "detached_jws";
         "verification_method": string;
-        "alg": "EdDSA" | "ES256" | "ML-DSA-65";
         "payload_digest": string;
         "created_at": string;
         "domain"?: string;
@@ -589,7 +587,6 @@ export type RealmSealFrontierView = {
           "authority_set_ref": string;
           "signature": {
             "verification_method": string;
-            "alg": "EdDSA" | "ES256" | "ML-DSA-65";
             "payload_digest": string;
             "created_at": string;
             "jws": string;
@@ -609,7 +606,6 @@ export type RealmSealFrontierView = {
         "authority_set_ref": string;
         "proofs": Array<{
           "verification_method": string;
-          "alg": "EdDSA" | "ES256" | "ML-DSA-65";
           "payload_digest": string;
           "created_at": string;
           "jws": string;
@@ -641,7 +637,6 @@ export type RealmSealFrontierView = {
           "authority_set_ref": string;
           "signature": {
             "verification_method": string;
-            "alg": "EdDSA" | "ES256" | "ML-DSA-65";
             "payload_digest": string;
             "created_at": string;
             "jws": string;
@@ -661,7 +656,6 @@ export type RealmSealFrontierView = {
         "authority_set_ref": string;
         "proofs": Array<{
           "verification_method": string;
-          "alg": "EdDSA" | "ES256" | "ML-DSA-65";
           "payload_digest": string;
           "created_at": string;
           "jws": string;
@@ -748,7 +742,6 @@ export type EventFederationSubmission = {
     "proofs": Array<{
       "kind": "detached_jws";
       "verification_method": string;
-      "alg": "EdDSA" | "ES256" | "ML-DSA-65";
       "event_digest": string;
       "created_at": string;
       "domain"?: string;
@@ -758,7 +751,6 @@ export type EventFederationSubmission = {
     }>;
     "requirements"?: {
       "schema"?: string[];
-      "reducer"?: string;
       "features"?: string[];
       "critical_extensions"?: Array<{
         "id": string;
@@ -833,7 +825,6 @@ export type EventFederationSubmission = {
     "proofs": Array<{
       "kind": "detached_jws";
       "verification_method": string;
-      "alg": "EdDSA" | "ES256" | "ML-DSA-65";
       "payload_digest": string;
       "created_at": string;
       "domain"?: string;
@@ -843,26 +834,17 @@ export type EventFederationSubmission = {
     }>;
   };
   "ingress_receipts": Array<{
-    "receipt_id": string;
+    "lease_basis": string;
     "event_digest": string;
-    "authorization_lease_id": string;
+    "qualified_ingress_id": string;
     "received_at": string;
-    "service_id": string;
-    "authority_set_ref": {
-      "authority_set_id": string;
-      "authority_set_digest": string;
-    };
-    "proofs": Array<{
-      "kind": "detached_jws";
+    "ingress_frontier": string[];
+    "issuer": string;
+    "signature": {
       "verification_method": string;
-      "alg": "EdDSA" | "ES256" | "ML-DSA-65";
-      "payload_digest": string;
       "created_at": string;
-      "domain"?: string;
-      "audience"?: string | string[];
-      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
       "jws": string;
-    }>;
+    };
   }>;
   "control_proposal_receipt"?: {
     "kind": "proposal_receipt";
@@ -882,11 +864,83 @@ export type EventFederationSubmission = {
       "authority_set_ref": string;
       "signature": {
         "verification_method": string;
-        "alg": "EdDSA" | "ES256" | "ML-DSA-65";
         "payload_digest": string;
         "created_at": string;
         "jws": string;
       };
     }>;
+  };
+  "membership_compensation_evidence"?: {
+    "delegation": {
+      "delegation_id": string;
+      "core": {
+        "authority": "ak.authority.membership_compensation.v1";
+        "admission_id": string;
+        "join_event_id": string;
+        "join_event_digest": string;
+        "membership_cell_id": string;
+        "membership_incarnation": string;
+        "membership_head_at_acceptance": string;
+        "subject_id": string;
+        "join_actor_id": string;
+        "executed_by"?: string;
+        "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1";
+        "verification_method": string;
+        "executor_service_id": string;
+        "executor_proof_key": string;
+        "resource": string;
+        "action": "ak.member.compensate.leave" | "ak.member.compensate.remove";
+        "deadline": string;
+      };
+      "delegation_digest": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "join_accepted_proof": {
+      "admission_id": string;
+      "join_event_id": string;
+      "join_event_digest": string;
+      "membership_incarnation": string;
+      "accepted_frontier_digest": string;
+      "accepted_at": string;
+      "issuer": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "terminal_certificate": {
+      "domain": "ak.membership-compensation.terminal-certificate.v1";
+      "admission_id": string;
+      "delegation_digest": string;
+      "operation_id": string;
+      "terminal_state": "failed_after_membership_acceptance" | "failed_after_mls_add";
+      "certified_at": string;
+      "issuer": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "single_use_cas_token": {
+      "domain": "ak.membership-compensation.single-use-cas.v1";
+      "admission_id": string;
+      "delegation_digest": string;
+      "expected_state": "unused";
+      "destination_service_id": string;
+      "issued_at": string;
+      "expires_at": string;
+      "issuer": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
   };
 };

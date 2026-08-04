@@ -50,7 +50,6 @@ fn envelope() -> Result<SignalEnvelope> {
                 "did:webvh:z6mkfixture:alice.example",
                 "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb"
             )),
-            alg: "EdDSA".to_owned(),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: sent_at,
             domain: None,

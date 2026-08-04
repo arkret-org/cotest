@@ -1156,12 +1156,11 @@ fn sample_envelope_event(
         // passes. Real Ed25519 verify happens elsewhere.
         "proofs": [{
             "kind": "detached_jws",
-            "alg": "EdDSA",
             "verification_method": "did:web:alice.example#k1",
             "event_digest": "",
             "created_at": created_at,
             "domain": "arkret-event-v1",
-            "jws": "eyJhbGciOiJFZERTQSJ9..synthetic_placeholder_signature_bytes"
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..synthetic_placeholder_signature_bytes"
         }]
     });
     let digest =
