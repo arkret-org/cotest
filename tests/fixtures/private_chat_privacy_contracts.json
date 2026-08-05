@@ -145,8 +145,7 @@
       "peer": {
         "kind": "human",
         "principal_id": "did:web:bob.example"
-      },
-      "create": false
+      }
     },
     "resolve_creation_required_response": {
       "state": "creation_required"
@@ -159,7 +158,8 @@
         "main_strand_id": "ak:strand:0196b39d-0000-7000-8000-000000000401",
         "binding_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000501"
       },
-      "send_blockers": []
+      "send_blockers": [],
+      "active_mls_generation_ref": "ak:event:0196b39d-0000-7000-8000-000000000501"
     },
     "binding_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000501",
     "binding_payload": {
@@ -177,17 +177,9 @@
           "ak:event:0196b39d-0000-7000-8000-000000000503"
         ]
       },
-      "member_event_refs": [
-        "ak:event:0196b39d-0000-7000-8000-000000000504",
-        "ak:event:0196b39d-0000-7000-8000-000000000505"
-      ],
-      "main_strand_create_ref": "ak:event:0196b39d-0000-7000-8000-000000000506",
-      "mls_group_id": "AZZBmwAAAACAAAAAAAAAAQ",
-      "mls_genesis_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000510",
-      "mls_commit_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000511",
-      "mls_welcome_event_ref": "ak:event:0196b39d-0000-7000-8000-000000000512",
       "created_at": "2026-06-06T00:00:00.000Z",
-      "binding_state": "active"
+      "founding_unit_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "initial_exact_pair_generation_ref": "ak:event:0196b39d-0000-7000-8000-000000000501"
     },
     "contact_list_row": {
       "peer": "did:web:bob.example",
@@ -235,16 +227,14 @@
         "peer": {
           "kind": "human",
           "principal_id": "did:web:chrid.example"
-        },
-        "create": false
+        }
       },
       "expected_error": {
         "error_code": "failed_precondition",
         "reason_code": "direct_conversation_unavailable"
       },
       "observed_response": {
-        "state": "temporarily_unavailable",
-        "reason": "dependency_pending"
+        "state": "temporarily_unavailable"
       }
     }
   }

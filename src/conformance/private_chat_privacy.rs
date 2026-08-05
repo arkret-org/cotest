@@ -90,6 +90,7 @@ struct ExpectedError {
 pub fn run_private_chat_privacy_contract_suite() -> Result<()> {
     validate_realm_remark_registry()?;
     validate_direct_conversation_artifacts()?;
+    validate_direct_conversation_founder_derivation()?;
 
     let value = load_local_fixture_value(FIXTURE_FILE)?;
     let fixture: PrivateChatPrivacyFixture = serde_json::from_value(value)
@@ -156,9 +157,106 @@ fn validate_realm_remark_registry() -> Result<()> {
     Ok(())
 }
 
+/// Founder derivation is the whole reason the cross-server creation race disappears, so it is
+/// checked as a conformance property rather than only in SDK unit tests.
+///
+/// The normal branch resolves to the **responder**, not the request issuer. That is normative: the
+/// basis is lit up by the responder's acceptance receipt, which proves the responder was online when
+/// it came into existence, while the requester may have gone offline days earlier. Base v1 defines
+/// no fallback, so naming the possibly-absent party would leave the pair unable to ever create.
+fn validate_direct_conversation_founder_derivation() -> Result<()> {
+    use arkret_models_collaboration::objects::direct_conversation::{
+        DirectConversationFounderBasis, direct_conversation_founder, direct_conversation_may_found,
+    };
+
+    let alice = arkret_identifiers::Did::new("did:webvh:z6mkcotest:alice.example".to_owned())?;
+    let bob = arkret_identifiers::Did::new("did:webvh:z6mkcotest:bob.example".to_owned())?;
+    let carol = arkret_identifiers::Did::new("did:webvh:z6mkcotest:carol.example".to_owned())?;
+
+    // A requests, B accepts -> B founds.
+    let normal = DirectConversationFounderBasis::Normal {
+        request_issuer: alice.clone(),
+    };
+    let founder = direct_conversation_founder([alice.clone(), bob.clone()], &normal)?;
+    if founder != bob {
+        bail!("normal basis founder must be the responder, not the request issuer");
+    }
+    // Argument order must not matter: both sides compute the same answer independently.
+    if direct_conversation_founder([bob.clone(), alice.clone()], &normal)? != bob {
+        bail!("founder derivation is not order independent");
+    }
+    // The non-founder may never author the founding unit, no matter how long it waits.
+    if direct_conversation_may_found(&alice, [alice.clone(), bob.clone()], &normal)? {
+        bail!("the request issuer must not be able to found the conversation");
+    }
+
+    // Glare: no responder exists, so the requests[0] issuer founds.
+    let glare = DirectConversationFounderBasis::Glare {
+        first_request_issuer: alice.clone(),
+    };
+    if direct_conversation_founder([alice.clone(), bob.clone()], &glare)? != alice {
+        bail!("glare basis founder must be the requests[0] issuer");
+    }
+
+    // controller-to-own-Agent is fixed to the controller regardless of DID ordering, so an Agent
+    // runtime key never needs Direct Conversation founding scope.
+    let agent = DirectConversationFounderBasis::ControllerOwnedAgent {
+        controller_id: alice.clone(),
+    };
+    if direct_conversation_founder([bob.clone(), alice.clone()], &agent)? != alice {
+        bail!("controller-owned-Agent founder must be the controller");
+    }
+
+    // Malformed inputs fail closed instead of guessing the complement.
+    if direct_conversation_founder(
+        [alice.clone(), bob.clone()],
+        &DirectConversationFounderBasis::Normal {
+            request_issuer: carol,
+        },
+    )
+    .is_ok()
+    {
+        bail!("a request issuer outside the pair must not derive a founder");
+    }
+    if direct_conversation_founder(
+        [alice.clone(), alice.clone()],
+        &DirectConversationFounderBasis::Normal {
+            request_issuer: alice,
+        },
+    )
+    .is_ok()
+    {
+        bail!("a degenerate pair must not derive a founder");
+    }
+
+    record_vector_event(
+        "private_chat_privacy.direct_conversation_founder_derivation",
+        &json!({
+            "normal": {"request_issuer": "alice", "participants": ["alice", "bob"]},
+            "glare": {"first_request_issuer": "alice"},
+            "controller_owned_agent": {"controller": "alice"}
+        }),
+        &json!({
+            "normal_founder": "responder",
+            "glare_founder": "requests[0]_issuer",
+            "controller_owned_agent_founder": "controller",
+            "non_founder_may_found": false,
+            "timeout_grants_create_authority": false,
+            "issuer_outside_pair": "rejected",
+            "degenerate_pair": "rejected"
+        }),
+        &json!({
+            "normal_founder": "bob",
+            "glare_founder": "alice",
+            "controller_owned_agent_founder": "alice"
+        }),
+    );
+    Ok(())
+}
+
 fn validate_direct_conversation_artifacts() -> Result<()> {
     let operation = arkret_wire::ServiceOperationId::from_wire(
-        arkret_wire::ServiceOperationId::SELF_DIRECT_CONVERSATION_COMMAND_RESOLVE,
+        arkret_wire::ServiceOperationId::SELF_DIRECT_CONVERSATION_QUERY_RESOLVE,
     )
     .ok_or_else(|| anyhow!("SDK missing direct conversation resolve operation"))?
     .descriptor();
@@ -168,19 +266,19 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         bail!("direct conversation resolver HTTP binding drifted");
     }
     if operation.request_schema_ref
-        != Some("schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_request")
+        != Some("schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request")
     {
         bail!("direct conversation request schema ref drifted");
     }
     if operation.response_schema_ref
-        != Some("schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_outcome")
+        != Some("schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_outcome")
     {
         bail!("direct conversation response schema ref drifted");
     }
 
     record_vector_event(
         "private_chat_privacy.direct_conversation_artifacts",
-        &json!({"operation_id": "ak.self.direct_conversation.command.resolve"}),
+        &json!({"operation_id": "ak.self.direct_conversation.query.resolve"}),
         &json!({
             "http": "POST /_arkret/self/direct-conversations/resolve",
             "request_field": "peer",
@@ -338,13 +436,18 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
 fn validate_resolve_request_shape(value: &Value) -> Result<()> {
     let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
     let validator = env.compile(
-        "schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_request",
+        "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request",
     )?;
     if !validator.is_valid(value) {
-        bail!("direct conversation request does not match the canonical operation schema");
+        let detail = validator
+            .iter_errors(value)
+            .map(|error| format!("{}: {error}", error.instance_path()))
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!("direct conversation request does not match the canonical operation schema: {detail}");
     }
     serde_json::from_value::<
-        arkret_models_collaboration::operation_control::DirectConversationResolveRequestBody,
+        arkret_models_collaboration::direct_conversation_ops::DirectConversationResolveRequestBody,
     >(value.clone())?;
     Ok(())
 }
@@ -352,13 +455,18 @@ fn validate_resolve_request_shape(value: &Value) -> Result<()> {
 fn validate_resolve_response_shape(value: &Value) -> Result<()> {
     let env = crate::conformance::schema_validation_fixture::SchemaEnv::load()?;
     let validator = env.compile(
-        "schemas/operation-control.schema.json#/$defs/direct_conversation_resolve_outcome",
+        "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_outcome",
     )?;
     if !validator.is_valid(value) {
-        bail!("direct conversation response does not match the canonical operation schema");
+        let detail = validator
+            .iter_errors(value)
+            .map(|error| format!("{}: {error}", error.instance_path()))
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!("direct conversation response does not match the canonical operation schema: {detail}");
     }
     serde_json::from_value::<
-        arkret_models_collaboration::operation_control::DirectConversationResolveOutcome,
+        arkret_models_collaboration::direct_conversation_ops::DirectConversationResolveOutcome,
     >(value.clone())?;
     Ok(())
 }

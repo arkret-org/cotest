@@ -65,7 +65,7 @@ use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_models_identity::handle::HandleVisibility;
 use arkret_wire::{
     AuthoritySetIssuer, AuthoritySetIssuerRole, AuthorizationRef, Base64UrlString, DidUrl,
-    EventKind, NonEmptyString, OpaqueLocalId, ProtocolOpaqueId, ProtocolOperationId,
+    EventKind, NonEmptyString, OpaqueLocalId, IdempotencyKey, ProtocolOpaqueId, ProtocolOperationId,
     RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
 };
 use base64::Engine as _;
@@ -272,7 +272,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
                 phase: SidecarPreparePhase::Prepare,
                 operation_id: ProtocolOperationId::new("ak:operation:cotest.sidecar.prepare")
                     .map_err(anyhow::Error::msg)?,
-                idempotency_key: ProtocolOpaqueId::new("cotest-sidecar-prepare-01999999")
+                idempotency_key: IdempotencyKey::new("cotest-sidecar-prepare-01999999")
                     .map_err(anyhow::Error::msg)?,
                 source_realm_id: arkret::RealmId::new(realm_id.clone())?,
                 controller_id: arkret::Did::new(ALICE_DID)?,
@@ -3324,7 +3324,7 @@ async fn provision_agent(
     let requested_scope = test_agent_requested_scope();
     let operation_id = ProtocolOperationId::new(new_prefixed_uuid7("ak:operation:"))
         .map_err(anyhow::Error::msg)?;
-    let idempotency_key = ProtocolOpaqueId::new(new_prefixed_uuid7("agent-provision-"))
+    let idempotency_key = IdempotencyKey::new(new_prefixed_uuid7("agent-provision-"))
         .map_err(anyhow::Error::msg)?;
     let prepared = client
         .agent_provision(&arkret::AgentProvisionRequestBody::Prepare {
