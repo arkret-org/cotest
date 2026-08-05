@@ -34,7 +34,7 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
 
     let realm_resource: arkret_wire::WireResourceSelector = serde_json::from_value(json!({
         "kind": "realm",
-        "realm_id": "ak:realm:01974100-0000-7000-8000-000000000010"
+        "realm_id": "ak:realm:01974100-0000-8000-8000-000000000010"
     }))?;
     let expected_resource = serde_json::to_value(&realm_resource)?;
     let valid = applet_grant_binding_matches(
@@ -75,7 +75,7 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
             canonical.clone(),
             json!({
                 "kind": "realm",
-                "realm_id": "ak:realm:01974100-0000-7000-8000-000000000011"
+                "realm_id": "ak:realm:01974100-0000-8000-8000-000000000011"
             }),
             service_id.as_str(),
             registration_epoch.as_str(),

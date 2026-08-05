@@ -408,7 +408,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     let expires_at = "2026-05-27T12:34:56.000Z";
     let focus_id = "fra-1";
     let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
-    let realm_id = "ak:realm:0196419b-0000-7000-8000-000000000000";
+    let realm_id = "ak:realm:0196419b-0000-8000-8000-000000000000";
 
     let signing_input = participant_binding_signing_input(
         actor_id,
@@ -427,7 +427,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     // Golden signature pin: the deterministic ed25519 signature over the fixed
     // input MUST reproduce this byte string. A drift in canonical JSON, the
     // label, the 0x00 separator, or the field set changes these bytes.
-    const EXPECTED_SIG_HEX: &str = "8e1fde63287f749c4f09723e218bbb50042a326f3cef2ddd02643436471799c7a5b8f84194df8288a6a82b833611b609e64828045db30c4d7e481e067890fe00";
+    const EXPECTED_SIG_HEX: &str = "5ede43c5c978144a1a703f0b4a4f8e66a4cba93fc28f83e98abd320baeaa5a896f1dd2f80d5cd9c22a01907ff75fa012ae5a9ef9966e01a2a0146602526eb20a";
     let actual_sig_hex = hex_lower(&sig.to_bytes());
     if actual_sig_hex != EXPECTED_SIG_HEX {
         bail!(
@@ -451,7 +451,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
             participant_identity,
             "ak:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
         ),
-        (realm_id, "ak:realm:0196419b-0000-7000-8000-00000000dead"),
+        (realm_id, "ak:realm:0196419b-0000-8000-8000-00000000dead"),
     ];
     for (idx, (_orig, replacement)) in tampers.iter().enumerate() {
         let tampered = participant_binding_signing_input(
@@ -596,7 +596,7 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 /// activated-call residual deferred to the live round.
 fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // The canonical Context MUST be exactly this 6-tuple.
-    let realm_id = "ak:realm:0196419b-0000-7000-8000-000000000000";
+    let realm_id = "ak:realm:0196419b-0000-8000-8000-000000000000";
     let call_id = "ak:call:0196441c-0000-7000-8000-000000000000";
     let focus_id = "fra-1";
     let epoch_id = "ak:mls_epoch:7";
@@ -651,7 +651,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // byte-correct label + canonical Context. A drift in label, separator, or
     // Context JCS changes these bytes.
     const EXPECTED_KEY_HEX: &str =
-        "d967efacc932d850ddcbe827e4e0aa399524a7b21ea2bef56a2ee9bf0b81dcc1";
+        "7fe312989938c49772d98da8f89d409693ec3504e24862e41c0d61fe13fb4da0";
     let actual_key_hex = hex_lower(&frame_key);
     if actual_key_hex != EXPECTED_KEY_HEX {
         bail!(
@@ -804,12 +804,12 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     }
 
     let context = recording_context(
-        "ak:realm:0196419b-0000-7000-8000-000000000000",
+        "ak:realm:0196419b-0000-8000-8000-000000000000",
         "ak:call:0196441c-0000-7000-8000-000000000000",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",
-        "ak:event:019a7360-0000-7000-8000-000000000003",
+        "ak:event:019a7360-0000-8000-8000-000000000003",
     )?;
 
     for (label, candidate_context) in [
@@ -868,7 +868,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         .map_err(|err| anyhow!("HKDF expand failed: {err}"))?;
 
     const EXPECTED_KEY_HEX: &str =
-        "65e98c81c5ca6e4c2b8b35ba9860fd97b386a2a441901d013165fdfd2d8d558a";
+        "4c309432564f01b68253274589f77084d06f62d9d8f58fa27530d25108be75ad";
     let actual_key_hex = hex_lower(&recording_key);
     if actual_key_hex != EXPECTED_KEY_HEX {
         bail!(
@@ -877,12 +877,12 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     }
 
     let other_context = recording_context(
-        "ak:realm:0196419b-0000-7000-8000-000000000000",
+        "ak:realm:0196419b-0000-8000-8000-000000000000",
         "ak:call:0196441c-0000-7000-8000-000000000000",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",
-        "ak:event:019a7360-0000-7000-8000-000000000004",
+        "ak:event:019a7360-0000-8000-8000-000000000004",
     )?;
     let mut other_info =
         Vec::with_capacity(ExporterLabelId::RTC_RECORDING_KEY_V1.len() + 1 + other_context.len());

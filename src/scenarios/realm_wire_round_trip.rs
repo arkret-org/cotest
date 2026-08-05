@@ -85,7 +85,7 @@ fn positive_vectors() -> Vec<WireVector> {
             kind: arkret_wire::EventKind::REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
-                "target_realm_id": "ak:realm:01904100-0000-7000-8000-668e2181b41d",
+                "target_realm_id": "ak:realm:01904100-0000-8000-8000-668e2181b41d",
             }),
             expected_class: EventProductClass::Realm,
         },
@@ -93,7 +93,7 @@ fn positive_vectors() -> Vec<WireVector> {
 }
 
 fn fixture_realm_id() -> Result<RealmId> {
-    RealmId::new("ak:realm:01904100-0000-7000-8000-000000000a01".to_owned())
+    RealmId::new("ak:realm:01904100-0000-8000-8000-000000000a01".to_owned())
         .map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 
@@ -122,16 +122,28 @@ fn round_trip_positive(vector: &WireVector, realm_id: &RealmId) -> Result<String
             vector.kind
         ));
     }
-    let parsed_realm_id = parsed
-        .get("realm_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("round-tripped {}: missing realm_id field", vector.label))?;
-    if parsed_realm_id != realm_id.as_str() {
-        return Err(anyhow!(
-            "round-tripped {}: realm_id drifted: got {parsed_realm_id:?}, want {:?}",
-            vector.label,
-            realm_id.as_str()
-        ));
+    // Spec realm-and-space.md section 2.5.0: a Realm genesis carries no
+    // realm_id on the wire — receivers derive it from the Event. Every other
+    // kind still round-trips the field unchanged.
+    if vector.kind == "ak.realm.create" {
+        if parsed.get("realm_id").is_some() {
+            return Err(anyhow!(
+                "round-tripped {}: ak.realm.create must omit realm_id",
+                vector.label
+            ));
+        }
+    } else {
+        let parsed_realm_id = parsed
+            .get("realm_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("round-tripped {}: missing realm_id field", vector.label))?;
+        if parsed_realm_id != realm_id.as_str() {
+            return Err(anyhow!(
+                "round-tripped {}: realm_id drifted: got {parsed_realm_id:?}, want {:?}",
+                vector.label,
+                realm_id.as_str()
+            ));
+        }
     }
     let parsed_payload = parsed
         .get("payload")

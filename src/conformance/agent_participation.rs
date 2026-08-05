@@ -183,12 +183,12 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         issuer_service_id: Some(Did::new("did:web:directory.acme.example".to_owned())?),
         binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
-        audience: Some("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned()),
+        audience: Some("ak:realm:0196419b-0000-8000-8000-000000000000".to_owned()),
         claim_scope: Default::default(),
         expires_at: None,
         created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
         verified_at: Some(Utc.with_ymd_and_hms(2026, 6, 19, 0, 1, 0).unwrap()),
-        source_refs: vec!["ak:event:0196419b-0000-7000-8000-000000000001".to_owned()],
+        source_refs: vec!["ak:event:0196419b-0000-8000-8000-000000000001".to_owned()],
         proofs: vec![PayloadProof {
             kind: "detached_jws".to_owned(),
             verification_method: crate::fixture_did_url("did:web:directory.acme.example#key-1"),
@@ -198,7 +198,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
             created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
             domain: None,
             audience: Some(Audience::Single(
-                "ak:realm:0196419b-0000-7000-8000-000000000000".to_owned(),
+                "ak:realm:0196419b-0000-8000-8000-000000000000".to_owned(),
             )),
             proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
             jws: "fixture.signature.value".to_owned(),
@@ -213,7 +213,7 @@ fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorR
         agent_slug: claim.agent_slug.clone(),
         verified: true,
         selector_claim: claim,
-        source_refs: vec!["ak:event:0196419b-0000-7000-8000-000000000001".to_owned()],
+        source_refs: vec!["ak:event:0196419b-0000-8000-8000-000000000001".to_owned()],
         expires_at: None,
     };
     outcome.validate()?;
@@ -429,7 +429,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         ParticipationScope::Realm { realm_id } => realm_id,
         other => bail!("session overlay vector expected Realm scope, got {other:?}"),
     };
-    if realm_id != RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000".to_owned())? {
+    if realm_id != RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000000".to_owned())? {
         bail!("session overlay Realm scope drifted");
     }
     Ok(())

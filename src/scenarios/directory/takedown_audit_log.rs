@@ -104,7 +104,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
     let now = Utc::now();
     validate_audit_row(
         "did:web:moderator.example",
-        "ak:realm:0196419b-0000-7000-8000-000000000501",
+        "ak:realm:0196419b-0000-8000-8000-000000000501",
         TakedownReason::PolicyViolation,
         now,
     )
@@ -124,7 +124,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
     // Sanity: a round-tripped audit row keeps every field.
     let row = json!({
         "actor_id": "did:web:moderator.example",
-        "target_realm_id": "ak:realm:0196419b-0000-7000-8000-000000000501",
+        "target_realm_id": "ak:realm:0196419b-0000-8000-8000-000000000501",
         "reason": "subject_request",
         "created_at": arkret_canonical::format_timestamp_canonical(now),
     });

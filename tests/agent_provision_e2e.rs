@@ -197,7 +197,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 
     advance_event_sequence(
         ALICE_DID,
-        "ak:realm:01999999-0000-7000-8000-000000000000",
+        "ak:realm:01999999-0000-8000-8000-000000000000",
         32,
     );
     let realm_id = create_realm_with_signing_seed(
@@ -1656,7 +1656,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             ),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
             event_id: arkret::EventId::new(
-                "ak:event:01904100-0000-7000-8000-00000000a910".to_owned(),
+                "ak:event:01904100-0000-8000-8000-00000000a910".to_owned(),
             )?,
             created_at: control_created_at,
             hlc: arkret::Hlc::new(format!("{control_timestamp_hex}-0000-a13f9c2e"))?,
@@ -1699,7 +1699,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         recovery_session_id: None,
     };
     let mut bootstrap_authorize = arkret::Event::new_with_id_at(
-        arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000a911".to_owned())?,
+        arkret::EventId::new("ak:event:01904100-0000-8000-8000-00000000a911".to_owned())?,
         EventKind::DEVICE_AUTHORIZE,
         arkret_wire::ScopeRef::Realm {
             realm_id: typed_control_realm_id.clone(),
@@ -1993,7 +1993,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         value: policy,
     };
     let mut policy_event = arkret::Event::new_with_id_at(
-        arkret::EventId::new("ak:event:01904100-0000-7000-8000-00000000a912".to_owned())?,
+        arkret::EventId::new("ak:event:01904100-0000-8000-8000-00000000a912".to_owned())?,
         EventKind::POLICY_SET,
         arkret_wire::ScopeRef::Realm {
             realm_id: arkret::RealmId::new(&control_realm_id)?,

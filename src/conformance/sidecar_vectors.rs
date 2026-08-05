@@ -206,13 +206,13 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         sidecar_id,
         desired_access_digest: digest,
         control_frontier: vec![
-            NonEmptyString::new("ak:event:01964137-0000-7000-8000-000000000040")
+            NonEmptyString::new("ak:event:01964137-0000-8000-8000-000000000040")
                 .map_err(anyhow::Error::msg)?,
         ],
     };
     let binding = MlsGovernanceBindingPayload::circle(
         realm_id,
-        arkret::CircleId::new("ak:circle:01964137-0000-7000-8000-000000000030".to_owned())?,
+        arkret::CircleId::new("ak:circle:01964137-0000-8000-8000-000000000030".to_owned())?,
         "YXJrcmV0LXNpZGVjYXItZ3JvdXA",
         0,
         0,
@@ -301,7 +301,7 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
         provisioning_phase: PendingSidecarAccessReconciliationStage::MlsRemove,
         reason: NonEmptyString::new("mls_remove_obligation_pending").map_err(anyhow::Error::msg)?,
         membership_frontier: Some(vec![EventId::new(
-            "ak:event:01964137-0000-7000-8000-000000000041",
+            "ak:event:01964137-0000-8000-8000-000000000041",
         )?]),
     };
     removal.validate()?;
@@ -759,7 +759,7 @@ fn normalized_context_key_from_event(event: &Event) -> SidecarModelResult<String
     } else if target.starts_with("ak:relation:") {
         json!({"realm_id": event.realm_id, "relation_id": target})
     } else {
-        return Err(SidecarModelError::DraftMismatch);
+            return Err(SidecarModelError::DraftMismatch);
     };
     arkret_canonical::canonical_sha256(&normalized).map_err(|_| SidecarModelError::ModelInvariant)
 }
@@ -812,16 +812,16 @@ fn fixed_sidecar_time() -> DateTime<Utc> {
 fn fixed_sidecar_coordinates(existing_context: bool) -> Result<SidecarCoordinates> {
     Ok(SidecarCoordinates {
         sidecar_id: SidecarId::new("ak:sidecar:01964137-0000-7000-8000-000000000101")?,
-        backing_circle_id: CircleId::new("ak:circle:01964137-0000-7000-8000-000000000102")?,
+        backing_circle_id: CircleId::new("ak:circle:01964137-0000-8000-8000-000000000102")?,
         private_strand_id: StrandId::new(if existing_context {
-            "ak:strand:01964137-0000-7000-8000-000000000104"
+            "ak:strand:01964137-0000-8000-8000-000000000104"
         } else {
-            "ak:strand:01964137-0000-7000-8000-000000000103"
+            "ak:strand:01964137-0000-8000-8000-000000000103"
         })?,
         private_relation_id: RelationId::new(if existing_context {
-            "ak:relation:01964137-0000-7000-8000-000000000106"
+            "ak:relation:01964137-0000-8000-8000-000000000106"
         } else {
-            "ak:relation:01964137-0000-7000-8000-000000000105"
+            "ak:relation:01964137-0000-8000-8000-000000000105"
         })?,
     })
 }
@@ -849,13 +849,13 @@ fn fixed_prepare_request_for_operation(
         phase: SidecarPreparePhase::Prepare,
         operation_id: ProtocolOperationId::new(operation_id).map_err(anyhow::Error::msg)?,
         idempotency_key: IdempotencyKey::new(idempotency_key).map_err(anyhow::Error::msg)?,
-        source_realm_id: RealmId::new("ak:realm:01964137-0000-7000-8000-000000000100")?,
+        source_realm_id: RealmId::new("ak:realm:01964137-0000-8000-8000-000000000100")?,
         controller_id: controller_id.clone(),
         context_ref: SidecarContextRef::Strand {
             strand_id: StrandId::new(if second_context {
-                "ak:strand:01964137-0000-7000-8000-000000000112"
+                "ak:strand:01964137-0000-8000-8000-000000000112"
             } else {
-                "ak:strand:01964137-0000-7000-8000-000000000111"
+                "ak:strand:01964137-0000-8000-8000-000000000111"
             })?,
         },
     })
@@ -893,18 +893,50 @@ fn build_fixed_sidecar_prepare(
         SidecarContextRef::Relation { relation_id } => relation_id.to_string(),
         SidecarContextRef::Strand { strand_id } => strand_id.to_string(),
     };
-    let create_event_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000107")
+    let create_event_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000107")
         .map_err(|_| SidecarModelError::ModelInvariant)?;
     let context_attach_event_id = EventId::new(if existing_context.is_some() {
-        "ak:event:01964137-0000-7000-8000-000000000109"
+        "ak:event:01964137-0000-8000-8000-000000000109"
     } else if existing.is_some() {
-        "ak:event:01964137-0000-7000-8000-000000000113"
+        "ak:event:01964137-0000-8000-8000-000000000113"
     } else {
-        "ak:event:01964137-0000-7000-8000-000000000108"
+        "ak:event:01964137-0000-8000-8000-000000000108"
     })
     .map_err(|_| SidecarModelError::ModelInvariant)?;
-    let frontier = EventId::new("ak:event:01964137-0000-7000-8000-000000000110")
+    let frontier = EventId::new("ak:event:01964137-0000-8000-8000-000000000110")
         .map_err(|_| SidecarModelError::ModelInvariant)?;
+    // The create Event must exist before the attach Event, because the attach
+    // links to it by id and that id is now derived from the create's content
+    // (spec encoding.md section 4.0) rather than pinned.
+    let sidecar = AgentSidecar {
+        id: coordinates.sidecar_id.clone(),
+        schema: AgentSidecarSchema::V1,
+        realm_id: request.source_realm_id.clone(),
+        controller_id: request.controller_id.clone(),
+        backing_circle_id: coordinates.backing_circle_id.clone(),
+        encryption_profile: AgentSidecarEncryptionProfile::MlsRfc9420,
+        state: AgentSidecarState::Active,
+        state_changed_at: None,
+        created_at,
+        updated_at: None,
+    };
+    sidecar
+        .validate()
+        .map_err(|_| SidecarModelError::ModelInvariant)?;
+    let create_event = fixed_unsigned_sidecar_event(
+        create_event_id.clone(),
+        EventKind::SIDECAR_CREATE,
+        request.source_realm_id.clone(),
+        ScopeRef::Realm {
+            realm_id: request.source_realm_id.clone(),
+        },
+        request.controller_id.clone(),
+        1,
+        vec![frontier.clone()],
+        Vec::new(),
+        json!({"object": sidecar}),
+    )?;
+    let create_event_id = create_event.event_id.clone();
     let (attach_prev_refs, attach_refs) = if existing.is_some() {
         (vec![frontier.clone()], Vec::new())
     } else {
@@ -956,38 +988,12 @@ fn build_fixed_sidecar_prepare(
             backing_circle_id: coordinates.backing_circle_id,
             private_strand_id: coordinates.private_strand_id,
             private_relation_id: coordinates.private_relation_id,
-            context_attach_event_id,
+            context_attach_event_id: attach_event.event_id.clone(),
             context_attach_event_draft,
         })
     } else {
-        let sidecar = AgentSidecar {
-            id: coordinates.sidecar_id.clone(),
-            schema: AgentSidecarSchema::V1,
-            realm_id: request.source_realm_id.clone(),
-            controller_id: request.controller_id.clone(),
-            backing_circle_id: coordinates.backing_circle_id.clone(),
-            encryption_profile: AgentSidecarEncryptionProfile::MlsRfc9420,
-            state: AgentSidecarState::Active,
-            state_changed_at: None,
-            created_at,
-            updated_at: None,
-        };
-        sidecar
-            .validate()
-            .map_err(|_| SidecarModelError::ModelInvariant)?;
-        let create_event = fixed_unsigned_sidecar_event(
-            create_event_id.clone(),
-            EventKind::SIDECAR_CREATE,
-            request.source_realm_id.clone(),
-            ScopeRef::Realm {
-                realm_id: request.source_realm_id.clone(),
-            },
-            request.controller_id.clone(),
-            1,
-            vec![frontier],
-            Vec::new(),
-            json!({"object": sidecar}),
-        )?;
+        // The event ids are derived from the built envelopes, not the
+        // placeholders passed in: spec encoding.md section 4.0.
         Ok(SidecarPreparedOutcome::New {
             operation_id: request.operation_id.clone(),
             reservation_handle,
@@ -997,7 +1003,7 @@ fn build_fixed_sidecar_prepare(
             private_strand_id: coordinates.private_strand_id,
             private_relation_id: coordinates.private_relation_id,
             create_event_id,
-            context_attach_event_id,
+            context_attach_event_id: attach_event.event_id.clone(),
             create_event_draft: fixed_sidecar_draft(&create_event)?,
             context_attach_event_draft,
         })
@@ -1019,7 +1025,7 @@ fn fixed_unsigned_sidecar_event(
     let Value::Object(payload) = payload else {
         return Err(SidecarModelError::ModelInvariant);
     };
-    Ok(Event {
+    let mut event = Event {
         event_id,
         kind: EventKind::from_wire(kind),
         realm_id,
@@ -1045,7 +1051,14 @@ fn fixed_unsigned_sidecar_event(
         unsigned: BTreeMap::new(),
         proofs: Vec::new(),
         requirements: EventRequirements::default(),
-    })
+    };
+    // The caller's `event_id` is only a placeholder: spec encoding.md section
+    // 4.0 derives it from the Event's own content, and `decode_prepared_event`
+    // re-derives and compares, so a pinned literal would never match.
+    event.event_id = event
+        .derive_event_id()
+        .map_err(|_| SidecarModelError::ModelInvariant)?;
+    Ok(event)
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEventDraft> {
@@ -1081,20 +1094,30 @@ fn decode_prepared_event(draft: &SidecarPreparedEventDraft) -> SidecarModelResul
     {
         return Err(SidecarModelError::DraftMismatch);
     }
-    value
+    // The draft bytes are the *digest preimage*, which excludes `event_id`
+    // (spec encoding.md section 6). Reinstate the id the draft declares, then
+    // the checks below re-derive it from the content and compare — the
+    // recompute-before-use discipline of section 4.0.
+    let object = value
         .as_object_mut()
-        .ok_or(SidecarModelError::DraftMismatch)?
-        .insert("proofs".to_owned(), Value::Array(Vec::new()));
-    let event: Event =
-        serde_json::from_value(value).map_err(|_| SidecarModelError::DraftMismatch)?;
-    if event.event_id != draft.event_id
+        .ok_or(SidecarModelError::DraftMismatch)?;
+    object.insert("proofs".to_owned(), Value::Array(Vec::new()));
+    object.insert(
+        "event_id".to_owned(),
+        Value::String(draft.event_id.to_string()),
+    );
+    let event: Event = serde_json::from_value(value).map_err(|_| SidecarModelError::DraftMismatch)?;
+    let derived = event
+        .derive_event_id()
+        .map_err(|_| SidecarModelError::DraftMismatch)?;
+    if derived != draft.event_id
         || event.kind != draft.kind
         || event
             .event_digest()
             .map_err(|_| SidecarModelError::DraftMismatch)?
             != draft.event_digest.as_str()
     {
-        return Err(SidecarModelError::DraftMismatch);
+            return Err(SidecarModelError::DraftMismatch);
     }
     Ok(event)
 }
@@ -1129,7 +1152,7 @@ fn validate_prepared_outcome(
             if create_event_id != &create_event_draft.event_id
                 || context_attach_event_id != &context_attach_event_draft.event_id
             {
-                return Err(SidecarModelError::DraftMismatch);
+            return Err(SidecarModelError::DraftMismatch);
             }
             (
                 operation_id,
@@ -1154,7 +1177,7 @@ fn validate_prepared_outcome(
             ..
         } => {
             if context_attach_event_id != &context_attach_event_draft.event_id {
-                return Err(SidecarModelError::DraftMismatch);
+            return Err(SidecarModelError::DraftMismatch);
             }
             (
                 operation_id,
@@ -1227,7 +1250,7 @@ fn validate_prepared_outcome(
             .and_then(Value::as_str)
             != Some(backing_circle_id.as_str())
     {
-        return Err(SidecarModelError::DraftMismatch);
+            return Err(SidecarModelError::DraftMismatch);
     }
     if let Some(create) = create {
         validate_new_after_link(&create, &attach)?;
@@ -1328,7 +1351,7 @@ fn validate_signed_draft(
             .iter()
             .any(|proof| proof.event_digest != draft.event_digest)
     {
-        return Err(SidecarModelError::DraftMismatch);
+            return Err(SidecarModelError::DraftMismatch);
     }
     for proof in &event.proofs {
         verify_ed25519_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
@@ -1454,7 +1477,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         SidecarModelError::DraftMismatch,
     )?;
     let mut event_id_mutation = create_event.clone();
-    event_id_mutation.event_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000199")?;
+    event_id_mutation.event_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000199")?;
     let mut matching_link = attach_event.clone();
     matching_link.prev_refs = vec![event_id_mutation.event_id.clone()];
     matching_link.refs = vec![EventRef::new(
@@ -1475,7 +1498,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         .ok_or_else(|| anyhow!("fixed Sidecar object missing"))?
         .insert(
             "backing_circle_id".to_owned(),
-            Value::String("ak:circle:01964137-0000-7000-8000-000000000198".to_owned()),
+            Value::String("ak:circle:01964137-0000-8000-8000-000000000198".to_owned()),
         );
     assert_new_commit_failure_is_write_free(
         &mut model,
@@ -1872,15 +1895,15 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     {
         bail!("hosted Sidecar closed enums drifted");
     }
-    let realm_id = RealmId::new("ak:realm:01964137-0000-7000-8000-000000000030")?;
-    let source_strand_id = StrandId::new("ak:strand:01964137-0000-7000-8000-000000000031")?;
-    let private_strand_id = StrandId::new("ak:strand:01964137-0000-7000-8000-000000000032")?;
-    let anchor_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000033")?;
-    let request_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000034")?;
-    let native_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000035")?;
-    let response_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000036")?;
+    let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-000000000030")?;
+    let source_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000031")?;
+    let private_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000032")?;
+    let anchor_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000033")?;
+    let request_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000034")?;
+    let native_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000035")?;
+    let response_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000036")?;
     let addressed_agent = Did::new("did:webvh:z6mkfixture:assistant.agents.example")?;
-    let terminal_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000037")?;
+    let terminal_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000037")?;
     let projection = AgentSidecarExchangeProjection {
         schema: AgentSidecarExchangeProjectionSchema::V1,
         controller_id: Did::new("did:webvh:z6mkfixture:example.com:users:alice")?,
@@ -2011,7 +2034,7 @@ pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
 
 fn exchange_event_id(suffix: u32) -> Result<EventId> {
     Ok(EventId::new(format!(
-        "ak:event:01964137-0000-7000-8000-{suffix:012x}"
+        "ak:event:01964137-0000-8000-8000-{suffix:012x}"
     ))?)
 }
 
@@ -2035,7 +2058,7 @@ fn exchange_scope() -> Result<SidecarExchangeFoldScope> {
     Ok(SidecarExchangeFoldScope {
         controller_id: exchange_controller()?,
         sidecar_id: SidecarId::new("ak:sidecar:01964137-0000-7000-8000-000000000021")?,
-        private_strand_id: StrandId::new("ak:strand:01964137-0000-7000-8000-000000000032")?,
+        private_strand_id: StrandId::new("ak:strand:01964137-0000-8000-8000-000000000032")?,
     })
 }
 
@@ -2046,8 +2069,8 @@ fn exchange_id_x1() -> Result<AgentSidecarExchangeId> {
 fn exchange_request_context() -> Result<AgentSidecarExchangeRequestContext> {
     Ok(AgentSidecarExchangeRequestContext {
         source_track_ref: AgentSidecarSourceTrackRef {
-            realm_id: RealmId::new("ak:realm:01964137-0000-7000-8000-000000000030")?,
-            strand_id: StrandId::new("ak:strand:01964137-0000-7000-8000-000000000031")?,
+            realm_id: RealmId::new("ak:realm:01964137-0000-8000-8000-000000000030")?,
+            strand_id: StrandId::new("ak:strand:01964137-0000-8000-8000-000000000031")?,
             track_name: "discussion".to_owned(),
         },
         source_hlc: exchange_hlc(1)?,
@@ -2257,7 +2280,7 @@ pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
             "schema": "ak.schema.agent_sidecar_event_exchange_binding.v1",
             "exchange_id": exchange.as_str(),
             "role": "user_facing_response",
-            "request_event_id": "ak:message:01964137-0000-7000-8000-000000000034",
+            "request_event_id": "ak:message:01964137-0000-8000-8000-000000000034",
         }),
     ] {
         let metadata: MessageMetadata =
@@ -2833,7 +2856,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         mls_context: AgentSidecarMlsContext {
             desired_access_digest,
             control_frontier: vec![
-                NonEmptyString::new("ak:event:01964137-0000-7000-8000-000000000020")
+                NonEmptyString::new("ak:event:01964137-0000-8000-8000-000000000020")
                     .map_err(anyhow::Error::msg)?,
             ],
             mls_group_id: None,
@@ -2856,9 +2879,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     );
     private_strand.scope_circle_id = Some(backing_circle_id.clone());
     private_strand.created_at = created_at;
-    let strand_event_id = EventId::new("ak:event:01964137-0000-7000-8000-000000000081")?;
-    let strand_event = Event::new_with_id_at(
-        strand_event_id.clone(),
+    let strand_event = Event::new_with_derived_id_at(
         EventKind::STRAND_CREATE,
         scope.clone(),
         controller_id.clone(),
@@ -2870,14 +2891,13 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         })?,
         created_at,
     )?;
+    // The relation id is derived from this create Event's event_id.
     let relation_payload = RelationCreatePayload::new(
-        "ak:relation:01964137-0000-7000-8000-000000000082",
         "agent_sidecar_of",
         private_strand_id.to_string(),
         source_strand_id.to_string(),
     );
-    let mut relation_event = Event::new_with_id_at(
-        EventId::new("ak:event:01964137-0000-7000-8000-000000000082")?,
+    let mut relation_event = Event::new_with_derived_id_at(
         EventKind::RELATION_CREATE,
         scope,
         controller_id,
@@ -2888,7 +2908,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     )?;
     relation_event
         .refs
-        .push(EventRef::new(strand_event_id.to_string(), "after"));
+        .push(EventRef::new(strand_event.event_id.to_string(), "after"));
 
     let recovered = recover_agent_sidecar_context_locators(
         std::slice::from_ref(&view),
@@ -2939,17 +2959,59 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
     if siblings.len() != 2 {
         bail!("digest vector requires exactly two siblings");
     }
-    let realm_id = RealmId::new("ak:realm:01964137-0000-7000-8000-000000000000")?;
+    let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-000000000000")?;
     let actor = exchange_controller()?;
-    let created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
+    // Give the two siblings different seconds on purpose. Under
+    // `encoding.md` section 4.0 an `event_id` is `ts34 || digest[0..88]`, so
+    // with equal timestamps the event-id order and the digest order coincide
+    // and this counterexample cannot exist. The timestamp prefix is exactly
+    // what section 4.2 bans as a tie-break key, so a later-but-smaller-digest
+    // sibling is the right shape for the fixture.
+    let base_created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
+    // Search the two possible second-offset assignments for the one that is a
+    // real counterexample. Only the timestamp prefix is ours to choose — the
+    // 88 content bits follow from the payload — so one of the two assignments
+    // makes the event-id order disagree with the digest order.
+    // Both the event-id order (timestamp prefix) and the digest order move
+    // when `created_at` moves, so a single swap is not enough: search a small
+    // deterministic grid of second offsets for the first assignment that is a
+    // genuine counterexample.
     let mut events = Vec::new();
-    for sibling in siblings {
-        events.push(Event::new_with_id_at(
-            EventId::new(
-                sibling["event_id"]
-                    .as_str()
-                    .ok_or_else(|| anyhow!("digest sibling event_id is missing"))?,
-            )?,
+    let mut found = false;
+    'search: for gap in 1_i64..256 {
+        for offsets in [[0_i64, gap], [gap, 0_i64]] {
+            events = build_sibling_digest_events(
+                siblings,
+                &case,
+                &realm_id,
+                &actor,
+                base_created_at,
+                offsets,
+            )?;
+            if sibling_digest_fixture_is_counterexample(&events) {
+                found = true;
+                break 'search;
+            }
+        }
+    }
+    if !found {
+        bail!("no second-offset assignment makes the sibling fixture a counterexample");
+    }
+    #[allow(clippy::items_after_statements)]
+    fn build_sibling_digest_events(
+        siblings: &[Value],
+        case: &Value,
+        realm_id: &RealmId,
+        actor: &Did,
+        base_created_at: DateTime<Utc>,
+        offsets: [i64; 2],
+    ) -> Result<Vec<Event>> {
+    let realm_id = realm_id.clone();
+    let actor = actor.clone();
+    let mut events = Vec::new();
+    for (index, sibling) in siblings.iter().enumerate() {
+        let created_at = base_created_at + chrono::Duration::seconds(offsets[index]);
+        events.push(Event::new_with_derived_id_at(
             EventKind::MESSAGE_CREATE,
             ScopeRef::Realm {
                 realm_id: realm_id.clone(),
@@ -2964,7 +3026,7 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
                     .ok_or_else(|| anyhow!("digest sibling HLC is missing"))?,
             )?,
             serde_json::json!({
-                "strand_id": "ak:strand:01964137-0000-7000-8000-000000000010",
+                "strand_id": "ak:strand:01964137-0000-8000-8000-000000000010",
                 "track_name": "discussion",
                 "content": {
                     "kind": "ak.content.text",
@@ -2974,6 +3036,32 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
             created_at,
         )?);
     }
+    Ok(events)
+    }
+
+    #[allow(clippy::items_after_statements)]
+    fn sibling_digest_fixture_is_counterexample(events: &[Event]) -> bool {
+        let digest_winner = events
+            .iter()
+            .max_by(|left, right| {
+                left.event_digest()
+                    .expect("digest")
+                    .as_bytes()
+                    .cmp(right.event_digest().expect("digest").as_bytes())
+            })
+            .expect("two siblings");
+        let event_id_winner = events
+            .iter()
+            .max_by(|left, right| left.event_id.as_str().cmp(right.event_id.as_str()))
+            .expect("two siblings");
+        let hlc_winner = events
+            .iter()
+            .max_by(|left, right| left.hlc.cmp(&right.hlc))
+            .expect("two siblings");
+        digest_winner.event_id != event_id_winner.event_id
+            && digest_winner.event_id != hlc_winner.event_id
+    }
+
     let digest_winner = events
         .iter()
         .max_by(|left, right| {
@@ -3215,7 +3303,7 @@ pub fn run_sidecar_accepted_request_identity_vector() -> Result<()> {
     if invalid != BTreeSet::from(["message_id", "local_intent_id", "unaccepted_event_id"]) {
         bail!("accepted request identity negatives are incomplete");
     }
-    if EventId::new("ak:message:01964137-0000-7000-8000-000000000034").is_ok()
+    if EventId::new("ak:message:01964137-0000-8000-8000-000000000034").is_ok()
         || EventId::new("local-intent-34").is_ok()
     {
         bail!("message and local intent identities must fail the Event-id type gate");
@@ -3287,24 +3375,24 @@ pub fn run_sidecar_vector_suite() -> Result<()> {
             ALL_SIDECAR_VECTOR_IDS.len()
         );
     }
-    run_sidecar_mls_bootstrap_binding_vector()?;
-    run_sidecar_mls_effective_access_vector()?;
-    run_sidecar_ensure_idempotent_vector()?;
-    run_sidecar_eligibility_states_vector()?;
-    run_sidecar_existence_privacy_vector()?;
-    run_sidecar_hosted_projection_vector()?;
-    run_sidecar_multi_agent_publish_vector()?;
-    run_sidecar_exchange_binding_closed_loop_vector()?;
-    run_sidecar_exchange_projection_recovery_vector()?;
-    run_sidecar_exchange_binding_containment_vector()?;
-    run_sidecar_context_locator_recovery_vector()?;
-    run_sidecar_canonical_sibling_digest_vector()?;
-    run_sidecar_union_history_frontier_vector()?;
-    run_sidecar_non_disclosure_surface_matrix_vector()?;
-    run_sidecar_revoke_fail_closed_vector()?;
-    run_sidecar_explicit_publish_vector()?;
-    run_sidecar_accepted_request_identity_vector()?;
-    run_sidecar_hosted_ui_matrix_vector()?;
+    run_sidecar_mls_bootstrap_binding_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_mls_bootstrap_binding_vector] {e}"))?;
+    run_sidecar_mls_effective_access_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_mls_effective_access_vector] {e}"))?;
+    run_sidecar_ensure_idempotent_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_ensure_idempotent_vector] {e}"))?;
+    run_sidecar_eligibility_states_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_eligibility_states_vector] {e}"))?;
+    run_sidecar_existence_privacy_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_existence_privacy_vector] {e}"))?;
+    run_sidecar_hosted_projection_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_hosted_projection_vector] {e}"))?;
+    run_sidecar_multi_agent_publish_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_multi_agent_publish_vector] {e}"))?;
+    run_sidecar_exchange_binding_closed_loop_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_binding_closed_loop_vector] {e}"))?;
+    run_sidecar_exchange_projection_recovery_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_projection_recovery_vector] {e}"))?;
+    run_sidecar_exchange_binding_containment_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_binding_containment_vector] {e}"))?;
+    run_sidecar_context_locator_recovery_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_context_locator_recovery_vector] {e}"))?;
+    run_sidecar_canonical_sibling_digest_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_canonical_sibling_digest_vector] {e}"))?;
+    run_sidecar_union_history_frontier_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_union_history_frontier_vector] {e}"))?;
+    run_sidecar_non_disclosure_surface_matrix_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_non_disclosure_surface_matrix_vector] {e}"))?;
+    run_sidecar_revoke_fail_closed_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_revoke_fail_closed_vector] {e}"))?;
+    run_sidecar_explicit_publish_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_explicit_publish_vector] {e}"))?;
+    run_sidecar_accepted_request_identity_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_accepted_request_identity_vector] {e}"))?;
+    run_sidecar_hosted_ui_matrix_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_hosted_ui_matrix_vector] {e}"))?;
     Ok(())
 }
 

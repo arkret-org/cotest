@@ -17,16 +17,16 @@
       "viewer_role": "author",
       "viewer_did": "did:web:alice.example",
       "original_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000001",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000001",
         "kind": "ak.message.create",
         "actor_id": "did:web:alice.example",
         "content": {"body": "the body"}
       },
       "redaction_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000002",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000002",
         "kind": "ak.message.redact",
         "actor_id": "did:web:alice.example",
-        "redacts": "ak:event:01970e58-0b01-7a01-8b01-000000000001",
+        "redacts": "ak:event:01970e58-0b01-8a01-8b01-000000000001",
         "reason": "self-redaction"
       },
       "expected": {
@@ -43,16 +43,16 @@
       "viewer_role": "member",
       "viewer_did": "did:web:bob.example",
       "original_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000010",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000010",
         "kind": "ak.message.create",
         "actor_id": "did:web:alice.example",
         "content": {"body": "the body"}
       },
       "redaction_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000011",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000011",
         "kind": "ak.message.redact",
         "actor_id": "did:web:alice.example",
-        "redacts": "ak:event:01970e58-0b01-7a01-8b01-000000000010",
+        "redacts": "ak:event:01970e58-0b01-8a01-8b01-000000000010",
         "reason": "author_redacts"
       },
       "expected": {
@@ -69,16 +69,16 @@
       "viewer_role": "world_reader",
       "viewer_did": null,
       "original_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000020",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000020",
         "kind": "ak.message.create",
         "actor_id": "did:web:alice.example",
         "content": {"body": "public body"}
       },
       "redaction_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000021",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000021",
         "kind": "ak.message.redact",
         "actor_id": "did:web:alice.example",
-        "redacts": "ak:event:01970e58-0b01-7a01-8b01-000000000020",
+        "redacts": "ak:event:01970e58-0b01-8a01-8b01-000000000020",
         "reason": "author_redacts_public"
       },
       "expected": {
@@ -96,22 +96,22 @@
       "viewer_role": "member",
       "viewer_did": "did:web:bob.example",
       "original_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000030",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000030",
         "kind": "ak.message.create",
         "actor_id": "did:web:alice.example",
         "content": {"body": "restored body"}
       },
       "redaction_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000031",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000031",
         "kind": "ak.message.redact",
         "actor_id": "did:web:alice.example",
-        "redacts": "ak:event:01970e58-0b01-7a01-8b01-000000000030"
+        "redacts": "ak:event:01970e58-0b01-8a01-8b01-000000000030"
       },
       "unredaction_move": {
-        "move_id": "ak:event:01970e58-0b01-7a01-8b01-000000000032",
+        "move_id": "ak:event:01970e58-0b01-8a01-8b01-000000000032",
         "kind": "ak.message.unredact",
         "actor_id": "did:web:alice.example",
-        "removes": ["ak:event:01970e58-0b01-7a01-8b01-000000000031"]
+        "removes": ["ak:event:01970e58-0b01-8a01-8b01-000000000031"]
       },
       "expected": {
         "view": "member",
@@ -127,16 +127,16 @@
       "viewer_role": "member",
       "viewer_did": "did:web:bob.example",
       "original_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000040",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000040",
         "kind": "ak.message.create",
         "actor_id": "did:web:alice.example",
         "content": {"body": "body40"}
       },
       "redaction_event": {
-        "event_id": "ak:event:01970e58-0b01-7a01-8b01-000000000041",
+        "event_id": "ak:event:01970e58-0b01-8a01-8b01-000000000041",
         "kind": "ak.message.redact",
         "actor_id": "did:web:alice.example",
-        "redacts": "ak:event:01970e58-0b01-7a01-8b01-000000000040"
+        "redacts": "ak:event:01970e58-0b01-8a01-8b01-000000000040"
       },
       "expected": {
         "view": "member",

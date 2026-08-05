@@ -164,13 +164,13 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
         .await?;
     let child_realm = create_policy_realm(
         &alice,
-        "ak:realm:01999999-0000-7000-8000-00000005c001",
+        "ak:realm:01999999-0000-8000-8000-00000005c001",
         "Policy Server Live Child",
     )
     .await?;
     let org_realm = create_policy_realm(
         &alice,
-        "ak:realm:01999999-0000-7000-8000-00000005c002",
+        "ak:realm:01999999-0000-8000-8000-00000005c002",
         "Policy Server Live Org",
     )
     .await?;
@@ -249,7 +249,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     // A Realm with neither a direct binding nor a governed_by chain.
     let never_declared = create_policy_realm(
         &alice,
-        "ak:realm:01999999-0000-7000-8000-00000005c003",
+        "ak:realm:01999999-0000-8000-8000-00000005c003",
         "Policy Server Live Never",
     )
     .await?;
@@ -319,7 +319,7 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
         .await?;
     let realm_id = create_policy_realm(
         &alice,
-        "ak:realm:01999999-0000-7000-8000-00000005c011",
+        "ak:realm:01999999-0000-8000-8000-00000005c011",
         "Policy Server Restart",
     )
     .await?;

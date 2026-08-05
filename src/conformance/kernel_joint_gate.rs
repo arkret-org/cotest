@@ -682,7 +682,7 @@ fn sample_cell(component: &str) -> CellRef {
 }
 
 fn sample_realm() -> RealmId {
-    RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000000").expect("fixed Realm id is valid")
+    RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000000").expect("fixed Realm id is valid")
 }
 
 fn repeated_hash(byte: u8) -> Hash {
@@ -757,7 +757,7 @@ fn sample_lease(
         scope_ref: scope_ref.clone(),
         source: AuthoritySetPolicySource {
             source_kind: AuthoritySetSourceKind::RealmControl,
-            source_ref: "ak:event:0196419b-0000-7000-8000-000000000001".to_owned(),
+            source_ref: "ak:event:0196419b-0000-8000-8000-000000000001".to_owned(),
             source_digest: repeated_hash(0x61),
             generation_ref: "1".to_owned(),
         },

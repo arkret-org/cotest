@@ -20,7 +20,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
         match case.name.as_str() {
             "preserved_fields" => {
                 let redacted =
-                    redact_event(&target, "ak:event:01970e58-0004-7000-8000-000000000001")?;
+                    redact_event(&target, "ak:event:01970e58-0004-8000-8000-000000000001")?;
                 let preserve = case.preserve.clone().unwrap_or_default();
                 for field in &preserve {
                     if redacted.get(field).is_none() {
@@ -40,8 +40,8 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
             "dangling_redaction" => {
                 let mut tracker = RedactionTracker::default();
                 let state = tracker.push_redaction(
-                    "ak:event:01970e58-0004-7000-8000-000000000002",
-                    "ak:event:01970e58-0004-7000-8000-000000000001",
+                    "ak:event:01970e58-0004-8000-8000-000000000002",
+                    "ak:event:01970e58-0004-8000-8000-000000000001",
                 );
                 if state != RedactionState::Pending {
                     bail!("redaction fixture {} expected pending state", case.name);
@@ -49,8 +49,8 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                 record_vector_event(
                     "redaction.dangling_redaction",
                     &json!({
-                        "target_event_id": "ak:event:01970e58-0004-7000-8000-000000000002",
-                        "redaction_event_id": "ak:event:01970e58-0004-7000-8000-000000000001",
+                        "target_event_id": "ak:event:01970e58-0004-8000-8000-000000000002",
+                        "redaction_event_id": "ak:event:01970e58-0004-8000-8000-000000000001",
                     }),
                     &json!({"state": "Pending"}),
                     &json!({"state": format!("{state:?}")}),
@@ -59,11 +59,11 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
             "late_target_event" => {
                 let mut tracker = RedactionTracker::default();
                 tracker.push_redaction(
-                    "ak:event:01970e58-0004-7000-8000-000000000003",
-                    "ak:event:01970e58-0004-7000-8000-000000000001",
+                    "ak:event:01970e58-0004-8000-8000-000000000003",
+                    "ak:event:01970e58-0004-8000-8000-000000000001",
                 );
                 let materialized = tracker.materialize_target(&sample_event_with_id(
-                    "ak:event:01970e58-0004-7000-8000-000000000003",
+                    "ak:event:01970e58-0004-8000-8000-000000000003",
                 ))?;
                 if materialized.get("content").is_some() {
                     bail!(
@@ -72,19 +72,19 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                     );
                 }
                 if materialized["redacted_because"]
-                    != "ak:event:01970e58-0004-7000-8000-000000000001"
+                    != "ak:event:01970e58-0004-8000-8000-000000000001"
                 {
                     bail!("redaction fixture {} lost redaction reference", case.name);
                 }
                 record_vector_event(
                     "redaction.late_target_event",
                     &json!({
-                        "target_event_id": "ak:event:01970e58-0004-7000-8000-000000000003",
-                        "redaction_event_id": "ak:event:01970e58-0004-7000-8000-000000000001",
+                        "target_event_id": "ak:event:01970e58-0004-8000-8000-000000000003",
+                        "redaction_event_id": "ak:event:01970e58-0004-8000-8000-000000000001",
                     }),
                     &json!({
                         "content_present": false,
-                        "redacted_because": "ak:event:01970e58-0004-7000-8000-000000000001",
+                        "redacted_because": "ak:event:01970e58-0004-8000-8000-000000000001",
                     }),
                     &json!({
                         "materialized": materialized.clone(),
@@ -94,7 +94,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
             }
             "audit_visibility" => {
                 let redacted =
-                    redact_event(&target, "ak:event:01970e58-0004-7000-8000-000000000001")?;
+                    redact_event(&target, "ak:event:01970e58-0004-8000-8000-000000000001")?;
                 let audit = audit_tombstone(&redacted)?;
                 if audit.get("content").is_some() {
                     bail!(
@@ -120,7 +120,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
             }
             "snapshot_pruning_stub" => {
                 let redacted =
-                    redact_event(&target, "ak:event:01970e58-0004-7000-8000-000000000001")?;
+                    redact_event(&target, "ak:event:01970e58-0004-8000-8000-000000000001")?;
                 // After redaction, snapshot should retain verification stub
                 if redacted.get("content").is_some() {
                     bail!(
@@ -158,7 +158,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                 record_vector_event(
                     "redaction.space_target_ref_schema",
                     &json!({
-                        "target_ref": "ak:space:019640b6-8000-7000-8000-000000000000",
+                        "target_ref": "ak:space:019640b6-8000-8000-8000-000000000000",
                         "reason": "privacy_cleanup",
                     }),
                     &json!({
@@ -221,7 +221,7 @@ fn assert_space_target_ref_schema() -> Result<()> {
     let validator = env.compile(schema_ref)?;
 
     let accepted = json!({
-        "target_ref": "ak:space:019640b6-8000-7000-8000-000000000000",
+        "target_ref": "ak:space:019640b6-8000-8000-8000-000000000000",
         "reason": "privacy_cleanup",
     });
     if !validator.is_valid(&accepted) {
@@ -262,9 +262,9 @@ struct PolicyScopeOutcome {
 /// its `event_id` fingerprint mapping (quarantine is a display constraint, not
 /// a delete).
 fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
-    let message_id = "ak:event:0196417d-8400-7000-8000-000000000000";
-    let policy_id = "ak:event:0196417d-8980-7000-8000-000000000000";
-    let redaction_id = "ak:event:0196417d-8f00-7000-8000-000000000000";
+    let message_id = "ak:event:0196417d-8400-8000-8000-000000000000";
+    let policy_id = "ak:event:0196417d-8980-8000-8000-000000000000";
+    let redaction_id = "ak:event:0196417d-8f00-8000-8000-000000000000";
 
     let timeline = json!([
         {
@@ -387,8 +387,8 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let stub_validator =
         env.compile("schemas/erasure-receipt.schema.json#/$defs/verification_stub")?;
 
-    let original_event_id = "ak:event:01970e58-0004-7000-8000-000000000004";
-    let redaction_event_id = "ak:event:01970e58-0004-7000-8000-000000000001";
+    let original_event_id = "ak:event:01970e58-0004-8000-8000-000000000004";
+    let redaction_event_id = "ak:event:01970e58-0004-8000-8000-000000000001";
     let receipt_id = "ak:receipt:01970e58-0004-7000-8000-000000000010";
     let event_digest = format!("sha256:{DIGEST64}");
 
@@ -449,7 +449,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
 
     let tampered_stub = json!({
         "stub_schema": "ak.schema.erasure_verification_stub.v1",
-        "subject": {"kind": "event", "subject_ref": "ak:event:01970e58-0004-7000-8000-0000000000ff"},
+        "subject": {"kind": "event", "subject_ref": "ak:event:01970e58-0004-8000-8000-0000000000ff"},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
         "completed_at": "2026-04-29T00:00:00.000Z",
@@ -509,7 +509,7 @@ fn verify_erasure_receipt_stub_digest(receipt: &Value, retained_stub: &Value) ->
 }
 
 fn sample_event() -> Value {
-    sample_event_with_id("ak:event:01970e58-0004-7000-8000-000000000004")
+    sample_event_with_id("ak:event:01970e58-0004-8000-8000-000000000004")
 }
 
 fn sample_event_with_id(event_id: &str) -> Value {

@@ -18,7 +18,7 @@ use crate::scenarios::identity_test_support::{
 
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
-const ADAPTER_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-000000000101";
+const ADAPTER_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-000000000101";
 
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<String> {
     // keys/upload verifies its typed request signature against the accepted
@@ -55,7 +55,7 @@ async fn submit_adapter_event(
             &realm_id,
             "ak.message.create",
             message_create_text_payload_for_strand(
-                parse_strand_id("ak:strand:0196419b-0000-7000-8000-000000000001")?,
+                parse_strand_id("ak:strand:0196419b-0000-8000-8000-000000000001")?,
                 "hello",
             )?,
         )

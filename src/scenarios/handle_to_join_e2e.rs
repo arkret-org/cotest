@@ -55,7 +55,7 @@ use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_
 
 /// Stable Realm DID used as the candidate audience for the happy path. Picked
 /// so the assertions read as a Realm identifier and not as a free-form string.
-const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-handle2joinaa";
+const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-handle2joinaa";
 
 /// Stable principal-server DID that appears as both the issuer and the
 /// recipient on the candidate. T3.4's allow-list test uses the same shape.
@@ -76,7 +76,7 @@ const ALICE_HANDLE: &str = "alice:acme.example";
 /// Source-ref event id the directory would echo back on a real
 /// `ak.find.directory.query.resolve_handle` envelope. Carried so `source_refs[]` is
 /// non-empty (a candidate validator MUST-rule).
-const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000002";
+const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-8000-8000-000000000002";
 
 // ── Public scenario entry-point ────────────────────────────────────────────
 
@@ -271,7 +271,7 @@ fn negative_case_expired() -> Result<()> {
 fn negative_case_audience_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
     let ctx =
-        CandidateValidationContext::new("ak:realm:0196419b-0000-7000-8000-WRONGSPACEXX".to_owned());
+        CandidateValidationContext::new("ak:realm:0196419b-0000-8000-8000-WRONGSPACEXX".to_owned());
 
     match candidate.validate(&ctx) {
         Err(CandidateError::AudienceMismatch { .. }) => Ok(()),
@@ -507,9 +507,9 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(
-                "ak:event:01890000-0000-7000-8000-acceptance01".to_owned(),
+                "ak:event:01890000-0000-8000-8000-acceptance01".to_owned(),
             ),
-            policy_event_ref: Some("ak:event:01890000-0000-7000-8000-policyref001".to_owned()),
+            policy_event_ref: Some("ak:event:01890000-0000-8000-8000-policyref001".to_owned()),
         },
         issuer_service_id: principal,
         audience: TARGET_REALM_ID.to_owned(),

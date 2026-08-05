@@ -46,19 +46,19 @@ pub async fn multi_agent_publish_attribution_run() -> Result<()> {
     let events = vec![
         // Controller's own message.
         PublishedEvent {
-            event_id: "ak:event:01999999-0000-7000-8000-0000000m9001".to_owned(),
+            event_id: "ak:event:01999999-0000-8000-8000-0000000m9001".to_owned(),
             actor_id: controller.to_owned(),
             executed_by: None,
         },
         // Agent A publishing on behalf of the controller.
         PublishedEvent {
-            event_id: "ak:event:01999999-0000-7000-8000-0000000m9002".to_owned(),
+            event_id: "ak:event:01999999-0000-8000-8000-0000000m9002".to_owned(),
             actor_id: controller.to_owned(),
             executed_by: Some(agent_a.to_owned()),
         },
         // Agent B publishing on behalf of the controller.
         PublishedEvent {
-            event_id: "ak:event:01999999-0000-7000-8000-0000000m9003".to_owned(),
+            event_id: "ak:event:01999999-0000-8000-8000-0000000m9003".to_owned(),
             actor_id: controller.to_owned(),
             executed_by: Some(agent_b.to_owned()),
         },

@@ -23,13 +23,13 @@
         "invite_ts": 80
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0001-7a01-8a01-000000000050", "origin_ts": 50, "kind": "ak.message.create"},
-        {"event_id": "ak:event:01970f01-0001-7a01-8a01-000000000150", "origin_ts": 150, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-0001-8a01-8a01-000000000050", "origin_ts": 50, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0001-8a01-8a01-000000000150", "origin_ts": 150, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
-        "visible_event_ids": ["ak:event:01970f01-0001-7a01-8a01-000000000150"],
-        "hidden_event_ids": ["ak:event:01970f01-0001-7a01-8a01-000000000050"],
+        "visible_event_ids": ["ak:event:01970f01-0001-8a01-8a01-000000000150"],
+        "hidden_event_ids": ["ak:event:01970f01-0001-8a01-8a01-000000000050"],
         "rationale": "joined visibility hides events with origin_ts < viewer.join_ts."
       }
     },
@@ -44,13 +44,13 @@
         "invite_ts": 120
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0002-7a02-8a02-000000000110", "origin_ts": 110, "kind": "ak.message.create"},
-        {"event_id": "ak:event:01970f01-0002-7a02-8a02-000000000130", "origin_ts": 130, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-0002-8a02-8a02-000000000110", "origin_ts": 110, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0002-8a02-8a02-000000000130", "origin_ts": 130, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
-        "visible_event_ids": ["ak:event:01970f01-0002-7a02-8a02-000000000130"],
-        "hidden_event_ids": ["ak:event:01970f01-0002-7a02-8a02-000000000110"],
+        "visible_event_ids": ["ak:event:01970f01-0002-8a02-8a02-000000000130"],
+        "hidden_event_ids": ["ak:event:01970f01-0002-8a02-8a02-000000000110"],
         "rationale": "invited visibility uses invite_ts as the cutoff (allows pre-accept preview of post-invite history)."
       }
     },
@@ -65,16 +65,16 @@
         "invite_ts": null
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000010", "origin_ts": 10, "kind": "ak.message.create"},
-        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000020", "origin_ts": 20, "kind": "ak.message.create"},
-        {"event_id": "ak:event:01970f01-0003-7a03-8a03-000000000030", "origin_ts": 30, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-0003-8a03-8a03-000000000010", "origin_ts": 10, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0003-8a03-8a03-000000000020", "origin_ts": 20, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0003-8a03-8a03-000000000030", "origin_ts": 30, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
         "visible_event_ids": [
-          "ak:event:01970f01-0003-7a03-8a03-000000000010",
-          "ak:event:01970f01-0003-7a03-8a03-000000000020",
-          "ak:event:01970f01-0003-7a03-8a03-000000000030"
+          "ak:event:01970f01-0003-8a03-8a03-000000000010",
+          "ak:event:01970f01-0003-8a03-8a03-000000000020",
+          "ak:event:01970f01-0003-8a03-8a03-000000000030"
         ],
         "hidden_event_ids": [],
         "rationale": "world_readable bypasses membership and join_ts gating; all events are public."
@@ -92,13 +92,13 @@
         "invite_ts": null
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0004-7a04-8a04-000000000180", "origin_ts": 180, "kind": "ak.message.create"},
-        {"event_id": "ak:event:01970f01-0004-7a04-8a04-000000000210", "origin_ts": 210, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-0004-8a04-8a04-000000000180", "origin_ts": 180, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0004-8a04-8a04-000000000210", "origin_ts": 210, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
-        "visible_event_ids": ["ak:event:01970f01-0004-7a04-8a04-000000000210"],
-        "hidden_event_ids": ["ak:event:01970f01-0004-7a04-8a04-000000000180"],
+        "visible_event_ids": ["ak:event:01970f01-0004-8a04-8a04-000000000210"],
+        "hidden_event_ids": ["ak:event:01970f01-0004-8a04-8a04-000000000180"],
         "rationale": "shared visibility uses the cutover ts (when the setting was first set to 'shared') as the floor for non-members."
       }
     },
@@ -107,10 +107,10 @@
       "comment": "history_visibility=joined; alice (author) gets audit_view of her redacted event with original content; bob (member) only sees the tombstone. Composes redaction reducer with history_visibility scope.",
       "history_visibility": "joined",
       "redacted_event": {
-        "event_id": "ak:event:01970f01-0005-7a05-8a05-000000000300",
+        "event_id": "ak:event:01970f01-0005-8a05-8a05-000000000300",
         "author": "did:web:alice.example",
         "origin_ts": 300,
-        "tombstone_event_id": "ak:event:01970f01-0005-7a05-8a05-000000000305"
+        "tombstone_event_id": "ak:event:01970f01-0005-8a05-8a05-000000000305"
       },
       "viewers": [
         {
@@ -140,7 +140,7 @@
       "admin_override": {
         "admin_did": "did:web:admin.example",
         "capability": "ak.recovery.read.history.v1",
-        "event_id": "ak:event:01970f01-0006-7a06-8a06-000000000400",
+        "event_id": "ak:event:01970f01-0006-8a06-8a06-000000000400",
         "audit_log_required": true
       },
       "viewer": {
@@ -150,11 +150,11 @@
         "invite_ts": 480
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0006-7a06-8a06-000000000400", "origin_ts": 400, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-0006-8a06-8a06-000000000400", "origin_ts": 400, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
-        "visible_event_ids": ["ak:event:01970f01-0006-7a06-8a06-000000000400"],
+        "visible_event_ids": ["ak:event:01970f01-0006-8a06-8a06-000000000400"],
         "audit_log_emitted": true,
         "view_mode": "audit_view",
         "rationale": "Admin override via recovery_capability bypasses normal joined-visibility cutoff but mandates audit log."
@@ -177,15 +177,15 @@
         "invite_ts": 90
       },
       "events": [
-        {"event_id": "ak:event:01970f01-0009-7a09-8a09-000000000150", "origin_ts": 150, "kind": "ak.message.create"},
-        {"event_id": "ak:event:01970f01-0009-7a09-8a09-000000000250", "origin_ts": 250, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-0009-8a09-8a09-000000000150", "origin_ts": 150, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-0009-8a09-8a09-000000000250", "origin_ts": 250, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
         "visible_event_ids": [],
         "hidden_event_ids": [
-          "ak:event:01970f01-0009-7a09-8a09-000000000150",
-          "ak:event:01970f01-0009-7a09-8a09-000000000250"
+          "ak:event:01970f01-0009-8a09-8a09-000000000150",
+          "ak:event:01970f01-0009-8a09-8a09-000000000250"
         ],
         "rationale": "Banned viewer state forces a strict deny on joined visibility; admin override is the only way to expose audit data, gated by recovery_capability."
       }
@@ -207,14 +207,14 @@
         "invite_ts": 90
       },
       "events": [
-        {"event_id": "ak:event:01970f01-000a-7a0a-8a0a-000000000150", "origin_ts": 150, "kind": "ak.message.create"},
-        {"event_id": "ak:event:01970f01-000a-7a0a-8a0a-000000000250", "origin_ts": 250, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-000a-8a0a-8a0a-000000000150", "origin_ts": 150, "kind": "ak.message.create"},
+        {"event_id": "ak:event:01970f01-000a-8a0a-8a0a-000000000250", "origin_ts": 250, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
         "visible_event_ids": [
-          "ak:event:01970f01-000a-7a0a-8a0a-000000000150",
-          "ak:event:01970f01-000a-7a0a-8a0a-000000000250"
+          "ak:event:01970f01-000a-8a0a-8a0a-000000000150",
+          "ak:event:01970f01-000a-8a0a-8a0a-000000000250"
         ],
         "hidden_event_ids": [],
         "rationale": "world_readable visibility bypasses all membership gating — banned viewers can still read once the cell is publicly readable."
@@ -227,7 +227,7 @@
       "admin_override": {
         "admin_did": "did:web:admin2.example",
         "capability": "ak.recovery.read.history.v1",
-        "event_id": "ak:event:01970f01-000b-7a0b-8a0b-000000000600",
+        "event_id": "ak:event:01970f01-000b-8a0b-8a0b-000000000600",
         "subject_id": "did:web:eve.example",
         "subject_membership_state": "ban",
         "audit_log_required": true,
@@ -240,11 +240,11 @@
         "invite_ts": 990
       },
       "events": [
-        {"event_id": "ak:event:01970f01-000b-7a0b-8a0b-000000000600", "origin_ts": 600, "kind": "ak.message.create"}
+        {"event_id": "ak:event:01970f01-000b-8a0b-8a0b-000000000600", "origin_ts": 600, "kind": "ak.message.create"}
       ],
       "expected": {
         "outcome": "accept",
-        "visible_event_ids": ["ak:event:01970f01-000b-7a0b-8a0b-000000000600"],
+        "visible_event_ids": ["ak:event:01970f01-000b-8a0b-8a0b-000000000600"],
         "audit_log_emitted": true,
         "view_mode": "audit_view",
         "rationale": "Recovery capability bypasses ban + joined cutoff for investigation; audit_log binds the read to the admin's DID + the subject_did."
@@ -262,7 +262,7 @@
         "join_ts": null,
         "invite_ts": null
       },
-      "event": {"event_id": "ak:event:01970f01-0007-7a07-8a07-000000000010", "origin_ts": 10},
+      "event": {"event_id": "ak:event:01970f01-0007-8a07-8a07-000000000010", "origin_ts": 10},
       "expected": {
         "outcome": "reject",
         "reason_code": "history_visibility_denied",
@@ -276,7 +276,7 @@
       "admin_override": {
         "admin_did": "did:web:mallory.example",
         "capability_held": [],
-        "event_id": "ak:event:01970f01-0008-7a08-8a08-000000000500"
+        "event_id": "ak:event:01970f01-0008-8a08-8a08-000000000500"
       },
       "expected": {
         "outcome": "reject",

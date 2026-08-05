@@ -210,7 +210,7 @@ fn realm_link_payload(target_realm_id: RealmId, status: RealmLinkStatus) -> Real
 }
 
 fn realm_id(suffix: &str) -> Result<RealmId> {
-    RealmId::new(format!("ak:realm:0196419b-0000-7000-8000-{suffix:0>12}")).map_err(Into::into)
+    RealmId::new(format!("ak:realm:0196419b-0000-8000-8000-{suffix:0>12}")).map_err(Into::into)
 }
 
 pub fn run_realm_link_fsm_transition_matrix_vector() -> Result<()> {
@@ -1436,15 +1436,15 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     let ops = vec![
         SealedOp::new(
             issuer_digest("c1"),
-            op_add("ak:event:01970e58-0007-7000-8000-000000000001"),
+            op_add("ak:event:01970e58-0007-8000-8000-000000000001"),
         ),
         SealedOp::new(
             issuer_digest("c2"),
-            op_add("ak:event:01970e58-0007-7000-8000-000000000002"),
+            op_add("ak:event:01970e58-0007-8000-8000-000000000002"),
         ),
         SealedOp::new(
             issuer_digest("c3"),
-            op_add("ak:event:01970e58-0007-7000-8000-000000000001"),
+            op_add("ak:event:01970e58-0007-8000-8000-000000000001"),
         ), // duplicate add
     ];
     let resolved = lattice.join(&cref, &ops);
@@ -1455,8 +1455,8 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("ak:event:01970e58-0007-7000-8000-000000000001")
-        || !serialized.contains("ak:event:01970e58-0007-7000-8000-000000000002")
+    if !serialized.contains("ak:event:01970e58-0007-8000-8000-000000000001")
+        || !serialized.contains("ak:event:01970e58-0007-8000-8000-000000000002")
     {
         bail!("covered_frontier did not surface both governance refs: {serialized}");
     }
@@ -1474,15 +1474,15 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     let ops = vec![
         SealedOp::new(
             issuer_digest("c4"),
-            op_add("ak:event:01970e58-0007-7000-8000-000000000003"),
+            op_add("ak:event:01970e58-0007-8000-8000-000000000003"),
         ),
         SealedOp::new(
             issuer_digest("c5"),
-            op_add("ak:event:01970e58-0007-7000-8000-000000000004"),
+            op_add("ak:event:01970e58-0007-8000-8000-000000000004"),
         ),
         SealedOp::new(
             issuer_digest("c6"),
-            op_remove("ak:event:01970e58-0007-7000-8000-000000000003"),
+            op_remove("ak:event:01970e58-0007-8000-8000-000000000003"),
         ),
     ];
     let resolved = lattice.join(&cref, &ops);
@@ -1493,12 +1493,12 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("ak:event:01970e58-0007-7000-8000-000000000004") {
+    if !serialized.contains("ak:event:01970e58-0007-8000-8000-000000000004") {
         bail!(
             "covered_frontier should keep `still_valid` ref visible after rotation: {serialized}"
         );
     }
-    if serialized.contains("ak:event:01970e58-0007-7000-8000-000000000003") {
+    if serialized.contains("ak:event:01970e58-0007-8000-8000-000000000003") {
         bail!("covered_frontier should drop the rotated ref after causal remove: {serialized}");
     }
     Ok(())

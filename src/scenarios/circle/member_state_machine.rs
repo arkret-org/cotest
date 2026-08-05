@@ -137,12 +137,12 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
 }
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000501".to_owned())
+    RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000501".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
 fn circle_id() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-7000-8000-000000000502".to_owned())
+    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000502".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 

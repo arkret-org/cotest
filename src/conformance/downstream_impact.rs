@@ -103,8 +103,8 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
 pub fn run_private_view_account_data_vector() -> Result<()> {
     let value = json!({
         "schema": "ak.schema.view.v1",
-        "id": "ak:view:0196419b-0000-7000-8000-000000000001",
-        "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
+        "id": "ak:view:0196419b-0000-8000-8000-000000000001",
+        "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
         "kind": "collection",
         "visibility": "private",
         "state": "active",
@@ -120,7 +120,7 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
 
     for (field, replacement) in [
         ("visibility", json!("shared")),
-        ("id", json!("ak:view:0196419b-0000-7000-8000-000000000009")),
+        ("id", json!("ak:view:0196419b-0000-8000-8000-000000000009")),
         ("state", json!("tombstoned")),
     ] {
         let mut invalid = value.clone();
@@ -137,7 +137,7 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
 }
 
 pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
-    let realm = RealmId::new("ak:realm:01904100-0000-7000-8000-00000000d501")?;
+    let realm = RealmId::new("ak:realm:01904100-0000-8000-8000-00000000d501")?;
     let hlc = ServerHlc::new("did:web:cotest.soland");
     let mut state = ProjectionState::new();
 
@@ -145,9 +145,9 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
         1,
         &realm,
         json!({
-            "decision_id": "ak:event:01904100-0000-7000-8000-00000000d511",
+            "decision_id": "ak:event:01904100-0000-8000-8000-00000000d511",
             "issuer": "did:web:moderator.example",
-            "target_ref": "ak:event:01904100-0000-7000-8000-00000000d510",
+            "target_ref": "ak:event:01904100-0000-8000-8000-00000000d510",
             "decision": "dismiss",
             "request_canonical_digest": format!("sha256:{}", "1".repeat(64))
         }),
@@ -157,17 +157,17 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
         ProjectionEffect::ModerationDecisionProjected { .. }
     ));
     assert_eq!(
-        state.effective_moderation_verdict("ak:event:01904100-0000-7000-8000-00000000d510"),
+        state.effective_moderation_verdict("ak:event:01904100-0000-8000-8000-00000000d510"),
         "none"
     );
 
-    let target = "ak:message:01904100-0000-7000-8000-00000000d520";
+    let target = "ak:message:01904100-0000-8000-8000-00000000d520";
     for (index, decision) in [(2, "quarantine"), (3, "hard_deny")] {
         let event = operation(
             index,
             &realm,
             json!({
-                "decision_id": format!("ak:event:01904100-0000-7000-8000-{index:012x}"),
+                "decision_id": format!("ak:event:01904100-0000-8000-8000-{index:012x}"),
                 "issuer": format!("did:web:moderator-{index}.example"),
                 "target_ref": target,
                 "decision": decision,
@@ -197,7 +197,7 @@ pub fn run_policy_transcript_tamper_vector() -> Result<()> {
         "request_id": "policy-cotest-1",
         "decision": "hard_deny",
         "bound_to": {
-            "realm_id": "ak:realm:01904100-0000-7000-8000-00000000c501",
+            "realm_id": "ak:realm:01904100-0000-8000-8000-00000000c501",
             "actor_id": "did:web:holder.example",
             "action": "ak.message.create",
             "request_canonical_digest": format!("sha256:{}", "1".repeat(64)),

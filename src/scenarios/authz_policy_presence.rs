@@ -454,7 +454,7 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
         arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
     >(json!({
         "request_id": "req-invalid",
-        "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
+        "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
         "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         "action": "ak.message.create",
         "actor_id": alice.actor.as_str(),

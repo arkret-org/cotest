@@ -21,17 +21,17 @@
     {
       "name": "realm_policy_default",
       "kind": "ak.realm.policy",
-      "components_array": ["ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "default"],
+      "components_array": ["ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "default"],
       "components_order_source": "[realm_id, policy_name]",
-      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"default\"]",
+      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"default\"]",
       "expected_state_subject": "oWt24-I1SX_wawUrwoeXS4xbeJ_W7z4IiV27Wmcv2mA"
     },
     {
       "name": "realm_member_carol",
       "kind": "ak.realm.member",
-      "components_array": ["ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:carol.example"],
+      "components_array": ["ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
-      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"did:web:carol.example\"]",
+      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"did:web:carol.example\"]",
       "expected_state_subject": "jySVHHmiICU8qFiOkFbanUE9CvSnztq_vgUuEc0XG9Y"
     }
   ],
@@ -39,27 +39,27 @@
     {
       "name": "strand_track_member_alice",
       "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
       "expected_state_subject": "LcdCKbYzgZadA3KgEfbSBgXMl9bx3n6dhXWlNACDGj8",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
       "name": "strand_track_history_visibility_main",
       "kind": "cx.strand.track.history_visibility",
-      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
-      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"main\"]",
       "expected_state_subject": "PNpB2wjzXRXe0boWhYxWF68aKoeJPgWV0PZ409Ehvs4",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
       "name": "strand_track_member_alice_distinct_track",
       "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "feature-x", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"feature-x\",\"did:web:alice.example\"]",
       "expected_state_subject": "MB92dtoGtnZL7WRyjivpGApdcqimGx-YBD_5YLHUUSc",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Same strand_id + actor_id as strand_track_member_alice but different track segment — must produce a distinct state_subject."
@@ -69,7 +69,7 @@
     {
       "name": "wrong_component_order_must_differ",
       "kind": "cx.strand.track.member",
-      "components_array": ["main", "ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
+      "components_array": ["main", "ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "Component reordering (track before strand_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
       "must_differ_from": "LcdCKbYzgZadA3KgEfbSBgXMl9bx3n6dhXWlNACDGj8"
     }

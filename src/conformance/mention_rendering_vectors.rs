@@ -145,7 +145,7 @@ pub fn run_render_step1_unique_success_vector() -> Result<()> {
 
 pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ak:realm:01904100-0000-8000-8000-0000000000aa";
     // Two candidates: the Realm-scoped projection is "not unique" until the
     // live audience context discriminates. With context set, §3.2.1 picks
     // the audience-matched claim deterministically (the §3.8.2 step-2 live

@@ -8,7 +8,7 @@
       "account_did": "did:web:alice.example",
       "expected": {
         "outcome": "accept",
-        "principal_realm_id": "ak:realm:01964200-0000-7000-8000-000000000001"
+        "principal_realm_id": "ak:realm:01964200-0000-8000-8000-000000000001"
       }
     },
     {
@@ -43,7 +43,7 @@
     {
       "name": "final_state_observe_emits_audit_log",
       "step": "final_state_observe",
-      "realm_id": "ak:realm:01964200-0000-7000-8000-000000000001",
+      "realm_id": "ak:realm:01964200-0000-8000-8000-000000000001",
       "expected": {
         "outcome": "accept",
         "audit_log_emitted": true

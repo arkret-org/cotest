@@ -14,7 +14,7 @@ pub const VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN: &str =
     "ak.vector.signal.device_authorization_domain.v1";
 
 fn envelope() -> Result<SignalEnvelope> {
-    let realm_id = RealmId::new("ak:realm:01904100-0000-7000-8000-65c7feb295d7")?;
+    let realm_id = RealmId::new("ak:realm:01904100-0000-8000-8000-65c7feb295d7")?;
     let sent_at = Utc
         .with_ymd_and_hms(2026, 7, 28, 12, 0, 0)
         .single()
@@ -34,7 +34,7 @@ fn envelope() -> Result<SignalEnvelope> {
             scheme: arkret_wire::SIGNAL_AEAD_SCHEME.to_owned(),
             key_ref: SignalKeyRef {
                 algorithm: "MLS-EXPORTER-AEAD".to_owned(),
-                group_state_ref: "ak:event:01904100-0000-7000-8000-cccccccccccc".to_owned(),
+                group_state_ref: "ak:event:01904100-0000-8000-8000-cccccccccccc".to_owned(),
             },
             purpose: arkret_wire::SIGNAL_AEAD_PURPOSE.to_owned(),
             aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519".to_owned(),
@@ -209,7 +209,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             }
             "signal_peer_relay_request" => {
                 if generator["same_realm"].as_bool() == Some(false) {
-                    let other = RealmId::new("ak:realm:01904100-0000-7000-8000-65c7feb295d8")?;
+                    let other = RealmId::new("ak:realm:01904100-0000-8000-8000-65c7feb295d8")?;
                     let cross_realm = SignalRelayRequest {
                         realm_id: other,
                         signals: vec![signal.clone()],

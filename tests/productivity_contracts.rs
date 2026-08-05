@@ -102,7 +102,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
         .validate_payload(
             arkret_wire::EventKind::RSVP_SET,
             &json!({
-                "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
+                "event_ref": "ak:strand:01904100-0000-8000-8000-000000000001",
                 "occurrence": null,
                 "entry": {
                     "schedule_basis_refs": [BASIS],
@@ -116,7 +116,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             .validate_payload(
                 arkret_wire::EventKind::RSVP_SET,
                 &json!({
-                    "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
+                    "event_ref": "ak:strand:01904100-0000-8000-8000-000000000001",
                     "occurrence": null,
                     "entry": {
                         "schedule_basis_refs": [BASIS],
@@ -132,7 +132,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             .validate_payload(
                 arkret_wire::EventKind::RSVP_SET,
                 &json!({
-                    "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
+                    "event_ref": "ak:strand:01904100-0000-8000-8000-000000000001",
                     "occurrence": null,
                     "status": "accepted"
                 }),
@@ -145,7 +145,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             .validate_payload(
                 arkret_wire::EventKind::RSVP_SET,
                 &json!({
-                    "event_ref": "ak:strand:01904100-0000-7000-8000-000000000001",
+                    "event_ref": "ak:strand:01904100-0000-8000-8000-000000000001",
                     "occurrence": null,
                     "entry": {"schedule_basis_refs": [BASIS]}
                 }),
@@ -156,14 +156,14 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 
     let pin_scope = json!({
         "kind": "strand",
-        "id": "ak:strand:01904100-0000-7000-8000-000000000001"
+        "id": "ak:strand:01904100-0000-8000-8000-000000000001"
     });
     catalog
         .validate_payload(
             arkret_wire::EventKind::PIN_ADD,
             &json!({
                 "pin_scope": pin_scope,
-                "target_ref": "ak:message:01904100-0000-7000-8000-000000000002",
+                "target_ref": "ak:message:01904100-0000-8000-8000-000000000002",
                 "rank": "a0"
             }),
         )
@@ -230,8 +230,8 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 #[test]
 fn private_account_data_keys_do_not_leak_raw_refs() {
     let ns = b"cotest productivity namespace";
-    let message_id = MessageId::new("ak:message:01904100-0000-7000-8000-000000000001").unwrap();
-    let realm_id = RealmId::new("ak:realm:01904100-0000-7000-8000-000000000002").unwrap();
+    let message_id = MessageId::new("ak:message:01904100-0000-8000-8000-000000000001").unwrap();
+    let realm_id = RealmId::new("ak:realm:01904100-0000-8000-8000-000000000002").unwrap();
     let target_ref = message_id.as_str();
 
     let scheduled_send_key = scheduled_send_account_data_key(&message_id);
@@ -259,7 +259,7 @@ fn private_account_data_keys_do_not_leak_raw_refs() {
 
     assert!(
         validate_private_account_data_key(
-            "ak.draft.v1:message:ak:message:01904100-0000-7000-8000-000000000001:main"
+            "ak.draft.v1:message:ak:message:01904100-0000-8000-8000-000000000001:main"
         )
         .is_err(),
         "raw typed refs in private account-data keys must be rejected"

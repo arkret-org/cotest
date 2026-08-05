@@ -524,10 +524,10 @@ mod tests {
     #[test]
     fn event_digest_uses_producer_envelope_canonical_bytes() {
         let event = json!({
-            "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
+            "event_id": "ak:event:019f3b1c-884d-8fc0-965f-0550baae7184",
             "kind": "ak.member.state",
-            "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
+            "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -540,7 +540,7 @@ mod tests {
                 "critical_extensions": []
             },
             "payload": {
-                "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
+                "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
                 "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
                 "membership": "join",
                 "reason": "invite_accept"
@@ -548,7 +548,7 @@ mod tests {
             "unsigned": {"trace": "local"},
             "scope_ref": {
                 "kind": "realm",
-                "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"
+                "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"
             },
             "actor_kind": "native",
             "proofs": []
@@ -567,10 +567,10 @@ mod tests {
     #[test]
     fn event_digest_materializes_sdk_ref_defaults() {
         let event = json!({
-            "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
+            "event_id": "ak:event:019f3b1c-884d-8fc0-965f-0550baae7184",
             "kind": "ak.morph.schema_migrate",
-            "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
+            "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -582,7 +582,7 @@ mod tests {
             }],
             "requirements": {"schema": ["ak.schema.event_payload.v1"]},
             "payload": {
-                "morph_id": "ak:morph:019f3b1c-784d-7fc0-965f-0550baae7186",
+                "morph_id": "ak:morph:019f3b1c-884d-8fc0-965f-0550baae7186",
                 "from_schema_refs": ["ak.schema.morph.customer_risk.v1"],
                 "to_schema_refs": ["ak.schema.morph.customer_risk.ext.v1"],
                 "compatibility_class": "transformation"
@@ -634,10 +634,10 @@ mod tests {
         let seed = [42u8; 32];
         let signing_key = SigningKey::from_bytes(&seed);
         let event = json!({
-            "event_id": "ak:event:019f3b1c-784d-7fc0-965f-0550baae7184",
+            "event_id": "ak:event:019f3b1c-884d-8fc0-965f-0550baae7184",
             "kind": "ak.member.state",
-            "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
+            "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
             "actor_id": actor,
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -650,8 +650,8 @@ mod tests {
                 "critical_extensions": []
             },
             "payload": {
-                "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02",
-                "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-7f20-9715-66c42a93ad02"},
+                "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
+                "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
                 "actor_id": actor,
                 "membership": "join"
             }

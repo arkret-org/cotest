@@ -18,7 +18,7 @@
       "comment": "MLS group genesis: a creator Move (ak.mls.genesis) writes epoch=0, group_state=initial tree, covered_frontier=∅. The realm_id is fresh; no prior epoch exists; bottom mode is reject — but at genesis there is nothing to conflict with.",
       "realm_id": "ak:realm:01js0sp10000000000000000000",
       "kind": "ak.mls.genesis",
-      "move_id": "ak:event:01970e58-0d01-7a01-8d01-000000000000",
+      "move_id": "ak:event:01970e58-0d01-8a01-8d01-000000000000",
       "creator_did": "did:web:alice.example",
       "effects": [
         {
@@ -50,10 +50,10 @@
       "comment": "An MLS commit Move advances the epoch CAS-register from 0 to 1, replaces the group_state tree_hash with a new one, and adds the attested governance ref to covered_frontier.",
       "realm_id": "ak:realm:01js0sp11000000000000000000",
       "kind": "ak.mls.commit",
-      "move_id": "ak:event:01970e58-0d02-7a02-8d02-000000000010",
+      "move_id": "ak:event:01970e58-0d02-8a02-8d02-000000000010",
       "committer_did": "did:web:alice.example",
       "prior_epoch": 0,
-      "covered_frontier_attests_to": "ak:event:01970e58-0d02-7a02-8d02-000000000005",
+      "covered_frontier_attests_to": "ak:event:01970e58-0d02-8a02-8d02-000000000005",
       "effects": [
         {
           "cell": "ak:cell:ak.component.mls.epoch.v1:ak.realm.01js0sp11000000000000000000",
@@ -68,13 +68,13 @@
         {
           "cell": "ak:cell:ak.component.mls.covered_frontier.v1:ak.realm.01js0sp11000000000000000000",
           "op": "or_set_add",
-          "tag": "ak:event:01970e58-0d02-7a02-8d02-000000000005"
+          "tag": "ak:event:01970e58-0d02-8a02-8d02-000000000005"
         }
       ],
       "expected": {
         "outcome": "accept",
         "epoch_after": 1,
-        "covered_frontier_after": ["ak:event:01970e58-0d02-7a02-8d02-000000000005"],
+        "covered_frontier_after": ["ak:event:01970e58-0d02-8a02-8d02-000000000005"],
         "rationale": "Commit advances epoch 0→1 atomically with all three cell writes; covered_frontier accumulates the attested governance ref."
       }
     },
@@ -83,7 +83,7 @@
       "comment": "MLS commit that adds a member: bob joins the group. The group_state.members set grows; epoch advances; covered_frontier accumulates the join-attesting governance ref.",
       "realm_id": "ak:realm:01js0sp12000000000000000000",
       "kind": "ak.mls.commit",
-      "move_id": "ak:event:01970e58-0d03-7a03-8d03-000000000020",
+      "move_id": "ak:event:01970e58-0d03-8a03-8d03-000000000020",
       "committer_did": "did:web:alice.example",
       "prior_epoch": 1,
       "joining_did": "did:web:bob.example",
@@ -102,7 +102,7 @@
         {
           "cell": "ak:cell:ak.component.mls.covered_frontier.v1:ak.realm.01js0sp12000000000000000000",
           "op": "or_set_add",
-          "tag": "ak:event:01970e58-0d03-7a03-8d03-000000000015"
+          "tag": "ak:event:01970e58-0d03-8a03-8d03-000000000015"
         }
       ],
       "expected": {
@@ -118,7 +118,7 @@
       "comment": "MLS commit that removes a member: bob leaves. The group_state.members set shrinks; tree is re-computed without bob's leaf. Epoch advances. covered_frontier still accumulates.",
       "realm_id": "ak:realm:01js0sp13000000000000000000",
       "kind": "ak.mls.commit",
-      "move_id": "ak:event:01970e58-0d04-7a04-8d04-000000000030",
+      "move_id": "ak:event:01970e58-0d04-8a04-8d04-000000000030",
       "committer_did": "did:web:alice.example",
       "prior_epoch": 2,
       "leaving_did": "did:web:bob.example",
@@ -137,7 +137,7 @@
         {
           "cell": "ak:cell:ak.component.mls.covered_frontier.v1:ak.realm.01js0sp13000000000000000000",
           "op": "or_set_add",
-          "tag": "ak:event:01970e58-0d04-7a04-8d04-000000000025"
+          "tag": "ak:event:01970e58-0d04-8a04-8d04-000000000025"
         }
       ],
       "expected": {
@@ -154,28 +154,28 @@
       "realm_id": "ak:realm:01js0sp14000000000000000000",
       "commits": [
         {
-          "move_id": "ak:event:01970e58-0d05-7a05-8d05-000000000040",
+          "move_id": "ak:event:01970e58-0d05-8a05-8d05-000000000040",
           "epoch": 1,
-          "covered_frontier_attests_to": "ak:event:01970e58-0d05-7a05-8d05-000000000041"
+          "covered_frontier_attests_to": "ak:event:01970e58-0d05-8a05-8d05-000000000041"
         },
         {
-          "move_id": "ak:event:01970e58-0d05-7a05-8d05-000000000042",
+          "move_id": "ak:event:01970e58-0d05-8a05-8d05-000000000042",
           "epoch": 2,
-          "covered_frontier_attests_to": "ak:event:01970e58-0d05-7a05-8d05-000000000043"
+          "covered_frontier_attests_to": "ak:event:01970e58-0d05-8a05-8d05-000000000043"
         },
         {
-          "move_id": "ak:event:01970e58-0d05-7a05-8d05-000000000044",
+          "move_id": "ak:event:01970e58-0d05-8a05-8d05-000000000044",
           "epoch": 3,
-          "covered_frontier_attests_to": "ak:event:01970e58-0d05-7a05-8d05-000000000045"
+          "covered_frontier_attests_to": "ak:event:01970e58-0d05-8a05-8d05-000000000045"
         }
       ],
       "expected": {
         "outcome": "accept",
         "epoch_after": 3,
         "covered_frontier_after": [
-          "ak:event:01970e58-0d05-7a05-8d05-000000000041",
-          "ak:event:01970e58-0d05-7a05-8d05-000000000043",
-          "ak:event:01970e58-0d05-7a05-8d05-000000000045"
+          "ak:event:01970e58-0d05-8a05-8d05-000000000041",
+          "ak:event:01970e58-0d05-8a05-8d05-000000000043",
+          "ak:event:01970e58-0d05-8a05-8d05-000000000045"
         ],
         "rationale": "Or-set accumulates all three refs across epochs; no rotation; full set is the active surface."
       }
@@ -184,12 +184,12 @@
       "name": "encryption_aad_digest_pinning",
       "comment": "An E2EE message Move's ciphertext carries an Authenticated Associated Data (AAD) digest pin computed over (move_id || epoch_id || tree_hash || covered_frontier_root). A bit-flip in ANY of these inputs must produce a different SHA-256 digest. The recipient recomputes the digest from observed cell state and rejects if mismatched.",
       "realm_id": "ak:realm:01js0sp15000000000000000000",
-      "move_id": "ak:event:01970e58-0d06-7a06-8d06-000000000050",
+      "move_id": "ak:event:01970e58-0d06-8a06-8d06-000000000050",
       "epoch_id": 5,
       "tree_hash_b64": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEA",
       "covered_frontier_root_b64": "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA",
       "expected_aad_digest_inputs": [
-        "ak:event:01970e58-0d06-7a06-8d06-000000000050",
+        "ak:event:01970e58-0d06-8a06-8d06-000000000050",
         "5",
         "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEA",
         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA"
@@ -207,7 +207,7 @@
       "name": "epoch_skip_rejected",
       "comment": "An MLS commit that claims to advance from epoch 1 to epoch 5 (skipping 2,3,4) MUST reject — epoch advances must be monotonically +1 per commit; gaps indicate dropped commits or malicious replay.",
       "realm_id": "ak:realm:01js0sp16000000000000000000",
-      "move_id": "ak:event:01970e58-0d07-7a07-8d07-000000000060",
+      "move_id": "ak:event:01970e58-0d07-8a07-8d07-000000000060",
       "prior_epoch": 1,
       "claimed_epoch": 5,
       "expected": {
@@ -220,7 +220,7 @@
       "name": "aad_digest_mismatch_rejected",
       "comment": "Recipient observes group_state.tree_hash=X but ciphertext's AAD digest was computed over tree_hash=Y (the sender's stale tree). Recompute MUST diverge → reject pre-decryption.",
       "realm_id": "ak:realm:01js0sp17000000000000000000",
-      "move_id": "ak:event:01970e58-0d08-7a08-8d08-000000000070",
+      "move_id": "ak:event:01970e58-0d08-8a08-8d08-000000000070",
       "observed_tree_hash_b64": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGA",
       "claimed_aad_inputs_tree_hash_b64": "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHA",
       "expected": {

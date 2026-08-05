@@ -579,7 +579,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         DidUrl::new(format!("{receiver_service_id}#assertion-1")).map_err(anyhow::Error::msg)?;
     let agent_key_id = nes("runtime-1")?;
     let authorize_event_id = event_id(1)?;
-    let realm_id = RealmId::new("ak:realm:01964137-0000-7000-8000-000000000009")?;
+    let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-000000000009")?;
 
     let binding = build_agent_signing_key_binding(
         signer_id.clone(),
@@ -1124,7 +1124,7 @@ fn hash_byte(byte: u8) -> Result<Hash> {
 }
 
 fn event_id(suffix: u8) -> Result<EventId> {
-    EventId::new(format!("ak:event:01964137-0000-7000-8000-{suffix:012x}"))
+    EventId::new(format!("ak:event:01964137-0000-8000-8000-{suffix:012x}"))
         .map_err(anyhow::Error::msg)
 }
 

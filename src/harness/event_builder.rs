@@ -192,8 +192,8 @@ pub async fn create_realm(
             "plaintext_visible_services": [server.service_id()]
         }),
     )?;
-    let events =
-        realm_bootstrap_event_batch(actor, &realm_id, payload, plaintext_visible_services)?;
+    let (realm_id, events) =
+        realm_bootstrap_event_batch(actor, payload, plaintext_visible_services)?;
     let events = events
         .into_iter()
         .map(arkret_wire::EventInitialSubmission::online)
@@ -230,9 +230,8 @@ pub async fn create_realm_with_signing_seed(
             "plaintext_visible_services": [server.service_id()]
         }),
     )?;
-    let events = realm_bootstrap_event_batch_with_signing_seed(
+    let (realm_id, events) = realm_bootstrap_event_batch_with_signing_seed(
         actor,
-        &realm_id,
         payload,
         plaintext_visible_services,
         signing_seed,
@@ -257,16 +256,14 @@ pub async fn create_realm_with_signing_seed(
 
 pub fn realm_bootstrap_event_batch(
     actor: &str,
-    realm_id: &str,
     realm_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload,
     plaintext_visible_services: Option<
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
     >,
-) -> Result<Vec<arkret_wire::Event>> {
+) -> Result<(String, Vec<arkret_wire::Event>)> {
     let (signing_seed, verification_method) = event_signing_identity(actor);
     realm_bootstrap_event_batch_with_signing_seed(
         actor,
-        realm_id,
         realm_payload,
         plaintext_visible_services,
         signing_seed,
@@ -303,17 +300,18 @@ fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cba::Preconditio
 /// Event that actually writes the cell.
 pub fn realm_bootstrap_event_batch_with_signing_seed(
     actor: &str,
-    realm_id: &str,
     realm_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload,
     plaintext_visible_services: Option<
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
     >,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-) -> Result<Vec<arkret_wire::Event>> {
+) -> Result<(String, Vec<arkret_wire::Event>)> {
+    // Genesis carries no Realm id at all — the scope is `realm_genesis` and the
+    // id falls out of the signed Event. The placeholder below is never read.
     let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
-        realm_id,
+        "ak:realm:00000000-0000-7000-8000-000000000000",
         "ak.realm.create",
         realm_payload.to_value()?,
         Some(0),
@@ -325,12 +323,16 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             "ak:cell:ak.component.realm.create.v1:null",
         )?],
     );
+    // The genesis carries no realm_id; the SDK resolved it from the Event, and
+    // every follow-up in this batch MUST name that derived value or admission
+    // reports `out_of_order_bootstrap`.
+    let derived_realm_id = realm_event.realm_id.to_string();
     let Some(services) = plaintext_visible_services else {
-        return Ok(vec![realm_event]);
+        return Ok((derived_realm_id, vec![realm_event]));
     };
     let services_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
-        realm_id,
+        &derived_realm_id,
         "ak.realm.plaintext_visible_services",
         services.to_value()?,
         Some(1),
@@ -342,7 +344,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             "ak:cell:ak.component.realm.plaintext_visible_services.v1:null",
         )?],
     );
-    Ok(vec![realm_event, services_event])
+    Ok((derived_realm_id, vec![realm_event, services_event]))
 }
 
 pub async fn add_member(
@@ -726,11 +728,21 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         .expect("static cotest Event timestamp")
         .with_timezone(&Utc);
     let actor_id = Did::new(actor.to_owned()).expect("cotest actor DID");
-    let mut event = arkret_wire::Event::new_with_id_at(
-        EventId::new(format!("ak:event:{suffix}")).expect("cotest Event id"),
+    // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
+    // `event_id` from the Event's own content, so the harness builds with the
+    // derived constructor and callers read the id back off the built Event.
+    let _ = &suffix;
+    let mut event = arkret_wire::Event::new_with_derived_id_at(
         kind,
-        ScopeRef::Realm {
-            realm_id: RealmId::new(realm_id.to_owned()).expect("cotest Realm id"),
+        // A Realm genesis carries the closed genesis scope and no realm_id;
+        // the Realm's id is derived from the Event (spec realm-and-space.md
+        // section 2.5.0).
+        if kind == "ak.realm.create" {
+            ScopeRef::RealmGenesis
+        } else {
+            ScopeRef::Realm {
+                realm_id: RealmId::new(realm_id.to_owned()).expect("cotest Realm id"),
+            }
         },
         actor_id.clone(),
         actor_seq,
@@ -803,7 +815,7 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
             let strand_id = realm_id
                 .strip_prefix("ak:realm:")
                 .map(|suffix| format!("ak:strand:{suffix}"))
-                .unwrap_or_else(|| "ak:strand:01904100-0000-7000-8000-f10dc0000001".to_owned());
+                .unwrap_or_else(|| "ak:strand:01904100-0000-8000-8000-f10dc0000001".to_owned());
             object
                 .entry("strand_id".to_owned())
                 .or_insert_with(|| Value::String(strand_id));

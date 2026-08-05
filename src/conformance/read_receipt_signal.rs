@@ -39,13 +39,13 @@ fn actor() -> Result<Did> {
 
 fn event_id() -> Result<EventId> {
     Ok(EventId::new(
-        "ak:event:01904100-0000-7000-8000-00000000000a",
+        "ak:event:01904100-0000-8000-8000-00000000000a",
     )?)
 }
 
 fn strand_id() -> Result<StrandId> {
     Ok(StrandId::new(
-        "ak:strand:01904100-0000-7000-8000-000000000001",
+        "ak:strand:01904100-0000-8000-8000-000000000001",
     )?)
 }
 

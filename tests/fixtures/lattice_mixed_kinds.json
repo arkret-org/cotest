@@ -16,7 +16,7 @@
         "cells": {
           "ak:cell:ak.component.realm.locked.v1:ak.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas_register",
-            "head": "ak:event:21084210-8421-7842-9084-210842108421",
+            "head": "ak:event:21084210-8421-8842-9084-210842108421",
             "value": false
           },
           "ak:cell:ak.component.realm.tags.v1:ak.realm.0196419b-0000-7000-8000-000000000000": {
@@ -26,7 +26,7 @@
         }
       },
       "move": {
-        "id": "ak:event:6b5ad6b5-ad6b-7ad6-b5ad-6b5ad6b5ad6b",
+        "id": "ak:event:6b5ad6b5-ad6b-8ad6-b5ad-6b5ad6b5ad6b",
         "issuer": "did:web:admin.example",
         "anchor_ref": "ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "preconditions": [
@@ -34,7 +34,7 @@
             "cell": "ak:cell:ak.component.realm.locked.v1:ak.realm.0196419b-0000-7000-8000-000000000000",
             "predicate": {
               "op": "head_eq",
-              "value": "ak:event:21084210-8421-7842-9084-210842108421"
+              "value": "ak:event:21084210-8421-8842-9084-210842108421"
             }
           }
         ],
@@ -81,7 +81,7 @@
       },
       "concurrent_moves": [
         {
-          "id": "ak:event:84210842-1084-7108-8210-842108421084",
+          "id": "ak:event:84210842-1084-8108-8210-842108421084",
           "issuer": "did:web:alice.example",
           "effects": [
             {
@@ -94,7 +94,7 @@
           ]
         },
         {
-          "id": "ak:event:a5294a52-94a5-794a-9294-a5294a5294a5",
+          "id": "ak:event:a5294a52-94a5-894a-9294-a5294a5294a5",
           "issuer": "did:web:bob.example",
           "effects": [
             {
@@ -111,8 +111,8 @@
         "query": {
           "status": "conflict",
           "heads": [
-            "ak:event:84210842-1084-7108-8210-842108421084",
-            "ak:event:a5294a52-94a5-794a-9294-a5294a5294a5"
+            "ak:event:84210842-1084-8108-8210-842108421084",
+            "ak:event:a5294a52-94a5-894a-9294-a5294a5294a5"
           ],
           "values": ["Launch Plan v1", "Launch Plan v2"]
         },
@@ -128,7 +128,7 @@
         "cells": {
           "ak:cell:ak.component.realm.locked.v1:ak.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "cas_register",
-            "head": "ak:event:42108421-0842-7084-a108-421084210842",
+            "head": "ak:event:42108421-0842-8084-a108-421084210842",
             "value": false
           },
           "ak:cell:ak.component.realm.tags.v1:ak.realm.0196419b-0000-7000-8000-000000000000": {
@@ -143,14 +143,14 @@
       },
       "anchor_frontier_moves": [
         {
-          "id": "ak:event:c6318c63-18c6-718c-a318-c6318c6318c6",
+          "id": "ak:event:c6318c63-18c6-818c-a318-c6318c6318c6",
           "issuer": "did:web:admin.example",
           "preconditions": [
             {
               "cell": "ak:cell:ak.component.realm.locked.v1:ak.realm.0196419b-0000-7000-8000-000000000000",
               "predicate": {
                 "op": "head_eq",
-                "value": "ak:event:42108421-0842-7084-a108-421084210842"
+                "value": "ak:event:42108421-0842-8084-a108-421084210842"
               }
             }
           ],
@@ -165,7 +165,7 @@
           ]
         },
         {
-          "id": "ak:event:e739ce73-9ce7-79ce-b39c-e739ce739ce7",
+          "id": "ak:event:e739ce73-9ce7-89ce-b39c-e739ce739ce7",
           "issuer": "did:web:alice.example",
           "effects": [
             {
@@ -179,7 +179,7 @@
           ]
         },
         {
-          "id": "ak:event:f8417f84-17f8-7f84-c417-f8417f8417f8",
+          "id": "ak:event:f8417f84-17f8-8f84-c417-f8417f8417f8",
           "issuer": "did:web:bob.example",
           "effects": [
             {
@@ -205,7 +205,7 @@
           },
           "ak:cell:ak.component.realm.draft_title.v1:ak.realm.0196419b-0000-7000-8000-000000000000": {
             "lattice": "mv_register",
-            "heads": ["ak:event:f8417f84-17f8-7f84-c417-f8417f8417f8"],
+            "heads": ["ak:event:f8417f84-17f8-8f84-c417-f8417f8417f8"],
             "values": ["Single draft title"]
           }
         },

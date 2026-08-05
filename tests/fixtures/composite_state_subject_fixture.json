@@ -31,18 +31,18 @@
     {
       "name": "strand_track_member_alice",
       "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "main", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"main\",\"did:web:alice.example\"]",
       "expected_state_subject": "LcdCKbYzgZadA3KgEfbSBgXMl9bx3n6dhXWlNACDGj8",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
       "name": "strand_track_member_bob_distinct_subject",
       "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main", "did:web:bob.example"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "main", "did:web:bob.example"],
       "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\",\"did:web:bob.example\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"main\",\"did:web:bob.example\"]",
       "expected_state_subject": "2YCROPLMat2513FMxWOGi0pZz03tpDuVbsLUGIEGA1c",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Same strand + track but a different actor — historical encoding fixture only; current v1 producers must not emit ak.strand.track.member."
@@ -50,18 +50,18 @@
     {
       "name": "strand_track_history_visibility",
       "kind": "cx.strand.track.history_visibility",
-      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
-      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"main\"]",
       "expected_state_subject": "PNpB2wjzXRXe0boWhYxWF68aKoeJPgWV0PZ409Ehvs4",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
       "name": "strand_track_policy_bundle_same_subject_as_history_visibility",
       "kind": "cx.strand.track.policy_bundle",
-      "components_array": ["ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "main"],
+      "components_array": ["ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "main"],
       "components_order_source": "[strand_id, track]",
-      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9\",\"main\"]",
+      "expected_canonical_json": "[\"ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"main\"]",
       "expected_state_subject": "PNpB2wjzXRXe0boWhYxWF68aKoeJPgWV0PZ409Ehvs4",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Two removed kinds shared the same components_array shape; retained only to pin historical hash encoding."
@@ -71,14 +71,14 @@
     {
       "name": "wrong_component_order_collides_into_different_subject",
       "kind": "cx.strand.track.member",
-      "components_array": ["main", "ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "did:web:alice.example"],
+      "components_array": ["main", "ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "did:web:alice.example"],
       "comment": "If a buggy implementation reorders components_array (e.g. track before strand_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical strand_track_member_alice subject.",
       "must_differ_from": "LcdCKbYzgZadA3KgEfbSBgXMl9bx3n6dhXWlNACDGj8"
     },
     {
       "name": "pipe_form_must_not_be_used_as_canonical",
       "kind": "cx.strand.track.member",
-      "pipe_form": "ak:strand:7fd5ae82-44e2-7a8a-9a4b-8857991142f9|main|did:web:alice.example",
+      "pipe_form": "ak:strand:7fd5ae82-44e2-8a8a-9a4b-8857991142f9|main|did:web:alice.example",
       "comment": "The pipe-separated form is informational only. Cotest verifies that hashing the pipe string would not produce the canonical state_subject — implementations that use it would diverge.",
       "must_differ_from": "LcdCKbYzgZadA3KgEfbSBgXMl9bx3n6dhXWlNACDGj8"
     }

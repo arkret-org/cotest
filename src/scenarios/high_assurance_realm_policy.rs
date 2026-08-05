@@ -20,7 +20,7 @@ use arkret_wire::{
     SecurityClass,
 };
 
-const REALM_ID: &str = "ak:realm:01904100-0000-7000-8000-000000000aa1";
+const REALM_ID: &str = "ak:realm:01904100-0000-8000-8000-000000000aa1";
 
 fn realm_id() -> Result<RealmId> {
     RealmId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
@@ -44,7 +44,9 @@ fn build_realm(
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Realm {
         schema: "ak.schema.realm.v1".to_owned(),
-        id,
+        // Materialised-object fixture, so it carries an id; a create payload
+        // would leave this `None` (spec realm-and-space.md section 2.5.0).
+        id: Some(id),
         title: "Compliance Vault".to_owned(),
         trust_domain,
         summary: None,

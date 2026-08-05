@@ -26,8 +26,8 @@ pub async fn agent_sidecar_run() -> Result<()> {
     }
 
     let controller_id = Did::new("did:web:controller.example.com".to_owned())?;
-    let source_realm_id = RealmId::new("ak:realm:01999999-0000-7000-8000-00000000c002".to_owned())?;
-    let strand_id = StrandId::new("ak:strand:01999999-0000-7000-8000-00000000c003".to_owned())?;
+    let source_realm_id = RealmId::new("ak:realm:01999999-0000-8000-8000-00000000c002".to_owned())?;
+    let strand_id = StrandId::new("ak:strand:01999999-0000-8000-8000-00000000c003".to_owned())?;
     let operation_id = ProtocolOperationId::new("ak:operation:cotest.sidecar.scaffold")
         .map_err(anyhow::Error::msg)?;
     let prepare = SidecarEnsureRequestBody::Prepare(SidecarEnsurePrepareRequestBody {

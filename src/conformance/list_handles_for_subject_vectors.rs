@@ -163,8 +163,8 @@ pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
 
 pub fn run_audience_filter_applied_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
-    let other_ctx = "ak:realm:01904100-0000-7000-8000-0000000000bb";
+    let realm_ctx = "ak:realm:01904100-0000-8000-8000-0000000000aa";
+    let other_ctx = "ak:realm:01904100-0000-8000-8000-0000000000bb";
 
     // Directory has two claims; one is scoped to a different audience.
     let in_scope = claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?;
@@ -297,7 +297,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
 
 pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ak:realm:01904100-0000-8000-8000-0000000000aa";
     let snapshot = vec![
         claim_for("alice:other.example", &s, OTHER_ISSUER, None)?,
         claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?,

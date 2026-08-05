@@ -838,17 +838,17 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
-      const eventId = `ak:event:01904100-0000-7000-8000-${Date.now()
+      const eventId = `ak:event:01904100-0000-8000-8000-${Date.now()
         .toString()
         .slice(-12)
         .padStart(12, "0")}`;
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
         eventId,
-        realmId: "ak:realm:01904100-0000-7000-8000-000000001101",
+        realmId: "ak:realm:01904100-0000-8000-8000-000000001101",
         kind: "ak.message.create",
         payload: {
-          strand_id: "ak:strand:01904100-0000-7000-8000-000000001101",
+          strand_id: "ak:strand:01904100-0000-8000-8000-000000001101",
           track_name: "discussion",
           content: { kind: "ak.content.text", body: "must not accept unknown feature" },
         },
@@ -877,17 +877,17 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e2");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
-      const eventId = `ak:event:01904100-0000-7000-8000-${Date.now()
+      const eventId = `ak:event:01904100-0000-8000-8000-${Date.now()
         .toString()
         .slice(-12)
         .padStart(12, "0")}`;
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
         eventId,
-        realmId: "ak:realm:01904100-0000-7000-8000-000000001102",
+        realmId: "ak:realm:01904100-0000-8000-8000-000000001102",
         kind: "ak.message.create",
         payload: {
-          strand_id: "ak:strand:01904100-0000-7000-8000-000000001102",
+          strand_id: "ak:strand:01904100-0000-8000-8000-000000001102",
           track_name: "discussion",
           content: {
             kind: "ak.content.text",

@@ -162,7 +162,7 @@ pub fn run_single_candidate_passthrough_vector() -> Result<()> {
 
 pub fn run_audience_match_wins_vector() -> Result<()> {
     let s = subject()?;
-    let realm_ctx = "ak:realm:01904100-0000-7000-8000-0000000000aa";
+    let realm_ctx = "ak:realm:01904100-0000-8000-8000-0000000000aa";
     // Newer, holder-flagged, but no audience.
     let newer = claim(
         "alice:other.example",
@@ -485,7 +485,7 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
     let expires = at(2026, 6, 25);
     let mut canonical = claim("alice:acme.example", ACME_ISSUER, created, expires, None)?;
     canonical.handle_aliases = vec!["acct:alice@acme.example".to_owned()];
-    canonical.source_refs = vec!["ak:event:01904100-0000-7000-8000-000000000abc".to_owned()];
+    canonical.source_refs = vec!["ak:event:01904100-0000-8000-8000-000000000abc".to_owned()];
 
     let base = claim_digest(&canonical).map_err(|e| anyhow!("claim_digest base: {e}"))?;
 

@@ -19,7 +19,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
         .await?;
     let realm_id = create_test_realm(
         &alice,
-        "ak:realm:01999999-0000-7000-8000-00000000e101",
+        "ak:realm:01999999-0000-8000-8000-00000000e101",
         "Event Idempotency Replay",
     )
     .await?;
@@ -28,7 +28,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
             &realm_id,
             "ak.message.create",
             message_create_text_payload_for_strand(
-                parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
+                parse_strand_id("ak:strand:01999999-0000-8000-8000-00000000feed")?,
                 "idempotent replay body",
             )?,
         )
@@ -88,7 +88,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         .await?;
     let realm_id = create_test_realm(
         &alice,
-        "ak:realm:01999999-0000-7000-8000-00000000e102",
+        "ak:realm:01999999-0000-8000-8000-00000000e102",
         "Event Idempotency Edit Redact",
     )
     .await?;
@@ -97,7 +97,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
             &realm_id,
             "ak.message.create",
             message_create_text_payload_for_strand(
-                parse_strand_id("ak:strand:01999999-0000-7000-8000-00000000feed")?,
+                parse_strand_id("ak:strand:01999999-0000-8000-8000-00000000feed")?,
                 "message before edit/redact replay",
             )?,
         )

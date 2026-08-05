@@ -90,7 +90,7 @@ pub async fn agent_delegation_policy_run() -> Result<()> {
             "arkret_wire::EventKind::IDENTITY_ACCOUNTABILITY_GRANT spelling drifted: arkret_wire::EventKind::IDENTITY_ACCOUNTABILITY_GRANT"
         ));
     }
-    let grant_ref = EventId::new("ak:event:01999999-0000-7000-8000-0000000ab001".to_owned())
+    let grant_ref = EventId::new("ak:event:01999999-0000-8000-8000-0000000ab001".to_owned())
         .map_err(|e| anyhow!("accountability_grant_ref EventId: {e}"))?;
     if !grant_ref.as_str().starts_with("ak:event:") {
         return Err(anyhow!(

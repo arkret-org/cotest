@@ -26,7 +26,7 @@ use crate::harness::{ArkretServer, TestActorClient, eventually, expect_json};
 
 const ALICE_DID: &str = "did:web:cotest-rsvp-alice.example";
 const BOB_DID: &str = "did:web:cotest-rsvp-bob.example";
-const CALENDAR_STRAND_ID: &str = "ak:strand:01904100-0000-7000-8000-00000000ca01";
+const CALENDAR_STRAND_ID: &str = "ak:strand:01904100-0000-8000-8000-00000000ca01";
 
 fn calendar_subtree() -> Value {
     json!({

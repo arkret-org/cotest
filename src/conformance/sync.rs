@@ -61,15 +61,15 @@ fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
 
     let vector = required_field(value, "actor_frontier_digest")?;
     let realm_id = arkret_identifiers::RealmId::new(
-        "ak:realm:01904100-0000-7000-8000-000000000001".to_owned(),
+        "ak:realm:01904100-0000-8000-8000-000000000001".to_owned(),
     )?;
     let actor_id = arkret_identifiers::Did::new("did:web:alice.example".to_owned())?;
     let event_ids = vec![
         arkret_identifiers::EventId::new(
-            "ak:event:01904100-0000-7000-8000-000000000001".to_owned(),
+            "ak:event:01904100-0000-8000-8000-000000000001".to_owned(),
         )?,
         arkret_identifiers::EventId::new(
-            "ak:event:01904100-0000-7000-8000-000000000002".to_owned(),
+            "ak:event:01904100-0000-8000-8000-000000000002".to_owned(),
         )?,
     ];
     let digest = arkret_models_collaboration::event_sync::RealmActorFrontierView::compute_digest(

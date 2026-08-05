@@ -30,8 +30,8 @@ use url::Url;
 use crate::harness::{ArkretServer, expect_json};
 
 pub(crate) const TEST_PRINCIPAL_SIGNING_KEY_SEED: [u8; 32] = [0x51; 32];
-const PCR_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a10";
-const DEVICE_AUTHORIZE_EVENT_ID: &str = "ak:event:01904100-0000-7000-8000-fedc00000a11";
+const PCR_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-8000-8000-fedc00000a10";
+const DEVICE_AUTHORIZE_EVENT_ID: &str = "ak:event:01904100-0000-8000-8000-fedc00000a11";
 
 fn registry_digest() -> arkret_identifiers::Hash {
     arkret::current_capability_action_registry_digest()

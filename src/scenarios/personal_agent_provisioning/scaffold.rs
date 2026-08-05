@@ -79,7 +79,7 @@ pub async fn personal_agent_provisioning_run() -> Result<()> {
             "agent key_id must be a DID URL verification method on the agent principal"
         ));
     }
-    EventId::new("ak:event:01999999-0000-7000-8000-000000000004".to_owned())
+    EventId::new("ak:event:01999999-0000-8000-8000-000000000004".to_owned())
         .map_err(|e| anyhow!("accountability_grant_ref EventId construction: {e}"))?;
 
     // (d) ill-formed DID / typed-ids MUST be rejected. This is the

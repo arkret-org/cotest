@@ -111,7 +111,7 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
     // as a defence-in-depth signal that the production server never
     // exposes the proof path to unauthenticated clients.
     let actor = "did:web:alice.cotest.local";
-    let realm_id = "ak:realm:0196419b-0000-7000-8000-000000000013";
+    let realm_id = "ak:realm:0196419b-0000-8000-8000-000000000013";
     let mut event = crate::harness::event_envelope(
         actor,
         realm_id,

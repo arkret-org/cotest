@@ -146,8 +146,8 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         alice_did,
         alice_token,
         service_id: server.service_id().to_owned(),
-        realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:01999999-0000-8000-8000-000000000451".to_owned(),
+        space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
     };
 
     let contract_path = locate_inkson_contract(&root)?
@@ -226,8 +226,8 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
         service_id: "did:web:soland.mock-parity-smoke.local".to_owned(),
-        realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:01999999-0000-8000-8000-000000000451".to_owned(),
+        space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
     };
     assert_mock_contract_format(&contract_path, &fixture, &ctx)
 }
@@ -247,8 +247,8 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
         service_id: "did:web:soland.mock-parity-gate.local".to_owned(),
-        realm_id: "ak:realm:01999999-0000-7000-8000-000000000451".to_owned(),
-        space_id: "ak:space:01999999-0000-7000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:01999999-0000-8000-8000-000000000451".to_owned(),
+        space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
     };
     assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)
 }
@@ -715,17 +715,17 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>
     Ok(match case.body_template.as_deref() {
         Some("realm_create_event") => Some(realm_create_event(
             ctx,
-            "ak:realm:01999999-0000-7000-8000-000000000451",
+            "ak:realm:01999999-0000-8000-8000-000000000451",
             "Mock parity setup",
         )?),
         Some("realm_create_event_2") => Some(realm_create_event(
             ctx,
-            "ak:realm:01999999-0000-7000-8000-000000000452",
+            "ak:realm:01999999-0000-8000-8000-000000000452",
             "Mock Parity Realm",
         )?),
         Some("realm_create_event_3") => Some(realm_create_event(
             ctx,
-            "ak:realm:01999999-0000-7000-8000-000000000453",
+            "ak:realm:01999999-0000-8000-8000-000000000453",
             "Mock Parity Space",
         )?),
         Some("typing_signal") => {
@@ -752,7 +752,7 @@ fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>
                     "scheme": "ak.signal_exporter_aead.v1",
                     "key_ref": {
                         "algorithm": "MLS-EXPORTER-AEAD",
-                        "group_state_ref": "ak:event:01999999-0000-7000-8000-000000000451"
+                        "group_state_ref": "ak:event:01999999-0000-8000-8000-000000000451"
                     },
                     "purpose": "ak.signal.v1",
                     "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
@@ -833,10 +833,11 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
     realm.federation_policy = Some(serde_json::from_value(json!("open"))?);
     realm.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-22T10:00:00.000Z")?
         .with_timezone(&chrono::Utc);
+    // R3.1: the create payload carries no object id.
+    realm.id = None;
     let payload = arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm);
-    let events = cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
+    let (_derived_realm_id, events) = cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
         &ctx.alice_did,
-        realm_id,
         payload,
         None,
         MOCK_PARITY_ALICE_SIGNING_SEED,

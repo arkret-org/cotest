@@ -84,11 +84,11 @@
           "state_root": "sha256:eee1111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
               "kind": "conflict",
               "concurrent_heads": [
-                "ak:event:01970e58-0000-7000-8000-000000000010",
-                "ak:event:01970e58-0000-7000-8000-000000000011"
+                "ak:event:01970e58-0000-8000-8000-000000000010",
+                "ak:event:01970e58-0000-8000-8000-000000000011"
               ]
             }
           ]
@@ -112,11 +112,11 @@
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
-              "ak:event:01970e58-0000-7000-8000-000000000010",
-              "ak:event:01970e58-0000-7000-8000-000000000011"
+              "ak:event:01970e58-0000-8000-8000-000000000010",
+              "ak:event:01970e58-0000-8000-8000-000000000011"
             ]
           }
         ]
@@ -130,11 +130,11 @@
         "state_root": "sha256:9991111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [
           {
-            "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+            "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
-              "ak:event:01970e58-0000-7000-8000-000000000010",
-              "ak:event:01970e58-0000-7000-8000-000000000011"
+              "ak:event:01970e58-0000-8000-8000-000000000010",
+              "ak:event:01970e58-0000-8000-8000-000000000011"
             ]
           }
         ],
@@ -157,9 +157,9 @@
           "state_root": "sha256:8a81111111111111111111111111111111111111111111111111111111111111",
           "bottom_diagnostics": [
             {
-              "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-7a8a-9a4b-8857991142f9",
+              "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
               "kind": "conflict",
-              "concurrent_heads": ["ak:event:01970e58-0000-7000-8000-000000000020"]
+              "concurrent_heads": ["ak:event:01970e58-0000-8000-8000-000000000020"]
             }
           ]
         }

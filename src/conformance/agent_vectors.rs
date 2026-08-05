@@ -214,8 +214,8 @@ pub fn run_agent_provision_vector() -> Result<()> {
             "arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING spelling drifted: accountability_grant_missing"
         );
     }
-    let realm = "ak:realm:019a7360-0000-7000-8000-000000000000";
-    let other_realm = "ak:realm:019a7360-0000-7000-8000-000000000001";
+    let realm = "ak:realm:019a7360-0000-8000-8000-000000000000";
+    let other_realm = "ak:realm:019a7360-0000-8000-8000-000000000001";
     let ceiling_actions = ["ak.event.read", "ak.message.create", "ak.reaction.add"];
     let ceiling_resources = [
         ("operation", None, Some("ak.self.events.stream.subscribe")),
@@ -616,8 +616,8 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
 pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     let agent = "did:webvh:z6mkagent:agent.example";
     let controller = "did:webvh:z6mkcontroller:controller.example";
-    let agent_pcr = "ak:realm:01964137-0000-7000-8000-000000000020";
-    let controller_pcr = "ak:realm:01964137-0000-7000-8000-000000000021";
+    let agent_pcr = "ak:realm:01964137-0000-8000-8000-000000000020";
+    let controller_pcr = "ak:realm:01964137-0000-8000-8000-000000000021";
     if agent_pcr == controller_pcr {
         bail!("managed Agent reused the controller PCR");
     }
@@ -639,7 +639,7 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     let authored = serde_json::json!({
         "actor_id": agent,
         "executed_by": controller,
-        "authorization_ref": "ak:event:01964137-0000-7000-8000-000000000022"
+        "authorization_ref": "ak:event:01964137-0000-8000-8000-000000000022"
     });
     if authored["actor_id"] != agent
         || authored["executed_by"] != controller
@@ -738,13 +738,13 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "accountable_principal_id": "did:web:alice.example",
         "agent_key_scope": {
             "actions": ["ak.event.read"],
-            "resources": [{"kind": "realm", "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001"}]
+            "resources": [{"kind": "realm", "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001"}]
         },
         "audience": ["did:web:soland.example"],
         "issued_at": "2026-07-12T00:00:00.000Z",
         "approval_evidence": {
             "kind": "approval_event",
-            "evidence_ref": "ak:event:01990000-0000-7000-8000-000000000001"
+            "evidence_ref": "ak:event:01990000-0000-8000-8000-000000000001"
         }
     });
     let decoded: arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload =
@@ -1138,7 +1138,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
 
 const HUMAN_APPROVAL_RUNNER: &str =
     "cotest::conformance::agent_vectors::run_agent_human_approval_required_vector";
-const ACCEPTED_APPROVAL_EVENT_REF: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
+const ACCEPTED_APPROVAL_EVENT_REF: &str = "ak:event:0196419b-0000-8000-8000-000000000001";
 
 fn validate_human_approval_details_schema(details: &Value) -> Result<()> {
     let document = super::load_artifact_json("schemas/agent-operations.schema.json")?;

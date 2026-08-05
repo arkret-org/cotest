@@ -79,7 +79,7 @@ fn vectors() -> Vec<CanonicalVector> {
             payload: json!({
                 "actor_id": "did:web:alice.example",
                 "event_id": "ak:event:01970e589d21-0001-a13f9c2e",
-                "realm_id": "ak:realm:01904100-0000-7000-8000-668e2181b41d",
+                "realm_id": "ak:realm:01904100-0000-8000-8000-668e2181b41d",
                 "kind": "ak.message.create",
                 "hlc": "01970e589d21-0001-a13f9c2e",
                 "payload": {
@@ -87,7 +87,7 @@ fn vectors() -> Vec<CanonicalVector> {
                         "kind": "ak.content.text",
                         "body": "hello"
                     },
-                    "strand_id": "ak:strand:01904100-0000-7000-8000-6c663fa0205f",
+                    "strand_id": "ak:strand:01904100-0000-8000-8000-6c663fa0205f",
                     "track_name": "discussion",
                 },
                 "schema_version": 1,
@@ -296,11 +296,11 @@ fn pinned_r3_2_inputs() -> (
         RosterHandleClaimDigestEntry,
     };
 
-    let realm = RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").unwrap();
+    let realm = RealmId::new("ak:realm:01904100-0000-8000-8000-000000000001").unwrap();
     let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
     let events = vec![
         EffectiveIdentityEntry {
-            event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000a01").unwrap(),
+            event_id: EventId::new("ak:event:01904100-0000-8000-8000-000000000a01").unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -308,7 +308,7 @@ fn pinned_r3_2_inputs() -> (
             .unwrap(),
         },
         EffectiveIdentityEntry {
-            event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000a02").unwrap(),
+            event_id: EventId::new("ak:event:01904100-0000-8000-8000-000000000a02").unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:2222222222222222222222222222222222222222222222222222222222222222",

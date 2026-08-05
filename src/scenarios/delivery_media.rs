@@ -12,7 +12,7 @@ use crate::scenarios::identity_test_support::{
     actor_did_for_service, authorize_device_public_key, signed_keys_upload_body,
 };
 
-const BLOB_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-00000000d101";
+const BLOB_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-00000000d101";
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("delivery-keys").await?;
@@ -546,8 +546,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
             >(json!({
-                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+                "target_ref": "ak:event:0196419b-0000-8000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:alice.example"
             }))?),
@@ -563,8 +563,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
             >(json!({
-                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+                "target_ref": "ak:event:0196419b-0000-8000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             }))?),
@@ -580,8 +580,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
             >(json!({
-                "realm_id": "ak:realm:0196419b-0000-7000-8000-000000000000",
-                "target_ref": "ak:event:0196419b-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+                "target_ref": "ak:event:0196419b-0000-8000-8000-000000000001",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             }))?),

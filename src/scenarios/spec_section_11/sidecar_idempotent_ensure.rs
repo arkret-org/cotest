@@ -27,7 +27,7 @@ fn derive_sidecar_id(controller_id: &str, realm_id: &str) -> Result<String> {
 
 pub async fn sidecar_idempotent_ensure_run() -> Result<()> {
     let controller_id = "did:web:controller.example.com";
-    let realm_id = "ak:realm:01999999-0000-7000-8000-00000000c001";
+    let realm_id = "ak:realm:01999999-0000-8000-8000-00000000c001";
     let first = derive_sidecar_id(controller_id, realm_id)?;
     let second = derive_sidecar_id(controller_id, realm_id)?;
     if first != second {
@@ -36,7 +36,7 @@ pub async fn sidecar_idempotent_ensure_run() -> Result<()> {
     SidecarId::new(first.clone())?;
     if derive_sidecar_id(
         controller_id,
-        "ak:realm:01999999-0000-7000-8000-00000000c002",
+        "ak:realm:01999999-0000-8000-8000-00000000c002",
     )? == first
     {
         return Err(anyhow!("distinct Realms collided to one Sidecar id"));

@@ -79,9 +79,9 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         display_name: `Alice Allowed Agent ${stamp}`,
         agent_slug: `allowed-${stamp.toString(36)}`,
         direct_conversation: {
-          realm_id: "ak:realm:01964137-0000-7000-8000-0000000000b1",
-          main_strand_id: "ak:strand:01964137-0000-7000-8000-0000000000b2",
-          binding_event_ref: "ak:event:01964137-0000-7000-8000-0000000000b3",
+          realm_id: "ak:realm:01964137-0000-8000-8000-0000000000b1",
+          main_strand_id: "ak:strand:01964137-0000-8000-8000-0000000000b2",
+          binding_event_ref: "ak:event:01964137-0000-8000-8000-0000000000b3",
           state: "active",
         },
       };

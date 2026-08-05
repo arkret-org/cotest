@@ -91,7 +91,7 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
 fn strand_payload(realm_id: &str, suffix: &str) -> Value {
     json!({
         "object": {
-            "id": format!("ak:strand:01904100-0000-7000-8000-{suffix}"),
+            "id": format!("ak:strand:01904100-0000-8000-8000-{suffix}"),
             "schema": "ak.schema.strand.v1",
             "realm_id": realm_id,
             "tracks": {"discussion": {"enabled": true, "is_primary": true}},

@@ -395,23 +395,17 @@ impl TestActorClient {
     }
 
     pub async fn create_realm_with(&self, body: Value) -> Result<Value> {
-        let realm_id = body
-            .get("realm_id")
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned)
-            .unwrap_or_else(|| next_typed_id("realm"));
+        // Only a construction placeholder: the create payload drops the object
+        // id (R3.1) and the real Realm id comes back out of the genesis Event.
+        let placeholder_realm_id = next_typed_id("realm");
+        let (payload, plaintext_visible_services) =
+            realm_create_payload(&self.actor, &self.service_id, &placeholder_realm_id, &body)?;
+        let (realm_id, events) =
+            realm_bootstrap_event_batch(&self.actor, payload, plaintext_visible_services)?;
         self.controlled_realms
             .lock()
             .expect("cotest controlled-Realm set is not poisoned")
             .insert(realm_id.clone());
-        let (payload, plaintext_visible_services) =
-            realm_create_payload(&self.actor, &self.service_id, &realm_id, &body)?;
-        let events = realm_bootstrap_event_batch(
-            &self.actor,
-            &realm_id,
-            payload,
-            plaintext_visible_services,
-        )?;
         let events = events
             .into_iter()
             .map(arkret_wire::EventInitialSubmission::online)

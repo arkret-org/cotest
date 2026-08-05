@@ -426,7 +426,7 @@ fn member(
 ) -> Result<ProposalMemberReceipt> {
     let received_at = received_at.parse()?;
     let mut member = ProposalMemberReceipt {
-        realm_id: RealmId::new("ak:realm:01904100-0000-7000-8000-65c7feb295d7")?,
+        realm_id: RealmId::new("ak:realm:01904100-0000-8000-8000-65c7feb295d7")?,
         proposal_digest: hash('c'),
         received_at,
         decision_due_at: decision_due_at.parse()?,

@@ -198,7 +198,7 @@ fn ts(value: &str) -> DateTime<Utc> {
 }
 
 fn realm_id() -> RealmId {
-    RealmId::new("ak:realm:019a7360-0000-7000-8000-000000000000").unwrap()
+    RealmId::new("ak:realm:019a7360-0000-8000-8000-000000000000").unwrap()
 }
 
 fn call_id() -> CallId {
@@ -206,7 +206,7 @@ fn call_id() -> CallId {
 }
 
 fn start_event_id() -> EventId {
-    EventId::new("ak:event:019a7360-0000-7000-8000-000000000003").unwrap()
+    EventId::new("ak:event:019a7360-0000-8000-8000-000000000003").unwrap()
 }
 
 fn hash(ch: char) -> Hash {

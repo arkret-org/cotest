@@ -274,6 +274,9 @@ pub(crate) fn realm_create_payload(
         realm.sync_endpoints = serde_json::from_value(sync_endpoints.clone())?;
     }
     realm.validate_kind_invariants()?;
+    // R3.1: a create payload carries no object id — the Realm id is derived
+    // from the genesis Event (spec realm-and-space.md section 2.5.0).
+    realm.id = None;
     Ok((
         arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm),
         plaintext_visible_services,

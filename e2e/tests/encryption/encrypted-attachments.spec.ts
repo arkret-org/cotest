@@ -33,7 +33,7 @@ test.describe("encrypted attachments", () => {
   }) => {
     const uploadResp = await request.post(`${solandBaseUrl()}/_arkret/self/blob/upload`, {
       headers: {
-        "x-arkret-realm-id": "ak:realm:0196419b-0000-7000-8000-00000000prob",
+        "x-arkret-realm-id": "ak:realm:0196419b-0000-8000-8000-00000000prob",
         "x-arkret-content-digest":
           "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       },

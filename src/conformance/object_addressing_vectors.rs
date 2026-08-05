@@ -73,12 +73,12 @@ pub const ALL_OBJECT_ADDRESSING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_OA_RESOLVE_TARGET_REALM_PREVIEW,
 ];
 
-// ── Pinned fixture identifiers (bare lowercase uuidv7) ───────────────────────
+// ── Pinned fixture identifiers (bare lowercase content-bound uuidv8) ────────
 
-const R: &str = "01904100-0000-7000-8000-0000000000aa";
-const F: &str = "01904100-0000-7000-8000-0000000000bb";
-const F2: &str = "01904100-0000-7000-8000-0000000000cc";
-const M: &str = "01904100-0000-7000-8000-0000000000dd";
+const R: &str = "01904100-0000-8000-8000-0000000000aa";
+const F: &str = "01904100-0000-8000-8000-0000000000bb";
+const F2: &str = "01904100-0000-8000-8000-0000000000cc";
+const M: &str = "01904100-0000-8000-8000-0000000000dd";
 const VIA: &str = "did:web:relay.example";
 const LANDING: &str = "https://share.arkret.example";
 
@@ -359,8 +359,8 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     // omitted form, not the null form.
     let digest = target_digest(&desc).map_err(|e| anyhow!("digest: {e}"))?;
 
-    let omitted_bytes = b"{\"address_link_kind\":\"reference\",\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
-    let null_bytes = b"{\"strand_id\":null,\"address_link_kind\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:01904100-0000-7000-8000-0000000000aa\"}";
+    let omitted_bytes = b"{\"address_link_kind\":\"reference\",\"realm_id\":\"ak:realm:01904100-0000-8000-8000-0000000000aa\"}";
+    let null_bytes = b"{\"strand_id\":null,\"address_link_kind\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:01904100-0000-8000-8000-0000000000aa\"}";
     let omitted_expected = super::sha256_prefixed(omitted_bytes);
     let null_expected = super::sha256_prefixed(null_bytes);
 
@@ -499,15 +499,15 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             "object_kind": "strand",
             "title": "Launch planning",
             "as_of": "2026-05-27T00:00:00.000Z",
-            "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
+            "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e1"],
             "policy_revision": "rev-7",
             "stale": false
         },
         "join_rule": "knock",
         "as_of": "2026-05-27T00:00:00.000Z",
         "source_refs": [
-            "ak:event:01904100-0000-7000-8000-0000000000e1",
-            "ak:event:01904100-0000-7000-8000-0000000000e2"
+            "ak:event:01904100-0000-8000-8000-0000000000e1",
+            "ak:event:01904100-0000-8000-8000-0000000000e2"
         ],
         "join_candidates": [
             {
@@ -519,7 +519,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 0,
                 "source": "directory_ingest",
-                "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
+                "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e1"],
                 "as_of": "2026-05-27T00:00:00.000Z",
                 "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
@@ -535,7 +535,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 1,
                 "source": "directory_ingest",
-                "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e2"],
+                "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e2"],
                 "as_of": "2026-05-27T00:00:00.000Z",
                 "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
@@ -604,7 +604,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         },
         "join_rule": "invite",
         "as_of": "2026-05-27T00:00:00.000Z",
-        "source_refs": ["ak:event:01904100-0000-7000-8000-0000000000e1"],
+        "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e1"],
         "join_candidates": [],
         "policy_revision": "rev-1"
     });

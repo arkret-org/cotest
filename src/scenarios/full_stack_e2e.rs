@@ -73,10 +73,10 @@ const BOB_DID: &str = "did:web:bob.acme.example";
 const ALICE_HANDLE: &str = "alice:acme.example";
 const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
 const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
-const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-7000-8000-fullstacke2e1";
-const STABLE_STRAND_ID: &str = "ak:strand:0196419b-0000-7000-8000-fullstackflow";
-const STABLE_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-fullstackevt0";
-const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-7000-8000-000000000001";
+const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-fullstacke2e1";
+const STABLE_STRAND_ID: &str = "ak:strand:0196419b-0000-8000-8000-fullstackflow";
+const STABLE_EVENT_ID: &str = "ak:event:0196419b-0000-8000-8000-fullstackevt0";
+const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-8000-8000-000000000001";
 
 /// Opaque push pseudonym used by the blind-wakeup mock. Matches the
 /// `ak:pseudonym:push:<token>` shape required by the sanitizer.
@@ -646,9 +646,9 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(
-                "ak:event:0196419b-0000-7000-8000-acceptance01".to_owned(),
+                "ak:event:0196419b-0000-8000-8000-acceptance01".to_owned(),
             ),
-            policy_event_ref: Some("ak:event:0196419b-0000-7000-8000-policyref001".to_owned()),
+            policy_event_ref: Some("ak:event:0196419b-0000-8000-8000-policyref001".to_owned()),
         },
         issuer_service_id: principal,
         audience: TARGET_REALM_ID.to_owned(),

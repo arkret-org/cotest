@@ -43,8 +43,8 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.move_item.accept.v1",
             "ak.container.move_item",
             json!({
-                "item_ref": "ak:morph:01904100-0000-7000-8000-000000000201",
-                "container_ref": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "item_ref": "ak:morph:01904100-0000-8000-8000-000000000201",
+                "container_ref": "ak:morph:01904100-0000-8000-8000-000000000101",
                 "relation_kind": "contains",
                 "rank": "A"
             }),
@@ -54,8 +54,8 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.move_item.legacy_rejected.v1",
             "ak.container.move_item",
             json!({
-                "object_ref": "ak:morph:01904100-0000-7000-8000-000000000201",
-                "to_container_id": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "object_ref": "ak:morph:01904100-0000-8000-8000-000000000201",
+                "to_container_id": "ak:morph:01904100-0000-8000-8000-000000000101",
                 "relation_kind": "contains",
                 "rank": "A"
             }),
@@ -65,11 +65,11 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.rebalance.accept.v1",
             "ak.container.rebalance",
             json!({
-                "container_ref": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "container_ref": "ak:morph:01904100-0000-8000-8000-000000000101",
                 "relation_kind": "contains",
                 "positions": [
-                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000201", "rank": "A"},
-                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000202", "rank": "B"}
+                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000201", "rank": "A"},
+                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000202", "rank": "B"}
                 ],
                 "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             }),
@@ -79,11 +79,11 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.rebalance.duplicate_rank_rejected.v1",
             "ak.container.rebalance",
             json!({
-                "container_ref": "ak:morph:01904100-0000-7000-8000-000000000101",
+                "container_ref": "ak:morph:01904100-0000-8000-8000-000000000101",
                 "relation_kind": "contains",
                 "positions": [
-                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000201", "rank": "A"},
-                    {"item_ref": "ak:morph:01904100-0000-7000-8000-000000000202", "rank": "A"}
+                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000201", "rank": "A"},
+                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000202", "rank": "A"}
                 ],
                 "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             }),
@@ -93,7 +93,7 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.realm.notary.accept.v1",
             "ak.realm.notary",
             json!({
-                "realm_id": "ak:realm:01904100-0000-7000-8000-cfc039892036",
+                "realm_id": "ak:realm:01904100-0000-8000-8000-cfc039892036",
                 "notary": {"kind": "single_did", "did": "did:web:notary.example"}
             }),
             true,
@@ -168,7 +168,7 @@ pub fn run_deprecated_event_alias_suite() -> Result<()> {
                 "01970e589d21-0001-a13f9c2e",
                 "2026-05-02T00:00:00.000Z",
                 json!({
-                    "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
+                    "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
                     "body": "legacy alias"
                 }),
             );
@@ -428,7 +428,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
             "content": {
                 "kind": "ak.content.text",
                 "body": "hello"
@@ -455,7 +455,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
             "content": {
                 "kind": "ak.content.text",
                 "body": "a"
@@ -468,7 +468,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
             "content": {
                 "kind": "ak.content.text",
                 "body": "b"
@@ -490,7 +490,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
             "content": {
                 "kind": "ak.content.text",
                 "body": "future"
@@ -516,7 +516,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
             "content": {
                 "kind": "ak.content.text",
                 "body": "backdated"
@@ -540,14 +540,14 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d24-0001-a13f9c2e",
         "2026-05-02T00:00:03.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-7000-8000-000000000000",
+            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
             "content": {
                 "kind": "ak.content.text",
                 "body": "legacy field"
             }
         }),
     );
-    unknown_field_event["space_id"] = json!("ak:space:019a7360-0000-7000-8000-000000000000");
+    unknown_field_event["space_id"] = json!("ak:space:019a7360-0000-8000-8000-000000000000");
     let unknown_field_decision =
         validate_event_envelope(&unknown_field_event, event_kinds, &context)?;
     assert_event_decision(
@@ -1136,16 +1136,16 @@ fn sample_envelope_event(
     // Synthetic events emit the active spec shape directly (top-level fields
     // restricted to the canonical envelope property set — no `schema`).
     let mut event = json!({
-        "event_id": "ak:event:019a6b10-0000-7000-8000-000000000000",
+        "event_id": "ak:event:019a6b10-0000-8000-8000-000000000000",
         "kind": kind,
-        "realm_id": "ak:realm:019a7360-0000-7000-8000-000000000000",
+        "realm_id": "ak:realm:019a7360-0000-8000-8000-000000000000",
         "actor_id": "did:web:alice.example",
         "actor_seq": actor_seq,
         "created_at": created_at,
         "hlc": hlc,
         "prev_refs": [],
         "refs": [{
-            "id": "ak:event:5139099c-b114-7e4c-8149-a8048971a269",
+            "id": "ak:event:5139099c-b114-8e4c-8149-a8048971a269",
             "role": "reply_to",
             "critical": false
         }],

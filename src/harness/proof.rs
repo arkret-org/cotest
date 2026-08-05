@@ -231,10 +231,10 @@ mod tests {
     #[test]
     fn canonical_event_digest_uses_sdk_typed_event_wire_shape() {
         let event = json!({
-            "event_id": "ak:event:019f3b1c-76c8-7000-8000-000000000001",
+            "event_id": "ak:event:019f3b1c-86c8-8000-8000-000000000001",
             "kind": "ak.message.create",
-            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001"},
+            "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001"},
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00.000Z",
@@ -247,8 +247,8 @@ mod tests {
             },
             "payload": {
                 "content": {"kind": "ak.content.text", "body": "hello"},
-                "message_id": "ak:message:019f3b1c-76c8-7000-8000-000000000001",
-                "strand_id": "ak:strand:019f3b1c-76c8-7000-8000-000000000001"
+                "message_id": "ak:message:019f3b1c-86c8-8000-8000-000000000001",
+                "strand_id": "ak:strand:019f3b1c-86c8-8000-8000-000000000001"
             },
             "proofs": [{
                 "kind": "detached_jws",
@@ -276,8 +276,8 @@ mod tests {
     fn raw_signal_envelope_can_be_signed_and_verifies() {
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]);
         let mut envelope = json!({
-            "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-76c8-7000-8000-000000000001"},
+            "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001"},
             "sender_actor_id": "did:web:alice.example",
             "sender_device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
             "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),
@@ -288,7 +288,7 @@ mod tests {
                 "scheme": "ak.signal_exporter_aead.v1",
                 "key_ref": {
                     "algorithm": "MLS-EXPORTER-AEAD",
-                    "group_state_ref": "ak:event:019f3b1c-76c8-7000-8000-000000000002"
+                    "group_state_ref": "ak:event:019f3b1c-86c8-8000-8000-000000000002"
                 },
                 "purpose": "ak.signal.v1",
                 "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",

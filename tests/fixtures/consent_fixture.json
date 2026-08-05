@@ -9,7 +9,7 @@
       "comment": "Holder grants consent for `invite` scope to peer; the or-set cell join contains (bob, invite). The subsequent invite Move's `require_consent` precondition resolves true and Move is accepted.",
       "moves": [
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000001",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000001",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
@@ -22,7 +22,7 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000002",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000002",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -43,7 +43,7 @@
       "comment": "Causal remove of the prior grant op (or-set or_set_remove referencing the grant move_id). After Move 2, the cell join no longer contains (bob, invite); Move 3's `consent_active` precondition resolves false and the Move is rejected with consent_required.",
       "moves": [
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000010",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000010",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
@@ -56,20 +56,20 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000011",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000011",
           "kind": "ak.consent.revoke",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_remove",
-              "removes": ["ak:event:01970e58-0000-7000-8000-000000000010"]
+              "removes": ["ak:event:01970e58-0000-8000-8000-000000000010"]
             }
           ],
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000012",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000012",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -90,7 +90,7 @@
       "comment": "scope=any tag in the or-set covers all consent scopes (invite, direct_message, voice_call, video_call, presence). A call invite under any-scope is accepted without an explicit voice_call tag.",
       "moves": [
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000020",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000020",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
@@ -103,7 +103,7 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000021",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000021",
           "kind": "ak.call.invite",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -124,7 +124,7 @@
       "comment": "Pseudonym DID peers are valid or-set tag values. Cell join is identity-provenance-agnostic.",
       "moves": [
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000030",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000030",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
@@ -140,7 +140,7 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000031",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000031",
           "kind": "ak.message.create",
           "actor_id": "did:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
           "preconditions": [
@@ -161,7 +161,7 @@
       "comment": "When the receiving Space pins the require_consent component, the invite Move's `consent_active` precondition fails closed because the holder's or-set has no matching tag. Move is rejected with consent_required.",
       "moves": [
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000040",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000040",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [
@@ -182,7 +182,7 @@
       "comment": "Causal or-set: a fresh grant Move after a revoke creates a new tag op_id distinct from the previously-removed op. The cell join now contains the new tag, and the invite is accepted again.",
       "moves": [
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000050",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000050",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
@@ -195,20 +195,20 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000051",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000051",
           "kind": "ak.consent.revoke",
           "actor_id": "did:web:alice.example",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
               "op": "or_set_remove",
-              "removes": ["ak:event:01970e58-0000-7000-8000-000000000050"]
+              "removes": ["ak:event:01970e58-0000-8000-8000-000000000050"]
             }
           ],
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000052",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000052",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
           "effects": [
@@ -221,7 +221,7 @@
           "expected": { "outcome": "accept" }
         },
         {
-          "move_id": "ak:event:01970e58-0000-7000-8000-000000000053",
+          "move_id": "ak:event:01970e58-0000-8000-8000-000000000053",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
           "preconditions": [

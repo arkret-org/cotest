@@ -31,7 +31,7 @@ pub async fn act_on_behalf_attribution_run() -> Result<()> {
     let executed_by = Did::new("did:web:agent.example.com".to_owned())
         .map_err(|e| anyhow!("executed_by DID: {e}"))?;
     let authorization_ref =
-        EventId::new("ak:event:01999999-0000-7000-8000-00000000b005".to_owned())
+        EventId::new("ak:event:01999999-0000-8000-8000-00000000b005".to_owned())
             .map_err(|e| anyhow!("authorization_ref: {e}"))?;
     if !executed_by.as_str().starts_with("did:") {
         return Err(anyhow!("executed_by must be a DID"));

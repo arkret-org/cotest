@@ -96,9 +96,9 @@ pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
             "error-code-registry missing reason code reset_event_id_mismatch"
         ));
     }
-    let id_a = EventId::new("ak:event:01904100-0000-7000-8000-000000000001")
+    let id_a = EventId::new("ak:event:01904100-0000-8000-8000-000000000001")
         .map_err(|e| anyhow!("SDK rejected well-formed EventId a: {e}"))?;
-    let id_b = EventId::new("ak:event:01904100-0000-7000-8000-000000000002")
+    let id_b = EventId::new("ak:event:01904100-0000-8000-8000-000000000002")
         .map_err(|e| anyhow!("SDK rejected well-formed EventId b: {e}"))?;
     if id_a.as_str() == id_b.as_str() {
         return Err(anyhow!("EventId equality broke: a and b must be distinct"));

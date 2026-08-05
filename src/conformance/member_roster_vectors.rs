@@ -66,11 +66,11 @@ fn alice_subject() -> Result<Did> {
 }
 
 fn fake_realm() -> Result<RealmId> {
-    RealmId::new("ak:realm:01904100-0000-7000-8000-000000000001").map_err(|e| anyhow!("realm: {e}"))
+    RealmId::new("ak:realm:01904100-0000-8000-8000-000000000001").map_err(|e| anyhow!("realm: {e}"))
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
-    EventId::new(format!("ak:event:01904100-0000-7000-8000-{suffix:012x}"))
+    EventId::new(format!("ak:event:01904100-0000-8000-8000-{suffix:012x}"))
         .map_err(|e| anyhow!("invalid event id: {e}"))
 }
 
@@ -183,13 +183,13 @@ pub fn run_member_roster_shape_vector() -> Result<()> {
 /// such a frame as the complete member set.
 pub fn run_member_roster_limited_vector() -> Result<()> {
     let frame = json!({
-        "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
+        "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
         "members": [
             {
                 "actor_id": "did:web:alice.acme.example",
                 "membership": "join",
                 "identity_event_ids": [
-                    "ak:event:01904100-0000-7000-8000-00000000ea01"
+                    "ak:event:01904100-0000-8000-8000-00000000ea01"
                 ],
                 "member_display_state_digest":
                     "sha256:abababababababababababababababababababababababababababababababab"
@@ -216,7 +216,7 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
         );
     }
     let unlimited = json!({
-        "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
+        "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
         "members": []
     });
     if unlimited.get("members_limited").is_some() {
@@ -239,35 +239,35 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
         "membership": "join",
         "subject_id": "did:web:alice.principal.example",
         "identity_event_ids": [
-            "ak:event:01904100-0000-7000-8000-00000000ea01",
-            "ak:event:01904100-0000-7000-8000-00000000ea02"
+            "ak:event:01904100-0000-8000-8000-00000000ea01",
+            "ak:event:01904100-0000-8000-8000-00000000ea02"
         ],
         "member_display_state_digest":
             "sha256:abababababababababababababababababababababababababababababababab",
         "identity_events": [
             {
-                "event_id": "ak:event:01904100-0000-7000-8000-00000000ea01",
+                "event_id": "ak:event:01904100-0000-8000-8000-00000000ea01",
                 "kind": "ak.member.identity.update",
-                "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
-                    "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
+                    "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
                     "actor_id": "did:web:alice.acme.example",
                     "segment": "member_identity",
                     "identity_payload": {"member_identity": {"placeholder": "v1"}}
                 }
             },
             {
-                "event_id": "ak:event:01904100-0000-7000-8000-00000000ea02",
+                "event_id": "ak:event:01904100-0000-8000-8000-00000000ea02",
                 "kind": "ak.member.identity.update",
-                "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
+                "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
-                    "realm_id": "ak:realm:01904100-0000-7000-8000-000000000001",
+                    "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
                     "actor_id": "did:web:alice.acme.example",
                     "segment": "member_identity",
                     "replaces": [{
-                        "event_id": "ak:event:01904100-0000-7000-8000-00000000ea01",
+                        "event_id": "ak:event:01904100-0000-8000-8000-00000000ea01",
                         "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
                     }],
                     "identity_payload": {"member_identity": {"placeholder": "v2"}}

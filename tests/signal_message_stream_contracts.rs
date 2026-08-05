@@ -18,15 +18,15 @@ fn device() -> DeviceId {
 }
 
 fn realm() -> RealmId {
-    RealmId::new("ak:realm:01904100-0000-7000-8000-000000000004").unwrap()
+    RealmId::new("ak:realm:01904100-0000-8000-8000-000000000004").unwrap()
 }
 
 fn strand() -> StrandId {
-    StrandId::new("ak:strand:01904100-0000-7000-8000-000000000002").unwrap()
+    StrandId::new("ak:strand:01904100-0000-8000-8000-000000000002").unwrap()
 }
 
 fn event_id() -> EventId {
-    EventId::new("ak:event:01904100-0000-7000-8000-000000000003").unwrap()
+    EventId::new("ak:event:01904100-0000-8000-8000-000000000003").unwrap()
 }
 
 fn stream_id() -> MessageStreamId {

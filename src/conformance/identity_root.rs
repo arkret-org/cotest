@@ -225,7 +225,7 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
         device_status: Some(DeviceStatus::Active),
         enrollment_authority_binding: Some(authority.clone()),
         device_authorize_event_id: Some(EventId::new(
-            "ak:event:01904100-0000-7000-8000-000000000004",
+            "ak:event:01904100-0000-8000-8000-000000000004",
         )?),
         authorized_generation_ref: Some(non_empty("2-QmCurrent")?),
         ..QueryDeviceRecord::default()
@@ -268,7 +268,7 @@ fn validate_bootstrap_helpers() -> Result<()> {
                 DID_INCEPTION_REF_ROLE,
             ),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
-            event_id: EventId::new("ak:event:01904100-0000-7000-8000-000000000001")?,
+            event_id: EventId::new("ak:event:01904100-0000-8000-8000-000000000001")?,
             created_at,
             hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         },
@@ -309,7 +309,7 @@ fn validate_bootstrap_helpers() -> Result<()> {
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         serde_json::to_value(payload)?,
     )?;
-    authorize.event_id = EventId::new("ak:event:01904100-0000-7000-8000-000000000002")?;
+    authorize.event_id = EventId::new("ak:event:01904100-0000-8000-8000-000000000002")?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
     authorize.executed_by = Some(authority.authority_did.clone());
@@ -362,7 +362,7 @@ fn validate_reanchor_helpers() -> Result<()> {
         "previous_device_generation": "1-QmPrevious",
         "new_device_generation": "2-QmCurrent",
         "pre_fence_basis": null,
-        "replacement_authorize_event_id": "ak:event:01904100-0000-7000-8000-000000000003",
+        "replacement_authorize_event_id": "ak:event:01904100-0000-8000-8000-000000000003",
         "replacement_authorize_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     });
     let payload: DeviceReanchorPayload = serde_json::from_value(value.clone())?;

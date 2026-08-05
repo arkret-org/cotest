@@ -43,12 +43,12 @@ pub fn ingest_filter(scope: &ScopeRef) -> DirectoryFilterDecision {
 }
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("ak:realm:0196419b-0000-7000-8000-000000000601".to_owned())
+    RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000601".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
 fn circle_id() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-7000-8000-000000000602".to_owned())
+    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000602".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 

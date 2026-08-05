@@ -282,7 +282,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 }
 
 async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
-    let realm_id = "ak:realm:01904100-0000-7000-8000-c011ab000001".to_owned();
+    let realm_id = "ak:realm:01904100-0000-8000-8000-c011ab000001".to_owned();
     let created = alice
         .create_realm_with(json!({
             "realm_id": &realm_id,

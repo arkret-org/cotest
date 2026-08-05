@@ -136,8 +136,8 @@ pub fn cross_signing_recovery_create_request_for(
     let coordinator = Did::new(service_id.to_owned())?;
     let principal = Did::new(principal_id.to_owned())?;
     let authorize_event_id =
-        EventId::new("ak:event:01975510-0000-7000-8000-0000000000f3".to_owned())?;
-    let list_event_id = EventId::new("ak:event:01975510-0000-7000-8000-0000000000f4".to_owned())?;
+        EventId::new("ak:event:01975510-0000-8000-8000-0000000000f3".to_owned())?;
+    let list_event_id = EventId::new("ak:event:01975510-0000-8000-8000-0000000000f4".to_owned())?;
     let request = EventsSubmitBatchRequestBody {
         events: vec![
             event_submission(&principal, authorize_event_id, "ak.device.authorize", "f5")?,
@@ -168,7 +168,7 @@ fn rotation_create_request(service_id: &str) -> Result<SecurityTransactionCreate
     let coordinator = Did::new(service_id.to_owned())?;
     let principal = Did::new(ACTOR.to_owned())?;
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
-    let revoke_event_id = EventId::new("ak:event:01975510-0000-7000-8000-0000000000b3".to_owned())?;
+    let revoke_event_id = EventId::new("ak:event:01975510-0000-8000-8000-0000000000b3".to_owned())?;
     let rotations = [
         (BackupRotationKind::SecretStorage, "c"),
         (BackupRotationKind::MlsHistory, "d"),
@@ -215,7 +215,7 @@ fn rotation_plan(
             ciphertext_digest: hash('7')?,
         }],
         active_series_event_id: EventId::new(format!(
-            "ak:event:01975510-0000-7000-8000-0000000000{suffix}4"
+            "ak:event:01975510-0000-8000-8000-0000000000{suffix}4"
         ))?,
         old_backups: vec![BackupObjectRef {
             backup_id: BackupId::new(format!(
