@@ -5,7 +5,12 @@ import { randomUUID, createHash } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
-import { authHeaders, canonicalTimestamp, uuidV7 } from "../../helpers/soland-api";
+import {
+  authHeaders,
+  canonicalJson,
+  canonicalTimestamp,
+  uuidV7,
+} from "../../helpers/soland-api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
@@ -182,12 +187,18 @@ async function putBackup(
   backupId: string,
   body: Record<string, unknown>,
 ) {
+  // Soland validates this body as a canonical JSON operation body and rejects
+  // anything that is not byte-for-byte canonical. A JS object literal keeps its
+  // insertion order through `JSON.stringify`, which is not key-sorted, so the
+  // body has to be serialized through the SDK's canonicalizer rather than
+  // handed to Playwright as an object.
   return await request.put(`${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`, {
     headers: {
       ...authHeaders(token),
+      "content-type": "application/json",
       "idempotency-key": `cotest-key-backup-${backupId}`,
     },
-    data: body,
+    data: canonicalJson(body),
   });
 }
 
