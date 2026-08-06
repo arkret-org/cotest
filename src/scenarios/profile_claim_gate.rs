@@ -55,12 +55,12 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
         "supported_profiles": ["ak.profile.core_event_store.v1"],
         "supported_operations": [
             "ak.server.query.describe",
-            "ak.self.events.query.describe",
+            "ak.self.events.read.describe",
             "ak.self.events.command.submit",
             "ak.self.events.resource.get",
-            "ak.self.events.query.resolve",
-            "ak.self.events.query.scan",
-            "ak.self.events.query.frontier"
+            "ak.self.events.read.resolve",
+            "ak.self.events.read.scan",
+            "ak.self.events.read.frontier"
         ],
         "supported_event_kinds": [
             "ak.space.create",
@@ -109,7 +109,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
         "supported_operations": [
             "ak.self.keys.keypackages.command.claim",
             "ak.self.keys.keypackages.command.consume",
-            "ak.self.events.query.scan",
+            "ak.self.events.read.scan",
         ],
         "supported_cells": [],
     });

@@ -62,7 +62,7 @@
         "interop_bridge_present": false,
         "client_can_call": [
           "ak.self.events.command.submit",
-          "ak.self.events.query.frontier",
+          "ak.self.events.read.frontier",
           "ak.self.account.stream.subscribe"
         ],
         "client_must_not_call": [

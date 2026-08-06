@@ -18,7 +18,7 @@
     },
     {
       "id": "events_list",
-      "operation_id": "ak.self.events.query.scan",
+      "operation_id": "ak.self.events.read.scan",
       "method": "GET",
       "path": "/_arkret/self/events?realms=${realm_id}&limit=20",
       "auth": "alice"

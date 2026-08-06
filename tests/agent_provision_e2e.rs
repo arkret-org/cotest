@@ -168,7 +168,7 @@ fn test_agent_requested_scope() -> arkret::AgentKeyScope {
 fn agent_runtime_service_actions() -> [&'static str; 8] {
     [
         "ak.self.events.stream.subscribe",
-        "ak.self.events.query.scan",
+        "ak.self.events.read.scan",
         "ak.self.events.command.submit",
         "ak.self.keys.keypackages.upload.create",
         "ak.self.keys.keypackages.command.consume",
