@@ -12,24 +12,33 @@
 //!   * with a durable PostgreSQL backend the declaration survives a full process restart.
 use anyhow::{Result, anyhow};
 use arkret_models_collaboration::governance::realm_governance::{
-    RealmLinkCreateRequestBody, RealmPolicyServerReplaceRequestBody,
+    RealmLinkCreateRequestBody, RealmPolicyServerDeleteRequestBody,
+    RealmPolicyServerReplaceRequestBody,
 };
+use arkret_wire::EventInitialSubmission;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, expect_json,
+    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, event_envelope,
+    event_envelope_with_preconditions, expect_json, head_eq_precondition,
 };
+
+/// The one cell every `ak.realm.policy_server` write moves.
+const POLICY_SERVER_CELL: &str = "ak:cell:ak.component.realm.policy_server.v1:null";
 use crate::transcripts::record_vector_event;
 
-fn declaration_body(host: &str) -> Result<RealmPolicyServerReplaceRequestBody> {
-    Ok(serde_json::from_value(json!({
+/// The declaration the caller signs. It is the durable payload the reducer
+/// stores, not a narrower REST projection of it: the request body carries the
+/// signed Event and nothing else.
+fn declaration_payload(host: &str) -> Value {
+    json!({
         "policy_server_did": format!("did:web:{host}"),
         "policy_server_url": format!("https://{host}/_arkret/self/policy/check"),
         "cache_ttl_seconds": 60,
         "timeout_ms": 1500,
         "on_timeout": "fail_closed",
-    }))?)
+    })
 }
 
 async fn create_policy_realm(client: &TestActorClient, title: &str) -> Result<String> {
@@ -107,9 +116,26 @@ async fn get_policy_server(
 async fn delete_policy_server(
     client: &TestActorClient,
     realm_id: &str,
+    settled: Option<Value>,
 ) -> Result<(StatusCode, Value)> {
+    // The DELETE carries a body because the removal is a signed Event, and the
+    // caller attaches its own `head_eq`: a precondition is inside the bytes it
+    // signs, so the service cannot add one for it.
+    let preconditions = settled
+        .map(|value| vec![head_eq_precondition(POLICY_SERVER_CELL, value)])
+        .unwrap_or_default();
+    let request = RealmPolicyServerDeleteRequestBody {
+        policy_server_event: EventInitialSubmission::online(event_envelope_with_preconditions(
+            &client.actor,
+            realm_id,
+            arkret_wire::EventKind::REALM_POLICY_SERVER,
+            json!({ "tombstone": true }),
+            preconditions,
+        )),
+    };
     let response = client
         .delete(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
+        .canonical_json(&request)?
         .send()
         .await?;
     let status = response.status();
@@ -120,11 +146,19 @@ async fn delete_policy_server(
 async fn put_policy_server(
     client: &TestActorClient,
     realm_id: &str,
-    body: &RealmPolicyServerReplaceRequestBody,
+    declaration: Value,
 ) -> Result<(StatusCode, Value)> {
+    let request = RealmPolicyServerReplaceRequestBody {
+        policy_server_event: EventInitialSubmission::online(event_envelope(
+            &client.actor,
+            realm_id,
+            arkret_wire::EventKind::REALM_POLICY_SERVER,
+            declaration,
+        )),
+    };
     let response = client
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
-        .canonical_json(body)?
+        .canonical_json(&request)?
         .send()
         .await?;
     let status = response.status();
@@ -133,11 +167,18 @@ async fn put_policy_server(
 }
 
 async fn link_governed_by(client: &TestActorClient, realm_id: &str, target: &str) -> Result<()> {
-    let request = serde_json::from_value::<RealmLinkCreateRequestBody>(json!({
-        "target_realm_id": target,
-        "link_kind": "governed_by",
-        "status": "active",
-    }))?;
+    let request = RealmLinkCreateRequestBody {
+        link_event: EventInitialSubmission::online(event_envelope(
+            &client.actor,
+            realm_id,
+            arkret_wire::EventKind::REALM_LINK,
+            json!({
+                "target_realm_id": target,
+                "link_kind": "governed_by",
+                "status": "active",
+            }),
+        )),
+    };
     let body = expect_json(
         client
             .post(&format!("/_arkret/self/realms/{realm_id}/links"))
@@ -170,7 +211,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     // The org declares: durable Control Move + newly accepted Seal.
     let seal_before = accepted_seal_id(&alice, &org_realm).await?;
     let (status, view) =
-        put_policy_server(&alice, &org_realm, &declaration_body("org-policy.example")?).await?;
+        put_policy_server(&alice, &org_realm, declaration_payload("org-policy.example")).await?;
     assert_eq!(status, StatusCode::OK, "org PUT: {view}");
     assert_eq!(view["from_org_fallback"], false);
     let declared = policy_server_events(&alice, &org_realm).await?;
@@ -193,7 +234,10 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
 
     // An inherited binding is not a direct declaration: DELETE answers
     // not_found and must not touch the ancestor.
-    let (inherited_status, inherited_body) = delete_policy_server(&alice, &child_realm).await?;
+    // No settled direct value to guard: the refusal is `not_found`, before any
+    // precondition could apply.
+    let (inherited_status, inherited_body) =
+        delete_policy_server(&alice, &child_realm, None).await?;
     assert_eq!(
         inherited_status,
         StatusCode::NOT_FOUND,
@@ -213,14 +257,12 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
 
     // A settled direct child declaration can be tombstoned. The tombstone
     // restores organization fallback, and repeating DELETE appends nothing.
-    let (status, direct) = put_policy_server(
-        &alice,
-        &child_realm,
-        &declaration_body("child-policy.example")?,
-    )
-    .await?;
+    let child_declaration = declaration_payload("child-policy.example");
+    let (status, direct) =
+        put_policy_server(&alice, &child_realm, child_declaration.clone()).await?;
     assert_eq!(status, StatusCode::OK, "child PUT: {direct}");
-    let (deleted_status, deleted) = delete_policy_server(&alice, &child_realm).await?;
+    let (deleted_status, deleted) =
+        delete_policy_server(&alice, &child_realm, Some(child_declaration)).await?;
     assert_eq!(deleted_status, StatusCode::OK, "child DELETE: {deleted}");
     let child_events = policy_server_events(&alice, &child_realm).await?;
     assert_eq!(child_events.len(), 2, "declaration plus tombstone");
@@ -233,13 +275,16 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     );
     assert_eq!(fallback["policy_server_did"], "did:web:org-policy.example");
     assert_eq!(fallback["from_org_fallback"], true);
-    let (repeat_status, repeat) = delete_policy_server(&alice, &child_realm).await?;
+    // A settled tombstone answers empty-success without admitting the Event, so
+    // the repeat needs no guard of its own.
+    let (repeat_status, repeat) = delete_policy_server(&alice, &child_realm, None).await?;
     assert_eq!(repeat_status, StatusCode::OK, "repeat DELETE: {repeat}");
     assert_eq!(policy_server_events(&alice, &child_realm).await?.len(), 2);
 
     // A Realm with neither a direct binding nor a governed_by chain.
     let never_declared = create_policy_realm(&alice, "Policy Server Live Never").await?;
-    let (missing_status, missing_body) = delete_policy_server(&alice, &never_declared).await?;
+    let (missing_status, missing_body) =
+        delete_policy_server(&alice, &never_declared, None).await?;
     assert_eq!(
         missing_status,
         StatusCode::NOT_FOUND,
@@ -305,12 +350,9 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
         .await?;
     let realm_id = create_policy_realm(&alice, "Policy Server Restart").await?;
 
-    let (status, view) = put_policy_server(
-        &alice,
-        &realm_id,
-        &declaration_body("restart-policy.example")?,
-    )
-    .await?;
+    let restart_declaration = declaration_payload("restart-policy.example");
+    let (status, view) =
+        put_policy_server(&alice, &realm_id, restart_declaration.clone()).await?;
     assert_eq!(status, StatusCode::OK, "PUT before restart: {view}");
     let declared = policy_server_events(&alice, &realm_id).await?;
     assert_eq!(declared.len(), 1, "declaration events: {declared:?}");
@@ -330,7 +372,8 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
         "the durable log must retain the declaration after restart: {events:?}"
     );
 
-    let (delete_status, deleted) = delete_policy_server(&alice, &realm_id).await?;
+    let (delete_status, deleted) =
+        delete_policy_server(&alice, &realm_id, Some(restart_declaration)).await?;
     assert_eq!(
         delete_status,
         StatusCode::OK,

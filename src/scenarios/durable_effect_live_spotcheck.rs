@@ -177,17 +177,29 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let replace_effect =
         declared_effect(&registry, "ak.self.realm_policy_server.resource.replace")?;
     let before = realm_event_kinds(&alice, &realm_id).await?;
+    // The declaration is what the caller signs; the request body carries that
+    // Event and nothing else.
+    let declaration = json!({
+        "policy_server_did": "did:web:spotcheck-policy.example",
+        "policy_server_url": "https://spotcheck-policy.example/_arkret/self/policy/check",
+        "cache_ttl_seconds": 60,
+        "timeout_ms": 1500,
+        "on_timeout": "fail_closed",
+    });
     let response = alice
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
-        .canonical_json(&serde_json::from_value::<
-            arkret_models_collaboration::governance::realm_governance::RealmPolicyServerReplaceRequestBody,
-        >(json!({
-            "policy_server_did": "did:web:spotcheck-policy.example",
-            "policy_server_url": "https://spotcheck-policy.example/_arkret/self/policy/check",
-            "cache_ttl_seconds": 60,
-            "timeout_ms": 1500,
-            "on_timeout": "fail_closed",
-        }))?)?
+        .canonical_json(
+            &arkret_models_collaboration::governance::realm_governance::RealmPolicyServerReplaceRequestBody {
+                policy_server_event: arkret_wire::EventInitialSubmission::online(
+                    crate::harness::event_envelope(
+                        &alice.actor,
+                        &realm_id,
+                        arkret_wire::EventKind::REALM_POLICY_SERVER,
+                        declaration.clone(),
+                    ),
+                ),
+            },
+        )?
         .send()
         .await?;
     let replace_status = response.status();
@@ -212,8 +224,27 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     // ── 2. policy delete (DELETE .../policy-server) ────────────────────────
     let delete_effect = declared_effect(&registry, "ak.self.realm_policy_server.resource.delete")?;
     let before = realm_event_kinds(&alice, &realm_id).await?;
+    // The removal is a signed Event too, so the DELETE carries a body, and the
+    // caller attaches its own `head_eq`: a precondition is inside the bytes it
+    // signs.
     let response = alice
         .delete(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
+        .canonical_json(
+            &arkret_models_collaboration::governance::realm_governance::RealmPolicyServerDeleteRequestBody {
+                policy_server_event: arkret_wire::EventInitialSubmission::online(
+                    crate::harness::event_envelope_with_preconditions(
+                        &alice.actor,
+                        &realm_id,
+                        arkret_wire::EventKind::REALM_POLICY_SERVER,
+                        json!({ "tombstone": true }),
+                        vec![crate::harness::head_eq_precondition(
+                            "ak:cell:ak.component.realm.policy_server.v1:null",
+                            declaration,
+                        )],
+                    ),
+                ),
+            },
+        )?
         .send()
         .await?;
     let delete_status = response.status();

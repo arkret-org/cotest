@@ -595,6 +595,44 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -
     )
 }
 
+/// A caller-signed Control Move that carries its own `head_eq` guard.
+///
+/// A precondition is signed content, so a surface that requires one -- the
+/// policy-server writes, for instance -- can only get it from the caller. The
+/// service used to read the settled value and attach the guard itself, which is
+/// the co-signing `key-management.md` section 411 forbids.
+pub fn event_envelope_with_preconditions(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    preconditions: Vec<arkret_wire::cba::Precondition>,
+) -> Event {
+    let (signing_seed, verification_method) = event_signing_identity(actor);
+    event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        None,
+        Vec::new(),
+        signing_seed,
+        &verification_method,
+        Vec::new(),
+        preconditions,
+    )
+}
+
+/// The `head_eq` guard naming the complete settled value a Control Move
+/// replaces.
+pub fn head_eq_precondition(cell: &str, settled_value: Value) -> arkret_wire::cba::Precondition {
+    serde_json::from_value(json!({
+        "cell": cell,
+        "predicate": { "op": "head_eq", "value": settled_value },
+    }))
+    .expect("cotest head_eq precondition")
+}
+
 pub fn event_envelope_with_signing_seed(
     actor: &str,
     realm_id: &str,
