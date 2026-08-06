@@ -145,6 +145,12 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
         1,
         &realm,
         json!({
+            // A decision's add dot is derived from the Event that carries it,
+            // and a decision's `decision_id` is that Event's own id. Building
+            // the Operation by hand skips the submit path, so the `event_id`
+            // `projection_operation_from_event` injects has to be supplied
+            // here or the dot is unresolvable and the decision is rejected.
+            "event_id": "ak:event:01904100-0000-8000-8000-00000000d511",
             "decision_id": "ak:event:01904100-0000-8000-8000-00000000d511",
             "issuer": "did:web:moderator.example",
             "target_ref": "ak:event:01904100-0000-8000-8000-00000000d510",
@@ -167,6 +173,7 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
             index,
             &realm,
             json!({
+                "event_id": format!("ak:event:01904100-0000-8000-8000-{index:012x}"),
                 "decision_id": format!("ak:event:01904100-0000-8000-8000-{index:012x}"),
                 "issuer": format!("did:web:moderator-{index}.example"),
                 "target_ref": target,

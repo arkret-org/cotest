@@ -704,15 +704,32 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     )
 }
 
-/// Envelope `created_at` for the `unique_seq`-th Event this process builds.
+/// Envelope `created_at` for the next Event this process builds: the platform
+/// clock, never moving backward.
 ///
-/// Anchored once at process start so a run's Events keep a stable base, then
-/// stepped a millisecond per Event: `created_at` sits in the digest preimage,
-/// and two Events built in the same millisecond would otherwise be able to tie
-/// while one names the other in `prev_refs`.
-fn harness_event_created_at(unique_seq: u64) -> DateTime<Utc> {
-    static BASE: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
-    *BASE + chrono::Duration::milliseconds(unique_seq as i64)
+/// It has to be the real clock rather than a base stamped at process start and
+/// stepped per Event. Tests share this process and run concurrently, so a test
+/// that begins a minute in has its Realm bootstrap stamped by the SDK with the
+/// real clock while a counter anchored at process start is still handing out
+/// timestamps from a minute ago — the harness Event then lands before the
+/// bootstrap Event it names in `prev_refs` and the server rejects it with
+/// `created_at_before_causal_predecessor`.
+///
+/// The floor exists because `created_at` sits in the digest preimage: two
+/// Events built inside one millisecond would otherwise tie while one names the
+/// other.
+fn harness_event_created_at() -> DateTime<Utc> {
+    static LAST_ISSUED: Mutex<Option<DateTime<Utc>>> = Mutex::new(None);
+    let mut last_issued = LAST_ISSUED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let now = Utc::now();
+    let issued = match *last_issued {
+        Some(previous) if now <= previous => previous + chrono::Duration::milliseconds(1),
+        _ => now,
+    };
+    *last_issued = Some(issued);
+    issued
 }
 
 /// Preconditions are signed content, so a Control Move that needs one has to
@@ -741,7 +758,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // `prev_refs` and the server rejects it with
     // `created_at_before_causal_predecessor`. Anchor on the process clock and
     // step once per built Event so successors are strictly later.
-    let created_at = harness_event_created_at(unique_seq);
+    let created_at = harness_event_created_at();
     let actor_id = Did::new(actor.to_owned()).expect("cotest actor DID");
     // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
     // `event_id` from the Event's own content, so the harness builds with the
