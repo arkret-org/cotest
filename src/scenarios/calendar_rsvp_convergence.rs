@@ -80,7 +80,7 @@ async fn read_strand(client: &TestActorClient) -> Result<Value> {
 }
 
 async fn inkson_schedule_frontier(client: &TestActorClient, realm_id: &str) -> Result<Vec<String>> {
-    let events = client.sdk().events_query_all_pages(realm_id).await?.events;
+    let events = client.sdk().events_read_all_pages(realm_id).await?.events;
     Ok(
         inkson::calendar::schedule_revision_heads(&events, CALENDAR_STRAND_ID)?
             .into_iter()

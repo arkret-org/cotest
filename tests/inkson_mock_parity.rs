@@ -836,13 +836,14 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
     // R3.1: the create payload carries no object id.
     realm.id = None;
     let payload = arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm);
-    let (_derived_realm_id, events) = cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
-        &ctx.alice_did,
-        payload,
-        None,
-        MOCK_PARITY_ALICE_SIGNING_SEED,
-        &cotest::fixture_did_url(format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did)),
-    )?;
+    let (_derived_realm_id, events) =
+        cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
+            &ctx.alice_did,
+            payload,
+            None,
+            MOCK_PARITY_ALICE_SIGNING_SEED,
+            &cotest::fixture_did_url(format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did)),
+        )?;
     let request = arkret_wire::EventsSubmitBatchRequestBody {
         events: events
             .into_iter()
@@ -965,6 +966,13 @@ async fn call_live_soland(
         request = match case.operation_id.as_str() {
             "ak.self.events.command.submit" => {
                 let typed: arkret_wire::EventsSubmitBatchRequestBody =
+                    serde_json::from_value(body)?;
+                request
+                    .header(reqwest::header::CONTENT_TYPE, "application/json")
+                    .body(arkret_canonical::canonical_json_bytes(&typed)?)
+            }
+            "ak.self.events.read.scan" => {
+                let typed: arkret_models_collaboration::event_query::EventsQueryPostRequestBody =
                     serde_json::from_value(body)?;
                 request
                     .header(reqwest::header::CONTENT_TYPE, "application/json")

@@ -980,7 +980,7 @@
           ]
         },
         {
-          "operation_id": "ak.peer.events.query.frontier",
+          "operation_id": "ak.peer.events.read.frontier",
           "surfaces": [
             "peer_federation"
           ]

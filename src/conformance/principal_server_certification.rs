@@ -15,7 +15,7 @@ const REQUIRED_OPERATIONS: &[&str] = &[
     "ak.self.account.query.describe",
     "ak.self.account.stream.subscribe",
     "ak.self.events.stream.subscribe",
-    "ak.self.events.query.scan",
+    "ak.self.events.read.scan",
     "ak.self.snapshot.query.manifest_head",
     "ak.self.authz.query.check",
 ];

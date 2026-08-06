@@ -8,7 +8,7 @@
 
 - `models/realm-and-space.md` §3.4 — `history_visibility=joined`
 - `models/realm-and-space.md` §2.6 — Realm 创建者是 bootstrap owner
-- `models/events.md` — `ak.self.events.query.scan` / `ak.self.events.stream.subscribe`
+- `models/events.md` — `ak.self.events.read.scan` / `ak.self.events.stream.subscribe`
 
 ## 拓扑
 

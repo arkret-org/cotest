@@ -18,10 +18,14 @@
     },
     {
       "id": "events_list",
-      "operation_id": "ak.self.events.query.scan",
-      "method": "GET",
-      "path": "/_arkret/self/events?realms=${realm_id}&limit=20",
-      "auth": "alice"
+      "operation_id": "ak.self.events.read.scan",
+      "method": "QUERY",
+      "path": "/_arkret/self/events",
+      "auth": "alice",
+      "body": {
+        "realms": ["${realm_id}"],
+        "limit": 20
+      }
     },
     {
       "id": "account_profile",

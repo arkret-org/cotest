@@ -12,7 +12,7 @@
 // `GET /_arkret/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
-// list-pagination cursor on `ak.self.events.query.scan`) and Phase D (generic
+// list-pagination cursor on `ak.self.events.read.scan`) and Phase D (generic
 // `Idempotency-Key` header path on POST /_arkret/self/events) are all live on
 // soland.
 //
@@ -593,7 +593,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
       //         client paginates by `has_more`, follows `next_cursor`).
       //
-      // The `ak.self.events.query.scan` list surface at GET /_arkret/self/events
+      // The `ak.self.events.read.scan` list surface at QUERY /_arkret/self/events
       // is the first list endpoint to reach the §7.1 wire shape exactly:
       // `{ events, next_cursor: "ak:cursor:<base64url>", has_more, prev_cursor }`.
       const stamp = Date.now();
@@ -630,12 +630,15 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const cursorRe = /^ak:cursor:[A-Za-z0-9_-]+$/;
       const fetchPage = async (after?: string) => {
         const url = new URL(`${solandBaseUrl()}/_arkret/self/events`);
-        url.searchParams.set("realms", realmId);
-        url.searchParams.set("limit", "2");
-        if (after) {
-          url.searchParams.set("after", after);
-        }
-        const resp = await request.get(url.toString(), { headers: authHeaders(token) });
+        const resp = await request.fetch(url.toString(), {
+          method: "QUERY",
+          headers: { ...authHeaders(token), "content-type": "application/json" },
+          data: {
+            realms: [realmId],
+            limit: 2,
+            ...(after ? { after } : {}),
+          },
+        });
         expect(resp.status(), "list page status").toBe(200);
         const body = (await resp.json()) as {
           events?: Array<{ event_id?: string }>;
@@ -705,11 +708,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const flippedChar = validCursor![validCursor!.length - 1] === "A" ? "B" : "A";
       const tampered = validCursor!.slice(0, -1) + flippedChar;
       const tamperUrl = new URL(`${solandBaseUrl()}/_arkret/self/events`);
-      tamperUrl.searchParams.set("realms", realmId);
-      tamperUrl.searchParams.set("limit", "2");
-      tamperUrl.searchParams.set("after", tampered);
-      const tamperResp = await request.get(tamperUrl.toString(), {
-        headers: authHeaders(token),
+      const tamperResp = await request.fetch(tamperUrl.toString(), {
+        method: "QUERY",
+        headers: { ...authHeaders(token), "content-type": "application/json" },
+        data: { realms: [realmId], limit: 2, after: tampered },
       });
       expect(tamperResp.status(), "tampered cursor is rejected 4xx").toBeGreaterThanOrEqual(400);
       expect(tamperResp.status(), "tampered cursor is a client error").toBeLessThan(500);

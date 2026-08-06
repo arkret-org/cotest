@@ -65,8 +65,8 @@ use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_models_identity::handle::HandleVisibility;
 use arkret_wire::{
     AuthoritySetIssuer, AuthoritySetIssuerRole, AuthorizationRef, Base64UrlString, DidUrl,
-    EventKind, NonEmptyString, OpaqueLocalId, IdempotencyKey, ProtocolOpaqueId, ProtocolOperationId,
-    RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
+    EventKind, IdempotencyKey, NonEmptyString, OpaqueLocalId, ProtocolOpaqueId,
+    ProtocolOperationId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -168,7 +168,7 @@ fn test_agent_requested_scope() -> arkret::AgentKeyScope {
 fn agent_runtime_service_actions() -> [&'static str; 8] {
     [
         "ak.self.events.stream.subscribe",
-        "ak.self.events.query.scan",
+        "ak.self.events.read.scan",
         "ak.self.events.command.submit",
         "ak.self.keys.keypackages.upload.create",
         "ak.self.keys.keypackages.command.consume",
@@ -637,7 +637,7 @@ async fn run_security_rotation_restart_matrix(
         }
     };
     let mut actor_events = sdk
-        .events_query_all_pages(&control_realm)
+        .events_read_all_pages(&control_realm)
         .await?
         .events
         .into_iter()
@@ -2125,7 +2125,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             "SDK device-authorize Event was not accepted: {device_authorize_submit:?}"
         ));
     }
-    let control_events = sdk.events_query_all_pages(&control_realm_id).await?.events;
+    let control_events = sdk.events_read_all_pages(&control_realm_id).await?.events;
     let mut control_seal_hlc = arkret::HlcGenerator::new(
         &control_realm_id,
         ALICE_DEVICE,
@@ -2473,7 +2473,7 @@ async fn submit_delegated_agent_event(
     } else {
         let sdk = bearer_sdk_client(server, token)?;
         let realm_create = sdk
-            .events_query_all_pages(realm_id)
+            .events_read_all_pages(realm_id)
             .await?
             .events
             .into_iter()
@@ -2740,7 +2740,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
     let mut mls_created = false;
     if frontier_before.is_none() {
         let existing_events = bearer_sdk_client(server, token)?
-            .events_query_all_pages(realm_id)
+            .events_read_all_pages(realm_id)
             .await?
             .events;
         let _realm_create_event_id = match existing_events
@@ -2783,7 +2783,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
         let mut hlc =
             arkret::HlcGenerator::new(realm_id, ALICE_DEVICE, b"cotest-managed-agent-pcr-seal");
         let client = bearer_sdk_client(server, token)?;
-        let realm_events = client.events_query_all_pages(realm_id).await?.events;
+        let realm_events = client.events_read_all_pages(realm_id).await?.events;
         let genesis_seal = arkret_bootstrap::build_managed_agent_pcr_event_seal(
             &realm_events,
             None,
@@ -2873,7 +2873,7 @@ async fn ensure_agent_pcr_mls<P: PairingOutcome>(
                 .map(|frontier| frontier.seal_id.as_str());
     if seal_needs_advancing {
         let client = bearer_sdk_client(server, token)?;
-        let events = client.events_query_all_pages(realm_id).await?.events;
+        let events = client.events_read_all_pages(realm_id).await?.events;
         let seal_key = format!("{}|{realm_id}", server.base_url());
         let predecessor = MANAGED_AGENT_PCR_SEALS
             .lock()
@@ -3247,7 +3247,7 @@ async fn prepare_agent_pcr_recovery<P: PairingOutcome>(
         .cloned()
         .ok_or_else(|| anyhow!("controller principal-control stream has no accepted Seal"))?;
     let control_events = sdk
-        .events_query_all_pages(controller_realm_id.as_str())
+        .events_read_all_pages(controller_realm_id.as_str())
         .await?
         .events;
     let seal_signer = arkret_signatures::Ed25519PayloadSigner::new(
@@ -3324,8 +3324,8 @@ async fn provision_agent(
     let requested_scope = test_agent_requested_scope();
     let operation_id = ProtocolOperationId::new(new_prefixed_uuid7("ak:operation:"))
         .map_err(anyhow::Error::msg)?;
-    let idempotency_key = IdempotencyKey::new(new_prefixed_uuid7("agent-provision-"))
-        .map_err(anyhow::Error::msg)?;
+    let idempotency_key =
+        IdempotencyKey::new(new_prefixed_uuid7("agent-provision-")).map_err(anyhow::Error::msg)?;
     let prepared = client
         .agent_provision(&arkret::AgentProvisionRequestBody::Prepare {
             operation_id: operation_id.clone(),
@@ -3729,7 +3729,7 @@ async fn advance_managed_agent_pcr_seal(
     realm_id: &str,
 ) -> Result<()> {
     let client = bearer_sdk_client(server, token)?;
-    let events = client.events_query_all_pages(realm_id).await?.events;
+    let events = client.events_read_all_pages(realm_id).await?.events;
     let seal_key = format!("{}|{realm_id}", server.base_url());
     let predecessor = MANAGED_AGENT_PCR_SEALS
         .lock()
@@ -3951,7 +3951,7 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     )?;
     let sdk = bearer_sdk_client(server, token)?;
     let realm_create = sdk
-        .events_query_all_pages(provisioned.principal_control_realm_id().as_str())
+        .events_read_all_pages(provisioned.principal_control_realm_id().as_str())
         .await?
         .events
         .into_iter()
@@ -4077,7 +4077,7 @@ async fn prepare_managed_agent_submission(
 ) -> Result<arkret_wire::EventInitialSubmission> {
     let sdk = bearer_sdk_client(server, token)?;
     let realm_create = sdk
-        .events_query_all_pages(realm_id)
+        .events_read_all_pages(realm_id)
         .await?
         .events
         .into_iter()
