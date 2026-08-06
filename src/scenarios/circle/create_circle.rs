@@ -75,7 +75,7 @@ pub async fn create_circle_run() -> Result<()> {
         ));
     }
     let parsed: Circle = serde_json::from_value(json).map_err(|e| anyhow!("parse: {e}"))?;
-    if parsed.id.as_str() != circle.id.as_str() {
+    if parsed.id != circle.id {
         return Err(anyhow!("round-trip lost Circle.id"));
     }
     if parsed.realm_id.as_str() != circle.realm_id.as_str() {
