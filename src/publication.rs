@@ -18,10 +18,10 @@ use arkret_wire::{
     AnchorUnitLeaseBasis, AnchorUnitLeaseBasisRef, AuthoritySetAuthorizationRule,
     AuthoritySetIssuer, AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind,
     AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease,
-    AuthorizationLeaseId, ControlProposalDecisionPolicy, ControlProposalAck,
-    ControlProposalAckKind, DeviceId, Did, DidUrl, Event, EventFederationSubmission,
+    AuthorizationLeaseId, ControlProposalAck, ControlProposalAckKind, ControlProposalAuthorityAck,
+    ControlProposalDecisionPolicy, DeviceId, Did, DidUrl, Event, EventFederationSubmission,
     EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef, PayloadProof, PayloadSignature,
-    ProjectedCellWrite, ControlProposalAuthorityAck, ReceiptId, RiskTier, SchemaId, SealId, proof_kind,
+    ProjectedCellWrite, ReceiptId, RiskTier, SchemaId, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
 /// The one registry projection evaluator cotest uses.

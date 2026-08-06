@@ -161,9 +161,10 @@ fn validate_realm_remark_registry() -> Result<()> {
 /// checked as a conformance property rather than only in SDK unit tests.
 ///
 /// The normal branch resolves to the **responder**, not the request issuer. That is normative: the
-/// basis is lit up by the responder's acceptance receipt, which proves the responder was online when
-/// it came into existence, while the requester may have gone offline days earlier. Base v1 defines
-/// no fallback, so naming the possibly-absent party would leave the pair unable to ever create.
+/// basis is lit up by the responder's acceptance receipt, which proves the responder was online
+/// when it came into existence, while the requester may have gone offline days earlier. Base v1
+/// defines no fallback, so naming the possibly-absent party would leave the pair unable to ever
+/// create.
 fn validate_direct_conversation_founder_derivation() -> Result<()> {
     use arkret_models_collaboration::objects::direct_conversation::{
         DirectConversationFounderBasis, direct_conversation_founder, direct_conversation_may_found,
@@ -266,12 +267,16 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
         bail!("direct conversation resolver HTTP binding drifted");
     }
     if operation.request_schema_ref
-        != Some("schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request")
+        != Some(
+            "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_request",
+        )
     {
         bail!("direct conversation request schema ref drifted");
     }
     if operation.response_schema_ref
-        != Some("schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_outcome")
+        != Some(
+            "schemas/direct-conversation-operations.schema.json#/$defs/direct_conversation_resolve_outcome",
+        )
     {
         bail!("direct conversation response schema ref drifted");
     }
@@ -444,7 +449,9 @@ fn validate_resolve_request_shape(value: &Value) -> Result<()> {
             .map(|error| format!("{}: {error}", error.instance_path()))
             .collect::<Vec<_>>()
             .join("; ");
-        bail!("direct conversation request does not match the canonical operation schema: {detail}");
+        bail!(
+            "direct conversation request does not match the canonical operation schema: {detail}"
+        );
     }
     serde_json::from_value::<
         arkret_models_collaboration::direct_conversation_ops::DirectConversationResolveRequestBody,
@@ -463,7 +470,9 @@ fn validate_resolve_response_shape(value: &Value) -> Result<()> {
             .map(|error| format!("{}: {error}", error.instance_path()))
             .collect::<Vec<_>>()
             .join("; ");
-        bail!("direct conversation response does not match the canonical operation schema: {detail}");
+        bail!(
+            "direct conversation response does not match the canonical operation schema: {detail}"
+        );
     }
     serde_json::from_value::<
         arkret_models_collaboration::direct_conversation_ops::DirectConversationResolveOutcome,

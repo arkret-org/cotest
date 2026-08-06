@@ -1,12 +1,11 @@
 use anyhow::{Result, anyhow};
-use arkret::ContactIntroductionEvidence;
 use arkret::contact_operations::{
     ContactAcceptAction, ContactAcceptPrepareRequestBody, ContactAcceptRequestBody,
     ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
     ContactOperationRequestBody, ContactPeer, ContactPreparePhase, ContactPrepareRequestBody,
     ContactPreparedEventDraft, ContactPreparedOutcome, ContactScope, RequestAcceptanceReceipt,
 };
-use arkret::{IdempotencyKey, ProtocolOperationId};
+use arkret::{ContactIntroductionEvidence, IdempotencyKey, ProtocolOperationId};
 use arkret_http_client::Client as SdkClient;
 use arkret_identifiers::{Did, Hash, Hlc};
 use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};

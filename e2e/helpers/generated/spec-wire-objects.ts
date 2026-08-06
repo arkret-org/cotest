@@ -571,7 +571,7 @@ export type RealmSealFrontierView = {
     "status": "healthy" | "degraded";
     "pending_proposals": Array<{
       "proposal_digest": string;
-      "receipt": {
+      "control_proposal_ack": {
         "kind": "signed_ack";
         "realm_id": string;
         "proposal_digest": string;
@@ -621,7 +621,7 @@ export type RealmSealFrontierView = {
     }>;
     "retained_faults": Array<{
       "proposal_digest": string;
-      "receipt": {
+      "control_proposal_ack": {
         "kind": "signed_ack";
         "realm_id": string;
         "proposal_digest": string;

@@ -154,7 +154,9 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
                 .ok_or_else(|| anyhow!("vector {name} signed_compaction missing signature"))?;
             let signature_algorithm = required_str(signature, "signature_algorithm")?;
             if signature_algorithm != "Ed25519" {
-                bail!("vector {name} signed_compaction signature.signature_algorithm must be Ed25519, got {signature_algorithm}");
+                bail!(
+                    "vector {name} signed_compaction signature.signature_algorithm must be Ed25519, got {signature_algorithm}"
+                );
             }
         }
 

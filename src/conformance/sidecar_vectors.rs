@@ -759,7 +759,7 @@ fn normalized_context_key_from_event(event: &Event) -> SidecarModelResult<String
     } else if target.starts_with("ak:relation:") {
         json!({"realm_id": event.realm_id, "relation_id": target})
     } else {
-            return Err(SidecarModelError::DraftMismatch);
+        return Err(SidecarModelError::DraftMismatch);
     };
     arkret_canonical::canonical_sha256(&normalized).map_err(|_| SidecarModelError::ModelInvariant)
 }
@@ -1106,7 +1106,8 @@ fn decode_prepared_event(draft: &SidecarPreparedEventDraft) -> SidecarModelResul
         "event_id".to_owned(),
         Value::String(draft.event_id.to_string()),
     );
-    let event: Event = serde_json::from_value(value).map_err(|_| SidecarModelError::DraftMismatch)?;
+    let event: Event =
+        serde_json::from_value(value).map_err(|_| SidecarModelError::DraftMismatch)?;
     let derived = event
         .derive_event_id()
         .map_err(|_| SidecarModelError::DraftMismatch)?;
@@ -1117,7 +1118,7 @@ fn decode_prepared_event(draft: &SidecarPreparedEventDraft) -> SidecarModelResul
             .map_err(|_| SidecarModelError::DraftMismatch)?
             != draft.event_digest.as_str()
     {
-            return Err(SidecarModelError::DraftMismatch);
+        return Err(SidecarModelError::DraftMismatch);
     }
     Ok(event)
 }
@@ -1152,7 +1153,7 @@ fn validate_prepared_outcome(
             if create_event_id != &create_event_draft.event_id
                 || context_attach_event_id != &context_attach_event_draft.event_id
             {
-            return Err(SidecarModelError::DraftMismatch);
+                return Err(SidecarModelError::DraftMismatch);
             }
             (
                 operation_id,
@@ -1177,7 +1178,7 @@ fn validate_prepared_outcome(
             ..
         } => {
             if context_attach_event_id != &context_attach_event_draft.event_id {
-            return Err(SidecarModelError::DraftMismatch);
+                return Err(SidecarModelError::DraftMismatch);
             }
             (
                 operation_id,
@@ -1250,7 +1251,7 @@ fn validate_prepared_outcome(
             .and_then(Value::as_str)
             != Some(backing_circle_id.as_str())
     {
-            return Err(SidecarModelError::DraftMismatch);
+        return Err(SidecarModelError::DraftMismatch);
     }
     if let Some(create) = create {
         validate_new_after_link(&create, &attach)?;
@@ -1351,7 +1352,7 @@ fn validate_signed_draft(
             .iter()
             .any(|proof| proof.event_digest != draft.event_digest)
     {
-            return Err(SidecarModelError::DraftMismatch);
+        return Err(SidecarModelError::DraftMismatch);
     }
     for proof in &event.proofs {
         verify_ed25519_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
@@ -3006,37 +3007,37 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
         base_created_at: DateTime<Utc>,
         offsets: [i64; 2],
     ) -> Result<Vec<Event>> {
-    let realm_id = realm_id.clone();
-    let actor = actor.clone();
-    let mut events = Vec::new();
-    for (index, sibling) in siblings.iter().enumerate() {
-        let created_at = base_created_at + chrono::Duration::seconds(offsets[index]);
-        events.push(Event::new_with_derived_id_at(
-            EventKind::MESSAGE_CREATE,
-            ScopeRef::Realm {
-                realm_id: realm_id.clone(),
-            },
-            actor.clone(),
-            case["actor_seq"]
-                .as_u64()
-                .ok_or_else(|| anyhow!("digest sibling actor_seq is missing"))?,
-            Hlc::new(
-                sibling["hlc"]
-                    .as_str()
-                    .ok_or_else(|| anyhow!("digest sibling HLC is missing"))?,
-            )?,
-            serde_json::json!({
-                "strand_id": "ak:strand:01964137-0000-8000-8000-000000000010",
-                "track_name": "discussion",
-                "content": {
-                    "kind": "ak.content.text",
-                    "body": sibling["content_text"]
-                }
-            }),
-            created_at,
-        )?);
-    }
-    Ok(events)
+        let realm_id = realm_id.clone();
+        let actor = actor.clone();
+        let mut events = Vec::new();
+        for (index, sibling) in siblings.iter().enumerate() {
+            let created_at = base_created_at + chrono::Duration::seconds(offsets[index]);
+            events.push(Event::new_with_derived_id_at(
+                EventKind::MESSAGE_CREATE,
+                ScopeRef::Realm {
+                    realm_id: realm_id.clone(),
+                },
+                actor.clone(),
+                case["actor_seq"]
+                    .as_u64()
+                    .ok_or_else(|| anyhow!("digest sibling actor_seq is missing"))?,
+                Hlc::new(
+                    sibling["hlc"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("digest sibling HLC is missing"))?,
+                )?,
+                serde_json::json!({
+                    "strand_id": "ak:strand:01964137-0000-8000-8000-000000000010",
+                    "track_name": "discussion",
+                    "content": {
+                        "kind": "ak.content.text",
+                        "body": sibling["content_text"]
+                    }
+                }),
+                created_at,
+            )?);
+        }
+        Ok(events)
     }
 
     #[allow(clippy::items_after_statements)]
@@ -3375,24 +3376,42 @@ pub fn run_sidecar_vector_suite() -> Result<()> {
             ALL_SIDECAR_VECTOR_IDS.len()
         );
     }
-    run_sidecar_mls_bootstrap_binding_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_mls_bootstrap_binding_vector] {e}"))?;
-    run_sidecar_mls_effective_access_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_mls_effective_access_vector] {e}"))?;
-    run_sidecar_ensure_idempotent_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_ensure_idempotent_vector] {e}"))?;
-    run_sidecar_eligibility_states_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_eligibility_states_vector] {e}"))?;
-    run_sidecar_existence_privacy_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_existence_privacy_vector] {e}"))?;
-    run_sidecar_hosted_projection_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_hosted_projection_vector] {e}"))?;
-    run_sidecar_multi_agent_publish_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_multi_agent_publish_vector] {e}"))?;
-    run_sidecar_exchange_binding_closed_loop_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_binding_closed_loop_vector] {e}"))?;
-    run_sidecar_exchange_projection_recovery_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_projection_recovery_vector] {e}"))?;
-    run_sidecar_exchange_binding_containment_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_binding_containment_vector] {e}"))?;
-    run_sidecar_context_locator_recovery_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_context_locator_recovery_vector] {e}"))?;
-    run_sidecar_canonical_sibling_digest_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_canonical_sibling_digest_vector] {e}"))?;
-    run_sidecar_union_history_frontier_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_union_history_frontier_vector] {e}"))?;
-    run_sidecar_non_disclosure_surface_matrix_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_non_disclosure_surface_matrix_vector] {e}"))?;
-    run_sidecar_revoke_fail_closed_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_revoke_fail_closed_vector] {e}"))?;
-    run_sidecar_explicit_publish_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_explicit_publish_vector] {e}"))?;
-    run_sidecar_accepted_request_identity_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_accepted_request_identity_vector] {e}"))?;
-    run_sidecar_hosted_ui_matrix_vector().map_err(|e| anyhow::anyhow!("[run_sidecar_hosted_ui_matrix_vector] {e}"))?;
+    run_sidecar_mls_bootstrap_binding_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_mls_bootstrap_binding_vector] {e}"))?;
+    run_sidecar_mls_effective_access_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_mls_effective_access_vector] {e}"))?;
+    run_sidecar_ensure_idempotent_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_ensure_idempotent_vector] {e}"))?;
+    run_sidecar_eligibility_states_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_eligibility_states_vector] {e}"))?;
+    run_sidecar_existence_privacy_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_existence_privacy_vector] {e}"))?;
+    run_sidecar_hosted_projection_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_hosted_projection_vector] {e}"))?;
+    run_sidecar_multi_agent_publish_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_multi_agent_publish_vector] {e}"))?;
+    run_sidecar_exchange_binding_closed_loop_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_binding_closed_loop_vector] {e}"))?;
+    run_sidecar_exchange_projection_recovery_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_projection_recovery_vector] {e}"))?;
+    run_sidecar_exchange_binding_containment_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_exchange_binding_containment_vector] {e}"))?;
+    run_sidecar_context_locator_recovery_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_context_locator_recovery_vector] {e}"))?;
+    run_sidecar_canonical_sibling_digest_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_canonical_sibling_digest_vector] {e}"))?;
+    run_sidecar_union_history_frontier_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_union_history_frontier_vector] {e}"))?;
+    run_sidecar_non_disclosure_surface_matrix_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_non_disclosure_surface_matrix_vector] {e}"))?;
+    run_sidecar_revoke_fail_closed_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_revoke_fail_closed_vector] {e}"))?;
+    run_sidecar_explicit_publish_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_explicit_publish_vector] {e}"))?;
+    run_sidecar_accepted_request_identity_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_accepted_request_identity_vector] {e}"))?;
+    run_sidecar_hosted_ui_matrix_vector()
+        .map_err(|e| anyhow::anyhow!("[run_sidecar_hosted_ui_matrix_vector] {e}"))?;
     Ok(())
 }
 

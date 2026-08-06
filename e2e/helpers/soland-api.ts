@@ -2456,9 +2456,9 @@ async function issueControlProposalAckApi(
   if (event.seal_basis == null) {
     return undefined;
   }
-  const localReceipt = localPrincipalControlProposalAck(event);
-  if (localReceipt) {
-    return localReceipt;
+  const localAck = localPrincipalControlProposalAck(event);
+  if (localAck) {
+    return localAck;
   }
   const response = await request.post(
     `${solandBaseUrl(server)}/_arkret/self/control-proposal-acks`,

@@ -3,8 +3,9 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_wire::notary::{ForensicAttribution, NotaryValue};
 use arkret_wire::{
-    ControlProposalDecision, ControlProposalDecisionPolicy, ControlProposalAck,
-    ControlProposalRejectReason, DidUrl, Hash, PayloadSignature, ControlProposalAuthorityAck, RealmId,
+    ControlProposalAck, ControlProposalAuthorityAck, ControlProposalDecision,
+    ControlProposalDecisionPolicy, ControlProposalRejectReason, DidUrl, Hash, PayloadSignature,
+    RealmId,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -24,14 +25,14 @@ pub fn run_control_proposal_bounded_decision_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("seal-submit fixture is missing {name}"))
     };
 
-    let receipt = case("control_proposal_ack_commits_initial_and_absolute_deadlines")?;
-    let receipt_instance = &receipt["instance"];
-    let received_at = timestamp(receipt_instance, "received_at")?;
-    let decision_due_at = timestamp(receipt_instance, "decision_due_at")?;
-    let absolute_due_at = timestamp(receipt_instance, "absolute_due_at")?;
+    let ack = case("control_proposal_ack_commits_initial_and_absolute_deadlines")?;
+    let ack_instance = &ack["instance"];
+    let received_at = timestamp(ack_instance, "received_at")?;
+    let decision_due_at = timestamp(ack_instance, "decision_due_at")?;
+    let absolute_due_at = timestamp(ack_instance, "absolute_due_at")?;
     if decision_due_at - received_at != chrono::Duration::seconds(30)
         || absolute_due_at - received_at != chrono::Duration::seconds(90)
-        || receipt_instance["defer_count"].as_u64() != Some(0)
+        || ack_instance["defer_count"].as_u64() != Some(0)
     {
         bail!("Control Proposal Ack does not pin the 30s initial / 90s absolute window");
     }
@@ -119,11 +120,11 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
     };
 
     let threshold_case = case("threshold_ack_set_uses_distinct_current_members")?;
-    let receipt_members = threshold_case["authority_acks"]
+    let authority_ack_values = threshold_case["authority_acks"]
         .as_array()
         .ok_or_else(|| anyhow!("threshold authority_acks must be an array"))?;
     let authority_ref = hash('a');
-    let members = receipt_members
+    let members = authority_ack_values
         .iter()
         .map(|member| member_from_fixture(member, authority_ref.clone()))
         .collect::<Result<Vec<_>>>()?;
@@ -153,17 +154,14 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         absolute_horizon: chrono::Duration::seconds(90),
         max_defers: 2,
     };
-    let receipt =
-        ControlProposalAck::from_authority_acks_for_notary(members, policy, &notary)?;
+    let ack = ControlProposalAck::from_authority_acks_for_notary(members, policy, &notary)?;
     ensure!(
-        receipt.received_at == timestamp(&threshold_case["expected"], "received_at")?
-            && receipt.decision_due_at
-                == timestamp(&threshold_case["expected"], "decision_due_at")?
-            && receipt.absolute_due_at
-                == timestamp(&threshold_case["expected"], "absolute_due_at")?,
-        "threshold receipt aggregate window diverged"
+        ack.received_at == timestamp(&threshold_case["expected"], "received_at")?
+            && ack.decision_due_at == timestamp(&threshold_case["expected"], "decision_due_at")?
+            && ack.absolute_due_at == timestamp(&threshold_case["expected"], "absolute_due_at")?,
+        "threshold Ack aggregate window diverged"
     );
-    let actual_order = receipt
+    let actual_order = ack
         .authority_acks
         .iter()
         .map(|member| member.signature.verification_method.as_str())
@@ -198,12 +196,8 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
     ensure!(
-        ControlProposalAck::from_authority_acks_for_notary(
-            duplicate_members,
-            policy,
-            &notary,
-        )
-        .is_err(),
+        ControlProposalAck::from_authority_acks_for_notary(duplicate_members, policy, &notary,)
+            .is_err(),
         "duplicate member counted twice"
     );
 
@@ -229,7 +223,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
     ];
     ensure!(
         ControlProposalAck::from_authority_acks(mixed_members, policy).is_err(),
-        "mixed authority receipt set was accepted"
+        "mixed authority Ack set was accepted"
     );
 
     ensure!(
@@ -239,7 +233,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         }
         .validate()
         .is_ok(),
-        "inclusive receipt SLA maximum was rejected"
+        "inclusive proposal intake SLA maximum was rejected"
     );
     ensure!(
         ControlProposalDecisionPolicy {
@@ -248,7 +242,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
         }
         .validate()
         .is_err(),
-        "receipt SLA above the wire maximum was accepted"
+        "proposal intake SLA above the wire maximum was accepted"
     );
 
     for name in [
@@ -297,16 +291,16 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
     }
 
     let replay = case("exact_member_retry_is_byte_identical_and_conflict_cannot_extend")?;
-    let original = serde_json::to_vec(&receipt.authority_acks[0])?;
+    let original = serde_json::to_vec(&ack.authority_acks[0])?;
     let request = b"canonical-request".to_vec();
-    let mut ledger = BTreeMap::from([("receipt-key", (request.clone(), original.clone()))]);
+    let mut ledger = BTreeMap::from([("ack-key", (request.clone(), original.clone()))]);
     let exact = ledger
-        .get("receipt-key")
+        .get("ack-key")
         .filter(|(stored_request, _)| stored_request == &request)
         .map(|(_, outcome)| outcome.clone())
         .context("exact retry missed its original authority Ack")?;
     let conflict = ledger
-        .get_mut("receipt-key")
+        .get_mut("ack-key")
         .is_some_and(|(stored_request, _)| stored_request != b"different-request");
     ensure!(
         exact == original
@@ -316,27 +310,27 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
     );
 
     let decision_case = case("decision_proofs_cannot_cross_ack_sets")?;
-    let wrong_receipt_digest = Hash::new(
+    let wrong_proposal_ack_digest = Hash::new(
         decision_case["decision_proof_proposal_ack_digests"][1]
             .as_str()
             .unwrap(),
     )?;
     let mut decision = ControlProposalDecision::SignedReject {
-        realm_id: receipt.realm_id.clone(),
-        proposal_digest: receipt.proposal_digest.clone(),
-        proposal_ack_digest: wrong_receipt_digest,
-        decided_at: receipt.received_at,
-        decision_due_at: receipt.decision_due_at,
-        absolute_due_at: receipt.absolute_due_at,
+        realm_id: ack.realm_id.clone(),
+        proposal_digest: ack.proposal_digest.clone(),
+        proposal_ack_digest: wrong_proposal_ack_digest,
+        decided_at: ack.received_at,
+        decision_due_at: ack.decision_due_at,
+        absolute_due_at: ack.absolute_due_at,
         defer_count: 0,
         reason_code: ControlProposalRejectReason::PolicyDenied,
-        authority_set_ref: receipt.authority_set_ref.clone(),
+        authority_set_ref: ack.authority_set_ref.clone(),
         proofs: vec![PayloadSignature {
             verification_method: crate::fixture_did_url(
                 "did:webvh:z6mkfixture:authority-a.example#notary",
             ),
             payload_digest: hash('0'),
-            created_at: receipt.received_at,
+            created_at: ack.received_at,
             jws: "a..b".to_owned(),
             extra: Default::default(),
         }],
@@ -347,8 +341,8 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
     };
     proofs[0].payload_digest = digest;
     ensure!(
-        decision.validate_chain(&receipt, &[], policy).is_err(),
-        "decision proof crossed receipt sets"
+        decision.validate_chain(&ack, &[], policy).is_err(),
+        "decision proof crossed Ack sets"
     );
 
     for name in [
@@ -396,7 +390,10 @@ fn hash(byte: char) -> Hash {
     Hash::new(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
 }
 
-fn member_from_fixture(value: &Value, authority_set_ref: Hash) -> Result<ControlProposalAuthorityAck> {
+fn member_from_fixture(
+    value: &Value,
+    authority_set_ref: Hash,
+) -> Result<ControlProposalAuthorityAck> {
     member(
         value["verification_method"]
             .as_str()
