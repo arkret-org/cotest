@@ -191,7 +191,7 @@ async function allowlistVerificationService(
       kind: "ak.realm.policy_bundle",
       payload: {
         policy_revision: 1,
-        third_party_invite_verification_services: [serviceId],
+        allowed_third_party_invite_verification_service_ids: [serviceId],
       },
     }),
     { context: `allowlist verification service ${serviceId}` },
@@ -409,10 +409,12 @@ test.describe("third-party invite", () => {
     expect(replay.status()).toBe(409);
   });
 
-  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
-  // @user-promise none; protocol carrier decision is required
-  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
-  test.fixme("bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership", async ({
+  // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
+  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // Former blocker, now resolved:
+  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  test("bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership", async ({
     request,
   }) => {
     // third-party-invites.md §4.1-4.3 — happy path. The did:webvh verification
@@ -487,10 +489,12 @@ test.describe("third-party invite", () => {
     expect(claimed, `claimed invite for ${ctx.bob.did}`).toBeTruthy();
   });
 
-  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
-  // @user-promise none; protocol carrier decision is required
-  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
-  test.fixme("E3.1 expired token: reducer rejects claim with expired_invite_token", async ({
+  // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
+  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // Former blocker, now resolved:
+  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  test("E3.1 expired token: reducer rejects claim with expired_invite_token", async ({
     request,
   }) => {
     // third-party-invites.md §4.3 step 2 / §6.1 — an invite past expires_at
@@ -545,10 +549,12 @@ test.describe("third-party invite", () => {
     expect(claim.rejectReason).toBe("expired_invite_token");
   });
 
-  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
-  // @user-promise none; protocol carrier decision is required
-  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
-  test.fixme("E3.2 wrong DID claim (subject_proof != binding_proof.subject) rejected", async ({
+  // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
+  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // Former blocker, now resolved:
+  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  test("E3.2 wrong DID claim (subject_proof != binding_proof.subject) rejected", async ({
     request,
   }) => {
     // third-party-invites.md §4.3 step 5 — mallory holds the token but the
@@ -616,10 +622,12 @@ test.describe("third-party invite", () => {
     expect(detail).toContain("subject_id");
   });
 
-  // @blocking-on arkret-work/review/spec-open/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
-  // @user-promise none; protocol carrier decision is required
-  // @expected-live-by after the canonical allowlist carrier lands in spec + SDK + soland
-  test.fixme("E3.3 double-claim: second claim of same token rejected (token consumed)", async ({
+  // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
+  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // soland's reducer (`apply_invites.rs` reads that top-level component only).
+  // Former blocker, now resolved:
+  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  test("E3.3 double-claim: second claim of same token rejected (token consumed)", async ({
     request,
   }) => {
     // third-party-invites.md §4.3 step 6 / §6.1 — once a token is claimed the
