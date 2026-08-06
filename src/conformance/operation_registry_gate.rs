@@ -606,6 +606,14 @@ fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>
             let Some(operation) = item.get(*openapi_method).and_then(Value::as_object) else {
                 continue;
             };
+            // A compatibility binding is a second HTTP spelling of an operation
+            // that is already registered under its canonical method, so it
+            // carries `x-arkret-compatibility-binding-of` instead of an
+            // `operationId` of its own. Treating it as a missing id would make
+            // every deprecated alias look like an unregistered operation.
+            if operation.contains_key("x-arkret-compatibility-binding-of") {
+                continue;
+            }
             let operation_id = operation
                 .get("operationId")
                 .and_then(Value::as_str)

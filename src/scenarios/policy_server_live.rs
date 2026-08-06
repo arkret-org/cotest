@@ -124,7 +124,7 @@ async fn put_policy_server(
 ) -> Result<(StatusCode, Value)> {
     let response = client
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
-        .json(body)
+        .canonical_json(body)?
         .send()
         .await?;
     let status = response.status();

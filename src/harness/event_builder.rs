@@ -704,6 +704,17 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     )
 }
 
+/// Envelope `created_at` for the `unique_seq`-th Event this process builds.
+///
+/// Anchored once at process start so a run's Events keep a stable base, then
+/// stepped a millisecond per Event: `created_at` sits in the digest preimage,
+/// and two Events built in the same millisecond would otherwise be able to tie
+/// while one names the other in `prev_refs`.
+fn harness_event_created_at(unique_seq: u64) -> DateTime<Utc> {
+    static BASE: LazyLock<DateTime<Utc>> = LazyLock::new(Utc::now);
+    *BASE + chrono::Duration::milliseconds(unique_seq as i64)
+}
+
 /// Preconditions are signed content, so a Control Move that needs one has to
 /// declare it here rather than have it stamped onto an already-signed envelope.
 #[allow(clippy::too_many_arguments)]
@@ -724,9 +735,13 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     let hlc_logical = unique_seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{unique_seq:012x}");
     normalize_message_payload(kind, realm_id, &mut payload);
-    let created_at = DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")
-        .expect("static cotest Event timestamp")
-        .with_timezone(&Utc);
+    // A static timestamp cannot stay behind a causal predecessor: the Realm
+    // bootstrap the SDK submits is stamped with the real clock, so any harness
+    // Event pinned to a fixed past date lands before the Event it names in
+    // `prev_refs` and the server rejects it with
+    // `created_at_before_causal_predecessor`. Anchor on the process clock and
+    // step once per built Event so successors are strictly later.
+    let created_at = harness_event_created_at(unique_seq);
     let actor_id = Did::new(actor.to_owned()).expect("cotest actor DID");
     // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
     // `event_id` from the Event's own content, so the harness builds with the
