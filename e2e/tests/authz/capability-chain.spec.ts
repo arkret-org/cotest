@@ -239,10 +239,9 @@ test.describe("capability chain (event wire)", () => {
     // on the registered effective-grants read surface before authoring the
     // child, otherwise the reducer correctly leaves it dependency-pending.
     await expect
-      .poll(
-        () => effectiveGrantIds(request, aliceToken, bob.did, realmId),
-        { timeout: 30_000 },
-      )
+      .poll(() => effectiveGrantIds(request, aliceToken, bob.did, realmId), {
+        timeout: 30_000,
+      })
       .toContain(parent.grantId);
 
     // Child grant narrows: same action set, strictly earlier expiry (§10.1).
@@ -263,10 +262,10 @@ test.describe("capability chain (event wire)", () => {
       .poll(
         async () => ({
           check: await authzCheck(request, carolToken, {
-              actorDid: carol.did,
-              action: "ak.message.create",
-              realmId,
-            }),
+            actorDid: carol.did,
+            action: "ak.message.create",
+            realmId,
+          }),
           parentGrantIds: await effectiveGrantIds(
             request,
             aliceToken,
@@ -280,9 +279,11 @@ test.describe("capability chain (event wire)", () => {
             realmId,
           ),
           realmEventIds: (
-            (await queryRealmEventsApi(request, aliceToken, realmId, {
-              limit: 100,
-            })).events as Array<{ event_id?: string }>
+            (
+              await queryRealmEventsApi(request, aliceToken, realmId, {
+                limit: 100,
+              })
+            ).events as Array<{ event_id?: string }>
           ).flatMap((event) => (event.event_id ? [event.event_id] : [])),
         }),
         { timeout: 30_000 },

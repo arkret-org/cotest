@@ -142,13 +142,24 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         &ed25519_dalek::SigningKey::from_bytes(&MOCK_PARITY_ALICE_SIGNING_SEED),
     )
     .await?;
-    let ctx = TemplateContext {
+    let mut ctx = TemplateContext {
         alice_did,
         alice_token,
         service_id: server.service_id().to_owned(),
-        realm_id: "ak:realm:01999999-0000-8000-8000-000000000451".to_owned(),
+        realm_id: String::new(),
         space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
     };
+    // The parity Realm's id is derived from the genesis Event the setup case
+    // submits, so it has to be computed from that batch rather than chosen.
+    // Built once, not twice: the batch carries real-clock timestamps inside the
+    // digest preimage, so rebuilding it would derive a different Realm id than
+    // the one actually submitted.
+    let (setup_realm_id, setup_bootstrap_body) = realm_bootstrap_batch(
+        &ctx,
+        "ak:realm:01999999-0000-8000-8000-000000000451",
+        "Mock parity setup",
+    )?;
+    ctx.realm_id = setup_realm_id;
 
     let contract_path = locate_inkson_contract(&root)?
         .ok_or_else(|| anyhow!("inkson mock contract missing next to {}", root.display()))?;
@@ -165,7 +176,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         }
 
         let rendered_path = render_str(&case.path, &ctx);
-        let rendered_body = render_body(case, &ctx)?;
+        let rendered_body = render_body(case, &ctx, &setup_bootstrap_body)?;
         let rendered_body =
             prepare_live_publication_body(&server, case, &ctx, rendered_body).await?;
         let mock = normalize_snapshot(
@@ -280,9 +291,17 @@ fn assert_mock_contract_format(
     fixture: &Fixture,
     ctx: &TemplateContext,
 ) -> Result<()> {
+    // Shape-only gates: the batch is never submitted, so a locally built one
+    // serves and its derived Realm id does not have to match anything.
+    let setup_bootstrap_body = realm_bootstrap_batch(
+        ctx,
+        "ak:realm:01999999-0000-8000-8000-000000000451",
+        "Mock parity setup",
+    )?
+    .1;
     for case in &fixture.cases {
         let rendered_path = render_str(&case.path, ctx);
-        let rendered_body = render_body(case, ctx)?;
+        let rendered_body = render_body(case, ctx, &setup_bootstrap_body)?;
         let snapshot = call_mock_contract(contract_path, case, &rendered_path, rendered_body, ctx)
             .with_context(|| format!("format smoke for {}", case.id))?;
         if snapshot.status == 599 {
@@ -305,6 +324,14 @@ fn assert_mock_contract_artifact_gate(
     let artifacts_root = spec_artifacts_root(root);
     let registry = load_operation_registry(&artifacts_root)?;
     let schema_index = load_operation_schema_index(&artifacts_root)?;
+    // Shape-only gate: the batch is never submitted, so a locally built one
+    // serves and its derived Realm id does not have to match anything.
+    let setup_bootstrap_body = realm_bootstrap_batch(
+        ctx,
+        "ak:realm:01999999-0000-8000-8000-000000000451",
+        "Mock parity setup",
+    )?
+    .1;
 
     let contract_source = fs::read_to_string(contract_path)
         .with_context(|| format!("read {}", contract_path.display()))?;
@@ -365,7 +392,7 @@ fn assert_mock_contract_artifact_gate(
                 );
             }
             if operation.request_schema_ref.is_some() {
-                let body = render_body(case, ctx)?;
+                let body = render_body(case, ctx, &setup_bootstrap_body)?;
                 let request_shape = schema.request.as_ref().ok_or_else(|| {
                     anyhow!(
                         "schema index missing request shape for fixture case `{}` ({})",
@@ -376,7 +403,7 @@ fn assert_mock_contract_artifact_gate(
                 assert_json_shape_required_fields(case, "request", request_shape, body.as_ref())?;
             }
             if operation.response_schema_ref.is_some() {
-                let body = render_body(case, ctx)?;
+                let body = render_body(case, ctx, &setup_bootstrap_body)?;
                 let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                     .with_context(|| {
                     format!("mock response for artifact gate case `{}`", case.id)
@@ -404,7 +431,7 @@ fn assert_mock_contract_artifact_gate(
                 )?;
             }
         } else {
-            let body = render_body(case, ctx)?;
+            let body = render_body(case, ctx, &setup_bootstrap_body)?;
             let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                 .with_context(|| format!("mock response for artifact gate case `{}`", case.id))?;
             assert_supported_operations_registered(&case.id, &snapshot.body, &registry)?;
@@ -711,13 +738,15 @@ fn extract_after<'a>(line: &'a str, prefix: &str, suffix: &str) -> Option<&'a st
     Some(&rest[..end])
 }
 
-fn render_body(case: &ParityCase, ctx: &TemplateContext) -> Result<Option<Value>> {
+fn render_body(
+    case: &ParityCase,
+    ctx: &TemplateContext,
+    setup_bootstrap_body: &Value,
+) -> Result<Option<Value>> {
     Ok(match case.body_template.as_deref() {
-        Some("realm_create_event") => Some(realm_create_event(
-            ctx,
-            "ak:realm:01999999-0000-8000-8000-000000000451",
-            "Mock parity setup",
-        )?),
+        // The setup batch is the one the Realm id in `ctx` was derived from,
+        // so it is replayed rather than rebuilt.
+        Some("realm_create_event") => Some(setup_bootstrap_body.clone()),
         Some("realm_create_event_2") => Some(realm_create_event(
             ctx,
             "ak:realm:01999999-0000-8000-8000-000000000452",
@@ -810,7 +839,19 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
         .replace("${space_id}", &ctx.space_id)
 }
 
-fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Result<Value> {
+/// The bootstrap batch for a parity Realm, together with the Realm id its
+/// genesis Event derives.
+///
+/// The create payload carries no object id, so the Realm id is a function of
+/// the genesis Event and is only knowable once the batch is built. It is
+/// deterministic here because the signing seed, title and timestamps are fixed,
+/// which is what lets the template context name the Realm before the batch is
+/// submitted.
+fn realm_bootstrap_batch(
+    ctx: &TemplateContext,
+    realm_id: &str,
+    title: &str,
+) -> Result<(String, Value)> {
     let creator = arkret_identifiers::Did::new(ctx.alice_did.clone())?;
     let service_id = arkret_identifiers::Did::new(ctx.service_id.clone())?;
     let mut realm = arkret_models_collaboration::objects::realm::Realm::new(
@@ -836,7 +877,7 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
     // R3.1: the create payload carries no object id.
     realm.id = None;
     let payload = arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm);
-    let (_derived_realm_id, events) =
+    let (derived_realm_id, events) =
         cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
             &ctx.alice_did,
             payload,
@@ -850,7 +891,11 @@ fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Res
             .map(arkret_wire::EventInitialSubmission::online)
             .collect(),
     };
-    Ok(serde_json::to_value(request)?)
+    Ok((derived_realm_id.to_string(), serde_json::to_value(request)?))
+}
+
+fn realm_create_event(ctx: &TemplateContext, realm_id: &str, title: &str) -> Result<Value> {
+    Ok(realm_bootstrap_batch(ctx, realm_id, title)?.1)
 }
 
 fn call_mock_contract(

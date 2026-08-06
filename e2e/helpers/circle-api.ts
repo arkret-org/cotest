@@ -21,7 +21,6 @@ import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
 import {
   authHeaders,
-  buildCapabilityGrantProof,
   canonicalTimestamp,
   expectJsonOk,
   signedEventEnvelope,
@@ -115,16 +114,9 @@ export async function grantCircleMemberManageCapability(
       kind: "ak.capability.grant",
       payload: {
         grant_id: grantId,
-        grant: {
-          ...unsignedGrant,
-          proofs: [
-            buildCapabilityGrantProof({
-              issuerDid: args.ownerDid,
-              payload: unsignedGrant,
-              createdAt: issuedAt,
-            }),
-          ],
-        },
+        // The grant body is closed and carries no inner proof; the Event
+        // envelope proof is the sole durable issuer signature.
+        grant: unsignedGrant,
       },
       createdAt: issuedAt,
     }),
@@ -187,16 +179,9 @@ export async function grantCircleManageCapability(
       kind: "ak.capability.grant",
       payload: {
         grant_id: grantId,
-        grant: {
-          ...unsignedGrant,
-          proofs: [
-            buildCapabilityGrantProof({
-              issuerDid: args.ownerDid,
-              payload: unsignedGrant,
-              createdAt: issuedAt,
-            }),
-          ],
-        },
+        // The grant body is closed and carries no inner proof; the Event
+        // envelope proof is the sole durable issuer signature.
+        grant: unsignedGrant,
       },
       createdAt: issuedAt,
     }),
@@ -321,9 +306,7 @@ async function submitCircleLifecycleArkret(
     {
       headers: authHeaders(token),
       data:
-        opts.reasonCode !== undefined
-          ? { reason_code: opts.reasonCode }
-          : {},
+        opts.reasonCode !== undefined ? { reason_code: opts.reasonCode } : {},
     },
   );
   return await expectJsonOk<CircleOutcome>(

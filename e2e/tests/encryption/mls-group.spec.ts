@@ -261,9 +261,7 @@ async function publishCrossSigning(
     actorDid: fixture.did,
     deviceId: user.deviceId,
     verificationMethod: fixture.principalSigningKeyId,
-    signingSeedB64url: ed25519PrivateKeySeedB64url(
-      fixture.psk.privateKey,
-    ),
+    signingSeedB64url: ed25519PrivateKeySeedB64url(fixture.psk.privateKey),
   });
   await submitSignedEventApi(
     request,
@@ -482,7 +480,6 @@ async function submitMlsGenesis(
   realmId: string,
 ): Promise<MlsGroupContext> {
   const groupId = base64url(typedId("mls_group"));
-  const genesisEventId = typedId("event");
   const effectiveScope = { kind: "realm" as const, realm_id: realmId };
   const group: MlsGroupContext = {
     groupId,
@@ -496,29 +493,29 @@ async function submitMlsGenesis(
     0,
     0,
   );
-  const body = await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: owner.did,
-      realmId,
-      kind: "ak.mls.genesis",
-      eventId: genesisEventId,
-      payload: {
-        mls_group_id: groupId,
-        effective_scope: effectiveScope,
-        epoch: 0,
-        creator_principal_id: owner.did,
-        creator_device_id: owner.deviceId,
-        cipher_suite: MLS_CIPHER_SUITE,
-        group_info_digest: `sha256:${"3".repeat(64)}`,
-        ratchet_tree_digest: `sha256:${"4".repeat(64)}`,
-        governance_binding: governanceBinding,
-        created_at: canonicalTimestamp(),
-      },
-    }),
-    { context: `submit MLS genesis ${groupId}` },
-  );
+  // The genesis Event's id is derived from its own envelope, so it is built
+  // first and read back rather than chosen.
+  const genesisEnvelope = signedEventEnvelope({
+    actorDid: owner.did,
+    realmId,
+    kind: "ak.mls.genesis",
+    payload: {
+      mls_group_id: groupId,
+      effective_scope: effectiveScope,
+      epoch: 0,
+      creator_principal_id: owner.did,
+      creator_device_id: owner.deviceId,
+      cipher_suite: MLS_CIPHER_SUITE,
+      group_info_digest: `sha256:${"3".repeat(64)}`,
+      ratchet_tree_digest: `sha256:${"4".repeat(64)}`,
+      governance_binding: governanceBinding,
+      created_at: canonicalTimestamp(),
+    },
+  });
+  const genesisEventId = genesisEnvelope.event_id as string;
+  const body = await submitSignedEventApi(request, token, genesisEnvelope, {
+    context: `submit MLS genesis ${groupId}`,
+  });
   expect(body.accepted ?? []).toContain(genesisEventId);
   group.epochRefs.set(0, genesisEventId);
   return group;
@@ -543,10 +540,9 @@ async function submitMlsCommit(
     concurrentCommit?: boolean;
     raw?: boolean;
   },
-): Promise<Record<string, unknown>> {
+): Promise<{ body: Record<string, unknown>; eventId: string }> {
   const { realmId, group, baseEpoch, label } = args;
   const nextEpoch = baseEpoch + 1;
-  const eventId = args.eventId ?? typedId("event");
   const baseEpochRef = group.epochRefs.get(baseEpoch);
   if (!baseEpochRef) {
     throw new Error(`missing MLS epoch ${baseEpoch} event ref`);
@@ -573,16 +569,23 @@ async function submitMlsCommit(
     actorDid: committer.did,
     realmId,
     kind: "ak.mls.commit",
-    eventId,
+    eventId: args.eventId,
     payload,
   });
+  // The commit's id is derived from the finished envelope, and realignment to
+  // the actor frontier re-derives it, so the id can only be read back.
+  let eventId = envelope.event_id as string;
   if (args.raw) {
     await alignSignedEventToActorFrontierApi(request, token, envelope);
+    eventId = envelope.event_id as string;
     const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(token),
       data: envelope,
     });
-    return { __status: resp.status(), __body: await resp.json() };
+    return {
+      body: { __status: resp.status(), __body: await resp.json() },
+      eventId,
+    };
   }
   const body = await submitSignedEventApi(request, token, envelope, {
     context: `submit MLS commit ${label}`,
@@ -593,7 +596,7 @@ async function submitMlsCommit(
   ) {
     group.epochRefs.set(nextEpoch, eventId);
   }
-  return body;
+  return { body, eventId };
 }
 
 async function sendEncryptedTimelineMessage(
@@ -1017,8 +1020,6 @@ test.describe("MLS group encryption", () => {
       "mls_keypackage_not_found",
     );
 
-    const genesisEventId = typedId("event");
-    const commitEventId = typedId("event");
     const effectiveScope = { kind: "realm" as const, realm_id: realmId };
     const group = { groupId, effectiveScope };
     const genesisBinding = await fetchMlsGovernanceBinding(
@@ -1028,30 +1029,29 @@ test.describe("MLS group encryption", () => {
       0,
       0,
     );
+    const genesisEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.mls.genesis",
+      payload: {
+        mls_group_id: groupId,
+        effective_scope: effectiveScope,
+        epoch: 0,
+        creator_principal_id: alice.did,
+        creator_device_id: alice.deviceId,
+        cipher_suite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+        group_info_digest: digest("3"),
+        ratchet_tree_digest: digest("4"),
+        governance_binding: genesisBinding,
+        created_at: canonicalTimestamp(),
+      },
+    });
+    const genesisEventId = genesisEnvelope.event_id as string;
     const genesisBody = await submitSignedEventApi(
       request,
       aliceToken,
-      signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.mls.genesis",
-        eventId: genesisEventId,
-        payload: {
-          mls_group_id: groupId,
-          effective_scope: effectiveScope,
-          epoch: 0,
-          creator_principal_id: alice.did,
-          creator_device_id: alice.deviceId,
-          cipher_suite: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
-          group_info_digest: digest("3"),
-          ratchet_tree_digest: digest("4"),
-          governance_binding: genesisBinding,
-          created_at: canonicalTimestamp(),
-        },
-      }),
-      {
-        context: "submit MLS genesis",
-      },
+      genesisEnvelope,
+      { context: "submit MLS genesis" },
     );
     expect(genesisBody.accepted ?? []).toContain(genesisEventId);
 
@@ -1063,7 +1063,6 @@ test.describe("MLS group encryption", () => {
       1,
     );
 
-    const welcomeEventId = typedId("event");
     const welcomeCiphertext = base64url(`opaque-mls-welcome-${stamp}`);
     const welcomeDigest = sha256Digest(
       Buffer.from(welcomeCiphertext, "base64url"),
@@ -1093,9 +1092,9 @@ test.describe("MLS group encryption", () => {
       actorDid: alice.did,
       realmId,
       kind: "ak.mls.commit",
-      eventId: commitEventId,
       payload: commitPayload(`opaque-commit-${stamp}`),
     });
+    const commitEventId = commitEnvelope.event_id as string;
     const commitBody = await submitSignedEventApi(
       request,
       aliceToken,
@@ -1106,49 +1105,48 @@ test.describe("MLS group encryption", () => {
     );
     expect(commitBody.accepted ?? []).toContain(commitEventId);
 
+    const welcomeEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.mls.welcome",
+      payload: {
+        mls_group_id: groupId,
+        epoch: 1,
+        recipient_principal_id: bob.did,
+        recipient_device_id: bob.deviceId,
+        keypackage_ref: keypackageRef,
+        keypackage_digest: keypackageDigest,
+        claim_id: claimId,
+        claim_ref: {
+          claim_id: claimId,
+          keypackage_ref: keypackageRef,
+          keypackage_digest: keypackageDigest,
+          capabilities_digest: capabilitiesDigest,
+          ssk_generation: claimSskGeneration,
+        },
+        claim_envelope: {
+          ...claimEnvelopeUnsigned,
+          signature: {
+            kid: aliceFixture.sskKid,
+            alg: "Ed25519",
+            sig: ed25519SignatureB64url(
+              aliceFixture.ssk.privateKey,
+              canonicalBytes(claimEnvelopeUnsigned),
+            ),
+          },
+        },
+        ciphertext: welcomeCiphertext,
+        expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
+        commit_ref: commitEventId,
+        governance_binding: commitBinding,
+      },
+    });
+    const welcomeEventId = welcomeEnvelope.event_id as string;
     const welcomeBody = await submitSignedEventApi(
       request,
       aliceToken,
-      signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.mls.welcome",
-        eventId: welcomeEventId,
-        payload: {
-          mls_group_id: groupId,
-          epoch: 1,
-          recipient_principal_id: bob.did,
-          recipient_device_id: bob.deviceId,
-          keypackage_ref: keypackageRef,
-          keypackage_digest: keypackageDigest,
-          claim_id: claimId,
-          claim_ref: {
-            claim_id: claimId,
-            keypackage_ref: keypackageRef,
-            keypackage_digest: keypackageDigest,
-            capabilities_digest: capabilitiesDigest,
-            ssk_generation: claimSskGeneration,
-          },
-          claim_envelope: {
-            ...claimEnvelopeUnsigned,
-            signature: {
-              kid: aliceFixture.sskKid,
-              alg: "Ed25519",
-              sig: ed25519SignatureB64url(
-                aliceFixture.ssk.privateKey,
-                canonicalBytes(claimEnvelopeUnsigned),
-              ),
-            },
-          },
-          ciphertext: welcomeCiphertext,
-          expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
-          commit_ref: commitEventId,
-          governance_binding: commitBinding,
-        },
-      }),
-      {
-        context: "submit MLS welcome",
-      },
+      welcomeEnvelope,
+      { context: "submit MLS welcome" },
     );
     expect(welcomeBody.accepted ?? []).toContain(welcomeEventId);
 
@@ -1439,9 +1437,7 @@ test.describe("MLS group encryption", () => {
           audit.indexedDbEnumerationSupported,
           "Chromium must expose IndexedDB database enumeration for a complete storage audit",
         ).toBe(true);
-        expect(audit.indexedDbStores).toContain(
-          "inkson.secret.inkson/entries",
-        );
+        expect(audit.indexedDbStores).toContain("inkson.secret.inkson/entries");
         expect(
           audit.indexedDbEntryKeys.some((key) =>
             key.includes("inkson.e2ee_plaintext_cache.v1."),
@@ -1503,14 +1499,17 @@ test.describe("MLS group encryption", () => {
     const group = await submitMlsGenesis(request, aliceToken, alice, realmId);
 
     // Pre-join MLS epoch advance: epoch 0 -> 1, before carol joins.
-    const preJoinEventId = typedId("event");
-    const preJoin = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      eventId: preJoinEventId,
-      baseEpoch: 0,
-      label: `prejoin-${stamp}`,
-    });
+    const { body: preJoin, eventId: preJoinEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 0,
+        label: `prejoin-${stamp}`,
+      },
+    );
     expect(preJoin.accepted ?? []).toContain(preJoinEventId);
 
     // carol joins now → her joined_at is after the pre-join commit landed. This
@@ -1518,14 +1517,17 @@ test.describe("MLS group encryption", () => {
     await addRealmMemberApi(request, aliceToken, realmId, carol.did);
 
     // Post-join MLS epoch advance: epoch 1 -> 2, visible to carol.
-    const postJoinEventId = typedId("event");
-    const postJoin = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      eventId: postJoinEventId,
-      baseEpoch: 1,
-      label: `postjoin-${stamp}`,
-    });
+    const { body: postJoin, eventId: postJoinEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 1,
+        label: `postjoin-${stamp}`,
+      },
+    );
     expect(postJoin.accepted ?? []).toContain(postJoinEventId);
 
     // carol reads the realm event stream: history_visibility=joined crops the
@@ -1545,7 +1547,9 @@ test.describe("MLS group encryption", () => {
           };
           return (body.events ?? [])
             .map((event) => event.event_id)
-            .filter((eventId): eventId is string => typeof eventId === "string");
+            .filter(
+              (eventId): eventId is string => typeof eventId === "string",
+            );
         },
         {
           timeout: 60_000,
@@ -1733,64 +1737,81 @@ test.describe("MLS group encryption", () => {
     const group = await submitMlsGenesis(request, aliceToken, alice, realmId);
 
     // First commit at base epoch 0 lands → epoch 1.
-    const firstEventId = typedId("event");
-    const first = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      eventId: firstEventId,
-      baseEpoch: 0,
-      label: `commit-a-${stamp}`,
-    });
+    const { body: first, eventId: firstEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 0,
+        label: `commit-a-${stamp}`,
+      },
+    );
     expect(first.accepted ?? []).toContain(firstEventId);
 
     // A racing commit explicitly forking base epoch 0 with different material
     // drives covered_frontier_cell to ⊥. soland accepts the first contended
     // commit (it records the contested marker) without advancing the epoch.
-    const contendEventId = typedId("event");
-    const contend = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      eventId: contendEventId,
-      baseEpoch: 0,
-      label: `commit-b-${stamp}`,
-      concurrentCommit: true,
-    });
+    const { body: contend, eventId: contendEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 0,
+        label: `commit-b-${stamp}`,
+        concurrentCommit: true,
+      },
+    );
     expect(contend.accepted ?? []).toContain(contendEventId);
 
     // A further racing commit at the contested base now fails closed as
     // decryption_pending — the frontier is ⊥ until resolved.
-    const pending = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      baseEpoch: 0,
-      label: `commit-c-${stamp}`,
-      concurrentCommit: true,
-      raw: true,
-    });
+    const { body: pending, eventId: pendingEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 0,
+        label: `commit-c-${stamp}`,
+        concurrentCommit: true,
+        raw: true,
+      },
+    );
     expect([409, 412, 422]).toContain(pending.__status as number);
     expect(wireErrCode(pending.__body)).toBe("decryption_pending");
 
     // A resolving commit at the live epoch advances past ⊥ and clears it.
-    const resolveEventId = typedId("event");
-    const resolve = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      eventId: resolveEventId,
-      baseEpoch: 1,
-      label: `commit-resolve-${stamp}`,
-    });
+    const { body: resolve, eventId: resolveEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 1,
+        label: `commit-resolve-${stamp}`,
+      },
+    );
     expect(resolve.accepted ?? []).toContain(resolveEventId);
 
     // After resolution a further commit at the new live epoch advances normally
     // (the frontier is no longer ⊥).
-    const afterEventId = typedId("event");
-    const after = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      eventId: afterEventId,
-      baseEpoch: 2,
-      label: `commit-after-${stamp}`,
-    });
+    const { body: after, eventId: afterEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 2,
+        label: `commit-after-${stamp}`,
+      },
+    );
     expect(after.accepted ?? []).toContain(afterEventId);
   });
 
@@ -1834,28 +1855,36 @@ test.describe("MLS group encryption", () => {
 
     // A syntactically valid binding with a frontier digest that does not match the
     // accepted Realm control state is rejected with governance_binding_mismatch.
-    const forged = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      baseEpoch: 0,
-      label: `forged-binding-${stamp}`,
-      governanceBinding: forgedCommitBinding,
-      raw: true,
-    });
+    const { body: forged, eventId: forgedEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 0,
+        label: `forged-binding-${stamp}`,
+        governanceBinding: forgedCommitBinding,
+        raw: true,
+      },
+    );
     expect([400, 409, 412, 422]).toContain(forged.__status as number);
     expect(wireErrCode(forged.__body)).toBe("governance_binding_mismatch");
 
     // The matching-frontier commit at the same base still advances the epoch — the
     // gate rejects only the forged binding, not the legitimate one.
-    const cleanEventId = typedId("event");
-    const clean = await submitMlsCommit(request, aliceToken, alice, {
-      realmId,
-      group,
-      eventId: cleanEventId,
-      baseEpoch: 0,
-      label: `clean-binding-${stamp}`,
-      governanceBinding: originalCommitBinding,
-    });
+    const { body: clean, eventId: cleanEventId } = await submitMlsCommit(
+      request,
+      aliceToken,
+      alice,
+      {
+        realmId,
+        group,
+        baseEpoch: 0,
+        label: `clean-binding-${stamp}`,
+        governanceBinding: originalCommitBinding,
+      },
+    );
     expect(clean.accepted ?? []).toContain(cleanEventId);
   });
 

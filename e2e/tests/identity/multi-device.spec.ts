@@ -786,12 +786,7 @@ test.describe("multi-device pairing + revocation", () => {
         reason: "self_revoke_probe",
       },
     });
-    await prepareSignedEventCbaApi(
-      request,
-      aliceToken,
-      selfRevokeEnvelope,
-      {},
-    );
+    await prepareSignedEventCbaApi(request, aliceToken, selfRevokeEnvelope, {});
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,
@@ -1793,8 +1788,7 @@ async function submitPrincipalControlEvent(
     `${context} lease issuance omitted authorization_lease`,
   ).toBeTruthy();
 
-  const controlControlProposalAck =
-    localPrincipalControlProposalAck(envelope);
+  const controlControlProposalAck = localPrincipalControlProposalAck(envelope);
   expect(
     controlControlProposalAck,
     `${context} omitted principal Control Proposal Ack`,
@@ -2104,25 +2098,22 @@ async function revokeDeviceApi(
   token: string,
   deviceId: string,
 ): Promise<string> {
-  const eventId = typedId("event");
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: user.did,
-      realmId: principalControlRealmForDid(user.did),
-      kind: "ak.device.revoke",
-      eventId,
-      payload: {
-        principal_id: user.did,
-        device_id: deviceId,
-        revoked_by: user.deviceId,
-        revoked_at: canonicalTimestamp(),
-        reason: "lost_device",
-      },
-    }),
-    { context: `revoke device ${deviceId}` },
-  );
+  const envelope = signedEventEnvelope({
+    actorDid: user.did,
+    realmId: principalControlRealmForDid(user.did),
+    kind: "ak.device.revoke",
+    payload: {
+      principal_id: user.did,
+      device_id: deviceId,
+      revoked_by: user.deviceId,
+      revoked_at: canonicalTimestamp(),
+      reason: "lost_device",
+    },
+  });
+  const eventId = envelope.event_id as string;
+  await submitSignedEventApi(request, token, envelope, {
+    context: `revoke device ${deviceId}`,
+  });
   return eventId;
 }
 
@@ -2211,7 +2202,6 @@ function buildMlsWelcomeEnvelope(args: {
   label: string;
   governanceBinding: Record<string, unknown>;
 }): { eventId: string; welcomeId: string; envelope: Record<string, unknown> } {
-  const eventId = typedId("event");
   const welcomeId = typedId("mls_welcome");
   const claimId = String(args.keypackageClaim.claim_id);
   const keypackageRef = String(args.keypackageClaim.keypackage_ref);
@@ -2233,49 +2223,46 @@ function buildMlsWelcomeEnvelope(args: {
     created_at: canonicalTimestamp(),
   };
 
-  return {
-    eventId,
-    welcomeId,
-    envelope: signedEventEnvelope({
-      actorDid: args.actorDid,
-      realmId: args.realmId,
-      kind: "ak.mls.welcome",
-      eventId,
-      payload: {
-        welcome_id: welcomeId,
-        mls_group_id: args.group.groupId,
-        epoch: args.epoch,
-        recipient_principal_id: args.recipientDid,
-        recipient_device_id: args.recipientDeviceId,
+  const envelope = signedEventEnvelope({
+    actorDid: args.actorDid,
+    realmId: args.realmId,
+    kind: "ak.mls.welcome",
+    payload: {
+      welcome_id: welcomeId,
+      mls_group_id: args.group.groupId,
+      epoch: args.epoch,
+      recipient_principal_id: args.recipientDid,
+      recipient_device_id: args.recipientDeviceId,
+      keypackage_ref: keypackageRef,
+      keypackage_digest: keypackageDigest,
+      claim_id: claimId,
+      claim_ref: {
+        claim_id: claimId,
         keypackage_ref: keypackageRef,
         keypackage_digest: keypackageDigest,
-        claim_id: claimId,
-        claim_ref: {
-          claim_id: claimId,
-          keypackage_ref: keypackageRef,
-          keypackage_digest: keypackageDigest,
-          capabilities_digest: capabilitiesDigest,
-          ssk_generation: sskGeneration,
-        },
-        claim_envelope: {
-          ...claimEnvelopeUnsigned,
-          signature: {
-            kid: args.identity.ssk.verificationMethod,
-            alg: "Ed25519",
-            sig: nodeSign(
-              null,
-              canonicalBytes(claimEnvelopeUnsigned),
-              args.identity.ssk.privateKey,
-            ).toString("base64url"),
-          },
-        },
-        ciphertext,
-        expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
-        commit_ref: args.commitRef,
-        governance_binding: args.governanceBinding,
+        capabilities_digest: capabilitiesDigest,
+        ssk_generation: sskGeneration,
       },
-    }),
-  };
+      claim_envelope: {
+        ...claimEnvelopeUnsigned,
+        signature: {
+          kid: args.identity.ssk.verificationMethod,
+          alg: "Ed25519",
+          sig: nodeSign(
+            null,
+            canonicalBytes(claimEnvelopeUnsigned),
+            args.identity.ssk.privateKey,
+          ).toString("base64url"),
+        },
+      },
+      ciphertext,
+      expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
+      commit_ref: args.commitRef,
+      governance_binding: args.governanceBinding,
+    },
+  });
+  // The Welcome Event's id is derived from the envelope, so it is read back.
+  return { eventId: envelope.event_id as string, welcomeId, envelope };
 }
 
 function findEventPayload(

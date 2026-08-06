@@ -16,7 +16,6 @@ import {
   accountSubscribeFramesApi,
   base64url,
   base64urlJsonCanonical,
-  buildCapabilityGrantProof,
   canonicalEventTimestamp,
   canonicalJson,
   canonicalTimestamp,
@@ -156,13 +155,15 @@ function deviceVerifyingKeyMultibase(
   actorDid: string,
   deviceId: string,
 ): string {
-  const rawKey = Buffer.from(deviceSigner(actorDid, deviceId).publicKeyHex, "hex");
+  const rawKey = Buffer.from(
+    deviceSigner(actorDid, deviceId).publicKeyHex,
+    "hex",
+  );
   return `z${base58Encode(Buffer.concat([Buffer.from([0xed, 0x01]), rawKey]))}`;
 }
 
 function base58Encode(bytes: Uint8Array): string {
-  const alphabet =
-    "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
   let value = BigInt(`0x${Buffer.from(bytes).toString("hex")}`);
   let encoded = "";
   while (value > 0n) {
@@ -217,9 +218,7 @@ export function buildSignalEnvelope(args: {
       aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
       epoch: 0,
       nonce: base64url(Buffer.alloc(12)),
-      ciphertext: base64url(
-        Buffer.from(canonicalJson(args.plaintext), "utf8"),
-      ),
+      ciphertext: base64url(Buffer.from(canonicalJson(args.plaintext), "utf8")),
       aad_digest: `sha256:${"0".repeat(64)}`,
     },
     proof: {
@@ -271,7 +270,10 @@ export function buildCallSignalEnvelope(args: {
 }
 
 function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
-  const encryptedPayload = envelope.encrypted_payload as Record<string, unknown>;
+  const encryptedPayload = envelope.encrypted_payload as Record<
+    string,
+    unknown
+  >;
   const proof = envelope.proof as Record<string, unknown>;
   const aad = {
     realm_id: envelope.realm_id,
@@ -327,8 +329,7 @@ export function signalPlaintext(
   envelope: Record<string, unknown>,
 ): Record<string, unknown> {
   const encryptedPayload = envelope.encrypted_payload as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (typeof encryptedPayload?.ciphertext !== "string") {
     throw new Error("Signal envelope has no encrypted_payload.ciphertext");
   }
@@ -398,16 +399,9 @@ export async function grantCallCapability(
       },
     ],
   };
-  const grant = {
-    ...unsignedGrant,
-    proofs: [
-      buildCapabilityGrantProof({
-        issuerDid: ownerDid,
-        payload: unsignedGrant,
-        createdAt: issuedAt,
-      }),
-    ],
-  };
+  // The grant body is closed and carries no inner proof; the Event envelope
+  // proof is the sole durable issuer signature.
+  const grant = unsignedGrant;
   await submitSignedEventApi(
     request,
     ownerToken,
@@ -481,7 +475,6 @@ export async function seedCallState(
       "ak.call.state carries at most one moderation_delta per event",
     );
   }
-  const eventId = typedId("event");
   const lifecycleKey = `${realmId}\u001f${callId}`;
   const previousState = callLifecycleByRealmAndCall.get(lifecycleKey) ?? null;
   const nextState = opts.state ?? "active";
@@ -521,7 +514,6 @@ export async function seedCallState(
     request,
     ownerToken,
     signedEventEnvelope({
-      eventId,
       actorDid: ownerDid,
       realmId,
       kind: "ak.call.state",

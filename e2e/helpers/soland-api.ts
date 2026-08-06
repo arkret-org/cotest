@@ -58,7 +58,10 @@ type RegisteredEventSigner = {
 };
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
-const localControlProposalAuthorityAcks = new Map<string, Record<string, unknown>>();
+const localControlProposalAuthorityAcks = new Map<
+  string,
+  Record<string, unknown>
+>();
 const realmAuthorityControllers = new Map<string, string>();
 
 const REALM_AUTHORITY_ROOT_CELL =
@@ -2035,9 +2038,10 @@ export function signedEventEnvelope(
 /// The genesis is the one Event that MUST NOT carry `realm_id` on the wire
 /// while its caller still has to learn the Realm id, so the pair is returned
 /// rather than smuggled through the envelope.
-export function signedRealmGenesisEnvelope(
-  args: SignedEventEnvelopeArgs,
-): { envelope: Record<string, unknown>; realmId: string } {
+export function signedRealmGenesisEnvelope(args: SignedEventEnvelopeArgs): {
+  envelope: Record<string, unknown>;
+  realmId: string;
+} {
   const envelope = signedEventEnvelope(args);
   const eventId = stringValue(envelope.event_id);
   if (!eventId) {
@@ -2060,6 +2064,14 @@ export function refreshEventEnvelopeProof(
   }
   const event = { ...envelope };
   delete event.proofs;
+  // Callers reach this after rewriting `actor_seq` / `prev_refs` to a fresh
+  // actor frontier, and both sit inside the digest preimage. An Event id is a
+  // function of that digest, so re-signing without re-deriving would leave the
+  // envelope carrying the id of content it no longer has.
+  delete event.event_id;
+  const derived = sdkEventDerivedIds(event);
+  event.event_id = derived.event_id;
+  envelope.event_id = derived.event_id;
   envelope.proofs = [
     eventEnvelopeProof({
       actorDid,
@@ -2135,57 +2147,6 @@ function eventEnvelopeProof(args: {
     createdAt,
     signingSeedB64url: registeredSigner?.signingSeedB64url,
   });
-}
-
-// Capability grants have a dedicated SDK transcript; they must not reuse a
-// generic payload-proof binding because the issuer, subject and fixed context
-// are part of the signed bytes.
-export function buildCapabilityGrantProof(args: {
-  issuerDid: string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-  verificationMethod?: string;
-}): Record<string, unknown> {
-  const registeredSigner = eventSignerFor(
-    args.issuerDid,
-    args.verificationMethod,
-  );
-  const verificationMethod =
-    args.verificationMethod ??
-    registeredSigner?.verificationMethod ??
-    `${args.issuerDid}#device`;
-  const payloadDigest = `sha256:${sha256CanonicalJson(args.payload)}`;
-  const bindingObject = {
-    context: "ak.capability-grant-proof-v1",
-    payload_digest: payloadDigest,
-    issuer: args.issuerDid,
-    subject: args.payload.subject,
-    verification_method: verificationMethod,
-    created_at: args.createdAt,
-  };
-  const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
-  const bindingPayload = base64urlJsonCanonical(bindingObject);
-  const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const signature =
-    signWithRegisteredEventSigner(
-      args.issuerDid,
-      verificationMethod,
-      signingInput,
-    ) ??
-    sign(
-      null,
-      Buffer.from(signingInput, "utf8"),
-      developmentProtocolPrivateKey(verificationMethod),
-    ).toString("base64url");
-  return {
-    kind: "detached_jws",
-    alg: "Ed25519",
-    verification_method: verificationMethod,
-    payload_digest: payloadDigest,
-    created_at: args.createdAt,
-    proof_purpose: "issuer_attestation",
-    jws: `${protectedHeader}..${signature}`,
-  };
 }
 
 export async function submitSignedEventApi(
@@ -3120,12 +3081,7 @@ async function applyRegisteredCbaPlane(
       envelope.auth_context === undefined
     ) {
       try {
-        const basis = await readRealmSealBasis(
-          request,
-          token,
-          realmId,
-          server,
-        );
+        const basis = await readRealmSealBasis(request, token, realmId, server);
         const leaves = basis.leaves;
         if (!Array.isArray(leaves) || typeof leaves[0] !== "string") {
           throw new Error(`Realm ${realmId} has no citable Seal leaf`);
@@ -3874,7 +3830,9 @@ function batchFrontierEventIds(
     .filter(
       (id): id is string => typeof id === "string" && !referenced.has(id),
     );
-  return heads.length > 0 ? heads : [typedId("event")];
+  // An empty batch has no heads. Fabricating one would mean minting an
+  // `ak:event:` id, and an Event id is derived from an Event that exists.
+  return heads;
 }
 
 function peerEventsSubmitBody(
@@ -4270,7 +4228,7 @@ function sdkEventEnvelopeProof(args: {
 /// that digest's preimage, so a producer builds the envelope first and derives
 /// the id second. Minting one here would produce a UUIDv7 where the wire form
 /// is UUIDv8, and every SDK-side parse of the envelope rejects it.
-function sdkEventDerivedIds(event: Record<string, unknown>): {
+export function sdkEventDerivedIds(event: Record<string, unknown>): {
   event_id: string;
   realm_id: string;
 } {
