@@ -193,9 +193,9 @@ conformance_test!(
 );
 
 conformance_test!(
-    control_proposal_receipt_suite_matches_reference_semantics,
-    "control_proposal_receipt",
-    cotest::conformance::run_control_proposal_receipt_suite,
+    control_proposal_ack_suite_matches_reference_semantics,
+    "control_proposal_ack",
+    cotest::conformance::run_control_proposal_ack_suite,
 );
 
 conformance_test!(

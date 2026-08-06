@@ -90,7 +90,7 @@ fn build_realm(
         // `revocation_freshness_window_ms`.
         revocation_freshness_window_ms: None,
         recovery_witness_freshness_window_ms: None,
-        receipt_sla_ms: None,
+        proposal_intake_sla_ms: None,
         proposal_decision_window_ms: None,
         proposal_absolute_deadline_ms: None,
         max_proposal_defers: None,

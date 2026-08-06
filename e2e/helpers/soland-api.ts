@@ -58,7 +58,7 @@ type RegisteredEventSigner = {
 };
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
-const localProposalMemberReceipts = new Map<string, Record<string, unknown>>();
+const localControlProposalAuthorityAcks = new Map<string, Record<string, unknown>>();
 const realmAuthorityControllers = new Map<string, string>();
 
 const REALM_AUTHORITY_ROOT_CELL =
@@ -2144,7 +2144,7 @@ export async function submitSignedEventApi(
       1,
       context,
     )[0];
-    const controlProposalReceipt = await issueControlProposalReceiptApi(
+    const controlControlProposalAck = await issueControlProposalAckApi(
       request,
       token,
       envelope,
@@ -2155,7 +2155,7 @@ export async function submitSignedEventApi(
     const realmId = stringValue(envelope.realm_id);
     const actorDid = stringValue(envelope.actor_id);
     const previousControlRoot =
-      controlProposalReceipt &&
+      controlControlProposalAck &&
       realmId &&
       actorDid &&
       realmId !== principalControlRealmForDid(actorDid)
@@ -2172,8 +2172,8 @@ export async function submitSignedEventApi(
         data: canonicalJson({
           event: envelope,
           authorization_lease: authorizationLease,
-          ...(controlProposalReceipt
-            ? { control_proposal_receipt: controlProposalReceipt }
+          ...(controlControlProposalAck
+            ? { control_proposal_ack: controlControlProposalAck }
             : {}),
         }),
       },
@@ -2275,9 +2275,9 @@ export async function submitSignedEventBatchApi(
     const anchorUnit = events[0]?.kind === "ak.realm.create";
     const submissions: Array<Record<string, unknown>> = [];
     for (const [index, event] of events.entries()) {
-      const controlProposalReceipt = anchorUnit
+      const controlControlProposalAck = anchorUnit
         ? undefined
-        : await issueControlProposalReceiptApi(
+        : await issueControlProposalAckApi(
             request,
             token,
             event,
@@ -2288,8 +2288,8 @@ export async function submitSignedEventBatchApi(
       submissions.push({
         event,
         authorization_lease: authorizationLeases[index],
-        ...(controlProposalReceipt
-          ? { control_proposal_receipt: controlProposalReceipt }
+        ...(controlControlProposalAck
+          ? { control_proposal_ack: controlControlProposalAck }
           : {}),
       });
     }
@@ -2399,7 +2399,7 @@ export async function rawSubmitSignedEventApi(
       1,
       `submit ${String(envelope.kind)}`,
     )[0];
-    const controlProposalReceipt = await issueControlProposalReceiptApi(
+    const controlControlProposalAck = await issueControlProposalAckApi(
       request,
       token,
       envelope,
@@ -2417,8 +2417,8 @@ export async function rawSubmitSignedEventApi(
         data: canonicalJson({
           event: envelope,
           authorization_lease: authorizationLease,
-          ...(controlProposalReceipt
-            ? { control_proposal_receipt: controlProposalReceipt }
+          ...(controlControlProposalAck
+            ? { control_proposal_ack: controlControlProposalAck }
             : {}),
         }),
       },
@@ -2442,7 +2442,7 @@ export async function rawSubmitSignedEventApi(
   );
 }
 
-async function issueControlProposalReceiptApi(
+async function issueControlProposalAckApi(
   request: APIRequestContext,
   token: string,
   event: Record<string, unknown>,
@@ -2456,12 +2456,12 @@ async function issueControlProposalReceiptApi(
   if (event.seal_basis == null) {
     return undefined;
   }
-  const localReceipt = localPrincipalControlProposalReceipt(event);
+  const localReceipt = localPrincipalControlProposalAck(event);
   if (localReceipt) {
     return localReceipt;
   }
   const response = await request.post(
-    `${solandBaseUrl(server)}/_arkret/self/control-proposal-receipts`,
+    `${solandBaseUrl(server)}/_arkret/self/control-proposal-acks`,
     {
       headers: {
         ...authHeaders(token),
@@ -2476,17 +2476,17 @@ async function issueControlProposalReceiptApi(
   const text = await response.text();
   expect(
     [200, 201],
-    `${context} proposal receipt issuance returned ${response.status()}: ${text}`,
+    `${context} Control Proposal Ack issuance returned ${response.status()}: ${text}`,
   ).toContain(response.status());
   const body = parseJsonOrRaw(text) as Record<string, unknown>;
-  const member = body.member_receipt as Record<string, unknown> | undefined;
+  const member = body.authority_ack as Record<string, unknown> | undefined;
   if (!member) {
     throw new Error(
-      `${context} proposal receipt issuance omitted member_receipt`,
+      `${context} Control Proposal Ack issuance omitted authority_ack`,
     );
   }
   return {
-    kind: "proposal_receipt",
+    kind: "signed_ack",
     realm_id: member.realm_id,
     proposal_digest: member.proposal_digest,
     received_at: member.received_at,
@@ -2494,11 +2494,11 @@ async function issueControlProposalReceiptApi(
     absolute_due_at: member.absolute_due_at,
     defer_count: 0,
     authority_set_ref: member.authority_set_ref,
-    member_receipts: [member],
+    authority_acks: [member],
   };
 }
 
-export function localPrincipalControlProposalReceipt(
+export function localPrincipalControlProposalAck(
   event: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   const actorDid = stringValue(event.actor_id);
@@ -2531,7 +2531,7 @@ export function localPrincipalControlProposalReceipt(
     did: actorDid,
   })}`;
   const cacheKey = `${proposalDigest}\0${authoritySetRef}\0${verificationMethod}`;
-  let member = localProposalMemberReceipts.get(cacheKey);
+  let member = localControlProposalAuthorityAcks.get(cacheKey);
   if (!member) {
     const receivedAt = new Date();
     const memberWithoutSignature = {
@@ -2546,7 +2546,7 @@ export function localPrincipalControlProposalReceipt(
       memberWithoutSignature,
     )}`;
     const transcript = {
-      context: "ak.control-proposal-member-receipt-proof-v1",
+      context: "ak.control-proposal-authority-ack-proof-v1",
       payload_digest: payloadDigest,
       verification_method: verificationMethod,
       created_at: memberWithoutSignature.received_at,
@@ -2576,10 +2576,10 @@ export function localPrincipalControlProposalReceipt(
         jws: `${protectedHeader}..${signature}`,
       },
     };
-    localProposalMemberReceipts.set(cacheKey, member);
+    localControlProposalAuthorityAcks.set(cacheKey, member);
   }
   return {
-    kind: "proposal_receipt",
+    kind: "signed_ack",
     realm_id: member.realm_id,
     proposal_digest: member.proposal_digest,
     received_at: member.received_at,
@@ -2587,7 +2587,7 @@ export function localPrincipalControlProposalReceipt(
     absolute_due_at: member.absolute_due_at,
     defer_count: 0,
     authority_set_ref: member.authority_set_ref,
-    member_receipts: [member],
+    authority_acks: [member],
   };
 }
 

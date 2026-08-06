@@ -2053,7 +2053,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
             .authorization_lease
             .ok_or_else(|| anyhow!("recovery-policy publication requires delayed authorization"))?,
         cba_proof_bundles: policy_submission.cba_proof_bundles,
-        control_proposal_receipt: policy_submission.control_proposal_receipt,
+        control_proposal_ack: policy_submission.control_proposal_ack,
     };
     sdk.identity_recovery_policy_publish(&policy_request)
         .await
@@ -2455,7 +2455,7 @@ async fn submit_delegated_agent_event(
             event: typed_event.clone(),
             authorization_lease: Some(authorization_lease),
             cba_proof_bundles: Vec::new(),
-            control_proposal_receipt: None,
+            control_proposal_ack: None,
             membership_compensation_evidence: None,
         };
         submission.validate_structural_in_context(arkret_wire::EventSubmitContext::AnchorUnit)?;
@@ -2463,10 +2463,10 @@ async fn submit_delegated_agent_event(
         if !outcome.accepted.contains(&typed_event.event_id) {
             return Err(anyhow!("delegated {kind} was not accepted: {outcome:?}"));
         }
-        if outcome.control_proposal_receipts.len() != 1 {
+        if outcome.control_proposal_acks.len() != 1 {
             return Err(anyhow!(
-                "delegated {kind} returned {} proposal receipts instead of one",
-                outcome.control_proposal_receipts.len()
+                "delegated {kind} returned {} Control Proposal Acks instead of one",
+                outcome.control_proposal_acks.len()
             ));
         }
         return Ok(typed_event);
@@ -4223,7 +4223,7 @@ async fn prepare_initial_submission_for_notary(
     let received_at = canonical_now();
     let proposal_digest = arkret_identifiers::Hash::new(event.event_digest()?)?;
     let authority_set_ref = arkret_identifiers::Hash::new(canonical::canonical_sha256(notary)?)?;
-    let mut member_receipt = arkret_wire::ProposalMemberReceipt {
+    let mut authority_ack = arkret_wire::ControlProposalAuthorityAck {
         realm_id: event.realm_id.clone(),
         proposal_digest: proposal_digest.clone(),
         received_at,
@@ -4238,13 +4238,13 @@ async fn prepare_initial_submission_for_notary(
             jws: String::new(),
         },
     };
-    let signing_bytes = member_receipt.canonical_bytes_for_signature()?;
-    member_receipt.signature.payload_digest = member_receipt.member_receipt_digest()?;
-    member_receipt.signature.jws =
+    let signing_bytes = authority_ack.canonical_bytes_for_signature()?;
+    authority_ack.signature.payload_digest = authority_ack.authority_ack_digest()?;
+    authority_ack.signature.jws =
         arkret_signatures::jws::sign_jws_ed25519(&signing_bytes, signing_key)
             .map_err(anyhow::Error::msg)?;
-    let control_proposal_receipt = arkret_wire::ControlProposalReceipt {
-        kind: arkret_wire::ControlProposalReceiptKind::ProposalReceipt,
+    let control_proposal_ack = arkret_wire::ControlProposalAck {
+        kind: arkret_wire::ControlProposalAckKind::SignedAck,
         realm_id: event.realm_id.clone(),
         proposal_digest,
         received_at,
@@ -4252,14 +4252,14 @@ async fn prepare_initial_submission_for_notary(
         absolute_due_at: received_at + policy.absolute_horizon,
         defer_count: 0,
         authority_set_ref,
-        member_receipts: vec![member_receipt],
+        authority_acks: vec![authority_ack],
     };
-    control_proposal_receipt.validate_structural(policy)?;
+    control_proposal_ack.validate_structural(policy)?;
     let submission = arkret_wire::EventInitialSubmission {
         event: event.clone(),
         authorization_lease: Some(lease),
         cba_proof_bundles: Vec::new(),
-        control_proposal_receipt: Some(control_proposal_receipt),
+        control_proposal_ack: Some(control_proposal_ack),
         membership_compensation_evidence: None,
     };
     submission.validate_structural()?;

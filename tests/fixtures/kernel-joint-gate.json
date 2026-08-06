@@ -433,7 +433,7 @@
       "case_id": "proposal_include",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_receipts.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue",
         "payload": {
           "decision": "include",
           "defer_count": 0
@@ -456,7 +456,7 @@
       "case_id": "proposal_signed_reject",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_receipts.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue",
         "payload": {
           "decision": "reject",
           "defer_count": 0
@@ -479,7 +479,7 @@
       "case_id": "proposal_second_defer",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_receipts.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue",
         "payload": {
           "decision": "defer",
           "defer_count": 2
@@ -504,7 +504,7 @@
       "case_id": "proposal_third_defer_rejected",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_receipts.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue",
         "payload": {
           "decision": "defer",
           "defer_count": 3

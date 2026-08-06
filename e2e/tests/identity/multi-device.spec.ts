@@ -26,7 +26,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   currentActorDidApi,
-  localPrincipalControlProposalReceipt,
+  localPrincipalControlProposalAck,
   principalControlRealmForDid,
   prepareSignedEventCbaApi,
   queryRealmEventsApi,
@@ -1793,11 +1793,11 @@ async function submitPrincipalControlEvent(
     `${context} lease issuance omitted authorization_lease`,
   ).toBeTruthy();
 
-  const controlProposalReceipt =
-    localPrincipalControlProposalReceipt(envelope);
+  const controlControlProposalAck =
+    localPrincipalControlProposalAck(envelope);
   expect(
-    controlProposalReceipt,
-    `${context} omitted principal Control Proposal Receipt`,
+    controlControlProposalAck,
+    `${context} omitted principal Control Proposal Ack`,
   ).toBeTruthy();
 
   const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
@@ -1806,7 +1806,7 @@ async function submitPrincipalControlEvent(
     data: {
       event: envelope,
       authorization_lease: authorizationLease,
-      control_proposal_receipt: controlProposalReceipt,
+      control_proposal_ack: controlControlProposalAck,
     },
   });
   const text = await response.text();

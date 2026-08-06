@@ -105,7 +105,7 @@ const INDENT = "  ";
 /**
  * The bound only exists to stop a self-referential `$ref` chain, so keep it
  * well above the deepest real one. It was 12, which is *below* the real depth
- * of `EventFederationSubmission` → proposal receipt → proof → digest; the
+ * of `EventFederationSubmission` → Control Proposal Ack → proof → digest; the
  * effect was not an error but a silent `unknown`, i.e. a generated type that
  * constrains nothing. Raise this rather than accept a bare `unknown`.
  */

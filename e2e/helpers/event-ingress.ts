@@ -26,7 +26,7 @@ export type IngressSubmission = {
   event: IngressEvent;
   authorization_lease?: Record<string, unknown>;
   cba_proof_bundles?: unknown[];
-  control_proposal_receipt?: Record<string, unknown>;
+  control_proposal_ack?: Record<string, unknown>;
 };
 
 export type IngressDecodeOptions = {

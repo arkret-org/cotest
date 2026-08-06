@@ -10,7 +10,7 @@
 
 /** `realm.schema.json` — closed object schema. */
 export type RealmObject = {
-  "id": string;
+  "id"?: string;
   "schema": "ak.schema.realm.v1";
   "title": string;
   "summary"?: string;
@@ -107,7 +107,7 @@ export type RealmObject = {
   "capability_action_registry_digest": string;
   "revocation_freshness_window_ms"?: number;
   "recovery_witness_freshness_window_ms"?: number;
-  "receipt_sla_ms"?: number;
+  "proposal_intake_sla_ms"?: number;
   "proposal_decision_window_ms"?: number;
   "proposal_absolute_deadline_ms"?: number;
   "max_proposal_defers"?: number;
@@ -135,7 +135,7 @@ export type RealmObject = {
 
 /** `space.schema.json` — closed object schema. */
 export type SpaceObject = {
-  "id": string;
+  "id"?: string;
   "schema": "ak.schema.space.v1";
   "realm_id": string;
   "default_realm_id"?: string;
@@ -344,7 +344,7 @@ export type InviteDeliveryRequestBody = {
   "invite_event": {
     "event_id": string;
     "kind": string;
-    "realm_id": string;
+    "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
@@ -352,6 +352,8 @@ export type InviteDeliveryRequestBody = {
       "kind": "circle";
       "realm_id": string;
       "circle_id": string;
+    } | {
+      "kind": "realm_genesis";
     };
     "actor_id": string;
     "executed_by"?: string;
@@ -570,7 +572,7 @@ export type RealmSealFrontierView = {
     "pending_proposals": Array<{
       "proposal_digest": string;
       "receipt": {
-        "kind": "proposal_receipt";
+        "kind": "signed_ack";
         "realm_id": string;
         "proposal_digest": string;
         "received_at": string;
@@ -578,7 +580,7 @@ export type RealmSealFrontierView = {
         "absolute_due_at": string;
         "defer_count": 0;
         "authority_set_ref": string;
-        "member_receipts": Array<{
+        "authority_acks": Array<{
           "realm_id": string;
           "proposal_digest": string;
           "received_at": string;
@@ -597,7 +599,7 @@ export type RealmSealFrontierView = {
         "kind": "signed_reject" | "signed_defer";
         "realm_id": string;
         "proposal_digest": string;
-        "receipt_digest": string;
+        "proposal_ack_digest": string;
         "decided_at": string;
         "decision_due_at": string;
         "absolute_due_at": string;
@@ -620,7 +622,7 @@ export type RealmSealFrontierView = {
     "retained_faults": Array<{
       "proposal_digest": string;
       "receipt": {
-        "kind": "proposal_receipt";
+        "kind": "signed_ack";
         "realm_id": string;
         "proposal_digest": string;
         "received_at": string;
@@ -628,7 +630,7 @@ export type RealmSealFrontierView = {
         "absolute_due_at": string;
         "defer_count": 0;
         "authority_set_ref": string;
-        "member_receipts": Array<{
+        "authority_acks": Array<{
           "realm_id": string;
           "proposal_digest": string;
           "received_at": string;
@@ -647,7 +649,7 @@ export type RealmSealFrontierView = {
         "kind": "signed_defer";
         "realm_id": string;
         "proposal_digest": string;
-        "receipt_digest": string;
+        "proposal_ack_digest": string;
         "decided_at": string;
         "decision_due_at": string;
         "absolute_due_at": string;
@@ -674,7 +676,7 @@ export type EventFederationSubmission = {
   "event": {
     "event_id": string;
     "kind": string;
-    "realm_id": string;
+    "realm_id"?: string;
     "scope_ref": {
       "kind": "realm";
       "realm_id": string;
@@ -682,6 +684,8 @@ export type EventFederationSubmission = {
       "kind": "circle";
       "realm_id": string;
       "circle_id": string;
+    } | {
+      "kind": "realm_genesis";
     };
     "actor_id": string;
     "executed_by"?: string;
@@ -784,6 +788,8 @@ export type EventFederationSubmission = {
       "kind": "circle";
       "realm_id": string;
       "circle_id": string;
+    } | {
+      "kind": "realm_genesis";
     };
     "action": string;
     "authorization_rule_id": string;
@@ -805,6 +811,8 @@ export type EventFederationSubmission = {
         "kind": "circle";
         "realm_id": string;
         "circle_id": string;
+      } | {
+        "kind": "realm_genesis";
       };
       "source": {
         "source_kind": "cross_signing_publish" | "did_document" | "recovery_policy" | "realm_control";
@@ -846,8 +854,8 @@ export type EventFederationSubmission = {
       "jws": string;
     };
   }>;
-  "control_proposal_receipt"?: {
-    "kind": "proposal_receipt";
+  "control_proposal_ack"?: {
+    "kind": "signed_ack";
     "realm_id": string;
     "proposal_digest": string;
     "received_at": string;
@@ -855,7 +863,7 @@ export type EventFederationSubmission = {
     "absolute_due_at": string;
     "defer_count": 0;
     "authority_set_ref": string;
-    "member_receipts": Array<{
+    "authority_acks": Array<{
       "realm_id": string;
       "proposal_digest": string;
       "received_at": string;
@@ -869,78 +877,5 @@ export type EventFederationSubmission = {
         "jws": string;
       };
     }>;
-  };
-  "membership_compensation_evidence"?: {
-    "delegation": {
-      "delegation_id": string;
-      "core": {
-        "authority": "ak.authority.membership_compensation.v1";
-        "admission_id": string;
-        "join_event_id": string;
-        "join_event_digest": string;
-        "membership_cell_id": string;
-        "membership_incarnation": string;
-        "membership_head_at_acceptance": string;
-        "subject_id": string;
-        "join_actor_id": string;
-        "executed_by"?: string;
-        "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1";
-        "verification_method": string;
-        "executor_service_id": string;
-        "executor_proof_key": string;
-        "resource": string;
-        "action": "ak.member.compensate.leave" | "ak.member.compensate.remove";
-        "deadline": string;
-      };
-      "delegation_digest": string;
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
-    "join_accepted_proof": {
-      "admission_id": string;
-      "join_event_id": string;
-      "join_event_digest": string;
-      "membership_incarnation": string;
-      "accepted_frontier_digest": string;
-      "accepted_at": string;
-      "issuer": string;
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
-    "terminal_certificate": {
-      "domain": "ak.membership-compensation.terminal-certificate.v1";
-      "admission_id": string;
-      "delegation_digest": string;
-      "operation_id": string;
-      "terminal_state": "failed_after_membership_acceptance" | "failed_after_mls_add";
-      "certified_at": string;
-      "issuer": string;
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
-    "single_use_cas_token": {
-      "domain": "ak.membership-compensation.single-use-cas.v1";
-      "admission_id": string;
-      "delegation_digest": string;
-      "expected_state": "unused";
-      "destination_service_id": string;
-      "issued_at": string;
-      "expires_at": string;
-      "issuer": string;
-      "signature": {
-        "verification_method": string;
-        "created_at": string;
-        "jws": string;
-      };
-    };
   };
 };

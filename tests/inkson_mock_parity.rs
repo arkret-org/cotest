@@ -1069,7 +1069,7 @@ async fn prepare_live_publication_body(
                         event,
                         authorization_lease: Some(authorization_lease),
                         cba_proof_bundles: Vec::new(),
-                        control_proposal_receipt: None,
+                        control_proposal_ack: None,
                         membership_compensation_evidence: None,
                     },
                 )

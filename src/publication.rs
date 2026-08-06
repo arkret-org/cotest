@@ -18,10 +18,10 @@ use arkret_wire::{
     AnchorUnitLeaseBasis, AnchorUnitLeaseBasisRef, AuthoritySetAuthorizationRule,
     AuthoritySetIssuer, AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind,
     AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease,
-    AuthorizationLeaseId, ControlProposalDecisionPolicy, ControlProposalReceipt,
-    ControlProposalReceiptKind, DeviceId, Did, DidUrl, Event, EventFederationSubmission,
+    AuthorizationLeaseId, ControlProposalDecisionPolicy, ControlProposalAck,
+    ControlProposalAckKind, DeviceId, Did, DidUrl, Event, EventFederationSubmission,
     EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef, PayloadProof, PayloadSignature,
-    ProjectedCellWrite, ProposalMemberReceipt, ReceiptId, RiskTier, SchemaId, SealId, proof_kind,
+    ProjectedCellWrite, ControlProposalAuthorityAck, ReceiptId, RiskTier, SchemaId, SealId, proof_kind,
 };
 use chrono::{Duration, Utc};
 /// The one registry projection evaluator cotest uses.
@@ -58,7 +58,7 @@ fn issuer_proof(
     }
 }
 
-fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalReceipt>> {
+fn control_proposal_ack_for(event: &Event) -> Result<Option<ControlProposalAck>> {
     if event.seal_basis.is_none() {
         return Ok(None);
     }
@@ -68,7 +68,7 @@ fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalR
         .context("Event digest is a valid Hash")?;
     let authority_set_ref =
         harness_authority_set("ak.authority_set.realm_admission.v1").authority_set_digest;
-    let mut member_receipt = ProposalMemberReceipt {
+    let mut authority_ack = ControlProposalAuthorityAck {
         realm_id: event.realm_id.clone(),
         proposal_digest: proposal_digest.clone(),
         received_at,
@@ -79,17 +79,17 @@ fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalR
             verification_method: DidUrl::new("did:webvh:z6mkfixture:authority.example#key-1")
                 .map_err(anyhow::Error::msg)?,
             payload_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
-                .context("static placeholder member receipt digest is valid")?,
+                .context("static placeholder authority Ack digest is valid")?,
             created_at: received_at,
             jws: "a..b".to_owned(),
             extra: Default::default(),
         },
     };
-    member_receipt.signature.payload_digest = member_receipt
-        .member_receipt_digest()
-        .context("harness proposal member receipt is canonicalizable")?;
-    let receipt = ControlProposalReceipt {
-        kind: ControlProposalReceiptKind::ProposalReceipt,
+    authority_ack.signature.payload_digest = authority_ack
+        .authority_ack_digest()
+        .context("harness proposal authority Ack is canonicalizable")?;
+    let receipt = ControlProposalAck {
+        kind: ControlProposalAckKind::SignedAck,
         realm_id: event.realm_id.clone(),
         proposal_digest,
         received_at,
@@ -97,11 +97,11 @@ fn control_proposal_receipt_for(event: &Event) -> Result<Option<ControlProposalR
         absolute_due_at: received_at + policy.absolute_horizon,
         defer_count: 0,
         authority_set_ref,
-        member_receipts: vec![member_receipt],
+        authority_acks: vec![authority_ack],
     };
     receipt
         .validate_structural(policy)
-        .context("harness proposal receipt is structurally valid")?;
+        .context("harness Control Proposal Ack is structurally valid")?;
     Ok(Some(receipt))
 }
 
@@ -276,12 +276,12 @@ pub fn ingress_receipt_for(event: &Event, lease: &AuthorizationLease) -> Result<
 pub fn federation_submission(event: Event, action: &str) -> Result<EventFederationSubmission> {
     let authorization_lease = authorization_lease_for(&event, action, RiskTier::Low)?;
     let receipt = ingress_receipt_for(&event, &authorization_lease)?;
-    let control_proposal_receipt = control_proposal_receipt_for(&event)?;
+    let control_proposal_ack = control_proposal_ack_for(&event)?;
     Ok(EventFederationSubmission {
         event,
         authorization_lease: Some(authorization_lease),
         ingress_receipts: vec![receipt],
-        control_proposal_receipt,
+        control_proposal_ack,
         membership_compensation_evidence: None,
     })
 }

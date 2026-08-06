@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_wire::notary::{ForensicAttribution, NotaryValue};
 use arkret_wire::{
-    ControlProposalDecision, ControlProposalDecisionPolicy, ControlProposalReceipt,
-    ControlProposalRejectReason, DidUrl, Hash, PayloadSignature, ProposalMemberReceipt, RealmId,
+    ControlProposalDecision, ControlProposalDecisionPolicy, ControlProposalAck,
+    ControlProposalRejectReason, DidUrl, Hash, PayloadSignature, ControlProposalAuthorityAck, RealmId,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -24,7 +24,7 @@ pub fn run_control_proposal_bounded_decision_suite() -> Result<()> {
             .ok_or_else(|| anyhow!("seal-submit fixture is missing {name}"))
     };
 
-    let receipt = case("proposal_receipt_commits_initial_and_absolute_deadlines")?;
+    let receipt = case("control_proposal_ack_commits_initial_and_absolute_deadlines")?;
     let receipt_instance = &receipt["instance"];
     let received_at = timestamp(receipt_instance, "received_at")?;
     let decision_due_at = timestamp(receipt_instance, "decision_due_at")?;
@@ -33,7 +33,7 @@ pub fn run_control_proposal_bounded_decision_suite() -> Result<()> {
         || absolute_due_at - received_at != chrono::Duration::seconds(90)
         || receipt_instance["defer_count"].as_u64() != Some(0)
     {
-        bail!("proposal receipt does not pin the 30s initial / 90s absolute window");
+        bail!("Control Proposal Ack does not pin the 30s initial / 90s absolute window");
     }
 
     let second = &case("second_defer_at_immutable_absolute_deadline")?["instance"];
@@ -68,28 +68,28 @@ pub fn run_control_proposal_bounded_decision_suite() -> Result<()> {
     Ok(())
 }
 
-pub fn run_control_proposal_receipt_suite() -> Result<()> {
-    let fixture = load_fixture_value("control-proposal-receipt-fixture.json")?;
+pub fn run_control_proposal_ack_suite() -> Result<()> {
+    let fixture = load_fixture_value("control-proposal-ack-fixture.json")?;
     ensure!(
-        fixture.get("suite").and_then(Value::as_str) == Some("control_proposal_receipt")
+        fixture.get("suite").and_then(Value::as_str) == Some("control_proposal_ack")
             && fixture
                 .pointer("/runner/entrypoint")
                 .and_then(Value::as_str)
-                == Some("ak.suite.cba.control_proposal_receipt.v1"),
-        "control proposal receipt fixture metadata changed"
+                == Some("ak.suite.cba.control_proposal_ack.v1"),
+        "Control Proposal Ack fixture metadata changed"
     );
     let cases = fixture
         .get("cases")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("control proposal receipt fixture has no cases[]"))?;
+        .ok_or_else(|| anyhow!("Control Proposal Ack fixture has no cases[]"))?;
     const REQUIRED_CASES: [&str; 10] = [
-        "threshold_receipt_set_uses_distinct_current_members",
+        "threshold_ack_set_uses_distinct_current_members",
         "duplicate_member_does_not_count_twice",
         "mixed_authority_set_and_out_of_window_rejected",
-        "receipt_sla_wire_maximum_is_inclusive",
-        "receipt_sla_above_wire_maximum_is_rejected",
+        "proposal_intake_sla_wire_maximum_is_inclusive",
+        "proposal_intake_sla_above_wire_maximum_is_rejected",
         "exact_member_retry_is_byte_identical_and_conflict_cannot_extend",
-        "decision_proofs_cannot_cross_receipt_sets",
+        "decision_proofs_cannot_cross_ack_sets",
         "proposal_decision_window_after_absolute_deadline_rejected",
         "equal_proposal_windows_without_defers_accepted",
         "equal_proposal_windows_with_defers_rejected",
@@ -99,29 +99,29 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         let name = value
             .get("name")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("control proposal receipt case is missing name"))?;
+            .ok_or_else(|| anyhow!("Control Proposal Ack case is missing name"))?;
         ensure!(
             cases_by_name.insert(name, value).is_none(),
-            "control proposal receipt fixture contains duplicate case {name}"
+            "Control Proposal Ack fixture contains duplicate case {name}"
         );
     }
     for required in REQUIRED_CASES {
         ensure!(
             cases_by_name.contains_key(required),
-            "control proposal receipt fixture is missing {required}"
+            "Control Proposal Ack fixture is missing {required}"
         );
     }
     let case = |name: &str| {
         cases_by_name
             .get(name)
             .copied()
-            .ok_or_else(|| anyhow!("control proposal receipt fixture is missing {name}"))
+            .ok_or_else(|| anyhow!("Control Proposal Ack fixture is missing {name}"))
     };
 
-    let threshold_case = case("threshold_receipt_set_uses_distinct_current_members")?;
-    let receipt_members = threshold_case["member_receipts"]
+    let threshold_case = case("threshold_ack_set_uses_distinct_current_members")?;
+    let receipt_members = threshold_case["authority_acks"]
         .as_array()
-        .ok_or_else(|| anyhow!("threshold member_receipts must be an array"))?;
+        .ok_or_else(|| anyhow!("threshold authority_acks must be an array"))?;
     let authority_ref = hash('a');
     let members = receipt_members
         .iter()
@@ -148,13 +148,13 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         forensic_attribution: ForensicAttribution::QuorumIntersection,
     };
     let policy = ControlProposalDecisionPolicy {
-        receipt_sla: chrono::Duration::seconds(60),
+        proposal_intake_sla: chrono::Duration::seconds(60),
         decision_window: chrono::Duration::seconds(30),
         absolute_horizon: chrono::Duration::seconds(90),
         max_defers: 2,
     };
     let receipt =
-        ControlProposalReceipt::from_member_receipts_for_notary(members, policy, &notary)?;
+        ControlProposalAck::from_authority_acks_for_notary(members, policy, &notary)?;
     ensure!(
         receipt.received_at == timestamp(&threshold_case["expected"], "received_at")?
             && receipt.decision_due_at
@@ -164,7 +164,7 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         "threshold receipt aggregate window diverged"
     );
     let actual_order = receipt
-        .member_receipts
+        .authority_acks
         .iter()
         .map(|member| member.signature.verification_method.as_str())
         .collect::<Vec<_>>();
@@ -198,7 +198,7 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
     ensure!(
-        ControlProposalReceipt::from_member_receipts_for_notary(
+        ControlProposalAck::from_authority_acks_for_notary(
             duplicate_members,
             policy,
             &notary,
@@ -228,13 +228,13 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         )?,
     ];
     ensure!(
-        ControlProposalReceipt::from_member_receipts(mixed_members, policy).is_err(),
+        ControlProposalAck::from_authority_acks(mixed_members, policy).is_err(),
         "mixed authority receipt set was accepted"
     );
 
     ensure!(
         ControlProposalDecisionPolicy {
-            receipt_sla: chrono::Duration::hours(24),
+            proposal_intake_sla: chrono::Duration::hours(24),
             ..policy
         }
         .validate()
@@ -243,7 +243,7 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
     );
     ensure!(
         ControlProposalDecisionPolicy {
-            receipt_sla: chrono::Duration::milliseconds(86_400_001),
+            proposal_intake_sla: chrono::Duration::milliseconds(86_400_001),
             ..policy
         }
         .validate()
@@ -272,7 +272,7 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
             .and_then(|value| u8::try_from(value).ok())
             .ok_or_else(|| anyhow!("{name}.max_proposal_defers must fit u8"))?;
         let candidate = ControlProposalDecisionPolicy {
-            receipt_sla: policy.receipt_sla,
+            proposal_intake_sla: policy.proposal_intake_sla,
             decision_window: chrono::Duration::milliseconds(milliseconds(
                 "proposal_decision_window_ms",
             )?),
@@ -297,14 +297,14 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
     }
 
     let replay = case("exact_member_retry_is_byte_identical_and_conflict_cannot_extend")?;
-    let original = serde_json::to_vec(&receipt.member_receipts[0])?;
+    let original = serde_json::to_vec(&receipt.authority_acks[0])?;
     let request = b"canonical-request".to_vec();
     let mut ledger = BTreeMap::from([("receipt-key", (request.clone(), original.clone()))]);
     let exact = ledger
         .get("receipt-key")
         .filter(|(stored_request, _)| stored_request == &request)
         .map(|(_, outcome)| outcome.clone())
-        .context("exact retry missed its original member receipt")?;
+        .context("exact retry missed its original authority Ack")?;
     let conflict = ledger
         .get_mut("receipt-key")
         .is_some_and(|(stored_request, _)| stored_request != b"different-request");
@@ -312,19 +312,19 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         exact == original
             && conflict
             && replay["expected"]["deadline_extended"].as_bool() == Some(false),
-        "member receipt replay semantics diverged"
+        "authority Ack replay semantics diverged"
     );
 
-    let decision_case = case("decision_proofs_cannot_cross_receipt_sets")?;
+    let decision_case = case("decision_proofs_cannot_cross_ack_sets")?;
     let wrong_receipt_digest = Hash::new(
-        decision_case["decision_proof_receipt_digests"][1]
+        decision_case["decision_proof_proposal_ack_digests"][1]
             .as_str()
             .unwrap(),
     )?;
     let mut decision = ControlProposalDecision::SignedReject {
         realm_id: receipt.realm_id.clone(),
         proposal_digest: receipt.proposal_digest.clone(),
-        receipt_digest: wrong_receipt_digest,
+        proposal_ack_digest: wrong_receipt_digest,
         decided_at: receipt.received_at,
         decision_due_at: receipt.decision_due_at,
         absolute_due_at: receipt.absolute_due_at,
@@ -359,7 +359,7 @@ pub fn run_control_proposal_receipt_suite() -> Result<()> {
         let vector = case(name)?;
         let configuration = &vector["realm_configuration"];
         let policy = ControlProposalDecisionPolicy {
-            receipt_sla: chrono::Duration::hours(24),
+            proposal_intake_sla: chrono::Duration::hours(24),
             decision_window: chrono::Duration::milliseconds(
                 configuration["proposal_decision_window_ms"]
                     .as_i64()
@@ -396,7 +396,7 @@ fn hash(byte: char) -> Hash {
     Hash::new(format!("sha256:{}", byte.to_string().repeat(64))).unwrap()
 }
 
-fn member_from_fixture(value: &Value, authority_set_ref: Hash) -> Result<ProposalMemberReceipt> {
+fn member_from_fixture(value: &Value, authority_set_ref: Hash) -> Result<ControlProposalAuthorityAck> {
     member(
         value["verification_method"]
             .as_str()
@@ -423,9 +423,9 @@ fn member(
     decision_due_at: &str,
     absolute_due_at: &str,
     authority_set_ref: Hash,
-) -> Result<ProposalMemberReceipt> {
+) -> Result<ControlProposalAuthorityAck> {
     let received_at = received_at.parse()?;
-    let mut member = ProposalMemberReceipt {
+    let mut member = ControlProposalAuthorityAck {
         realm_id: RealmId::new("ak:realm:01904100-0000-8000-8000-65c7feb295d7")?,
         proposal_digest: hash('c'),
         received_at,
@@ -440,7 +440,7 @@ fn member(
             extra: Default::default(),
         },
     };
-    member.signature.payload_digest = member.member_receipt_digest()?;
+    member.signature.payload_digest = member.authority_ack_digest()?;
     Ok(member)
 }
 

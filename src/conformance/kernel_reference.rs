@@ -70,7 +70,7 @@ pub fn reduce(input: &KernelGateInput) -> KernelGateOutcome {
         }
         "ak.message.create" => reduce_offline_publication(input),
         "ak.self.authorization_leases.command.issue" => reduce_lease_issue(input),
-        "ak.self.control_proposal_receipts.command.issue" => reduce_proposal(input),
+        "ak.self.control_proposal_acks.command.issue" => reduce_proposal(input),
         "ak.notary.fault.equivocation" => reduce_equivocation(input),
         _ => KernelGateOutcome::error("unsupported_feature", "kernel_gate_kind_unsupported"),
     }
