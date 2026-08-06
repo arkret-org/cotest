@@ -292,7 +292,6 @@ export async function createRealmApi(
 ): Promise<string> {
   const ownerDid =
     data.ownerDid ?? (await currentActorDidApi(request, token, opts));
-  const realmId = data.realm_id ?? typedId("realm");
   const createdAt = data.created_at ?? canonicalTimestamp();
   const plaintextVisibleServiceIds =
     data.plaintext_visible_services ??
@@ -305,8 +304,7 @@ export async function createRealmApi(
   // Annotated with the generated mirror of the closed `realm.schema.json`, so
   // an unregistered member is a `tsc --noEmit` error instead of a live
   // `Realm candidate object violates ak.schema.realm.v1` rejection.
-  const realmObject: RealmObject = {
-    id: realmId,
+  const realmObject: Omit<RealmObject, "id"> = {
     schema: "ak.schema.realm.v1",
     title: data.title,
     summary: data.summary,
@@ -339,11 +337,11 @@ export async function createRealmApi(
     created_at: createdAt,
   };
   const realmCreateCell = "ak:cell:ak.component.realm.create.v1:null";
-  const realmCreateEventId = typedId("event");
-  const realmCreateEvent = signedEventEnvelope({
-    eventId: realmCreateEventId,
+  const { envelope: realmCreateEvent, realmId } = signedRealmGenesisEnvelope({
     actorDid: ownerDid,
-    realmId,
+    // The genesis names no Realm; the envelope builder derives both its own id
+    // and the Realm's from the finished envelope.
+    realmId: "",
     kind: "ak.realm.create",
     actorSeq: 0,
     createdAt,
@@ -357,6 +355,9 @@ export async function createRealmApi(
       object: realmObject,
     },
   });
+  // The genesis Event names itself to everything that follows, and its id is
+  // derived from the envelope, so the chain can only be built afterwards.
+  const realmCreateEventId = realmCreateEvent.event_id as string;
   const bootstrapEvents = [realmCreateEvent];
   if (plaintextVisibleServices.length > 0) {
     const plaintextVisibleServicesCell =
@@ -718,16 +719,11 @@ export async function grantRealmReviewCapabilityApi(
     createdAt: issuedAt,
     payload: {
       grant_id: grantId,
-      grant: {
-        ...unsignedGrant,
-        proofs: [
-          buildCapabilityGrantProof({
-            issuerDid: args.ownerDid,
-            payload: unsignedGrant,
-            createdAt: issuedAt,
-          }),
-        ],
-      },
+      // `capability_grant_payload`: the grant body is closed and carries no
+      // inner proof — the Event envelope proof is the sole durable issuer
+      // signature, and it already covers actor, scope, authority refs, payload
+      // and time.
+      grant: unsignedGrant,
     },
   });
   await submitSignedEventApi(request, ownerToken, grantEvent, {
@@ -824,16 +820,9 @@ export async function grantServiceCapabilityApi(
       createdAt: issuedAt,
       payload: {
         grant_id: grantId,
-        grant: {
-          ...unsignedGrant,
-          proofs: [
-            buildCapabilityGrantProof({
-              issuerDid: args.ownerDid,
-              payload: unsignedGrant,
-              createdAt: issuedAt,
-            }),
-          ],
-        },
+        // The grant body is closed and carries no inner proof; the Event
+        // envelope proof is the sole durable issuer signature.
+        grant: unsignedGrant,
       },
     }),
     {
@@ -879,7 +868,6 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   eventId: string;
 } {
   const grantId = typedId("grant");
-  const eventId = typedId("event");
   const issuedAt = canonicalTimestamp();
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
@@ -910,25 +898,19 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     actorDid: args.ownerDid,
     realmId: args.realmId,
     kind: "ak.capability.grant",
-    eventId,
     createdAt: issuedAt,
     // capability_grant_payload (event-payload.schema.json) is closed; typed
     // issuer-authority refs travel inside the grant object.
     payload: {
       grant_id: grantId,
-      grant: {
-        ...unsignedGrant,
-        proofs: [
-          buildCapabilityGrantProof({
-            issuerDid: args.ownerDid,
-            payload: unsignedGrant,
-            createdAt: issuedAt,
-          }),
-        ],
-      },
+      // The grant body is closed and carries no inner proof; the Event
+      // envelope proof is the sole durable issuer signature.
+      grant: unsignedGrant,
     },
   });
-  return { envelope, grantId, eventId };
+  // The grant Event's id is derived from the envelope, so it can only be read
+  // back once the envelope exists.
+  return { envelope, grantId, eventId: envelope.event_id as string };
 }
 
 export async function grantCapabilityEventApi(
@@ -1997,11 +1979,19 @@ export function signedEventEnvelope(
   );
   const hlc = args.hlc ?? nextEnvelopeHlc(args.realmId, createdAt);
   const payload = stripUndefined(args.payload) as Record<string, unknown>;
-  const event = stripUndefined({
-    event_id: args.eventId ?? typedId("event"),
+  // A Realm genesis is the one Event that names no Realm: `realm_id` is
+  // `retype(event_id)` of the genesis itself, and `scope_ref` carries the
+  // closed `realm_genesis` form. Sending either would be
+  // `realm_id_not_event_derived`.
+  const isRealmGenesis = args.kind === "ak.realm.create";
+  const unidentified = stripUndefined({
     kind: args.kind,
-    realm_id: args.realmId,
-    scope_ref: args.scopeRef ?? { kind: "realm", realm_id: args.realmId },
+    realm_id: isRealmGenesis ? undefined : args.realmId,
+    scope_ref:
+      args.scopeRef ??
+      (isRealmGenesis
+        ? { kind: "realm_genesis" }
+        : { kind: "realm", realm_id: args.realmId }),
     actor_id: args.actorDid,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
@@ -2019,6 +2009,15 @@ export function signedEventEnvelope(
     },
     payload,
   }) as Record<string, unknown>;
+  // `event_id` sits outside the digest preimage, so deriving it from the
+  // finished envelope and adding it afterwards does not disturb the digest the
+  // proof below signs. An explicit `eventId` stays honoured: a wire-negative
+  // case needs to be able to present an id the producer would never derive.
+  const derived = args.eventId ? undefined : sdkEventDerivedIds(unidentified);
+  const event = {
+    ...unidentified,
+    event_id: args.eventId ?? derived!.event_id,
+  } as Record<string, unknown>;
   return {
     ...event,
     proofs: [
@@ -2029,6 +2028,25 @@ export function signedEventEnvelope(
       }),
     ],
   };
+}
+
+/// A Realm genesis envelope together with the Realm id it derives.
+///
+/// The genesis is the one Event that MUST NOT carry `realm_id` on the wire
+/// while its caller still has to learn the Realm id, so the pair is returned
+/// rather than smuggled through the envelope.
+export function signedRealmGenesisEnvelope(
+  args: SignedEventEnvelopeArgs,
+): { envelope: Record<string, unknown>; realmId: string } {
+  const envelope = signedEventEnvelope(args);
+  const eventId = stringValue(envelope.event_id);
+  if (!eventId) {
+    throw new Error("Realm genesis Event is missing event_id");
+  }
+  // Re-derived from the finished envelope rather than recomputed here: the
+  // genesis Realm id is protocol arithmetic and belongs to the SDK, not to a
+  // second implementation in the harness.
+  return { envelope, realmId: sdkEventDerivedIds(envelope).realm_id };
 }
 
 export function refreshEventEnvelopeProof(
@@ -2880,11 +2898,10 @@ export async function readRealmSealBasis(
   server?: SolandKey,
 ): Promise<Record<string, unknown>> {
   const frontier = await readRealmSealFrontier(request, token, realmId, server);
-  return {
-    leaves: [frontier.seal_id],
-    control_event_set_root: frontier.control_event_set_root,
-    state_root: frontier.state_root,
-  };
+  // `event-envelope.schema.json`: the sorted Seal leaves are the sole producer
+  // commitment. The Seal roots stay on the Seal — a receiver resolves each leaf
+  // and recomputes them — so copying them into the Event is an unknown member.
+  return { leaves: [frontier.seal_id] };
 }
 
 // Local projection of the wire view: the callers only need the seal head plus
@@ -4089,6 +4106,7 @@ type CotestWireCommand =
   | "capability-action-registry-digest"
   | "event-proof"
   | "event-envelope-proof"
+  | "event-derived-id"
   | "mimi-consent-proof"
   | "principal-control-realm-id"
   | "account-handoff-request"
@@ -4244,6 +4262,23 @@ function sdkEventEnvelopeProof(args: {
     created_at: args.createdAt,
     signing_seed_b64url: args.signingSeedB64url,
   });
+}
+
+/// The content-bound `event_id` the SDK derives for this envelope.
+///
+/// An Event id is a function of the Event's own digest and is excluded from
+/// that digest's preimage, so a producer builds the envelope first and derives
+/// the id second. Minting one here would produce a UUIDv7 where the wire form
+/// is UUIDv8, and every SDK-side parse of the envelope rejects it.
+function sdkEventDerivedIds(event: Record<string, unknown>): {
+  event_id: string;
+  realm_id: string;
+} {
+  assertJsonTransportable(event, "$.event");
+  return cotestWire<{ event_id: string; realm_id: string }>(
+    "event-derived-id",
+    event,
+  );
 }
 
 export function sdkMimiConsentProof(args: {

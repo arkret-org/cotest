@@ -112,6 +112,7 @@ fn main() -> Result<()> {
         "capability-action-registry-digest" => capability_action_registry_digest()?,
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
+        "event-derived-id" => event_derived_id(input)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
@@ -588,6 +589,46 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding)
             .map_err(|error| anyhow::anyhow!("sign MIMI consent proof: {error}"))?;
     serde_json::to_value(request.signature).context("serialize MIMI consent proof")
+}
+
+/// The content-bound `event_id` of an envelope, derived the SDK way.
+///
+/// `encoding.md` section 4.0 makes an Event id a function of the Event's own
+/// digest, and section 6 keeps `event_id` out of that digest's preimage. A
+/// producer therefore cannot mint one: it builds the envelope, derives the id
+/// and only then signs. Callers that cannot reach the SDK — the Playwright
+/// harness is TypeScript — send the envelope here with any placeholder id and
+/// get the real one back.
+fn event_derived_id(event: Value) -> Result<Value> {
+    let mut event = event;
+    if let Value::Object(object) = &mut event {
+        object.insert(
+            "event_id".to_owned(),
+            Value::String("ak:event:00000000-0000-8000-8000-000000000000".to_owned()),
+        );
+        object
+            .entry("proofs")
+            .or_insert_with(|| Value::Array(Vec::new()));
+    }
+    let mut event: Event =
+        serde_json::from_value(event).context("parse SDK Event for id derivation")?;
+    event.event_id = event
+        .derive_event_id()
+        .map_err(|error| anyhow::anyhow!("derive event id: {error}"))?;
+    // A Realm genesis names no Realm, so its `realm_id` is a function of the
+    // Event that creates it and can only be computed once the Event has its
+    // own id. Callers get both back because neither is theirs to choose.
+    if event.scope_ref.realm_id_opt().is_none() {
+        event.realm_id = arkret_wire::derive_genesis_realm_id(
+            &event.event_id,
+            &event.actor_id,
+            event.payload.get("object"),
+        );
+    }
+    Ok(serde_json::json!({
+        "event_id": event.event_id.to_string(),
+        "realm_id": event.realm_id.to_string(),
+    }))
 }
 
 fn event_digest(event: &Value, _mode: EventDigestMode) -> Result<String> {

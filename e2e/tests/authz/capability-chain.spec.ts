@@ -19,6 +19,7 @@ import {
   authHeaders,
   addRealmMemberApi,
   buildCapabilityGrantEnvelope,
+  canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
   queryRealmEventsApi,
@@ -70,12 +71,18 @@ async function authzCheck(
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/authz/check`,
     {
-      headers: authHeaders(token),
-      data: {
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
+      },
+      // Non-streaming JSON operation bodies are admitted as RFC 8785 canonical
+      // bytes, so the request has to be canonicalised rather than handed to
+      // Playwright's own JSON serialiser.
+      data: canonicalJson({
         actor_id: args.actorDid,
         action: args.action,
         resource: { kind: "realm", realm_id: args.realmId },
-      },
+      }),
     },
   );
   const text = await response.text();
