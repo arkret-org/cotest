@@ -29,6 +29,16 @@ const PRODUCT_PRIVATE_REF: &str = "operation-product-private-paths.json";
 const HTTP_METHODS: &[&str] = &[
     "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "QUERY",
 ];
+/// Methods this gate will infer from source text.
+///
+/// QUERY is excluded on purpose. Source-text inference reads both a lowercase
+/// `.verb(` call and a bare uppercase token, and QUERY collides with ordinary
+/// code on both: `.query(&[..])` is `reqwest`'s query-string builder on a GET,
+/// and `AGENT_SIGNER_EVIDENCE_QUERY_PATH` is a path constant, not a verb. A
+/// call site whose verb cannot be inferred is still matched against the
+/// registered path, so leaving QUERY out costs nothing and stops a GET from
+/// being relabelled into an operation that does not exist.
+const INFERABLE_METHODS: &[&str] = &["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
 const OPENAPI_METHODS: &[(&str, &str)] = &[
     ("get", "GET"),
     ("head", "HEAD"),
@@ -267,7 +277,10 @@ pub fn build_operation_registry_gate_report_from_paths(
         .iter()
         .map(|operation| (operation.operation_id.clone(), operation.clone()))
         .collect::<BTreeMap<_, _>>();
-    let openapi = load_openapi_operations(&openapi_path)?;
+    let OpenApiBindings {
+        operations: openapi,
+        compatibility_bindings,
+    } = load_openapi_operations(&openapi_path)?;
     let completeness = load_completeness_report(&completeness_path)?;
     let schema_index = load_schema_index(&schema_index_path)?;
     let product_private = load_product_private_index(&paths.product_private_path)?;
@@ -298,6 +311,7 @@ pub fn build_operation_registry_gate_report_from_paths(
         entries.push(classify_observed_operation(
             observed,
             &registry_by_key,
+            &compatibility_bindings,
             &product_private,
         ));
     }
@@ -584,7 +598,14 @@ fn validate_durable_effects(
     Ok(failures)
 }
 
-fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>> {
+/// OpenAPI bindings, split into the canonical operations and the deprecated
+/// compatibility spellings the spec still publishes for them.
+struct OpenApiBindings {
+    operations: BTreeMap<OperationKey, String>,
+    compatibility_bindings: BTreeMap<OperationKey, String>,
+}
+
+fn load_openapi_operations(path: &Path) -> Result<OpenApiBindings> {
     let raw = fs::read_to_string(path)
         .map_err(|error| anyhow!("failed to read OpenAPI {}: {error}", path.display()))?;
     let value: Value = serde_yaml_ng::from_str(&raw)
@@ -595,6 +616,7 @@ fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>
         .ok_or_else(|| anyhow!("OpenAPI {} missing paths object", path.display()))?;
 
     let mut operations = BTreeMap::new();
+    let mut compatibility_bindings = BTreeMap::new();
     for (path, item) in paths {
         if !path.starts_with("/_arkret") {
             continue;
@@ -611,7 +633,12 @@ fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>
             // carries `x-arkret-compatibility-binding-of` instead of an
             // `operationId` of its own. Treating it as a missing id would make
             // every deprecated alias look like an unregistered operation.
-            if operation.contains_key("x-arkret-compatibility-binding-of") {
+            if let Some(canonical) = operation
+                .get("x-arkret-compatibility-binding-of")
+                .and_then(Value::as_str)
+            {
+                compatibility_bindings
+                    .insert(OperationKey::new(*method, path), canonical.to_owned());
                 continue;
             }
             let operation_id = operation
@@ -627,7 +654,10 @@ fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>
             }
         }
     }
-    Ok(operations)
+    Ok(OpenApiBindings {
+        operations,
+        compatibility_bindings,
+    })
 }
 
 fn load_completeness_report(path: &Path) -> Result<BTreeMap<String, OperationKey>> {
@@ -847,6 +877,7 @@ fn validate_product_private_index(index: &ProductPrivateIndex) -> Vec<String> {
 fn classify_observed_operation(
     observed: ObservedOperation,
     registry_by_key: &BTreeMap<OperationKey, RegisteredOperation>,
+    compatibility_bindings: &BTreeMap<OperationKey, String>,
     product_private: &ProductPrivateIndex,
 ) -> OperationRegistryGateEntry {
     if let Some((operation_id, key)) =
@@ -864,6 +895,20 @@ fn classify_observed_operation(
             evidence: observed.evidence,
             gate_status: OperationRegistryGateStatus::Registered,
             operation_id: Some(operation_id),
+            reason: None,
+        };
+    }
+
+    if let Some((key, operation_id)) = find_compatibility_binding(&observed, compatibility_bindings)
+    {
+        let key_method = key.method.clone();
+        return OperationRegistryGateEntry {
+            source: observed.source,
+            method: observed.method.or(Some(key_method)),
+            path: observed.path,
+            evidence: observed.evidence,
+            gate_status: OperationRegistryGateStatus::Registered,
+            operation_id: Some(operation_id.clone()),
             reason: None,
         };
     }
@@ -896,6 +941,28 @@ fn classify_observed_operation(
                 .to_owned(),
         ),
     }
+}
+
+/// The operation an observed call site reaches through a declared
+/// compatibility binding, if any.
+///
+/// The Events read surface is registered under QUERY, and the OpenAPI declares
+/// the deprecated GET/POST spellings that remain servable during the migration
+/// as `x-arkret-compatibility-binding-of`. A caller still using one of those is
+/// calling a registered operation by a spelling the spec itself publishes, so
+/// the gate must not report it as an unregistered path — while a spelling the
+/// spec does not publish still fails.
+fn find_compatibility_binding<'a>(
+    observed: &ObservedOperation,
+    compatibility_bindings: &'a BTreeMap<OperationKey, String>,
+) -> Option<(&'a OperationKey, &'a String)> {
+    compatibility_bindings.iter().find(|(key, _)| {
+        observed
+            .method
+            .as_deref()
+            .is_none_or(|method| method == key.method)
+            && pattern_matches_path(&key.path, &observed.path)
+    })
 }
 
 fn find_registered_operation<'a>(
@@ -1147,13 +1214,13 @@ fn infer_method_near(lines: &[&str], index: usize) -> Option<String> {
     // The verb binding sits on the line(s) immediately *after* the path. Prefer
     // the nearest following `.<verb>(` over the symmetric context window, which
     // would otherwise pick up a neighbouring route's verb earlier in the
-    // `.push(...).push(...)` chain (HTTP_METHODS iteration order makes GET win
-    // over POST when both appear in the window).
+    // `.push(...).push(...)` chain (INFERABLE_METHODS iteration order makes GET
+    // win over POST when both appear in the window).
     for following in lines.iter().skip(index + 1).take(2) {
         if following.contains("with_path(") || following.contains("Router::") {
             break;
         }
-        for method in HTTP_METHODS {
+        for method in INFERABLE_METHODS {
             if following
                 .trim_start()
                 .starts_with(&format!(".{}(", method.to_ascii_lowercase()))
@@ -1197,7 +1264,7 @@ fn infer_method_from_line(line: &str) -> Option<String> {
     let arkret_index = line.find("_arkret")?;
     let prefix = &line[..arkret_index];
     for token in prefix.split(|ch: char| !ch.is_ascii_alphabetic()) {
-        for method in HTTP_METHODS {
+        for method in INFERABLE_METHODS {
             if token == *method {
                 return Some((*method).to_owned());
             }
@@ -1210,7 +1277,7 @@ fn infer_method_from_line(line: &str) -> Option<String> {
     // far more precise than the multi-line context fallback, which can latch
     // onto a neighbouring route's verb in a `.push(...).push(...)` chain.
     let suffix = &line[arkret_index..];
-    for method in HTTP_METHODS {
+    for method in INFERABLE_METHODS {
         if suffix.contains(&format!(").{}(", method.to_ascii_lowercase())) {
             return Some((*method).to_owned());
         }
@@ -1220,7 +1287,7 @@ fn infer_method_from_line(line: &str) -> Option<String> {
 
 fn infer_method_from_context(context: &str) -> Option<String> {
     let context_lower = context.to_ascii_lowercase();
-    for method in HTTP_METHODS {
+    for method in INFERABLE_METHODS {
         let lower = method.to_ascii_lowercase();
         if context.contains(&format!("Method::{method}"))
             || context.contains(&format!(
@@ -1240,7 +1307,7 @@ fn infer_method_from_context(context: &str) -> Option<String> {
             return Some((*method).to_owned());
         }
     }
-    for method in HTTP_METHODS {
+    for method in INFERABLE_METHODS {
         if context.contains(&format!("{method} /_arkret"))
             || context.contains(&format!("{method} `_arkret"))
             || context.contains(&format!("{method} `/_arkret"))
@@ -1252,7 +1319,7 @@ fn infer_method_from_context(context: &str) -> Option<String> {
 }
 
 fn infer_path_item_type_method(line: &str) -> Option<String> {
-    for method in HTTP_METHODS {
+    for method in INFERABLE_METHODS {
         if line.contains(&format!("PathItemType::{}", title_method(method))) {
             return Some((*method).to_owned());
         }
