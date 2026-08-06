@@ -180,7 +180,7 @@ pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
 /// fixture and verifies the remaining reducer cases stay explicitly declared.
 ///
 /// This is deliberately named a checkpoint suite: presence checks for the
-/// 62-case formal matrix are not reported as executed reducer coverage.
+/// 63-case formal matrix are not reported as executed reducer coverage.
 pub fn run_identity_root_anchor_checkpoint_suite() -> Result<()> {
     let fixture = load_fixture_value(ROOT_ANCHOR_FIXTURE)?;
     for vector in [
@@ -362,21 +362,40 @@ fn validate_reanchor_helpers() -> Result<()> {
         "previous_device_generation": "1-QmPrevious",
         "new_device_generation": "2-QmCurrent",
         "pre_fence_basis": null,
-        "replacement_authorize_event_id": "ak:event:01904100-0000-8000-8000-000000000003",
-        "replacement_authorize_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "replacement_authorize_payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     });
     let payload: DeviceReanchorPayload = serde_json::from_value(value.clone())?;
     let reanchor_digest = Hash::new(format!("sha256:{}", "1".repeat(64)))?;
+    let authorize_digest = Hash::new(format!("sha256:{}", "2".repeat(64)))?;
     // A Seal `delta` entry is a bare digest: `move` is no longer an id kind.
-    let delta = vec![
-        reanchor_digest.clone(),
-        payload.replacement_authorize_digest.clone(),
-    ];
-    validate_device_reanchor_recovery_first_seal(&payload, &[], &delta, &reanchor_digest)?;
-    if validate_device_reanchor_recovery_first_seal(&payload, &[], &delta[..1], &reanchor_digest)
-        .is_ok()
+    let delta = vec![reanchor_digest.clone(), authorize_digest.clone()];
+    validate_device_reanchor_recovery_first_seal(
+        &payload,
+        &[],
+        &delta,
+        &reanchor_digest,
+        &authorize_digest,
+    )?;
+    if validate_device_reanchor_recovery_first_seal(
+        &payload,
+        &[],
+        &delta[..1],
+        &reanchor_digest,
+        &authorize_digest,
+    )
+    .is_ok()
     {
         bail!("recovery-first Seal accepted a partial re-anchor unit");
+    }
+
+    // The re-anchor payload MUST NOT carry the authorize Event id or envelope
+    // digest: the authorize envelope names the re-anchor in prev_refs, so an id
+    // binding would make the two Events preimages of each other.
+    let mut carries_event_id = value.clone();
+    carries_event_id["replacement_authorize_event_id"] =
+        json!("ak:event:01904100-0000-8000-8000-000000000003");
+    if serde_json::from_value::<DeviceReanchorPayload>(carries_event_id).is_ok() {
+        bail!("device re-anchor accepted a replacement Event id binding");
     }
 
     let mut mismatched = value;
@@ -434,9 +453,9 @@ fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
         .get("cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("{ROOT_ANCHOR_FIXTURE} missing cases[]"))?;
-    if cases.len() != 62 {
+    if cases.len() != 63 {
         bail!(
-            "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 62 cases, found {}",
+            "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 63 cases, found {}",
             cases.len()
         );
     }

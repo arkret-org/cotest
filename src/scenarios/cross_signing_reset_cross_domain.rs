@@ -1,28 +1,19 @@
-//! Round 2+3 / T08 — `ak.cross_signing.reset` cross-domain replay
-//! defense + event_id binding.
+//! `ak.cross_signing.reset` cross-domain replay defense.
 //!
-//! Spec (round 2+3 cleanup, T08):
+//! `cross-signing-reset.schema.json` requires `trust_domain:
+//! TypedTrustDomainId` (`ak:trust_domain:<scope>`), and the receiver MUST
+//! reject a payload whose `trust_domain` is not its own deployment trust domain
+//! with `cross_domain_replay_rejected`.
 //!
-//! `cross-signing-reset.schema.json` now requires two new payload fields:
-//!   * `trust_domain: TypedTrustDomainId` (`ak:trust_domain:<scope>`)
-//!   * `reset_event_id: TypedEventId` (`ak:event:<uuidv7>`)
-//!
-//! The receiver MUST validate in this strict order:
-//!   1. `trust_domain` matches the receiver's deployment trust domain → otherwise
-//!      `cross_domain_replay_rejected`
-//!   2. `reset_event_id` equals the enclosing `Event.id` → otherwise `reset_event_id_mismatch`
-//!   3. Signature verification (existing) → otherwise `invalid_signature`
-//!
-//! This module covers two scenarios:
-//!
-//! * `cross_signing_reset_cross_domain_run` — proof minted against `ak:trust_domain:A` replayed
-//!   against deployment `ak:trust_domain:B`; MUST be rejected with `cross_domain_replay_rejected`.
-//!
-//! * `cross_signing_reset_event_id_mismatch_run` — payload carries `reset_event_id != Event.id`;
-//!   MUST be rejected with `reset_event_id_mismatch`.
+//! The companion `reset_event_id` binding is gone: `arkret-spec@e6da1f0e`
+//! retired it because the payload sits inside the `event_digest` preimage and
+//! `event_id` derives from that digest, so a payload naming its own Event had
+//! no fixed point. Shell binding now comes from the envelope proof, which is
+//! outside the preimage, plus the `previous_generation` precondition — neither
+//! of which this module pins.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{EventId, TypedTrustDomainId};
+use arkret_identifiers::TypedTrustDomainId;
 use arkret_schema::embedded_error_code_identifiers;
 
 pub const TRUST_DOMAIN_ID_PREFIX: &str = "ak:trust_domain:";
@@ -74,38 +65,6 @@ pub async fn cross_signing_reset_cross_domain_run() -> Result<()> {
     Ok(())
 }
 
-/// Wire-level executable check for `reset_event_id_mismatch`: the SDK's
-/// `EventId` validator must accept two distinct valid event ids — the
-/// reducer surface for this code is "payload.reset_event_id != Event.id"
-/// which is a structural inequality the SDK constructors enable.
-pub async fn cross_signing_reset_event_id_mismatch_run() -> Result<()> {
-    if arkret_wire::ReasonCode::RESET_EVENT_ID_MISMATCH != "reset_event_id_mismatch" {
-        return Err(anyhow!(
-            "SDK arkret_wire::ReasonCode::RESET_EVENT_ID_MISMATCH ({}) drifted from cotest pin ({}).",
-            "reset_event_id_mismatch",
-            arkret_wire::ReasonCode::RESET_EVENT_ID_MISMATCH,
-        ));
-    }
-    // `reset_event_id_mismatch` is a spec `reason_code` (applies_to=
-    // schema_violation), not a top-level error `code`; validate registration
-    // against the registry union rather than the codes-only table.
-    let registry_identifiers = embedded_error_code_identifiers()
-        .map_err(|e| anyhow!("failed to load embedded error-code-registry: {e}"))?;
-    if !registry_identifiers.contains(arkret_wire::ReasonCode::RESET_EVENT_ID_MISMATCH) {
-        return Err(anyhow!(
-            "error-code-registry missing reason code reset_event_id_mismatch"
-        ));
-    }
-    let id_a = EventId::new("ak:event:01904100-0000-8000-8000-000000000001")
-        .map_err(|e| anyhow!("SDK rejected well-formed EventId a: {e}"))?;
-    let id_b = EventId::new("ak:event:01904100-0000-8000-8000-000000000002")
-        .map_err(|e| anyhow!("SDK rejected well-formed EventId b: {e}"))?;
-    if id_a.as_str() == id_b.as_str() {
-        return Err(anyhow!("EventId equality broke: a and b must be distinct"));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,12 +74,5 @@ mod tests {
         cross_signing_reset_cross_domain_run()
             .await
             .expect("SDK constant + TypedTrustDomainId roundtrip must agree with cotest pin");
-    }
-
-    #[tokio::test]
-    async fn reset_event_id_mismatch_pin_matches_sdk() {
-        cross_signing_reset_event_id_mismatch_run()
-            .await
-            .expect("SDK constant + EventId roundtrip must agree with cotest pin");
     }
 }
