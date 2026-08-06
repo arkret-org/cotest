@@ -14,8 +14,15 @@
 // routes them through the same reducer pipeline as wire events (so reducer
 // invariants like `circle_member_must_be_realm_member` fire identically).
 //
-// Wire shapes mirror soland src/routing/circles.rs (CreateCircleRequestBody /
-// CircleMemberRequestBody / CircleOutcome / CircleMembershipOutcome).
+// Wire shapes mirror soland src/routing/circles.rs (CircleCreateRequestBody /
+// CircleMemberRequestBody / CircleView / CircleMembershipOutcome).
+//
+// Every write body now carries the caller-signed `ak.circle.*` Event and nothing
+// else: the operations declare a durable `event_log` effect, and the spec
+// forbids the service from producing that signature for the caller
+// (`capabilities.md` §118/§361, `key-management.md` §411). That is also why the
+// helpers take an `actorDid` — a bearer token says who is calling, but only a
+// DID can be the `actor_id` of a signed Event.
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
@@ -193,32 +200,100 @@ export async function grantCircleManageCapability(
   return grantId;
 }
 
-// Create a Circle bound to `realmId`. Defaults `join_rule` to "invite" (the
-// soland default) so admin-only one-way adds are the membership path.
+// `display.short_name` derived from a Circle title, mirroring inkson's
+// `ak_ops::circle_display_from_title`. It is a presentation default with no
+// reducer meaning, so it belongs wherever the create payload is authored — which
+// is the caller now that the service no longer builds that payload.
+export function circleDisplayFromTitle(
+  title: string,
+): CircleOutcome["display"] {
+  let shortName = Array.from(title)
+    .filter((ch) => /[A-Za-z0-9 _-]/.test(ch))
+    .join("")
+    .trim();
+  if (shortName.length === 0) {
+    shortName = "Circle";
+  }
+  const first = shortName[0]!;
+  if (/[a-z]/.test(first)) {
+    shortName = first.toUpperCase() + shortName.slice(1);
+  } else if (!/[A-Z]/.test(first)) {
+    shortName = `C ${shortName}`;
+  }
+  return {
+    short_name: shortName.slice(0, 24).trimEnd(),
+    color_token: "slate",
+    symbol: { glyph: "ring" },
+  };
+}
+
+// The Circle object the caller signs into `ak.circle.create`.
+//
+// `id` and `mls_group_ref` are absent by construction, and the service rejects
+// either one: the Circle id is `retype(create_event.event_id)` and the group ref
+// is reducer-derived. Everything else is the actor's to choose, which is why the
+// whole object lives inside the signed Event rather than in REST fields.
+function circleCreateObject(args: {
+  actorDid: string;
+  realmId: string;
+  title: string;
+  summary?: string;
+  joinRule?: string;
+  directoryVisibility?: string;
+  historyVisibility?: string;
+  encryptionProfile?: string;
+  createdAt: string;
+}): Record<string, unknown> {
+  return {
+    schema: "ak.schema.circle.v1",
+    realm_id: args.realmId,
+    title: args.title,
+    ...(args.summary !== undefined ? { summary: args.summary } : {}),
+    display: circleDisplayFromTitle(args.title),
+    directory_visibility: args.directoryVisibility ?? "members",
+    join_rule: args.joinRule ?? "invite",
+    history_visibility: args.historyVisibility ?? "joined",
+    encryption_profile: args.encryptionProfile ?? "mls_rfc9420",
+    state: "active",
+    created_by: args.actorDid,
+    created_at: args.createdAt,
+  };
+}
+
+// Create a Circle bound to `realmId`. Defaults mirror the values the service
+// used to fill in before the request body became the caller-signed Event
+// (`members` / `invite` / `joined` / `mls_rfc9420`), so admin-only one-way adds
+// stay the membership path.
 export async function createCircleArkret(
   request: APIRequestContext,
   token: string,
   args: {
+    actorDid: string;
     realmId: string;
     title: string;
     joinRule?: string;
     directoryVisibility?: string;
+    historyVisibility?: string;
+    encryptionProfile?: string;
     summary?: string;
     server?: SolandKey;
   },
 ): Promise<CircleOutcome> {
+  const createdAt = canonicalTimestamp();
   const response = await request.post(
     `${solandBaseUrl(args.server)}/_arkret/self/circles`,
     {
       headers: authHeaders(token),
       data: {
-        realm_id: args.realmId,
-        title: args.title,
-        ...(args.joinRule !== undefined ? { join_rule: args.joinRule } : {}),
-        ...(args.directoryVisibility !== undefined
-          ? { directory_visibility: args.directoryVisibility }
-          : {}),
-        ...(args.summary !== undefined ? { summary: args.summary } : {}),
+        create_event: {
+          event: signedEventEnvelope({
+            actorDid: args.actorDid,
+            realmId: args.realmId,
+            kind: "ak.circle.create",
+            payload: { object: circleCreateObject({ ...args, createdAt }) },
+            createdAt,
+          }),
+        },
       },
     },
   );
@@ -243,21 +318,43 @@ export async function getCircleArkret(
 
 // Add (or change) a Circle member. Returns the raw APIResponse so negative
 // scenarios can assert status + wire `code` without throwing.
+//
+// `actorDid` is the caller who signs the Event — not `actorId`, the actor whose
+// membership moves. The two differ on every admin pull, which is exactly the
+// scenario this surface exists for: the puller signs, the pulled actor does
+// nothing.
 export async function addCircleMemberRaw(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  args: { actorId: string; membership?: CircleMembership; server?: SolandKey },
+  args: {
+    actorDid: string;
+    realmId: string;
+    actorId: string;
+    membership?: CircleMembership;
+    server?: SolandKey;
+  },
 ): Promise<APIResponse> {
   return await request.post(
     `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`,
     {
       headers: authHeaders(token),
       data: {
-        actor_id: args.actorId,
-        ...(args.membership !== undefined
-          ? { membership: args.membership }
-          : {}),
+        member_event: {
+          event: signedEventEnvelope({
+            actorDid: args.actorDid,
+            realmId: args.realmId,
+            kind: "ak.circle.member.state",
+            payload: {
+              circle_id: circleId,
+              actor_id: args.actorId,
+              // `circle_member_state_payload` is closed and requires
+              // `membership`, so there is no server-side default left to lean
+              // on; the surface's own default was `join`.
+              membership: args.membership ?? "join",
+            },
+          }),
+        },
       },
     },
   );
@@ -268,7 +365,13 @@ export async function addCircleMemberArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  args: { actorId: string; membership?: CircleMembership; server?: SolandKey },
+  args: {
+    actorDid: string;
+    realmId: string;
+    actorId: string;
+    membership?: CircleMembership;
+    server?: SolandKey;
+  },
 ): Promise<CircleMembershipOutcome> {
   const response = await addCircleMemberRaw(request, token, circleId, args);
   return await expectJsonOk<CircleMembershipOutcome>(
@@ -294,19 +397,41 @@ export async function removeCircleMemberArkret(
   );
 }
 
+// The three lifecycle endpoints share `object_lifecycle_payload`, which
+// single-sources the target Circle by `target_ref`; the service checks it
+// against the path. `reason` is free text on that payload — it is not a wire
+// reason code, which is why the argument lost the `Code` suffix.
+type CircleLifecycleArgs = {
+  actorDid: string;
+  realmId: string;
+  reason?: string;
+  server?: SolandKey;
+};
+
 async function submitCircleLifecycleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
   action: "archive" | "restore" | "tombstone",
-  opts: { reasonCode?: string; server?: SolandKey } = {},
+  args: CircleLifecycleArgs,
 ): Promise<CircleOutcome> {
   const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/${action}`,
+    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/${action}`,
     {
       headers: authHeaders(token),
-      data:
-        opts.reasonCode !== undefined ? { reason_code: opts.reasonCode } : {},
+      data: {
+        lifecycle_event: {
+          event: signedEventEnvelope({
+            actorDid: args.actorDid,
+            realmId: args.realmId,
+            kind: `ak.circle.${action}`,
+            payload: {
+              target_ref: circleId,
+              ...(args.reason !== undefined ? { reason: args.reason } : {}),
+            },
+          }),
+        },
+      },
     },
   );
   return await expectJsonOk<CircleOutcome>(
@@ -319,14 +444,14 @@ export async function archiveCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  opts: { reasonCode?: string; server?: SolandKey } = {},
+  args: CircleLifecycleArgs,
 ): Promise<CircleOutcome> {
   return await submitCircleLifecycleArkret(
     request,
     token,
     circleId,
     "archive",
-    opts,
+    args,
   );
 }
 
@@ -334,14 +459,14 @@ export async function restoreCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  opts: { reasonCode?: string; server?: SolandKey } = {},
+  args: CircleLifecycleArgs,
 ): Promise<CircleOutcome> {
   return await submitCircleLifecycleArkret(
     request,
     token,
     circleId,
     "restore",
-    opts,
+    args,
   );
 }
 
@@ -349,14 +474,14 @@ export async function tombstoneCircleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  opts: { reasonCode?: string; server?: SolandKey } = {},
+  args: CircleLifecycleArgs,
 ): Promise<CircleOutcome> {
   return await submitCircleLifecycleArkret(
     request,
     token,
     circleId,
     "tombstone",
-    opts,
+    args,
   );
 }
 

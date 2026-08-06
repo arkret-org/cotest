@@ -68,6 +68,7 @@ test.describe("circle membership (same principal server)", () => {
 
     // alice creates an invite-rule Circle bound to that realm.
     const circle = await createCircleArkret(request, aliceToken, {
+      actorDid: alice.did,
       realmId,
       title: `S8 circle ${Date.now()}`,
       joinRule: "invite",
@@ -96,6 +97,8 @@ test.describe("circle membership (same principal server)", () => {
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
+      actorDid: alice.did,
+      realmId,
       actorId: alice.did,
       membership: "join",
     });
@@ -103,7 +106,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
-      { actorId: bob.did, membership: "join" },
+      { actorDid: alice.did, realmId, actorId: bob.did, membership: "join" },
     );
     expect(membership.membership).toBe("join");
     expect(membership.actor_id).toBe(bob.did);
@@ -129,6 +132,7 @@ test.describe("circle membership (same principal server)", () => {
       ownerDid: alice.did,
     });
     const circle = await createCircleArkret(request, aliceToken, {
+      actorDid: alice.did,
       realmId,
       title: `S8 restore circle ${Date.now()}`,
       joinRule: "invite",
@@ -146,6 +150,8 @@ test.describe("circle membership (same principal server)", () => {
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
+      actorDid: alice.did,
+      realmId,
       actorId: alice.did,
       membership: "join",
     });
@@ -154,6 +160,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
+      { actorDid: alice.did, realmId },
     );
     expect(archived.state).toBe("archived");
 
@@ -161,6 +168,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
+      { actorDid: alice.did, realmId },
     );
     expect(restored.state).toBe("active");
 
@@ -191,6 +199,7 @@ test.describe("circle membership (same principal server)", () => {
       ownerDid: alice.did,
     });
     const circle = await createCircleArkret(request, aliceToken, {
+      actorDid: alice.did,
       realmId,
       title: `S8n circle ${Date.now()}`,
       joinRule: "invite",
@@ -202,6 +211,8 @@ test.describe("circle membership (same principal server)", () => {
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
+      actorDid: alice.did,
+      realmId,
       actorId: alice.did,
       membership: "join",
     });
@@ -212,7 +223,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
-      { actorId: mallory.did, membership: "join" },
+      { actorDid: alice.did, realmId, actorId: mallory.did, membership: "join" },
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(422);
@@ -260,6 +271,7 @@ test.describe("circle membership (same principal server)", () => {
     await addRealmMemberApi(request, aliceToken, realmId, dave.did);
 
     const circle = await createCircleArkret(request, aliceToken, {
+      actorDid: alice.did,
       realmId,
       title: `S8c circle ${Date.now()}`,
       joinRule: "invite",
@@ -271,6 +283,8 @@ test.describe("circle membership (same principal server)", () => {
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
+      actorDid: alice.did,
+      realmId,
       actorId: alice.did,
       membership: "join",
     });
@@ -282,7 +296,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       carolToken,
       circle.circle_id,
-      { actorId: dave.did, membership: "join" },
+      { actorDid: carol.did, realmId, actorId: dave.did, membership: "join" },
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(403);
