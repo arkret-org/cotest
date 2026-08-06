@@ -7,6 +7,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   addRealmMemberApi,
+  accountDataSetSubmission,
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
   authHeaders,
@@ -75,7 +76,14 @@ test.describe("personal blocklist", () => {
       `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
       {
         headers: authHeaders(token),
-        data: { expected_revision: 0, content: first },
+        data: {
+          set_event: accountDataSetSubmission({
+            actorDid: alice.did,
+            key: dataType,
+            expectedRevision: 0,
+            value: first,
+          }),
+        },
       },
     );
     expect(firstPut.status()).toBe(201);
@@ -90,7 +98,14 @@ test.describe("personal blocklist", () => {
       `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
       {
         headers: authHeaders(token),
-        data: { expected_revision: firstEntry.revision, content: second },
+        data: {
+          set_event: accountDataSetSubmission({
+            actorDid: alice.did,
+            key: dataType,
+            expectedRevision: firstEntry.revision ?? 1,
+            value: second,
+          }),
+        },
       },
     );
     expect(secondPut.status()).toBe(200);

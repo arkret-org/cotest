@@ -1817,6 +1817,70 @@ function parseNdjsonFrames(text: string): Array<Record<string, unknown>> {
     .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
+/// The holder-signed `ak.account_data.set` both account-data endpoints now take.
+///
+/// The kind's actor-private cell subject is
+/// `composite[envelope.actor_id, payload.key]`, so the Event's actor is half the
+/// cell address: the holder signs, and the service cannot author it under its own
+/// DID. Omit `value` for the tombstone the DELETE endpoint requires.
+export function accountDataSetSubmission(args: {
+  actorDid: string;
+  key: string;
+  expectedRevision: number;
+  value?: unknown;
+  privateValue?: boolean;
+}): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    key: args.key,
+    owner: args.actorDid,
+    expected_revision: args.expectedRevision,
+  };
+  if (args.value === undefined) {
+    payload.tombstone = true;
+  } else if (args.privateValue ?? privateAccountDataKeys.has(args.key)) {
+    payload.encrypted_payload = args.value;
+  } else {
+    payload.body = args.value;
+  }
+  return {
+    event: signedEventEnvelope({
+      actorDid: args.actorDid,
+      realmId: principalControlRealmForDid(args.actorDid),
+      kind: "ak.account_data.set",
+      payload,
+    }),
+  };
+}
+
+/// Tombstone one account-data key through the holder-signed DELETE body.
+///
+/// `expected_revision` lives in the signed payload; it used to be a query
+/// parameter, which no signature could cover.
+export async function deleteAccountDataApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  key: string,
+  expectedRevision: number,
+  opts: { server?: SolandKey; context?: string } = {},
+) {
+  const response = await request.delete(
+    `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
+    {
+      headers: authHeaders(token),
+      data: {
+        set_event: accountDataSetSubmission({ actorDid, key, expectedRevision }),
+      },
+    },
+  );
+  const text = await response.text();
+  expect(
+    response.status(),
+    `${opts.context ?? `delete account_data ${key}`} returned ${response.status()}: ${text}`,
+  ).toBe(200);
+  return parseJsonOrRaw(text) as Record<string, unknown>;
+}
+
 export async function replaceAccountDataApi(
   request: APIRequestContext,
   token: string,
@@ -1834,8 +1898,12 @@ export async function replaceAccountDataApi(
     {
       headers: authHeaders(token),
       data: {
-        expected_revision: expectedRevision,
-        content,
+        set_event: accountDataSetSubmission({
+          actorDid,
+          key,
+          expectedRevision,
+          value: content,
+        }),
       },
     },
   );

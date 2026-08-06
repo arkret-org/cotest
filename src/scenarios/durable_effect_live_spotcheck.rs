@@ -331,12 +331,28 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         ));
     };
     let before = realm_event_kinds(&alice, &realm_id).await?;
+    // The holder signs: `ak.account_data.set`'s actor-private cell subject is
+    // composite[envelope.actor_id, payload.key], so the actor is half the cell
+    // address and the service cannot author it.
+    let account_data_key = "client.durable-effect-spotcheck";
+    let set_event = crate::harness::event_envelope(
+        &alice.actor,
+        &arkret_models_identity::principal_control_realm_id(&arkret_wire::Did::new(
+            alice.actor.clone(),
+        )?),
+        arkret_wire::EventKind::ACCOUNT_DATA_SET,
+        json!({
+            "key": account_data_key,
+            "owner": alice.actor.clone(),
+            "expected_revision": 0,
+            "body": {"spotcheck": true},
+        }),
+    );
     let response = alice
-        .put("/_arkret/self/account_data/client.durable-effect-spotcheck")
+        .put(&format!("/_arkret/self/account_data/{account_data_key}"))
         .json(
             &arkret_models_identity::account::AccountDataReplaceRequestBody {
-                expected_revision: 0,
-                content: json!({"spotcheck": true}),
+                set_event: arkret_wire::EventInitialSubmission::online(set_event),
             },
         )
         .send()
