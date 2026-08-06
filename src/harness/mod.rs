@@ -47,7 +47,7 @@ pub use proof::{
 };
 pub use server::{ArkretServer, TestServerGroup};
 pub(crate) use server::{ReservedPort, reserve_port};
-pub use wire_body::{NonProtocolTestBody, wire_negative_from_sdk};
+pub use wire_body::{CanonicalJsonBody, NonProtocolTestBody, wire_negative_from_sdk};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
 

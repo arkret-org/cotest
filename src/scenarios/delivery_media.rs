@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
@@ -11,8 +11,6 @@ use crate::harness::{
 use crate::scenarios::identity_test_support::{
     actor_did_for_service, authorize_device_public_key, signed_keys_upload_body,
 };
-
-const BLOB_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-00000000d101";
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("delivery-keys").await?;
@@ -442,7 +440,6 @@ async fn create_blob_access_realm(
 ) -> Result<String> {
     let create = alice
         .create_realm_with(json!({
-            "realm_id": BLOB_REALM_ID,
             "title": "Blob Access Space",
             "public": true,
             "discoverability": "public",
@@ -451,12 +448,17 @@ async fn create_blob_access_realm(
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
-    assert_eq!(create["realm_id"], BLOB_REALM_ID);
+    // The Realm id is derived from the genesis Event, so it can only be read
+    // back from the create response.
+    let realm_id = create["realm_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("Realm create response has no realm_id"))?
+        .to_owned();
 
-    let member = alice.add_member(BLOB_REALM_ID, bob).await?;
+    let member = alice.add_member(&realm_id, bob).await?;
     assert_eq!(member["status"], "accepted");
 
-    Ok(BLOB_REALM_ID.to_owned())
+    Ok(realm_id)
 }
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {

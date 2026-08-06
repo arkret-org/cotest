@@ -92,7 +92,10 @@ fn vectors() -> Vec<CanonicalVector> {
                 },
                 "schema_version": 1,
             }),
-            expected_digest: "sha256:4897809adcfd8cb255fce7030c55e9d73a4f5bc740b60bbcf0921eee5b81a6f9",
+            // Regenerated after the Realm id in this payload moved to the
+            // event-derived UUIDv8 layout: the id sits inside the digest
+            // preimage, so editing it necessarily moves the digest.
+            expected_digest: "sha256:6e229d37ceac222b160a9aea3dd2325ea36f643b9a1989a52aca51892d85e056",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.starid_webvh_update.v1",
@@ -347,7 +350,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     )
     .expect("effective-set digest");
     assert_eq!(
-        effective_set, "sha256:3ecfd9602f659f3044d809b84e3aa65c7d531529a95631685e305d3002933506",
+        effective_set, "sha256:f687b7added051552cfd79a74ba225d52c6e9013bf667ed6db4bf5286a3f25e2",
         "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

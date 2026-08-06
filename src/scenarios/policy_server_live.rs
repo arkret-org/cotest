@@ -17,7 +17,9 @@ use arkret_models_collaboration::governance::realm_governance::{
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, TestActorClient, TestServerGroup, expect_json};
+use crate::harness::{
+    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, expect_json,
+};
 use crate::transcripts::record_vector_event;
 
 fn declaration_body(host: &str) -> Result<RealmPolicyServerReplaceRequestBody> {
@@ -30,27 +32,26 @@ fn declaration_body(host: &str) -> Result<RealmPolicyServerReplaceRequestBody> {
     }))?)
 }
 
-async fn create_policy_realm(
-    client: &TestActorClient,
-    realm_id: &str,
-    title: &str,
-) -> Result<String> {
+async fn create_policy_realm(client: &TestActorClient, title: &str) -> Result<String> {
     let created = client
         .create_realm_with(json!({
-            "realm_id": realm_id,
             "title": title,
             "summary": title,
             "public": false,
             "plaintext_visible_services": [client.service_id()]
         }))
         .await?;
-    client
-        .grant_self_realm_actions(realm_id, &["ak.policy.manage"])
-        .await?;
-    created["realm_id"]
+    // The Realm id is derived from the genesis Event. Granting against anything
+    // else addresses a Realm that was never created, which the server answers
+    // with `realm not found`.
+    let realm_id = created["realm_id"]
         .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("create realm response missing realm_id: {created}"))
+        .ok_or_else(|| anyhow!("create realm response missing realm_id: {created}"))?
+        .to_owned();
+    client
+        .grant_self_realm_actions(&realm_id, &["ak.policy.manage"])
+        .await?;
+    Ok(realm_id)
 }
 
 async fn policy_server_events(client: &TestActorClient, realm_id: &str) -> Result<Vec<Value>> {
@@ -140,7 +141,7 @@ async fn link_governed_by(client: &TestActorClient, realm_id: &str, target: &str
     let body = expect_json(
         client
             .post(&format!("/_arkret/self/realms/{realm_id}/links"))
-            .json(&request),
+            .canonical_json(&request)?,
         StatusCode::OK,
     )
     .await?;
@@ -162,18 +163,8 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let child_realm = create_policy_realm(
-        &alice,
-        "ak:realm:01999999-0000-8000-8000-00000005c001",
-        "Policy Server Live Child",
-    )
-    .await?;
-    let org_realm = create_policy_realm(
-        &alice,
-        "ak:realm:01999999-0000-8000-8000-00000005c002",
-        "Policy Server Live Org",
-    )
-    .await?;
+    let child_realm = create_policy_realm(&alice, "Policy Server Live Child").await?;
+    let org_realm = create_policy_realm(&alice, "Policy Server Live Org").await?;
     link_governed_by(&alice, &child_realm, &org_realm).await?;
 
     // The org declares: durable Control Move + newly accepted Seal.
@@ -247,12 +238,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     assert_eq!(policy_server_events(&alice, &child_realm).await?.len(), 2);
 
     // A Realm with neither a direct binding nor a governed_by chain.
-    let never_declared = create_policy_realm(
-        &alice,
-        "ak:realm:01999999-0000-8000-8000-00000005c003",
-        "Policy Server Live Never",
-    )
-    .await?;
+    let never_declared = create_policy_realm(&alice, "Policy Server Live Never").await?;
     let (missing_status, missing_body) = delete_policy_server(&alice, &never_declared).await?;
     assert_eq!(
         missing_status,
@@ -317,12 +303,7 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let realm_id = create_policy_realm(
-        &alice,
-        "ak:realm:01999999-0000-8000-8000-00000005c011",
-        "Policy Server Restart",
-    )
-    .await?;
+    let realm_id = create_policy_realm(&alice, "Policy Server Restart").await?;
 
     let (status, view) = put_policy_server(
         &alice,

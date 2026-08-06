@@ -88,10 +88,14 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
     cotest::harness::refresh_typed_event_proof_with_signing_seed(event, SIGNING_SEED)
 }
 
+/// A Strand create whose only per-sibling difference is its title.
+///
+/// The object id is not authored: a Strand id is `retype(event_id)` of this
+/// create, so `suffix` exists solely to keep concurrent siblings distinct in
+/// the digest preimage.
 fn strand_payload(realm_id: &str, suffix: &str) -> Value {
     json!({
         "object": {
-            "id": format!("ak:strand:01904100-0000-8000-8000-{suffix}"),
             "schema": "ak.schema.strand.v1",
             "realm_id": realm_id,
             "tracks": {"discussion": {"enabled": true, "is_primary": true}},

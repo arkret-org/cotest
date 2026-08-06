@@ -26,8 +26,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, event_envelope_with_chain, eventually, expect_json,
-    refresh_typed_event_proof,
+    CanonicalJsonBody, TestActorClient, TestServerGroup, event_envelope_with_chain, eventually,
+    expect_json, refresh_typed_event_proof,
 };
 use crate::transcripts::record_vector_event;
 
@@ -175,7 +175,7 @@ async fn submit_invite_move(
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
     let response = actor
         .post("/_arkret/self/events")
-        .json(&crate::publication::initial_submission(event, "")?)
+        .canonical_json(&crate::publication::initial_submission(event, "")?)?
         .send()
         .await?;
     let status = response.status();
@@ -365,7 +365,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     .await?;
     let response = alice
         .post("/_arkret/self/events")
-        .json(&crate::publication::initial_submission(replay_event, "")?)
+        .canonical_json(&crate::publication::initial_submission(replay_event, "")?)?
         .send()
         .await?;
     let replay_status = response.status();

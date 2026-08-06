@@ -2,6 +2,33 @@ use anyhow::{Result, anyhow};
 use serde::{Serialize, Serializer};
 use serde_json::Value;
 
+/// Sends a request body the way a real Arkret client does: as RFC 8785
+/// canonical JSON bytes.
+///
+/// `reqwest`'s own `.json()` serialises struct fields in declaration order,
+/// which is almost never lexicographic, so a server that admits non-streaming
+/// JSON operation bodies through the SDK ingress budget rejects it with
+/// `schema_violation`. The SDK's HTTP client canonicalises for exactly this
+/// reason (`arkret-http-client` `canonical_json_body`); the harness has to do
+/// the same wherever it hand-builds a request instead of going through the SDK.
+///
+/// Deliberately non-canonical bytes are a different intent — a wire-negative
+/// case — and those call sites must keep using `.json()` or `.body()` so the
+/// mutation survives to the server.
+pub trait CanonicalJsonBody: Sized {
+    fn canonical_json<T: Serialize + ?Sized>(self, body: &T) -> Result<Self>;
+}
+
+impl CanonicalJsonBody for reqwest::RequestBuilder {
+    fn canonical_json<T: Serialize + ?Sized>(self, body: &T) -> Result<Self> {
+        let bytes = arkret_canonical::canonical::canonical_json_bytes(body)
+            .map_err(|error| anyhow!("request body is not canonicalisable: {error}"))?;
+        Ok(self
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(bytes))
+    }
+}
+
 /// Raw body for a named wire-negative case. Construction starts from a
 /// serializable SDK value and applies one deliberate mutation.
 pub struct WireNegativeBody(Value);

@@ -17,12 +17,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let realm_id = create_test_realm(
-        &alice,
-        "ak:realm:01999999-0000-8000-8000-00000000e101",
-        "Event Idempotency Replay",
-    )
-    .await?;
+    let realm_id = create_test_realm(&alice, "Event Idempotency Replay").await?;
     let event = alice
         .author_event(
             &realm_id,
@@ -86,12 +81,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let realm_id = create_test_realm(
-        &alice,
-        "ak:realm:01999999-0000-8000-8000-00000000e102",
-        "Event Idempotency Edit Redact",
-    )
-    .await?;
+    let realm_id = create_test_realm(&alice, "Event Idempotency Edit Redact").await?;
     let create_event = alice
         .author_event(
             &realm_id,
@@ -166,10 +156,14 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     Ok(())
 }
 
-async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str) -> Result<String> {
+/// Creates a Realm and returns the id the genesis Event derived.
+///
+/// A Realm id is `retype(event_id)` of its own create, so a caller cannot
+/// choose one: naming a fixture id here and asserting the response echoes it
+/// compares a placeholder against the real derived id.
+async fn create_test_realm(alice: &TestActorClient, title: &str) -> Result<String> {
     let response = alice
         .create_realm_with(json!({
-            "realm_id": realm_id,
             "title": title,
             "summary": title,
             "public": true,
@@ -179,8 +173,10 @@ async fn create_test_realm(alice: &TestActorClient, realm_id: &str, title: &str)
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
-    assert_eq!(response["realm_id"], realm_id);
-    Ok(realm_id.to_owned())
+    Ok(response["realm_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("Realm create response has no realm_id"))?
+        .to_owned())
 }
 
 async fn submit_and_duplicate(alice: &TestActorClient, event: &Event) -> Result<Value> {

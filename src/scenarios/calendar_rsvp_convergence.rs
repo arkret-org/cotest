@@ -26,7 +26,19 @@ use crate::harness::{ArkretServer, TestActorClient, eventually, expect_json};
 
 const ALICE_DID: &str = "did:web:cotest-rsvp-alice.example";
 const BOB_DID: &str = "did:web:cotest-rsvp-bob.example";
-const CALENDAR_STRAND_ID: &str = "ak:strand:01904100-0000-8000-8000-00000000ca01";
+/// The Strand id of a create the server has accepted.
+///
+/// A Strand is an event-derived kind: its id is `retype(event_id)` of its own
+/// create Event, so the only way to name it is to submit the create first and
+/// read the id back. Carrying a pre-minted id in the create payload is
+/// `object_id_not_event_derived`.
+fn created_strand_id(submitted: &Value) -> Result<String> {
+    let event_id = submitted["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("Strand create response carries no accepted event_id"))?;
+    let event_id = arkret_identifiers::EventId::new(event_id.to_owned())?;
+    Ok(arkret_identifiers::StrandId::from_event_id(&event_id).to_string())
+}
 
 fn calendar_subtree() -> Value {
     json!({
@@ -46,6 +58,7 @@ fn calendar_subtree() -> Value {
 
 fn inkson_rsvp_payload(
     realm_id: &str,
+    strand_id: &str,
     actor_id: &str,
     status: &str,
     basis: &[String],
@@ -59,7 +72,7 @@ fn inkson_rsvp_payload(
     let event = inkson::calendar::build_calendar_rsvp_event(
         realm_id,
         actor_id,
-        CALENDAR_STRAND_ID,
+        strand_id,
         status,
         None,
         &calendar_fields,
@@ -71,18 +84,22 @@ fn inkson_rsvp_payload(
 }
 
 /// Reads the schedule revision frontier and the live RSVP heads.
-async fn read_strand(client: &TestActorClient) -> Result<Value> {
+async fn read_strand(client: &TestActorClient, strand_id: &str) -> Result<Value> {
     expect_json(
-        client.get(&format!("/_soland/self/strands/{CALENDAR_STRAND_ID}")),
+        client.get(&format!("/_soland/self/strands/{strand_id}")),
         StatusCode::OK,
     )
     .await
 }
 
-async fn inkson_schedule_frontier(client: &TestActorClient, realm_id: &str) -> Result<Vec<String>> {
+async fn inkson_schedule_frontier(
+    client: &TestActorClient,
+    realm_id: &str,
+    strand_id: &str,
+) -> Result<Vec<String>> {
     let events = client.sdk().events_read_all_pages(realm_id).await?.events;
     Ok(
-        inkson::calendar::schedule_revision_heads(&events, CALENDAR_STRAND_ID)?
+        inkson::calendar::schedule_revision_heads(&events, strand_id)?
             .into_iter()
             .map(|digest| digest.as_str().to_owned())
             .collect(),
@@ -272,13 +289,12 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 
     // Activation is one canonical pair: the schema ref plus the calendar
     // namespace. A lone ref or a lone subtree is calendar_activation_mismatch.
-    alice
+    let created = alice
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.strand.create",
             json!({
                 "object": {
-                    "id": CALENDAR_STRAND_ID,
                     "schema": "ak.schema.strand.v1",
                     "realm_id": realm_id,
                     "schema_refs": ["ak.schema.calendar_event.v1"],
@@ -295,8 +311,9 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             calendar_grant_refs.clone(),
         )
         .await?;
+    let strand_id = created_strand_id(&created)?;
 
-    let create_frontier = inkson_schedule_frontier(&alice, &realm_id).await?;
+    let create_frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
     if create_frontier.is_empty() {
         return Err(anyhow!(
             "calendar create must publish a schedule revision head; without it a client cannot \
@@ -314,7 +331,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             &realm_id,
             "ak.strand.update",
             json!({
-                "target_ref": CALENDAR_STRAND_ID,
+                "target_ref": strand_id,
                 "patch": {
                     "metadata.fields.calendar": {
                         "$op": "set",
@@ -339,17 +356,17 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             calendar_grant_refs.clone(),
         )
         .await?;
-    let frontier = inkson_schedule_frontier(&alice, &realm_id).await?;
+    let frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
 
     bob.submit_event_with_causal_refs(
         &realm_id,
         "ak.rsvp.set",
-        inkson_rsvp_payload(&realm_id, BOB_DID, "accepted", &frontier)?,
+        inkson_rsvp_payload(&realm_id, &strand_id, BOB_DID, "accepted", &frontier)?,
         frontier.clone(),
         bob_grant_refs,
     )
     .await?;
-    let bob_heads = heads_for(&read_strand(&bob).await?, BOB_DID);
+    let bob_heads = heads_for(&read_strand(&bob, &strand_id).await?, BOB_DID);
     if head_statuses(&bob_heads) != vec!["accepted".to_owned()] {
         return Err(anyhow!(
             "Bob's RSVP did not materialize through the real reducer"
@@ -362,7 +379,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
             frontier.clone(),
             calendar_grant_refs.clone(),
         )
@@ -371,7 +388,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "declined", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "declined", &frontier)?,
             frontier.clone(),
             calendar_grant_refs.clone(),
         )
@@ -379,7 +396,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let first_digest = submit_prepared_event(&alice, &first_event).await?;
     let second_digest = submit_prepared_event(&alice_second_device, &second_event).await?;
 
-    let strand = read_strand(&alice).await?;
+    let strand = read_strand(&alice, &strand_id).await?;
     let heads = heads_for(&strand, ALICE_DID);
     if heads.len() != 2 {
         return Err(anyhow!(
@@ -405,14 +422,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "ak.rsvp.set",
             // The entry basis stays the schedule frontier; the extra causal
             // edges are what dominate the earlier RSVP heads.
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "tentative", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "tentative", &frontier)?,
             resolving_basis,
             calendar_grant_refs.clone(),
         )
         .await?;
     let resolved_digest = submitted_digest(&resolved)?;
 
-    let strand = read_strand(&alice).await?;
+    let strand = read_strand(&alice, &strand_id).await?;
     let heads = heads_for(&strand, ALICE_DID);
     if heads.len() != 1 {
         return Err(anyhow!(
@@ -435,7 +452,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
             next_pair_basis.clone(),
             calendar_grant_refs.clone(),
         )
@@ -444,7 +461,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "declined", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "declined", &frontier)?,
             next_pair_basis,
             calendar_grant_refs.clone(),
         )
@@ -452,7 +469,10 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let reverse_first_digest = submit_prepared_event(&alice_second_device, &reverse_first).await?;
     let reverse_second_digest = submit_prepared_event(&alice, &reverse_second).await?;
     submit_prepared_event(&alice_second_device, &reverse_first).await?;
-    let heads = heads_for(&read_strand(&alice_second_device).await?, ALICE_DID);
+    let heads = heads_for(
+        &read_strand(&alice_second_device, &strand_id).await?,
+        ALICE_DID,
+    );
     if heads.len() != 2
         || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
     {
@@ -468,12 +488,12 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "tentative", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "tentative", &frontier)?,
             final_resolution_basis,
             calendar_grant_refs,
         )
         .await?;
-    let final_heads = heads_for(&read_strand(&alice).await?, ALICE_DID);
+    let final_heads = heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID);
     if final_heads.len() != 1 || head_statuses(&final_heads) != vec!["tentative".to_owned()] {
         return Err(anyhow!(
             "reversed arrival order must converge to the same causal successor"
@@ -551,13 +571,12 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .to_owned();
     let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
     let grants = grant_calendar_actions(&alice, &realm_id, &bootstrap_seal).await?;
-    alice
+    let created = alice
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.strand.create",
             json!({
                 "object": {
-                    "id": CALENDAR_STRAND_ID,
                     "schema": "ak.schema.strand.v1",
                     "realm_id": realm_id,
                     "schema_refs": ["ak.schema.calendar_event.v1"],
@@ -574,12 +593,13 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             grants.clone(),
         )
         .await?;
-    let frontier = inkson_schedule_frontier(&alice, &realm_id).await?;
+    let strand_id = created_strand_id(&created)?;
+    let frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
     let accepted = alice
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
             frontier.clone(),
             grants.clone(),
         )
@@ -588,14 +608,14 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "declined", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "declined", &frontier)?,
             frontier.clone(),
             grants.clone(),
         )
         .await?;
     let accepted_digest = submit_prepared_event(&alice, &accepted).await?;
     let declined_digest = submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(&read_strand(&alice).await?, ALICE_DID).len() != 2 {
+    if heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID).len() != 2 {
         return Err(anyhow!(
             "pre-restart Calendar cell did not expose two heads"
         ));
@@ -611,7 +631,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice_second_device = server
         .demo_client(ALICE_DID, "ak:device:01904100-0000-7000-8000-0000000000d2")
         .await?;
-    let restarted_strand = read_strand(&alice).await?;
+    let restarted_strand = read_strand(&alice, &strand_id).await?;
     let heads = heads_for(&restarted_strand, ALICE_DID);
     if heads.len() != 2
         || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
@@ -622,7 +642,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     }
     submit_prepared_event(&alice, &accepted).await?;
     submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(&read_strand(&alice).await?, ALICE_DID).len() != 2 {
+    if heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID).len() != 2 {
         return Err(anyhow!("post-restart exact replay duplicated RSVP heads"));
     }
 
@@ -634,7 +654,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "tentative", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "tentative", &frontier)?,
             resolution_basis,
             grants,
         )
@@ -646,7 +666,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice = server
         .demo_client(ALICE_DID, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
-    let heads = heads_for(&read_strand(&alice).await?, ALICE_DID);
+    let heads = heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID);
     if heads.len() != 1 || head_statuses(&heads) != vec!["tentative".to_owned()] {
         return Err(anyhow!(
             "resolved RSVP cell did not survive the second restart"
@@ -687,13 +707,12 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
         .to_owned();
     let bootstrap_seal = wait_for_bootstrap_seal(&alice, &realm_id).await?;
     let strand_grant_refs = grant_calendar_actions(&alice, &realm_id, &bootstrap_seal).await?;
-    alice
+    let strand_created = alice
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.strand.create",
             json!({
                 "object": {
-                    "id": CALENDAR_STRAND_ID,
                     "schema": "ak.schema.strand.v1",
                     "realm_id": realm_id,
                     "schema_refs": ["ak.schema.calendar_event.v1"],
@@ -710,14 +729,15 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
             strand_grant_refs,
         )
         .await?;
+    let strand_id = created_strand_id(&strand_created)?;
 
-    let frontier = inkson_schedule_frontier(&alice, &realm_id).await?;
+    let frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
 
     let event = alice
         .author_event(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
         )
         .await?;
     let submission = crate::publication::initial_submission(event, "")?;

@@ -23,7 +23,12 @@ const OPERATION_SCHEMA_INDEX_REF: &str = "reports/operation-schema-index.json";
 const EVENT_KIND_REGISTRY_REF: &str = "registry/event-kind-registry.json";
 const PRODUCT_PRIVATE_REF: &str = "operation-product-private-paths.json";
 
-const HTTP_METHODS: &[&str] = &["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+// QUERY (RFC 9110 registered, safe and cacheable with a request body) is what
+// the operation registry binds the Events read surface to; a gate that does not
+// know the verb reports every one of those operations as an unsupported method.
+const HTTP_METHODS: &[&str] = &[
+    "GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "QUERY",
+];
 const OPENAPI_METHODS: &[(&str, &str)] = &[
     ("get", "GET"),
     ("head", "HEAD"),
@@ -32,6 +37,7 @@ const OPENAPI_METHODS: &[(&str, &str)] = &[
     ("patch", "PATCH"),
     ("delete", "DELETE"),
     ("options", "OPTIONS"),
+    ("query", "QUERY"),
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq)]

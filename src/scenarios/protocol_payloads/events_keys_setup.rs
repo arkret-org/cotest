@@ -18,8 +18,6 @@ use crate::scenarios::identity_test_support::{
 
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
-const ADAPTER_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-000000000101";
-
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<String> {
     // keys/upload verifies its typed request signature against the accepted
     // device projection. Publish the principal/self-signing hierarchy before
@@ -40,7 +38,6 @@ async fn submit_adapter_event(
     let actor = server.client_with_token(actor_id, KEYS_DEVICE_ID, token.to_owned())?;
     let realm_id = actor
         .create_realm_with(json!({
-            "realm_id": ADAPTER_REALM_ID,
             "title": "Adapter Event Space",
             "summary": "Adapter Event Space",
             "public": true,

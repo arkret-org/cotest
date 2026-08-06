@@ -314,11 +314,14 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
         .get("required")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("view schema missing required[]"))?;
+    // `id` is deliberately absent: a View is an event-derived kind, so its id
+    // comes from its create Event rather than from the authored object, and
+    // requiring it here would contradict `object_id_not_event_derived`.
     for field in [
-        "id",
         "schema",
         "realm_id",
         "kind",
+        "state",
         "query",
         "created_by",
         "created_at",
