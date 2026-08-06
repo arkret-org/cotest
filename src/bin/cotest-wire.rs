@@ -201,6 +201,22 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         draft.submit_body,
     )
     .context("build identity-binding challenge request")?;
+    // One HLC value, used by BOTH the checkpoint field and the Event below.
+    // Inkson rebuilds this Event from the checkpoint and compares canonical
+    // bytes, so a second `generate()` here would fail that comparison.
+    let bootstrap_hlc = hlc.generate().to_string();
+    let bootstrap_create_event = build_bootstrap_create_event(
+        &principal,
+        &control_realm,
+        &input.trust_domain,
+        &draft.version_id,
+        &draft.root_public_key_multibase,
+        &draft.root_verification_method,
+        &key_material.root_seed,
+        created_at,
+        &bootstrap_hlc,
+    )
+    .context("build bootstrap Principal Control Realm create Event")?;
     let checkpoint = json!({
         "principal_server_url": input.principal_server_url,
         "gate_account_base": input.gate_account_base,
@@ -220,9 +236,14 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "backup_hpke_public_key_multibase": key_material.backup_hpke_public_key_multikey,
         "recovery_key_fingerprint": recovery_key_fingerprint,
         "did_operation": did_operation,
-        "bootstrap_create_event_id": arkret_identifiers::new_prefixed_uuid7("ak:event:"),
+        // The signed genesis Event itself, not a reserved id for it. `ak:event:`
+        // is an event-derived kind, so its id is a function of this finished
+        // envelope; the id-only field this fixture used to emit was both
+        // unreadable by Inkson and a forbidden random mint.
+        "bootstrap_create_event": serde_json::to_value(&bootstrap_create_event)
+            .context("serialize bootstrap create Event")?,
         "bootstrap_created_at": arkret_canonical::format_timestamp_canonical(created_at),
-        "bootstrap_hlc": hlc.generate().to_string(),
+        "bootstrap_hlc": bootstrap_hlc,
         "binding_receipt": null,
         "stage": "custody_confirmed",
     });
@@ -232,6 +253,79 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "checkpoint": checkpoint,
         "challenge_request": challenge_request,
     }))
+}
+
+/// The founding Principal Control Realm genesis Event, signed by the identity
+/// root the 24 words derive.
+///
+/// This mirrors Inkson's `build_bootstrap_create_event` exactly, and it has to:
+/// Inkson rebuilds the Event from the checkpoint's own fields and refuses the
+/// checkpoint unless the canonical bytes match byte-for-byte. Every input below
+/// is therefore taken from a field the checkpoint also stores, and the cell
+/// projector is the same `DigestSuite::Sha256` projection Inkson routes through.
+#[allow(clippy::too_many_arguments)]
+fn build_bootstrap_create_event(
+    principal: &Did,
+    control_realm: &str,
+    trust_domain: &str,
+    version_id: &str,
+    root_public_key_multibase: &str,
+    root_verification_method: &str,
+    root_seed: &[u8; 32],
+    created_at: chrono::DateTime<Utc>,
+    hlc: &str,
+) -> Result<Event> {
+    // The builder needs an id before the envelope is final; signing stamps the
+    // content-derived one over it. Same placeholder Inkson uses.
+    const PLACEHOLDER_EVENT_ID: &str = "ak:event:00000000-0000-8000-8000-000000000000";
+
+    let mut create = arkret_bootstrap::build_self_principal_pcr_create(
+        arkret_bootstrap::SelfPrincipalPcrCreateInput {
+            principal_id: principal.clone(),
+            realm_id: arkret::RealmId::new(control_realm.to_owned())
+                .context("parse Principal Control Realm id")?,
+            trust_domain: arkret::TypedTrustDomainId::new(trust_domain.to_owned())
+                .context("parse trust domain")?,
+            did_inception_ref: arkret::EventRef::new(
+                version_id.to_owned(),
+                arkret_bootstrap::DID_INCEPTION_REF_ROLE,
+            ),
+            capability_action_registry_digest: arkret::current_capability_action_registry_digest()
+                .context("load SDK capability-action registry digest")?,
+            event_id: arkret::EventId::new(PLACEHOLDER_EVENT_ID)
+                .context("parse placeholder Event id")?,
+            created_at,
+            hlc: arkret::Hlc::new(hlc.to_owned()).context("parse bootstrap HLC")?,
+        },
+        &cotest::publication::project_cells,
+    )
+    .context("build self principal PCR create")?;
+
+    let root_did = Did::new(format!("did:key:{root_public_key_multibase}"))
+        .context("parse identity root did:key")?;
+    let root_verification_method = arkret_wire::DidUrl::new(root_verification_method.to_owned())
+        .map_err(anyhow::Error::msg)
+        .context("parse identity root verification method")?;
+    let root_signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
+        *root_seed,
+        root_did,
+        root_verification_method.clone(),
+    );
+    let digest_suite = serde_json::from_value::<arkret::RealmCreatePayload>(
+        serde_json::to_value(&create.payload).context("serialize PCR genesis payload")?,
+    )
+    .context("decode Principal Control Realm genesis digest suite")?
+    .object
+    .digest_algorithm;
+    arkret::signatures::sign_event_with_digest_suite(
+        &mut create,
+        &root_signer,
+        &root_verification_method,
+        digest_suite,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )
+    .context("sign the PCR genesis Event with the identity root")?;
+    Ok(create)
 }
 
 fn account_handoff_request(input: Value) -> Result<Value> {

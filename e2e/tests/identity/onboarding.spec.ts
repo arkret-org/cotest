@@ -451,6 +451,48 @@ test.describe("account onboarding", () => {
     }
   });
 
+  test("a saved setup nothing on this device can finish is a dead end, not a Recovery Key prompt", async ({
+    browser,
+    request,
+  }) => {
+    // spec: account-lifecycle.md §2.1
+    // A draft can outlive the only thing that could complete it: its account
+    // binding is registered, so finishing it needs a session grant for its own
+    // DID, and this device has none. Asking for 24 words there is a dead end
+    // whose submit can only answer "sign in again", and before this guard it
+    // also took the surface away from a NEW account onboarding on the same
+    // browser.
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
+
+    const user = uniqueUser("s7-stale-draft");
+    const account = await registerCoauthPasswordAccount(request, coauth!, {
+      handle: user.handle.slice(1),
+    });
+    user.did = account.did;
+    user.deviceId = account.bootstrapDeviceId;
+
+    // Injected WITHOUT a grant: checkpoint present, session absent.
+    const jointPage = await openUserPage(browser, user, {
+      pendingPrincipalRegistration: account.pendingPrincipalRegistration,
+    });
+    try {
+      const page = jointPage.page;
+      await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
+      const stale = page.getByTestId("stale-principal-setup");
+      await expect(stale).toBeVisible({ timeout: 120_000 });
+      await expect(page.getByTestId("bootstrap-recovery-key")).toHaveCount(0);
+      // The binding is already registered, so the warning must say so.
+      await expect(stale).toContainText("cannot be undone");
+
+      await page.getByTestId("onboarding-discard-saved-setup").click();
+      await expect(stale).toBeHidden({ timeout: 120_000 });
+      await expect(page.getByTestId("account-strand")).toBeVisible();
+    } finally {
+      await jointPage.close();
+    }
+  });
+
   test("carol creates an account then binds her client-signed cold-root inception", async ({
     request,
   }) => {
