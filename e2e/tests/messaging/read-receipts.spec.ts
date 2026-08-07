@@ -16,6 +16,7 @@ import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   signedEventEnvelope,
   submitSignedEventApi,
+  typedId,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -423,7 +424,7 @@ test.describe("read receipts + privacy", () => {
     const aliceSecondToken = await issueDevSession(request, aliceSecond);
 
     const hlc = makeHlc(1);
-    const advance = await advanceReadCursor(request, fixture.aliceToken, {
+    const advance = await advanceReadCursor(request, fixture.aliceToken, fixture.alice, {
       realm_id: fixture.realmId,
       read_scope: { kind: "realm" },
       position: { event_id: fixture.message.event_id, hlc },
@@ -506,11 +507,16 @@ test.describe("read receipts + privacy", () => {
       { event_id: highest.event_id, hlc: makeHlc(3) },
     ];
     for (const position of positions) {
-      const response = await advanceReadCursor(request, fixture.aliceToken, {
+      const response = await advanceReadCursor(
+        request,
+        fixture.aliceToken,
+        fixture.alice,
+        {
         realm_id: fixture.realmId,
         read_scope: { kind: "realm" },
         position,
-      });
+        },
+      );
       expect(response.status()).toBe(200);
     }
 
@@ -525,11 +531,16 @@ test.describe("read receipts + privacy", () => {
     expect(markers[0].position.hlc).toBe(makeHlc(3));
 
     // An out-of-order older position MUST NOT regress the merged cursor.
-    const regress = await advanceReadCursor(request, fixture.aliceToken, {
+    const regress = await advanceReadCursor(
+      request,
+      fixture.aliceToken,
+      fixture.alice,
+      {
       realm_id: fixture.realmId,
       read_scope: { kind: "realm" },
       position: { event_id: second.event_id, hlc: makeHlc(2) },
-    });
+      },
+    );
     expect(regress.status()).toBe(200);
     const afterRegress = await listReadCursors(
       request,
@@ -566,13 +577,13 @@ test.describe("read receipts + privacy", () => {
     // Submit the higher device first, then the lower device: server-receive
     // order favors the lower device under naive LWW, so a passing assertion
     // proves the HLC/device tiebreak — not arrival order — decides convergence.
-    const first = await advanceReadCursor(request, higher.token, {
+    const first = await advanceReadCursor(request, higher.token, higher.user, {
       realm_id: fixture.realmId,
       read_scope: { kind: "realm" },
       position: { event_id: fixture.message.event_id, hlc: tieHlc },
     });
     expect(first.status()).toBe(200);
-    const second = await advanceReadCursor(request, lower.token, {
+    const second = await advanceReadCursor(request, lower.token, lower.user, {
       realm_id: fixture.realmId,
       read_scope: { kind: "realm" },
       position: { event_id: fixture.message.event_id, hlc: tieHlc },
@@ -749,11 +760,29 @@ type ReadCursorMarker = {
 async function advanceReadCursor(
   request: APIRequestContext,
   token: string,
+  actor: JointUser,
   body: ReadCursorAdvanceBody,
 ) {
+  const updatedAt = new Date().toISOString();
+  const event = signedEventEnvelope({
+    actorDid: actor.did,
+    realmId: body.realm_id,
+    kind: "ak.read_cursor.advance",
+    createdAt: updatedAt,
+    payload: {
+      id: typedId("read_cursor"),
+      schema: "ak.schema.read_cursor.v1",
+      actor_id: actor.did,
+      device_id: actor.deviceId,
+      realm_id: body.realm_id,
+      read_scope: body.read_scope,
+      position: body.position,
+      updated_at: updatedAt,
+    },
+  });
   return await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
     headers: authHeaders(token),
-    data: body,
+    data: { advance_event: { event } },
   });
 }
 

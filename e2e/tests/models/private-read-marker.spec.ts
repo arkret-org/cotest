@@ -59,14 +59,15 @@ test.describe("private read marker", () => {
     const beforeBody = await before.json();
     expect(beforeBody.markers).toEqual([]);
 
-    const mark = await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-      headers: auth,
-      data: {
-        realm_id: realmId,
-        read_scope: { kind: "realm" },
-        position,
-      },
-    });
+    const mark = await postReadCursor(
+      request,
+      aliceToken,
+      alice.did,
+      alice.deviceId,
+      realmId,
+      { kind: "realm" },
+      position,
+    );
     expect(mark.status()).toBe(200);
     const markBody = await mark.json();
     expect(markBody.realm_id).toBe(realmId);
@@ -116,14 +117,15 @@ test.describe("private read marker", () => {
     expect(bobBefore.status()).toBe(200);
     expect((await bobBefore.json()).markers).toEqual([]);
 
-    const markAlice = await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-      headers: aliceAuth,
-      data: {
-        realm_id: realmId,
-        read_scope: { kind: "realm" },
-        position,
-      },
-    });
+    const markAlice = await postReadCursor(
+      request,
+      aliceToken,
+      alice.did,
+      alice.deviceId,
+      realmId,
+      { kind: "realm" },
+      position,
+    );
     expect(markAlice.status()).toBe(200);
     const markAliceBody = await markAlice.json();
     expect(markAliceBody.actor_id).toBe(alice.did);
@@ -178,10 +180,15 @@ test.describe("private read marker", () => {
     const m4 = await sendAndResolvePosition(request, token1, realmId, alice.did, `M4 ${stamp}`);
 
     // Phase C — device-1 records marker at M2.
-    const markM2 = await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-      headers: { authorization: `Bearer ${token1}` },
-      data: { realm_id: realmId, read_scope: { kind: "realm" }, position: m2 },
-    });
+    const markM2 = await postReadCursor(
+      request,
+      token1,
+      alice.did,
+      device1,
+      realmId,
+      { kind: "realm" },
+      m2,
+    );
     expect(markM2.status()).toBe(200);
     expect((await markM2.json()).device_id).toBe(device1);
 
@@ -194,10 +201,15 @@ test.describe("private read marker", () => {
     expect(device2Marker.content.device_id).toBe(device1);
 
     // Phase G — device-2 marks-all-read (advances to M4); device-1 converges.
-    const markM4 = await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-      headers: { authorization: `Bearer ${token2}` },
-      data: { realm_id: realmId, read_scope: { kind: "realm" }, position: m4 },
-    });
+    const markM4 = await postReadCursor(
+      request,
+      token2,
+      alice.did,
+      device2,
+      realmId,
+      { kind: "realm" },
+      m4,
+    );
     expect(markM4.status()).toBe(200);
     expect((await markM4.json()).device_id).toBe(device2);
 
@@ -248,10 +260,15 @@ test.describe("private read marker", () => {
 
     // Two monotonically-advancing writes from device-1 in quick succession.
     for (const position of [first, second]) {
-      const mark = await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-        headers: { authorization: `Bearer ${token1}` },
-        data: { realm_id: realmId, read_scope: { kind: "realm" }, position },
-      });
+      const mark = await postReadCursor(
+        request,
+        token1,
+        alice.did,
+        device1,
+        realmId,
+        { kind: "realm" },
+        position,
+      );
       expect(mark.status()).toBe(200);
     }
 
@@ -359,21 +376,27 @@ test.describe("private read marker", () => {
     const circleId = typedId("circle");
 
     // Realm-default marker.
-    const markRealm = await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-      headers: auth,
-      data: { realm_id: realmId, read_scope: { kind: "realm" }, position: mPublic },
-    });
+    const markRealm = await postReadCursor(
+      request,
+      aliceToken,
+      alice.did,
+      alice.deviceId,
+      realmId,
+      { kind: "realm" },
+      mPublic,
+    );
     expect(markRealm.status()).toBe(200);
 
     // Circle-scoped private marker on the SAME realm_id, different read_scope.
-    const markCircle = await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-      headers: auth,
-      data: {
-        realm_id: realmId,
-        read_scope: { kind: "circle", container_ref: circleId },
-        position: mPrivate,
-      },
-    });
+    const markCircle = await postReadCursor(
+      request,
+      aliceToken,
+      alice.did,
+      alice.deviceId,
+      realmId,
+      { kind: "circle", container_ref: circleId },
+      mPrivate,
+    );
     expect(markCircle.status()).toBe(200);
 
     // Both markers coexist, keyed by (actor_id, realm_id, read_scope); the
@@ -425,6 +448,38 @@ async function readCursorFixture(
     `cursor target ${stamp}`,
   );
   return { alice, aliceToken, realmId, position };
+}
+
+async function postReadCursor(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  deviceId: string,
+  realmId: string,
+  readScope: { kind: string; container_ref?: string; track_name?: string },
+  position: { event_id: string; hlc: string },
+) {
+  const updatedAt = new Date().toISOString();
+  const event = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.read_cursor.advance",
+    createdAt: updatedAt,
+    payload: {
+      id: typedId("read_cursor"),
+      schema: "ak.schema.read_cursor.v1",
+      actor_id: actorDid,
+      device_id: deviceId,
+      realm_id: realmId,
+      read_scope: readScope,
+      position,
+      updated_at: updatedAt,
+    },
+  });
+  return await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
+    headers: { authorization: `Bearer ${token}` },
+    data: { advance_event: { event } },
+  });
 }
 
 // Send a plaintext message and return its canonical read-cursor position
