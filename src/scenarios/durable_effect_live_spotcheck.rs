@@ -191,12 +191,13 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         .canonical_json(
             &arkret_models_collaboration::governance::realm_governance::RealmPolicyServerReplaceRequestBody {
                 policy_server_event: arkret_wire::EventInitialSubmission::online(
-                    crate::harness::event_envelope(
-                        &alice.actor,
-                        &realm_id,
-                        arkret_wire::EventKind::REALM_POLICY_SERVER,
-                        declaration.clone(),
-                    ),
+                    alice
+                        .author_event(
+                            &realm_id,
+                            arkret_wire::EventKind::REALM_POLICY_SERVER,
+                            declaration.clone(),
+                        )
+                        .await?,
                 ),
             },
         )?
@@ -232,16 +233,17 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         .canonical_json(
             &arkret_models_collaboration::governance::realm_governance::RealmPolicyServerDeleteRequestBody {
                 policy_server_event: arkret_wire::EventInitialSubmission::online(
-                    crate::harness::event_envelope_with_preconditions(
-                        &alice.actor,
-                        &realm_id,
-                        arkret_wire::EventKind::REALM_POLICY_SERVER,
-                        json!({ "tombstone": true }),
-                        vec![crate::harness::head_eq_precondition(
-                            "ak:cell:ak.component.realm.policy_server.v1:null",
-                            declaration,
-                        )],
-                    ),
+                    alice
+                        .author_event_with_preconditions(
+                            &realm_id,
+                            arkret_wire::EventKind::REALM_POLICY_SERVER,
+                            json!({ "tombstone": true }),
+                            vec![crate::harness::head_eq_precondition(
+                                "ak:cell:ak.component.realm.policy_server.v1:null",
+                                declaration,
+                            )],
+                        )
+                        .await?,
                 ),
             },
         )?
