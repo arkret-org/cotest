@@ -11,7 +11,7 @@ import {
   sign,
 } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
-import { canonicalBytes, expectJsonOk } from "./soland-api";
+import { canonicalBytes, canonicalJson, expectJsonOk } from "./soland-api";
 import { base58btcEncode, encodeEd25519PubkeyMultibase } from "./encoding";
 
 const WEBVH_SCID_PLACEHOLDER = "{SCID}";
@@ -264,12 +264,13 @@ export async function submitPrincipalGenesisEntry(
   const response = await request.post(
     `${baseUrl.replace(/\/$/, "")}/_arkret/root/identity/submit-did-operation`,
     {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         did: built.did,
         did_method: "webvh",
         seq: 1,
         operation: built.entry,
-      },
+      }),
     },
   );
   await expectJsonOk(response, `submit principal inception ${built.did}`);

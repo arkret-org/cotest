@@ -1,7 +1,12 @@
 // Key backup restore live path
 // Contract: e2e/scenarios/encryption/key-backup-restore.md
 
-import { randomUUID, createHash } from "node:crypto";
+import {
+  randomUUID,
+  createHash,
+  sign,
+  type KeyObject,
+} from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 
@@ -10,6 +15,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   uuidV7,
+  wireErrCode,
 } from "../../helpers/soland-api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -18,6 +24,25 @@ import {
   uniqueUser,
   type JointUser,
 } from "../../helpers/users";
+import {
+  buildPrincipalGenesisEntry,
+  generateWebvhKey,
+  submitPrincipalGenesisEntry,
+} from "../../helpers/webvh-api";
+
+type KeyBackupDeleteChallenge = {
+  challenge_id: string;
+  challenge: string;
+  nonce: string;
+  operation: string;
+  principal_id: string;
+  backup_id: string;
+  audience: string;
+  service_id: string;
+  request_id: string;
+  issued_at: string;
+  expires_at: string;
+};
 
 test.describe.configure({ mode: "serial" });
 
@@ -135,7 +160,12 @@ test.describe("key backup restore live path", () => {
   });
 
   test("DELETE requires ownership proof; proof-bound delete removes the backup", async ({ request }) => {
-    const { alice, aliceToken } = await registeredSession(request, "kb-restore-delete");
+    const {
+      alice,
+      aliceToken,
+      principalSigningKey,
+      verificationMethod,
+    } = await registeredPrincipalSession(request, "kb-restore-delete");
     const backupId = backupIdFor("delete");
     expect((await putBackup(request, aliceToken, backupId, makeBackupBody(alice, backupId))).status()).toBe(200);
 
@@ -143,29 +173,39 @@ test.describe("key backup restore live path", () => {
       `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
       { headers: authHeaders(aliceToken) },
     );
-    expect([400, 401, 403, 422]).toContain(sessionOnlyDelete.status());
+    expect(sessionOnlyDelete.status()).toBe(400);
+    expect(wireErrCode(await sessionOnlyDelete.json())).toBe("invalid_param");
     const afterSessionOnlyDelete = await request.get(`${solandBaseUrl()}/_arkret/self/keys/backups`, {
       headers: authHeaders(aliceToken),
     });
     expect(JSON.stringify(await afterSessionOnlyDelete.json())).toContain(backupId);
 
-    const proofDelete = await request.delete(
-      `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
-      {
-        headers: authHeaders(aliceToken),
-        data: {
-          proof: {
-            kind: "ak.key_backup.delete.development.v1",
-            value: deleteProof(alice.did, backupId),
-          },
-          reason: "user_requested",
-        },
-      },
+    const requestId = Buffer.from(`cotest-key-backup-delete:${randomUUID()}`, "utf8").toString(
+      "base64url",
     );
+    const challenge = await issueDeleteChallenge(
+      request,
+      aliceToken,
+      backupId,
+      requestId,
+    );
+    const deleteBody = principalSigningDeleteBody(
+      challenge,
+      "user_requested",
+      verificationMethod,
+      principalSigningKey,
+    );
+    const proofDelete = await deleteBackup(request, aliceToken, backupId, deleteBody);
     expect(proofDelete.status()).toBe(200);
-    // spec `keys_backups_delete_outcome` carries only { deleted } (the SDK
-    // KeysBackupsDeleteOutcome shape).
-    expect(await proofDelete.json()).toMatchObject({ deleted: true });
+    const deleteOutcome = await proofDelete.json();
+    expect(deleteOutcome).toMatchObject({ deleted: true, backup_id: backupId });
+
+    // §7.8.1 keeps the challenge single-use while the request-id ledger makes
+    // a byte-identical network retry return the original terminal outcome.
+    const replay = await deleteBackup(request, aliceToken, backupId, deleteBody);
+    expect(replay.status()).toBe(200);
+    expect(await replay.json()).toEqual(deleteOutcome);
+
     const list = await request.get(`${solandBaseUrl()}/_arkret/self/keys/backups`, {
       headers: authHeaders(aliceToken),
     });
@@ -179,6 +219,114 @@ async function registeredSession(request: APIRequestContext, prefix: string) {
   await ensureRegistered(request, user);
   const token = await issueDevSession(request, user);
   return { alice: user, aliceToken: token, bob: user, bobToken: token };
+}
+
+async function registeredPrincipalSession(request: APIRequestContext, prefix: string) {
+  const seed = uniqueUser(prefix);
+  const principalSigningKey = generateWebvhKey();
+  const built = buildPrincipalGenesisEntry({
+    baseUrl: solandBaseUrl(),
+    localId: seed.name,
+    rootKey: generateWebvhKey(),
+    nextRootKey: generateWebvhKey(),
+    principalSigningKey,
+    enrollmentKey: generateWebvhKey(),
+    serviceEndpoint: solandBaseUrl(),
+  });
+  await submitPrincipalGenesisEntry(request, solandBaseUrl(), built);
+  const alice = { ...seed, did: built.did };
+  await ensureRegistered(request, alice);
+  const aliceToken = await issueDevSession(request, alice);
+  return {
+    alice,
+    aliceToken,
+    principalSigningKey: principalSigningKey.privateKey,
+    verificationMethod: built.principalSigningKeyId,
+  };
+}
+
+async function issueDeleteChallenge(
+  request: APIRequestContext,
+  token: string,
+  backupId: string,
+  requestId: string,
+): Promise<KeyBackupDeleteChallenge> {
+  const response = await request.post(
+    `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}/delete-challenge`,
+    {
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({ request_id: requestId }),
+    },
+  );
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()) as KeyBackupDeleteChallenge;
+}
+
+function principalSigningDeleteBody(
+  challenge: KeyBackupDeleteChallenge,
+  reason: string,
+  verificationMethod: string,
+  privateKey: KeyObject,
+): Record<string, unknown> {
+  const transcript = {
+    context: "ak.keys.backup_delete.v1",
+    operation: challenge.operation,
+    request_id: challenge.request_id,
+    principal_id: challenge.principal_id,
+    backup_id: challenge.backup_id,
+    reason,
+    challenge_id: challenge.challenge_id,
+    challenge: challenge.challenge,
+    nonce: challenge.nonce,
+    audience: challenge.audience,
+    service_id: challenge.service_id,
+    issued_at: challenge.issued_at,
+    expires_at: challenge.expires_at,
+  };
+  const canonical = Buffer.from(canonicalJson(transcript), "utf8");
+  const protectedHeader = Buffer.from(canonicalJson({ alg: "Ed25519" }), "utf8").toString(
+    "base64url",
+  );
+  const signingInput = `${protectedHeader}.${canonical.toString("base64url")}`;
+  const signature = sign(null, Buffer.from(signingInput, "utf8"), privateKey).toString(
+    "base64url",
+  );
+  return {
+    request_id: challenge.request_id,
+    challenge_id: challenge.challenge_id,
+    proof: {
+      kind: "principal_signing",
+      proof: {
+        kind: "detached_jws",
+        verification_method: verificationMethod,
+        payload_digest: sha256Ref(canonical),
+        created_at: challenge.issued_at,
+        jws: `${protectedHeader}..${signature}`,
+      },
+    },
+    reason,
+  };
+}
+
+async function deleteBackup(
+  request: APIRequestContext,
+  token: string,
+  backupId: string,
+  body: Record<string, unknown>,
+) {
+  return await request.delete(
+    `${solandBaseUrl()}/_arkret/self/keys/backups/${encodeURIComponent(backupId)}`,
+    {
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(body),
+    },
+  );
 }
 
 async function putBackup(
@@ -335,10 +483,6 @@ function backupIdFor(label: string): string {
   return `ak:backup:${uuidV7()}`;
 }
 
-function sha256Ref(value: string): string {
+function sha256Ref(value: string | Buffer): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
-
-function deleteProof(actorDid: string, backupId: string): string {
-  return `dev-ssk-delete:v1:${actorDid}:${backupId}`;
 }
