@@ -186,7 +186,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         expires_at: None,
         created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
         verified_at: Some(Utc.with_ymd_and_hms(2026, 6, 19, 0, 1, 0).unwrap()),
-        source_refs: vec!["ak:event:0196419b-0000-8000-8000-000000000001".to_owned()],
+        source_refs: vec!["ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-".to_owned()],
         proofs: vec![PayloadProof {
             kind: "detached_jws".to_owned(),
             verification_method: crate::fixture_did_url("did:web:directory.acme.example#key-1"),
@@ -211,7 +211,7 @@ fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorR
         agent_slug: claim.agent_slug.clone(),
         verified: true,
         selector_claim: claim,
-        source_refs: vec!["ak:event:0196419b-0000-8000-8000-000000000001".to_owned()],
+        source_refs: vec!["ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-".to_owned()],
         expires_at: None,
     };
     outcome.validate()?;

@@ -276,10 +276,6 @@ fn build_bootstrap_create_event(
     created_at: chrono::DateTime<Utc>,
     hlc: &str,
 ) -> Result<Event> {
-    // The builder needs an id before the envelope is final; signing stamps the
-    // content-derived one over it. Same placeholder Inkson uses.
-    const PLACEHOLDER_EVENT_ID: &str = "ak:event:00000000-0000-8000-8000-000000000000";
-
     let mut create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
@@ -293,8 +289,6 @@ fn build_bootstrap_create_event(
             ),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()
                 .context("load SDK capability-action registry digest")?,
-            event_id: arkret::EventId::new(PLACEHOLDER_EVENT_ID)
-                .context("parse placeholder Event id")?,
             created_at,
             hlc: arkret::Hlc::new(hlc.to_owned()).context("parse bootstrap HLC")?,
         },
@@ -595,26 +589,20 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
 ///
 /// `encoding.md` section 4.0 makes an Event id a function of the Event's own
 /// digest, and section 6 keeps `event_id` out of that digest's preimage. A
-/// producer therefore cannot mint one: it builds the envelope, derives the id
-/// and only then signs. Callers that cannot reach the SDK — the Playwright
-/// harness is TypeScript — send the envelope here with any placeholder id and
-/// get the real one back.
+/// producer therefore builds the complete digest preimage, derives the id and
+/// only then signs. TypeScript callers send that digest-payload shape here and
+/// get the real identity back.
 fn event_derived_id(event: Value) -> Result<Value> {
     let mut event = event;
     if let Value::Object(object) = &mut event {
-        object.insert(
-            "event_id".to_owned(),
-            Value::String("ak:event:00000000-0000-8000-8000-000000000000".to_owned()),
-        );
-        object
-            .entry("proofs")
-            .or_insert_with(|| Value::Array(Vec::new()));
+        for excluded in ["event_id", "proofs", "unsigned", "actor_kind"] {
+            object.remove(excluded);
+        }
     }
-    let mut event: Event =
-        serde_json::from_value(event).context("parse SDK Event for id derivation")?;
-    event.event_id = event
-        .derive_event_id()
-        .map_err(|error| anyhow::anyhow!("derive event id: {error}"))?;
+    let digest_payload_bytes = arkret_canonical::canonical_json_bytes(&event)
+        .context("canonicalize SDK Event digest payload")?;
+    let mut event = Event::from_digest_payload_bytes(&digest_payload_bytes)
+        .context("derive SDK Event identity from digest payload")?;
     // A Realm genesis names no Realm, so its `realm_id` is a function of the
     // Event that creates it and can only be computed once the Event has its
     // own id. Callers get both back because neither is theirs to choose.
@@ -661,7 +649,7 @@ mod tests {
     #[test]
     fn event_digest_uses_producer_envelope_canonical_bytes() {
         let event = json!({
-            "event_id": "ak:event:019f3b1c-884d-8fc0-965f-0550baae7184",
+            "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.member.state",
             "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
@@ -704,7 +692,7 @@ mod tests {
     #[test]
     fn event_digest_materializes_sdk_ref_defaults() {
         let event = json!({
-            "event_id": "ak:event:019f3b1c-884d-8fc0-965f-0550baae7184",
+            "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.morph.schema_migrate",
             "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
@@ -771,7 +759,7 @@ mod tests {
         let seed = [42u8; 32];
         let signing_key = SigningKey::from_bytes(&seed);
         let event = json!({
-            "event_id": "ak:event:019f3b1c-884d-8fc0-965f-0550baae7184",
+            "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.member.state",
             "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},

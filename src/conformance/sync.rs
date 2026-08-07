@@ -66,10 +66,10 @@ fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
     let actor_id = arkret_identifiers::Did::new("did:web:alice.example".to_owned())?;
     let event_ids = vec![
         arkret_identifiers::EventId::new(
-            "ak:event:01904100-0000-8000-8000-000000000001".to_owned(),
+            "ak:event:AZYdi3qlzHC9BLa3vihHvgrhFh0AYuNTNpOD7a8MiN5J".to_owned(),
         )?,
         arkret_identifiers::EventId::new(
-            "ak:event:01904100-0000-8000-8000-000000000002".to_owned(),
+            "ak:event:AfgGQBNqha39-nDeQUUb6PfHADeASPNO2ficO33h96Kq".to_owned(),
         )?,
     ];
     let digest = arkret_models_collaboration::event_sync::RealmActorFrontierView::compute_digest(

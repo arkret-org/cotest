@@ -809,7 +809,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",
-        "ak:event:019a7360-0000-8000-8000-000000000003",
+        "ak:event:ARHMhWPvHwsRKYQXNhB6wm4cESEe1fbHz6rJWPRl9wHY",
     )?;
 
     for (label, candidate_context) in [
@@ -882,7 +882,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",
-        "ak:event:019a7360-0000-8000-8000-000000000004",
+        "ak:event:AS-ORd5zGMm1S5O6yi-p0U6TY6n0gvX_I-ZaEoNxW5LO",
     )?;
     let mut other_info =
         Vec::with_capacity(ExporterLabelId::RTC_RECORDING_KEY_V1.len() + 1 + other_context.len());

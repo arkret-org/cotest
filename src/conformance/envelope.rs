@@ -1136,7 +1136,7 @@ fn sample_envelope_event(
     // Synthetic events emit the active spec shape directly (top-level fields
     // restricted to the canonical envelope property set — no `schema`).
     let mut event = json!({
-        "event_id": "ak:event:019a6b10-0000-8000-8000-000000000000",
+        "event_id": "ak:event:AbmZo_Q7CHRfJYVqari3NAaEZm6tfSbZppTL7IsJJ7Gl",
         "kind": kind,
         "realm_id": "ak:realm:019a7360-0000-8000-8000-000000000000",
         "actor_id": "did:web:alice.example",
@@ -1145,7 +1145,7 @@ fn sample_envelope_event(
         "hlc": hlc,
         "prev_refs": [],
         "refs": [{
-            "id": "ak:event:5139099c-b114-8e4c-8149-a8048971a269",
+            "id": "ak:event:AVkkQ3SRXwZhSvXw0hnu-AeFeMX_3g54oqAZWM4qri4H",
             "role": "reply_to",
             "critical": false
         }],

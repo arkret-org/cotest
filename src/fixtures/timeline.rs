@@ -250,7 +250,7 @@ pub fn install_failure_dump_hook() {
 mod tests {
     use super::*;
 
-    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00.000Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/_arkret/self/events","headers":{},"body":{"event_id":"ak:event:01999999-0000-8000-8000-000000000001","kind":"ak.message.create","actor_id":"did:webvh:z6mkfixture:alice.example","realm_id":"ak:realm:abc","prev_refs":["ak:event:prev-1"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ak:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
+    const SAMPLE_EVENT_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:00.000Z","duration_ms":5,"request":{"method":"POST","url":"http://127.0.0.1:8008/_arkret/self/events","headers":{},"body":{"event_id":"ak:event:AQxUGuiuN1TnxpGS7hMr02xzmhvH7VIYxsrrdxVaoLrZ","kind":"ak.message.create","actor_id":"did:webvh:z6mkfixture:alice.example","realm_id":"ak:realm:abc","prev_refs":["ak:event:AamYARiCCubbYQ3GoHbppXPhsNkI0kDOZQi17eTRhQ94"],"proofs":[{"kind":"detached_jws","event_digest":"sha256:deadbeef"}],"unsigned":{"local_operation_idempotency_alias":"ak:operation:01999999"}}},"response":{"status":200,"headers":{},"body":{}}}"#;
     const SAMPLE_GET_LINE: &str = r#"{"timestamp":"2026-05-18T10:00:01.000Z","duration_ms":2,"request":{"method":"GET","url":"http://127.0.0.1:8008/_arkret/self/account/subscribe","headers":{},"body":null},"response":{"status":401,"headers":{},"body":{"ok":false}}}"#;
 
     #[test]
@@ -261,10 +261,16 @@ mod tests {
 
         let first = &timeline.events[0];
         assert_eq!(first.sender, "did:webvh:z6mkfixture:alice.example");
-        assert_eq!(first.op_id, "ak:event:01999999-0000-8000-8000-000000000001");
+        assert_eq!(
+            first.op_id,
+            "ak:event:AQxUGuiuN1TnxpGS7hMr02xzmhvH7VIYxsrrdxVaoLrZ"
+        );
         assert_eq!(first.kind, "ak.message.create");
         assert_eq!(first.event_digest, "sha256:deadbeef");
-        assert_eq!(first.depends_on, vec!["ak:event:prev-1".to_owned()]);
+        assert_eq!(
+            first.depends_on,
+            vec!["ak:event:AamYARiCCubbYQ3GoHbppXPhsNkI0kDOZQi17eTRhQ94".to_owned()]
+        );
         assert_eq!(first.status, Some(200));
 
         let second = &timeline.events[1];
@@ -288,7 +294,7 @@ mod tests {
         assert!(rendered.contains("did:webvh:z6mkfixture:alice"));
         assert!(rendered.contains("ak.message.create"));
         assert!(rendered.contains("sha256:deadbeef"));
-        assert!(rendered.contains("ak:event:prev-1"));
+        assert!(rendered.contains("ak:event:AamYARiCCubbYQ3GoHbppXPhsNkI0kDOZQi17eTRhQ94"));
         assert!(rendered.contains("401"));
     }
 

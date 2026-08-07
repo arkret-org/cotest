@@ -70,8 +70,9 @@ fn fake_realm() -> Result<RealmId> {
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
-    EventId::new(format!("ak:event:01904100-0000-8000-8000-{suffix:012x}"))
-        .map_err(|e| anyhow!("invalid event id: {e}"))
+    Ok(crate::fixture_event_id(format!(
+        "member-roster-vector:{suffix}"
+    )))
 }
 
 fn pinned_state_digest() -> Result<Hash> {
@@ -189,7 +190,7 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
                 "actor_id": "did:web:alice.acme.example",
                 "membership": "join",
                 "identity_event_ids": [
-                    "ak:event:01904100-0000-8000-8000-00000000ea01"
+                    "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ"
                 ],
                 "member_display_state_digest":
                     "sha256:abababababababababababababababababababababababababababababababab"
@@ -239,14 +240,14 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
         "membership": "join",
         "subject_id": "did:web:alice.principal.example",
         "identity_event_ids": [
-            "ak:event:01904100-0000-8000-8000-00000000ea01",
-            "ak:event:01904100-0000-8000-8000-00000000ea02"
+            "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
+            "ak:event:AY2Hn6IY76TnIeYqiTmQfD0I9bOBlvFOr6qVQbYcUaIz"
         ],
         "member_display_state_digest":
             "sha256:abababababababababababababababababababababababababababababababab",
         "identity_events": [
             {
-                "event_id": "ak:event:01904100-0000-8000-8000-00000000ea01",
+                "event_id": "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
                 "kind": "ak.member.identity.update",
                 "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
@@ -258,7 +259,7 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
                 }
             },
             {
-                "event_id": "ak:event:01904100-0000-8000-8000-00000000ea02",
+                "event_id": "ak:event:AY2Hn6IY76TnIeYqiTmQfD0I9bOBlvFOr6qVQbYcUaIz",
                 "kind": "ak.member.identity.update",
                 "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
                 "actor_id": "did:web:alice.acme.example",
@@ -267,7 +268,7 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
                     "actor_id": "did:web:alice.acme.example",
                     "segment": "member_identity",
                     "replaces": [{
-                        "event_id": "ak:event:01904100-0000-8000-8000-00000000ea01",
+                        "event_id": "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
                         "payload_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
                     }],
                     "identity_payload": {"member_identity": {"placeholder": "v2"}}

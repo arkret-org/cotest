@@ -39,7 +39,7 @@ fn actor() -> Result<Did> {
 
 fn event_id() -> Result<EventId> {
     Ok(EventId::new(
-        "ak:event:01904100-0000-8000-8000-00000000000a",
+        "ak:event:ATJ_DJ_0dc3yFbBW3UWM7qysprZ6zJPZzhxGzqahfHEA",
     )?)
 }
 

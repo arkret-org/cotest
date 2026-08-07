@@ -34,7 +34,7 @@ fn envelope() -> Result<SignalEnvelope> {
             scheme: arkret_wire::SIGNAL_AEAD_SCHEME.to_owned(),
             key_ref: SignalKeyRef {
                 algorithm: "MLS-EXPORTER-AEAD".to_owned(),
-                group_state_ref: "ak:event:01904100-0000-8000-8000-cccccccccccc".to_owned(),
+                group_state_ref: "ak:event:AbyX-ijAQZ4DkcySKE3VusrcCoBFT8DGS4fx8tpo-PNm".to_owned(),
             },
             purpose: arkret_wire::SIGNAL_AEAD_PURPOSE.to_owned(),
             aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519".to_owned(),

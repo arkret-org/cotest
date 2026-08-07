@@ -316,7 +316,8 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                 active_leaves = vec![bystander_leaf()];
             }
             "group_state_ref_not_winning_for_epoch" => {
-                claim_group_state_ref = "ak:event:01970e58-9d27-8000-8000-00000000dead".to_owned();
+                claim_group_state_ref =
+                    "ak:event:Ae_C4acZBxZrKRIpxI7LZac2h7xf5Xr33oxNIV2kq6w4".to_owned();
             }
             "proof_key_differs_from_leaf_signature_key" => {
                 proof_key = b"z6MkpairwiseWrongProofKey".to_vec();

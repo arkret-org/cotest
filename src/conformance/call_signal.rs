@@ -336,7 +336,7 @@ fn signed_call_signal_envelope(
             scheme: SIGNAL_AEAD_SCHEME.to_owned(),
             key_ref: SignalKeyRef {
                 algorithm: "MLS-EXPORTER-AEAD".to_owned(),
-                group_state_ref: "ak:event:0196441c-0000-8000-8000-00000000000c".to_owned(),
+                group_state_ref: "ak:event:AXehYOgO_p3M5hbOzs6Mhblqek3i9nwaGUec3J9_89_C".to_owned(),
             },
             purpose: SIGNAL_AEAD_PURPOSE.to_owned(),
             aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519".to_owned(),

@@ -757,7 +757,7 @@ fn sample_lease(
         scope_ref: scope_ref.clone(),
         source: AuthoritySetPolicySource {
             source_kind: AuthoritySetSourceKind::RealmControl,
-            source_ref: "ak:event:0196419b-0000-8000-8000-000000000001".to_owned(),
+            source_ref: "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-".to_owned(),
             source_digest: repeated_hash(0x61),
             generation_ref: "1".to_owned(),
         },

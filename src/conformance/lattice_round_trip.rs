@@ -1436,15 +1436,15 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
     let ops = vec![
         SealedOp::new(
             issuer_digest("c1"),
-            op_add("ak:event:01970e58-0007-8000-8000-000000000001"),
+            op_add("ak:event:AfXWLGjjzmUk0babO-HDpZAvswjPfvrs8q77raV3fN2Q"),
         ),
         SealedOp::new(
             issuer_digest("c2"),
-            op_add("ak:event:01970e58-0007-8000-8000-000000000002"),
+            op_add("ak:event:AecDGkfEd-fL66NxBRV42zX9DoqbGZ3lEe1BmyoWb1IL"),
         ),
         SealedOp::new(
             issuer_digest("c3"),
-            op_add("ak:event:01970e58-0007-8000-8000-000000000001"),
+            op_add("ak:event:AfXWLGjjzmUk0babO-HDpZAvswjPfvrs8q77raV3fN2Q"),
         ), // duplicate add
     ];
     let resolved = lattice.join(&cref, &ops);
@@ -1455,8 +1455,8 @@ fn mls_covered_frontier_or_set_accumulates_governance_refs() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("ak:event:01970e58-0007-8000-8000-000000000001")
-        || !serialized.contains("ak:event:01970e58-0007-8000-8000-000000000002")
+    if !serialized.contains("ak:event:AfXWLGjjzmUk0babO-HDpZAvswjPfvrs8q77raV3fN2Q")
+        || !serialized.contains("ak:event:AecDGkfEd-fL66NxBRV42zX9DoqbGZ3lEe1BmyoWb1IL")
     {
         bail!("covered_frontier did not surface both governance refs: {serialized}");
     }
@@ -1474,15 +1474,15 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
     let ops = vec![
         SealedOp::new(
             issuer_digest("c4"),
-            op_add("ak:event:01970e58-0007-8000-8000-000000000003"),
+            op_add("ak:event:AWHzVy4-CV587FBidgn9Hqq7yFM2n4jpuq6xmWKsEg5B"),
         ),
         SealedOp::new(
             issuer_digest("c5"),
-            op_add("ak:event:01970e58-0007-8000-8000-000000000004"),
+            op_add("ak:event:AcZF3BEL_TohuLgYkcDZ81RM55kSNwhAAashww3uBPQg"),
         ),
         SealedOp::new(
             issuer_digest("c6"),
-            op_remove("ak:event:01970e58-0007-8000-8000-000000000003"),
+            op_remove("ak:event:AWHzVy4-CV587FBidgn9Hqq7yFM2n4jpuq6xmWKsEg5B"),
         ),
     ];
     let resolved = lattice.join(&cref, &ops);
@@ -1493,12 +1493,12 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
         CellState::Value(v) => serde_json::to_string(v).unwrap_or_default(),
         CellState::Bottom(_) => unreachable!(),
     };
-    if !serialized.contains("ak:event:01970e58-0007-8000-8000-000000000004") {
+    if !serialized.contains("ak:event:AcZF3BEL_TohuLgYkcDZ81RM55kSNwhAAashww3uBPQg") {
         bail!(
             "covered_frontier should keep `still_valid` ref visible after rotation: {serialized}"
         );
     }
-    if serialized.contains("ak:event:01970e58-0007-8000-8000-000000000003") {
+    if serialized.contains("ak:event:AWHzVy4-CV587FBidgn9Hqq7yFM2n4jpuq6xmWKsEg5B") {
         bail!("covered_frontier should drop the rotated ref after causal remove: {serialized}");
     }
     Ok(())

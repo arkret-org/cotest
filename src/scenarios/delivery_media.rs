@@ -549,7 +549,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
                 arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
             >(json!({
                 "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
-                "target_ref": "ak:event:0196419b-0000-8000-8000-000000000001",
+                "target_ref": "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-",
                 "report_reason_code": "spam",
                 "reporter": "did:web:alice.example"
             }))?),
@@ -566,7 +566,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
                 arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
             >(json!({
                 "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
-                "target_ref": "ak:event:0196419b-0000-8000-8000-000000000001",
+                "target_ref": "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             }))?),
@@ -583,7 +583,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
                 arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
             >(json!({
                 "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
-                "target_ref": "ak:event:0196419b-0000-8000-8000-000000000001",
+                "target_ref": "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-",
                 "report_reason_code": "spam",
                 "reporter": "did:web:bob-delivery.example"
             }))?),

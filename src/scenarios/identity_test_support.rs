@@ -5,7 +5,7 @@ use arkret_bootstrap::{
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_identifiers::{DeviceId, Did, EventId, Hlc, RealmId};
+use arkret_identifiers::{DeviceId, Did, Hlc, RealmId};
 use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
     keys_upload_signing_input,
@@ -30,8 +30,6 @@ use url::Url;
 use crate::harness::{ArkretServer, expect_json};
 
 pub(crate) const TEST_PRINCIPAL_SIGNING_KEY_SEED: [u8; 32] = [0x51; 32];
-const PCR_CREATE_EVENT_ID: &str = "ak:event:01904100-0000-8000-8000-fedc00000a10";
-const DEVICE_AUTHORIZE_EVENT_ID: &str = "ak:event:01904100-0000-8000-8000-fedc00000a11";
 
 fn registry_digest() -> arkret_identifiers::Hash {
     arkret::current_capability_action_registry_digest()
@@ -218,7 +216,6 @@ async fn bootstrap_test_device_authorization(
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             capability_action_registry_digest: registry_digest(),
-            event_id: EventId::new(PCR_CREATE_EVENT_ID.to_owned())?,
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
         },
@@ -280,7 +277,6 @@ async fn bootstrap_test_device_authorization(
         Hlc::new("01970e589d21-0001-a13f9c2e")?,
         serde_json::to_value(payload)?,
     )?;
-    authorize.event_id = EventId::new(DEVICE_AUTHORIZE_EVENT_ID.to_owned())?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
     authorize.executed_by = Some(principal.clone());
@@ -288,6 +284,7 @@ async fn bootstrap_test_device_authorization(
         arkret_wire::AuthorizationRef::new(enrollment_method.clone())
             .map_err(anyhow::Error::msg)?,
     );
+    authorize.refresh_content_bound_identity()?;
     let enrollment_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
     let enrollment_method = crate::fixture_did_url(enrollment_method);
@@ -333,6 +330,8 @@ async fn bootstrap_test_device_authorization(
         anyhow::bail!("founding authorization lease issue did not preserve unit cardinality");
     };
 
+    let create_event_id = create.event_id.clone();
+    let authorize_event_id = authorize.event_id.clone();
     let request = self_principal_bootstrap_submit_request(
         EventInitialSubmission {
             event: create,

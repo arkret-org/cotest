@@ -78,7 +78,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // stripping `proofs` / `unsigned` from the on-wire envelope.
             payload: json!({
                 "actor_id": "did:web:alice.example",
-                "event_id": "ak:event:01970e589d21-0001-a13f9c2e",
+                "event_id": "ak:event:AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
                 "realm_id": "ak:realm:01904100-0000-8000-8000-668e2181b41d",
                 "kind": "ak.message.create",
                 "hlc": "01970e589d21-0001-a13f9c2e",
@@ -92,9 +92,9 @@ fn vectors() -> Vec<CanonicalVector> {
                 },
                 "schema_version": 1,
             }),
-            // Regenerated after the Realm id in this payload moved to the
-            // event-derived UUIDv8 layout: the id sits inside the digest
-            // preimage, so editing it necessarily moves the digest.
+            // Regenerated after the Realm id in this payload moved to its
+            // Event-derived complete digest token: the Realm id sits inside
+            // this Event's preimage, so editing it necessarily moves the digest.
             expected_digest: "sha256:6e229d37ceac222b160a9aea3dd2325ea36f643b9a1989a52aca51892d85e056",
         },
         CanonicalVector {
@@ -303,7 +303,8 @@ fn pinned_r3_2_inputs() -> (
     let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
     let events = vec![
         EffectiveIdentityEntry {
-            event_id: EventId::new("ak:event:01904100-0000-8000-8000-000000000a01").unwrap(),
+            event_id: EventId::new("ak:event:AaaV5G8rACWz0A_AfDNtAvW_ConNcll4oFZ_LaD4uJgJ")
+                .unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -311,7 +312,8 @@ fn pinned_r3_2_inputs() -> (
             .unwrap(),
         },
         EffectiveIdentityEntry {
-            event_id: EventId::new("ak:event:01904100-0000-8000-8000-000000000a02").unwrap(),
+            event_id: EventId::new("ak:event:AVSR9-fIfK6zH9lp2bY3NSMx92UnNqdqIre2mtDySANm")
+                .unwrap(),
             segment: MemberIdentitySegment::MemberIdentity,
             payload_digest: Hash::new(
                 "sha256:2222222222222222222222222222222222222222222222222222222222222222",

@@ -499,15 +499,15 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             "object_kind": "strand",
             "title": "Launch planning",
             "as_of": "2026-05-27T00:00:00.000Z",
-            "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e1"],
+            "source_refs": ["ak:event:AZa7oTwtpij7cep1wdnWO4WQpnnQcif7lJLRl9_Q95Zy"],
             "policy_revision": "rev-7",
             "stale": false
         },
         "join_rule": "knock",
         "as_of": "2026-05-27T00:00:00.000Z",
         "source_refs": [
-            "ak:event:01904100-0000-8000-8000-0000000000e1",
-            "ak:event:01904100-0000-8000-8000-0000000000e2"
+            "ak:event:AZa7oTwtpij7cep1wdnWO4WQpnnQcif7lJLRl9_Q95Zy",
+            "ak:event:AdM-78HwkxpAUDgKrubpfJvFBhXfehnd29ROMSo_ts1X"
         ],
         "join_candidates": [
             {
@@ -519,7 +519,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 0,
                 "source": "directory_ingest",
-                "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e1"],
+                "source_refs": ["ak:event:AZa7oTwtpij7cep1wdnWO4WQpnnQcif7lJLRl9_Q95Zy"],
                 "as_of": "2026-05-27T00:00:00.000Z",
                 "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
@@ -535,7 +535,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "priority": 1,
                 "source": "directory_ingest",
-                "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e2"],
+                "source_refs": ["ak:event:AdM-78HwkxpAUDgKrubpfJvFBhXfehnd29ROMSo_ts1X"],
                 "as_of": "2026-05-27T00:00:00.000Z",
                 "expires_at": "2026-05-27T00:15:00.000Z",
                 "seal_basis": {
@@ -604,7 +604,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         },
         "join_rule": "invite",
         "as_of": "2026-05-27T00:00:00.000Z",
-        "source_refs": ["ak:event:01904100-0000-8000-8000-0000000000e1"],
+        "source_refs": ["ak:event:AZa7oTwtpij7cep1wdnWO4WQpnnQcif7lJLRl9_Q95Zy"],
         "join_candidates": [],
         "policy_revision": "rev-1"
     });

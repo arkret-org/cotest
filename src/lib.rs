@@ -20,6 +20,20 @@ pub mod transcripts;
 
 pub const HARNESS_NAME: &str = "cotest";
 
+/// Build a deterministic, suite-tagged Event identity for fixtures that refer
+/// to an Event but do not carry that Event's envelope.
+///
+/// Real Event fixtures must derive their identity from `Event::digest_payload`;
+/// this helper is only for opaque reference samples and missing-id probes.
+pub fn fixture_event_id(label: impl AsRef<[u8]>) -> arkret_wire::EventId {
+    use sha2::{Digest, Sha256};
+
+    arkret_wire::EventId::from_digest(
+        arkret_canonical::DigestSuite::Sha256,
+        Sha256::digest(label.as_ref()).into(),
+    )
+}
+
 /// A fixture verification method as the SDK's `arkret_wire::DidUrl`.
 ///
 /// `zh/identity/did-usage-and-verification.md` §2.2 requires every

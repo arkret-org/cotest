@@ -206,7 +206,7 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         sidecar_id,
         desired_access_digest: digest,
         control_frontier: vec![
-            NonEmptyString::new("ak:event:01964137-0000-8000-8000-000000000040")
+            NonEmptyString::new("ak:event:ATLNYjgAv7kFEef4jwHjtdjjTC9rAZqvGekqKcxx7pSX")
                 .map_err(anyhow::Error::msg)?,
         ],
     };
@@ -301,7 +301,7 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
         provisioning_phase: PendingSidecarAccessReconciliationStage::MlsRemove,
         reason: NonEmptyString::new("mls_remove_obligation_pending").map_err(anyhow::Error::msg)?,
         membership_frontier: Some(vec![EventId::new(
-            "ak:event:01964137-0000-8000-8000-000000000041",
+            "ak:event:AWifyy9pOZxDgygPC-YXK0utndmBAgXZy7HF-iPG3cyV",
         )?]),
     };
     removal.validate()?;
@@ -889,17 +889,7 @@ fn build_fixed_sidecar_prepare(
         SidecarContextRef::Relation { relation_id } => relation_id.to_string(),
         SidecarContextRef::Strand { strand_id } => strand_id.to_string(),
     };
-    let create_event_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000107")
-        .map_err(|_| SidecarModelError::ModelInvariant)?;
-    let context_attach_event_id = EventId::new(if existing_context.is_some() {
-        "ak:event:01964137-0000-8000-8000-000000000109"
-    } else if existing.is_some() {
-        "ak:event:01964137-0000-8000-8000-000000000113"
-    } else {
-        "ak:event:01964137-0000-8000-8000-000000000108"
-    })
-    .map_err(|_| SidecarModelError::ModelInvariant)?;
-    let frontier = EventId::new("ak:event:01964137-0000-8000-8000-000000000110")
+    let frontier = EventId::new("ak:event:AXt_8tC5N1gjLn_b-DdVFC0jdOuhwjrtAUmJGOZzUaVJ")
         .map_err(|_| SidecarModelError::ModelInvariant)?;
     // The create Event must exist before the attach Event, because the attach
     // links to it by id and that id is now derived from the create's content
@@ -920,7 +910,6 @@ fn build_fixed_sidecar_prepare(
         .validate()
         .map_err(|_| SidecarModelError::ModelInvariant)?;
     let create_event = fixed_unsigned_sidecar_event(
-        create_event_id.clone(),
         EventKind::SIDECAR_CREATE,
         request.source_realm_id.clone(),
         ScopeRef::Realm {
@@ -942,7 +931,6 @@ fn build_fixed_sidecar_prepare(
         )
     };
     let attach_event = fixed_unsigned_sidecar_event(
-        context_attach_event_id.clone(),
         EventKind::SIDECAR_CONTEXT_ATTACH,
         request.source_realm_id.clone(),
         ScopeRef::Circle {
@@ -1008,7 +996,6 @@ fn build_fixed_sidecar_prepare(
 
 #[allow(clippy::too_many_arguments)]
 fn fixed_unsigned_sidecar_event(
-    event_id: EventId,
     kind: &'static str,
     realm_id: RealmId,
     scope_ref: ScopeRef,
@@ -1018,43 +1005,24 @@ fn fixed_unsigned_sidecar_event(
     refs: Vec<EventRef>,
     payload: Value,
 ) -> SidecarModelResult<Event> {
-    let Value::Object(payload) = payload else {
+    if !payload.is_object() {
         return Err(SidecarModelError::ModelInvariant);
-    };
-    let mut event = Event {
-        event_id,
-        kind: EventKind::from_wire(kind),
-        realm_id,
-        scope_ref,
-        actor_id,
-        executed_by: None,
-        authorization_ref: None,
-        applet_id: None,
-        external_ref: None,
-        actor_kind: None,
-        actor_seq,
-        created_at: fixed_sidecar_time(),
-        hlc: None,
-        prev_refs,
-        refs,
-        causal_refs: Vec::new(),
-        preconditions: Vec::new(),
-        seal_ref: None,
-        auth_context: None,
-        seal_basis: None,
-        payload: payload.into_iter().collect(),
-        redacts: None,
-        unsigned: BTreeMap::new(),
-        proofs: Vec::new(),
-        requirements: EventRequirements::default(),
-    };
-    // The caller's `event_id` is only a placeholder: spec encoding.md section
-    // 4.0 derives it from the Event's own content, and `decode_prepared_event`
-    // re-derives and compares, so a pinned literal would never match.
-    event.event_id = event
-        .derive_event_id()
+    }
+    let digest_payload = json!({
+        "kind": EventKind::from_wire(kind),
+        "realm_id": realm_id,
+        "scope_ref": scope_ref,
+        "actor_id": actor_id,
+        "actor_seq": actor_seq,
+        "created_at": fixed_sidecar_time(),
+        "prev_refs": prev_refs,
+        "refs": refs,
+        "payload": payload,
+        "requirements": EventRequirements::default(),
+    });
+    let bytes = arkret_canonical::canonical_json_bytes(&digest_payload)
         .map_err(|_| SidecarModelError::ModelInvariant)?;
-    Ok(event)
+    Event::from_digest_payload_bytes(&bytes).map_err(|_| SidecarModelError::ModelInvariant)
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEventDraft> {
@@ -1474,7 +1442,8 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         SidecarModelError::DraftMismatch,
     )?;
     let mut event_id_mutation = create_event.clone();
-    event_id_mutation.event_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000199")?;
+    event_id_mutation.event_id =
+        EventId::new("ak:event:AR9z2q8WciIPBQxN5ECtwwI7tb_zAwItKYIUMxeXuIWA")?;
     let mut matching_link = attach_event.clone();
     matching_link.prev_refs = vec![event_id_mutation.event_id.clone()];
     matching_link.refs = vec![EventRef::new(
@@ -1895,12 +1864,12 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-000000000030")?;
     let source_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000031")?;
     let private_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000032")?;
-    let anchor_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000033")?;
-    let request_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000034")?;
-    let native_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000035")?;
-    let response_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000036")?;
+    let anchor_id = EventId::new("ak:event:AVmh6k5n-qXekmKueZzJW_ZoqYSe8zyTeMC9sRwYlIGS")?;
+    let request_id = EventId::new("ak:event:AU7uNevwc0Cp8J79qQnR0XFIA6sS-Ey-sAx6QesaglRs")?;
+    let native_id = EventId::new("ak:event:AZjT-hpiUOSks1wjNlYAqMixCtZTrdsCsZzB-uVQC4hr")?;
+    let response_id = EventId::new("ak:event:AYc-4BlSOVqQFbwNPwG_8grd4XMcbaWyErQiaMg6uDIK")?;
     let addressed_agent = Did::new("did:webvh:z6mkfixture:assistant.agents.example")?;
-    let terminal_id = EventId::new("ak:event:01964137-0000-8000-8000-000000000037")?;
+    let terminal_id = EventId::new("ak:event:AcQOShj1JyHhaaSQwjV-D2nyDc1M1yK4DTq0JtH4nPIx")?;
     let projection = AgentSidecarExchangeProjection {
         schema: AgentSidecarExchangeProjectionSchema::V1,
         controller_id: Did::new("did:webvh:z6mkfixture:example.com:users:alice")?,
@@ -2030,9 +1999,9 @@ pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
 // ─── shared exchange fixtures for the §7.2 vectors ─────────────────────────
 
 fn exchange_event_id(suffix: u32) -> Result<EventId> {
-    Ok(EventId::new(format!(
-        "ak:event:01964137-0000-8000-8000-{suffix:012x}"
-    ))?)
+    Ok(crate::fixture_event_id(format!(
+        "sidecar-exchange:{suffix}"
+    )))
 }
 
 fn exchange_hlc(counter: u32) -> Result<Hlc> {
@@ -2853,7 +2822,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         mls_context: AgentSidecarMlsContext {
             desired_access_digest,
             control_frontier: vec![
-                NonEmptyString::new("ak:event:01964137-0000-8000-8000-000000000020")
+                NonEmptyString::new("ak:event:AW7v_e06yQzTyt3cQnfQqZgcb1qUW5O5flxXbw4ZEahY")
                     .map_err(anyhow::Error::msg)?,
             ],
             mls_group_id: None,
@@ -2958,19 +2927,13 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
     }
     let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-000000000000")?;
     let actor = exchange_controller()?;
-    // Give the two siblings different seconds on purpose. Under
-    // `encoding.md` section 4.0 an `event_id` is `ts34 || digest[0..88]`, so
-    // with equal timestamps the event-id order and the digest order coincide
-    // and this counterexample cannot exist. The timestamp prefix is exactly
-    // what section 4.2 bans as a tie-break key, so a later-but-smaller-digest
-    // sibling is the right shape for the fixture.
+    // Give the two siblings different seconds so their digest preimages are
+    // independently variable. The protocol tie-break compares canonical
+    // digests, never the Base64URL spelling of their complete Event ids.
     let base_created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
     // Search the two possible second-offset assignments for the one that is a
-    // real counterexample. Only the timestamp prefix is ours to choose — the
-    // 88 content bits follow from the payload — so one of the two assignments
-    // makes the event-id order disagree with the digest order.
-    // Both the event-id order (timestamp prefix) and the digest order move
-    // when `created_at` moves, so a single swap is not enough: search a small
+    // real counterexample. `created_at` is digest-covered, so changing it moves
+    // both the digest and the complete content-bound identity. Search a small
     // deterministic grid of second offsets for the first assignment that is a
     // genuine counterexample.
     let mut events = Vec::new();

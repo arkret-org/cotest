@@ -840,13 +840,8 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
-      const eventId = `ak:event:01904100-0000-8000-8000-${Date.now()
-        .toString()
-        .slice(-12)
-        .padStart(12, "0")}`;
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
-        eventId,
         realmId: "ak:realm:01904100-0000-8000-8000-000000001101",
         kind: "ak.message.create",
         payload: {
@@ -856,6 +851,8 @@ test.describe("service surface contract — error envelope, pagination, idempote
         },
       });
       (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
+      refreshEventEnvelopeProof(envelope);
+      const eventId = String(envelope.event_id);
 
       const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { authorization: `Bearer ${token}` },
@@ -879,13 +876,8 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e2");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
-      const eventId = `ak:event:01904100-0000-8000-8000-${Date.now()
-        .toString()
-        .slice(-12)
-        .padStart(12, "0")}`;
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
-        eventId,
         realmId: "ak:realm:01904100-0000-8000-8000-000000001102",
         kind: "ak.message.create",
         payload: {

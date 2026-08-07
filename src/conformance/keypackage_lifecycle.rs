@@ -925,7 +925,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
                 "sig": "c2ln"
             }
         },
-        "commit_ref": "ak:event:0196419b-0000-8000-8000-000000000010",
+        "commit_ref": "ak:event:AR8j96rkirO3GDtvwgRddZScc5YX1AgFEOGO5Bs1wrgC",
         "governance_binding": {
             "binding_version": 1,
             "encoding_profile": "cbor-deterministic-rfc8949-v1",

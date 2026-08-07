@@ -84,7 +84,7 @@ fn project_on_send(
             "expiry_stub": true,
             "expiry_reason": "disappearing_expired",
             "expired_at_ms": expires_at_ms,
-            "audit_ref": "ak:event:01904100-0000-8000-8000-000000000004"
+            "audit_ref": "ak:event:Ac0RSITUWs2Ftqgb902qaA5SlygUXgX0yAce_06OOjek"
         }),
     }
 }

@@ -4213,8 +4213,8 @@ function sdkEventEnvelopeProof(args: {
 ///
 /// An Event id is a function of the Event's own digest and is excluded from
 /// that digest's preimage, so a producer builds the envelope first and derives
-/// the id second. Minting one here would produce a UUIDv7 where the wire form
-/// is UUIDv8, and every SDK-side parse of the envelope rejects it.
+/// the complete suite-tagged digest identity second. Every SDK-side parse
+/// rejects an identity that does not match the digest preimage.
 export function sdkEventDerivedIds(event: Record<string, unknown>): {
   event_id: string;
   realm_id: string;

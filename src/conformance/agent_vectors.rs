@@ -639,7 +639,7 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     let authored = serde_json::json!({
         "actor_id": agent,
         "executed_by": controller,
-        "authorization_ref": "ak:event:01964137-0000-8000-8000-000000000022"
+        "authorization_ref": "ak:event:AaFkuSVtHcmpSTwun3O77ySLPpa7WleqRUq8Stzi_0WZ"
     });
     if authored["actor_id"] != agent
         || authored["executed_by"] != controller
@@ -744,7 +744,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "issued_at": "2026-07-12T00:00:00.000Z",
         "approval_evidence": {
             "kind": "approval_event",
-            "evidence_ref": "ak:event:01990000-0000-8000-8000-000000000001"
+            "evidence_ref": "ak:event:AYz83T5m9wlxPZajbMTo2434KPasrefi0JLVQGx6gO0W"
         }
     });
     let decoded: arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload =
@@ -813,7 +813,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
-        arkret_wire::ServiceOperationId::SELF_AGENT_READ_LIST,
+        arkret_wire::ServiceOperationId::SELF_AGENT_QUERY_LIST,
         arkret_wire::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
         arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,
@@ -1138,7 +1138,7 @@ pub fn run_agent_session_grant_replay_vector() -> Result<()> {
 
 const HUMAN_APPROVAL_RUNNER: &str =
     "cotest::conformance::agent_vectors::run_agent_human_approval_required_vector";
-const ACCEPTED_APPROVAL_EVENT_REF: &str = "ak:event:0196419b-0000-8000-8000-000000000001";
+const ACCEPTED_APPROVAL_EVENT_REF: &str = "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-";
 
 fn validate_human_approval_details_schema(details: &Value) -> Result<()> {
     let document = super::load_artifact_json("schemas/agent-operations.schema.json")?;

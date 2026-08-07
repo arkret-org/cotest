@@ -49,7 +49,7 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
             .is_none_or(|value| value.is_null() || value.as_array().is_some_and(Vec::is_empty))
     );
 
-    let missing_event = "ak:event:01904100-0000-8000-8000-00000000e502";
+    let missing_event = "ak:event:Af0YczSWD-8X4lrK2BH5wtPMV43kWXeGhVnctg-7ZeGb";
     let missing_digest = format!("sha256:{}", "2".repeat(64));
     let mixed = expect_json(
         alice
@@ -81,7 +81,7 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     );
 
     let at_budget: Vec<String> = (0..max_resolve)
-        .map(|index| format!("ak:event:01904100-0000-8000-8000-{index:012x}"))
+        .map(|index| crate::fixture_event_id(format!("events-resolve:{index}")).to_string())
         .collect();
     let at_budget_outcome = expect_json(
         alice

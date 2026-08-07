@@ -1,5 +1,5 @@
 use arkret::{
-    DeviceId, Did, Event, EventId, Hlc, MessageCreatePayload, MessageId, MessageStreamDelta,
+    DeviceId, Did, Event, Hlc, MessageCreatePayload, MessageId, MessageStreamDelta,
     MessageStreamFormat, MessageStreamFrame, MessageStreamId, MessageStreamKeyframe,
     MessageStreamProducer, RealmId, ScopeRef, SealId, StrandId,
 };
@@ -25,8 +25,22 @@ fn strand() -> StrandId {
     StrandId::new("ak:strand:01904100-0000-8000-8000-000000000002").unwrap()
 }
 
-fn event_id() -> EventId {
-    EventId::new("ak:event:01904100-0000-8000-8000-000000000003").unwrap()
+fn final_event() -> Event {
+    let payload = MessageCreatePayload::with_content(
+        strand(),
+        "discussion",
+        arkret::ContentBlock::text("complete final"),
+    );
+    Event::new_with_derived_id_at(
+        "ak.message.create",
+        ScopeRef::Realm { realm_id: realm() },
+        actor(),
+        1,
+        Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),
+        payload.to_value().unwrap(),
+        at(3),
+    )
+    .unwrap()
 }
 
 fn stream_id() -> MessageStreamId {
@@ -67,7 +81,8 @@ fn authorize_frame(_: &SignalPlaintext, _: &MessageStreamFrame) -> bool {
 
 #[test]
 fn producer_and_consumer_self_heal_then_bind_direct_final() {
-    let event_id = event_id();
+    let final_event = final_event();
+    let event_id = final_event.event_id.clone();
     let message_id = MessageId::from_event_id(&event_id);
     let (mut producer, initial) = MessageStreamProducer::start(
         1,
@@ -129,22 +144,6 @@ fn producer_and_consumer_self_heal_then_bind_direct_final() {
         MessageStreamApplyOutcome::Updated
     );
 
-    let payload = MessageCreatePayload::with_content(
-        strand(),
-        "discussion",
-        arkret::ContentBlock::text("complete final"),
-    );
-    let final_event = Event::new_with_id_at(
-        event_id,
-        "ak.message.create",
-        ScopeRef::Realm { realm_id: realm() },
-        actor(),
-        1,
-        Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),
-        payload.to_value().unwrap(),
-        at(3),
-    )
-    .unwrap();
     let removed = projection
         .bind_verified_final(&final_event, &device())
         .unwrap()
@@ -166,7 +165,7 @@ fn fixture_and_closed_message_create_identity_contract_are_present() {
     let illegal = json!({
         "strand_id": strand().as_str(),
         "track_name": "discussion",
-        "message_id": MessageId::from_event_id(&event_id()).as_str(),
+        "message_id": MessageId::from_event_id(&final_event().event_id).as_str(),
         "content": {"kind": "ak.content.text", "body": "must fail"}
     });
     assert!(serde_json::from_value::<MessageCreatePayload>(illegal).is_err());

@@ -783,7 +783,7 @@ fn render_body(
                     "scheme": "ak.signal_exporter_aead.v1",
                     "key_ref": {
                         "algorithm": "MLS-EXPORTER-AEAD",
-                        "group_state_ref": "ak:event:01999999-0000-8000-8000-000000000451"
+                        "group_state_ref": "ak:event:AX1Yi6rgOReFnLzM0OwMzoI7WWl1XHT5HWSbeE9LgFyg"
                     },
                     "purpose": "ak.signal.v1",
                     "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",

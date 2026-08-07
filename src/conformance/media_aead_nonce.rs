@@ -74,7 +74,7 @@ fn nonce_context(device_id: &str, aead_profile: &str) -> AeadNonceContext {
     AeadNonceContext {
         key_ref: json!({
             "algorithm": "MLS",
-            "group_state_ref": "ak:event:01964148-0000-8000-8000-000000000000"
+            "group_state_ref": "ak:event:ASIihwq2PrVn-0TWdd_J8voN4PsCP2T40iIDdKrDQaCU"
         }),
         epoch: 42,
         device_id: device_id.to_owned(),

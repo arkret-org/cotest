@@ -68,7 +68,7 @@
           "discoverability": "listed",
           "as_of": "2026-06-06T00:00:00.000Z",
           "source_refs": [
-            "ak:event:0196b39d-0000-8000-8000-000000000201"
+            "ak:event:AVAXPtjUq_7NKI-aYtOned0cm20tOwEMG0onUjNTTJ-N"
           ],
           "policy_revision": "rev-1"
         }
@@ -156,12 +156,12 @@
         "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
         "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000301",
         "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
-        "binding_event_ref": "ak:event:0196b39d-0000-8000-8000-000000000501"
+        "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
       },
       "send_blockers": [],
-      "active_mls_generation_ref": "ak:event:0196b39d-0000-8000-8000-000000000501"
+      "active_mls_generation_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
     },
-    "binding_event_ref": "ak:event:0196b39d-0000-8000-8000-000000000501",
+    "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
     "binding_payload": {
       "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
       "participants_unordered": [
@@ -173,19 +173,19 @@
       "authorization_basis": {
         "kind": "accepted_contact",
         "event_refs": [
-          "ak:event:0196b39d-0000-8000-8000-000000000502",
-          "ak:event:0196b39d-0000-8000-8000-000000000503"
+          "ak:event:AZbAR-UJKJB9XAMVWWroEIv43WmrHqCfW6GJV3MnzF9J",
+          "ak:event:AVEntuNDJE3nOVqGBDAuKT6laYevDi6AJvAiMxML4uy3"
         ]
       },
       "created_at": "2026-06-06T00:00:00.000Z",
       "founding_unit_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "initial_exact_pair_generation_ref": "ak:event:0196b39d-0000-8000-8000-000000000501"
+      "initial_exact_pair_generation_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
     },
     "contact_list_row": {
       "peer": "did:web:bob.example",
       "state": "accepted",
-      "request_event_ref": "ak:event:0196b39d-0000-8000-8000-000000000502",
-      "response_event_ref": "ak:event:0196b39d-0000-8000-8000-000000000503",
+      "request_event_ref": "ak:event:AZbAR-UJKJB9XAMVWWroEIv43WmrHqCfW6GJV3MnzF9J",
+      "response_event_ref": "ak:event:AVEntuNDJE3nOVqGBDAuKT6laYevDi6AJvAiMxML4uy3",
       "granted_by_me": [
         "direct_message"
       ],
@@ -201,7 +201,7 @@
       "direct_conversation": {
         "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000301",
         "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
-        "binding_event_ref": "ak:event:0196b39d-0000-8000-8000-000000000501",
+        "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
         "state": "active"
       }
     },
@@ -216,7 +216,7 @@
       "contact_row": {
         "peer": "did:web:chrid.example",
         "state": "pending_incoming",
-        "request_event_ref": "ak:event:0196b39d-0000-8000-8000-000000000601",
+        "request_event_ref": "ak:event:AUvBHgN7bd-kwN9HoAO2mZ8V5vtNsq41biC5ss2DqiAO",
         "granted_by_me": [],
         "granted_to_me": [
           "direct_message"

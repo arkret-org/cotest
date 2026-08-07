@@ -140,7 +140,7 @@
       "cell_family": "ak.component.consent.grant.v1",
       "lattice": "or_set",
       "bottom": "inert",
-      "payload_shape": { "consent_id": "ak:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "revokes_op_id": "ak:event:7fd5ae82-44e2-8a8a-9a4b-8857991142f0" }
+      "payload_shape": { "consent_id": "ak:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "revokes_op_id": "ak:event:AcaBhCPC41muN5bl3jpIcFkdQDGvJqCzQdFrF78sWdNw" }
     },
     {
       "name": "capability_grant_or_set",

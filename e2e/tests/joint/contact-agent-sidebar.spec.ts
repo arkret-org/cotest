@@ -81,7 +81,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         direct_conversation: {
           realm_id: "ak:realm:01964137-0000-8000-8000-0000000000b1",
           main_strand_id: "ak:strand:01964137-0000-8000-8000-0000000000b2",
-          binding_event_ref: "ak:event:01964137-0000-8000-8000-0000000000b3",
+          binding_event_ref: "ak:event:ARn7D_ihLMur4IPmD8Tz75ZThvC26r14I60hC2_uRS8q",
           state: "active",
         },
       };

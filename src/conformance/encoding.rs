@@ -56,7 +56,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
 
     for case in fixture.cases.proof_payload {
         let event = json!({
-            "event_id": "ak:event:01970e58-0003-8000-8000-000000000010",
+            "event_id": "ak:event:AffYvO1bZNivtZWJPL_VcWqpd_MP-_igXCfxL5lhBbXu",
             "kind": "ak.message.create",
             "realm_id": "ak:realm:01970e58-0003-8000-8000-000000000011",
             "content": {"kind": "ak.content.text", "body": "covered"},
@@ -323,7 +323,7 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
 
     let event_for = |scope: Value, status: &str| -> Result<arkret_wire::Event> {
         Ok(serde_json::from_value(json!({
-            "event_id": "ak:event:019f9e50-d787-84e0-8731-c9ad5eaa9190",
+            "event_id": "ak:event:AdUJkfoC4GBgYoPW4M0pjanZUQUGUONyXm711OvGtCga",
             "kind": "ak.identity.accountability_grant",
             "realm_id": "ak:realm:019f9e50-d787-84e0-8731-c9ad5eaa9180",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f9e50-d787-84e0-8731-c9ad5eaa9180"},

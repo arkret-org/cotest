@@ -87,8 +87,8 @@
               "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
               "kind": "conflict",
               "concurrent_heads": [
-                "ak:event:01970e58-0000-8000-8000-000000000010",
-                "ak:event:01970e58-0000-8000-8000-000000000011"
+                "ak:event:ASRboSxLt55ezeNBXCa9odsuRrRWsJ_J49TgWKtyTcWd",
+                "ak:event:AerVVhAWptFKZiFBDlob36MUqKQML7m1Hilkfvbtzngz"
               ]
             }
           ]
@@ -115,8 +115,8 @@
             "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
-              "ak:event:01970e58-0000-8000-8000-000000000010",
-              "ak:event:01970e58-0000-8000-8000-000000000011"
+              "ak:event:ASRboSxLt55ezeNBXCa9odsuRrRWsJ_J49TgWKtyTcWd",
+              "ak:event:AerVVhAWptFKZiFBDlob36MUqKQML7m1Hilkfvbtzngz"
             ]
           }
         ]
@@ -133,8 +133,8 @@
             "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
             "kind": "conflict",
             "concurrent_heads": [
-              "ak:event:01970e58-0000-8000-8000-000000000010",
-              "ak:event:01970e58-0000-8000-8000-000000000011"
+              "ak:event:ASRboSxLt55ezeNBXCa9odsuRrRWsJ_J49TgWKtyTcWd",
+              "ak:event:AerVVhAWptFKZiFBDlob36MUqKQML7m1Hilkfvbtzngz"
             ]
           }
         ],
@@ -159,7 +159,7 @@
             {
               "cell": "ak:cell:ak.component.realm.policy.v1:ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
               "kind": "conflict",
-              "concurrent_heads": ["ak:event:01970e58-0000-8000-8000-000000000020"]
+              "concurrent_heads": ["ak:event:AVcRegcVuCp930M9IWpAEAB1WurfkmzertYaDjGXO2Er"]
             }
           ]
         }

@@ -225,7 +225,7 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
         device_status: Some(DeviceStatus::Active),
         enrollment_authority_binding: Some(authority.clone()),
         device_authorize_event_id: Some(EventId::new(
-            "ak:event:01904100-0000-8000-8000-000000000004",
+            "ak:event:Ac0RSITUWs2Ftqgb902qaA5SlygUXgX0yAce_06OOjek",
         )?),
         authorized_generation_ref: Some(non_empty("2-QmCurrent")?),
         ..QueryDeviceRecord::default()
@@ -268,7 +268,6 @@ fn validate_bootstrap_helpers() -> Result<()> {
                 DID_INCEPTION_REF_ROLE,
             ),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
-            event_id: EventId::new("ak:event:01904100-0000-8000-8000-000000000001")?,
             created_at,
             hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         },
@@ -309,7 +308,6 @@ fn validate_bootstrap_helpers() -> Result<()> {
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         serde_json::to_value(payload)?,
     )?;
-    authorize.event_id = EventId::new("ak:event:01904100-0000-8000-8000-000000000002")?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
     authorize.executed_by = Some(authority.authority_did.clone());
@@ -393,7 +391,7 @@ fn validate_reanchor_helpers() -> Result<()> {
     // binding would make the two Events preimages of each other.
     let mut carries_event_id = value.clone();
     carries_event_id["replacement_authorize_event_id"] =
-        json!("ak:event:01904100-0000-8000-8000-000000000003");
+        json!("ak:event:AXlG8yvLUgeROF13vorAuw0LMlE4uhRoHybH_PZB3WFx");
     if serde_json::from_value::<DeviceReanchorPayload>(carries_event_id).is_ok() {
         bail!("device re-anchor accepted a replacement Event id binding");
     }
@@ -508,6 +506,7 @@ fn enrollment_binding() -> Result<DeviceEnrollmentAuthorityBinding> {
 }
 
 fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Result<Event> {
+    event.refresh_content_bound_identity()?;
     let digest = Hash::new(event.event_digest()?)?;
     event.proofs = vec![Proof {
         kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),

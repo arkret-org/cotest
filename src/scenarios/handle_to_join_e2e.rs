@@ -76,7 +76,7 @@ const ALICE_HANDLE: &str = "alice:acme.example";
 /// Source-ref event id the directory would echo back on a real
 /// `ak.find.directory.read.resolve_handle` envelope. Carried so `source_refs[]` is
 /// non-empty (a candidate validator MUST-rule).
-const SOURCE_REF_EVENT_ID: &str = "ak:event:0196419b-0000-8000-8000-000000000002";
+const SOURCE_REF_EVENT_ID: &str = "ak:event:AccVsThCMukcEF5tfolTyrO1SoKc5W7qAlVm_mDWvfuw";
 
 // ── Public scenario entry-point ────────────────────────────────────────────
 
@@ -507,9 +507,11 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(
-                "ak:event:01890000-0000-8000-8000-acceptance01".to_owned(),
+                "ak:event:AafiSe5-0DLIzxypKeEYStsz0tPrLS0bvyfdfmJHrGtZ".to_owned(),
             ),
-            policy_event_ref: Some("ak:event:01890000-0000-8000-8000-policyref001".to_owned()),
+            policy_event_ref: Some(
+                "ak:event:AQ34vCwlfah2TO0DO9lN1zqgfyIP-qbCp6Kq2XMiySVs".to_owned(),
+            ),
         },
         issuer_service_id: principal,
         audience: TARGET_REALM_ID.to_owned(),

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use arkret_wire::{
     BackupId, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
-    BackupSeriesId, CanonicalPublicMaterial, Did, Event, EventId, EventInitialSubmission,
+    BackupSeriesId, CanonicalPublicMaterial, Did, Event, EventInitialSubmission,
     EventsSubmitBatchRequestBody, Hash, Hlc, ReceiptId, RecoverySessionId,
     RecoveryTransactionCreateRequest, RiskTier, ScopeRef, SealId,
     SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
@@ -135,13 +135,10 @@ pub fn cross_signing_recovery_create_request_for(
 ) -> Result<SecurityTransactionCreateRequest> {
     let coordinator = Did::new(service_id.to_owned())?;
     let principal = Did::new(principal_id.to_owned())?;
-    let authorize_event_id =
-        EventId::new("ak:event:01975510-0000-8000-8000-0000000000f3".to_owned())?;
-    let list_event_id = EventId::new("ak:event:01975510-0000-8000-8000-0000000000f4".to_owned())?;
     let request = EventsSubmitBatchRequestBody {
         events: vec![
-            event_submission(&principal, authorize_event_id, "ak.device.authorize", "f5")?,
-            event_submission(&principal, list_event_id, "ak.device.list_update", "f6")?,
+            event_submission(&principal, "ak.device.authorize")?,
+            event_submission(&principal, "ak.device.list_update")?,
         ],
     };
     Ok(SecurityTransactionCreateRequest::Recovery(
@@ -168,7 +165,9 @@ fn rotation_create_request(service_id: &str) -> Result<SecurityTransactionCreate
     let coordinator = Did::new(service_id.to_owned())?;
     let principal = Did::new(ACTOR.to_owned())?;
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
-    let revoke_event_id = EventId::new("ak:event:01975510-0000-8000-8000-0000000000b3".to_owned())?;
+    let revoke_submission = event_submission(&principal, "ak.device.revoke")?;
+    let revoke_event_id = revoke_submission.event.event_id.clone();
+    let revoke_unit = event_unit(&coordinator, revoke_submission)?;
     let rotations = [
         (BackupRotationKind::SecretStorage, "c"),
         (BackupRotationKind::MlsHistory, "d"),
@@ -181,13 +180,8 @@ fn rotation_create_request(service_id: &str) -> Result<SecurityTransactionCreate
             transaction_id,
             principal.clone(),
             Utc::now() + chrono::Duration::hours(1),
-            revoke_event_id.clone(),
-            event_unit(
-                &coordinator,
-                &principal,
-                revoke_event_id,
-                "ak.device.revoke",
-            )?,
+            revoke_event_id,
+            revoke_unit,
             hash('e')?,
             rotations,
         )?,
@@ -200,6 +194,8 @@ fn rotation_plan(
     kind: BackupRotationKind,
     suffix: &str,
 ) -> Result<BackupRotationPlan> {
+    let active_series_submission = event_submission(principal, "ak.key_backup.active_series")?;
+    let active_series_event_id = active_series_submission.event.event_id.clone();
     let binding = BackupRotationBinding {
         backup_kind: kind,
         previous_series_id: BackupSeriesId::new(format!(
@@ -214,9 +210,7 @@ fn rotation_plan(
             ))?,
             ciphertext_digest: hash('7')?,
         }],
-        active_series_event_id: EventId::new(format!(
-            "ak:event:01975510-0000-8000-8000-0000000000{suffix}4"
-        ))?,
+        active_series_event_id,
         old_backups: vec![BackupObjectRef {
             backup_id: BackupId::new(format!(
                 "ak:backup:01975510-0000-7000-8000-0000000000{suffix}5"
@@ -236,12 +230,7 @@ fn rotation_plan(
         "series_id": binding.new_series_id,
     })]))?;
     Ok(BackupRotationPlan {
-        active_series_unit: event_unit(
-            coordinator,
-            principal,
-            binding.active_series_event_id.clone(),
-            "ak.key_backup.active_series",
-        )?,
+        active_series_unit: event_unit(coordinator, active_series_submission)?,
         encrypted_backup_material: material,
         binding,
     })
@@ -249,12 +238,10 @@ fn rotation_plan(
 
 fn event_unit(
     coordinator: &Did,
-    principal: &Did,
-    event_id: EventId,
-    kind: &str,
+    submission: EventInitialSubmission,
 ) -> Result<arkret_wire::PreparedEventUnit> {
     let request = EventsSubmitBatchRequestBody {
-        events: vec![event_submission(principal, event_id, kind, "e1")?],
+        events: vec![submission],
     };
     Ok(arkret_wire::PreparedEventUnit::new(
         coordinator.clone(),
@@ -262,12 +249,7 @@ fn event_unit(
     )?)
 }
 
-fn event_submission(
-    principal: &Did,
-    event_id: EventId,
-    kind: &str,
-    _lease_suffix: &str,
-) -> Result<EventInitialSubmission> {
+fn event_submission(principal: &Did, kind: &str) -> Result<EventInitialSubmission> {
     let realm_id = arkret_wire::RealmId::new(
         arkret_models_identity::did_document::principal_control_realm_id(principal),
     )?;
@@ -275,8 +257,7 @@ fn event_submission(
         realm_id: realm_id.clone(),
     };
     let now = Utc::now();
-    let mut event = Event::new_with_id_at(
-        event_id,
+    let mut event = Event::new_with_derived_id_at(
         kind,
         scope_ref.clone(),
         principal.clone(),

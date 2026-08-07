@@ -683,8 +683,8 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
     let v1 = make_identity("Alice v1")?;
     let v2 = make_identity("Alice v2 (display_name changed)")?;
-    let event_a = EventId::new("ak:event:01904100-0000-8000-8000-000000007a01")?;
-    let event_b = EventId::new("ak:event:01904100-0000-8000-8000-000000007a02")?;
+    let event_a = EventId::new("ak:event:AXNgOIZZl4gk3plitPd__yCjPWoadg6iy_MvsFlDEJoX")?;
+    let event_b = EventId::new("ak:event:ARDf-SZvtxzRy4KgOrojq92s84Z4PJb0V-wUAApfmvnO")?;
     let carrier_a = IdentityPayloadCarrier::MemberIdentity {
         member_identity: v1,
     };
@@ -806,7 +806,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         issued_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
             .with_timezone(&chrono::Utc),
         source_refs: vec![EventId::new(
-            "ak:event:01904100-0000-8000-8000-000000000001",
+            "ak:event:AZYdi3qlzHC9BLa3vihHvgrhFh0AYuNTNpOD7a8MiN5J",
         )?],
         proofs: vec![Proof {
             kind: "detached_jws".to_owned(),

@@ -1659,9 +1659,6 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
                 arkret_bootstrap::DID_INCEPTION_REF_ROLE,
             ),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
-            event_id: arkret::EventId::new(
-                "ak:event:01904100-0000-8000-8000-00000000a910".to_owned(),
-            )?,
             created_at: control_created_at,
             hlc: arkret::Hlc::new(format!("{control_timestamp_hex}-0000-a13f9c2e"))?,
         },
@@ -1702,8 +1699,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         }),
         recovery_session_id: None,
     };
-    let mut bootstrap_authorize = arkret::Event::new_with_id_at(
-        arkret::EventId::new("ak:event:01904100-0000-8000-8000-00000000a911".to_owned())?,
+    let mut bootstrap_authorize = arkret::Event::new_with_derived_id_at(
         EventKind::DEVICE_AUTHORIZE,
         arkret_wire::ScopeRef::Realm {
             realm_id: typed_control_realm_id.clone(),
@@ -1993,8 +1989,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         policy_id: policy.policy_id.clone(),
         value: policy,
     };
-    let mut policy_event = arkret::Event::new_with_id_at(
-        arkret::EventId::new("ak:event:01904100-0000-8000-8000-00000000a912".to_owned())?,
+    let mut policy_event = arkret::Event::new_with_derived_id_at(
         EventKind::POLICY_SET,
         arkret_wire::ScopeRef::Realm {
             realm_id: arkret::RealmId::new(&control_realm_id)?,
@@ -3873,24 +3868,23 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
         )?;
     let issued_at = canonical_now();
     let expires_at = std::cmp::min(pairing_expires_at, issued_at + chrono::Duration::minutes(4));
-    let authorize_event_id = arkret::EventId::new(arkret::new_prefixed_uuid7("ak:event:"))?;
-    let signing_key_binding = arkret_signatures::agent_evidence::build_agent_signing_key_binding(
-        agent_id.clone(),
-        arkret::NonEmptyString::new(verification_method.clone())
-            .map_err(|reason| anyhow!(reason))?,
-        arkret::DidUrl::new(verification_method.clone()).map_err(|reason| anyhow!(reason))?,
-        signing_key.verifying_key().to_bytes(),
-        authorize_event_id.clone(),
-        issued_at,
-        Some(expires_at),
-        controller_id.clone(),
-        controller_vm.clone(),
-        &SigningKey::from_bytes(&controller_signing_seed),
-    )
-    .map_err(|reason| anyhow!(reason.as_str()))?;
+    let signing_key_binding_core =
+        arkret_signatures::agent_evidence::prepare_agent_signing_key_binding_core(
+            agent_id.clone(),
+            arkret::NonEmptyString::new(verification_method.clone())
+                .map_err(|reason| anyhow!(reason))?,
+            arkret::DidUrl::new(verification_method.clone()).map_err(|reason| anyhow!(reason))?,
+            &approval_request.public_key,
+            issued_at,
+            Some(expires_at),
+            controller_id.clone(),
+        )
+        .map_err(|reason| anyhow!(reason.as_str()))?;
     let signing_key_binding_digest =
-        arkret_signatures::agent_evidence::agent_signing_key_binding_digest(&signing_key_binding)
-            .map_err(|reason| anyhow!(reason.as_str()))?;
+        arkret_signatures::agent_evidence::agent_signing_key_binding_core_digest(
+            &signing_key_binding_core,
+        )
+        .map_err(|reason| anyhow!(reason.as_str()))?;
     let authorize_payload = arkret::AgentKeyAuthorizePayload {
         agent_id: agent_id.clone(),
         key_id: non_empty(verification_method.clone())?,
@@ -3942,7 +3936,6 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     let actor_seq = actor_frontier.next_actor_seq;
     let mut authorize_event = arkret_event_draft::build_agent_key_authorize_event(
         &authorize_payload,
-        authorize_event_id,
         arkret_wire::ScopeRef::Realm {
             realm_id: provisioned.principal_control_realm_id().clone(),
         },
@@ -3959,6 +3952,31 @@ async fn build_agent_key_pair_request_with_controller_vm<P: PairingOutcome>(
     )?);
     authorize_event.created_at = canonical_now();
     authorize_event.proofs.clear();
+    authorize_event.refresh_content_bound_identity()?;
+    let signing_key_binding_to_sign =
+        arkret_signatures::agent_evidence::materialize_agent_signing_key_binding(
+            signing_key_binding_core,
+            authorize_event.event_id.clone(),
+            controller_vm.clone(),
+        )
+        .map_err(|reason| anyhow!(reason.as_str()))?;
+    let binding_bytes = arkret_signatures::agent_evidence::agent_signing_key_binding_to_sign_bytes(
+        &signing_key_binding_to_sign,
+    )
+    .map_err(|reason| anyhow!(reason.as_str()))?;
+    let controller_jws = arkret_signatures::proof::sign_ed25519_detached_jws(
+        &SigningKey::from_bytes(&controller_signing_seed),
+        &binding_bytes,
+    )?;
+    let signing_key_binding = arkret_signatures::agent_evidence::finish_agent_signing_key_binding(
+        signing_key_binding_to_sign,
+        &controller_jws,
+    )
+    .map_err(|reason| anyhow!(reason.as_str()))?;
+    authorize_event.unsigned.insert(
+        "agent_signing_key_binding".to_owned(),
+        serde_json::to_value(&signing_key_binding)?,
+    );
     arkret::signatures::sign_event(
         &mut authorize_event,
         &controller_signer,

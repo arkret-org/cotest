@@ -80,7 +80,7 @@ fn key() -> [u8; 32] {
 fn key_ref() -> KeyRefObject {
     KeyRefObject {
         algorithm: "MLS".to_owned(),
-        group_state_ref: "ak:event:01964148-0000-8000-8000-000000000000".to_owned(),
+        group_state_ref: "ak:event:ASIihwq2PrVn-0TWdd_J8voN4PsCP2T40iIDdKrDQaCU".to_owned(),
     }
 }
 

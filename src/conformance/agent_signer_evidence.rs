@@ -1124,8 +1124,9 @@ fn hash_byte(byte: u8) -> Result<Hash> {
 }
 
 fn event_id(suffix: u8) -> Result<EventId> {
-    EventId::new(format!("ak:event:01964137-0000-8000-8000-{suffix:012x}"))
-        .map_err(anyhow::Error::msg)
+    Ok(crate::fixture_event_id(format!(
+        "agent-signer-evidence:{suffix}"
+    )))
 }
 
 fn nes(value: &str) -> Result<NonEmptyString> {

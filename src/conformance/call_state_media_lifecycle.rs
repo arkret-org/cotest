@@ -206,7 +206,7 @@ fn call_id() -> CallId {
 }
 
 fn start_event_id() -> EventId {
-    EventId::new("ak:event:019a7360-0000-8000-8000-000000000003").unwrap()
+    EventId::new("ak:event:ARHMhWPvHwsRKYQXNhB6wm4cESEe1fbHz6rJWPRl9wHY").unwrap()
 }
 
 fn hash(ch: char) -> Hash {

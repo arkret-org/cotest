@@ -366,7 +366,7 @@ mod tests {
 
     fn sample_event() -> Value {
         json!({
-            "event_id": "ak:event:01970e589d21-0001-a13f9c2e",
+            "event_id": "ak:event:AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
             "kind": "ak.message.create",
             "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
             "actor_id": "did:web:alice.example",

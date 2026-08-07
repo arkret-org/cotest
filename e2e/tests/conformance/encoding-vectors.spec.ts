@@ -451,9 +451,9 @@ test.describe("conformance encoding vectors", () => {
     // cursor handler folds events into an order-independent digest, so both
     // POSTs MUST return the same cursor string.
     const events = [
-      { event_id: "ak:event:019640ed-8000-8000-8000-000000000001" },
-      { event_id: "ak:event:019640ed-8000-8000-8000-000000000002" },
-      { event_id: "ak:event:019640ed-8000-8000-8000-000000000003" },
+      { event_id: "ak:event:ARpiDPsbW2AJUyySDauMC0D4IKLvB9L-ahd5-622lBqY" },
+      { event_id: "ak:event:AXvZ07LXpvHUCn0jFurPzNlYh-87RUj62VEaoYHUD8Fr" },
+      { event_id: "ak:event:AVcAdvZ2vg_iyVrtExlPij_vSCh0Onsy20GO0nR2yD4s" },
     ];
     const shuffled = [events[2], events[0], events[1]];
 
@@ -558,7 +558,7 @@ test.describe("conformance encoding vectors", () => {
     const ownerDid = "did:web:alice.example";
     const guestDid = "did:web:guest.example";
     const event = {
-      event_id: "ak:event:019640ed-8000-8000-8000-000000000abc",
+      event_id: "ak:event:AY3Ymj4NJ7YEqOwLhBjWKXoD1P7PbP5OfU_ed6ZWIIMc",
       kind: "ak.message.create",
       sender_actor_id: ownerDid,
       payload: {

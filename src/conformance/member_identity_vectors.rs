@@ -88,8 +88,9 @@ fn fake_subject() -> Result<Did> {
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
-    EventId::new(format!("ak:event:01904100-0000-8000-8000-{suffix:012x}"))
-        .map_err(|e| anyhow!("invalid event id: {e}"))
+    Ok(crate::fixture_event_id(format!(
+        "member-identity-vector:{suffix}"
+    )))
 }
 
 /// Pinned `asserted_at` so vector digests are stable across runs.

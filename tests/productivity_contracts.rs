@@ -7,7 +7,7 @@ use arkret_models_collaboration::objects::productivity::{
     validate_private_account_data_key,
 };
 use arkret_schema::event_payload_validator_catalog_from_spec_artifacts;
-use arkret_wire::{MessageId, RealmId};
+use arkret_wire::{MessageId, RealmId, ScheduledSendId};
 use serde_json::{Value, json};
 
 fn artifacts_root() -> PathBuf {
@@ -231,15 +231,17 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 fn private_account_data_keys_do_not_leak_raw_refs() {
     let ns = b"cotest productivity namespace";
     let message_id = MessageId::new("ak:message:01904100-0000-8000-8000-000000000001").unwrap();
+    let scheduled_send_id =
+        ScheduledSendId::new("ak:scheduled_send:01904100-0000-7000-8000-000000000003").unwrap();
     let realm_id = RealmId::new("ak:realm:01904100-0000-8000-8000-000000000002").unwrap();
     let target_ref = message_id.as_str();
 
-    let scheduled_send_key = scheduled_send_account_data_key(&message_id);
+    let scheduled_send_key = scheduled_send_account_data_key(&scheduled_send_id);
     validate_private_account_data_key(&scheduled_send_key).unwrap();
     assert_eq!(
         scheduled_send_key,
-        format!("ak.scheduled_send.v1:{}", message_id.as_str()),
-        "scheduled-send key must use the spec-defined planned_message_id idempotency anchor"
+        format!("ak.scheduled_send.v1:{}", scheduled_send_id.as_str()),
+        "scheduled-send key must use its producer-allocated plan identity"
     );
 
     let keys = [

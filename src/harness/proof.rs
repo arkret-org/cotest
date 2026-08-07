@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn canonical_event_digest_uses_sdk_typed_event_wire_shape() {
         let event = json!({
-            "event_id": "ak:event:019f3b1c-86c8-8000-8000-000000000001",
+            "event_id": "ak:event:Adrg-UgvjkV_pq83rokfhuq2TV0knfj99s04-4U7zApt",
             "kind": "ak.message.create",
             "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001"},
@@ -288,7 +288,7 @@ mod tests {
                 "scheme": "ak.signal_exporter_aead.v1",
                 "key_ref": {
                     "algorithm": "MLS-EXPORTER-AEAD",
-                    "group_state_ref": "ak:event:019f3b1c-86c8-8000-8000-000000000002"
+                    "group_state_ref": "ak:event:Ab1ksa-umr9kNJE_n2EEj6AVhUsqM_Xml_hJgWyMpwq8"
                 },
                 "purpose": "ak.signal.v1",
                 "aead_profile": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",

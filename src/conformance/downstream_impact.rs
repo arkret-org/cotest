@@ -150,10 +150,10 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
             // the Operation by hand skips the submit path, so the `event_id`
             // `projection_operation_from_event` injects has to be supplied
             // here or the dot is unresolvable and the decision is rejected.
-            "event_id": "ak:event:01904100-0000-8000-8000-00000000d511",
-            "decision_id": "ak:event:01904100-0000-8000-8000-00000000d511",
+            "event_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
+            "decision_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
             "issuer": "did:web:moderator.example",
-            "target_ref": "ak:event:01904100-0000-8000-8000-00000000d510",
+            "target_ref": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC",
             "decision": "dismiss",
             "request_canonical_digest": format!("sha256:{}", "1".repeat(64))
         }),
@@ -163,18 +163,19 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
         ProjectionEffect::ModerationDecisionProjected { .. }
     ));
     assert_eq!(
-        state.effective_moderation_verdict("ak:event:01904100-0000-8000-8000-00000000d510"),
+        state.effective_moderation_verdict("ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC"),
         "none"
     );
 
     let target = "ak:message:01904100-0000-8000-8000-00000000d520";
     for (index, decision) in [(2, "quarantine"), (3, "hard_deny")] {
+        let decision_event_id = crate::fixture_event_id(format!("moderation-decision:{index}"));
         let event = operation(
             index,
             &realm,
             json!({
-                "event_id": format!("ak:event:01904100-0000-8000-8000-{index:012x}"),
-                "decision_id": format!("ak:event:01904100-0000-8000-8000-{index:012x}"),
+                "event_id": decision_event_id,
+                "decision_id": decision_event_id,
                 "issuer": format!("did:web:moderator-{index}.example"),
                 "target_ref": target,
                 "decision": decision,

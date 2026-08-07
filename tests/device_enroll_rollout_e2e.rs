@@ -17,8 +17,6 @@ use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-const PLACEHOLDER_EVENT_ID: &str = "ak:event:00000000-0000-8000-8000-000000000000";
-
 #[tokio::test(flavor = "multi_thread")]
 async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     let server = ArkretServer::spawn("device-enroll-rollout").await?;
@@ -231,7 +229,6 @@ fn principal_bootstrap_events(
             trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local")?,
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
-            event_id: EventId::new(PLACEHOLDER_EVENT_ID)?,
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
         },
