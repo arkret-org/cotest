@@ -353,11 +353,15 @@ export type InviteDeliveryRequestBody = {
       "realm_id": string;
       "circle_id": string;
     } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
       "kind": "realm_genesis";
     };
     "actor_id": string;
     "executed_by"?: string;
-    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1";
+    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;
@@ -685,11 +689,15 @@ export type EventFederationSubmission = {
       "realm_id": string;
       "circle_id": string;
     } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
       "kind": "realm_genesis";
     };
     "actor_id": string;
     "executed_by"?: string;
-    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1";
+    "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
     "external_ref"?: {
       "schema"?: string;
@@ -789,6 +797,10 @@ export type EventFederationSubmission = {
       "realm_id": string;
       "circle_id": string;
     } | {
+      "kind": "sidecar";
+      "realm_id": string;
+      "sidecar_id": string;
+    } | {
       "kind": "realm_genesis";
     };
     "action": string;
@@ -811,6 +823,10 @@ export type EventFederationSubmission = {
         "kind": "circle";
         "realm_id": string;
         "circle_id": string;
+      } | {
+        "kind": "sidecar";
+        "realm_id": string;
+        "sidecar_id": string;
       } | {
         "kind": "realm_genesis";
       };

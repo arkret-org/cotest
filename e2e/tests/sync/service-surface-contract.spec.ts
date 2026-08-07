@@ -905,6 +905,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         },
       ];
       refreshEventEnvelopeProof(envelope);
+      const eventId = String(envelope.event_id);
 
       const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: { authorization: `Bearer ${token}` },
