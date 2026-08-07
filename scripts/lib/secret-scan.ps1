@@ -131,7 +131,9 @@ function Test-Bip39MnemonicCandidate {
 # report; `Protect-SecretBearingFile` writes it back into the artifact, where
 # truncation would destroy the surrounding diagnostic.
 function ConvertTo-RedactedLine {
-    param([Parameter(Mandatory = $true)][string]$Line)
+    # Blank lines are ordinary content in every artifact this redacts; without
+    # AllowEmptyString the whole redaction pass dies on the first one.
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Line)
 
     $preview = $Line
     $preview = $preview -replace '(?i)((?:^|\s)authorization\s*:\s*bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
