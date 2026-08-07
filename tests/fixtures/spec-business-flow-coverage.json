@@ -952,10 +952,18 @@
         },
         {
           "kind": "conformance_fixture",
-          "path": "src/scenarios/spec_section_11/mod.rs",
+          "path": "src/conformance/sidecar_vectors.rs",
           "markers": [
-            "ak.self.agent.sidecar.command.ensure",
-            "ak.self.agent.deactivate"
+            "ak.vector.sidecar.ensure_idempotent.v1",
+            "run_sidecar_ensure_idempotent_vector"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/agent_vectors.rs",
+          "markers": [
+            "SELF_AGENT_COMMAND_DEACTIVATE",
+            "agent_transition"
           ]
         }
       ]

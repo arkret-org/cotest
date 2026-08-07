@@ -1,5 +1,5 @@
 //! Personal AI Agent provisioning -> pairing -> lifecycle, driven live against
-//! a spawned soland in development mode (AKP-0008, spec_section_11 live leg).
+//! a spawned soland in development mode (personal-agent conformance live leg).
 //!
 //! Exercises controller-authored provisioning through the public agent HTTP
 //! surface. The test obtains server-allocated coordinates, asks the SDK to
