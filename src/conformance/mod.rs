@@ -549,7 +549,6 @@ pub(crate) struct NamedCase {
     pub(crate) input: Option<Value>,
     pub(crate) inputs: Option<Vec<Value>>,
     pub(crate) expected: Option<Value>,
-    pub(crate) expected_digest: Option<String>,
     pub(crate) request_contract: Option<Value>,
     pub(crate) cases: Option<Vec<Value>>,
 }

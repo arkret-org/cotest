@@ -65,8 +65,8 @@ use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_models_identity::handle::HandleVisibility;
 use arkret_wire::{
     AuthoritySetIssuer, AuthoritySetIssuerRole, AuthorizationRef, Base64UrlString, DidUrl,
-    EventKind, IdempotencyKey, NonEmptyString, OpaqueLocalId, ProtocolOpaqueId,
-    ProtocolOperationId, RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
+    EventKind, IdempotencyKey, NonEmptyString, OpaqueLocalId, ProtocolOperationId,
+    RECOVERY_POLICY_SIGNATURE_TYPE, SchemaId, ServiceOperationId,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -2469,7 +2469,7 @@ async fn submit_delegated_agent_event(
                 outcome.control_proposal_acks.len()
             ));
         }
-        return Ok(typed_event);
+        Ok(typed_event)
     } else {
         let sdk = bearer_sdk_client(server, token)?;
         let realm_create = sdk
@@ -2498,7 +2498,7 @@ async fn submit_delegated_agent_event(
         if !outcome.accepted.contains(&typed_event.event_id) {
             return Err(anyhow!("delegated {kind} was not accepted: {outcome:?}"));
         }
-        return Ok(typed_event);
+        Ok(typed_event)
     }
 }
 

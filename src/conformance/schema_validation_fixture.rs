@@ -33,8 +33,6 @@ use super::{fixture_path, spec_artifacts_root, validate_profile};
 /// Canonical fixture filename.
 pub const SCHEMA_VALIDATION_FIXTURE: &str = "schema-validation-fixture.json";
 
-/// Canonical conformance profile pin.
-
 /// Key-backup schema-validation fixture (25 cases against the key-backup /
 /// recovery schema family).
 pub const KEY_BACKUP_FIXTURE: &str = "key-backup-fixture.json";

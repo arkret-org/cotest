@@ -870,23 +870,19 @@ fn build_fixed_sidecar_prepare(
     let created_at = fixed_sidecar_time();
     let expires_at = created_at + chrono::Duration::minutes(10);
     let coordinates = match existing {
-        Some(existing) => {
-            let context_coordinates = match existing_context {
-                Some(context) => SidecarCoordinates {
-                    sidecar_id: existing.sidecar_id.clone(),
-                    backing_circle_id: existing.backing_circle_id.clone(),
-                    private_strand_id: context.private_strand_id.clone(),
-                    private_relation_id: context.private_relation_id.clone(),
-                },
-                None => SidecarCoordinates {
-                    sidecar_id: existing.sidecar_id.clone(),
-                    backing_circle_id: existing.backing_circle_id.clone(),
-                    ..fixed_sidecar_coordinates(true)
-                        .map_err(|_| SidecarModelError::ModelInvariant)?
-                },
-            };
-            context_coordinates
-        }
+        Some(existing) => match existing_context {
+            Some(context) => SidecarCoordinates {
+                sidecar_id: existing.sidecar_id.clone(),
+                backing_circle_id: existing.backing_circle_id.clone(),
+                private_strand_id: context.private_strand_id.clone(),
+                private_relation_id: context.private_relation_id.clone(),
+            },
+            None => SidecarCoordinates {
+                sidecar_id: existing.sidecar_id.clone(),
+                backing_circle_id: existing.backing_circle_id.clone(),
+                ..fixed_sidecar_coordinates(true).map_err(|_| SidecarModelError::ModelInvariant)?
+            },
+        },
         None => fixed_sidecar_coordinates(false).map_err(|_| SidecarModelError::ModelInvariant)?,
     };
     let context_target = match &request.context_ref {
@@ -1755,7 +1751,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     };
     if accepted_coordinates(&accepted_a) != accepted_coordinates(&accepted_b)
         || concurrent.durable.contexts.len() != 1
-        || concurrent.reservations.len() != 0
+        || !concurrent.reservations.is_empty()
         || concurrent.accepted.len() != 2
         || concurrent.atomic_commit_epoch != 2
     {
