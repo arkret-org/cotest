@@ -529,4 +529,150 @@ test.describe("account onboarding", () => {
     });
   });
 
+  test("a second account registering on the same browser gets its own Recovery Key", async ({
+    browser,
+    request,
+  }) => {
+    // Pre-login onboarding state has one global home: the `anonymous` account
+    // namespace, plus secure-store keys whose account segment is empty while no
+    // DID is adopted. So "the next person to register on this browser" inherits
+    // whatever the previous one left behind. This drives two full registrations
+    // through one browser profile with no storage clearing in between; the
+    // second one must reach its OWN Recovery Key generation.
+    test.slow();
+    const coauth = coauthBaseUrl();
+    test.skip(!coauth, "coauth not started for this run");
+
+    const first = uniqueUser("s7-tenant-a");
+    const jointPage = await openUserPage(browser, first, {
+      neutralLoginConfig: true,
+      autoCompleteRecoveryKeySetup: false,
+    });
+    const page = jointPage.page;
+    try {
+      await registerThroughBrowser(page, request, first);
+      // Finish the first account completely, so the browser holds a settled
+      // identity rather than a half-written draft.
+      await page.getByTestId("choose-new-identity").click();
+      const generated = page.getByTestId("onboarding-recovery-key-display");
+      await expect(generated).toBeVisible();
+      const firstWords = (await generated.locator("li").allTextContents())
+        .map((word) => word.trim())
+        .join(" ");
+      await page.getByTestId("onboarding-recovery-key-confirm").fill(firstWords);
+      await page.getByTestId("onboarding-bind-identity").click();
+      await expect(page.getByTestId("onboarding-complete")).toBeVisible({
+        timeout: 120_000,
+      });
+
+      await page.getByTestId("account-menu-button").click();
+      await page.getByTestId("account-menu-session-logout").click();
+
+      const second = uniqueUser("s7-tenant-b");
+      await registerThroughBrowser(page, request, second);
+
+      // The whole point: a brand-new account must never be handed the previous
+      // tenant's unfinished setup, and must never be asked for 24 words it has
+      // not been shown.
+      await expect(page.getByTestId("account-handoff-onboarding")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(page.getByTestId("bootstrap-recovery-key")).toHaveCount(0);
+      await expect(page.getByTestId("stale-principal-setup")).toHaveCount(0);
+      await page.getByTestId("choose-new-identity").click();
+      const secondGenerated = page.getByTestId("onboarding-recovery-key-display");
+      await expect(secondGenerated).toBeVisible();
+      const secondWords = (await secondGenerated.locator("li").allTextContents()).map(
+        (word) => word.trim(),
+      );
+      expect(secondWords).toHaveLength(24);
+      // A fresh key, not the first tenant's.
+      expect(secondWords.join(" ")).not.toBe(firstWords);
+    } finally {
+      await jointPage.close();
+    }
+  });
+
 });
+
+/// Drive the browser half of a coauth account registration, from `/register`
+/// through email verification and OAuth approval, up to the onboarding panel.
+async function registerThroughBrowser(
+  page: import("@playwright/test").Page,
+  request: import("@playwright/test").APIRequestContext,
+  user: { name: string; handle: string; displayName: string },
+): Promise<void> {
+  const coauthOrigin = new URL(coauthBaseUrl()!).origin;
+  const handle = user.handle.slice(1);
+  const email = `${user.name}@example.test`;
+  const password = "ArkretE2E!2026";
+
+  await page.goto("/register", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("registration-panel")).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.getByTestId("register-server").fill(solandBaseUrl());
+  await page.getByTestId("register-open-account-authority").click();
+  await expect(page.locator("#login-handle")).toBeVisible({ timeout: 120_000 });
+  await page.getByRole("link", { name: /create account/i }).click();
+  await page.locator('input[autocomplete="username"]').fill(handle);
+  await page.locator('input[autocomplete="email"]').fill(email);
+  const passwordInputs = page.locator('input[autocomplete="new-password"]');
+  await expect(passwordInputs).toHaveCount(2);
+  await passwordInputs.nth(0).fill(password);
+  await passwordInputs.nth(1).fill(password);
+  await page.getByRole("button", { name: /create account/i }).click();
+  await expect(page.locator("#register-email-verify-code")).toBeVisible({
+    timeout: 60_000,
+  });
+
+  let verificationCode = "123456";
+  if (mockEmailBaseUrl()) {
+    await expect
+      .poll(() => latestMockEmailCode(request, email), { timeout: 30_000 })
+      .toBeTruthy();
+    verificationCode = (await latestMockEmailCode(request, email))!;
+  }
+  await page.locator("#register-email-verify-code").fill(verificationCode);
+  const verifyEmailButton = page.getByRole("button", { name: "Verify", exact: true });
+  const deadline = Date.now() + 30_000;
+  let verified = false;
+  do {
+    const verificationResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.origin === coauthOrigin &&
+        url.pathname.endsWith("/verify-email") &&
+        response.request().method() === "POST"
+      );
+    });
+    await verifyEmailButton.click();
+    const outcome = (await (await verificationResponse).json()) as {
+      status?: string;
+    };
+    if (outcome.status === "success") {
+      verified = true;
+      break;
+    }
+    await page.waitForTimeout(250);
+  } while (Date.now() < deadline);
+  expect(verified, "dev email verification did not succeed").toBe(true);
+
+  const displayName = page.getByRole("textbox");
+  await expect(displayName).toHaveCount(1);
+  await expect(displayName).toBeVisible({ timeout: 60_000 });
+  await displayName.fill(user.displayName);
+  await page.getByRole("button", { name: /continue/i }).click();
+  const approve = page.getByTestId("coauth-oauth-approve");
+  if (
+    await approve
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false)
+  ) {
+    await approve.click();
+  }
+  await expect(page.getByTestId("onboarding-panel")).toBeVisible({
+    timeout: 120_000,
+  });
+}
