@@ -72,8 +72,9 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, TimeDelta, Timelike as _, Utc};
 use cotest::harness::{
-    ArkretServer, create_realm_with_signing_seed, dev_login, event_envelope, eventually,
-    expect_api_error, expect_json, refresh_typed_event_proof_with_signing_seed, register_account,
+    ArkretServer, create_realm_with_signing_seed, dev_login, event_envelope,
+    events_frontier_request_body, events_query_for_actor, eventually, expect_api_error,
+    expect_json, query_method, refresh_typed_event_proof_with_signing_seed, register_account,
 };
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
@@ -215,8 +216,11 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
         || async {
             let response = server
                 .http()
-                .get(server.url("/_arkret/self/events/frontier"))
-                .query(&[("realm_id", realm_id.as_str())])
+                .request(query_method(), server.url("/_arkret/self/events/frontier"))
+                .json(&events_frontier_request_body(
+                    None,
+                    Some(realm_id.as_str()),
+                )?)
                 .bearer_auth(&token)
                 .send()
                 .await?;
@@ -1845,7 +1849,6 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
     )?;
     cross_signing_event.prev_refs = actor_frontier.frontier_event_ids;
     cross_signing_event.seal_basis = Some(controller_seal_basis.clone());
-    let cross_signing_event_id = cross_signing_event.event_id.clone();
     let algorithms = TEST_DEVICE_ALGORITHMS.map(str::to_owned).to_vec();
     let cross_signing_binding = DeviceCrossSigningBinding {
         verification_method: did_url(ssk_kid.to_owned())?,
@@ -1903,9 +1906,7 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         device_authorize,
         control_created_at,
     )?;
-    device_authorize_event.prev_refs = vec![cross_signing_event_id.clone()];
     device_authorize_event.seal_basis = Some(controller_seal_basis.clone());
-    let device_authorize_event_id = device_authorize_event.event_id.clone();
     let issued_at = canonical_now();
     let signed_fields = RECOVERY_POLICY_SIGNED_FIELDS.map(str::to_owned).to_vec();
     let recovery_material = recovery_key_material()?;
@@ -2060,18 +2061,23 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         .context("publish recovery policy through the SDK canonical transport")?;
 
     let policy_seal_basis = policy_seal.seal_basis();
+    let cross_signing_created_at = canonical_now();
+    let cross_signing_timestamp_hex =
+        format!("{:012x}", cross_signing_created_at.timestamp_millis());
     cross_signing_event.actor_seq = 3;
     cross_signing_event.prev_refs = vec![policy_event.event_id.clone()];
     cross_signing_event.seal_basis = Some(policy_seal_basis.clone());
+    cross_signing_event.created_at = cross_signing_created_at;
     cross_signing_event.hlc = Some(arkret::Hlc::new(format!(
-        "{control_timestamp_hex}-0003-a13f9c2e"
+        "{cross_signing_timestamp_hex}-0003-a13f9c2e"
     ))?);
     arkret::signatures::sign_event(
         &mut cross_signing_event,
         &seal_signer,
         &alice_device_verification_method(),
-        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+        arkret::signatures::SignEventOptions::new().with_created_at(cross_signing_created_at),
     )?;
+    let cross_signing_event_id = cross_signing_event.event_id.clone();
     let cross_signing_submission = prepare_controller_initial_submission(
         &sdk,
         &cross_signing_event,
@@ -2093,18 +2099,23 @@ async fn prepare_agent_controller_recovery(server: &ArkretServer, token: &str) -
         ));
     }
 
+    let device_authorize_created_at = canonical_now();
+    let device_authorize_timestamp_hex =
+        format!("{:012x}", device_authorize_created_at.timestamp_millis());
     device_authorize_event.actor_seq = 4;
     device_authorize_event.prev_refs = vec![cross_signing_event_id];
     device_authorize_event.seal_basis = Some(policy_seal_basis);
+    device_authorize_event.created_at = device_authorize_created_at;
     device_authorize_event.hlc = Some(arkret::Hlc::new(format!(
-        "{control_timestamp_hex}-0004-a13f9c2e"
+        "{device_authorize_timestamp_hex}-0004-a13f9c2e"
     ))?);
     arkret::signatures::sign_event(
         &mut device_authorize_event,
         &seal_signer,
         &alice_device_verification_method(),
-        arkret::signatures::SignEventOptions::new().with_created_at(control_created_at),
+        arkret::signatures::SignEventOptions::new().with_created_at(device_authorize_created_at),
     )?;
+    let device_authorize_event_id = device_authorize_event.event_id.clone();
     let device_authorize_submission = prepare_controller_initial_submission(
         &sdk,
         &device_authorize_event,
@@ -2244,7 +2255,6 @@ async fn live_cross_signing_recovery_create_request(
         })?,
         now,
     )?;
-    list_update.prev_refs = vec![authorize.event_id.clone()];
     let control_seal = managed_agent_frontier(server, token, authorize.realm_id.as_str())
         .await?
         .ok_or_else(|| anyhow!("recovery principal control Seal frontier is unavailable"))?;
@@ -2256,14 +2266,19 @@ async fn live_cross_signing_recovery_create_request(
         principal.clone(),
         ssk_verification_method.clone(),
     );
-    for event in [&mut authorize, &mut list_update] {
-        arkret::signatures::sign_event(
-            event,
-            &ssk_signer,
-            &ssk_verification_method,
-            arkret::signatures::SignEventOptions::new().with_created_at(now),
-        )?;
-    }
+    arkret::signatures::sign_event(
+        &mut authorize,
+        &ssk_signer,
+        &ssk_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(now),
+    )?;
+    list_update.prev_refs = vec![authorize.event_id.clone()];
+    arkret::signatures::sign_event(
+        &mut list_update,
+        &ssk_signer,
+        &ssk_verification_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(now),
+    )?;
     let recovery_signer = inkson::event_signer::build_ed25519_signer_with_verification_method(
         [22_u8; 32],
         ALICE_DID,
@@ -2509,9 +2524,8 @@ async fn managed_agent_frontier(
 ) -> Result<Option<arkret_models_collaboration::event_sync::RealmSealFrontierView>> {
     let response = server
         .http()
-        .get(server.url(&format!(
-            "/_arkret/self/events/frontier?realm_id={realm_id}"
-        )))
+        .request(query_method(), server.url("/_arkret/self/events/frontier"))
+        .json(&events_frontier_request_body(None, Some(realm_id))?)
         .bearer_auth(token)
         .send()
         .await?;
@@ -2548,9 +2562,11 @@ async fn managed_agent_actor_frontier(
 ) -> Result<arkret_models_collaboration::event_sync::RealmActorFrontierView> {
     let response = server
         .http()
-        .get(server.url(&format!(
-            "/_arkret/self/events/frontier?actor_id={agent_id}&realm_id={realm_id}"
-        )))
+        .request(query_method(), server.url("/_arkret/self/events/frontier"))
+        .json(&events_frontier_request_body(
+            Some(agent_id),
+            Some(realm_id),
+        )?)
         .bearer_auth(token)
         .send()
         .await?;
@@ -3460,9 +3476,9 @@ async fn provision_agent(
     let replayed = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/self/events"))
+            .request(query_method(), server.url("/_arkret/self/events"))
             .bearer_auth(token)
-            .query(&[("actors", ALICE_DID), ("limit", "100")]),
+            .json(&events_query_for_actor(ALICE_DID, 100)?),
         StatusCode::OK,
     )
     .await?;
@@ -4175,8 +4191,8 @@ async fn grant_controller_strand_create(
         || async {
             let response = server
                 .http()
-                .get(server.url("/_arkret/self/events/frontier"))
-                .query(&[("realm_id", realm_id)])
+                .request(query_method(), server.url("/_arkret/self/events/frontier"))
+                .json(&events_frontier_request_body(None, Some(realm_id))?)
                 .bearer_auth(token)
                 .send()
                 .await?;

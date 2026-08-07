@@ -1,6 +1,7 @@
 //! Live self-events resolve coverage against a spawned soland process.
 
 use anyhow::{Result, anyhow};
+use arkret_models_collaboration::event_query::EventsDescribeRequestBody;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -20,7 +21,7 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let describe = expect_json(
         alice
             .query("/_arkret/self/events/describe")
-            .json(&json!({})),
+            .json(&EventsDescribeRequestBody::default()),
         StatusCode::OK,
     )
     .await?;

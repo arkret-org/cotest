@@ -20,8 +20,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, expect_json,
-    head_eq_precondition,
+    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, events_query_for_realm,
+    expect_json, head_eq_precondition,
 };
 
 /// The one cell every `ak.realm.policy_server` write moves.
@@ -67,7 +67,7 @@ async fn policy_server_events(client: &TestActorClient, realm_id: &str) -> Resul
     let listed = expect_json(
         client
             .query("/_arkret/self/events")
-            .json(&json!({"realms": [realm_id], "limit": 200})),
+            .json(&events_query_for_realm(realm_id, 200)?),
         StatusCode::OK,
     )
     .await?;

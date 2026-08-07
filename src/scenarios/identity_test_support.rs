@@ -240,6 +240,7 @@ async fn bootstrap_test_device_authorization(
         &root_verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
+    let create_event_id = create.event_id.clone();
 
     let enrollment_method = format!("{actor}#cotest-device-enrollment-authority");
     let device_public_key =
@@ -301,6 +302,7 @@ async fn bootstrap_test_device_authorization(
         &enrollment_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
+    let authorize_event_id = authorize.event_id.clone();
 
     let lease_request = AuthorizationLeaseIssueRequest {
         events: vec![create.clone(), authorize.clone()],
@@ -357,8 +359,8 @@ async fn bootstrap_test_device_authorization(
         StatusCode::OK,
     )
     .await?;
-    assert_json_array_contains(&accepted["accepted"], PCR_CREATE_EVENT_ID, &accepted);
-    assert_json_array_contains(&accepted["accepted"], DEVICE_AUTHORIZE_EVENT_ID, &accepted);
+    assert_json_array_contains(&accepted["accepted"], create_event_id.as_str());
+    assert_json_array_contains(&accepted["accepted"], authorize_event_id.as_str());
 
     Ok(arkret_wire::FederatedDeviceSigningKeyEvidence {
         actor_id: principal,
@@ -468,13 +470,13 @@ fn did_authority_from_service_id(service_id: &str) -> String {
         .to_ascii_lowercase()
         .replace(':', ".")
 }
-fn assert_json_array_contains(array: &Value, expected: &str, context: &Value) {
+fn assert_json_array_contains(array: &Value, expected: &str) {
     assert!(
         array
             .as_array()
             .unwrap()
             .iter()
             .any(|value| value.as_str() == Some(expected)),
-        "expected {array} to contain {expected}; response: {context}"
+        "expected accepted Event ids {array} to contain {expected}"
     );
 }

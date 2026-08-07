@@ -275,15 +275,15 @@ test.describe("consent grant", () => {
           timeout: 30_000,
         },
       );
-      // Cell is holder=bob / peer=alice / pending; alice (the peer) may read it.
-      await expectConsentCell(
-        request,
-        aliceToken,
-        bob.did,
-        alice.did,
-        "message",
-        "pending",
-      );
+      // Consent cells are holder-private. Alice can observe her own outgoing
+      // request projection, but MUST NOT read Bob's underlying consent cell.
+      const holderCellUrl =
+        `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(bob.did)}` +
+        `?peer=${encodeURIComponent(alice.did)}&scope=message`;
+      const peerRead = await request.get(holderCellUrl, {
+        headers: authHeaders(aliceToken),
+      });
+      expect(peerRead.status()).toBe(403);
       await expect(
         alicePage.page
           .getByTestId("consent-outgoing-request-row")

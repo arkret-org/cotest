@@ -2376,6 +2376,32 @@ try {
     }
 
     if (-not $SkipBuild -and $StartCoauth -and -not $CoauthBin) {
+        # Coauth serves its browser UI from ./dist. Building only the backend
+        # binary can therefore run current handlers behind a stale frontend
+        # bundle (for example, the Passkey API exists while /security still
+        # renders the pre-Passkey page). Keep the served Wasm bundle under the
+        # same source-freshness gate as the backend binary.
+        $coauthRoot = Join-Path $workspaceRoot "coauth"
+        $coauthFrontendArtifact = Join-Path $coauthRoot "dist\wasm\coauth-frontend_bg.wasm"
+        $coauthFrontendFreshness = Get-ArtifactFreshness `
+            -ArtifactPath $coauthFrontendArtifact `
+            -RepositoryRoots @(
+                $coauthRoot,
+                (Join-Path $workspaceRoot "arkret-rust-sdk")
+            )
+        if (-not $coauthFrontendFreshness.Fresh) {
+            Write-Host "Preparing coauth frontend: $($coauthFrontendFreshness.Detail)"
+            $started = Get-Date
+            $service = Start-ManagedCommand `
+                -Name "prepare-coauth-frontend" `
+                -Command "just frontend-assets" `
+                -WorkingDirectory $coauthRoot `
+                -LogDirectory $serviceLogDir
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth-frontend"; Service = $service; Started = $started; Artifact = $coauthFrontendArtifact; AllowUnchangedArtifact = $true })
+        } else {
+            $preparationTimings.Add([pscustomobject]@{ name = "coauth-frontend"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFrontendFreshness.Detail })
+        }
+
         $defaultCoauthBinary = Join-Path $workspaceRoot "coauth\target\debug\coauth.exe"
         $coauthFreshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultCoauthBinary `
@@ -2386,7 +2412,7 @@ try {
         if (-not $coauthFreshness.Fresh) {
             Write-Host "Preparing coauth binary: $($coauthFreshness.Detail)"
             $started = Get-Date
-            $coauthManifest = Join-Path $workspaceRoot "coauth\Cargo.toml"
+            $coauthManifest = Join-Path $coauthRoot "Cargo.toml"
             $service = Start-ManagedCommand `
                 -Name "prepare-coauth" `
                 -Command ("cargo build --manifest-path {0} --bin coauth" -f (Quote-PsLiteral $coauthManifest)) `

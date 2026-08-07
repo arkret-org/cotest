@@ -7,9 +7,7 @@
 import { expect, test } from "@playwright/test";
 import { request as playwrightRequest } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
-import {
-  createRealmApi,
-} from "../../helpers/soland-api";
+import { createRealmApi, sdkEventDerivedIds } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -146,9 +144,18 @@ function expectEventsContainRealmCreate(body: unknown, realmId: string) {
     events.some((event) => {
       if (!isRecord(event)) return false;
       const kind = event.kind ?? event.event_kind;
-      return event.realm_id === realmId && kind === "ak.realm.create";
+      const scope = isRecord(event.scope_ref) ? event.scope_ref : undefined;
+      const genesisRealmId =
+        scope?.kind === "realm_genesis"
+          ? sdkEventDerivedIds(event).realm_id
+          : undefined;
+      return (
+        kind === "ak.realm.create" &&
+        (event.realm_id === realmId ||
+          (scope?.kind === "realm_genesis" && genesisRealmId === realmId))
+      );
     }),
-    `world_readable history response must include ak.realm.create for ${realmId}: ${JSON.stringify(body)}`,
+    `world_readable history response must include ak.realm.create for ${realmId}; received ${events.length} events`,
   ).toBe(true);
 }
 

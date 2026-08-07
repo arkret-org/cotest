@@ -19,8 +19,8 @@ use super::event_builder::{
     event_signing_identity, realm_bootstrap_event_batch,
 };
 use super::{
-    member_join_payload, message_create_text_payload, next_typed_id, realm_create_payload,
-    refresh_typed_event_proof,
+    events_frontier_request_body, member_join_payload, message_create_text_payload, next_typed_id,
+    query_method, realm_create_payload, refresh_typed_event_proof,
 };
 
 #[derive(Clone)]
@@ -240,8 +240,8 @@ impl TestActorClient {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
             let response = expect_response(
-                self.get("/_arkret/self/events/frontier")
-                    .query(&[("realm_id", realm_id)]),
+                self.query("/_arkret/self/events/frontier")
+                    .json(&events_frontier_request_body(None, Some(realm_id))?),
                 StatusCode::OK,
             )
             .await;
@@ -372,10 +372,7 @@ impl TestActorClient {
 
     pub fn query(&self, path: &str) -> reqwest::RequestBuilder {
         self.http
-            .request(
-                reqwest::Method::from_bytes(b"QUERY").expect("QUERY is a valid HTTP method"),
-                self.url(path),
-            )
+            .request(query_method(), self.url(path))
             .bearer_auth(&self.token)
     }
 
@@ -636,8 +633,11 @@ impl TestActorClient {
         capability_refs: Vec<String>,
     ) -> Result<Event> {
         let frontier = expect_json(
-            self.get("/_arkret/self/events/frontier")
-                .query(&[("actor_id", self.actor.as_str()), ("realm_id", realm_id)]),
+            self.query("/_arkret/self/events/frontier")
+                .json(&events_frontier_request_body(
+                    Some(self.actor.as_str()),
+                    Some(realm_id),
+                )?),
             StatusCode::OK,
         )
         .await?;
@@ -739,8 +739,11 @@ impl TestActorClient {
     ) -> Result<Event> {
         self.ensure_authority_for_kind(realm_id, kind).await?;
         let frontier = expect_json(
-            self.get("/_arkret/self/events/frontier")
-                .query(&[("actor_id", self.actor.as_str()), ("realm_id", realm_id)]),
+            self.query("/_arkret/self/events/frontier")
+                .json(&events_frontier_request_body(
+                    Some(self.actor.as_str()),
+                    Some(realm_id),
+                )?),
             StatusCode::OK,
         )
         .await?;

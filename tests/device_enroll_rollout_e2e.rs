@@ -17,6 +17,8 @@ use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
+const PLACEHOLDER_EVENT_ID: &str = "ak:event:00000000-0000-8000-8000-000000000000";
+
 #[tokio::test(flavor = "multi_thread")]
 async fn device_enroll_service_attested_event_live_e2e() -> Result<()> {
     let server = ArkretServer::spawn("device-enroll-rollout").await?;
@@ -229,7 +231,7 @@ fn principal_bootstrap_events(
             trust_domain: TypedTrustDomainId::new("ak:trust_domain:soland.local")?,
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
-            event_id: EventId::new(arkret_wire::new_prefixed_uuid7("ak:event:"))?,
+            event_id: EventId::new(PLACEHOLDER_EVENT_ID)?,
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
         },
@@ -257,7 +259,6 @@ fn principal_bootstrap_events(
         device_id,
         device_public_key,
         1,
-        &arkret_wire::new_prefixed_uuid7("ak:event:"),
         vec![create.event_id.clone()],
     )?;
     Ok([create, authorize])
@@ -271,7 +272,6 @@ fn service_attested_device_authorize_event(
     device_id: &str,
     device_public_key: &str,
     actor_seq: u64,
-    event_id: &str,
     prev_refs: Vec<EventId>,
 ) -> Result<Event> {
     let principal = Did::new(principal_id.to_owned())?;
@@ -312,7 +312,6 @@ fn service_attested_device_authorize_event(
         Hlc::new(format!("01970e589d21-{actor_seq:04x}-a13f9c2e"))?,
         serde_json::to_value(payload)?,
     )?;
-    event.event_id = EventId::new(event_id)?;
     event.created_at = created_at;
     event.prev_refs = prev_refs;
     event.executed_by = Some(authority_did.clone());

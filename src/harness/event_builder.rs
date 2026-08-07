@@ -26,7 +26,8 @@ use super::assertions::expect_json;
 use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
-    NEXT_EVENT_SEQ, canonical_device_id, member_join_payload, next_typed_id, realm_create_payload,
+    NEXT_EVENT_SEQ, canonical_device_id, events_frontier_request_body, member_join_payload,
+    next_typed_id, query_method, realm_create_payload,
 };
 
 type RegisteredEventSigner = ([u8; 32], DidUrl);
@@ -474,8 +475,8 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
     let frontier = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/self/events/frontier"))
-            .query(&[("actor_id", actor), ("realm_id", realm_id)])
+            .request(query_method(), server.url("/_arkret/self/events/frontier"))
+            .json(&events_frontier_request_body(Some(actor), Some(realm_id))?)
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -560,8 +561,8 @@ async fn realm_seal_frontier_for(
     loop {
         let response = server
             .http()
-            .get(server.url("/_arkret/self/events/frontier"))
-            .query(&[("realm_id", realm_id)])
+            .request(query_method(), server.url("/_arkret/self/events/frontier"))
+            .json(&events_frontier_request_body(None, Some(realm_id))?)
             .bearer_auth(token)
             .send()
             .await?;

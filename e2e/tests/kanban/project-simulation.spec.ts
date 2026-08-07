@@ -19,6 +19,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
+  sdkEventDerivedObjectId,
   sha256CanonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -136,89 +137,89 @@ async function createBoardWithCard(
     dueDate?: string;
   },
 ): Promise<{ boardId: string; listId: string; cardId: string }> {
-  const boardId = typedId("space");
-  const listId = typedId("space");
-  const cardId = typedId("strand");
   const createdAt = canonicalTimestamp();
 
+  const boardEnvelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.space.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.space.v1",
+        realm_id: realmId,
+        kind: "board",
+        title: opts.boardTitle,
+        created_by: actorDid,
+        created_at: createdAt,
+      },
+    },
+  });
+  const boardId = sdkEventDerivedObjectId(boardEnvelope);
   await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.space.create",
-      createdAt,
-      payload: {
-        object: {
-          id: boardId,
-          schema: "ak.schema.space.v1",
-          realm_id: realmId,
-          kind: "board",
-          title: opts.boardTitle,
-          created_by: actorDid,
-          created_at: createdAt,
-        },
-      },
-    }),
+    boardEnvelope,
     { context: `create board ${opts.boardTitle}` },
   );
 
+  const listEnvelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.space.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.space.v1",
+        realm_id: realmId,
+        kind: "list",
+        title: opts.listTitle,
+        parent_space_id: boardId,
+        rank: "r001",
+        created_by: actorDid,
+        created_at: createdAt,
+      },
+    },
+  });
+  const listId = sdkEventDerivedObjectId(listEnvelope);
   await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.space.create",
-      createdAt,
-      payload: {
-        object: {
-          id: listId,
-          schema: "ak.schema.space.v1",
-          realm_id: realmId,
-          kind: "list",
-          title: opts.listTitle,
-          parent_space_id: boardId,
-          rank: "r001",
-          created_by: actorDid,
-          created_at: createdAt,
-        },
-      },
-    }),
+    listEnvelope,
     { context: `create list ${opts.listTitle}` },
   );
 
+  const cardEnvelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.strand.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.strand.v1",
+        realm_id: realmId,
+        metadata: {
+          title: opts.cardTitle,
+          fields: {
+            status: "todo",
+            board_space_id: boardId,
+            list_space_id: listId,
+            rank: "r007",
+            ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
+          },
+        },
+        stage: "planned",
+        tracks: { discussion: { enabled: true, is_primary: true } },
+        created_by: actorDid,
+        created_at: createdAt,
+      },
+    },
+  });
+  const cardId = sdkEventDerivedObjectId(cardEnvelope);
   await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.strand.create",
-      createdAt,
-      payload: {
-        object: {
-          id: cardId,
-          schema: "ak.schema.strand.v1",
-          realm_id: realmId,
-          metadata: {
-            title: opts.cardTitle,
-            fields: {
-              status: "todo",
-              board_space_id: boardId,
-              list_space_id: listId,
-              rank: "r007",
-              ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
-            },
-          },
-          stage: "planned",
-          tracks: { discussion: { enabled: true, is_primary: true } },
-          created_by: actorDid,
-          created_at: createdAt,
-        },
-      },
-    }),
+    cardEnvelope,
     { context: `create card ${opts.cardTitle}` },
   );
 

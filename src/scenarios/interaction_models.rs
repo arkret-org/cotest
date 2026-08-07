@@ -4,8 +4,8 @@ use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    ArkretServer, expect_json, expect_response, expect_status, message_redact_payload,
-    message_revise_text_payload,
+    ArkretServer, events_query_for_realm, expect_json, expect_response, expect_status,
+    message_redact_payload, message_revise_text_payload,
 };
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
@@ -181,7 +181,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     let markers = expect_json(
         dave.query("/_arkret/self/events")
-            .json(&json!({"realms": [realm_id], "limit": 50})),
+            .json(&events_query_for_realm(&realm_id, 50)?),
         StatusCode::OK,
     )
     .await?;

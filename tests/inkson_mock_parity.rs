@@ -6,7 +6,9 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
-use cotest::harness::{ArkretServer, expect_json, register_account};
+use cotest::harness::{
+    ArkretServer, events_frontier_request_body, expect_json, query_method, register_account,
+};
 use cotest::scenarios::identity_test_support::{
     actor_did_for_service, authorize_device_public_key,
 };
@@ -1132,9 +1134,9 @@ async fn wait_for_realm_seal(
     loop {
         let response = server
             .http()
-            .get(server.url("/_arkret/self/events/frontier"))
+            .request(query_method(), server.url("/_arkret/self/events/frontier"))
             .bearer_auth(&ctx.alice_token)
-            .query(&[("realm_id", realm_id)])
+            .json(&events_frontier_request_body(None, Some(realm_id))?)
             .send()
             .await?;
         if response.status() == reqwest::StatusCode::OK {

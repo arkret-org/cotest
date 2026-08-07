@@ -6,8 +6,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, expect_json, expect_status, member_join_payload_value,
-    member_transition_payload,
+    ArkretServer, TestActorClient, events_query_for_realm, expect_json, expect_status,
+    member_join_payload_value, member_transition_payload,
 };
 
 const ALICE_DID: &str = "did:web:cotest-collab-alice.example";
@@ -240,7 +240,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let lifecycle = expect_json(
         alice
             .query("/_arkret/self/events")
-            .json(&json!({"realms": [realm_id], "limit": 100})),
+            .json(&events_query_for_realm(&realm_id, 100)?),
         StatusCode::OK,
     )
     .await?;

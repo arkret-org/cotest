@@ -625,9 +625,11 @@ fn event_derived_id(event: Value) -> Result<Value> {
             event.payload.get("object"),
         );
     }
+    let object_id = arkret_schema::derived_object_id_for_kind(event.kind.as_str(), &event.event_id);
     Ok(serde_json::json!({
         "event_id": event.event_id.to_string(),
         "realm_id": event.realm_id.to_string(),
+        "object_id": object_id,
     }))
 }
 

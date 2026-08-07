@@ -38,10 +38,10 @@ import {
   createRealmApi,
   grantCapabilityEventApi,
   prepareSignedEventCbaApi,
+  sdkEventDerivedObjectId,
   sha256CanonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
-  typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
@@ -271,9 +271,8 @@ test.describe("morph schema migration @fully-implemented", () => {
     const realmId = await createRealmApi(request, token, {
       title: `Morph migrate A ${Date.now()}`,
     });
-    const morphId = morphTypedId();
     const fromRefs = ["ak.schema.morph.customer_risk.v1"];
-    await createCustomerRiskMorph(request, token, alice.did, realmId, morphId, fromRefs, {
+    const morphId = await createCustomerRiskMorph(request, token, alice.did, realmId, fromRefs, {
       status: "open",
       severity: "high",
     });
@@ -330,11 +329,17 @@ test.describe("morph schema migration @fully-implemented", () => {
     const realmId = await createRealmApi(request, token, {
       title: `Morph migrate B ${Date.now()}`,
     });
-    const morphId = morphTypedId();
     const fromRefs = ["ak.schema.morph.customer_risk.v1"];
     const toRefs = ["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.ext.v1"];
     const fields = { status: "open", severity: "high" };
-    await createCustomerRiskMorph(request, token, alice.did, realmId, morphId, fromRefs, fields);
+    const morphId = await createCustomerRiskMorph(
+      request,
+      token,
+      alice.did,
+      realmId,
+      fromRefs,
+      fields,
+    );
 
     const result = await submitSchemaMigrateRaw(request, token, {
       actorDid: alice.did,
@@ -374,10 +379,9 @@ test.describe("morph schema migration @fully-implemented", () => {
     const realmId = await createRealmApi(request, token, {
       title: `Morph migrate C ${Date.now()}`,
     });
-    const morphId = morphTypedId();
     const fromRefs = ["ak.schema.morph.customer_risk.v1"];
     const toRefs = ["ak.schema.morph.customer_risk.ext.v1"];
-    await createCustomerRiskMorph(request, token, alice.did, realmId, morphId, fromRefs, {
+    const morphId = await createCustomerRiskMorph(request, token, alice.did, realmId, fromRefs, {
       status: "open",
       severity: "high",
     });
@@ -511,13 +515,11 @@ test.describe("morph schema migration @fully-implemented", () => {
       // expected canonical bytes and cross-run determinism.
       const observed: string[] = [];
       for (let run = 0; run < 2; run += 1) {
-        const morphId = morphTypedId();
-        await createCustomerRiskMorph(
+        const morphId = await createCustomerRiskMorph(
           request,
           token,
           alice.did,
           realmId,
-          morphId,
           vector.input.from_schema_refs,
           vector.input.fields,
         );
@@ -550,10 +552,6 @@ test.describe("morph schema migration @fully-implemented", () => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function morphTypedId(): string {
-  return typedId("operation").replace("ak:operation:", "ak:morph:");
-}
-
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -563,44 +561,45 @@ async function createCustomerRiskMorph(
   token: string,
   actorDid: string,
   realmId: string,
-  morphId: string,
   schemaRefs: string[],
   fields: Record<string, unknown>,
-): Promise<void> {
+): Promise<string> {
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.morph.create",
+    payload: {
+      object: {
+        schema: "ak.schema.morph.v1",
+        realm_id: realmId,
+        // views.md §377 / service-http-binding.md §230 — the single-Morph read
+        // surface GET /_arkret/self/realms/{realm_id}/morphs/{morph_id} is the
+        // *document* Morph projection (response document_morph_projection_outcome,
+        // which carries `document.schema_refs` and `document.fields`). It serves
+        // only morph_kind=="document" (soland projection_query.rs
+        // get_document_projection). Business morph field state is otherwise read
+        // via the canonical event/snapshot history, which has no HTTP field-read
+        // surface — so this HTTP migration read-back test uses a document Morph.
+        // morph_kind is orthogonal to schema_refs (the customer_risk reference
+        // schemas the §4.1 S3 transformation vectors evolve), and immutable per
+        // §4.1 S2, so the migration semantics are unchanged.
+        morph_kind: "document",
+        stage: "in_progress",
+        schema_refs: schemaRefs,
+        fields,
+        created_by: actorDid,
+        created_at: nowIso(),
+      },
+    },
+  });
+  const morphId = sdkEventDerivedObjectId(envelope);
   await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.morph.create",
-      payload: {
-        object: {
-          id: morphId,
-          schema: "ak.schema.morph.v1",
-          realm_id: realmId,
-          // views.md §377 / service-http-binding.md §230 — the single-Morph read
-          // surface GET /_arkret/self/realms/{realm_id}/morphs/{morph_id} is the
-          // *document* Morph projection (response document_morph_projection_outcome,
-          // which carries `document.schema_refs` and `document.fields`). It serves
-          // only morph_kind=="document" (soland projection_query.rs
-          // get_document_projection). Business morph field state is otherwise read
-          // via the canonical event/snapshot history, which has no HTTP field-read
-          // surface — so this HTTP migration read-back test uses a document Morph.
-          // morph_kind is orthogonal to schema_refs (the customer_risk reference
-          // schemas the §4.1 S3 transformation vectors evolve), and immutable per
-          // §4.1 S2, so the migration semantics are unchanged.
-          morph_kind: "document",
-          stage: "in_progress",
-          schema_refs: schemaRefs,
-          fields,
-          created_by: actorDid,
-          created_at: nowIso(),
-        },
-      },
-    }),
+    envelope,
     { context: `create customer_risk-schema document morph ${morphId}` },
   );
+  return morphId;
 }
 
 type SchemaMigrateArgs = {

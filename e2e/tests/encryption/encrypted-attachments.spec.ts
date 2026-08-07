@@ -88,10 +88,11 @@ test.describe("encrypted attachments", () => {
     const ciphertext = Buffer.from(`ciphertext-only-${Date.now()}`, "utf8");
     const ciphertextDigest = sha256Digest(ciphertext);
     const envelope = {
+      blob_ref: `ak:blob:${ciphertextDigest}`,
       encrypted: true,
       scheme: "ak.blob.whole_file_aead.v1",
-      alg: "mls_exporter_aead_xchacha20poly1305",
-      nonce: "test-nonce",
+      encryption_algorithm: "mls_exporter_aead_xchacha20poly1305",
+      nonce: "dGVzdC1ub25jZS0wMDAx",
       key_ref: {
         algorithm: "MLS",
         group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",

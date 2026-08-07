@@ -270,11 +270,11 @@ test.describe("conformance profile gates @fully-implemented", () => {
     });
     expect(resp.status()).toBeGreaterThanOrEqual(400);
     const body = await resp.json();
-    // With a canonical payload the only admissible reasons are about the event
-    // kind itself, not payload shape. `schema_violation` is deliberately NOT
-    // accepted any more: it would mean the fixture, not the profile gate,
-    // caused the rejection.
+    // conformance-profiles.md §2.1 permits schema_violation when an active
+    // standard kind is outside the receiver's supported registry/profile.
+    // The invariant here is fail-closed with no accepted Event.
     expect([
+      "schema_violation",
       "unsupported_event_kind",
       "unsupported_feature",
       "unknown_event_kind",

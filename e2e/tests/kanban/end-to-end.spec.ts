@@ -20,6 +20,8 @@ import {
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
+  rawSubmitSignedEventApi,
+  sdkEventDerivedObjectId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -162,35 +164,71 @@ async function createCardStrandApi(
   realmId: string,
   title: string,
 ): Promise<string> {
-  const strandId = typedId("strand");
   const createdAt = canonicalTimestamp();
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.strand.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.strand.v1",
+        realm_id: realmId,
+        metadata: {
+          title,
+          fields: { status: "todo" },
+        },
+        stage: "planned",
+        tracks: { discussion: { enabled: true, is_primary: true } },
+        created_by: actorDid,
+        created_at: createdAt,
+      },
+    },
+  });
+  const strandId = sdkEventDerivedObjectId(envelope);
   await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid,
-      realmId,
-      kind: "ak.strand.create",
-      createdAt,
-      payload: {
-        object: {
-          id: strandId,
-          schema: "ak.schema.strand.v1",
-          realm_id: realmId,
-          metadata: {
-            title,
-            fields: { status: "todo" },
-          },
-          stage: "planned",
-          tracks: { discussion: { enabled: true, is_primary: true } },
-          created_by: actorDid,
-          created_at: createdAt,
-        },
-      },
-    }),
+    envelope,
     { context: `create card strand ${title}` },
   );
   return strandId;
+}
+
+async function createSpaceApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  kind: "board" | "list",
+  title: string,
+  parentSpaceId?: string,
+): Promise<string> {
+  const createdAt = canonicalTimestamp();
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.space.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.space.v1",
+        realm_id: realmId,
+        kind,
+        title,
+        ...(parentSpaceId
+          ? { parent_space_id: parentSpaceId, rank: "m" }
+          : {}),
+        created_by: actorDid,
+        created_at: createdAt,
+      },
+    },
+  });
+  const spaceId = sdkEventDerivedObjectId(envelope);
+  await submitSignedEventApi(request, token, envelope, {
+    context: `create ${kind} space ${title}`,
+  });
+  return spaceId;
 }
 
 test.describe("kanban end-to-end", () => {
@@ -322,9 +360,32 @@ test.describe("kanban end-to-end", () => {
       `CAS Card ${stamp}`,
     );
 
-    const boardSpaceId = typedId("space");
-    const inProgressListId = typedId("space");
-    const doneListId = typedId("space");
+    const boardSpaceId = await createSpaceApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      "board",
+      `CAS Board ${stamp}`,
+    );
+    const inProgressListId = await createSpaceApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      "list",
+      `CAS In Progress ${stamp}`,
+      boardSpaceId,
+    );
+    const doneListId = await createSpaceApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      "list",
+      `CAS Done ${stamp}`,
+      boardSpaceId,
+    );
 
     const winnerMove = signedEventEnvelope({
       actorDid: alice.did,
@@ -365,15 +426,19 @@ test.describe("kanban end-to-end", () => {
     );
 
     // Loser targets the SAME card but is stamped behind the accepted frontier
-    // → cas_conflict. Use a raw POST since submitSignedEventApi asserts 2xx.
-    const loserResponse = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      { headers: authHeaders(aliceToken), data: loserMove },
+    // → cas_conflict. It still has to use the canonical lease/publication
+    // rail; the negative helper disables only the normal automatic frontier
+    // repair so that the stale verdict remains observable.
+    const loserResponse = await rawSubmitSignedEventApi(
+      request,
+      aliceToken,
+      loserMove,
+      { retryActorFrontier: false },
     );
     const loserBody = await loserResponse.json();
     const loserReason =
       wireErrCode(loserBody) ?? loserBody.rejected?.[0]?.reason_code;
-    expect(loserReason).toBe("cas_conflict");
+    expect(loserReason, JSON.stringify(loserBody)).toBe("cas_conflict");
   });
 
   test("cross-realm contains relation rejected with reason=cross_realm_structural_relation", async ({

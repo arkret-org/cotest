@@ -6,7 +6,7 @@ use arkret_models_collaboration::event_sync::{
 };
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, event_envelope_at_frontier_with_signing_seed,
-    expect_json, register_account,
+    events_frontier_request_body, expect_json, query_method, register_account,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -32,8 +32,11 @@ async fn frontier(
     let value = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/self/events/frontier"))
-            .query(&[("realm_id", realm_id), ("actor_id", ACTOR.as_str())])
+            .request(query_method(), server.url("/_arkret/self/events/frontier"))
+            .json(&events_frontier_request_body(
+                Some(ACTOR.as_str()),
+                Some(realm_id),
+            )?)
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -56,8 +59,8 @@ async fn seal_basis(
     let value = expect_json(
         server
             .http()
-            .get(server.url("/_arkret/self/events/frontier"))
-            .query(&[("realm_id", realm_id)])
+            .request(query_method(), server.url("/_arkret/self/events/frontier"))
+            .json(&events_frontier_request_body(None, Some(realm_id))?)
             .bearer_auth(token),
         StatusCode::OK,
     )

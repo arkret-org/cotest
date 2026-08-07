@@ -73,6 +73,52 @@ pub(crate) fn fixture_webvh_did(host: &str) -> String {
     format!("did:webvh:{FIXTURE_WEBVH_SCID}:{host}")
 }
 
+pub fn query_method() -> reqwest::Method {
+    reqwest::Method::from_bytes(b"QUERY").expect("QUERY is a valid HTTP method")
+}
+
+pub fn events_frontier_request_body(
+    actor_id: Option<&str>,
+    realm_id: Option<&str>,
+) -> Result<arkret_models_collaboration::event_query::EventsFrontierRequestBody> {
+    Ok(
+        arkret_models_collaboration::event_query::EventsFrontierRequestBody {
+            actor_id: actor_id
+                .map(|value| arkret_identifiers::Did::new(value.to_owned()))
+                .transpose()?,
+            realm_id: realm_id
+                .map(|value| arkret_identifiers::RealmId::new(value.to_owned()))
+                .transpose()?,
+        },
+    )
+}
+
+pub fn events_query_for_realm(
+    realm_id: &str,
+    limit: u32,
+) -> Result<arkret_models_collaboration::event_query::EventsQueryPostRequestBody> {
+    Ok(
+        arkret_models_collaboration::event_query::EventsQueryPostRequestBody {
+            realms: vec![arkret_identifiers::RealmId::new(realm_id.to_owned())?],
+            limit: Some(limit),
+            ..Default::default()
+        },
+    )
+}
+
+pub fn events_query_for_actor(
+    actor_id: &str,
+    limit: u32,
+) -> Result<arkret_models_collaboration::event_query::EventsQueryPostRequestBody> {
+    Ok(
+        arkret_models_collaboration::event_query::EventsQueryPostRequestBody {
+            actors: vec![arkret_identifiers::Did::new(actor_id.to_owned())?],
+            limit: Some(limit),
+            ..Default::default()
+        },
+    )
+}
+
 pub(crate) fn canonical_device_id(input: &str) -> String {
     if input.starts_with("ak:device:") {
         return input.to_owned();

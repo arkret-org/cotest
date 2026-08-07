@@ -17,8 +17,9 @@ use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    TestServerGroup, account_subscribe_delta_from_text, eventually, expect_account_subscribe_delta,
-    expect_account_subscribe_realm_delta, invite_create_payload, message_create_text_payload,
+    TestServerGroup, account_subscribe_delta_from_text, events_frontier_request_body, eventually,
+    expect_account_subscribe_delta, expect_account_subscribe_realm_delta, invite_create_payload,
+    message_create_text_payload,
 };
 
 const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
@@ -702,8 +703,11 @@ async fn submit_event_now(
 ) -> Result<Value> {
     let frontier = crate::harness::expect_json(
         actor
-            .get("/_arkret/self/events/frontier")
-            .query(&[("actor_id", actor.actor.as_str()), ("realm_id", realm_id)]),
+            .query("/_arkret/self/events/frontier")
+            .json(&events_frontier_request_body(
+                Some(actor.actor.as_str()),
+                Some(realm_id),
+            )?),
         StatusCode::OK,
     )
     .await?;

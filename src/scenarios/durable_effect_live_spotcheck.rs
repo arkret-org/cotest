@@ -24,7 +24,9 @@ use chrono::Duration as ChronoDuration;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{CanonicalJsonBody, TestActorClient, TestServerGroup, expect_json};
+use crate::harness::{
+    CanonicalJsonBody, TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
+};
 use crate::transcripts::record_vector_event;
 
 const OPERATION_REGISTRY_REF: &str = "registry/operation-registry.json";
@@ -94,7 +96,7 @@ async fn realm_event_kinds(client: &TestActorClient, realm_id: &str) -> Result<V
     let listed = expect_json(
         client
             .query("/_arkret/self/events")
-            .json(&json!({"realms": [realm_id], "limit": 200})),
+            .json(&events_query_for_realm(realm_id, 200)?),
         StatusCode::OK,
     )
     .await?;

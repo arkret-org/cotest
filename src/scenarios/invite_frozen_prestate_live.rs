@@ -26,8 +26,9 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CanonicalJsonBody, TestActorClient, TestServerGroup, event_envelope_with_chain, eventually,
-    expect_json, refresh_typed_event_proof,
+    CanonicalJsonBody, TestActorClient, TestServerGroup, event_envelope_with_chain,
+    events_frontier_request_body, events_query_for_realm, eventually, expect_json,
+    refresh_typed_event_proof,
 };
 use crate::transcripts::record_vector_event;
 
@@ -50,7 +51,7 @@ async fn observe(
     let listed = expect_json(
         client
             .query("/_arkret/self/events")
-            .json(&json!({"realms": [realm_id], "limit": 200})),
+            .json(&events_query_for_realm(realm_id, 200)?),
         StatusCode::OK,
     )
     .await?;
@@ -111,10 +112,12 @@ async fn author_invite_move(
     payload: Value,
 ) -> Result<arkret_wire::Event> {
     let frontier = expect_json(
-        actor.query("/_arkret/self/events/frontier").json(&json!({
-            "actor_id": actor.actor,
-            "realm_id": realm_id
-        })),
+        actor
+            .query("/_arkret/self/events/frontier")
+            .json(&events_frontier_request_body(
+                Some(actor.actor.as_str()),
+                Some(realm_id),
+            )?),
         StatusCode::OK,
     )
     .await?;

@@ -2413,7 +2413,7 @@ export async function rawSubmitSignedEventApi(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
-  opts: { server?: SolandKey } = {},
+  opts: { server?: SolandKey; retryActorFrontier?: boolean } = {},
 ): Promise<APIResponse> {
   await applyRegisteredCbaPlane(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -2427,6 +2427,7 @@ export async function rawSubmitSignedEventApi(
       const leaseText = await leaseResponse.text();
       const leaseBody = parseJsonOrRaw(leaseText);
       if (
+        opts.retryActorFrontier === false ||
         !requiresActorFrontierRefresh(
           leaseResponse.status(),
           leaseBody,
@@ -2477,6 +2478,7 @@ export async function rawSubmitSignedEventApi(
     const responseText = await response.text();
     const responseBody = parseJsonOrRaw(responseText);
     if (
+      opts.retryActorFrontier === false ||
       !requiresActorFrontierRefresh(
         response.status(),
         responseBody,
@@ -4216,12 +4218,21 @@ function sdkEventEnvelopeProof(args: {
 export function sdkEventDerivedIds(event: Record<string, unknown>): {
   event_id: string;
   realm_id: string;
+  object_id?: string;
 } {
   assertJsonTransportable(event, "$.event");
   return cotestWire<{ event_id: string; realm_id: string }>(
     "event-derived-id",
     event,
   );
+}
+
+export function sdkEventDerivedObjectId(event: Record<string, unknown>): string {
+  const objectId = sdkEventDerivedIds(event).object_id;
+  if (!objectId) {
+    throw new Error(`Event kind ${String(event.kind)} does not derive an object id`);
+  }
+  return objectId;
 }
 
 export function sdkMimiConsentProof(args: {

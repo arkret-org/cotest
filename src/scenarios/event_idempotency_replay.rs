@@ -4,8 +4,9 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, expect_json, message_create_text_payload_for_strand,
-    message_redact_payload, message_revise_text_payload, parse_strand_id,
+    TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
+    message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
+    parse_strand_id,
 };
 
 pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<()> {
@@ -54,7 +55,7 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     let listed = expect_json(
         alice
             .query("/_arkret/self/events")
-            .json(&json!({"realms": [realm_id], "limit": 100})),
+            .json(&events_query_for_realm(&realm_id, 100)?),
         StatusCode::OK,
     )
     .await?;
@@ -209,7 +210,7 @@ async fn list_realm_events(alice: &TestActorClient, realm_id: &str) -> Result<Va
     expect_json(
         alice
             .query("/_arkret/self/events")
-            .json(&json!({"realms": [realm_id], "limit": 100})),
+            .json(&events_query_for_realm(realm_id, 100)?),
         StatusCode::OK,
     )
     .await
