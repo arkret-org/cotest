@@ -80,19 +80,70 @@ fn run_content_kdf(case: &Value) -> Result<()> {
 /// actually run reproduces the registered bytes.
 fn run_signal_exporter_key(case: &Value) -> Result<()> {
     let input = &case["input"];
+    let expected = &case["expected"];
     let exporter_secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
     let realm_id = arkret::RealmId::new(required_str(input, "realm_id_utf8")?.to_owned())
         .map_err(|error| anyhow!("registered realm id is invalid: {error}"))?;
+    let sender_device_id =
+        arkret::DeviceId::new(required_str(input, "sender_device_id")?.to_owned())
+            .map_err(|error| anyhow!("registered sender device id is invalid: {error}"))?;
     let key_len = required_u64(input, "aead_nk")? as usize;
 
-    let signal_key = arkret::mls::derive_signal_exporter_key(&exporter_secret, &realm_id, key_len)
-        .map_err(|error| anyhow!("SDK signal exporter key derivation failed: {error}"))?;
+    let context = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "sender_device_id": sender_device_id,
+    }))?;
+    let expected_context = required_str(input, "signal_context_canonical_json")?;
+    if context != expected_context.as_bytes() {
+        bail!(
+            "Signal sender key context drifted: expected {expected_context}, got {}",
+            String::from_utf8_lossy(&context)
+        );
+    }
+    assert_hex("signal context", &context, input, "signal_context_hex")?;
+    let info = kdf_label(key_len, required_str(input, "signal_label")?, &context)?;
     assert_hex(
-        "signal_key",
-        &signal_key,
-        &case["expected"],
-        "signal_key_hex",
+        "signal ExpandWithLabel info",
+        &info,
+        expected,
+        "signal_expand_with_label_info_hex",
+    )?;
+
+    let signal_key = arkret::mls::derive_signal_exporter_key(
+        &exporter_secret,
+        &realm_id,
+        &sender_device_id,
+        key_len,
     )
+    .map_err(|error| anyhow!("SDK signal exporter key derivation failed: {error}"))?;
+    assert_hex("signal_key", &signal_key, expected, "signal_key_hex")?;
+
+    let collision_peer = arkret::DeviceId::new(
+        required_str(expected, "collision_peer_sender_device_id")?.to_owned(),
+    )
+    .map_err(|error| anyhow!("collision peer device id is invalid: {error}"))?;
+    let peer_key = arkret::mls::derive_signal_exporter_key(
+        &exporter_secret,
+        &realm_id,
+        &collision_peer,
+        key_len,
+    )
+    .map_err(|error| anyhow!("SDK collision-peer Signal key derivation failed: {error}"))?;
+    assert_hex(
+        "collision peer signal key",
+        &peer_key,
+        expected,
+        "collision_peer_signal_key_hex",
+    )?;
+    if signal_key.as_slice() == peer_key.as_slice()
+        || expected.get("same_raw_aead_key").and_then(Value::as_bool) != Some(false)
+    {
+        bail!("valid Signal senders did not receive independent raw AEAD keys");
+    }
+    let forced_nonce = hex::decode(required_str(expected, "forced_equal_nonce_hex")?)?;
+    if forced_nonce.len() != 12 {
+        bail!("forced AES-GCM collision nonce must be exactly 12 bytes");
+    }
+    Ok(())
 }
 
 /// `ak.vector.aead.sender_nonce_prefix_kat.v1` — the §10.1 sender prefix and

@@ -86,6 +86,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    signal_sequence_high_water_fixture_suite_matches_reference_semantics,
+    "signal_sequence_high_water",
+    cotest::conformance::run_signal_sequence_high_water_suite,
+);
+
+conformance_test!(
     /// Round 4 / A2 — security-closure-fixture runner contract.
     /// Confirms the 12 `ak.vector.*` ids are present and every step
     /// exposes the full `runner {given_state, operation, transcript,

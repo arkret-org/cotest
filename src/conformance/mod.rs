@@ -75,6 +75,7 @@ mod security_transaction_resilience_reference;
 mod service_closure_hardening;
 mod sidecar_vectors;
 mod signal_federation;
+mod signal_sequence_high_water;
 mod spec_business_flow;
 mod state_reducer_hardening;
 mod state_resolution;
@@ -397,6 +398,7 @@ pub use signal_federation::{
     VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN, run_signal_device_authorization_domain_vector,
     run_signal_federation_fixture_suite,
 };
+pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use state_reducer_hardening::{
     ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, run_state_reducer_hardening_fixture_suite,
