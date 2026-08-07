@@ -11,13 +11,13 @@
   "account_data_cases": {
     "positive": {
       "name": "realm_private_pin_pinned_true",
-      "key": "ak.contacts.realm.ak:realm:0196b39d-0000-8000-8000-000000000101",
+      "key": "ak.contacts.realm.ak:realm:AWTDh81g8RB36YDiswQuSLkbySREHjIIO5wwjNzpiEg9",
       "expect_valid": true,
       "payload": {
         "version": 1,
         "subject": {
           "kind": "realm",
-          "id": "ak:realm:0196b39d-0000-8000-8000-000000000101"
+          "id": "ak:realm:AWTDh81g8RB36YDiswQuSLkbySREHjIIO5wwjNzpiEg9"
         },
         "local_name": "Pinned Engineering",
         "note": "Alice private note",
@@ -33,14 +33,14 @@
     },
     "negative": {
       "name": "realm_private_pin_subject_id_mismatch",
-      "key": "ak.contacts.realm.ak:realm:0196b39d-0000-8000-8000-000000000101",
+      "key": "ak.contacts.realm.ak:realm:AWTDh81g8RB36YDiswQuSLkbySREHjIIO5wwjNzpiEg9",
       "expect_valid": false,
       "expected_error": "realm_remark_subject_mismatch",
       "payload": {
         "version": 1,
         "subject": {
           "kind": "realm",
-          "id": "ak:realm:0196b39d-0000-8000-8000-000000000102"
+          "id": "ak:realm:ASjOE1cbirq2QeKmuZoCEiNzRQjbSK9lOalQt7n_-Ix2"
         },
         "local_name": "Pinned Engineering",
         "note": "Alice private note",
@@ -62,7 +62,7 @@
       "payload": {
         "operation_id": "ak.find.directory.read.search_realms",
         "result": {
-          "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000101",
+          "realm_id": "ak:realm:AWTDh81g8RB36YDiswQuSLkbySREHjIIO5wwjNzpiEg9",
           "title": "Engineering",
           "summary": "Team workspace",
           "discoverability": "listed",
@@ -154,7 +154,7 @@
       "state": "found",
       "coordinates": {
         "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
-        "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000301",
+        "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
         "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
         "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
       },
@@ -168,7 +168,7 @@
         "did:webvh:z6mkfixture:alice.example",
         "did:webvh:z6mkfixture:bob.example"
       ],
-      "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000301",
+      "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
       "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
       "authorization_basis": {
         "kind": "accepted_contact",
@@ -199,14 +199,14 @@
         "direct_message"
       ],
       "direct_conversation": {
-        "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000301",
+        "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
         "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
         "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
         "state": "active"
       }
     },
     "derived_strand_selection": {
-      "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000301",
+      "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
       "binding_main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
       "default_strand_id_for_realm": "ak:strand:0196b39d-0000-8000-8000-000000000499",
       "selected_main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401"

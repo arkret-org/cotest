@@ -15,7 +15,7 @@
 //!   * realm-only / strand / message hierarchy forms.
 //!   * unknown keyword and wrong hierarchy order fail closed (`parse_address` returns Err); retired
 //!     `via` hints are ignored.
-//!   * `<realm>` disambiguation: UUIDv7 → RealmRef::RealmId, dotted/domain → RealmRef::Alias.
+//!   * `<realm>` disambiguation: 44-character token → RealmRef::RealmId, dotted/domain → RealmRef::Alias.
 //!   * `target_digest` covers ONLY the identity tuple + address_link_kind — adding / removing
 //!     action/tok/lt does NOT change it; switching strand/message DOES; absent hierarchy fields are
 //!     OMITTED (not `null`) in the canonical shape.
@@ -204,15 +204,15 @@ pub fn run_grammar_fail_closed_vector() -> Result<()> {
     Ok(())
 }
 
-/// OA-COT-1.4 — `<realm>` segment disambiguation. A UUIDv7 textual realm
+/// OA-COT-1.4 — `<realm>` segment disambiguation. A 44-character Realm token
 /// segment classifies as [`RealmRef::RealmId`]; a dotted/domain-style segment
 /// classifies as [`RealmRef::Alias`].
 pub fn run_realm_id_vs_alias_vector() -> Result<()> {
-    let uuid_form =
-        parse_address(&format!("web+arkret:realm/{R}")).map_err(|e| anyhow!("uuid realm: {e}"))?;
-    match &uuid_form.realm {
+    let token_form =
+        parse_address(&format!("web+arkret:realm/{R}")).map_err(|e| anyhow!("token realm: {e}"))?;
+    match &token_form.realm {
         RealmRef::RealmId(id) if id == R => {}
-        other => bail!("a UUIDv7 realm segment MUST be RealmRef::RealmId; got {other:?}"),
+        other => bail!("a canonical Realm token MUST be RealmRef::RealmId; got {other:?}"),
     }
 
     for alias in ["team.example.com", "acme.example"] {
@@ -226,7 +226,7 @@ pub fn run_realm_id_vs_alias_vector() -> Result<()> {
 
     // Direct classifier check (the parser's underlying rule).
     if RealmRef::parse(R) != RealmRef::RealmId(R.to_owned()) {
-        bail!("RealmRef::parse MUST map a UUIDv7 to RealmId");
+        bail!("RealmRef::parse MUST map a canonical token to RealmId");
     }
     if RealmRef::parse("team.example.com") != RealmRef::Alias("team.example.com".to_owned()) {
         bail!("RealmRef::parse MUST map a domain string to Alias");
@@ -359,8 +359,8 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     // omitted form, not the null form.
     let digest = target_digest(&desc).map_err(|e| anyhow!("digest: {e}"))?;
 
-    let omitted_bytes = b"{\"address_link_kind\":\"reference\",\"realm_id\":\"ak:realm:01904100-0000-8000-8000-0000000000aa\"}";
-    let null_bytes = b"{\"strand_id\":null,\"address_link_kind\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:01904100-0000-8000-8000-0000000000aa\"}";
+    let omitted_bytes = b"{\"address_link_kind\":\"reference\",\"realm_id\":\"ak:realm:AWEs1cV4Rn1CVWdYoOUZ1yiMPe9Ze6ZYmP0ChDr89cPl\"}";
+    let null_bytes = b"{\"strand_id\":null,\"address_link_kind\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:AWEs1cV4Rn1CVWdYoOUZ1yiMPe9Ze6ZYmP0ChDr89cPl\"}";
     let omitted_expected = super::sha256_prefixed(omitted_bytes);
     let null_expected = super::sha256_prefixed(null_bytes);
 

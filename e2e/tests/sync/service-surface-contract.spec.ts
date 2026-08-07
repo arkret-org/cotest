@@ -842,7 +842,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const token = await issueDevSession(request, alice);
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
-        realmId: "ak:realm:01904100-0000-8000-8000-000000001101",
+        realmId: "ak:realm:Abf_EFzG0z16A5W8192VSnWPMSNVFmuS4X2gQVKgT4ml",
         kind: "ak.message.create",
         payload: {
           strand_id: "ak:strand:01904100-0000-8000-8000-000000001101",
@@ -878,7 +878,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const token = await issueDevSession(request, alice);
       const envelope = signedEventEnvelope({
         actorDid: alice.did,
-        realmId: "ak:realm:01904100-0000-8000-8000-000000001102",
+        realmId: "ak:realm:AZi2ri6b3n9gy8t4vZ4PaHWctnb2kQBJ7o-ajv9MjXsg",
         kind: "ak.message.create",
         payload: {
           strand_id: "ak:strand:01904100-0000-8000-8000-000000001102",

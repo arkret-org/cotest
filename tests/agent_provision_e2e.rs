@@ -198,7 +198,7 @@ async fn agent_provision_pair_lifecycle_e2e() -> Result<()> {
 
     advance_event_sequence(
         ALICE_DID,
-        "ak:realm:01999999-0000-8000-8000-000000000000",
+        "ak:realm:AQ3mKJvfTHTRv0-o-AQYCgBnIdkSag5CbtPuhYTWG7I2",
         32,
     );
     let realm_id = create_realm_with_signing_seed(

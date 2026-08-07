@@ -93,7 +93,7 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.realm.notary.accept.v1",
             "ak.realm.notary",
             json!({
-                "realm_id": "ak:realm:01904100-0000-8000-8000-cfc039892036",
+                "realm_id": "ak:realm:AZpEa1TBWdyQensfzl-MJg8_sdcSNKSeAKHbyCN5ZXjb",
                 "notary": {"kind": "single_did", "did": "did:web:notary.example"}
             }),
             true,
@@ -1138,7 +1138,7 @@ fn sample_envelope_event(
     let mut event = json!({
         "event_id": "ak:event:AbmZo_Q7CHRfJYVqari3NAaEZm6tfSbZppTL7IsJJ7Gl",
         "kind": kind,
-        "realm_id": "ak:realm:019a7360-0000-8000-8000-000000000000",
+        "realm_id": "ak:realm:AXvhSdy6b-PYcJNuFcYsp-gKHjg-PECuUtuV08YJYwhK",
         "actor_id": "did:web:alice.example",
         "actor_seq": actor_seq,
         "created_at": created_at,

@@ -58,7 +58,7 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
         let event = json!({
             "event_id": "ak:event:AffYvO1bZNivtZWJPL_VcWqpd_MP-_igXCfxL5lhBbXu",
             "kind": "ak.message.create",
-            "realm_id": "ak:realm:01970e58-0003-8000-8000-000000000011",
+            "realm_id": "ak:realm:AWjfZKM-MUJ5ix2n8mCPUPOIgAUAF68FMFxNS0MIgSSv",
             "content": {"kind": "ak.content.text", "body": "covered"},
             "proofs": [{"fixture_marker": "not_covered"}],
             "unsigned": {"hint": "not covered"}
@@ -325,8 +325,8 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
         Ok(serde_json::from_value(json!({
             "event_id": "ak:event:AdUJkfoC4GBgYoPW4M0pjanZUQUGUONyXm711OvGtCga",
             "kind": "ak.identity.accountability_grant",
-            "realm_id": "ak:realm:019f9e50-d787-84e0-8731-c9ad5eaa9180",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f9e50-d787-84e0-8731-c9ad5eaa9180"},
+            "realm_id": "ak:realm:AUhhceSJLo6_BscKp90reATdtKd6Wu5jC9lZdYyfXDjN",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AUhhceSJLo6_BscKp90reATdtKd6Wu5jC9lZdYyfXDjN"},
             "actor_id": issuer,
             "actor_seq": 7,
             "created_at": "2026-07-26T01:00:00.000Z",

@@ -66,7 +66,7 @@ fn alice_subject() -> Result<Did> {
 }
 
 fn fake_realm() -> Result<RealmId> {
-    RealmId::new("ak:realm:01904100-0000-8000-8000-000000000001").map_err(|e| anyhow!("realm: {e}"))
+    RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K").map_err(|e| anyhow!("realm: {e}"))
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
@@ -184,7 +184,7 @@ pub fn run_member_roster_shape_vector() -> Result<()> {
 /// such a frame as the complete member set.
 pub fn run_member_roster_limited_vector() -> Result<()> {
     let frame = json!({
-        "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
+        "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
         "members": [
             {
                 "actor_id": "did:web:alice.acme.example",
@@ -217,7 +217,7 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
         );
     }
     let unlimited = json!({
-        "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
+        "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
         "members": []
     });
     if unlimited.get("members_limited").is_some() {
@@ -249,10 +249,10 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
             {
                 "event_id": "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
                 "kind": "ak.member.identity.update",
-                "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
+                "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
-                    "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
+                    "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
                     "actor_id": "did:web:alice.acme.example",
                     "segment": "member_identity",
                     "identity_payload": {"member_identity": {"placeholder": "v1"}}
@@ -261,10 +261,10 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
             {
                 "event_id": "ak:event:AY2Hn6IY76TnIeYqiTmQfD0I9bOBlvFOr6qVQbYcUaIz",
                 "kind": "ak.member.identity.update",
-                "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
+                "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
                 "actor_id": "did:web:alice.acme.example",
                 "payload": {
-                    "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001",
+                    "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
                     "actor_id": "did:web:alice.acme.example",
                     "segment": "member_identity",
                     "replaces": [{

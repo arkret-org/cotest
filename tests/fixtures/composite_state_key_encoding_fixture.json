@@ -21,17 +21,17 @@
     {
       "name": "realm_policy_default",
       "kind": "ak.realm.policy",
-      "components_array": ["ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "default"],
+      "components_array": ["ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG", "default"],
       "components_order_source": "[realm_id, policy_name]",
-      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"default\"]",
+      "expected_canonical_json": "[\"ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG\",\"default\"]",
       "expected_state_subject": "oWt24-I1SX_wawUrwoeXS4xbeJ_W7z4IiV27Wmcv2mA"
     },
     {
       "name": "realm_member_carol",
       "kind": "ak.realm.member",
-      "components_array": ["ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "did:web:carol.example"],
+      "components_array": ["ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
-      "expected_canonical_json": "[\"ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9\",\"did:web:carol.example\"]",
+      "expected_canonical_json": "[\"ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG\",\"did:web:carol.example\"]",
       "expected_state_subject": "jySVHHmiICU8qFiOkFbanUE9CvSnztq_vgUuEc0XG9Y"
     }
   ],

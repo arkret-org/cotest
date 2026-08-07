@@ -233,8 +233,8 @@ mod tests {
         let event = json!({
             "event_id": "ak:event:Adrg-UgvjkV_pq83rokfhuq2TV0knfj99s04-4U7zApt",
             "kind": "ak.message.create",
-            "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001"},
+            "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA"},
             "actor_id": "did:web:alice.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00.000Z",
@@ -276,8 +276,8 @@ mod tests {
     fn raw_signal_envelope_can_be_signed_and_verifies() {
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]);
         let mut envelope = json!({
-            "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-86c8-8000-8000-000000000001"},
+            "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA"},
             "sender_actor_id": "did:web:alice.example",
             "sender_device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
             "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),

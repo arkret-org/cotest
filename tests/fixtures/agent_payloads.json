@@ -58,7 +58,7 @@
         "proposed_action": "ak.message.create",
         "target": {
           "kind": "realm",
-          "realm_id": "ak:realm:01999999-0000-8000-8000-000000000001"
+          "realm_id": "ak:realm:AbL8oOUkpZusQ-VqkYVKoKNNlWviopqGNtOPvbl98WW4"
         },
         "content_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "created_at": "2026-05-27T07:00:00.000Z",
@@ -78,7 +78,7 @@
         "proposed_action": "ak.message.create",
         "target": {
           "kind": "realm",
-          "realm_id": "ak:realm:01999999-0000-8000-8000-000000000001"
+          "realm_id": "ak:realm:AbL8oOUkpZusQ-VqkYVKoKNNlWviopqGNtOPvbl98WW4"
         },
         "request_canonical_digest": "sha256:1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "created_at": "2026-05-27T07:01:00.000Z",
@@ -99,7 +99,7 @@
         "proposed_action": "ak.message.create",
         "target": {
           "kind": "realm",
-          "realm_id": "ak:realm:01999999-0000-8000-8000-000000000001"
+          "realm_id": "ak:realm:AbL8oOUkpZusQ-VqkYVKoKNNlWviopqGNtOPvbl98WW4"
         },
         "approved_payload_digest": "sha256:2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
         "approval_nonce": "agent-approval-nonce-1",

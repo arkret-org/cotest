@@ -18,7 +18,7 @@ fn device() -> DeviceId {
 }
 
 fn realm() -> RealmId {
-    RealmId::new("ak:realm:01904100-0000-8000-8000-000000000004").unwrap()
+    RealmId::new("ak:realm:AT0IclxT6wqw_35e-KEo9WxM7NDMQY_q7PQX6SJzOIjT").unwrap()
 }
 
 fn strand() -> StrandId {

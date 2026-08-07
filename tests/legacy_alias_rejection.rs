@@ -47,7 +47,7 @@ struct ObjectShape {
 
 #[test]
 fn resource_selector_rejects_legacy_schema_id_fields() {
-    let realm_id = "ak:realm:01904100-0000-8000-8000-65c7feb295d7";
+    let realm_id = "ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_";
     let schema_ref = "ak.schema.strand.v1";
 
     let canonical = ResourceSelector::from_spec_value(&json!({

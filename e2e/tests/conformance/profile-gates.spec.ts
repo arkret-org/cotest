@@ -251,7 +251,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: "ak:realm:01904100-0000-8000-8000-000000000999",
+      realmId: "ak:realm:AY0rSzrDAC1zeYgGHFxVjALohUeclZwWr9eDkFlNy2df",
       kind: "ak.edge.applet.command.transaction",
       // `ak:transaction:` is the canonical typed ID prefix. The abbreviated
       // `ak:txn:` is a `hard_reject` entry in
@@ -291,7 +291,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: "ak:realm:01904100-0000-8000-8000-000000001000",
+      realmId: "ak:realm:AVAS1PeoJLynuHDRgmf-2LvFQSeNYWxMtub5zKMmPWtI",
       kind: "ak.message.create",
       payload: {
         strand_id: "ak:strand:01904100-0000-8000-8000-000000001000",

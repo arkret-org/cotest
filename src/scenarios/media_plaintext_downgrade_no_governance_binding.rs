@@ -72,7 +72,7 @@ pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()>
 fn realm_cell(family: &str) -> Result<CellRef> {
     CellRef::new(format!(
         "ak:cell:{family}:{}",
-        encode_state_subject(&["ak:realm:019809f4-a800-8000-8000-000000000001"])
+        encode_state_subject(&["ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE"])
     ))
     .map_err(Into::into)
 }
@@ -85,7 +85,7 @@ fn realm_cell(family: &str) -> Result<CellRef> {
 pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
     let scope: ScopeRef = serde_json::from_value(json!({
         "kind": "realm",
-        "realm_id": "ak:realm:019809f4-a800-8000-8000-000000000001"
+        "realm_id": "ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE"
     }))?;
     let leaves: Vec<MlsSecurityFrontierLeaf> = serde_json::from_value(json!([{
         "leaf_index": 0,

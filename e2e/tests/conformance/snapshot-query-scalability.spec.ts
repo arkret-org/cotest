@@ -114,8 +114,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
     const chunkHashes = chunks.map(chunkDigest);
     const manifest = {
-      id: "ak:snapshot:ak:realm:01904100-0000-8000-8000-000000000001:fixture",
-      realm_id: "ak:realm:01904100-0000-8000-8000-000000000001",
+      id: "ak:snapshot:ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K:fixture",
+      realm_id: "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
       reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunkHashes,
@@ -154,8 +154,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     const signerDid = "did:web:soland.conformance-signer";
     const chunks = [{ chunk_id: "chunk-1", payload: { cell: "a", value: "signed" } }];
     const manifest = {
-      id: "ak:snapshot:ak:realm:01904100-0000-8000-8000-000000000002:signed",
-      realm_id: "ak:realm:01904100-0000-8000-8000-000000000002",
+      id: "ak:snapshot:ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ:signed",
+      realm_id: "ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ",
       reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.core.v1"],
       chunk_hashes: chunks.map(chunkDigest),

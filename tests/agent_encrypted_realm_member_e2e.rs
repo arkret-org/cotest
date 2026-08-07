@@ -359,7 +359,7 @@ fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Res
         Base64UrlString::new("Y2xhaW0tYWdlbnQtbGlmZWN5Y2xlLTAwMQ").map_err(anyhow::Error::msg)?;
     let welcome_ref = NonEmptyString::new(add.welcome.welcome_hash.as_str().to_owned())
         .map_err(anyhow::Error::msg)?;
-    let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-00000000000f")?;
+    let realm_id = RealmId::new("ak:realm:AYBkAlmxKX1w02cC-oYLQFXP2f32OJ7ZO4Gn-LGKXyhm")?;
     let mls_group_id =
         NonEmptyString::new(add.welcome.group_id.clone()).map_err(anyhow::Error::msg)?;
     let durable_at = chrono::Utc::now();

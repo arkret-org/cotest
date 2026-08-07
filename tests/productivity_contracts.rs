@@ -233,7 +233,7 @@ fn private_account_data_keys_do_not_leak_raw_refs() {
     let message_id = MessageId::new("ak:message:01904100-0000-8000-8000-000000000001").unwrap();
     let scheduled_send_id =
         ScheduledSendId::new("ak:scheduled_send:01904100-0000-7000-8000-000000000003").unwrap();
-    let realm_id = RealmId::new("ak:realm:01904100-0000-8000-8000-000000000002").unwrap();
+    let realm_id = RealmId::new("ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ").unwrap();
     let target_ref = message_id.as_str();
 
     let scheduled_send_key = scheduled_send_account_data_key(&scheduled_send_id);

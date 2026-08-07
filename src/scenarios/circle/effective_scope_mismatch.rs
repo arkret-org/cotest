@@ -17,7 +17,7 @@ use arkret_wire::ScopeRef;
 use serde_json::{Value, json};
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000401".to_owned())
+    RealmId::new("ak:realm:AanMy6rJz0LmJJWrNW6zac0vr3d5KTW7HkGbh8DM_Yam".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 

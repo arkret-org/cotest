@@ -646,7 +646,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
         MemberIdentityUpdatePayload, effective_identity_events,
     };
 
-    let realm = RealmId::new("ak:realm:01904100-0000-8000-8000-000000007007")
+    let realm = RealmId::new("ak:realm:AQfJRAZvIVyNOdrjtAPw9Q2gKR0o_3Ud-xQZQB8gx_r9")
         .map_err(|e| anyhow!("realm: {e}"))?;
     let alice = Did::new("did:web:alice.acme.example".to_owned())?;
     let subject = Did::new("did:web:alice.principal.example".to_owned())?;

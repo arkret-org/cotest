@@ -158,7 +158,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
     // the one actually submitted.
     let (setup_realm_id, setup_bootstrap_body) = realm_bootstrap_batch(
         &ctx,
-        "ak:realm:01999999-0000-8000-8000-000000000451",
+        "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk",
         "Mock parity setup",
     )?;
     ctx.realm_id = setup_realm_id;
@@ -239,7 +239,7 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
         service_id: "did:web:soland.mock-parity-smoke.local".to_owned(),
-        realm_id: "ak:realm:01999999-0000-8000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
     };
     assert_mock_contract_format(&contract_path, &fixture, &ctx)
@@ -260,7 +260,7 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
         service_id: "did:web:soland.mock-parity-gate.local".to_owned(),
-        realm_id: "ak:realm:01999999-0000-8000-8000-000000000451".to_owned(),
+        realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
     };
     assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)
@@ -297,7 +297,7 @@ fn assert_mock_contract_format(
     // serves and its derived Realm id does not have to match anything.
     let setup_bootstrap_body = realm_bootstrap_batch(
         ctx,
-        "ak:realm:01999999-0000-8000-8000-000000000451",
+        "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk",
         "Mock parity setup",
     )?
     .1;
@@ -330,7 +330,7 @@ fn assert_mock_contract_artifact_gate(
     // serves and its derived Realm id does not have to match anything.
     let setup_bootstrap_body = realm_bootstrap_batch(
         ctx,
-        "ak:realm:01999999-0000-8000-8000-000000000451",
+        "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk",
         "Mock parity setup",
     )?
     .1;
@@ -751,12 +751,12 @@ fn render_body(
         Some("realm_create_event") => Some(setup_bootstrap_body.clone()),
         Some("realm_create_event_2") => Some(realm_create_event(
             ctx,
-            "ak:realm:01999999-0000-8000-8000-000000000452",
+            "ak:realm:AXkWN4ihjvy_cLRGmk5Rflr6_1olBATMdS32QpUd-BG9",
             "Mock Parity Realm",
         )?),
         Some("realm_create_event_3") => Some(realm_create_event(
             ctx,
-            "ak:realm:01999999-0000-8000-8000-000000000453",
+            "ak:realm:AU333dfTBLCxKUz6U6KscxDaOSk5lfjH0nb9kR4LyUsL",
             "Mock Parity Space",
         )?),
         Some("typing_signal") => {

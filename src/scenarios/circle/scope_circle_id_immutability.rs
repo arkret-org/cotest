@@ -25,7 +25,7 @@ use arkret_models_collaboration::objects::strand::Strand;
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000602".to_owned())
+    RealmId::new("ak:realm:ARSVhlBhjEl6EaJuZnkswKxdLAnPSKT3Qykr6m7fqgEG".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 

@@ -85,7 +85,7 @@ fn positive_vectors() -> Vec<WireVector> {
             kind: arkret_wire::EventKind::REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
-                "target_realm_id": "ak:realm:01904100-0000-8000-8000-668e2181b41d",
+                "target_realm_id": "ak:realm:AQptIWDEF2d4jlsnzTQVXGqZs6h-vPkYXuYqwewKqIjr",
             }),
             expected_class: EventProductClass::Realm,
         },
@@ -93,7 +93,7 @@ fn positive_vectors() -> Vec<WireVector> {
 }
 
 fn fixture_realm_id() -> Result<RealmId> {
-    RealmId::new("ak:realm:01904100-0000-8000-8000-000000000a01".to_owned())
+    RealmId::new("ak:realm:AUGIFvQctz4TjQTmvvO4Wdy-xdc5XP2ZnJ5Qpbh4s8Ru".to_owned())
         .map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 

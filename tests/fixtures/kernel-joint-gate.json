@@ -124,7 +124,7 @@
             "mls_group_id": "ak:mls_group:abc",
             "effective_scope": {
               "kind": "realm",
-              "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000"
+              "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1"
             },
             "epoch": 0,
             "creator_principal_id": "did:webvh:z6mkfixture:alice.example",
@@ -135,10 +135,10 @@
             "governance_binding": {
               "binding_version": 1,
               "encoding_profile": "cbor-deterministic-rfc8949-v1",
-              "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+              "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
               "effective_scope": {
                 "kind": "realm",
-                "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000"
+                "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1"
               },
               "mls_group_id": "ak:mls_group:abc",
               "previous_epoch": 0,
@@ -158,10 +158,10 @@
             "governance_binding": {
               "binding_version": 1,
               "encoding_profile": "cbor-deterministic-rfc8949-v1",
-              "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+              "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
               "effective_scope": {
                 "kind": "realm",
-                "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000"
+                "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1"
               },
               "mls_group_id": "ak:mls_group:abc",
               "previous_epoch": 0,
@@ -360,7 +360,7 @@
             "seals": [
               {
                 "seal_ref": "target",
-                "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+                "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
                 "predecessor_refs": [],
                 "notary_seq": 7,
                 "delta_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"

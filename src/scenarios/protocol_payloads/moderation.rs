@@ -22,7 +22,7 @@ pub async fn run(
             >(json!({
                 // soland validates that the reported target exists; point at the
                 // adapter message Event authored in the events/keys setup phase.
-                "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000101",
+                "realm_id": "ak:realm:AdoahEryEldhLbQHY9vRcm90ddQW1gjDVrYmHsbaLIJc",
                 "target_ref": target_event_id,
                 "report_reason_code": "spam",
                 "reporter": actor_id

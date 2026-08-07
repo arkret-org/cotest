@@ -79,7 +79,7 @@ fn vectors() -> Vec<CanonicalVector> {
             payload: json!({
                 "actor_id": "did:web:alice.example",
                 "event_id": "ak:event:AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
-                "realm_id": "ak:realm:01904100-0000-8000-8000-668e2181b41d",
+                "realm_id": "ak:realm:AQptIWDEF2d4jlsnzTQVXGqZs6h-vPkYXuYqwewKqIjr",
                 "kind": "ak.message.create",
                 "hlc": "01970e589d21-0001-a13f9c2e",
                 "payload": {
@@ -299,7 +299,7 @@ fn pinned_r3_2_inputs() -> (
         RosterHandleClaimDigestEntry,
     };
 
-    let realm = RealmId::new("ak:realm:01904100-0000-8000-8000-000000000001").unwrap();
+    let realm = RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K").unwrap();
     let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
     let events = vec![
         EffectiveIdentityEntry {

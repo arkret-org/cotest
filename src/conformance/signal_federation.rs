@@ -14,7 +14,7 @@ pub const VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN: &str =
     "ak.vector.signal.device_authorization_domain.v1";
 
 fn envelope() -> Result<SignalEnvelope> {
-    let realm_id = RealmId::new("ak:realm:01904100-0000-8000-8000-65c7feb295d7")?;
+    let realm_id = RealmId::new("ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_")?;
     let sent_at = Utc
         .with_ymd_and_hms(2026, 7, 28, 12, 0, 0)
         .single()
@@ -209,7 +209,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             }
             "signal_peer_relay_request" => {
                 if generator["same_realm"].as_bool() == Some(false) {
-                    let other = RealmId::new("ak:realm:01904100-0000-8000-8000-65c7feb295d8")?;
+                    let other = RealmId::new("ak:realm:Aa2wBBPOONHiiqIv1IKaV84axlqDTBPpa3Yw_hNef_Zl")?;
                     let cross_realm = SignalRelayRequest {
                         realm_id: other,
                         signals: vec![signal.clone()],

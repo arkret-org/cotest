@@ -71,7 +71,7 @@ pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-const STABLE_REALM_ID: &str = "ak:realm:01904100-0000-8000-8000-000000000001";
+const STABLE_REALM_ID: &str = "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K";
 const ALICE_ACTOR_DID: &str = "did:web:alice.acme.example";
 const ALICE_SUBJECT_DID: &str = "did:web:alice.principal.example";
 

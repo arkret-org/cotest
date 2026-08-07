@@ -832,7 +832,7 @@ export class JointUserPage {
     const text = await strand.innerText();
     expect(text, `realm bootstrap failed: ${text}`).not.toContain(" failed:");
     const match = text.match(
-      /created (ak:realm:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i,
+      /created (ak:realm:[A-Za-z0-9_-]{44})\b/,
     );
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     return match![1];

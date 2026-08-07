@@ -74,7 +74,7 @@
       "comment": "SDK-ORG-01 — active RealmOrganizationPayload relationship statement. organization_did issuer carries no delegation_ref; control_scopes endorse official_badge + realm_admin. Field order mirrors event-payload.schema.json #/$defs/realm_organization_payload properties.",
       "payload_shape": {
         "statement_id": "org-stmt-active-1",
-        "realm_id": "ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
+        "realm_id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
         "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
         "relationship": "owner",
         "status": "active",
@@ -98,7 +98,7 @@
       "comment": "SDK-ORG-01 — revoked RealmOrganizationPayload statement. status=revoked REQUIRES revokes_statement_id (schema allOf + verifier invariant).",
       "payload_shape": {
         "statement_id": "org-stmt-revoke-1",
-        "realm_id": "ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
+        "realm_id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
         "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
         "relationship": "owner",
         "status": "revoked",
@@ -121,7 +121,7 @@
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": {
-        "source_realm_id": "ak:realm:7fd5ae82-44e2-8a8a-9a4b-8857991142f9",
+        "source_realm_id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
         "inherits": { "policy_rules": ["moderation.v1"] },
         "mode": "narrow_only"
       }

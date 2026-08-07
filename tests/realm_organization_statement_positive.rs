@@ -49,7 +49,7 @@ fn org_control_key() -> SigningKey {
 fn active_statement() -> RealmOrganizationPayload {
     RealmOrganizationPayload {
         statement_id: "org-stmt-cot-org-03".to_owned(),
-        realm_id: RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000010").unwrap(),
+        realm_id: RealmId::new("ak:realm:AaucqKYsYtNwus16IgXDBl88-LWNZZVtRpZ-CqgnPQoi").unwrap(),
         organization_id: Did::new(ORG_DID.to_owned()).unwrap(),
         relationship: RealmOrganizationRelationship::Owner,
         status: RealmOrganizationStatus::Active,

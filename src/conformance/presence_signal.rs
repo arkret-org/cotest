@@ -239,7 +239,7 @@ fn actor() -> Result<Did> {
 
 fn realm() -> Result<RealmId> {
     Ok(RealmId::new(
-        "ak:realm:01904100-0000-8000-8000-65c7feb295d7",
+        "ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_",
     )?)
 }
 

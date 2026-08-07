@@ -312,7 +312,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     // id falls out of the signed Event. The placeholder below is never read.
     let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
-        "ak:realm:00000000-0000-7000-8000-000000000000",
+        "ak:realm:AbJKasiJAuypE52tDrie6RY7PJds4G20xbtLIvYRInJk",
         "ak.realm.create",
         realm_payload.to_value()?,
         Some(0),

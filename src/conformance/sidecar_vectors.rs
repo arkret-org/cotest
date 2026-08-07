@@ -849,7 +849,7 @@ fn fixed_prepare_request_for_operation(
         phase: SidecarPreparePhase::Prepare,
         operation_id: ProtocolOperationId::new(operation_id).map_err(anyhow::Error::msg)?,
         idempotency_key: IdempotencyKey::new(idempotency_key).map_err(anyhow::Error::msg)?,
-        source_realm_id: RealmId::new("ak:realm:01964137-0000-8000-8000-000000000100")?,
+        source_realm_id: RealmId::new("ak:realm:AZbWb-13w-oDGla4V2JFe2VWsjRVvQYYC-dr1JgcoXz5")?,
         controller_id: controller_id.clone(),
         context_ref: SidecarContextRef::Strand {
             strand_id: StrandId::new(if second_context {
@@ -1861,7 +1861,7 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     {
         bail!("hosted Sidecar closed enums drifted");
     }
-    let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-000000000030")?;
+    let realm_id = RealmId::new("ak:realm:AQcksDTzb8Sxrn1BUVVlHtH4vBOy99RKUB4EwOq_413b")?;
     let source_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000031")?;
     let private_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000032")?;
     let anchor_id = EventId::new("ak:event:AVmh6k5n-qXekmKueZzJW_ZoqYSe8zyTeMC9sRwYlIGS")?;
@@ -2035,7 +2035,7 @@ fn exchange_id_x1() -> Result<AgentSidecarExchangeId> {
 fn exchange_request_context() -> Result<AgentSidecarExchangeRequestContext> {
     Ok(AgentSidecarExchangeRequestContext {
         source_track_ref: AgentSidecarSourceTrackRef {
-            realm_id: RealmId::new("ak:realm:01964137-0000-8000-8000-000000000030")?,
+            realm_id: RealmId::new("ak:realm:AQcksDTzb8Sxrn1BUVVlHtH4vBOy99RKUB4EwOq_413b")?,
             strand_id: StrandId::new("ak:strand:01964137-0000-8000-8000-000000000031")?,
             track_name: "discussion".to_owned(),
         },
@@ -2925,7 +2925,7 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
     if siblings.len() != 2 {
         bail!("digest vector requires exactly two siblings");
     }
-    let realm_id = RealmId::new("ak:realm:01964137-0000-8000-8000-000000000000")?;
+    let realm_id = RealmId::new("ak:realm:AWsf08tedvQgc9QPO9ncYaCHxq005x-VuTJWkwlSmC_2")?;
     let actor = exchange_controller()?;
     // Give the two siblings different seconds so their digest preimages are
     // independently variable. The protocol tie-break compares canonical

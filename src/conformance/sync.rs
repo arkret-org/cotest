@@ -61,7 +61,7 @@ fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
 
     let vector = required_field(value, "actor_frontier_digest")?;
     let realm_id = arkret_identifiers::RealmId::new(
-        "ak:realm:01904100-0000-8000-8000-000000000001".to_owned(),
+        "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K".to_owned(),
     )?;
     let actor_id = arkret_identifiers::Did::new("did:web:alice.example".to_owned())?;
     let event_ids = vec![

@@ -97,7 +97,7 @@ fn assert_unrelated_state_is_orthogonal(
     changed.insert(
         cell_ref(
             CellFamilyId::REALM_METADATA_V1,
-            &["ak:realm:019809f4-a800-8000-8000-000000000001"],
+            &["ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE"],
         )?,
         CellState::Value(json!({"display_name": "orthogonal metadata"})),
     );
@@ -148,7 +148,7 @@ fn assert_realm_circle_isolation(
 
     let circle_scope: ScopeRef = serde_json::from_value(json!({
         "kind": "circle",
-        "realm_id": "ak:realm:019809f4-a800-8000-8000-000000000001",
+        "realm_id": "ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE",
         "circle_id": "ak:circle:019809f4-a800-8000-8000-000000000601"
     }))?;
     let circle_observed = derive_mls_security_frontier(&with_other_circle, &circle_scope, leaves)?;

@@ -20,7 +20,7 @@ use arkret_wire::{
     SecurityClass,
 };
 
-const REALM_ID: &str = "ak:realm:01904100-0000-8000-8000-000000000aa1";
+const REALM_ID: &str = "ak:realm:AWdkiR5jlnGgdx6sVlaEmGK5CATkDmi21Mn8gxnUmrZe";
 
 fn realm_id() -> Result<RealmId> {
     RealmId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))

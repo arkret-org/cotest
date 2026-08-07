@@ -703,7 +703,7 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
     }
     let principal = did("did:web:alice.example")?;
     let device = device(required_str(vector, "device_id")?)?;
-    let realm = realm("ak:realm:0196419b-0000-8000-8000-000000000000")?;
+    let realm = realm("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
     let expires_at = parse_time("2100-01-01T00:00:00.000Z")?;
     let mut old = MiniKeypackage::new_last_resort(
         required_str(vector, "old_last_resort_keypackage_ref")?,
@@ -1075,7 +1075,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         bail!("mismatched claim_ref keypackage_digest was accepted");
     }
     let bad_realm_value = welcome_payload_value(WelcomePayloadFixture {
-        intended_realm_id: "ak:realm:0196419b-0000-8000-8000-000000000002",
+        intended_realm_id: "ak:realm:AYmzq24KUdbYXjZtMiyVdibogezW-fCFD3oy0iviR-UD",
         ..good_welcome
     });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_realm_value)?;

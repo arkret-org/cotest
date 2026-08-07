@@ -25,7 +25,7 @@ use arkret_wire::{
 use chrono::TimeZone;
 
 fn realm() -> Result<RealmId> {
-    RealmId::new("ak:realm:0196419b-0000-8000-8000-00000000014a".to_owned())
+    RealmId::new("ak:realm:AXVdykmiwmiUakQOqyMoYAwL8Eh63mpQHFaMczNjNT5p".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 

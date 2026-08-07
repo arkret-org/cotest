@@ -429,7 +429,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
-      realmId: "ak:realm:01904100-0000-8000-8000-000000000998",
+      realmId: "ak:realm:AWKBMlbiCDVvdxpftc7u00CFiTYThQbKQJCj2gi91O9H",
       kind: removed!.id,
       payload: {},
     });
@@ -474,7 +474,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       headers: auth,
       data: signedEventEnvelope({
         actorDid: alice.did,
-        realmId: "ak:realm:01904100-0000-8000-8000-000000000997",
+        realmId: "ak:realm:AV1vAwt2NWgRW6lXhHcPfu4l8U3dkzSjWbQ_xXTw370Q",
         kind: "ak.read_cursor.advance",
         payload: {},
       }),

@@ -104,7 +104,7 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
     let value = json!({
         "schema": "ak.schema.view.v1",
         "id": "ak:view:0196419b-0000-8000-8000-000000000001",
-        "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+        "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
         "kind": "collection",
         "visibility": "private",
         "state": "active",
@@ -137,7 +137,7 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
 }
 
 pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
-    let realm = RealmId::new("ak:realm:01904100-0000-8000-8000-00000000d501")?;
+    let realm = RealmId::new("ak:realm:Aehk8ouR0nK85TCbP4F3AufePk0nSVb_1zu_q_iVuLjB")?;
     let hlc = ServerHlc::new("did:web:cotest.soland");
     let mut state = ProjectionState::new();
 
@@ -205,7 +205,7 @@ pub fn run_policy_transcript_tamper_vector() -> Result<()> {
         "request_id": "policy-cotest-1",
         "decision": "hard_deny",
         "bound_to": {
-            "realm_id": "ak:realm:01904100-0000-8000-8000-00000000c501",
+            "realm_id": "ak:realm:AeizpTttgA_DDran5rmKMGep4EOHjx10JTeYxZ6aopwg",
             "actor_id": "did:web:holder.example",
             "action": "ak.message.create",
             "request_canonical_digest": format!("sha256:{}", "1".repeat(64)),

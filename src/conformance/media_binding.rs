@@ -408,7 +408,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     let expires_at = "2026-05-27T12:34:56.000Z";
     let focus_id = "fra-1";
     let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
-    let realm_id = "ak:realm:0196419b-0000-8000-8000-000000000000";
+    let realm_id = "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1";
 
     let signing_input = participant_binding_signing_input(
         actor_id,
@@ -451,7 +451,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
             participant_identity,
             "ak:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
         ),
-        (realm_id, "ak:realm:0196419b-0000-8000-8000-00000000dead"),
+        (realm_id, "ak:realm:AeqRpQIZxaoTV-G0Cl9jzAJ6wSak3GJUvizlNJRsvSFY"),
     ];
     for (idx, (_orig, replacement)) in tampers.iter().enumerate() {
         let tampered = participant_binding_signing_input(
@@ -596,7 +596,7 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 /// activated-call residual deferred to the live round.
 fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // The canonical Context MUST be exactly this 6-tuple.
-    let realm_id = "ak:realm:0196419b-0000-8000-8000-000000000000";
+    let realm_id = "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1";
     let call_id = "ak:call:0196441c-0000-7000-8000-000000000000";
     let focus_id = "fra-1";
     let epoch_id = "ak:mls_epoch:7";
@@ -804,7 +804,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     }
 
     let context = recording_context(
-        "ak:realm:0196419b-0000-8000-8000-000000000000",
+        "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
         "ak:call:0196441c-0000-7000-8000-000000000000",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
@@ -877,7 +877,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
     }
 
     let other_context = recording_context(
-        "ak:realm:0196419b-0000-8000-8000-000000000000",
+        "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
         "ak:call:0196441c-0000-7000-8000-000000000000",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",

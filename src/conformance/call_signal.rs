@@ -146,7 +146,7 @@ pub fn run_plaintext_closed_schema_vector() -> Result<()> {
 pub fn run_seq_monotonic_vector() -> Result<()> {
     let mut frontier: BTreeMap<CallSignalSeqKey, u64> = BTreeMap::new();
     let key = CallSignalSeqKey {
-        realm_id: RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000000")?,
+        realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
         call_id: CallId::new("ak:call:0196441c-0000-7000-8000-000000000000")?,
         actor_id: Did::new("did:web:alice.example.com")?,
         device_id: DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?,
@@ -320,7 +320,7 @@ fn signed_call_signal_envelope(
     ttl_seconds: i64,
     signing_key: &SigningKey,
 ) -> Result<SignalEnvelope> {
-    let realm_id = RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000000")?;
+    let realm_id = RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
     let actor_id = Did::new("did:web:alice.example.com")?;
     let device_id = DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?;
     let mut envelope = SignalEnvelope {

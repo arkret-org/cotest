@@ -286,7 +286,7 @@ fn realm_member_preview_projection() -> Projection {
     Projection {
         body: json!({
             "circle_id": "ak:circle:0196419c-0000-8000-8000-000000000000",
-            "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+            "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
             "visibility": "realm_members",
             "display": {
                 "color_token": "indigo",
@@ -306,7 +306,7 @@ fn circle_member_full_projection() -> Projection {
     Projection {
         body: json!({
             "circle_id": "ak:circle:0196419c-0000-8000-8000-000000000000",
-            "realm_id": "ak:realm:0196419b-0000-8000-8000-000000000000",
+            "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
             "visibility": "members",
             "title": "Security Review",
             "display": {

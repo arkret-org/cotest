@@ -181,7 +181,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         issuer_service_id: Some(Did::new("did:web:directory.acme.example".to_owned())?),
         binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
-        audience: Some("ak:realm:0196419b-0000-8000-8000-000000000000".to_owned()),
+        audience: Some("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned()),
         claim_scope: Default::default(),
         expires_at: None,
         created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
@@ -196,7 +196,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
             created_at: Utc.with_ymd_and_hms(2026, 6, 19, 0, 0, 0).unwrap(),
             domain: None,
             audience: Some(Audience::Single(
-                "ak:realm:0196419b-0000-8000-8000-000000000000".to_owned(),
+                "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned(),
             )),
             proof_purpose: Some(PayloadProofPurpose::IssuerAttestation),
             jws: "fixture.signature.value".to_owned(),
@@ -427,7 +427,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         ParticipationScope::Realm { realm_id } => realm_id,
         other => bail!("session overlay vector expected Realm scope, got {other:?}"),
     };
-    if realm_id != RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000000".to_owned())? {
+    if realm_id != RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned())? {
         bail!("session overlay Realm scope drifted");
     }
     Ok(())

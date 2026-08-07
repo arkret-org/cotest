@@ -137,7 +137,7 @@ fn validate_member_transition(from: &str, to: &str, join_rule: &str) -> Result<(
 }
 
 fn realm_id() -> Result<RealmId> {
-    RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000501".to_owned())
+    RealmId::new("ak:realm:AU16OSOCTqcHCtBpGjjlRSVEboy9z65gD0A2Vw73vGcu".to_owned())
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 

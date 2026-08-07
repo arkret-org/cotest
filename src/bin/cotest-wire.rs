@@ -651,8 +651,8 @@ mod tests {
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.member.state",
-            "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
+            "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -665,7 +665,7 @@ mod tests {
                 "critical_extensions": []
             },
             "payload": {
-                "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
+                "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
                 "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
                 "membership": "join",
                 "reason": "invite_accept"
@@ -673,7 +673,7 @@ mod tests {
             "unsigned": {"trace": "local"},
             "scope_ref": {
                 "kind": "realm",
-                "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"
+                "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"
             },
             "actor_kind": "native",
             "proofs": []
@@ -694,8 +694,8 @@ mod tests {
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.morph.schema_migrate",
-            "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
+            "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -761,8 +761,8 @@ mod tests {
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.member.state",
-            "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
-            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
+            "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
+            "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor,
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
@@ -775,8 +775,8 @@ mod tests {
                 "critical_extensions": []
             },
             "payload": {
-                "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02",
-                "scope_ref": {"kind": "realm", "realm_id": "ak:realm:019f3b1c-6fc8-8f20-9715-66c42a93ad02"},
+                "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
+                "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
                 "actor_id": actor,
                 "membership": "join"
             }

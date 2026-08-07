@@ -214,8 +214,8 @@ pub fn run_agent_provision_vector() -> Result<()> {
             "arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING spelling drifted: accountability_grant_missing"
         );
     }
-    let realm = "ak:realm:019a7360-0000-8000-8000-000000000000";
-    let other_realm = "ak:realm:019a7360-0000-8000-8000-000000000001";
+    let realm = "ak:realm:AXvhSdy6b-PYcJNuFcYsp-gKHjg-PECuUtuV08YJYwhK";
+    let other_realm = "ak:realm:AScWxkEKMlia4qgqbO9IP9PLeuxVXhsLVwCznKY40mPz";
     let ceiling_actions = ["ak.event.read", "ak.message.create", "ak.reaction.add"];
     let ceiling_resources = [
         ("operation", None, Some("ak.self.events.stream.subscribe")),
@@ -616,8 +616,8 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
 pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     let agent = "did:webvh:z6mkagent:agent.example";
     let controller = "did:webvh:z6mkcontroller:controller.example";
-    let agent_pcr = "ak:realm:01964137-0000-8000-8000-000000000020";
-    let controller_pcr = "ak:realm:01964137-0000-8000-8000-000000000021";
+    let agent_pcr = "ak:realm:AQc8B431O3SQubQ_5nFtF3-v2Z0sQi6h0P2tfGx0TPKE";
+    let controller_pcr = "ak:realm:AR0PtbTxYB1FcA3wCiXkmkluv8VEeXQN_TrYLsL2RNVE";
     if agent_pcr == controller_pcr {
         bail!("managed Agent reused the controller PCR");
     }
@@ -738,7 +738,7 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
         "accountable_principal_id": "did:web:alice.example",
         "agent_key_scope": {
             "actions": ["ak.event.read"],
-            "resources": [{"kind": "realm", "realm_id": "ak:realm:01904100-0000-8000-8000-000000000001"}]
+            "resources": [{"kind": "realm", "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}]
         },
         "audience": ["did:web:soland.example"],
         "issued_at": "2026-07-12T00:00:00.000Z",

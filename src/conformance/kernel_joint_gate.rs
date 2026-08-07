@@ -682,7 +682,7 @@ fn sample_cell(component: &str) -> CellRef {
 }
 
 fn sample_realm() -> RealmId {
-    RealmId::new("ak:realm:0196419b-0000-8000-8000-000000000000").expect("fixed Realm id is valid")
+    RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1").expect("fixed Realm id is valid")
 }
 
 fn repeated_hash(byte: u8) -> Hash {
