@@ -66,8 +66,8 @@ async fn create_policy_realm(client: &TestActorClient, title: &str) -> Result<St
 async fn policy_server_events(client: &TestActorClient, realm_id: &str) -> Result<Vec<Value>> {
     let listed = expect_json(
         client
-            .get("/_arkret/self/events")
-            .query(&[("realms", realm_id), ("limit", "200")]),
+            .query("/_arkret/self/events")
+            .json(&json!({"realms": [realm_id], "limit": 200})),
         StatusCode::OK,
     )
     .await?;
@@ -219,8 +219,12 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
 
     // The org declares: durable Control Move + newly accepted Seal.
     let seal_before = accepted_seal_id(&alice, &org_realm).await?;
-    let (status, view) =
-        put_policy_server(&alice, &org_realm, declaration_payload("org-policy.example")).await?;
+    let (status, view) = put_policy_server(
+        &alice,
+        &org_realm,
+        declaration_payload("org-policy.example"),
+    )
+    .await?;
     assert_eq!(status, StatusCode::OK, "org PUT: {view}");
     assert_eq!(view["from_org_fallback"], false);
     let declared = policy_server_events(&alice, &org_realm).await?;
@@ -360,8 +364,7 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
     let realm_id = create_policy_realm(&alice, "Policy Server Restart").await?;
 
     let restart_declaration = declaration_payload("restart-policy.example");
-    let (status, view) =
-        put_policy_server(&alice, &realm_id, restart_declaration.clone()).await?;
+    let (status, view) = put_policy_server(&alice, &realm_id, restart_declaration.clone()).await?;
     assert_eq!(status, StatusCode::OK, "PUT before restart: {view}");
     let declared = policy_server_events(&alice, &realm_id).await?;
     assert_eq!(declared.len(), 1, "declaration events: {declared:?}");

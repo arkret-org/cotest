@@ -152,7 +152,7 @@ async function waitForEventBody(
     .toBeTruthy();
 }
 
-function unsignedPeerGetHeaders(
+function unsignedPeerQueryHeaders(
   sourceDid: string,
   destinationDid: string,
 ): Record<string, string> {
@@ -202,17 +202,20 @@ test.describe("cross-server federation", () => {
     );
     expect(pushProbe.status()).not.toBe(404);
 
-    const pullProbe = await request.get(
-      `${solandBaseUrl("beta")}/_arkret/peer/events?realms=ak:realm:probe`,
+    const pullProbe = await request.fetch(
+      `${solandBaseUrl("beta")}/_arkret/peer/events`,
+      { method: "QUERY", data: { realms: ["ak:realm:probe"] } },
     );
     expect(pullProbe.status()).not.toBe(404);
   });
 
-  test("unsigned peer GET pull is rejected", async ({ request }) => {
-    const response = await request.get(
-      `${solandBaseUrl("beta")}/_arkret/peer/events?limit=1`,
+  test("unsigned peer QUERY pull is rejected", async ({ request }) => {
+    const response = await request.fetch(
+      `${solandBaseUrl("beta")}/_arkret/peer/events`,
       {
-        headers: unsignedPeerGetHeaders(
+        method: "QUERY",
+        data: { limit: 1 },
+        headers: unsignedPeerQueryHeaders(
           solandServiceId("alpha"),
           solandServiceId("beta"),
         ),
@@ -220,7 +223,7 @@ test.describe("cross-server federation", () => {
     );
     expect(
       response.ok(),
-      `unsigned peer GET unexpectedly returned ${response.status()}: ${await response.text()}`,
+      `unsigned peer QUERY unexpectedly returned ${response.status()}: ${await response.text()}`,
     ).toBeFalsy();
     expect(response.status()).toBeLessThan(500);
   });
@@ -578,13 +581,13 @@ test.describe("cross-server federation", () => {
         acceptanceEvent,
         { server: "beta" },
       );
-      const alphaEventsUrl =
-        `${solandBaseUrl("alpha")}/_arkret/self/events` +
-        `?realms=${encodeURIComponent(realmId)}&limit=100`;
-      const alphaEventsResponse = await request.get(alphaEventsUrl, {
+      const alphaEventsUrl = `${solandBaseUrl("alpha")}/_arkret/self/events`;
+      const alphaEventsResponse = await request.fetch(alphaEventsUrl, {
+        method: "QUERY",
+        data: { realms: [realmId], limit: 100 },
         headers: selfPathHeadersForDpopSession(
           aliceFlow.session,
-          "GET",
+          "QUERY",
           alphaEventsUrl,
         ),
       });
@@ -720,7 +723,7 @@ test.describe("cross-server federation", () => {
     await waitForEventBody(request, aliceToken, realmId, bobBody, "alpha");
   });
 
-  test("peer query recovery: after a network partition, β fetches missing α events via GET /_arkret/peer/events", async ({
+  test("peer query recovery: after a network partition, β fetches missing α events via QUERY /_arkret/peer/events", async ({
     request,
   }) => {
     const stamp = Date.now();

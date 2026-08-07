@@ -246,12 +246,13 @@ test.describe("tsp bootstrap", () => {
 
     // v1 core fallback: the client degrades to the default HTTPS JWE / events
     // transport. The invite still reaches soland over the canonical path — a
-    // plain authenticated GET of self/events proves the default transport is
+    // Plain authenticated QUERY of self/events proves the default transport is
     // alive and the client is NOT fail-closed on the TSP outage.
-    const eventsResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/events?actor_id=${encodeURIComponent(alice.did)}`,
-      { headers: { authorization: `Bearer ${aliceToken}` } },
-    );
+    const eventsResp = await request.fetch(`${solandBaseUrl()}/_arkret/self/events`, {
+      method: "QUERY",
+      data: { actors: [alice.did] },
+      headers: { authorization: `Bearer ${aliceToken}` },
+    });
     expect(
       [200, 400, 404].includes(eventsResp.status()),
       `default v1 core transport must remain reachable after TSP outage: ${eventsResp.status()}`,

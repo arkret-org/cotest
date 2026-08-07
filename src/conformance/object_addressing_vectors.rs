@@ -1,4 +1,4 @@
-//! AKP-0011 shareable object-addressing + `ak.find.directory.query.resolve_target`
+//! AKP-0011 shareable object-addressing + `ak.find.directory.read.resolve_target`
 //! conformance vectors (OA-COT-1..4).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.1` (resolve_target +

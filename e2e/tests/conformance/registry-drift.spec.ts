@@ -485,7 +485,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
       { name: "health", response: await request.get(`${solandBaseUrl()}/health`), requireOk: true },
       { name: "directory.describe", response: await request.get(`${solandBaseUrl()}/_arkret/find/directory/describe`) },
       { name: "account.viewer", response: await request.get(`${solandBaseUrl()}/_arkret/self/account/viewer`, { headers: auth }) },
-      { name: "events.query", response: await request.get(`${solandBaseUrl()}/_arkret/self/events?limit=20`, { headers: auth }) },
+      { name: "events.read", response: await request.fetch(`${solandBaseUrl()}/_arkret/self/events`, { method: "QUERY", data: { limit: 20 }, headers: auth }) },
       { name: "notifications", response: await request.get(`${solandBaseUrl()}/_arkret/self/notifications`, { headers: auth }) },
       { name: "events.submit.receipt", response: submitReceipt },
     ];

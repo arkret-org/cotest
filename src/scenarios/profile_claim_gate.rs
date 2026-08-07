@@ -54,7 +54,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let failed = serde_json::json!({
         "supported_profiles": ["ak.profile.core_event_store.v1"],
         "supported_operations": [
-            "ak.server.query.describe",
+            "ak.server.read.describe",
             "ak.self.events.read.describe",
             "ak.self.events.command.submit",
             "ak.self.events.resource.get",
@@ -117,7 +117,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
 
     let missing_required_fixture = serde_json::json!({
         "supported_profiles": ["ak.vector_group.capability.v1"],
-        "supported_operations": ["ak.self.authz.query.check"],
+        "supported_operations": ["ak.self.authz.read.check"],
         "verified_fixtures": [],
     });
     expect_profile_rejected(&missing_required_fixture, "missing required fixture")?;

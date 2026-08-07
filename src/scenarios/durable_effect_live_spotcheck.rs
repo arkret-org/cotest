@@ -93,8 +93,8 @@ fn declared_effect(registry: &Value, operation_id: &str) -> Result<DeclaredEffec
 async fn realm_event_kinds(client: &TestActorClient, realm_id: &str) -> Result<Vec<String>> {
     let listed = expect_json(
         client
-            .get("/_arkret/self/events")
-            .query(&[("realms", realm_id), ("limit", "200")]),
+            .query("/_arkret/self/events")
+            .json(&json!({"realms": [realm_id], "limit": 200})),
         StatusCode::OK,
     )
     .await?;

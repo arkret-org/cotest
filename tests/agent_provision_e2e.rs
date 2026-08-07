@@ -173,7 +173,7 @@ fn agent_runtime_service_actions() -> [&'static str; 8] {
         "ak.self.keys.keypackages.upload.create",
         "ak.self.keys.keypackages.command.consume",
         "ak.self.keys.keypackages.command.revoke",
-        "ak.self.device_messages.query.list",
+        "ak.self.device_messages.read.list",
         "ak.self.device_messages.command.ack",
     ]
 }
@@ -1354,7 +1354,7 @@ async fn agent_pairing_renewal_e2e() -> Result<()> {
 }
 
 /// AKP-0008 runtime-side approval status poll
-/// (`ak.open.agent_pairing.query.runtime_key_request_status`): the runtime
+/// (`ak.open.agent_pairing.read.runtime_key_request_status`): the runtime
 /// learns the controller decision after submitting a runtime key request
 /// (arkret-work 2026-07-10-agent-runtime-approval-status-closure acceptance #5).
 #[tokio::test(flavor = "multi_thread")]

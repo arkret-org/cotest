@@ -17,7 +17,13 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
         )
         .await?;
 
-    let describe = expect_json(alice.get("/_arkret/self/events/describe"), StatusCode::OK).await?;
+    let describe = expect_json(
+        alice
+            .query("/_arkret/self/events/describe")
+            .json(&json!({})),
+        StatusCode::OK,
+    )
+    .await?;
     let max_resolve = describe
         .pointer("/limits/max_resolve")
         .and_then(Value::as_u64)
@@ -28,7 +34,7 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let missing_seal = format!("ak:seal:sha256:{}", "1".repeat(64));
     let seal_only = expect_json(
         alice
-            .post("/_arkret/self/events/resolve")
+            .query("/_arkret/self/events/resolve")
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
             >(json!({"seal_refs": [missing_seal]}))?),
@@ -46,7 +52,7 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let missing_digest = format!("sha256:{}", "2".repeat(64));
     let mixed = expect_json(
         alice
-            .post("/_arkret/self/events/resolve")
+            .query("/_arkret/self/events/resolve")
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
             >(json!({
@@ -78,7 +84,7 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
         .collect();
     let at_budget_outcome = expect_json(
         alice
-            .post("/_arkret/self/events/resolve")
+            .query("/_arkret/self/events/resolve")
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
             >(json!({"event_ids": at_budget}))?),
@@ -92,7 +98,7 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
 
     let over_budget = expect_response(
         alice
-            .post("/_arkret/self/events/resolve")
+            .query("/_arkret/self/events/resolve")
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
             >(json!({

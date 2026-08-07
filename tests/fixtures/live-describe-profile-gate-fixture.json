@@ -16,7 +16,7 @@
           "ak.profile.principal_server.v1"
         ],
         "supported_operations": [
-          "ak.server.query.describe"
+          "ak.server.read.describe"
         ],
         "limits": {
           "profile_status": {

@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{TestServerGroup, expect_json};
@@ -52,13 +52,12 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     let mut cursor = None;
     let mut collected = Vec::new();
     for _ in 0..12 {
-        let path = match cursor.as_deref() {
-            Some(cursor) => {
-                format!("/_arkret/self/events?realms={realm_id}&limit=1&after={cursor}")
-            }
-            None => format!("/_arkret/self/events?realms={realm_id}&limit=1"),
-        };
-        let page = expect_json(alice.get(&path), StatusCode::OK).await?;
+        let body = json!({"realms": [realm_id], "limit": 1, "after": cursor});
+        let page = expect_json(
+            alice.query("/_arkret/self/events").json(&body),
+            StatusCode::OK,
+        )
+        .await?;
         collected.extend(json_array(&page, "events")?.iter().cloned());
         if !page["has_more"]
             .as_bool()

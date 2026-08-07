@@ -11,13 +11,13 @@ const FIXTURE: &str = "principal-server-certification-gate.json";
 const FIXTURE_PROFILE: &str = "ak.profile.principal_server_certification_gate.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
-    "ak.server.query.describe",
-    "ak.self.account.query.describe",
+    "ak.server.read.describe",
+    "ak.self.account.read.describe",
     "ak.self.account.stream.subscribe",
     "ak.self.events.stream.subscribe",
     "ak.self.events.read.scan",
-    "ak.self.snapshot.query.manifest_head",
-    "ak.self.authz.query.check",
+    "ak.self.snapshot.read.manifest_head",
+    "ak.self.authz.read.check",
 ];
 
 const REQUIRED_EVENT_KINDS: &[&str] = &[

@@ -501,16 +501,14 @@ fn verify_self_pop(
 /// unless a sender-constrained proof (DPoP, RFC 9421 HTTP Message Signature,
 /// detached JWS, mTLS or equivalent) accompanies it — for EVERY profile, not
 /// just high-security. High-security profiles additionally demand RFC 9421 PoP
-/// for regular writes / sensitive reads, which the same predicate covers.
+/// for every protected `ak.self.*` operation.
 fn protected_bare_bearer_admission(
     _profile: &str,
     action: &str,
     has_sender_constrained_proof: bool,
 ) -> std::result::Result<(), &'static str> {
-    let protected = matches!(
-        action,
-        "protected_current_v1_endpoint" | "regular_write" | "sensitive_read"
-    );
+    let protected = matches!(action, "protected_current_v1_endpoint" | "regular_write")
+        || action.starts_with("ak.self.");
     if protected && !has_sender_constrained_proof {
         return Err(arkret_wire::ErrorCode::UNAUTHENTICATED);
     }
@@ -850,11 +848,11 @@ pub fn run_session_pop_presentation_vector() -> Result<()> {
 pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
     let fixture = auth_session_proof_fixture()?;
     let vector = case(&fixture, VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED)?;
-    // High-security profile: bare bearer on a regular write / sensitive read
-    // is rejected as unauthenticated.
+    // High-security profile: bare bearer on a protected `.read.` operation is
+    // rejected as unauthenticated.
     if protected_bare_bearer_admission(
         required_str(vector, "high_security_profile")?,
-        required_str(vector, "sensitive_action")?,
+        required_str(vector, "protected_read_operation_id")?,
         false,
     )
     .err()
@@ -889,6 +887,9 @@ pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
     // is classified as an unauthenticated public read, not an auth failure.
     if required_str(vector, "public_metadata_surface")? != "unauthenticated_public_response_only" {
         bail!("public metadata surface control drifted");
+    }
+    if required_str(vector, "public_metadata_operation_id")? != "ak.self.events.read.describe" {
+        bail!("public metadata operation classification drifted");
     }
     if classify_public_metadata_bare_bearer()
         != expected_str(vector, "public_metadata_bare_bearer")?

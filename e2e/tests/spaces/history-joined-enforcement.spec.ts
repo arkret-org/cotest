@@ -308,10 +308,11 @@ async function listMessageBodies(
   token: string,
   realmId: string,
 ): Promise<string[]> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`,
-    { headers: authHeaders(token) },
-  );
+  const response = await request.fetch(`${solandBaseUrl()}/_arkret/self/events`, {
+    method: "QUERY",
+    data: { realms: [realmId], limit: 100 },
+    headers: authHeaders(token),
+  });
   const text = await response.text();
   expect(response.status(), `query ${realmId}: ${text}`).toBe(200);
   const body = JSON.parse(text) as { events?: Array<Record<string, unknown>> };

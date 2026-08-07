@@ -423,9 +423,13 @@ async function fetchMlsGovernanceBinding(
   previousEpoch: number,
   nextEpoch: number,
 ): Promise<Record<string, unknown>> {
-  const frontierResponse = await request.get(
-    `${solandBaseUrl()}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(group.effectiveScope.realm_id)}`,
-    { headers: authHeaders(token) },
+  const frontierResponse = await request.fetch(
+    `${solandBaseUrl()}/_arkret/self/events/frontier`,
+    {
+      method: "QUERY",
+      data: { realm_id: group.effectiveScope.realm_id },
+      headers: authHeaders(token),
+    },
   );
   const frontierBody = await frontierResponse.json();
   expect(
@@ -434,9 +438,10 @@ async function fetchMlsGovernanceBinding(
   ).toBeTruthy();
   const trustedAnchorSealId = String(frontierBody.frontier?.seal_id ?? "");
   expect(trustedAnchorSealId).toMatch(/^ak:seal:/);
-  const response = await request.post(
+  const response = await request.fetch(
     `${solandBaseUrl()}/_arkret/self/events/mls-governance-proof`,
     {
+      method: "QUERY",
       headers: authHeaders(token),
       data: {
         realm_id: group.effectiveScope.realm_id,
@@ -801,12 +806,14 @@ test.describe("MLS group encryption", () => {
       });
 
       // Non-member access to raw events MUST be rejected.
-      const eventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
-      const eventsResp = await request.get(eventsUrl, {
+      const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const eventsResp = await request.fetch(eventsUrl, {
+        method: "QUERY",
+        data: { realms: [realmId], limit: 20 },
         headers: selfPathGrantHeaders({
           deviceKey: mallorySession.deviceKey,
           grantJwt: mallorySession.grantJwt,
-          method: "GET",
+          method: "QUERY",
           url: eventsUrl,
         }),
       });
@@ -1411,12 +1418,14 @@ test.describe("MLS group encryption", () => {
         bobPlaintext,
       );
 
-      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
-      const rawEvents = await request.get(rawEventsUrl, {
+      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const rawEvents = await request.fetch(rawEventsUrl, {
+        method: "QUERY",
+        data: { realms: [realmId], limit: 100 },
         headers: selfPathGrantHeaders({
           deviceKey: bobSession!.deviceKey,
           grantJwt: bobSession!.grantJwt,
-          method: "GET",
+          method: "QUERY",
           url: rawEventsUrl,
         }),
       });
@@ -1532,11 +1541,13 @@ test.describe("MLS group encryption", () => {
 
     // carol reads the realm event stream: history_visibility=joined crops the
     // pre-join epoch event but surfaces the post-join one.
-    const carolEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
+    const carolEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
     await expect
       .poll(
         async () => {
-          const resp = await request.get(carolEventsUrl, {
+          const resp = await request.fetch(carolEventsUrl, {
+            method: "QUERY",
+            data: { realms: [realmId], limit: 100 },
             headers: authHeaders(carolToken),
           });
           if (resp.status() !== 200) {
@@ -1560,7 +1571,9 @@ test.describe("MLS group encryption", () => {
       )
       .toContain(postJoinEventId);
 
-    const carolEvents = await request.get(carolEventsUrl, {
+    const carolEvents = await request.fetch(carolEventsUrl, {
+      method: "QUERY",
+      data: { realms: [realmId], limit: 100 },
       headers: authHeaders(carolToken),
     });
     expect(carolEvents.status()).toBe(200);

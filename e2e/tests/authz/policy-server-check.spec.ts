@@ -140,10 +140,12 @@ async function policyServerEvents(
   token: string,
   realmId: string,
 ): Promise<PolicyServerEvent[]> {
-  const url =
-    `${solandBaseUrl()}/_arkret/self/events?realms=` +
-    `${encodeURIComponent(realmId)}&limit=200`;
-  const response = await request.get(url, { headers: authHeaders(token) });
+  const url = `${solandBaseUrl()}/_arkret/self/events`;
+  const response = await request.fetch(url, {
+    method: "QUERY",
+    data: { realms: [realmId], limit: 200 },
+    headers: authHeaders(token),
+  });
   const body = await expectJsonOk<{ events?: PolicyServerEvent[] }>(
     response,
     "query canonical policy-server events",
@@ -167,10 +169,10 @@ test.describe("policy server check", () => {
     );
     expect(describe.supported_operations).toEqual(
       expect.arrayContaining([
-        "ak.self.authz.query.check",
-        "ak.self.authz.grants.query.effective",
-        "ak.self.authz.invites.query.list",
-        "ak.self.policy.query.check",
+        "ak.self.authz.read.check",
+        "ak.self.authz.grants.read.effective",
+        "ak.self.authz.invites.read.list",
+        "ak.self.policy.read.check",
       ]),
     );
     const limits = describe.limits as Record<string, unknown>;

@@ -211,9 +211,11 @@ test.describe("core object invariants", () => {
         // RealmLifecycleResponse does not currently surface. The events
         // query response item shape follows the Event Envelope projection:
         // { event_id, realm_id, kind, actor_id, payload, created_at, ... }.
-        const eventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=20`;
-        const eventsRes = await request.get(eventsUrl, {
-          headers: authFor("GET", eventsUrl),
+        const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+        const eventsRes = await request.fetch(eventsUrl, {
+          method: "QUERY",
+          data: { realms: [realmId], limit: 20 },
+          headers: authFor("QUERY", eventsUrl),
         });
         expect(eventsRes.status()).toBe(200);
         const eventsBody = (await eventsRes.json()) as {

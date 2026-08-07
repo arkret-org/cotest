@@ -73,12 +73,14 @@ async function waitForMlsWelcome(
   await expect
     .poll(
       async () => {
-        const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
-        const response = await request.get(url, {
+        const url = `${solandBaseUrl()}/_arkret/self/events`;
+        const response = await request.fetch(url, {
+          method: "QUERY",
+          data: { realms: [realmId], limit: 500 },
           headers: selfPathGrantHeaders({
             deviceKey: session.deviceKey,
             grantJwt: session.grantJwt,
-            method: "GET",
+            method: "QUERY",
             url,
           }),
         });
@@ -605,12 +607,14 @@ test.describe("cross-member encrypted kanban", () => {
       await expect
         .poll(
           async () => {
-            const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
-            const resp = await request.get(url, {
+            const url = `${solandBaseUrl()}/_arkret/self/events`;
+            const resp = await request.fetch(url, {
+              method: "QUERY",
+              data: { realms: [realmId], limit: 500 },
               headers: selfPathGrantHeaders({
                 deviceKey: bobSession.deviceKey,
                 grantJwt: bobSession.grantJwt,
-                method: "GET",
+                method: "QUERY",
                 url,
               }),
             });
@@ -662,12 +666,14 @@ test.describe("cross-member encrypted kanban", () => {
 
       // 7) Raw wire stays ciphertext for the private body: the encrypted realm
       //    must never expose alice's description verbatim in the event log.
-      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=200`;
-      const rawEvents = await request.get(rawEventsUrl, {
+      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const rawEvents = await request.fetch(rawEventsUrl, {
+        method: "QUERY",
+        data: { realms: [realmId], limit: 200 },
         headers: selfPathGrantHeaders({
           deviceKey: aliceSession.deviceKey,
           grantJwt: aliceSession.grantJwt,
-          method: "GET",
+          method: "QUERY",
           url: rawEventsUrl,
         }),
       });
@@ -771,12 +777,14 @@ test.describe("cross-member encrypted kanban", () => {
       await expect
         .poll(
           async () => {
-            const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=500`;
-            const resp = await request.get(url, {
+            const url = `${solandBaseUrl()}/_arkret/self/events`;
+            const resp = await request.fetch(url, {
+              method: "QUERY",
+              data: { realms: [realmId], limit: 500 },
               headers: selfPathGrantHeaders({
                 deviceKey: bobSession.deviceKey,
                 grantJwt: bobSession.grantJwt,
-                method: "GET",
+                method: "QUERY",
                 url,
               }),
             });
@@ -802,12 +810,14 @@ test.describe("cross-member encrypted kanban", () => {
       await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
       await stepShot(bobPage.page, testInfo, "C-bob-prejoin-card-survives-reload");
 
-      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=200`;
-      const rawEvents = await request.get(rawEventsUrl, {
+      const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const rawEvents = await request.fetch(rawEventsUrl, {
+        method: "QUERY",
+        data: { realms: [realmId], limit: 200 },
         headers: selfPathGrantHeaders({
           deviceKey: aliceSession.deviceKey,
           grantJwt: aliceSession.grantJwt,
-          method: "GET",
+          method: "QUERY",
           url: rawEventsUrl,
         }),
       });

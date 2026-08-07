@@ -1253,13 +1253,14 @@ async function forcePaginatedRealmBackfill(
     const outgoing = route.request();
     const url = new URL(outgoing.url());
     if (
-      outgoing.method() === "GET" &&
+      outgoing.method() === "QUERY" &&
       url.pathname === "/_arkret/self/events" &&
-      url.searchParams.get("realm_id") === realmId
+      Array.isArray(outgoing.postDataJSON().realms) &&
+      outgoing.postDataJSON().realms.includes(realmId)
     ) {
       requests += 1;
-      url.searchParams.set("limit", "1");
-      await route.continue({ url: url.toString() });
+      const body = { ...outgoing.postDataJSON(), limit: 1 };
+      await route.continue({ postData: JSON.stringify(body) });
       return;
     }
     await route.fallback();

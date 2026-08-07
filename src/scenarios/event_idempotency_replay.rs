@@ -53,8 +53,8 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
 
     let listed = expect_json(
         alice
-            .get("/_arkret/self/events")
-            .query(&[("realms", realm_id.as_str()), ("limit", "100")]),
+            .query("/_arkret/self/events")
+            .json(&json!({"realms": [realm_id], "limit": 100})),
         StatusCode::OK,
     )
     .await?;
@@ -208,8 +208,8 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Event) -> Result<
 async fn list_realm_events(alice: &TestActorClient, realm_id: &str) -> Result<Value> {
     expect_json(
         alice
-            .get("/_arkret/self/events")
-            .query(&[("realms", realm_id), ("limit", "100")]),
+            .query("/_arkret/self/events")
+            .json(&json!({"realms": [realm_id], "limit": 100})),
         StatusCode::OK,
     )
     .await

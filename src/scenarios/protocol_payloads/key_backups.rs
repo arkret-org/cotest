@@ -207,7 +207,7 @@ async fn describe_backup_operations(server: &ArkretServer) -> Result<()> {
         .expect("supported operation list");
     for operation_id in [
         "ak.self.keys.backups.resource.replace",
-        "ak.self.keys.backups.query.list",
+        "ak.self.keys.backups.read.list",
         "ak.self.keys.backups.command.unlock",
         "ak.self.keys.backups.resource.delete",
     ] {

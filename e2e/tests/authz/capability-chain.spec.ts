@@ -7,8 +7,8 @@
 // revocations `ak.capability.revoke` events submitted to /_arkret/self/events
 // and projected by the reducer. The only synchronous read surfaces are the
 // registered diagnostics endpoints POST /_arkret/self/authz/check
-// (ak.self.authz.query.check) and GET /_arkret/self/authz/effective-grants
-// (ak.self.authz.grants.query.effective). The former synchronous REST
+// (ak.self.authz.read.check) and GET /_arkret/self/authz/effective-grants
+// (ak.self.authz.grants.read.effective). The former synchronous REST
 // grant/revoke/audit surface (POST/DELETE /_arkret/self/authz/grants*,
 // GET /_soland/self/audit/events) was removed from the spec and MUST NOT be
 // reintroduced (SPEC-CR-020: zero new operations).

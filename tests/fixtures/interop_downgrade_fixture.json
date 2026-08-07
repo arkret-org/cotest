@@ -74,7 +74,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ak.open.mimi.query.identifiers",
+        "operation_id": "ak.open.mimi.read.identifiers",
         "privacy_profile": "psi_blinded_batch",
         "connection_identifier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },

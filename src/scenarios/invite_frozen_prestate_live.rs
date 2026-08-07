@@ -49,8 +49,8 @@ async fn observe(
 ) -> Result<RealmObservation> {
     let listed = expect_json(
         client
-            .get("/_arkret/self/events")
-            .query(&[("realms", realm_id), ("limit", "200")]),
+            .query("/_arkret/self/events")
+            .json(&json!({"realms": [realm_id], "limit": 200})),
         StatusCode::OK,
     )
     .await?;
@@ -111,9 +111,10 @@ async fn author_invite_move(
     payload: Value,
 ) -> Result<arkret_wire::Event> {
     let frontier = expect_json(
-        actor
-            .get("/_arkret/self/events/frontier")
-            .query(&[("actor_id", actor.actor.as_str()), ("realm_id", realm_id)]),
+        actor.query("/_arkret/self/events/frontier").json(&json!({
+            "actor_id": actor.actor,
+            "realm_id": realm_id
+        })),
         StatusCode::OK,
     )
     .await?;

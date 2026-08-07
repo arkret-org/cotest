@@ -67,9 +67,9 @@
         ],
         "client_must_not_call": [
           "ak.self.blob.upload.create",
-          "ak.self.media.query.ice_config",
+          "ak.self.media.read.ice_config",
           "ak.self.moderation.command.report",
-          "ak.edge.applet.query.ping",
+          "ak.edge.applet.read.ping",
           "ak.open.mimi.command.submit_message"
         ]
       }
@@ -94,7 +94,7 @@
           "ak.self.blob.resource.get"
         ],
         "client_must_not_call": [
-          "ak.self.media.query.ice_config",
+          "ak.self.media.read.ice_config",
           "ak.self.moderation.command.report"
         ],
         "comment_c16": "Post-C16 (spec 2026-05-08) blob_storage was split out as its own surface from a previous combined media-like surface. A SUT advertising blob_storage gets blob ops only — NOT realtime_media, NOT moderation_reports."
@@ -115,7 +115,7 @@
         "extension_surfaces": ["realtime_media"],
         "interop_bridge_present": false,
         "client_can_call": [
-          "ak.self.media.query.ice_config"
+          "ak.self.media.read.ice_config"
         ],
         "client_must_not_call": [
           "ak.self.blob.upload.create",
@@ -144,8 +144,8 @@
         ],
         "client_must_not_call": [
           "ak.self.blob.upload.create",
-          "ak.self.media.query.ice_config",
-          "ak.edge.applet.query.ping",
+          "ak.self.media.read.ice_config",
+          "ak.edge.applet.read.ping",
           "ak.open.mimi.command.report_abuse"
         ],
         "comment_c16": "moderation_reports is the post-C16 canonical surface name. Pre-C16 fixtures used `moderation`; this is now drift and would fail validator surface-name lookup."
@@ -172,7 +172,7 @@
           "ak.open.mimi.command.request_consent"
         ],
         "client_must_not_call": [
-          "ak.edge.applet.query.ping"
+          "ak.edge.applet.read.ping"
         ],
         "comment": "interop_bridge surface-class entries MUST be explicitly advertised, and only when the external protocol is actually supported. Advertising mimi_interop does NOT imply applet or any extension surface."
       }
@@ -193,8 +193,8 @@
         "interop_bridge_present": true,
         "interop_bridge_surfaces": ["applet"],
         "client_can_call": [
-          "ak.edge.applet.query.ping",
-          "ak.edge.applet.query.describe",
+          "ak.edge.applet.read.ping",
+          "ak.edge.applet.read.describe",
           "ak.edge.applet.command.transaction"
         ],
         "client_must_not_call": [

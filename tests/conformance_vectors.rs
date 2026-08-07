@@ -316,7 +316,7 @@ fn mention_rendering_vector_suite_runs_clean() {
     );
 }
 
-// ─── R3.2 / VECT-COT-3 — ak.find.directory.query.list_handles_for_subject ────────────
+// ─── R3.2 / VECT-COT-3 — ak.find.directory.read.list_handles_for_subject ────────────
 
 #[test]
 fn list_handles_for_subject_vector_suite_runs_clean() {
@@ -426,7 +426,7 @@ fn test_oa_cot_5_share_resolve_open_live() {
     // Live integration (client ↔ teabay resolve_target ↔ soland subject gate):
     //   1. Author shares a strand as `web+arkret:realm/<r>/strand/<f>?via=<teabay>
     //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
-    //   2. Recipient POSTs `ak.find.directory.query.resolve_target { address, token }`.
+    //   2. Recipient POSTs `ak.find.directory.read.resolve_target { address, token }`.
     //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
     //      (scope-confusion replay rejected), and returns `DirectoryTargetResolutionOutcome {
     //      target_kind=strand, object_preview, join_rule, as_of, source_refs, via_services }`.
@@ -863,7 +863,7 @@ fn test_8_handle_rename_round_trip_live() {
     //   1. Client builds invite for canonical handle `alice:acme.example`.
     //   2. soland reducer accepts member-add with `payload.handle = "alice:acme.example"` (NO
     //      `handle_uri` field).
-    //   3. teabay's `ak.find.directory.query.resolve_handle(handle=...)` accepts the canonical
+    //   3. teabay's `ak.find.directory.read.resolve_handle(handle=...)` accepts the canonical
     //      handle string in the request body and returns a candidate whose `handle` field is the
     //      same canonical wire form.
     //   4. coauth's handle-claim issuance + sync surface MUST NOT emit `handle_uri` anywhere on a

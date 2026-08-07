@@ -370,6 +370,15 @@ impl TestActorClient {
         self.http.post(self.url(path)).bearer_auth(&self.token)
     }
 
+    pub fn query(&self, path: &str) -> reqwest::RequestBuilder {
+        self.http
+            .request(
+                reqwest::Method::from_bytes(b"QUERY").expect("QUERY is a valid HTTP method"),
+                self.url(path),
+            )
+            .bearer_auth(&self.token)
+    }
+
     pub fn put(&self, path: &str) -> reqwest::RequestBuilder {
         self.http.put(self.url(path)).bearer_auth(&self.token)
     }

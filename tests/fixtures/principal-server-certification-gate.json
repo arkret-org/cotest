@@ -47,13 +47,13 @@
           }
         },
         "supported_operations": [
-          "ak.server.query.describe",
-          "ak.self.account.query.describe",
+          "ak.server.read.describe",
+          "ak.self.account.read.describe",
           "ak.self.account.stream.subscribe",
           "ak.self.events.stream.subscribe",
           "ak.self.events.read.scan",
-          "ak.self.snapshot.query.manifest_head",
-          "ak.self.authz.query.check"
+          "ak.self.snapshot.read.manifest_head",
+          "ak.self.authz.read.check"
         ],
         "supported_event_kinds": [
           "ak.space.create",
@@ -99,17 +99,17 @@
           }
         },
         "supported_operations": [
-          "ak.server.query.describe",
-          "ak.self.account.query.describe",
+          "ak.server.read.describe",
+          "ak.self.account.read.describe",
           "ak.self.account.stream.subscribe",
           "ak.self.events.stream.subscribe",
           "ak.self.events.read.scan",
-          "ak.self.snapshot.query.manifest_head",
-          "ak.self.authz.query.check",
+          "ak.self.snapshot.read.manifest_head",
+          "ak.self.authz.read.check",
           "ak.self.blob.upload.create",
           "ak.self.agent.command.provision",
           "ak.self.applet.command.install",
-          "ak.self.media.query.ice_config"
+          "ak.self.media.read.ice_config"
         ],
         "supported_event_kinds": [
           "ak.space.create",

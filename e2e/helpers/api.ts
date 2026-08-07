@@ -193,11 +193,13 @@ export async function listRealmEventsViaApi(
   realmId: string,
   opts: { limit?: number; server?: SolandKey } = {},
 ): Promise<Array<Record<string, unknown>>> {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=${
-      opts.limit ?? 50
-    }`,
-    { headers: authHeaders(token) },
+  const response = await request.fetch(
+    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
+    {
+      method: "QUERY",
+      data: { realms: [realmId], limit: opts.limit ?? 50 },
+      headers: authHeaders(token),
+    },
   );
   expect(response.status()).toBe(200);
   const body = await response.json();

@@ -1653,9 +1653,13 @@ export async function queryRealmEventsApi(
   realmId: string,
   opts: { server?: SolandKey; limit?: number } = {},
 ) {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=${opts.limit ?? 100}`,
-    { headers: authHeaders(token) },
+  const response = await request.fetch(
+    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
+    {
+      method: "QUERY",
+      data: { realms: [realmId], limit: opts.limit ?? 100 },
+      headers: authHeaders(token),
+    },
   );
   return await expectJsonOk<Record<string, unknown>>(
     response,
@@ -2793,9 +2797,13 @@ export async function advanceEnvelopeToActorFrontier(
       "Event envelope realm_id is required to refresh its frontier",
     );
   }
-  const response = await request.get(
-    `${solandBaseUrl(server)}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(actorDid)}&realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token) },
+  const response = await request.fetch(
+    `${solandBaseUrl(server)}/_arkret/self/events/frontier`,
+    {
+      method: "QUERY",
+      data: { actor_id: actorDid, realm_id: realmId },
+      headers: authHeaders(token),
+    },
   );
   if (allowInvisibleRealmGenesis && response.status() === 404) {
     const proofVerificationMethod = Array.isArray(envelope.proofs)
@@ -2882,9 +2890,13 @@ async function readRealmSealFrontier(
   realmId: string,
   server?: SolandKey,
 ): Promise<RealmSealFrontier> {
-  const response = await request.get(
-    `${solandBaseUrl(server)}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token) },
+  const response = await request.fetch(
+    `${solandBaseUrl(server)}/_arkret/self/events/frontier`,
+    {
+      method: "QUERY",
+      data: { realm_id: realmId },
+      headers: authHeaders(token),
+    },
   );
   // The endpoint answers 200 with an absent frontier before the genesis Seal
   // lands, so every member is treated as possibly missing and re-checked at
@@ -3570,24 +3582,24 @@ export async function queryPeerEventsApi(
     sourceDid?: string;
   },
 ) {
-  const params = new URLSearchParams({
-    limit: String(opts.limit ?? 100),
+  const body = stripUndefined({
+    realms: opts.realmId ? [opts.realmId] : undefined,
+    actors: opts.actorDid ? [opts.actorDid] : undefined,
+    limit: opts.limit ?? 100,
+    after: opts.after,
   });
-  if (opts.realmId) {
-    params.set("realms", opts.realmId);
-  }
-  if (opts.actorDid) {
-    params.set("actors", opts.actorDid);
-  }
-  if (opts.after) {
-    params.set("after", opts.after);
-  }
-  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events?${params.toString()}`;
-  const response = await request.get(targetUri, {
-    headers: peerGetHeaders(
-      opts.sourceDid,
-      solandServiceId(opts.server),
+  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
+  const sourceDid = opts.sourceDid ?? "did:web:cotest-peer.example";
+  const destinationDid = solandServiceId(opts.server);
+  const response = await request.fetch(targetUri, {
+    method: "QUERY",
+    data: canonicalJson(body),
+    headers: signedFederationPushHeaders(
+      sourceDid,
+      destinationDid,
       targetUri,
+      body,
+      { method: "QUERY" },
     ),
   });
   return await expectJsonOk<{
@@ -3603,12 +3615,19 @@ export async function peerEventFrontierApi(
   realmId: string,
   opts: { server?: SolandKey; sourceDid?: string } = {},
 ) {
-  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events/frontier?realm_id=${encodeURIComponent(realmId)}`;
-  const response = await request.get(targetUri, {
-    headers: peerGetHeaders(
-      opts.sourceDid,
-      solandServiceId(opts.server),
+  const body = { realm_id: realmId };
+  const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events/frontier`;
+  const sourceDid = opts.sourceDid ?? "did:web:cotest-peer.example";
+  const destinationDid = solandServiceId(opts.server);
+  const response = await request.fetch(targetUri, {
+    method: "QUERY",
+    data: canonicalJson(body),
+    headers: signedFederationPushHeaders(
+      sourceDid,
+      destinationDid,
       targetUri,
+      body,
+      { method: "QUERY" },
     ),
   });
   return await expectJsonOk<{
@@ -3866,52 +3885,18 @@ function peerEventsSubmitBody(
   }) as Record<string, unknown>;
 }
 
-function peerGetHeaders(
-  sourceDid = "did:web:cotest-peer.example",
-  destinationDid: string,
-  targetUri: string,
-): Record<string, string> {
-  const sourceTrustDomain = trustDomainFromServiceId(sourceDid);
-  const destinationTrustDomain = trustDomainFromServiceId(destinationDid);
-  const created = Math.floor(Date.now() / 1000);
-  const expires = created + 300;
-  const keyid = `${sourceDid}#federation-fanout-key`;
-  const signatureParams =
-    `("@method" "@target-uri" "@authority" "source-service-id" ` +
-    `"destination-service-id" "source-trust-domain" "destination-trust-domain");` +
-    `created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
-  const signatureBase = [
-    `"@method": GET`,
-    `"@target-uri": ${targetUri}`,
-    `"@authority": ${new URL(targetUri).host}`,
-    `"source-service-id": ${sourceDid}`,
-    `"destination-service-id": ${destinationDid}`,
-    `"source-trust-domain": ${sourceTrustDomain}`,
-    `"destination-trust-domain": ${destinationTrustDomain}`,
-    `"@signature-params": ${signatureParams}`,
-  ].join("\n");
-  const signature = sign(
-    null,
-    Buffer.from(signatureBase, "utf8"),
-    serviceHttpPrivateKey(sourceDid),
-  );
-  return {
-    "source-service-id": sourceDid,
-    "destination-service-id": destinationDid,
-    "source-trust-domain": sourceTrustDomain,
-    "destination-trust-domain": destinationTrustDomain,
-    "signature-input": `sig1=${signatureParams}`,
-    signature: `sig1=:${signature.toString("base64")}:`,
-  };
-}
-
 function signedFederationPushHeaders(
   sourceDid: string,
   destinationDid: string,
   targetUri: string,
   body: unknown,
-  opts: { expireSignature?: boolean; idempotencyKey?: string } = {},
+  opts: {
+    expireSignature?: boolean;
+    idempotencyKey?: string;
+    method?: "POST" | "QUERY";
+  } = {},
 ): Record<string, string> {
+  const method = opts.method ?? "POST";
   const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;
   const sourceTrustDomain = trustDomainFromServiceId(sourceDid);
@@ -3930,7 +3915,7 @@ function signedFederationPushHeaders(
     `"destination-service-id" "source-trust-domain" "destination-trust-domain"` +
     `${idempotencyComponent});created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
-    `"@method": POST`,
+    `"@method": ${method}`,
     `"@target-uri": ${targetUri}`,
     `"@authority": ${new URL(targetUri).host}`,
     `"content-digest": ${contentDigest}`,

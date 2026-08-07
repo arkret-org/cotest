@@ -180,7 +180,8 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .ok_or_else(|| anyhow!("read cursor submit response missing event_id: {marker}"))?;
 
     let markers = expect_json(
-        dave.get(&format!("/_arkret/self/events?realms={realm_id}&limit=50")),
+        dave.query("/_arkret/self/events")
+            .json(&json!({"realms": [realm_id], "limit": 50})),
         StatusCode::OK,
     )
     .await?;

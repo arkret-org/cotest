@@ -30,8 +30,8 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
         .filter_map(|operation| operation.as_str())
         .collect::<Vec<_>>();
     for required in [
-        "ak.edge.applet.query.ping",
-        "ak.edge.applet.query.describe",
+        "ak.edge.applet.read.ping",
+        "ak.edge.applet.read.describe",
         "ak.self.applet.install.command.preview",
         "ak.self.applet.command.install",
         "ak.self.applet.command.revoke",
@@ -96,7 +96,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         .collect::<Vec<_>>();
     for required in [
         "ak.self.agent.command.provision",
-        "ak.self.agent.query.list",
+        "ak.self.agent.read.list",
         "ak.self.agent.resource.get",
         "ak.self.agent.command.pause",
         "ak.self.agent.command.resume",

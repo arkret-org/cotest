@@ -38,15 +38,15 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 
     for required in [
         "ak.self.account.stream.subscribe",
-        "ak.find.directory.query.search_realms",
-        "ak.self.authz.query.check",
+        "ak.find.directory.read.search_realms",
+        "ak.self.authz.read.check",
         "ak.self.signal.command.send",
         "ak.edge.push.command.register_device",
         "ak.self.keys.backups.resource.replace",
-        "ak.self.keys.backups.query.list",
+        "ak.self.keys.backups.read.list",
         "ak.self.call.media.exchange.issue_token",
-        "ak.self.media.query.ice_config",
-        "ak.self.policy.query.check",
+        "ak.self.media.read.ice_config",
+        "ak.self.policy.read.check",
         "ak.self.moderation.command.report",
     ] {
         assert!(

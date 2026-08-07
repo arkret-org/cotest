@@ -237,8 +237,8 @@ test.describe("describes soland surface @fully-implemented", () => {
     }
 
     // §4.2 + service-api-schema.mdx §2.1 — every principal server must surface
-    // at least ak.server.query.describe + ak.self.events.command.submit on supported_operations.
-    expect(body.supported_operations, "exposes ak.server.query.describe").toContain("ak.server.query.describe");
+    // at least ak.server.read.describe + ak.self.events.command.submit on supported_operations.
+    expect(body.supported_operations, "exposes ak.server.read.describe").toContain("ak.server.read.describe");
     expect(body.supported_operations, "exposes ak.self.events.command.submit").toContain("ak.self.events.command.submit");
 
     await testInfo.attach("soland-describe", {

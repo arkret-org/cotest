@@ -1023,7 +1023,7 @@ async fn call_live_soland(
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(arkret_canonical::canonical_json_bytes(&typed)?)
             }
-            "ak.find.directory.query.search_realms" => {
+            "ak.find.directory.read.search_realms" => {
                 let typed: arkret_models_discovery::DirectorySearchRealmsRequestBody =
                     serde_json::from_value(body)?;
                 request
@@ -1279,7 +1279,7 @@ fn normalize_directory_describe(body: Value) -> Value {
             operations
                 .iter()
                 .filter_map(Value::as_str)
-                .any(|operation| operation == "ak.find.directory.query.describe")
+                .any(|operation| operation == "ak.find.directory.read.describe")
         })
         .unwrap_or(false);
     let accepts_did_web = body

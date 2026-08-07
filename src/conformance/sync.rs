@@ -610,6 +610,7 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
         "commitment_root_mismatch",
         "legacy_unprefixed_commitment_root",
         "silent_actor_seq_gap",
+        "entire_unknown_actor_omitted_without_independent_witness",
     ] {
         if !seen.contains(required) {
             bail!("snapshot inclusion challenge fixture missing case {required}");
@@ -672,6 +673,24 @@ fn evaluate_snapshot_inclusion_case(
             != Some(true)
     {
         return Ok(json!({"decision": "reject", "reason": "inclusion_proof_failed"}));
+    }
+    if response
+        .get("entire_actor_omitted")
+        .and_then(Value::as_bool)
+        == Some(true)
+        && response
+            .get("independent_actor_set_witness")
+            .is_none_or(Value::is_null)
+        && response
+            .get("raw_replay_completed")
+            .and_then(Value::as_bool)
+            != Some(true)
+    {
+        return Ok(json!({
+            "decision": "reject_high_assurance_snapshot",
+            "completeness_state": "unverified",
+            "reason": "inclusion_proof_failed",
+        }));
     }
 
     let entry_ids = entries
@@ -762,6 +781,12 @@ fn apply_snapshot_inclusion_mutation(
                 bail!("cannot drop gap attribution from actor_seq_range proof");
             };
             proof["gap_attribution"] = Value::Array(Vec::new());
+        }
+        "omit_actor_and_all_of_its_events_then_recompute_issuer_signature_root_count_and_actor_seq_ranges" =>
+        {
+            response["entire_actor_omitted"] = Value::Bool(true);
+            response["independent_actor_set_witness"] = Value::Null;
+            response["raw_replay_completed"] = Value::Bool(false);
         }
         other => bail!("unknown snapshot inclusion mutation {other}"),
     }

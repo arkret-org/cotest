@@ -277,10 +277,7 @@ pub fn build_operation_registry_gate_report_from_paths(
         .iter()
         .map(|operation| (operation.operation_id.clone(), operation.clone()))
         .collect::<BTreeMap<_, _>>();
-    let OpenApiBindings {
-        operations: openapi,
-        compatibility_bindings,
-    } = load_openapi_operations(&openapi_path)?;
+    let openapi = load_openapi_operations(&openapi_path)?;
     let completeness = load_completeness_report(&completeness_path)?;
     let schema_index = load_schema_index(&schema_index_path)?;
     let product_private = load_product_private_index(&paths.product_private_path)?;
@@ -311,7 +308,6 @@ pub fn build_operation_registry_gate_report_from_paths(
         entries.push(classify_observed_operation(
             observed,
             &registry_by_key,
-            &compatibility_bindings,
             &product_private,
         ));
     }
@@ -429,7 +425,7 @@ fn validate_durable_effects(
     let mut failures = Vec::new();
     for operation in registry_by_id.values() {
         let write_operation = matches!(operation.key.method.as_str(), "PUT" | "PATCH" | "DELETE")
-            || (operation.key.method == "POST" && !operation.operation_id.contains(".query."));
+            || (operation.key.method == "POST" && !operation.operation_id.contains(".read."));
         let Some(effect) = operation.durable_effect.as_ref() else {
             if write_operation {
                 failures.push(format!(
@@ -598,14 +594,7 @@ fn validate_durable_effects(
     Ok(failures)
 }
 
-/// OpenAPI bindings, split into the canonical operations and the deprecated
-/// compatibility spellings the spec still publishes for them.
-struct OpenApiBindings {
-    operations: BTreeMap<OperationKey, String>,
-    compatibility_bindings: BTreeMap<OperationKey, String>,
-}
-
-fn load_openapi_operations(path: &Path) -> Result<OpenApiBindings> {
+fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>> {
     let raw = fs::read_to_string(path)
         .map_err(|error| anyhow!("failed to read OpenAPI {}: {error}", path.display()))?;
     let value: Value = serde_yaml_ng::from_str(&raw)
@@ -616,7 +605,6 @@ fn load_openapi_operations(path: &Path) -> Result<OpenApiBindings> {
         .ok_or_else(|| anyhow!("OpenAPI {} missing paths object", path.display()))?;
 
     let mut operations = BTreeMap::new();
-    let mut compatibility_bindings = BTreeMap::new();
     for (path, item) in paths {
         if !path.starts_with("/_arkret") {
             continue;
@@ -628,19 +616,6 @@ fn load_openapi_operations(path: &Path) -> Result<OpenApiBindings> {
             let Some(operation) = item.get(*openapi_method).and_then(Value::as_object) else {
                 continue;
             };
-            // A compatibility binding is a second HTTP spelling of an operation
-            // that is already registered under its canonical method, so it
-            // carries `x-arkret-compatibility-binding-of` instead of an
-            // `operationId` of its own. Treating it as a missing id would make
-            // every deprecated alias look like an unregistered operation.
-            if let Some(canonical) = operation
-                .get("x-arkret-compatibility-binding-of")
-                .and_then(Value::as_str)
-            {
-                compatibility_bindings
-                    .insert(OperationKey::new(*method, path), canonical.to_owned());
-                continue;
-            }
             let operation_id = operation
                 .get("operationId")
                 .and_then(Value::as_str)
@@ -654,10 +629,7 @@ fn load_openapi_operations(path: &Path) -> Result<OpenApiBindings> {
             }
         }
     }
-    Ok(OpenApiBindings {
-        operations,
-        compatibility_bindings,
-    })
+    Ok(operations)
 }
 
 fn load_completeness_report(path: &Path) -> Result<BTreeMap<String, OperationKey>> {
@@ -877,7 +849,6 @@ fn validate_product_private_index(index: &ProductPrivateIndex) -> Vec<String> {
 fn classify_observed_operation(
     observed: ObservedOperation,
     registry_by_key: &BTreeMap<OperationKey, RegisteredOperation>,
-    compatibility_bindings: &BTreeMap<OperationKey, String>,
     product_private: &ProductPrivateIndex,
 ) -> OperationRegistryGateEntry {
     if let Some((operation_id, key)) =
@@ -895,20 +866,6 @@ fn classify_observed_operation(
             evidence: observed.evidence,
             gate_status: OperationRegistryGateStatus::Registered,
             operation_id: Some(operation_id),
-            reason: None,
-        };
-    }
-
-    if let Some((key, operation_id)) = find_compatibility_binding(&observed, compatibility_bindings)
-    {
-        let key_method = key.method.clone();
-        return OperationRegistryGateEntry {
-            source: observed.source,
-            method: observed.method.or(Some(key_method)),
-            path: observed.path,
-            evidence: observed.evidence,
-            gate_status: OperationRegistryGateStatus::Registered,
-            operation_id: Some(operation_id.clone()),
             reason: None,
         };
     }
@@ -941,28 +898,6 @@ fn classify_observed_operation(
                 .to_owned(),
         ),
     }
-}
-
-/// The operation an observed call site reaches through a declared
-/// compatibility binding, if any.
-///
-/// The Events read surface is registered under QUERY, and the OpenAPI declares
-/// the deprecated GET/POST spellings that remain servable during the migration
-/// as `x-arkret-compatibility-binding-of`. A caller still using one of those is
-/// calling a registered operation by a spelling the spec itself publishes, so
-/// the gate must not report it as an unregistered path — while a spelling the
-/// spec does not publish still fails.
-fn find_compatibility_binding<'a>(
-    observed: &ObservedOperation,
-    compatibility_bindings: &'a BTreeMap<OperationKey, String>,
-) -> Option<(&'a OperationKey, &'a String)> {
-    compatibility_bindings.iter().find(|(key, _)| {
-        observed
-            .method
-            .as_deref()
-            .is_none_or(|method| method == key.method)
-            && pattern_matches_path(&key.path, &observed.path)
-    })
 }
 
 fn find_registered_operation<'a>(
@@ -1262,6 +1197,17 @@ fn is_bare_path_list_element(line: &str) -> bool {
 
 fn infer_method_from_line(line: &str) -> Option<String> {
     let arkret_index = line.find("_arkret")?;
+    // Fetch-style calls carry the verb as an explicit property after the URL.
+    // Read it from the same source line so a QUERY call cannot borrow GET/POST
+    // from a neighboring array element, and neighboring calls cannot borrow
+    // this QUERY declaration.
+    for method in HTTP_METHODS {
+        if line.contains(&format!("method: \"{method}\""))
+            || line.contains(&format!("method: '{method}'"))
+        {
+            return Some((*method).to_owned());
+        }
+    }
     let prefix = &line[..arkret_index];
     for token in prefix.split(|ch: char| !ch.is_ascii_alphabetic()) {
         for method in INFERABLE_METHODS {
@@ -1738,6 +1684,12 @@ mod tests {
     }
 
     #[test]
+    fn explicit_fetch_query_method_wins_over_neighboring_get_calls() {
+        let line = r#"response: await request.fetch(`${base}/_arkret/self/events`, { method: "QUERY", data: { limit: 20 } })"#;
+        assert_eq!(infer_method_from_line(line).as_deref(), Some("QUERY"));
+    }
+
+    #[test]
     fn placeholders_match_registry_patterns() {
         assert!(pattern_matches_path(
             "/_arkret/self/keys/backups/{backup_id}",
@@ -1746,10 +1698,6 @@ mod tests {
         assert!(pattern_matches_path(
             "/_arkret/open/mimi/strands/{strand_id}/messages",
             "/_arkret/open/mimi/strands/{room_id}/messages"
-        ));
-        assert!(!pattern_matches_path(
-            "/_arkret/self/events",
-            "/_arkret/self/events/query"
         ));
     }
 }

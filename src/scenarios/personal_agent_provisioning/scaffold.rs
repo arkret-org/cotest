@@ -16,7 +16,7 @@ const PERSONAL_AGENT_OPERATIONS: &[&str] = &[
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY,
     arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PROVISION,
     arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
-    arkret_wire::ServiceOperationId::SELF_AGENT_QUERY_LIST,
+    arkret_wire::ServiceOperationId::SELF_AGENT_READ_LIST,
     arkret_wire::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
     arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
     arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,

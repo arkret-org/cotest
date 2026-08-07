@@ -8,8 +8,8 @@
 chain 传播。同步 REST 授权面（`POST/DELETE /_arkret/self/authz/grants*`、
 `GET /_soland/self/audit/events`）已从 spec 移除，本 scenario 不得复活它（SPEC-CR-020：零新增
 operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/check`
-（`ak.self.authz.query.check`，诊断/预检，非签名决定）与
-`GET /_arkret/self/authz/effective-grants`（`ak.self.authz.grants.query.effective`）。
+（`ak.self.authz.read.check`，诊断/预检，非签名决定）与
+`GET /_arkret/self/authz/effective-grants`（`ak.self.authz.grants.read.effective`）。
 
 ## Spec 锚点
 
@@ -17,7 +17,7 @@ operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/ch
 - `authz/capabilities.md` §10 — Authority chain；§10.1 收窄不变量（actions ⊆ issuer authority、resources 收窄、`effective_expires_at` ≤ issuer authority，违反 → `failed_precondition` reason=`authority_expiry_widening`（窗口）或 `schema_violation`（actions/resources 越界））；§10.3 revoke 因果传播（`grant_revoked_upstream`）
 - `authz/capabilities.md` §12 — Revocation 必须显式事件,不是删除记录
 - `authz/event-auth-state-resolution.md` §6 — authority chain revocation 传播
-- openapi:`ak.self.authz.query.check`(AuthzCheckOutcome 五值 `decision`)、`ak.self.authz.grants.query.effective`(GrantList)
+- openapi:`ak.self.authz.read.check`(AuthzCheckOutcome 五值 `decision`)、`ak.self.authz.grants.read.effective`(GrantList)
 
 ## 拓扑
 

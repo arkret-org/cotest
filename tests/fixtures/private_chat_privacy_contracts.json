@@ -60,7 +60,7 @@
       "name": "realm_remark_not_in_directory_projection",
       "surface": "directory_projection",
       "payload": {
-        "operation_id": "ak.find.directory.query.search_realms",
+        "operation_id": "ak.find.directory.read.search_realms",
         "result": {
           "realm_id": "ak:realm:0196b39d-0000-8000-8000-000000000101",
           "title": "Engineering",

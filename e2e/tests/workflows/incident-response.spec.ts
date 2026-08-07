@@ -350,9 +350,11 @@ async function queryRealmEventsWithDpop(
   session: DpopUserSession,
   realmId: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${solandBaseUrl()}/_arkret/self/events?realms=${encodeURIComponent(realmId)}&limit=100`;
-  const response = await request.get(url, {
-    headers: selfPathHeadersForDpopSession(session, "GET", url),
+  const url = `${solandBaseUrl()}/_arkret/self/events`;
+  const response = await request.fetch(url, {
+    method: "QUERY",
+    data: { realms: [realmId], limit: 100 },
+    headers: selfPathHeadersForDpopSession(session, "QUERY", url),
   });
   expect(response.status()).toBe(200);
   return (await response.json()) as Record<string, unknown>;

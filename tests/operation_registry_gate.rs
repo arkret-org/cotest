@@ -18,13 +18,13 @@ fn openapi_operation_id_drift_fails() -> Result<()> {
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.query.describe",
+            "ak.server.read.describe",
             "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_arkret/describe", "ak.server.query.wrong")],
+        &[("GET", "/_arkret/describe", "ak.server.read.wrong")],
     )?;
     write_json(
         &product_private_path,
@@ -45,7 +45,7 @@ fn openapi_operation_id_drift_fails() -> Result<()> {
         .expect_err("OpenAPI operationId drift must fail")
         .to_string();
     assert!(error.contains("operationId drift"));
-    assert!(error.contains("ak.server.query.wrong"));
+    assert!(error.contains("ak.server.read.wrong"));
     Ok(())
 }
 
@@ -58,13 +58,13 @@ fn unregistered_source_path_without_product_private_classification_fails() -> Re
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.query.describe",
+            "ak.server.read.describe",
             "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_arkret/describe", "ak.server.query.describe")],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe")],
     )?;
     write_json(
         &product_private_path,
@@ -99,13 +99,13 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.query.describe",
+            "ak.server.read.describe",
             "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_arkret/describe", "ak.server.query.describe")],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe")],
     )?;
     write_json(
         &product_private_path,
@@ -159,13 +159,13 @@ fn cotest_spec_files_are_scanned() -> Result<()> {
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.query.describe",
+            "ak.server.read.describe",
             "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_arkret/describe", "ak.server.query.describe")],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe")],
     )?;
     write_json(
         &product_private_path,
