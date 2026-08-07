@@ -20,8 +20,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, event_envelope,
-    event_envelope_with_preconditions, expect_json, head_eq_precondition,
+    ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, expect_json,
+    head_eq_precondition,
 };
 
 /// The one cell every `ak.realm.policy_server` write moves.
@@ -125,13 +125,16 @@ async fn delete_policy_server(
         .map(|value| vec![head_eq_precondition(POLICY_SERVER_CELL, value)])
         .unwrap_or_default();
     let request = RealmPolicyServerDeleteRequestBody {
-        policy_server_event: EventInitialSubmission::online(event_envelope_with_preconditions(
-            &client.actor,
-            realm_id,
-            arkret_wire::EventKind::REALM_POLICY_SERVER,
-            json!({ "tombstone": true }),
-            preconditions,
-        )),
+        policy_server_event: EventInitialSubmission::online(
+            client
+                .author_event_with_preconditions(
+                    realm_id,
+                    arkret_wire::EventKind::REALM_POLICY_SERVER,
+                    json!({ "tombstone": true }),
+                    preconditions,
+                )
+                .await?,
+        ),
     };
     let response = client
         .delete(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
@@ -149,12 +152,15 @@ async fn put_policy_server(
     declaration: Value,
 ) -> Result<(StatusCode, Value)> {
     let request = RealmPolicyServerReplaceRequestBody {
-        policy_server_event: EventInitialSubmission::online(event_envelope(
-            &client.actor,
-            realm_id,
-            arkret_wire::EventKind::REALM_POLICY_SERVER,
-            declaration,
-        )),
+        policy_server_event: EventInitialSubmission::online(
+            client
+                .author_event(
+                    realm_id,
+                    arkret_wire::EventKind::REALM_POLICY_SERVER,
+                    declaration,
+                )
+                .await?,
+        ),
     };
     let response = client
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
@@ -168,16 +174,19 @@ async fn put_policy_server(
 
 async fn link_governed_by(client: &TestActorClient, realm_id: &str, target: &str) -> Result<()> {
     let request = RealmLinkCreateRequestBody {
-        link_event: EventInitialSubmission::online(event_envelope(
-            &client.actor,
-            realm_id,
-            arkret_wire::EventKind::REALM_LINK,
-            json!({
-                "target_realm_id": target,
-                "link_kind": "governed_by",
-                "status": "active",
-            }),
-        )),
+        link_event: EventInitialSubmission::online(
+            client
+                .author_event(
+                    realm_id,
+                    arkret_wire::EventKind::REALM_LINK,
+                    json!({
+                        "target_realm_id": target,
+                        "link_kind": "governed_by",
+                        "status": "active",
+                    }),
+                )
+                .await?,
+        ),
     };
     let body = expect_json(
         client

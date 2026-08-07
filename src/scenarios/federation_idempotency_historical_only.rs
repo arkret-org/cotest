@@ -54,11 +54,6 @@ use serde_json::{Value, json};
 
 // ── Canonical pins for the C3 vector ────────────────────────────────────
 
-/// The security-closure vector id this scenario exercises. Same literal
-/// as `cotest::scenarios::security_closure_fixture::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE`,
-/// repeated here so a grep on `federation_idempotency_historical_only`
-/// finds the binding directly.
-
 /// Canonical `reason_code` carried on a cache-replay-after-key-revoke
 /// response. The SDK constant is the authoritative source — this pin
 /// guards drift between the SDK and the cotest scenario.

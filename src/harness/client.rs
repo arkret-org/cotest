@@ -709,6 +709,25 @@ impl TestActorClient {
     }
 
     pub async fn author_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Event> {
+        self.author_event_with_preconditions(realm_id, kind, payload, Vec::new())
+            .await
+    }
+
+    /// Author an Event that carries its own guards.
+    ///
+    /// A precondition is inside the bytes the caller signs, so a surface that
+    /// requires one -- the policy-server writes, for instance -- can only get it
+    /// from the caller. Attaching it here rather than in the scenario is what
+    /// keeps it on the same envelope that already resolves `seal_basis` from
+    /// the Realm Seal frontier: a Control Move authored without that basis is
+    /// refused before any guard is even looked at.
+    pub async fn author_event_with_preconditions(
+        &self,
+        realm_id: &str,
+        kind: &str,
+        payload: Value,
+        preconditions: Vec<arkret_wire::cba::Precondition>,
+    ) -> Result<Event> {
         self.ensure_authority_for_kind(realm_id, kind).await?;
         let frontier = expect_json(
             self.get("/_arkret/self/events/frontier")
@@ -738,6 +757,7 @@ impl TestActorClient {
             None,
         );
         event.prev_refs = frontier.frontier_event_ids;
+        event.preconditions = preconditions;
         let descriptor = arkret_wire::EventKind::from(kind).descriptor();
         let is_control_move = descriptor.is_some_and(|descriptor| {
             descriptor.reducer_input && descriptor.plane == Some("control")

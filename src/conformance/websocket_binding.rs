@@ -1036,10 +1036,10 @@ fn run_multiplex_trace(
                             channel.checkpoint();
                         }
                     }
-                    WebSocketServerEvent::ChannelError { channel_id, .. } => {
-                        if state.channel(&channel_id).is_none() {
-                            bail!("a channel error arrived on a closed channel");
-                        }
+                    WebSocketServerEvent::ChannelError { channel_id, .. }
+                        if state.channel(&channel_id).is_none() =>
+                    {
+                        bail!("a channel error arrived on a closed channel");
                     }
                     _ => {}
                 }
