@@ -292,7 +292,13 @@ fn build_bootstrap_create_event(
             created_at,
             hlc: arkret::Hlc::new(hlc.to_owned()).context("parse bootstrap HLC")?,
         },
-        &cotest::publication::project_cells,
+        &|event| {
+            arkret_schema::project_registered_cell_writes(
+                event,
+                arkret_canonical::DigestSuite::Sha256,
+            )
+            .map_err(|error| error.to_string())
+        },
     )
     .context("build self principal PCR create")?;
 

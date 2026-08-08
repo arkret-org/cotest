@@ -11,7 +11,9 @@ import {
   queryRealmEventsApi,
   sdkCapabilityActionRegistryDigest,
   sendMessageApi,
+  submitSignedEventBatchApi,
   typedId,
+  type AcceptedRealmBootstrap,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -26,10 +28,10 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const alice = uniqueUser("events-batch-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const realmId = typedId("realm");
+    const missingRealmId = typedId("realm");
 
     const missingFrontier = await request.get(
-      `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(realmId)}`,
+      `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(missingRealmId)}`,
       { headers: authHeaders(aliceToken) },
     );
     expect(
@@ -37,26 +39,38 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       "a not-yet-created Realm must not expose a synthetic empty frontier",
     ).toBe(404);
 
-    await createRealmApi(request, aliceToken, {
-      realm_id: realmId,
+    let acceptedBootstrap: AcceptedRealmBootstrap | undefined;
+    const realmId = await createRealmApi(request, aliceToken, {
       created_at: canonicalTimestamp(),
       ownerDid: alice.did,
       title: `Batch bootstrap ${Date.now()}`,
       summary: "cotest registered Realm genesis regression fixture",
       encryption_profile: "none",
+    }, {
+      onAcceptedBootstrap: (bootstrap) => {
+        acceptedBootstrap = bootstrap;
+      },
     });
+    expect(acceptedBootstrap, "accepted bootstrap capture").toBeDefined();
 
     const timeline = await queryRealmEventsApi(request, aliceToken, realmId);
-    const events = (timeline.events ?? []) as Array<Record<string, unknown>>;
+    const events = ((timeline.events ?? []) as Array<Record<string, unknown>>)
+      .filter((event) => event.actor_id === alice.did)
+      .sort((left, right) => Number(left.actor_seq) - Number(right.actor_seq));
+    const expectedKinds = [
+      "ak.realm.create",
+      "ak.realm.profile",
+      "ak.realm.policy_bundle",
+      "ak.realm.join_rule",
+      "ak.realm.history_visibility",
+      "ak.realm.discovery",
+      "ak.realm.plaintext_visible_services",
+      "ak.realm.delivery_binding_policy",
+      "ak.member.state",
+    ];
+    expect(events.map((event) => event.kind)).toEqual(expectedKinds);
     const create = events.find((event) => event.kind === "ak.realm.create");
-    const plaintextVisibleServices = events.find(
-      (event) => event.kind === "ak.realm.plaintext_visible_services",
-    );
     expect(create, "accepted Realm create Event").toBeTruthy();
-    expect(
-      plaintextVisibleServices,
-      "accepted plaintext-visible-services facet Event",
-    ).toBeTruthy();
     // realm-and-space.md section 2.5: v1 deleted the founding
     // `ak.capability.grant` slot. Genesis authority is the authority-root cell
     // the create Event's registered reducer contract writes, so an ordinary
@@ -67,18 +81,41 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     ).toBe(false);
     expect(create!.actor_seq).toBe(0);
     expect(create!.prev_refs).toEqual([]);
-    expect(
-      (create!.payload as { object?: Record<string, unknown> }).object,
-    ).not.toHaveProperty("plaintext_visible_services");
+    const createObject = (create!.payload as { object?: Record<string, unknown> }).object;
+    expect(createObject).not.toHaveProperty("title");
+    expect(createObject).not.toHaveProperty("summary");
+    expect(createObject).not.toHaveProperty("plaintext_visible_services");
+    expect(String(createObject?.genesis_salt)).toMatch(/^[A-Za-z0-9_-]{43}$/);
     // The create-locked registry basis the reducer copies into the
     // authority-root cell.
     expect(
-      (create!.payload as { object?: Record<string, unknown> }).object,
+      createObject,
     ).toMatchObject({
       capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     });
-    expect(plaintextVisibleServices!.actor_seq).toBe(1);
-    expect(plaintextVisibleServices!.prev_refs).toEqual([create!.event_id]);
+    events.forEach((event, index) => {
+      expect(event.actor_seq).toBe(index);
+      expect(event.prev_refs).toEqual(index === 0 ? [] : [events[index - 1]!.event_id]);
+    });
+
+    const first = acceptedBootstrap!;
+    const eventIds = first.events.map((event) => String(event.event_id));
+    expect(first.outcome.accepted).toEqual(eventIds);
+    const duplicate = await submitSignedEventBatchApi(
+      request,
+      aliceToken,
+      structuredClone(first.events),
+      { context: `retry accepted Realm bootstrap ${realmId}` },
+    );
+    expect(duplicate.accepted ?? []).toEqual([]);
+    expect(duplicate.duplicate).toEqual(eventIds);
+    expect(duplicate.ingress_receipts).toEqual(first.outcome.ingress_receipts);
+
+    const afterRetry = await queryRealmEventsApi(request, aliceToken, realmId);
+    const afterRetryEvents = (afterRetry.events ?? []) as Array<Record<string, unknown>>;
+    for (const eventId of eventIds) {
+      expect(afterRetryEvents.filter((event) => event.event_id === eventId)).toHaveLength(1);
+    }
 
     const frontierResponse = await request.get(
       `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(realmId)}`,
@@ -98,8 +135,8 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       kind: "realm_actor",
       realm_id: realmId,
       actor_id: alice.did,
-      next_actor_seq: 2,
-      frontier_event_ids: [plaintextVisibleServices!.event_id],
+      next_actor_seq: events.length,
+      frontier_event_ids: [events.at(-1)!.event_id],
     });
 
     const message = await sendMessageApi(
@@ -108,7 +145,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       realmId,
       "owner write after registered Realm genesis",
     );
-    expect(message.actor_seq).toBe(2);
-    expect(message.prev_refs).toEqual([plaintextVisibleServices!.event_id]);
+    expect(message.actor_seq).toBe(events.length);
+    expect(message.prev_refs).toEqual([events.at(-1)!.event_id]);
   });
 });

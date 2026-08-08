@@ -144,12 +144,10 @@ test.describe("transport negotiation", () => {
     const user = uniqueUser("e81-federation", "alpha");
     await ensureRegistered(request, user, { server: "alpha" });
     const token = await issueDevSession(request, user, { server: "alpha" });
-    const realmId = typedId("realm");
-    await createRealmApi(
+    const realmId = await createRealmApi(
       request,
       token,
       {
-        realm_id: realmId,
         title: "E8.1 federation signature fixture",
         ownerDid: user.did,
         creator_service_id: solandServiceId("alpha"),

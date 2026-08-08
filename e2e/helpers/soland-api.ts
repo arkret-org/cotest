@@ -252,6 +252,11 @@ export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
   }));
 }
 
+export type AcceptedRealmBootstrap = {
+  events: Array<Record<string, unknown>>;
+  outcome: Record<string, unknown>;
+};
+
 export async function createRealmApi(
   request: APIRequestContext,
   token: string,
@@ -288,10 +293,12 @@ export async function createRealmApi(
     schema_refs?: RealmObject["schema_refs"];
     ownerDid?: string;
     default_join_rule?: RealmObject["default_join_rule"];
-    realm_id?: string;
     created_at?: string;
   },
-  opts: { server?: SolandKey } = {},
+  opts: {
+    server?: SolandKey;
+    onAcceptedBootstrap?: (bootstrap: AcceptedRealmBootstrap) => void;
+  } = {},
 ): Promise<string> {
   const ownerDid =
     data.ownerDid ?? (await currentActorDidApi(request, token, opts));
@@ -484,9 +491,13 @@ export async function createRealmApi(
     },
   );
 
-  await submitSignedEventBatchApi(request, token, bootstrapEvents, {
+  const bootstrapOutcome = await submitSignedEventBatchApi(request, token, bootstrapEvents, {
     server: opts.server,
     context: `create realm ${data.title}`,
+  });
+  opts.onAcceptedBootstrap?.({
+    events: structuredClone(bootstrapEvents),
+    outcome: structuredClone(bootstrapOutcome),
   });
   realmAuthorityControllers.set(
     realmAuthorityControllerKey(opts.server, realmId),

@@ -12,7 +12,6 @@ import {
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
-  typedId,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -175,13 +174,11 @@ async function createHistoryFixture(
     issueDevSession(request, bob),
   ]);
 
-  const realmId = typedId("realm");
   const baseMs = Date.now();
-  await createRealm(
+  const realmId = await createRealm(
     request,
     aliceToken,
     alice,
-    realmId,
     opts.historyVisibility,
     createdAt(baseMs - 90_000),
   );
@@ -223,15 +220,13 @@ async function createRealm(
   request: APIRequestContext,
   token: string,
   actor: JointUser,
-  realmId: string,
   historyVisibility: "joined" | "shared",
   createdAtValue: string,
-) {
-  await createRealmApi(
+): Promise<string> {
+  return createRealmApi(
     request,
     token,
     {
-      realm_id: realmId,
       created_at: createdAtValue,
       ownerDid: actor.did,
       title: `history ${historyVisibility} ${Date.now()}`,

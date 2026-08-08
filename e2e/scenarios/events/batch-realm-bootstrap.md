@@ -11,17 +11,19 @@ by subsequent owner writes.
 1. Register Alice and issue a dev session.
 2. Confirm combined `(realm_id, actor_id)` frontier lookup returns `not_found`
    before the Realm exists.
-3. Submit the registered founding unit
-   `[ak.realm.create, ak.realm.plaintext_visible_services]` — `ak.realm.create`
-   plus the closed bootstrap follow-up facets the Realm declares. The create
+3. Submit the complete registered founding unit: `ak.realm.create`, profile,
+   policy bundle, join rule, history visibility, discovery, conditional
+   plaintext-visible services, delivery binding policy, and creator membership. The create
    object carries the create-locked `capability_action_registry_digest`; v1 has
    **no** founding `ak.capability.grant` slot.
-4. Query accepted history and assert the chain is `0/[] -> 1/[create_id]`, and
-   that the batch contains no `ak.capability.grant` at all.
-5. Query the combined frontier and assert `next_actor_seq=2` with the
-   plaintext-visible-services facet as its only head.
-6. Submit `ak.message.create` as Alice and assert it authors as
-   `2/[plaintext_visible_services_id]`.
+4. Query accepted history and assert every registered slot forms one exact
+   `actor_seq / prev_refs` chain, with no `ak.capability.grant` at all.
+5. Resubmit a byte-identical clone of the signed unit. Assert every Event is a
+   duplicate, every ingress receipt is byte-identical to the stored first receipt,
+   and accepted history still contains each Event exactly once.
+6. Query the combined frontier and assert its next sequence and only head are
+   the complete unit's creator-membership tail.
+7. Submit `ak.message.create` as Alice and assert it continues from that tail.
 
 ## Acceptance
 
@@ -34,4 +36,6 @@ by subsequent owner writes.
 - The create object's `capability_action_registry_digest` is the basis the
   reducer seeds that cell with, so it MUST equal the SDK's current digest.
 - The owner write immediately continues the exact accepted bootstrap chain.
+- An exact retry returns the original receipts and creates no second Event or
+  Realm-side state transition.
 - The scenario is tagged `@fully-implemented` so `joint-smoke` covers it.
