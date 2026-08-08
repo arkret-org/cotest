@@ -28,8 +28,10 @@
 
 use anyhow::Result;
 
-use crate::harness::{ArkretServer, dev_login};
-use crate::scenarios::identity_test_support::actor_did_for_service;
+use crate::harness::dev_login;
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, spawn_with_harness_account_authority,
+};
 
 mod backup_delete;
 mod blob;
@@ -40,7 +42,7 @@ mod moderation;
 mod push;
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
-    let server = ArkretServer::spawn_with_env(
+    let server = spawn_with_harness_account_authority(
         "protocol-payloads",
         &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )

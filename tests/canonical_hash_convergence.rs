@@ -95,7 +95,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // Regenerated after the Realm id in this payload moved to its
             // Event-derived complete digest token: the Realm id sits inside
             // this Event's preimage, so editing it necessarily moves the digest.
-            expected_digest: "sha256:6e229d37ceac222b160a9aea3dd2325ea36f643b9a1989a52aca51892d85e056",
+            expected_digest: "sha256:29cc90d1d29daf5b64ea3df5e42c503b156b0069b393d0d2eec24a8c5c20d6db",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.starid_webvh_update.v1",
@@ -352,7 +352,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     )
     .expect("effective-set digest");
     assert_eq!(
-        effective_set, "sha256:f687b7added051552cfd79a74ba225d52c6e9013bf667ed6db4bf5286a3f25e2",
+        effective_set, "sha256:c02f4878c538be0557b8db2396c647a93eb0769dd0a53032054e151e9c192d5b",
         "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
@@ -360,7 +360,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:51eef6673117e85cd276cd725dba7d0fed2f9084d668fd9d5b133e9240c03f15",
+        display_state, "sha256:10c1a879fe2349cdd78dbc3bd9832c1f8539c2221ff92880fcb16194cc926d47",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

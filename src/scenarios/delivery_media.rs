@@ -10,10 +10,11 @@ use crate::harness::{
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service, authorize_device_public_key, signed_keys_upload_body,
+    spawn_with_harness_account_authority,
 };
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
-    let server = ArkretServer::spawn("delivery-keys").await?;
+    let server = spawn_with_harness_account_authority("delivery-keys", &[]).await?;
     let alice_did = actor_did_for_service(server.service_id(), "delivery-alice")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let token = register_account(&server, &alice_did, "@delivery-alice", alice_device).await?;

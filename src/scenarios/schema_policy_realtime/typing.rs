@@ -2,11 +2,12 @@ use anyhow::Result;
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
-use crate::harness::ArkretServer;
-use crate::scenarios::identity_test_support::{actor_did_for_service, authorize_device_public_key};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, authorize_device_public_key, spawn_with_harness_account_authority,
+};
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
-    let server = ArkretServer::spawn("typing-push-rules").await?;
+    let server = spawn_with_harness_account_authority("typing-push-rules", &[]).await?;
     let alice = server
         .demo_client(
             "did:web:alice.example",
