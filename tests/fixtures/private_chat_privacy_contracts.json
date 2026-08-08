@@ -8,6 +8,38 @@
     "arkret-spec/spec/v1/artifacts/schemas/event-payload.schema.json",
     "arkret-spec/spec/v1/artifacts/registry/account-data-key-registry.json"
   ],
+  "founding_transcript_vector": {
+    "event_ids": [
+      "ak:event:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+      "ak:event:AWi7O9JH8Ib3wHJrt01Tl7Gf67pixYPhAmufRLOXFoBA",
+      "ak:event:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS"
+    ],
+    "expected_founding_unit_digest": "sha256:dc604271ea8bbefce03b4ef6916f12a01af81722e44b2f3640adc61d3a9e31dd",
+    "receipt": {
+      "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
+      "founder_id": "did:webvh:z6mkfixture:bob.example",
+      "realm_id": "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
+      "main_strand_id": "ak:strand:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS",
+      "founding_unit_digest": "sha256:dc604271ea8bbefce03b4ef6916f12a01af81722e44b2f3640adc61d3a9e31dd",
+      "authorization_core": {
+        "kind": "human",
+        "current_contact_basis_id": "01J8Z5Q6R7S8T9V0W1X2Y3Z4A5",
+        "founder_basis_id": "01J8Z5Q6R7S8T9V0W1X2Y3Z4A5",
+        "accepted_contact_evidence_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "slot_committed": true,
+      "issuer_service_id": "did:web:ps.example",
+      "issuer_service_binding_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "accepted_at": "2026-08-08T00:00:00.000Z",
+      "proof": {
+        "verification_method": "did:web:ps.example#key-1",
+        "created_at": "2026-08-08T00:00:00.000Z",
+        "jws": "eyJhbGciOiJFZERTQSJ9"
+      }
+    },
+    "expected_receipt_transcript_digest": "sha256:539b598278bee323b9c1479560f90eb224a6f704ebeaa449833e64fa365a2c14",
+    "expected_peer_verdict": "accept"
+  },
   "account_data_cases": {
     "positive": {
       "name": "realm_private_pin_pinned_true",
@@ -153,7 +185,7 @@
     "resolve_response": {
       "state": "found",
       "coordinates": {
-        "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
+        "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
         "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
         "main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
         "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
@@ -163,7 +195,7 @@
     },
     "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
     "binding_payload": {
-      "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
+      "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
       "participants_unordered": [
         "did:webvh:z6mkfixture:alice.example",
         "did:webvh:z6mkfixture:bob.example"

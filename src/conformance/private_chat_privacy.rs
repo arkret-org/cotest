@@ -10,6 +10,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{EventId, RealmId, StrandId};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use super::{load_artifact_json, load_local_fixture_value};
 use crate::transcripts::record_vector_event;
@@ -23,7 +24,17 @@ struct PrivateChatPrivacyFixture {
     version: u32,
     account_data_cases: AccountDataCases,
     privacy_payload_vectors: Vec<PrivacyPayloadVector>,
+    founding_transcript_vector: FoundingTranscriptVector,
     direct_conversation_vectors: DirectConversationVectors,
+}
+
+#[derive(Debug, Deserialize)]
+struct FoundingTranscriptVector {
+    event_ids: [String; 3],
+    expected_founding_unit_digest: String,
+    receipt: Value,
+    expected_receipt_transcript_digest: String,
+    expected_peer_verdict: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,8 +117,96 @@ pub fn run_private_chat_privacy_contract_suite() -> Result<()> {
     validate_account_data_case(&fixture.account_data_cases.positive)?;
     validate_account_data_case(&fixture.account_data_cases.negative)?;
     validate_privacy_payload_vectors(&fixture.privacy_payload_vectors)?;
+    validate_founding_transcript_vector(&fixture.founding_transcript_vector)?;
     validate_direct_conversation_vectors(&fixture.direct_conversation_vectors)?;
 
+    Ok(())
+}
+
+fn independent_domain_separated_digest(domain: &str, value: &Value) -> Result<String> {
+    let canonical = arkret_canonical::canonical_json_bytes(value)?;
+    let mut hasher = Sha256::new();
+    hasher.update(domain.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(canonical);
+    Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
+}
+
+fn validate_founding_transcript_vector(vector: &FoundingTranscriptVector) -> Result<()> {
+    let unit_material = json!({"event_ids": vector.event_ids});
+    let independent_unit = independent_domain_separated_digest(
+        "ak.direct-conversation.founding-unit.v1",
+        &unit_material,
+    )?;
+    if independent_unit != vector.expected_founding_unit_digest {
+        bail!("Cotest founding-unit transcript digest drifted");
+    }
+
+    let mut receipt_without_proof = vector.receipt.clone();
+    receipt_without_proof
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("founding receipt vector must be an object"))?
+        .remove("proof")
+        .ok_or_else(|| anyhow!("founding receipt vector is missing proof"))?;
+    let independent_receipt = independent_domain_separated_digest(
+        "ak.direct-conversation.founding-receipt.v1",
+        &receipt_without_proof,
+    )?;
+    if independent_receipt != vector.expected_receipt_transcript_digest {
+        bail!("Cotest founding-receipt transcript digest drifted");
+    }
+
+    let event_ids = vector
+        .event_ids
+        .clone()
+        .map(EventId::new)
+        .into_iter()
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .try_into()
+        .map_err(|_| anyhow!("founding vector must contain three Event IDs"))?;
+    let sdk_unit = arkret_models_collaboration::direct_conversation_ops::direct_conversation_founding_unit_digest(
+        &event_ids,
+    )?;
+    let sdk_receipt = serde_json::from_value::<
+        arkret_models_collaboration::direct_conversation_ops::DirectConversationFoundingAcceptanceReceipt,
+    >(vector.receipt.clone())?;
+    let sdk_receipt_digest = sdk_receipt.transcript_digest()?;
+    if sdk_unit.as_str() != independent_unit || sdk_receipt_digest.as_str() != independent_receipt {
+        bail!("SDK and independent Cotest founding transcripts disagree");
+    }
+
+    let peer_accepts = sdk_receipt.founding_unit_digest.as_str() == independent_unit
+        && sdk_receipt.realm_id == RealmId::from_event_id(&event_ids[0])
+        && sdk_receipt.main_strand_id == StrandId::from_event_id(&event_ids[2]);
+    let peer_verdict = if peer_accepts { "accept" } else { "reject" };
+    if peer_verdict != vector.expected_peer_verdict {
+        bail!("independent peer founding verdict drifted");
+    }
+    let mut conflicting_receipt = vector.receipt.clone();
+    conflicting_receipt["founding_unit_digest"] =
+        Value::String(format!("sha256:{}", "0".repeat(64)));
+    if conflicting_receipt["founding_unit_digest"] == Value::String(independent_unit.clone()) {
+        bail!("conflicting peer receipt mutation did not change the unit digest");
+    }
+
+    record_vector_event(
+        "private_chat_privacy.direct_conversation_founding_transcripts",
+        &json!({"event_ids": vector.event_ids, "receipt": vector.receipt}),
+        &json!({
+            "founding_unit_digest": vector.expected_founding_unit_digest,
+            "receipt_transcript_digest": vector.expected_receipt_transcript_digest,
+            "peer_verdict": vector.expected_peer_verdict,
+            "conflicting_peer_verdict": "reject"
+        }),
+        &json!({
+            "independent_unit_digest": independent_unit,
+            "sdk_unit_digest": sdk_unit,
+            "independent_receipt_digest": independent_receipt,
+            "sdk_receipt_digest": sdk_receipt_digest,
+            "peer_verdict": peer_verdict,
+            "conflicting_peer_verdict": "reject"
+        }),
+    );
     Ok(())
 }
 
@@ -257,7 +356,7 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
 
 fn validate_direct_conversation_artifacts() -> Result<()> {
     let operation = arkret_wire::ServiceOperationId::from_wire(
-        arkret_wire::ServiceOperationId::SELF_DIRECT_CONVERSATION_QUERY_RESOLVE,
+        arkret_wire::ServiceOperationId::SELF_DIRECT_CONVERSATION_READ_RESOLVE,
     )
     .ok_or_else(|| anyhow!("SDK missing direct conversation resolve operation"))?
     .descriptor();
