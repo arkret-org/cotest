@@ -505,7 +505,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     "state_resolution.cba.realm_create_projection_closure",
                     &json!({"vector": vector.clone()}),
                     &json!({
-                        "required_projection_count": 4,
+                        "required_projection_count": 5,
                         "genesis_state_root": "byte_identical_across_independent_implementations",
                     }),
                     &json!({
@@ -706,8 +706,8 @@ fn validate_realm_alias_single_carrier(vector: &Value, vector_name: &str) -> Res
 
 fn validate_realm_create_projection_closure(vector: &Value, vector_name: &str) -> Result<()> {
     let projected_writes = required_array(vector, "/required_projected_writes", vector_name)?;
-    if projected_writes.len() != 4 {
-        bail!("vector {vector_name} must define exactly four realm-create projected writes");
+    if projected_writes.len() != 5 {
+        bail!("vector {vector_name} must define exactly five realm-create projected writes");
     }
 
     let mut effect_kinds = std::collections::BTreeMap::new();
@@ -719,27 +719,16 @@ fn validate_realm_create_projection_closure(vector: &Value, vector_name: &str) -
         }
     }
     for (cell, op_kind) in [
-        ("ak:cell:ak.component.realm.metadata.v1:null", "set"),
-        (
-            "ak:cell:ak.component.member.state.v1:<payload.object.created_by>",
-            "transition",
-        ),
+        ("ak:cell:ak.component.realm.genesis.v1:null", "set"),
         ("ak:cell:ak.component.realm.create.v1:null", "append"),
         ("ak:cell:ak.component.notary.v1:null", "set"),
+        ("ak:cell:ak.component.realm.reducer_profile.v1:null", "set"),
+        ("ak:cell:ak.component.realm.authority_root.v1:null", "set"),
     ] {
         if effect_kinds.get(cell) != Some(&op_kind) {
             bail!("vector {vector_name} must bind realm-create cell {cell} to op_kind={op_kind}");
         }
     }
-    let member_effect = projected_writes
-        .iter()
-        .find(|effect| {
-            effect.get("cell").and_then(Value::as_str)
-                == Some("ak:cell:ak.component.member.state.v1:<payload.object.created_by>")
-        })
-        .expect("member effect checked above");
-    require_str_eq(member_effect, "/from", "leave", vector_name)?;
-    require_str_eq(member_effect, "/to", "join", vector_name)?;
     let create_effect = projected_writes
         .iter()
         .find(|effect| {
@@ -760,12 +749,12 @@ fn validate_realm_create_projection_closure(vector: &Value, vector_name: &str) -
     require_str_eq(
         vector,
         "/expected/creator_member_cell_proof",
-        "inclusion",
+        "inclusion from the explicit final ak.member.state bootstrap facet",
         vector_name,
     )?;
     require_bool_eq(
         vector,
-        "/expected/realm_metadata_cell_present_in_genesis_leaf_set",
+        "/expected/realm_genesis_and_profile_cells_present_in_genesis_leaf_set",
         true,
         vector_name,
     )?;
@@ -785,9 +774,9 @@ fn validate_realm_create_projection_closure(vector: &Value, vector_name: &str) -
         .map(|case| required_str(case, "name"))
         .collect::<Result<_>>()?;
     let expected_negative_names = BTreeSet::from([
-        "missing_member_state_projection",
+        "implicit_member_state_projection",
         "creator_non_membership_proof",
-        "metadata_cell_only_after_first_update",
+        "profile_cell_after_bootstrap",
         "extra_unregistered_projection",
     ]);
     if negative_names != expected_negative_names {

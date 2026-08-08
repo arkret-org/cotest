@@ -916,7 +916,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const body = await resp.json();
       expect(wireErrCode(body)).toBe("unsupported_feature");
       expect(JSON.stringify(body)).not.toContain('"accepted"');
-      expect(JSON.stringify(body)).not.toContain(eventId);
+      expect(JSON.stringify(body)).not.toContain(String(envelope.event_id));
     },
   );
 });

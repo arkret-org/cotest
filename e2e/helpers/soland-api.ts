@@ -48,6 +48,7 @@ export type SignedEventEnvelopeArgs = {
   authContext?: Record<string, unknown>;
   prevRefs?: string[];
   scopeRef?: Record<string, unknown>;
+  authorizationRef?: string;
 };
 
 export type EventProofMode = "dev-proof" | "detached-jws";
@@ -286,7 +287,6 @@ export async function createRealmApi(
     federation_policy?: RealmObject["federation_policy"];
     schema_refs?: RealmObject["schema_refs"];
     ownerDid?: string;
-    owning_organizations?: string[];
     default_join_rule?: RealmObject["default_join_rule"];
     realm_id?: string;
     created_at?: string;
@@ -304,29 +304,20 @@ export async function createRealmApi(
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
-  // Annotated with the generated mirror of the closed `realm.schema.json`, so
-  // an unregistered member is a `tsc --noEmit` error instead of a live
-  // `Realm candidate object violates ak.schema.realm.v1` rejection.
-  const realmObject: Omit<RealmObject, "id"> = {
-    schema: "ak.schema.realm.v1",
-    title: data.title,
-    summary: data.summary,
-    created_by: ownerDid,
+  if (data.history_visibility === "restricted") {
+    throw new Error(
+      "createRealmApi requires an explicit history-sharing policy for restricted history",
+    );
+  }
+  const realmGenesis = {
+    schema: "ak.schema.realm_genesis.v1",
+    purpose: "collaboration",
+    genesis_salt: base64url(randomBytes(32)),
     trust_domain: "ak:trust_domain:soland.local",
     schema_refs: data.schema_refs ?? ["ak.schema.realm.v1"],
-    default_discoverability:
-      data.discoverability ?? (data.public ? "public" : "listed"),
-    default_join_rule: data.default_join_rule ?? "invite",
-    history_visibility: data.history_visibility ?? "shared",
     reducer_profile: "ak.reducer.core.v1",
     encryption_profile: data.encryption_profile ?? "none",
-    ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
-    ...(data.sync_endpoints ? { sync_endpoints: data.sync_endpoints } : {}),
-    ...(data.owning_organizations
-      ? { owning_organizations: data.owning_organizations }
-      : {}),
     security_class: "standard",
-    federation_policy: data.federation_policy ?? "restricted",
     notary_profile: "single_did",
     digest_algorithm: "sha256",
     // This helper creates Principal-Server-hosted collaboration Realms. The
@@ -337,7 +328,6 @@ export async function createRealmApi(
     // into the Realm authority-root cell, which is what gives the creator
     // effective `ak.realm.owner`. v1 issues no genesis self-grant.
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
-    created_at: createdAt,
   };
   const realmCreateCell = "ak:cell:ak.component.realm.create.v1:null";
   const { envelope: realmCreateEvent, realmId } = signedRealmGenesisEnvelope({
@@ -355,34 +345,98 @@ export async function createRealmApi(
       },
     ],
     payload: {
-      object: realmObject,
+      object: realmGenesis,
     },
   });
   // The genesis Event names itself to everything that follows, and its id is
   // derived from the envelope, so the chain can only be built afterwards.
-  const realmCreateEventId = realmCreateEvent.event_id as string;
   const bootstrapEvents = [realmCreateEvent];
-  if (plaintextVisibleServices.length > 0) {
-    const plaintextVisibleServicesCell =
-      "ak:cell:ak.component.realm.plaintext_visible_services.v1:null";
+  const pushBootstrapEvent = (
+    kind: string,
+    cell: string,
+    payload: Record<string, unknown>,
+  ): void => {
+    const predecessorId = stringValue(
+      bootstrapEvents[bootstrapEvents.length - 1]?.event_id,
+    );
+    if (!predecessorId) {
+      throw new Error(`Realm bootstrap predecessor for ${kind} is missing event_id`);
+    }
     bootstrapEvents.push(
       signedEventEnvelope({
         actorDid: ownerDid,
         realmId,
-        kind: "ak.realm.plaintext_visible_services",
-        actorSeq: 1,
+        kind,
+        actorSeq: bootstrapEvents.length,
         createdAt,
-        prevRefs: [realmCreateEventId],
+        prevRefs: [predecessorId],
+        authorizationRef: REALM_AUTHORITY_ROOT_CELL,
         preconditions: [
           {
-            cell: plaintextVisibleServicesCell,
+            cell,
             predicate: { op: "head_eq", value: null },
           },
         ],
-        payload: { services: plaintextVisibleServices },
+        payload,
       }),
     );
+  };
+  pushBootstrapEvent(
+    "ak.realm.profile",
+    "ak:cell:ak.component.realm.profile.v1:null",
+    {
+      schema: "ak.schema.realm_profile.v1",
+      title: data.title,
+      ...(data.summary === undefined ? {} : { summary: data.summary }),
+    },
+  );
+  pushBootstrapEvent(
+    "ak.realm.policy_bundle",
+    "ak:cell:ak.component.realm.policy_bundle.v1:null",
+    {
+      policy_revision: 1,
+      federation_policy: data.federation_policy ?? "restricted",
+      content_encryption_floor:
+        data.encryption_profile === "mls_rfc9420"
+          ? "e2ee_required"
+          : "allow_plaintext",
+      metadata_encryption_floor:
+        data.encryption_profile === "mls_rfc9420"
+          ? "e2ee_required"
+          : "allow_plaintext",
+      ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
+      ...(data.sync_endpoints ? { sync_endpoints: data.sync_endpoints } : {}),
+    },
+  );
+  pushBootstrapEvent(
+    "ak.realm.join_rule",
+    "ak:cell:ak.component.realm.join_rule.v1:null",
+    { value: data.default_join_rule ?? "invite" },
+  );
+  pushBootstrapEvent(
+    "ak.realm.history_visibility",
+    "ak:cell:ak.component.realm.history_visibility.v1:null",
+    { value: data.history_visibility ?? "shared" },
+  );
+  pushBootstrapEvent(
+    "ak.realm.discovery",
+    "ak:cell:ak.component.realm.discovery.v1:null",
+    {
+      value: data.discoverability ?? (data.public ? "public" : "listed"),
+    },
+  );
+  if (plaintextVisibleServices.length > 0) {
+    pushBootstrapEvent(
+      "ak.realm.plaintext_visible_services",
+      "ak:cell:ak.component.realm.plaintext_visible_services.v1:null",
+      { services: plaintextVisibleServices },
+    );
   }
+  let creatorDeliveryBinding: Record<string, unknown> | undefined;
+  let deliveryPolicy: Record<string, unknown> = {
+    realm_id: realmId,
+    unroutable_membership_allowed: true,
+  };
   if (data.creator_service_id) {
     const didDocumentResponse = await request.get(
       `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(ownerDid)}/did-document`,
@@ -391,7 +445,7 @@ export async function createRealmApi(
       didDocumentResponse,
       `resolve creator DID document ${ownerDid}`,
     );
-    const deliveryPolicy = {
+    deliveryPolicy = {
       realm_id: realmId,
       allowed_binding_sources: ["did_document_default"],
       did_document_default_allowed: true,
@@ -400,77 +454,35 @@ export async function createRealmApi(
       unroutable_membership_allowed: true,
       rebind_authorization: "member",
     };
-    const policyCell =
-      "ak:cell:ak.component.realm.delivery_binding_policy.v1:null";
-    const predecessorId = stringValue(
-      bootstrapEvents[bootstrapEvents.length - 1]?.event_id,
-    );
-    if (!predecessorId) {
-      throw new Error("Realm bootstrap predecessor is missing event_id");
-    }
-    const policyEvent = signedEventEnvelope({
-      actorDid: ownerDid,
-      realmId,
-      kind: "ak.realm.delivery_binding_policy",
-      actorSeq: bootstrapEvents.length,
-      createdAt,
-      prevRefs: [predecessorId],
-      preconditions: [
-        {
-          cell: policyCell,
-          predicate: { op: "head_eq", value: null },
-        },
-      ],
-      payload: deliveryPolicy,
-    });
-    const policyEventId = stringValue(policyEvent.event_id);
-    if (!policyEventId) {
-      throw new Error(
-        "Realm delivery binding policy Event is missing event_id",
-      );
-    }
-    bootstrapEvents.push(policyEvent);
-
-    const memberCell = `ak:cell:ak.component.member.state.v1:${ownerDid}`;
-    bootstrapEvents.push(
-      signedEventEnvelope({
-        actorDid: ownerDid,
-        realmId,
-        kind: "ak.member.state",
-        actorSeq: bootstrapEvents.length,
-        createdAt,
-        prevRefs: [policyEventId],
-        preconditions: [
-          {
-            cell: memberCell,
-            predicate: { op: "head_eq", value: "join" },
-          },
-        ],
-        payload: {
-          realm_id: realmId,
-          actor_id: ownerDid,
-          membership: "join",
-          delivery_status: "routable",
-          delivery_binding: {
-            recipient_service_id: data.creator_service_id,
-            recipient_service_kind: "principal_server",
-            binding_scope: "realm",
-            binding_source: "did_document_default",
-            delivery_modes: [
-              "events",
-              "sync",
-              "to_device",
-              "push",
-              "key_packages",
-            ],
-            service_endpoint: solandBaseUrl(opts.server),
-            did_document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
-            resolved_at: createdAt,
-          },
-        },
-      }),
-    );
+    creatorDeliveryBinding = {
+      recipient_service_id: data.creator_service_id,
+      recipient_service_kind: "principal_server",
+      binding_scope: "realm",
+      binding_source: "did_document_default",
+      delivery_modes: ["events", "sync", "to_device", "push", "key_packages"],
+      service_endpoint: solandBaseUrl(opts.server),
+      did_document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
+      resolved_at: createdAt,
+    };
   }
+  pushBootstrapEvent(
+    "ak.realm.delivery_binding_policy",
+    "ak:cell:ak.component.realm.delivery_binding_policy.v1:null",
+    deliveryPolicy,
+  );
+  pushBootstrapEvent(
+    "ak.member.state",
+    `ak:cell:ak.component.member.state.v1:${ownerDid}`,
+    {
+      realm_id: realmId,
+      actor_id: ownerDid,
+      membership: "join",
+      delivery_status: creatorDeliveryBinding ? "routable" : "unroutable",
+      ...(creatorDeliveryBinding
+        ? { delivery_binding: creatorDeliveryBinding }
+        : {}),
+    },
+  );
 
   await submitSignedEventBatchApi(request, token, bootstrapEvents, {
     server: opts.server,
@@ -2000,6 +2012,7 @@ export function signedEventEnvelope(
         ? { kind: "realm_genesis" }
         : { kind: "realm", realm_id: args.realmId }),
     actor_id: args.actorDid,
+    authorization_ref: args.authorizationRef,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
     hlc,

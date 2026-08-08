@@ -1901,13 +1901,10 @@ test.describe("MLS group encryption", () => {
     expect(clean.accepted ?? []).toContain(cleanEventId);
   });
 
-  // encryption_profile is a create-locked Realm field (spec
-  // realm-and-space.md §2.3). soland enforces this in operations.rs
-  // (operation_touches_encryption_profile → realm_encryption_profile_create_locked)
-  // but no soland unit test or cotest case exercises it. This pins the wire
-  // rejection so a regression that lets the profile be patched after creation
-  // — silently downgrading an Encrypted Realm to plaintext — is caught.
-  test("ak.realm.update that patches encryption_profile is rejected (create-locked)", async ({
+  // encryption_profile is a create-locked Realm genesis field. No mutable
+  // facet may carry it; in particular the closed policy bundle rejects an
+  // attempted post-genesis downgrade before reducer admission.
+  test("Realm policy facet cannot rewrite create-locked encryption_profile", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -1925,10 +1922,11 @@ test.describe("MLS group encryption", () => {
     const updateEnvelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
-      kind: "ak.realm.update",
+      kind: "ak.realm.policy_bundle",
       payload: {
-        target_ref: realmId,
-        patch: { encryption_profile: { $op: "set", value: "none" } },
+        policy_revision: 2,
+        federation_policy: "restricted",
+        encryption_profile: "none",
       },
     });
     await alignSignedEventToActorFrontierApi(
@@ -1943,7 +1941,7 @@ test.describe("MLS group encryption", () => {
 
     const body = await resp.json();
     expect([400, 409, 412, 422], JSON.stringify(body)).toContain(resp.status());
-    expect(wireErrCode(body)).toBe("realm_encryption_profile_create_locked");
+    expect(wireErrCode(body)).toBe("schema_violation");
   });
 
   // Circle counterpart of the realm create-lock.

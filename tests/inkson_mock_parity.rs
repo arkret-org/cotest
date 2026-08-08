@@ -854,36 +854,25 @@ fn realm_bootstrap_batch(
     realm_id: &str,
     title: &str,
 ) -> Result<(String, Value)> {
-    let creator = arkret_identifiers::Did::new(ctx.alice_did.clone())?;
-    let service_id = arkret_identifiers::Did::new(ctx.service_id.clone())?;
-    let mut realm = arkret_models_collaboration::objects::realm::Realm::new(
-        arkret_identifiers::RealmId::new(realm_id.to_owned())?,
-        title,
-        creator,
-        arkret_identifiers::TypedTrustDomainId::new(
-            "ak:trust_domain:mock-parity.cotest.local".to_owned(),
-        )?,
-        arkret_wire::CORE_REDUCER_PROFILE,
-        arkret_models_collaboration::objects::realm::NotaryProfile::SingleDid,
-        arkret_wire::notary::NotaryValue::single_did(service_id),
-        arkret::current_capability_action_registry_digest()?,
-    );
-    realm.summary = Some("created by T-P0-04 parity baseline".to_owned());
-    realm.default_discoverability = serde_json::from_value(json!("public"))?;
-    realm.default_join_rule = serde_json::from_value(json!("public"))?;
-    realm.history_visibility = serde_json::from_value(json!("world_readable"))?;
-    realm.security_class = Some(serde_json::from_value(json!("standard"))?);
-    realm.federation_policy = Some(serde_json::from_value(json!("open"))?);
-    realm.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-22T10:00:00.000Z")?
-        .with_timezone(&chrono::Utc);
-    // R3.1: the create payload carries no object id.
-    realm.id = None;
-    let payload = arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm);
+    let draft = cotest::harness::realm_create_payload(
+        &ctx.alice_did,
+        &ctx.service_id,
+        realm_id,
+        &json!({
+            "title": title,
+            "summary": "created by T-P0-04 parity baseline",
+            "discoverability": "public",
+            "join_rule": "public",
+            "history_visibility": "world_readable",
+            "trust_domain": "ak:trust_domain:mock-parity.cotest.local",
+            "genesis_salt": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "plaintext_visible_services": []
+        }),
+    )?;
     let (derived_realm_id, events) =
         cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
             &ctx.alice_did,
-            payload,
-            None,
+            draft,
             MOCK_PARITY_ALICE_SIGNING_SEED,
             &cotest::fixture_did_url(format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did)),
         )?;

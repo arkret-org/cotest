@@ -604,12 +604,10 @@ async function submitRealmTitleUpdate(
     signedEventEnvelope({
       actorDid,
       realmId: realmId,
-      kind: "ak.realm.update",
+      kind: "ak.realm.profile",
       payload: {
-        target_ref: realmId,
-        patch: {
-          title: { $op: "set", value: title },
-        },
+        schema: "ak.schema.realm_profile.v1",
+        title,
       },
     }),
     { context: `realm title update ${title}` },

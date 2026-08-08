@@ -403,10 +403,9 @@ impl TestActorClient {
         // Only a construction placeholder: the create payload drops the object
         // id (R3.1) and the real Realm id comes back out of the genesis Event.
         let placeholder_realm_id = next_typed_id("realm");
-        let (payload, plaintext_visible_services) =
+        let draft =
             realm_create_payload(&self.actor, &self.service_id, &placeholder_realm_id, &body)?;
-        let (realm_id, events) =
-            realm_bootstrap_event_batch(&self.actor, payload, plaintext_visible_services)?;
+        let (realm_id, events) = realm_bootstrap_event_batch(&self.actor, draft)?;
         self.controlled_realms
             .lock()
             .expect("cotest controlled-Realm set is not poisoned")

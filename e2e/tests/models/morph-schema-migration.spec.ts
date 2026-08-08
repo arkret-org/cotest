@@ -376,12 +376,12 @@ test.describe("morph schema migration @fully-implemented", () => {
     const alice = uniqueUser("morph-migrate-c-alice");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const realmId = await createRealmApi(request, token, {
+    let realmId = await createRealmApi(request, token, {
       title: `Morph migrate C ${Date.now()}`,
     });
     const fromRefs = ["ak.schema.morph.customer_risk.v1"];
     const toRefs = ["ak.schema.morph.customer_risk.ext.v1"];
-    const morphId = await createCustomerRiskMorph(request, token, alice.did, realmId, fromRefs, {
+    let morphId = await createCustomerRiskMorph(request, token, alice.did, realmId, fromRefs, {
       status: "open",
       severity: "high",
     });
@@ -398,22 +398,20 @@ test.describe("morph schema migration @fully-implemented", () => {
     expect(beforeProfile.status, `breaking pre-profile body: ${beforeProfile.text}`).toBeGreaterThanOrEqual(400);
     expect(wireErrCode(beforeProfile.body)).toBe("morph_schema_refs_transformation_unsupported");
 
-    // 2. declare the opt-in migration profile via ak.realm.update.
-    await submitSignedEventApi(
+    // 2. Profiles that alter the Realm's interpretation are declared in the
+    // signed genesis schema_refs. A fresh intent is required; the old
+    // monolithic Realm update surface no longer exists.
+    realmId = await createRealmApi(request, token, {
+      title: `Morph migrate C opted-in ${Date.now()}`,
+      schema_refs: ["ak.schema.realm.v1", MIGRATION_PROFILE_ID],
+    });
+    morphId = await createCustomerRiskMorph(
       request,
       token,
-      signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.realm.update",
-        payload: {
-          target_ref: realmId,
-          patch: {
-            active_profiles: { $op: "set", value: [MIGRATION_PROFILE_ID] },
-          },
-        },
-      }),
-      { context: "declare migration profile" },
+      alice.did,
+      realmId,
+      fromRefs,
+      { status: "open", severity: "high" },
     );
 
     // 3. breaking now accepted.
@@ -486,21 +484,8 @@ test.describe("morph schema migration @fully-implemented", () => {
     // Vectors are transformation-class → the Realm declares the opt-in profile.
     const realmId = await createRealmApi(request, token, {
       title: `Morph migrate D ${Date.now()}`,
+      schema_refs: ["ak.schema.realm.v1", MIGRATION_PROFILE_ID],
     });
-    await submitSignedEventApi(
-      request,
-      token,
-      signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.realm.update",
-        payload: {
-          target_ref: realmId,
-          patch: { active_profiles: { $op: "set", value: [MIGRATION_PROFILE_ID] } },
-        },
-      }),
-      { context: "declare migration profile for vectors" },
-    );
 
     for (const vector of vectors) {
       const expectedCanonical = canonicalJson(vector.expected_output);

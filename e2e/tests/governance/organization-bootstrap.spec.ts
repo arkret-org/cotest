@@ -100,7 +100,6 @@ test.describe("organization principal bootstrap / delegation", () => {
       const realmId = await createRealmApi(request, token, {
         title: `S30 org boot ${Date.now()}`,
         public: true,
-        owning_organizations: [orgDid],
       });
 
       // Statement signed under the delegation (governance_service issuer).
@@ -174,7 +173,6 @@ test.describe("organization principal bootstrap / delegation", () => {
       const realmId = await createRealmApi(request, token, {
         title: `S30 org boot revoked ${Date.now()}`,
         public: true,
-        owning_organizations: [orgDid],
       });
 
       // soland must reject a statement that still references the revoked

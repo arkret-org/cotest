@@ -26,8 +26,8 @@ use super::assertions::expect_json;
 use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
-    NEXT_EVENT_SEQ, canonical_device_id, events_frontier_request_body, member_join_payload,
-    next_typed_id, query_method, realm_create_payload,
+    NEXT_EVENT_SEQ, RealmBootstrapDraft, canonical_device_id, events_frontier_request_body,
+    member_join_payload, next_typed_id, query_method, realm_create_payload,
 };
 
 type RegisteredEventSigner = ([u8; 32], DidUrl);
@@ -182,7 +182,7 @@ pub async fn create_realm(
     title: &str,
 ) -> Result<String> {
     let realm_id = next_typed_id("realm");
-    let (payload, plaintext_visible_services) = realm_create_payload(
+    let draft = realm_create_payload(
         actor,
         server.service_id(),
         &realm_id,
@@ -193,8 +193,7 @@ pub async fn create_realm(
             "plaintext_visible_services": [server.service_id()]
         }),
     )?;
-    let (realm_id, events) =
-        realm_bootstrap_event_batch(actor, payload, plaintext_visible_services)?;
+    let (realm_id, events) = realm_bootstrap_event_batch(actor, draft)?;
     let events = events
         .into_iter()
         .map(arkret_wire::EventInitialSubmission::online)
@@ -220,7 +219,7 @@ pub async fn create_realm_with_signing_seed(
     signing_seed: [u8; 32],
 ) -> Result<String> {
     let realm_id = next_typed_id("realm");
-    let (payload, plaintext_visible_services) = realm_create_payload(
+    let draft = realm_create_payload(
         actor,
         server.service_id(),
         &realm_id,
@@ -233,8 +232,7 @@ pub async fn create_realm_with_signing_seed(
     )?;
     let (realm_id, events) = realm_bootstrap_event_batch_with_signing_seed(
         actor,
-        payload,
-        plaintext_visible_services,
+        draft,
         signing_seed,
         &verification_method_for_actor(actor),
     )?;
@@ -257,19 +255,10 @@ pub async fn create_realm_with_signing_seed(
 
 pub fn realm_bootstrap_event_batch(
     actor: &str,
-    realm_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload,
-    plaintext_visible_services: Option<
-        arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
-    >,
+    draft: RealmBootstrapDraft,
 ) -> Result<(String, Vec<arkret_wire::Event>)> {
     let (signing_seed, verification_method) = event_signing_identity(actor);
-    realm_bootstrap_event_batch_with_signing_seed(
-        actor,
-        realm_payload,
-        plaintext_visible_services,
-        signing_seed,
-        &verification_method,
-    )
+    realm_bootstrap_event_batch_with_signing_seed(actor, draft, signing_seed, &verification_method)
 }
 
 /// The ordinary Realm genesis unit (`models/realm-and-space.md` section 2.5).
@@ -288,6 +277,38 @@ fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cba::Preconditio
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn realm_bootstrap_followup_event(
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    actor_seq: u64,
+    predecessor: EventId,
+    cell: &str,
+    signing_seed: [u8; 32],
+    verification_method: &DidUrl,
+) -> Result<Event> {
+    let mut event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        Some(actor_seq),
+        vec![predecessor],
+        signing_seed,
+        verification_method,
+        Vec::new(),
+        vec![head_eq_null_precondition(cell)?],
+    );
+    event.authorization_ref = Some(
+        arkret_wire::AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
+            .map_err(anyhow::Error::msg)?,
+    );
+    refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
+    Ok(event)
+}
+
 /// v1 has no genesis `ak.capability.grant` slot: the creator's root authority is
 /// the `ak.component.realm.authority_root.v1` cell that the `ak.realm.create`
 /// reducer contract writes. Callers that need to name that authority on a later
@@ -301,20 +322,29 @@ fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cba::Preconditio
 /// Event that actually writes the cell.
 pub fn realm_bootstrap_event_batch_with_signing_seed(
     actor: &str,
-    realm_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload,
-    plaintext_visible_services: Option<
-        arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
-    >,
+    draft: RealmBootstrapDraft,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
 ) -> Result<(String, Vec<arkret_wire::Event>)> {
+    let RealmBootstrapDraft {
+        create,
+        profile,
+        policy_bundle,
+        join_rule,
+        history_visibility,
+        history_sharing_policy,
+        discovery,
+        alias,
+        plaintext_visible_services,
+        delivery_binding_policy,
+    } = draft;
     // Genesis carries no Realm id at all — the scope is `realm_genesis` and the
     // id falls out of the signed Event. The placeholder below is never read.
     let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
         "ak:realm:AbJKasiJAuypE52tDrie6RY7PJds4G20xbtLIvYRInJk",
         "ak.realm.create",
-        realm_payload.to_value()?,
+        create.to_value()?,
         Some(0),
         Vec::new(),
         signing_seed,
@@ -328,24 +358,96 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     // every follow-up in this batch MUST name that derived value or admission
     // reports `out_of_order_bootstrap`.
     let derived_realm_id = realm_event.realm_id.to_string();
-    let Some(services) = plaintext_visible_services else {
-        return Ok((derived_realm_id, vec![realm_event]));
+    let mut events = vec![realm_event];
+    let mut push_followup =
+        |kind: &str, payload: Value, actor_seq: u64, cell: String| -> Result<()> {
+            let predecessor = events.last().expect("Realm create exists").event_id.clone();
+            events.push(realm_bootstrap_followup_event(
+                actor,
+                &derived_realm_id,
+                kind,
+                payload,
+                actor_seq,
+                predecessor,
+                &cell,
+                signing_seed,
+                verification_method,
+            )?);
+            Ok(())
+        };
+    push_followup(
+        arkret_wire::EventKind::REALM_PROFILE,
+        profile.to_value()?,
+        1,
+        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_PROFILE_V1),
+    )?;
+    push_followup(
+        arkret_wire::EventKind::REALM_POLICY_BUNDLE,
+        policy_bundle.to_value()?,
+        2,
+        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_POLICY_BUNDLE_V1),
+    )?;
+    push_followup(
+        arkret_wire::EventKind::REALM_JOIN_RULE,
+        join_rule.to_value()?,
+        3,
+        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_JOIN_RULE_V1),
+    )?;
+    push_followup(
+        arkret_wire::EventKind::REALM_HISTORY_VISIBILITY,
+        history_visibility.to_value()?,
+        4,
+        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_HISTORY_VISIBILITY_V1),
+    )?;
+    if let Some(policy) = history_sharing_policy {
+        push_followup(
+            arkret_wire::EventKind::REALM_HISTORY_SHARING_POLICY,
+            policy.to_value()?,
+            5,
+            arkret_wire::null_subject_cell(
+                arkret_wire::CellFamilyId::REALM_HISTORY_SHARING_POLICY_V1,
+            ),
+        )?;
+    }
+    push_followup(
+        arkret_wire::EventKind::REALM_DISCOVERY,
+        discovery.to_value()?,
+        6,
+        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DISCOVERY_V1),
+    )?;
+    if let Some(alias) = alias {
+        push_followup(
+            arkret_wire::EventKind::REALM_ALIAS,
+            alias.to_value()?,
+            7,
+            arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_ALIAS_V1),
+        )?;
+    }
+    if let Some(services) = plaintext_visible_services {
+        push_followup(
+            arkret_wire::EventKind::REALM_PLAINTEXT_VISIBLE_SERVICES,
+            services.to_value()?,
+            8,
+            arkret_wire::null_subject_cell(
+                arkret_wire::CellFamilyId::REALM_PLAINTEXT_VISIBLE_SERVICES_V1,
+            ),
+        )?;
     };
-    let services_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
-        actor,
-        &derived_realm_id,
-        "ak.realm.plaintext_visible_services",
-        services.to_value()?,
-        Some(1),
-        vec![realm_event.event_id.clone()],
-        signing_seed,
-        verification_method,
-        Vec::new(),
-        vec![head_eq_null_precondition(
-            "ak:cell:ak.component.realm.plaintext_visible_services.v1:null",
-        )?],
-    );
-    Ok((derived_realm_id, vec![realm_event, services_event]))
+    push_followup(
+        arkret_wire::EventKind::REALM_DELIVERY_BINDING_POLICY,
+        delivery_binding_policy.to_value()?,
+        9,
+        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DELIVERY_BINDING_POLICY_V1),
+    )?;
+    push_followup(
+        arkret_wire::EventKind::MEMBER_STATE,
+        member_join_payload_value(&derived_realm_id, actor)?,
+        10,
+        format!("ak:cell:ak.component.member.state.v1:{actor}"),
+    )?;
+    arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&events)
+        .map_err(|error| anyhow!("Realm bootstrap validation failed: {error}"))?;
+    Ok((derived_realm_id, events))
 }
 
 pub async fn add_member(
@@ -1187,4 +1289,88 @@ pub(crate) fn event_envelope_with_causal_refs(
         &verification_method,
         causal_refs,
     )
+}
+
+#[cfg(test)]
+mod realm_bootstrap_tests {
+    use super::*;
+
+    const ACTOR: &str = "did:webvh:z6mkfixture:alice.soland.local";
+    const SERVICE: &str = "did:webvh:z6mkfixture:soland.local";
+    const SALT: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    fn draft(extra: Value) -> RealmBootstrapDraft {
+        let mut input = json!({
+            "title": "Bootstrap Realm",
+            "summary": "Complete atomic bootstrap",
+            "genesis_salt": SALT,
+            "plaintext_visible_services": []
+        });
+        input
+            .as_object_mut()
+            .expect("fixture object")
+            .extend(extra.as_object().expect("extra object").clone());
+        realm_create_payload(ACTOR, SERVICE, "", &input).expect("valid Realm bootstrap draft")
+    }
+
+    fn build(draft: RealmBootstrapDraft) -> (String, Vec<Event>) {
+        realm_bootstrap_event_batch_with_signing_seed(
+            ACTOR,
+            draft,
+            [7; 32],
+            &DidUrl::new(format!("{ACTOR}#device-1")).expect("valid verification method"),
+        )
+        .expect("valid Realm bootstrap unit")
+    }
+
+    #[test]
+    fn ordinary_bootstrap_uses_the_registered_order_and_explicit_creator_member() {
+        let (_, events) = build(draft(json!({"alias": "general:soland.local"})));
+        let kinds: Vec<_> = events.iter().map(|event| event.kind.as_str()).collect();
+        assert_eq!(
+            kinds,
+            [
+                EventKind::REALM_CREATE,
+                EventKind::REALM_PROFILE,
+                EventKind::REALM_POLICY_BUNDLE,
+                EventKind::REALM_JOIN_RULE,
+                EventKind::REALM_HISTORY_VISIBILITY,
+                EventKind::REALM_DISCOVERY,
+                EventKind::REALM_ALIAS,
+                EventKind::REALM_DELIVERY_BINDING_POLICY,
+                EventKind::MEMBER_STATE,
+            ]
+        );
+        assert_eq!(
+            events
+                .last()
+                .and_then(|event| event.payload.get("actor_id")),
+            Some(&json!(ACTOR))
+        );
+    }
+
+    #[test]
+    fn bootstrap_rejects_missing_or_reordered_required_facets() {
+        let (_, events) = build(draft(json!({})));
+        let mut missing_profile = events.clone();
+        missing_profile.remove(1);
+        assert!(
+            arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&missing_profile)
+                .is_err()
+        );
+
+        let mut reordered = events;
+        reordered.swap(1, 2);
+        assert!(arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&reordered).is_err());
+    }
+
+    #[test]
+    fn exact_retry_reuses_prepared_signed_bytes() {
+        let (_, prepared) = build(draft(json!({})));
+        let retry = prepared.clone();
+        assert_eq!(
+            serde_json::to_vec(&prepared).expect("serialize prepared unit"),
+            serde_json::to_vec(&retry).expect("serialize retry unit")
+        );
+    }
 }

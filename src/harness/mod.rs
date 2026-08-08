@@ -208,17 +208,35 @@ fn normalize_plaintext_visible_service(entry: &Value) -> Value {
     }
 }
 
-pub(crate) fn realm_create_payload(
-    actor: &str,
-    service_id: &str,
-    realm_id: &str,
-    input: &Value,
-) -> Result<(
-    arkret_models_collaboration::events_payloads::RealmCreatePayload,
-    Option<
+#[derive(Clone)]
+pub struct RealmBootstrapDraft {
+    pub create: arkret_models_collaboration::events_payloads::RealmCreatePayload,
+    pub profile: arkret_models_collaboration::events_payloads::RealmProfile,
+    pub policy_bundle:
+        arkret_models_collaboration::events_payloads::realm::RealmPolicyBundlePayload,
+    pub join_rule:
+        arkret_models_collaboration::governance::realm_lifecycle::RealmJoinRulePayload,
+    pub history_visibility:
+        arkret_models_collaboration::governance::realm_lifecycle::HistoryVisibilityPayload,
+    pub history_sharing_policy:
+        Option<arkret_models_collaboration::events_payloads::HistorySharingPolicyPayload>,
+    pub discovery:
+        arkret_models_collaboration::governance::realm_lifecycle::RealmDiscoveryPayload,
+    pub alias:
+        Option<arkret_models_collaboration::governance::realm_governance::RealmAliasPayload>,
+    pub plaintext_visible_services: Option<
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
     >,
-)>{
+    pub delivery_binding_policy:
+        arkret_models_collaboration::events_payloads::realm::RealmDeliveryBindingPolicyPayload,
+}
+
+pub fn realm_create_payload(
+    _actor: &str,
+    service_id: &str,
+    _realm_id: &str,
+    input: &Value,
+) -> Result<RealmBootstrapDraft> {
     let title = input
         .get("title")
         .and_then(Value::as_str)
@@ -240,7 +258,7 @@ pub(crate) fn realm_create_payload(
         .get("join_rule")
         .and_then(Value::as_str)
         .unwrap_or("invite");
-    let history_visibility = input
+    let history_visibility_value = input
         .get("history_visibility")
         .and_then(Value::as_str)
         .unwrap_or("shared");
@@ -283,7 +301,6 @@ pub(crate) fn realm_create_payload(
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
 
-    let created_by = arkret_identifiers::Did::new(actor.to_owned())?;
     let notary_did = arkret_identifiers::Did::new(service_id.to_owned())?;
     let notary = arkret_wire::notary::NotaryValue::single_did_with_org(
         notary_did.clone(),
@@ -297,35 +314,120 @@ pub(crate) fn realm_create_payload(
             "did:webvh:z6mkfixture:organization.recovery.soland.local".to_owned(),
         )?],
     );
-    let mut realm = arkret_models_collaboration::objects::realm::Realm::new(
-        arkret_identifiers::RealmId::new(realm_id.to_owned())?,
-        title,
-        created_by,
-        arkret_identifiers::TypedTrustDomainId::new("ak:trust_domain:soland.local".to_owned())?,
+    let genesis_salt = input
+        .get("genesis_salt")
+        .and_then(Value::as_str)
+        .map(arkret_wire::GenesisSalt::new)
+        .transpose()?
+        .unwrap_or(arkret_wire::GenesisSalt::generate()?);
+    let trust_domain = input
+        .get("trust_domain")
+        .and_then(Value::as_str)
+        .unwrap_or("ak:trust_domain:soland.local");
+    let genesis = arkret_models_collaboration::events_payloads::RealmGenesis::event_derived(
+        arkret_models_collaboration::events_payloads::RealmPurpose::Collaboration,
+        genesis_salt,
+        arkret_identifiers::TypedTrustDomainId::new(trust_domain.to_owned())?,
+        serde_json::from_value(Value::Array(schema_refs))?,
         arkret_wire::CORE_REDUCER_PROFILE,
+        arkret_canonical::DigestSuite::Sha256,
+        serde_json::from_value(json!("standard"))?,
+        serde_json::from_value(json!(encryption_profile))?,
         arkret_models_collaboration::objects::realm::NotaryProfile::SingleDid,
         notary,
         arkret::current_capability_action_registry_digest()?,
-    );
-    realm.summary = Some(summary.to_owned());
-    realm.schema_refs = serde_json::from_value(Value::Array(schema_refs))?;
-    realm.default_discoverability = serde_json::from_value(json!(discoverability))?;
-    realm.default_join_rule = serde_json::from_value(json!(join_rule))?;
-    realm.history_visibility = serde_json::from_value(json!(history_visibility))?;
-    realm.encryption_profile = serde_json::from_value(json!(encryption_profile))?;
-    realm.security_class = Some(serde_json::from_value(json!("standard"))?);
-    realm.federation_policy = Some(serde_json::from_value(json!("restricted"))?);
-    realm.created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
-        .with_timezone(&chrono::Utc);
+    )?;
+    let mut profile = arkret_models_collaboration::events_payloads::RealmProfile::new(title)?;
+    profile.summary = Some(summary.to_owned());
+    let mut policy_bundle =
+        arkret_models_collaboration::events_payloads::realm::RealmPolicyBundlePayload::new(1);
+    policy_bundle.content_scheme = input
+        .get("content_scheme")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let encryption_floor = if encryption_profile == "mls_rfc9420" {
+        arkret_models_collaboration::governance::circle::EncryptionFloor::E2eeRequired
+    } else {
+        arkret_models_collaboration::governance::circle::EncryptionFloor::AllowPlaintext
+    };
+    policy_bundle.content_encryption_floor = Some(encryption_floor);
+    policy_bundle.metadata_encryption_floor = Some(encryption_floor);
+    policy_bundle.federation_policy = Some(serde_json::from_value(
+        input
+            .get("federation_policy")
+            .cloned()
+            .unwrap_or_else(|| json!("restricted")),
+    )?);
     if let Some(sync_endpoints) = input.get("sync_endpoints").filter(|value| value.is_array()) {
-        realm.sync_endpoints = serde_json::from_value(sync_endpoints.clone())?;
+        policy_bundle.sync_endpoints = Some(serde_json::from_value(sync_endpoints.clone())?);
     }
-    realm.validate_kind_invariants()?;
-    // R3.1: a create payload carries no object id — the Realm id is derived
-    // from the genesis Event (spec realm-and-space.md section 2.5.0).
-    realm.id = None;
-    Ok((
-        arkret_models_collaboration::events_payloads::RealmCreatePayload::new(realm),
+    policy_bundle.validate()?;
+    let history_sharing_policy = input
+        .get("history_sharing_policy")
+        .cloned()
+        .map(
+            serde_json::from_value::<
+                arkret_models_collaboration::events_payloads::HistorySharingPolicyPayload,
+            >,
+        )
+        .transpose()?;
+    let history_visibility = if history_visibility_value == "restricted" {
+        let policy = history_sharing_policy.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "cotest Realm bootstrap requires an explicit restricted history-sharing policy"
+            )
+        })?;
+        arkret_policy::history_visibility::validate_history_sharing_policy(&policy.value)?;
+        arkret_models_collaboration::governance::realm_lifecycle::HistoryVisibilityPayload::restricted(
+            arkret_canonical::canonical_sha256(&policy.value)?,
+        )
+    } else {
+        if history_sharing_policy.is_some() {
+            anyhow::bail!(
+                "cotest Realm bootstrap forbids history_sharing_policy unless history_visibility is restricted"
+            );
+        }
+        arkret_models_collaboration::governance::realm_lifecycle::HistoryVisibilityPayload::new(
+            serde_json::from_value(json!(history_visibility_value))?,
+        )
+    };
+    let alias = input
+        .get("alias")
+        .and_then(Value::as_str)
+        .map(|value| {
+            let authority = arkret_models_collaboration::objects::realm_alias::RealmAlias::authority_domain_for_service(service_id)?;
+            let alias = arkret_models_collaboration::objects::realm_alias::RealmAlias::prepare_under_authority(value, &authority)?;
+            Ok::<_, arkret_wire::Error>(
+                arkret_models_collaboration::governance::realm_governance::RealmAliasPayload::declaration(alias),
+            )
+        })
+        .transpose()?;
+    Ok(RealmBootstrapDraft {
+        create: arkret_models_collaboration::events_payloads::RealmCreatePayload::new(genesis),
+        profile,
+        policy_bundle,
+        join_rule:
+            arkret_models_collaboration::governance::realm_lifecycle::RealmJoinRulePayload::new(
+                serde_json::from_value(json!(join_rule))?,
+            ),
+        history_visibility,
+        history_sharing_policy,
+        discovery:
+            arkret_models_collaboration::governance::realm_lifecycle::RealmDiscoveryPayload::new(
+                serde_json::from_value(json!(discoverability))?,
+            ),
+        alias,
         plaintext_visible_services,
-    ))
+        delivery_binding_policy:
+            arkret_models_collaboration::events_payloads::realm::RealmDeliveryBindingPolicyPayload {
+                realm_id: None,
+                allowed_binding_sources: None,
+                did_document_default_allowed: None,
+                allowed_recipient_services: None,
+                required_endorsers: None,
+                unroutable_membership_allowed: Some(true),
+                rebind_authorization: None,
+                expires_after_seconds: None,
+            },
+    })
 }

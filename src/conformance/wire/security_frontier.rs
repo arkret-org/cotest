@@ -95,15 +95,12 @@ fn assert_unrelated_state_is_orthogonal(
         CellState::Value(json!({"action": "ak.message.send", "status": "active"})),
     );
     changed.insert(
-        cell_ref(
-            CellFamilyId::REALM_METADATA_V1,
-            &["ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE"],
-        )?,
-        CellState::Value(json!({"display_name": "orthogonal metadata"})),
+        cell_ref(CellFamilyId::REALM_PROFILE_V1, &["null"])?,
+        CellState::Value(json!({"title": "orthogonal profile"})),
     );
     let observed = derive_mls_security_frontier(&changed, scope, leaves)?;
     if &observed != expected {
-        bail!("unrelated capability/metadata state changed security_frontier_digest");
+        bail!("unrelated capability/profile state changed security_frontier_digest");
     }
     Ok(())
 }

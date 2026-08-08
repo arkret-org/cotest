@@ -6,8 +6,8 @@
 // COT-ORG-04 — the directory / teabay verified-organization badge must derive
 // from the SAME active-verified `ak.realm.organization` relationship that drives
 // protocol governance (see governance/organization-policy.spec.ts), never from
-// `owning_organizations[]` declarations or the `_soland/self/organizations`
-// local mirror. These are `test.fixme` until SOL-ORG-06 / TBY-ORG-01..03 land
+// create-payload hints or the `_soland/self/organizations` local mirror. These
+// are `test.fixme` until SOL-ORG-06 / TBY-ORG-01..03 land
 // the verified-relationship-backed badge projection.
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
@@ -95,13 +95,13 @@ function rowFor(rows: Array<Record<string, any>>, orgDid: string) {
 test.describe("directory verified organization badge", () => {
   test.fixme(
     // @blocking-on: SOL-ORG-06 — directory verified_badge must be false for a
-    //   realm that only declares owning_organizations[] with no active verified
-    //   ak.realm.organization relationship. Today the directory derives the
+    //   Realm with no active verified ak.realm.organization relationship.
+    //   Today the directory derives the
     //   badge from the local organizations registry, so declared-only realms can
     //   still show as verified — the regression this case must catch.
     // @user-promise: e2e/scenarios/discovery/organization-verified-badge.md (Case A)
     // @expected-live-by: 2026Q3
-    "Case A: declared-only realm does not show a verified organization badge",
+    "Case A: Realm without a relationship does not show a verified organization badge",
     async ({ request }) => {
       const alice = uniqueUser("s30-badge-A");
       await ensureRegistered(request, alice);
@@ -111,7 +111,6 @@ test.describe("directory verified organization badge", () => {
       await createRealmApi(request, token, {
         title: `S30 badge A ${Date.now()}`,
         public: true,
-        owning_organizations: [orgDid],
       });
 
       const rows = await searchOrganization(request, token, orgDid);
@@ -140,7 +139,6 @@ test.describe("directory verified organization badge", () => {
       const realmId = await createRealmApi(request, token, {
         title: `Acme ${label}`,
         public: true,
-        owning_organizations: [orgDid],
       });
       const accepted = await submitOrganizationStatement(
         request,
@@ -191,7 +189,6 @@ test.describe("directory verified organization badge", () => {
       const realmId = await createRealmApi(request, token, {
         title: `Acme ${label}`,
         public: true,
-        owning_organizations: [orgDid],
       });
       const activeStatementId = `org-stmt-${uuidV7()}`;
       const active = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {

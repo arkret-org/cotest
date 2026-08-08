@@ -1,4 +1,4 @@
-// Organization governance: verified relationship vs declared owning_organizations
+// Organization governance derives only from verified relationship statements.
 // Contract: e2e/scenarios/governance/organization-policy.md
 // Spec: governance/content-moderation.md §7, identity/identity-did.md §6,
 //       models/governance-objects.md §3,
@@ -119,13 +119,10 @@ test.describe("organization governance — verified relationship semantics", () 
 
   test.fixme(
     // @blocking-on: SOL-ORG-05 — effective-policy must derive organization
-    //   layers ONLY from active verified ak.realm.organization statements, and
-    //   must NOT inherit from realm.create.owning_organizations[] alone. Until
-    //   that lands soland still treats owning_organizations[] as the inheritance
-    //   chain, which is exactly the behaviour this case is meant to fail on.
+    //   layers ONLY from active verified ak.realm.organization statements.
     // @user-promise: e2e/scenarios/governance/organization-policy.md (Case A)
     // @expected-live-by: 2026Q3
-    "Case A: owning_organizations[] alone does not inherit organization policy or badge",
+    "Case A: a Realm without an organization statement inherits no policy or badge",
     async ({ request }) => {
       const alice = uniqueUser("s30-caseA-alice");
       await ensureRegistered(request, alice);
@@ -135,10 +132,9 @@ test.describe("organization governance — verified relationship semantics", () 
       const realmId = await createRealmApi(request, aliceToken, {
         title: `S30 case A ${Date.now()}`,
         public: true,
-        owning_organizations: [orgDid],
       });
 
-      // No ak.realm.organization statement is written — only the declaration.
+      // No ak.realm.organization statement is written.
       const effective = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/effective-policy`,
         { headers: authHeaders(aliceToken) },
@@ -170,7 +166,6 @@ test.describe("organization governance — verified relationship semantics", () 
       const realmId = await createRealmApi(request, aliceToken, {
         title: `S30 case B ${Date.now()}`,
         public: true,
-        owning_organizations: [orgDid],
       });
 
       // Active owner statement covering moderation_policy + official_badge.
@@ -207,7 +202,6 @@ test.describe("organization governance — verified relationship semantics", () 
       const narrowRealmId = await createRealmApi(request, aliceToken, {
         title: `S30 case B narrow ${Date.now()}`,
         public: true,
-        owning_organizations: [orgDid],
       });
       const narrowAccepted = await submitOrganizationStatement(
         request,
@@ -253,7 +247,6 @@ test.describe("organization governance — verified relationship semantics", () 
       const realmId = await createRealmApi(request, aliceToken, {
         title: `S30 case C ${Date.now()}`,
         public: true,
-        owning_organizations: [orgDid],
       });
 
       const activeStatementId = `org-stmt-${uuidV7()}`;
@@ -320,7 +313,6 @@ test.describe("organization governance — verified relationship semantics", () 
       const realmId = await createRealmApi(request, aliceToken, {
         title: `S30 case D ${Date.now()}`,
         public: true,
-        owning_organizations: [sponsorDid],
       });
 
       const accepted = await submitOrganizationStatement(
