@@ -467,12 +467,6 @@
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.enroll_device",
-          "surfaces": [
-            "account_auth"
-          ]
-        },
-        {
           "operation_id": "ak.self.device_messages.command.send",
           "surfaces": [
             "device_and_keys"
@@ -615,14 +609,6 @@
           "markers": [
             "/_arkret/self/blob/upload",
             "/_arkret/self/blob/get"
-          ]
-        },
-        {
-          "kind": "joint_e2e",
-          "path": "tests/device_enroll_rollout_e2e.rs",
-          "markers": [
-            "device-enroll-rollout",
-            "/_arkret/self/keys/query"
           ]
         }
       ]

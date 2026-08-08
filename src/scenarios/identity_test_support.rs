@@ -1,19 +1,23 @@
 use anyhow::{Context, Result};
 use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
-    self_principal_bootstrap_submit_request,
+    build_self_principal_pcr_genesis_unit,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_identifiers::{DeviceId, Did, Hlc, RealmId};
+use arkret_models_collaboration::events_payloads::{
+    DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
+    FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
+    FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
+};
 use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
     keys_upload_signing_input,
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_signatures::webvh::{
-    PreparedPrincipalInception, PrincipalEnrollmentDelegation, PrincipalInceptionInput,
-    prepare_principal_inception,
+    PreparedPrincipalInception, PrincipalInceptionInput, prepare_principal_inception,
 };
 use arkret_wire::{
     AuthorizationLeaseIssueOutcome, AuthorizationLeaseIssueRequest, Base64UrlString, Event,
@@ -29,23 +33,18 @@ use url::Url;
 
 use crate::harness::{ArkretServer, expect_json};
 
-pub(crate) const TEST_PRINCIPAL_SIGNING_KEY_SEED: [u8; 32] = [0x51; 32];
+pub(crate) const TEST_ROOT_KEY_SEED: [u8; 32] = [0x51; 32];
 
 fn registry_digest() -> arkret_identifiers::Hash {
     arkret::current_capability_action_registry_digest()
         .expect("embedded capability-action registry")
 }
 
-fn test_self_signing_key() -> SigningKey {
+fn test_device_record_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[0x52; 32])
 }
 
-fn test_principal_signing_key() -> SigningKey {
-    SigningKey::from_bytes(&TEST_PRINCIPAL_SIGNING_KEY_SEED)
-}
-
 async fn install_test_principal_control_document(server: &ArkretServer, actor: &str) -> Result<()> {
-    let psk_kid = format!("{actor}#cotest-principal-signing-key");
     let (_, remainder) = actor
         .strip_prefix("did:webvh:")
         .and_then(|remainder| remainder.split_once(':'))
@@ -84,13 +83,15 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
     anyhow::ensure!(
         resolved["did_document"]["verificationMethod"]
             .as_array()
-            .is_some_and(|methods| methods.iter().any(|method| method["id"] == psk_kid)),
-        "installed principal control key is absent from resolved DID document: {resolved}"
+            .is_some_and(|methods| methods.iter().any(|method| {
+                method["id"].as_str() == Some(prepared.root_verification_method.as_str())
+            })),
+        "installed identity root is absent from resolved DID document: {resolved}"
     );
     crate::harness::register_event_signing_identity(
         actor,
-        TEST_PRINCIPAL_SIGNING_KEY_SEED,
-        format!("{actor}#cotest-principal-signing-key"),
+        TEST_ROOT_KEY_SEED,
+        prepared.root_verification_method,
     );
     Ok(())
 }
@@ -142,7 +143,7 @@ fn signed_algorithm_key_records(
     let Value::Object(records) = records else {
         anyhow::bail!("keys/upload key records must be an object");
     };
-    let signing_key = test_self_signing_key();
+    let signing_key = test_device_record_signing_key();
     records
         .into_iter()
         .map(|(record_id, record)| {
@@ -175,7 +176,7 @@ fn signed_algorithm_key_records(
             record.insert(
                 "signature".to_owned(),
                 json!({
-                    "kid": format!("{actor}#ak_self_signing_v1"),
+                    "kid": format!("{actor}#device-record-key"),
                     "signature_algorithm": "Ed25519",
                     "sig": URL_SAFE_NO_PAD.encode(signing_key.sign(&signature_input).to_bytes()),
                 }),
@@ -194,7 +195,7 @@ async fn bootstrap_test_device_authorization(
     actor: &str,
     device_id: &str,
     device_signing_key: &SigningKey,
-) -> Result<arkret_wire::FederatedDeviceSigningKeyEvidence> {
+) -> Result<()> {
     let (_, remainder) = actor
         .strip_prefix("did:webvh:")
         .and_then(|remainder| remainder.split_once(':'))
@@ -209,12 +210,72 @@ async fn bootstrap_test_device_authorization(
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
 
+    let device_id = DeviceId::new(device_id.to_owned())?;
+    let device_multibase =
+        ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
+    let device_public_key =
+        NonEmptyString::new(format!("did:key:{device_multibase}")).map_err(anyhow::Error::msg)?;
+    let hpke_key =
+        NonEmptyString::new("z6LSCotestFederationHpkeKey").map_err(anyhow::Error::msg)?;
+    let algorithms = vec![
+        NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1")
+            .map_err(anyhow::Error::msg)?,
+    ];
+    let mut payload = DeviceAuthorizePayload {
+        principal_id: principal.clone(),
+        device_id: device_id.clone(),
+        device_public_key: device_public_key.clone(),
+        hpke_key: hpke_key.clone(),
+        algorithms: algorithms.clone(),
+        device_key_algorithm: Some(NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?),
+        authorized_by: DeviceOrPrincipalRef::Did(principal.clone()),
+        scopes: None,
+        not_before: created_at,
+        expires_at: None,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::RootAnchored,
+        device_signature: SignatureMaterial::NonEmptyString(
+            NonEmptyString::new("pending").map_err(anyhow::Error::msg)?,
+        ),
+        recovery_session_id: None,
+    };
+    payload.device_signature = SignatureMaterial::NonEmptyString(
+        NonEmptyString::new(
+            URL_SAFE_NO_PAD.encode(
+                device_signing_key
+                    .sign(&payload.device_possession_signature_input()?)
+                    .to_bytes(),
+            ),
+        )
+        .map_err(anyhow::Error::msg)?,
+    );
+    let payload_value = serde_json::to_value(&payload)?;
+    let descriptor = FoundingDeviceDescriptor {
+        descriptor_version: 1,
+        device_id: device_id.clone(),
+        device_key_digest: arkret_identifiers::Hash::new(
+            arkret_canonical::canonical::sha256_digest(device_public_key.as_bytes()),
+        )?,
+        device_public_key: device_public_key.clone(),
+        device_key_algorithm: FoundingDeviceKeyAlgorithm::Ed25519,
+        device_key_purpose: FoundingDeviceKeyPurpose::EventSigningAndMlsIdentity,
+        hpke_key_digest: arkret_identifiers::Hash::new(
+            arkret_canonical::canonical::sha256_digest(hpke_key.as_bytes()),
+        )?,
+        hpke_key,
+        hpke_key_algorithm: FoundingDeviceHpkeKeyAlgorithm::X25519,
+        algorithms,
+        founding_authorize_payload_digest: device_authorize_payload_digest(
+            &payload_value,
+            arkret_canonical::DigestSuite::Sha256,
+        )?,
+    };
     let mut create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
             realm_id: realm_id.clone(),
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
+            founding_device_descriptor: descriptor,
             capability_action_registry_digest: registry_digest(),
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
@@ -237,65 +298,33 @@ async fn bootstrap_test_device_authorization(
         &root_verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
-    let enrollment_method = format!("{actor}#cotest-device-enrollment-authority");
-    let device_public_key =
-        ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
-    let payload = arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload {
-        principal_id: principal.clone(),
-        device_id: DeviceId::new(device_id.to_owned())?,
-        device_public_key: NonEmptyString::new(device_public_key.clone())
-            .map_err(anyhow::Error::msg)?,
-        hpke_key: NonEmptyString::new("z6LSCotestFederationHpkeKey").map_err(anyhow::Error::msg)?,
-        algorithms: vec![
-            NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1")
-                .map_err(anyhow::Error::msg)?,
-            NonEmptyString::new("ak.mls.v1").map_err(anyhow::Error::msg)?,
-        ],
-        device_key_algorithm: Some(NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?),
-        authorized_by: arkret_models_collaboration::events_payloads::device_identity::DeviceOrPrincipalRef::Did(principal.clone()),
-        scopes: None,
-        not_before: created_at,
-        expires_at: None,
-        device_signature: None,
-        proof: None,
-        cross_signing_binding: None,
-        enrollment_authority_binding: Some(arkret_models_identity::artifacts_device_identity::DeviceEnrollmentAuthorityBinding {
-            kind: arkret_models_identity::artifacts_device_identity::DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
-            authority_did: principal.clone(),
-            authorization_ref: NonEmptyString::new(enrollment_method.clone())
-                .map_err(anyhow::Error::msg)?,
-        }),
-        recovery_session_id: None,
-    };
     let mut authorize = Event::new(
         arkret_wire::EventKind::DEVICE_AUTHORIZE,
         arkret_wire::ScopeRef::Realm { realm_id },
         principal.clone(),
         1,
         Hlc::new("01970e589d21-0001-a13f9c2e")?,
-        serde_json::to_value(payload)?,
+        payload_value,
     )?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
-    authorize.executed_by = Some(principal.clone());
-    authorize.authorization_ref = Some(
-        arkret_wire::AuthorizationRef::new(enrollment_method.clone())
-            .map_err(anyhow::Error::msg)?,
-    );
     authorize.refresh_content_bound_identity()?;
-    let enrollment_seed: [u8; 32] =
-        Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
-    let enrollment_method = crate::fixture_did_url(enrollment_method);
-    let enrollment_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
-        enrollment_seed,
+    let device_method = crate::fixture_did_url(format!("{actor}#{device_id}"));
+    let device_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+        device_signing_key.to_bytes(),
         principal.clone(),
-        enrollment_method.clone(),
+        device_method.clone(),
     );
     arkret::signatures::sign_event(
         &mut authorize,
-        &enrollment_signer,
-        &enrollment_method,
+        &device_signer,
+        &device_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )?;
+    let _unit = build_self_principal_pcr_genesis_unit(
+        create.clone(),
+        authorize.clone(),
+        &crate::publication::project_cells,
     )?;
     let lease_request = AuthorizationLeaseIssueRequest {
         events: vec![create.clone(), authorize.clone()],
@@ -328,23 +357,26 @@ async fn bootstrap_test_device_authorization(
 
     let create_event_id = create.event_id.clone();
     let authorize_event_id = authorize.event_id.clone();
-    let request = self_principal_bootstrap_submit_request(
-        EventInitialSubmission {
-            event: create,
-            authorization_lease: Some(create_lease.clone()),
-            cba_proof_bundles: Vec::new(),
-            control_proposal_ack: None,
-            membership_compensation_evidence: None,
+    let request = arkret_models_collaboration::http_bodies::EventsSubmitRequestBody::Batch(
+        arkret_models_collaboration::http_bodies::EventsSubmitBatchRequestBody {
+            events: vec![
+                EventInitialSubmission {
+                    event: create,
+                    authorization_lease: Some(create_lease.clone()),
+                    cba_proof_bundles: Vec::new(),
+                    control_proposal_ack: None,
+                    membership_compensation_evidence: None,
+                },
+                EventInitialSubmission {
+                    event: authorize.clone(),
+                    authorization_lease: Some(authorize_lease.clone()),
+                    cba_proof_bundles: Vec::new(),
+                    control_proposal_ack: None,
+                    membership_compensation_evidence: None,
+                },
+            ],
         },
-        EventInitialSubmission {
-            event: authorize.clone(),
-            authorization_lease: Some(authorize_lease.clone()),
-            cba_proof_bundles: Vec::new(),
-            control_proposal_ack: None,
-            membership_compensation_evidence: None,
-        },
-        &crate::publication::project_cells,
-    )?;
+    );
     let accepted = expect_json(
         server
             .http()
@@ -357,15 +389,7 @@ async fn bootstrap_test_device_authorization(
     assert_json_array_contains(&accepted["accepted"], create_event_id.as_str());
     assert_json_array_contains(&accepted["accepted"], authorize_event_id.as_str());
 
-    Ok(arkret_wire::FederatedDeviceSigningKeyEvidence {
-        actor_id: principal,
-        device_id: DeviceId::new(device_id.to_owned())?,
-        verification_method: crate::fixture_did_url(format!("{actor}#{device_id}")),
-        device_signing_key: arkret_wire::DidKey::new(format!("did:key:{device_public_key}"))
-            .map_err(anyhow::Error::msg)?,
-        authorization_accepted_at: chrono::Utc::now(),
-        device_authorize_event: Box::new(authorize),
-    })
+    Ok(())
 }
 
 pub fn actor_did_for_service(service_id: &str, actor: &str) -> Result<String> {
@@ -407,17 +431,9 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
         Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into();
     let next_root_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:next-root:{host}:{local_id}").as_bytes()).into();
-    let enrollment_seed: [u8; 32] =
-        Sha256::digest(format!("cotest:webvh:enrollment:{host}:{local_id}").as_bytes()).into();
     let next_root = SigningKey::from_bytes(&next_root_seed);
-    let enrollment = SigningKey::from_bytes(&enrollment_seed);
     let next_root_multibase =
         ed25519_pubkey_to_did_key_multibase(&next_root.verifying_key().to_bytes());
-    let principal_signing_multibase = ed25519_pubkey_to_did_key_multibase(
-        &test_principal_signing_key().verifying_key().to_bytes(),
-    );
-    let enrollment_multibase =
-        ed25519_pubkey_to_did_key_multibase(&enrollment.verifying_key().to_bytes());
     prepare_principal_inception(&PrincipalInceptionInput {
         principal_endpoint: &endpoint,
         local_id,
@@ -426,12 +442,6 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
             .with_timezone(&chrono::Utc),
         root_seed: &root_seed,
         next_root_public_key_multibase: &next_root_multibase,
-        enrollment: PrincipalEnrollmentDelegation::SelfAuthority {
-            principal_signing_public_key_multibase: &principal_signing_multibase,
-            enrollment_public_key_multibase: &enrollment_multibase,
-            principal_signing_fragment: Some("cotest-principal-signing-key"),
-            enrollment_fragment: Some("cotest-device-enrollment-authority"),
-        },
     })
     .with_context(|| {
         format!(

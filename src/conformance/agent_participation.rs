@@ -427,7 +427,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         ParticipationScope::Realm { realm_id } => realm_id,
         other => bail!("session overlay vector expected Realm scope, got {other:?}"),
     };
-    if realm_id != RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned())?
+    if realm_id != RealmId::new("ak:realm:Ac1aCK8aQdnkYImvdH3DFjq4jDCP198pXYWCGzGuVyj5".to_owned())?
     {
         bail!("session overlay Realm scope drifted");
     }

@@ -18,10 +18,7 @@ import {
   issueDevSession,
   uniqueUser,
 } from "../../helpers/users";
-import {
-  authHeaders,
-  createRealmApi,
-} from "../../helpers/soland-api";
+import { authHeaders, createRealmApi } from "../../helpers/soland-api";
 import {
   acceptInviteArkret,
   contactRow,
@@ -146,10 +143,7 @@ test.describe("contact graph (same principal server)", () => {
         request,
         uniqueUser("cg-s3-alice"),
       ),
-      prepareDirectConversationIdentityArkret(
-        request,
-        uniqueUser("cg-s3-bob"),
-      ),
+      prepareDirectConversationIdentityArkret(request, uniqueUser("cg-s3-bob")),
     ]);
     const alice = aliceIdentity.user;
     const bob = bobIdentity.user;
@@ -162,12 +156,8 @@ test.describe("contact graph (same principal server)", () => {
       issueDevSession(request, bob),
     ]);
     await Promise.all([
-      seedDirectConversationIdentityArkret(request, aliceToken, alice, {
-        principalSigningKey: aliceIdentity.principalSigningKey,
-      }),
-      seedDirectConversationIdentityArkret(request, bobToken, bob, {
-        principalSigningKey: bobIdentity.principalSigningKey,
-      }),
+      seedDirectConversationIdentityArkret(request, aliceToken, alice),
+      seedDirectConversationIdentityArkret(request, bobToken, bob),
     ]);
 
     // Establish a bidirectional direct_message contact. direct conversation
@@ -276,8 +266,9 @@ test.describe("contact graph (same principal server)", () => {
       ownerDid: alice.did,
     });
 
-    const { outcome: delivery, inviteId } =
-      await deliverInviteWithConsentGrant(request, {
+    const { outcome: delivery, inviteId } = await deliverInviteWithConsentGrant(
+      request,
+      {
         inviterDid: alice.did,
         inviterToken: aliceToken,
         realmId,
@@ -285,7 +276,8 @@ test.describe("contact graph (same principal server)", () => {
         consentGrantRef: grantRef!,
         originServer: "default",
         recipientServer: "default",
-      });
+      },
+    );
     // High-trust consent_grant: accepted + disclosed_outcome=delivered.
     expect(delivery.status).toBe("accepted");
     expect(delivery.disclosed_outcome).toBe("delivered");

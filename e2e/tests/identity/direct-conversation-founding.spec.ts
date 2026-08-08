@@ -37,8 +37,7 @@ type JsonObject = Record<string, any>;
 
 const REALM_AUTHORITY_ROOT_CELL =
   "ak:cell:ak.component.realm.authority_root.v1:null";
-const DIRECT_CONVERSATION_PROFILE =
-  "ak.profile.direct_conversation_realm.v1";
+const DIRECT_CONVERSATION_PROFILE = "ak.profile.direct_conversation_realm.v1";
 
 async function prepareAndCommitContactEvent(
   request: APIRequestContext,
@@ -167,9 +166,9 @@ async function acceptedDirectMessageEvidence(
       requestReceipt,
     )}`,
   };
-  expect(`sha256:${sha256CanonicalJson({ ...basis, domain: "ak.contact.basis.v1" })}`).toBe(
-    responseReceipt.basis_id,
-  );
+  expect(
+    `sha256:${sha256CanonicalJson({ ...basis, domain: "ak.contact.basis.v1" })}`,
+  ).toBe(responseReceipt.basis_id);
   return {
     kind: "human",
     basis_evidence_bundle: {
@@ -334,12 +333,8 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       issueDevSession(request, bob),
     ]);
     await Promise.all([
-      seedDirectConversationIdentityArkret(request, aliceToken, alice, {
-        principalSigningKey: aliceIdentity.principalSigningKey,
-      }),
-      seedDirectConversationIdentityArkret(request, bobToken, bob, {
-        principalSigningKey: bobIdentity.principalSigningKey,
-      }),
+      seedDirectConversationIdentityArkret(request, aliceToken, alice),
+      seedDirectConversationIdentityArkret(request, bobToken, bob),
     ]);
 
     const founderBasisEvidence = await acceptedDirectMessageEvidence(
@@ -446,7 +441,9 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     const conflict = JSON.parse(conflictText) as JsonObject;
     expect(conflictResponse.status(), conflictText).toBe(409);
     expect(wireErrCode(conflict)).toBe("conflict");
-    expect(conflictText).toContain("direct_conversation_slot_already_committed");
+    expect(conflictText).toContain(
+      "direct_conversation_slot_already_committed",
+    );
 
     const acceptedHistory = await queryRealmEventsApi(
       request,

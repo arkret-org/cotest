@@ -74,12 +74,12 @@ pub const ALL_OBJECT_ADDRESSING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_OA_RESOLVE_TARGET_REALM_PREVIEW,
 ];
 
-// ── Pinned fixture identifiers (bare lowercase content-bound uuidv8) ────────
+// ── Pinned fixture identifiers (bare 44-char Event-derived tokens) ─────────
 
-const R: &str = "01904100-0000-8000-8000-0000000000aa";
-const F: &str = "01904100-0000-8000-8000-0000000000bb";
-const F2: &str = "01904100-0000-8000-8000-0000000000cc";
-const M: &str = "01904100-0000-8000-8000-0000000000dd";
+const R: &str = "AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1";
+const F: &str = "ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM";
+const F2: &str = "AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq";
+const M: &str = "AS-ORd5zGMm1S5O6yi-p0U6TY6n0gvX_I-ZaEoNxW5LO";
 const VIA: &str = "did:web:relay.example";
 const LANDING: &str = "https://share.arkret.example";
 
@@ -360,10 +360,12 @@ pub fn run_target_digest_omits_absent_vector() -> Result<()> {
     // omitted form, not the null form.
     let digest = target_digest(&desc).map_err(|e| anyhow!("digest: {e}"))?;
 
-    let omitted_bytes = b"{\"address_link_kind\":\"reference\",\"realm_id\":\"ak:realm:AWEs1cV4Rn1CVWdYoOUZ1yiMPe9Ze6ZYmP0ChDr89cPl\"}";
-    let null_bytes = b"{\"strand_id\":null,\"address_link_kind\":\"reference\",\"message_id\":null,\"realm_id\":\"ak:realm:AWEs1cV4Rn1CVWdYoOUZ1yiMPe9Ze6ZYmP0ChDr89cPl\"}";
-    let omitted_expected = super::sha256_prefixed(omitted_bytes);
-    let null_expected = super::sha256_prefixed(null_bytes);
+    let omitted_bytes = format!(r#"{{"address_link_kind":"reference","realm_id":"ak:realm:{R}"}}"#);
+    let null_bytes = format!(
+        r#"{{"strand_id":null,"address_link_kind":"reference","message_id":null,"realm_id":"ak:realm:{R}"}}"#
+    );
+    let omitted_expected = super::sha256_prefixed(omitted_bytes.as_bytes());
+    let null_expected = super::sha256_prefixed(null_bytes.as_bytes());
 
     if digest != omitted_expected {
         bail!(

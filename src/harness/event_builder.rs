@@ -359,51 +359,46 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     // reports `out_of_order_bootstrap`.
     let derived_realm_id = realm_event.realm_id.to_string();
     let mut events = vec![realm_event];
-    let mut push_followup =
-        |kind: &str, payload: Value, actor_seq: u64, cell: String| -> Result<()> {
-            let predecessor = events.last().expect("Realm create exists").event_id.clone();
-            events.push(realm_bootstrap_followup_event(
-                actor,
-                &derived_realm_id,
-                kind,
-                payload,
-                actor_seq,
-                predecessor,
-                &cell,
-                signing_seed,
-                verification_method,
-            )?);
-            Ok(())
-        };
+    let mut push_followup = |kind: &str, payload: Value, cell: String| -> Result<()> {
+        let actor_seq = events.len() as u64;
+        let predecessor = events.last().expect("Realm create exists").event_id.clone();
+        events.push(realm_bootstrap_followup_event(
+            actor,
+            &derived_realm_id,
+            kind,
+            payload,
+            actor_seq,
+            predecessor,
+            &cell,
+            signing_seed,
+            verification_method,
+        )?);
+        Ok(())
+    };
     push_followup(
         arkret_wire::EventKind::REALM_PROFILE,
         profile.to_value()?,
-        1,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_PROFILE_V1),
     )?;
     push_followup(
         arkret_wire::EventKind::REALM_POLICY_BUNDLE,
         policy_bundle.to_value()?,
-        2,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_POLICY_BUNDLE_V1),
     )?;
     push_followup(
         arkret_wire::EventKind::REALM_JOIN_RULE,
         join_rule.to_value()?,
-        3,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_JOIN_RULE_V1),
     )?;
     push_followup(
         arkret_wire::EventKind::REALM_HISTORY_VISIBILITY,
         history_visibility.to_value()?,
-        4,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_HISTORY_VISIBILITY_V1),
     )?;
     if let Some(policy) = history_sharing_policy {
         push_followup(
             arkret_wire::EventKind::REALM_HISTORY_SHARING_POLICY,
             policy.to_value()?,
-            5,
             arkret_wire::null_subject_cell(
                 arkret_wire::CellFamilyId::REALM_HISTORY_SHARING_POLICY_V1,
             ),
@@ -412,14 +407,12 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     push_followup(
         arkret_wire::EventKind::REALM_DISCOVERY,
         discovery.to_value()?,
-        6,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DISCOVERY_V1),
     )?;
     if let Some(alias) = alias {
         push_followup(
             arkret_wire::EventKind::REALM_ALIAS,
             alias.to_value()?,
-            7,
             arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_ALIAS_V1),
         )?;
     }
@@ -427,7 +420,6 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         push_followup(
             arkret_wire::EventKind::REALM_PLAINTEXT_VISIBLE_SERVICES,
             services.to_value()?,
-            8,
             arkret_wire::null_subject_cell(
                 arkret_wire::CellFamilyId::REALM_PLAINTEXT_VISIBLE_SERVICES_V1,
             ),
@@ -436,13 +428,11 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     push_followup(
         arkret_wire::EventKind::REALM_DELIVERY_BINDING_POLICY,
         delivery_binding_policy.to_value()?,
-        9,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DELIVERY_BINDING_POLICY_V1),
     )?;
     push_followup(
         arkret_wire::EventKind::MEMBER_STATE,
         member_join_payload_value(&derived_realm_id, actor)?,
-        10,
         format!("ak:cell:ak.component.member.state.v1:{actor}"),
     )?;
     arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&events)

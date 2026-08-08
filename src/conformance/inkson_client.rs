@@ -224,7 +224,7 @@ fn validate_case_shape(
                     .ok_or_else(|| anyhow!("{name} missing observed"))?,
                 "verification_methods",
             )?;
-            for method in ["cross_signing", "sas"] {
+            for method in ["device_authorization", "sas"] {
                 if !methods.contains(method) {
                     bail!("{name} missing verification method {method}");
                 }

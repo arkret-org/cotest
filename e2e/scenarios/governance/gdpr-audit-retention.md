@@ -44,7 +44,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 10. soland 返回 `state="erased"`，并在响应中带 `ak.schema.erasure_receipt.v1`
 11. soland 后台任务执行:
     - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)
-    - 删除 alice 的 E2EE secret material(SSK / USK / device keys → 安全销毁,后续无法解密)
+    - 删除 alice 的 E2EE secret material（device keys 与 MLS backup keys 安全销毁，后续无法解密）
     - 把 alice 的消息 redact 成 tombstone(content 删除,event_id 保留以维持因果链)
     - 把 alice 的 devices 全 revoke
     - 把 alice 的 profile 改成 anonymized `did:web:erased-<hash>`(或保留 DID 但 profile 空)

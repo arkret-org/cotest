@@ -62,7 +62,8 @@ export function solandServiceId(key: SolandKey = "default"): string {
 // rather than fail when running on the single-server profile.
 export function hasDualSoland(): boolean {
   return Boolean(
-    optionalEnv("COTEST_SOLAND_ALPHA_BASE_URL") && optionalEnv("COTEST_SOLAND_BETA_BASE_URL"),
+    optionalEnv("COTEST_SOLAND_ALPHA_BASE_URL") &&
+    optionalEnv("COTEST_SOLAND_BETA_BASE_URL"),
   );
 }
 
@@ -79,10 +80,16 @@ export function assertDualSolandNotRequired(context: string): void {
 
 export function inksonBaseUrl(key: SolandKey = "default"): string {
   if (key === "alpha") {
-    return optionalEnv("COTEST_INKSON_ALPHA_BASE_URL")?.replace(/\/$/, "") ?? inksonBaseUrl();
+    return (
+      optionalEnv("COTEST_INKSON_ALPHA_BASE_URL")?.replace(/\/$/, "") ??
+      inksonBaseUrl()
+    );
   }
   if (key === "beta") {
-    return optionalEnv("COTEST_INKSON_BETA_BASE_URL")?.replace(/\/$/, "") ?? inksonBaseUrl();
+    return (
+      optionalEnv("COTEST_INKSON_BETA_BASE_URL")?.replace(/\/$/, "") ??
+      inksonBaseUrl()
+    );
   }
   return requiredEnv("COTEST_INKSON_BASE_URL").replace(/\/$/, "");
 }
@@ -92,7 +99,14 @@ export function coauthBaseUrl(): string | undefined {
 }
 
 export function coauthServiceId(): string {
-  return optionalEnv("COTEST_COAUTH_SERVICE_ID") ?? "did:webvh:z6mkfixture:coauth.joint-e2e.local";
+  return (
+    optionalEnv("COTEST_COAUTH_SERVICE_ID") ??
+    "did:webvh:z6mkfixture:coauth.joint-e2e.local"
+  );
+}
+
+export function coauthSessionGrantIntrospectionBearer(): string | undefined {
+  return optionalEnv("COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER");
 }
 
 export function embeddedWebvhRegistrationBearer(): string | undefined {
@@ -197,7 +211,10 @@ export function mockPushGatewayBaseUrl(): string | undefined {
 }
 
 export function mockAppletRegistryBaseUrl(): string | undefined {
-  return optionalEnv("COTEST_MOCK_APPLET_REGISTRY_BASE_URL")?.replace(/\/$/, "");
+  return optionalEnv("COTEST_MOCK_APPLET_REGISTRY_BASE_URL")?.replace(
+    /\/$/,
+    "",
+  );
 }
 
 export function mockAppletRegistryDid(): string | undefined {
@@ -261,7 +278,14 @@ export function teabayBaseUrl(): string | undefined {
 export function jointRunDir(): string {
   return (
     optionalEnv("COTEST_JOINT_RUN_DIR") ??
-    path.resolve(process.cwd(), "..", "artifacts", "runs", "joint-e2e-adhoc", "fallback")
+    path.resolve(
+      process.cwd(),
+      "..",
+      "artifacts",
+      "runs",
+      "joint-e2e-adhoc",
+      "fallback",
+    )
   );
 }
 
@@ -270,9 +294,15 @@ export function diagnosticsRoot(): string {
 }
 
 export function screenshotRoot(): string {
-  return optionalEnv("COTEST_UI_SCREENSHOT_DIR") ?? path.join(jointRunDir(), "screenshots");
+  return (
+    optionalEnv("COTEST_UI_SCREENSHOT_DIR") ??
+    path.join(jointRunDir(), "screenshots")
+  );
 }
 
 export function visualBaselineRoot(): string {
-  return optionalEnv("COTEST_UI_VISUAL_BASELINE_DIR") ?? path.join(jointRunDir(), "visual-baselines");
+  return (
+    optionalEnv("COTEST_UI_VISUAL_BASELINE_DIR") ??
+    path.join(jointRunDir(), "visual-baselines")
+  );
 }

@@ -32,8 +32,6 @@ struct Case {
     claim_agent_key_authorize_event_id: Option<String>,
     #[serde(default)]
     device_authorize_event_id: Option<String>,
-    #[serde(default)]
-    ssk_generation: Option<u64>,
     current_verification_method: String,
     leaf_signature_key: String,
     leaf_signature_valid: bool,
@@ -48,7 +46,6 @@ fn claim_is_authorized(case: &Case) -> bool {
         "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "agent_key_authorize_event_id": case.claim_agent_key_authorize_event_id,
         "device_authorize_event_id": case.device_authorize_event_id,
-        "ssk_generation": case.ssk_generation,
     });
     let binding_is_exclusive =
         serde_json::from_value::<MlsWelcomePayloadClaimRef>(claim_ref).is_ok();
@@ -71,7 +68,10 @@ pub fn run_agent_mls_keypackage_authorization_vector() -> Result<()> {
     {
         bail!("{FIXTURE} metadata drifted from the registered vector");
     }
-    if fixture.cases.len() < 9 {
+    // The clean-cut device/agent authorization model has one accepted-key
+    // branch. The positive case plus seven independent fail-closed mutations
+    // is the complete v1 matrix.
+    if fixture.cases.len() < 8 {
         bail!("{FIXTURE} must cover the positive case and every fail-closed branch");
     }
 

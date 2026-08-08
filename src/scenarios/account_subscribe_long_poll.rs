@@ -672,6 +672,7 @@ async fn accept_invite_join_now(
         "ak.invite.accept",
         serde_json::json!({
             "invite_id": invite_id,
+            "delivery_status": "unroutable",
         }),
     )
     .await

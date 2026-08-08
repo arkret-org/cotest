@@ -3,10 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
-use arkret_crypto::DeviceTrustBinding;
 use arkret_identifiers::{ConsentId, DeviceId, Did, Hash};
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
-use arkret_models_identity::artifacts_device_identity::CrossSigningPublish;
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
     Audience, Event, EventInitialSubmission, NonEmptyString, PayloadProof, Proof, proof_kind,
@@ -54,8 +52,8 @@ struct PrincipalRegistrationFixtureInput {
     handoff_request_id: String,
     identity_creation_lease: Value,
     device_id: String,
-    enrollment_authority_did: String,
     trust_domain: String,
+    initial_session: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,32 +74,10 @@ struct AccountHandoffRequestFixtureInput {
 struct IdentityCreationRegisterFixtureInput {
     challenge: Value,
     did_operation: Value,
+    pcr_genesis_unit: Value,
+    initial_session: Value,
     recovery_key: String,
     display_name: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PreRegistrationSessionFixtureInput {
-    principal_id: String,
-    device_id: String,
-    requested_scope: Vec<String>,
-    account_handoff_grant: String,
-    audience: String,
-    expires_at: String,
-    dpop_seed_b64url: String,
-}
-
-/// 05-2 — flat inputs for the SSK→device `ak.device-trust-bind-v1` canonical
-/// signing input. Mirrors the args the TS `deviceTrustBindingInput` byte-mirror
-/// helper takes, but the bytes are produced by the SDK.
-#[derive(Debug, Deserialize)]
-struct DeviceTrustBindingInputArgs {
-    principal_id: String,
-    device_id: String,
-    device_public_key: String,
-    hpke_key: String,
-    algorithms: Vec<String>,
-    ssk_generation: u64,
 }
 
 fn main() -> Result<()> {
@@ -120,9 +96,6 @@ fn main() -> Result<()> {
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
         "identity-creation-register-request" => identity_creation_register_request(input)?,
-        "pre-registration-session-request" => pre_registration_session_request(input)?,
-        "cross-signing-binding-input" => cross_signing_binding_input(input)?,
-        "device-trust-binding-input" => device_trust_binding_input(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 
@@ -134,6 +107,10 @@ fn capability_action_registry_digest() -> Result<Value> {
     let digest = arkret::current_capability_action_registry_digest()
         .context("load SDK capability-action registry digest")?;
     Ok(json!({ "digest": digest.as_str() }))
+}
+
+fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
+    NonEmptyString::new(value.into()).map_err(anyhow::Error::msg)
 }
 
 fn principal_registration_fixture(input: Value) -> Result<Value> {
@@ -176,9 +153,6 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             version_time: created_at,
             root_seed: &key_material.root_seed,
             next_root_public_key_multibase: &key_material.next_root_public_key_multikey,
-            enrollment: arkret::webvh::PrincipalEnrollmentDelegation::ExternalAuthority {
-                authority_did: &input.enrollment_authority_did,
-            },
         })
         .context("prepare principal inception")?;
     let principal = Did::new(draft.did.clone()).context("parse prepared principal DID")?;
@@ -197,29 +171,37 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     let lease: arkret::IdentityCreationLease =
         serde_json::from_value(input.identity_creation_lease)
             .context("parse identity-creation lease")?;
+    // One HLC value, used by BOTH the checkpoint field and the Event below.
+    // Inkson rebuilds this Event from the checkpoint and compares canonical
+    // bytes, so a second `generate()` here would fail that comparison.
+    let bootstrap_hlc = hlc.generate().to_string();
+    let (genesis_create_event, founding_authorize_event, device_signing_seed) =
+        build_pcr_genesis_unit(
+            &principal,
+            &control_realm,
+            &input.trust_domain,
+            &draft.version_id,
+            &draft.root_public_key_multibase,
+            &draft.root_verification_method,
+            &key_material.root_seed,
+            &input.device_id,
+            input.handoff_request_id.as_bytes(),
+            created_at,
+            &bootstrap_hlc,
+        )
+        .context("build PCR genesis unit")?;
     let challenge_request = garth::identity_binding_challenge_request(
         arkret::RequestId::new(arkret_identifiers::new_prefixed_uuid7("ak:request:"))
             .context("build identity-binding challenge request id")?,
         &lease,
         draft.submit_body,
+        &arkret_wire::PcrGenesisUnit::new(
+            genesis_create_event.clone(),
+            founding_authorize_event.clone(),
+        )?,
+        &serde_json::from_value(input.initial_session.clone())?,
     )
     .context("build identity-binding challenge request")?;
-    // One HLC value, used by BOTH the checkpoint field and the Event below.
-    // Inkson rebuilds this Event from the checkpoint and compares canonical
-    // bytes, so a second `generate()` here would fail that comparison.
-    let bootstrap_hlc = hlc.generate().to_string();
-    let bootstrap_create_event = build_bootstrap_create_event(
-        &principal,
-        &control_realm,
-        &input.trust_domain,
-        &draft.version_id,
-        &draft.root_public_key_multibase,
-        &draft.root_verification_method,
-        &key_material.root_seed,
-        created_at,
-        &bootstrap_hlc,
-    )
-    .context("build bootstrap Principal Control Realm create Event")?;
     let checkpoint = json!({
         "principal_server_url": input.principal_server_url,
         "gate_account_base": input.gate_account_base,
@@ -227,7 +209,6 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "lease_id": lease.lease_id,
         "lease_fence": lease.fence,
         "device_id": input.device_id,
-        "enrollment_authority_did": input.enrollment_authority_did,
         "trust_domain": input.trust_domain,
         "did": draft.did,
         "version_id": draft.version_id,
@@ -243,10 +224,13 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         // is an event-derived kind, so its id is a function of this finished
         // envelope; the id-only field this fixture used to emit was both
         // unreadable by Inkson and a forbidden random mint.
-        "bootstrap_create_event": serde_json::to_value(&bootstrap_create_event)
-            .context("serialize bootstrap create Event")?,
-        "bootstrap_created_at": arkret_canonical::format_timestamp_canonical(created_at),
-        "bootstrap_hlc": bootstrap_hlc,
+        "pcr_genesis_unit": {
+            "events": [genesis_create_event, founding_authorize_event],
+        },
+        "initial_session": input.initial_session,
+        "device_signing_seed_b64url": device_signing_seed,
+        "genesis_created_at": arkret_canonical::format_timestamp_canonical(created_at),
+        "genesis_hlc": bootstrap_hlc,
         "binding_receipt": null,
         "stage": "custody_confirmed",
     });
@@ -267,7 +251,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
 /// is therefore taken from a field the checkpoint also stores, and the cell
 /// projector is the same `DigestSuite::Sha256` projection Inkson routes through.
 #[allow(clippy::too_many_arguments)]
-fn build_bootstrap_create_event(
+fn build_pcr_genesis_unit(
     principal: &Did,
     control_realm: &str,
     trust_domain: &str,
@@ -275,9 +259,81 @@ fn build_bootstrap_create_event(
     root_public_key_multibase: &str,
     root_verification_method: &str,
     root_seed: &[u8; 32],
+    device_id: &str,
+    device_seed_basis: &[u8],
     created_at: chrono::DateTime<Utc>,
     hlc: &str,
-) -> Result<Event> {
+) -> Result<(Event, Event, String)> {
+    let principal_device_id = DeviceId::new(device_id.to_owned()).context("parse device id")?;
+    let device_seed: [u8; 32] = Sha256::digest(
+        [
+            b"cotest-pcr-genesis-device-v1".as_slice(),
+            device_seed_basis,
+        ]
+        .concat(),
+    )
+    .into();
+    let device_key = SigningKey::from_bytes(&device_seed);
+    let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        &device_key.verifying_key().to_bytes(),
+    );
+    let device_public_key = non_empty(format!("did:key:{device_multibase}"))?;
+    let hpke_key = non_empty("z6LSCotestPcrGenesisHpkeKey")?;
+    let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
+    let mut authorize_payload =
+        arkret_models_collaboration::events_payloads::DeviceAuthorizePayload {
+            principal_id: principal.clone(),
+            device_id: principal_device_id.clone(),
+            device_public_key: device_public_key.clone(),
+            hpke_key: hpke_key.clone(),
+            algorithms: algorithms.clone(),
+            device_key_algorithm: Some(non_empty("Ed25519")?),
+            authorized_by:
+                arkret_models_collaboration::events_payloads::DeviceOrPrincipalRef::Did(
+                    principal.clone(),
+                ),
+            scopes: None,
+            not_before: created_at,
+            expires_at: None,
+            authorization_binding_kind: arkret_models_collaboration::events_payloads::DeviceAuthorizationBindingKind::RootAnchored,
+            device_signature: arkret_models_collaboration::events_payloads::SignatureMaterial::NonEmptyString(
+                non_empty("pending")?,
+            ),
+            recovery_session_id: None,
+        };
+    authorize_payload.device_signature =
+        arkret_models_collaboration::events_payloads::SignatureMaterial::NonEmptyString(non_empty(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+                device_key
+                    .sign(&authorize_payload.device_possession_signature_input()?)
+                    .to_bytes(),
+            ),
+        )?);
+    let authorize_payload_value = serde_json::to_value(&authorize_payload)?;
+    let descriptor = arkret_models_collaboration::events_payloads::FoundingDeviceDescriptor {
+        descriptor_version: 1,
+        device_id: principal_device_id,
+        device_key_digest: arkret::Hash::new(arkret_canonical::canonical::sha256_digest(
+            device_public_key.as_bytes(),
+        ))?,
+        device_public_key,
+        device_key_algorithm:
+            arkret_models_collaboration::events_payloads::FoundingDeviceKeyAlgorithm::Ed25519,
+        device_key_purpose:
+            arkret_models_collaboration::events_payloads::FoundingDeviceKeyPurpose::EventSigningAndMlsIdentity,
+        hpke_key_digest: arkret::Hash::new(arkret_canonical::canonical::sha256_digest(
+            hpke_key.as_bytes(),
+        ))?,
+        hpke_key,
+        hpke_key_algorithm:
+            arkret_models_collaboration::events_payloads::FoundingDeviceHpkeKeyAlgorithm::X25519,
+        algorithms,
+        founding_authorize_payload_digest:
+            arkret_models_collaboration::events_payloads::device_authorize_payload_digest(
+                &authorize_payload_value,
+                arkret_canonical::DigestSuite::Sha256,
+            )?,
+    };
     let mut create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
@@ -289,6 +345,7 @@ fn build_bootstrap_create_event(
                 version_id.to_owned(),
                 arkret_bootstrap::DID_INCEPTION_REF_ROLE,
             ),
+            founding_device_descriptor: descriptor,
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()
                 .context("load SDK capability-action registry digest")?,
             created_at,
@@ -328,7 +385,42 @@ fn build_bootstrap_create_event(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .context("sign the PCR genesis Event with the identity root")?;
-    Ok(create)
+    let mut authorize = Event::new_at(
+        arkret_wire::EventKind::DEVICE_AUTHORIZE,
+        arkret::ScopeRef::Realm {
+            realm_id: arkret::RealmId::new(control_realm.to_owned())?,
+        },
+        principal.clone(),
+        1,
+        arkret::Hlc::new(hlc.to_owned())?,
+        authorize_payload_value,
+        created_at,
+    )?;
+    authorize.prev_refs = vec![create.event_id.clone()];
+    authorize.refresh_content_bound_identity()?;
+    let device_method =
+        arkret_wire::DidUrl::new(format!("{principal}#{device_id}")).map_err(anyhow::Error::msg)?;
+    let device_did = Did::new(format!("did:key:{device_multibase}"))?;
+    let device_signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
+        device_seed,
+        device_did,
+        device_method.clone(),
+    );
+    arkret::signatures::sign_event(
+        &mut authorize,
+        &device_signer,
+        &device_method,
+        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
+    )?;
+    arkret_bootstrap::validate_self_principal_pcr_genesis_unit(&create, &authorize, &|event| {
+        arkret_schema::project_registered_cell_writes(event, arkret_canonical::DigestSuite::Sha256)
+            .map_err(|error| error.to_string())
+    })?;
+    Ok((
+        create,
+        authorize,
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(device_seed),
+    ))
 }
 
 fn account_handoff_request(input: Value) -> Result<Value> {
@@ -373,33 +465,13 @@ fn identity_creation_register_request(input: Value) -> Result<Value> {
     let request = garth::identity_creation_register_request(
         &challenge,
         did_operation,
+        serde_json::from_value(input.pcr_genesis_unit).context("parse PCR genesis unit")?,
+        serde_json::from_value(input.initial_session).context("parse initial session request")?,
         &key_material.root_seed,
         input.display_name,
     )
     .context("build identity-creation register request")?;
     serde_json::to_value(request).context("serialize identity-creation register request")
-}
-
-fn pre_registration_session_request(input: Value) -> Result<Value> {
-    let input: PreRegistrationSessionFixtureInput =
-        serde_json::from_value(input).context("parse pre-registration session input")?;
-    let signing_key = signing_key_from_seed(&input.dpop_seed_b64url)?;
-    let expires_at = canonical::parse_timestamp_canonical(&input.expires_at)
-        .context("parse pre-registration proof expiry")?;
-    let request = garth::pre_registration_session_grant_request(
-        Did::new(input.principal_id).context("parse session principal")?,
-        Some(DeviceId::new(input.device_id).context("parse session device id")?),
-        input.requested_scope,
-        &input.account_handoff_grant,
-        Did::new(input.audience).context("parse session audience")?,
-        expires_at,
-        |bytes| {
-            Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD
-                .encode(signing_key.sign(bytes).to_bytes()))
-        },
-    )
-    .context("build pre-registration session request")?;
-    serde_json::to_value(request).context("serialize pre-registration session request")
 }
 
 fn signing_key_from_seed(seed_b64url: &str) -> Result<SigningKey> {
@@ -442,50 +514,6 @@ fn principal_control_realm(input: Value) -> Result<Value> {
     let principal = Did::new(input.principal_id).context("parse principal DID")?;
     Ok(json!({
         "realm_id": principal_control_realm_id(&principal),
-    }))
-}
-
-/// 05-2 — deserialize a full `ak.cross_signing.publish` payload (the shape the
-/// TypeScript conformance builder emits) into the SDK's
-/// `CrossSigningPublish` and return the SDK-authoritative PSK→SSK and
-/// PSK→USK `ak.cross-signing-bind-v1` canonical signing inputs. The TS
-/// `crossSigningBindingInput` byte-mirror is regression-checked against these
-/// bytes so a drift in the prefix / body field-set / canonical-JSON encoding
-/// is caught cross-language.
-fn cross_signing_binding_input(input: Value) -> Result<Value> {
-    let content: CrossSigningPublish =
-        serde_json::from_value(input).context("parse cross_signing.publish content")?;
-    let self_signing = content
-        .self_signing_binding_input()
-        .map_err(|err| anyhow::anyhow!("self_signing binding input: {err}"))?;
-    let user_signing = content
-        .user_signing_binding_input()
-        .map_err(|err| anyhow::anyhow!("user_signing binding input: {err}"))?;
-    Ok(json!({
-        "self_signing_input_b64": base64::engine::general_purpose::STANDARD.encode(&self_signing),
-        "user_signing_input_b64": base64::engine::general_purpose::STANDARD.encode(&user_signing),
-    }))
-}
-
-/// 05-2 — SDK-authoritative `ak.device-trust-bind-v1` canonical signing input
-/// (SSK→device) for the TS `deviceTrustBindingInput` byte-mirror to regress
-/// against.
-fn device_trust_binding_input(input: Value) -> Result<Value> {
-    let args: DeviceTrustBindingInputArgs =
-        serde_json::from_value(input).context("parse device-trust binding input args")?;
-    let principal = Did::new(args.principal_id).context("parse principal DID")?;
-    let device_id = DeviceId::new(args.device_id).context("parse device id")?;
-    let bytes = DeviceTrustBinding::canonical_input(
-        &principal,
-        &device_id,
-        &args.device_public_key,
-        &args.hpke_key,
-        &args.algorithms,
-        args.ssk_generation,
-    )
-    .map_err(|err| anyhow::anyhow!("device-trust binding input: {err}"))?;
-    Ok(json!({
-        "input_b64": base64::engine::general_purpose::STANDARD.encode(&bytes),
     }))
 }
 

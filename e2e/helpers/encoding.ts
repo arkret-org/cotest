@@ -1,7 +1,7 @@
 // Shared low-level encoders for the e2e harness.
 //
 // Base58BTC was previously re-implemented (inconsistently) in
-// helpers/webvh-api.ts, helpers/cross-signing-harness.ts and
+// helpers/webvh-api.ts and
 // helpers/contact-api.ts. This module is the single source of truth. The
 // implementation handles leading zero bytes (each is emitted as a leading `1`),
 // matching soland's `bs58`-backed decoder so multibase `z…` renderings produced
@@ -14,6 +14,8 @@ const BASE58BTC_ALPHABET =
 
 // multicodec ed25519-pub (0xed 0x01) varint prefix.
 const ED25519_MULTICODEC_PREFIX = Buffer.from([0xed, 0x01]);
+// multicodec x25519-pub (0xec 0x01) varint prefix.
+const X25519_MULTICODEC_PREFIX = Buffer.from([0xec, 0x01]);
 
 /// Encode arbitrary bytes as Base58BTC (Bitcoin alphabet), preserving leading
 /// zero bytes as leading `1` characters.
@@ -56,6 +58,15 @@ export function encodeEd25519PubkeyMultibase(rawPublicKey: Buffer): string {
   }
   const envelope = Buffer.concat([ED25519_MULTICODEC_PREFIX, rawPublicKey]);
   return `z${base58btcEncode(envelope)}`;
+}
+
+export function encodeX25519PubkeyMultibase(rawPublicKey: Buffer): string {
+  if (rawPublicKey.length !== 32) {
+    throw new Error(
+      `X25519 public key must be 32 bytes, got ${rawPublicKey.length}`,
+    );
+  }
+  return `z${base58btcEncode(Buffer.concat([X25519_MULTICODEC_PREFIX, rawPublicKey]))}`;
 }
 
 /// Extract the raw 32-byte Ed25519 public key from an SPKI-exported KeyObject.

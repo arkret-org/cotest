@@ -1,8 +1,8 @@
 // Principal did:webvh inception fixture construction.
 //
 // This helper only emits the current cold-root entry-0 shape. The root and
-// next root stay in method parameters, while the DID document contains a
-// distinct principal-signing key and a dedicated enrollment key for model A.
+// next root stay in method parameters. Device authorization is intentionally
+// absent: the DID is only the identity/root-rotation anchor.
 
 import {
   createHash,
@@ -28,9 +28,6 @@ export type PrincipalGenesisInput = {
   localId: string;
   rootKey: WebvhKey;
   nextRootKey: WebvhKey;
-  principalSigningKey: WebvhKey;
-  enrollmentKey: WebvhKey;
-  externalEnrollmentAuthorityDid?: string;
   alsoKnownAs?: string[];
   serviceEndpoint?: string;
   versionTime?: string;
@@ -42,8 +39,6 @@ export type BuiltPrincipalGenesis = {
   versionId: string;
   entry: Record<string, unknown>;
   didDocument: Record<string, unknown>;
-  principalSigningKeyId: string;
-  enrollmentKeyId: string;
 };
 
 export type WebvhGenesisInput = {
@@ -82,7 +77,10 @@ function sha256MultihashBase58btc(bytes: Buffer): string {
   return base58btcEncode(Buffer.concat([Buffer.from([0x12, 0x20]), digest]));
 }
 
-function entryHash(entry: Record<string, unknown>, previousAnchor: string): string {
+function entryHash(
+  entry: Record<string, unknown>,
+  previousAnchor: string,
+): string {
   const preimage: Record<string, unknown> = {
     ...entry,
     versionId: previousAnchor,
@@ -137,46 +135,11 @@ function principalDocument(
   const principalServerService = {
     id: `${did}#soland`,
     type: "ArkretPrincipalServer",
-    serviceEndpoint:
-      input.serviceEndpoint ?? input.baseUrl.replace(/\/$/, ""),
+    serviceEndpoint: input.serviceEndpoint ?? input.baseUrl.replace(/\/$/, ""),
   };
-  if (input.externalEnrollmentAuthorityDid) {
-    return {
-      "@context": ["https://www.w3.org/ns/did/v1"],
-      id: did,
-      alsoKnownAs: input.alsoKnownAs ?? [],
-      service: [
-        principalServerService,
-        {
-          id: `${did}#enrollment-authority`,
-          type: "ArkretDeviceEnrollmentAuthority",
-          serviceEndpoint: input.externalEnrollmentAuthorityDid,
-        },
-      ],
-    };
-  }
-  const principalSigningKeyId = `${did}#principal-signing-key`;
-  const enrollmentKeyId = `${did}#device-enrollment-authority`;
   return {
     "@context": ["https://www.w3.org/ns/did/v1"],
     id: did,
-    verificationMethod: [
-      {
-        id: principalSigningKeyId,
-        type: "Multikey",
-        controller: did,
-        publicKeyMultibase: input.principalSigningKey.multibase,
-      },
-      {
-        id: enrollmentKeyId,
-        type: "Multikey",
-        controller: did,
-        publicKeyMultibase: input.enrollmentKey.multibase,
-      },
-    ],
-    authentication: [principalSigningKeyId],
-    assertionMethod: [principalSigningKeyId],
-    capabilityDelegation: [enrollmentKeyId],
     alsoKnownAs: input.alsoKnownAs ?? [],
     service: [principalServerService],
   };
@@ -185,20 +148,6 @@ function principalDocument(
 export function buildPrincipalGenesisEntry(
   input: PrincipalGenesisInput,
 ): BuiltPrincipalGenesis {
-  const keys = [
-    input.rootKey.multibase,
-    input.nextRootKey.multibase,
-    ...(input.externalEnrollmentAuthorityDid
-      ? []
-      : [
-          input.principalSigningKey.multibase,
-          input.enrollmentKey.multibase,
-        ]),
-  ];
-  if (new Set(keys).size !== keys.length) {
-    throw new Error("principal root, next root, signing, and enrollment keys must be distinct");
-  }
-
   const built = buildWebvhGenesisEntry({
     baseUrl: input.baseUrl,
     localId: input.localId,
@@ -207,11 +156,7 @@ export function buildPrincipalGenesisEntry(
     document: (did) => principalDocument(did, input),
     versionTime: input.versionTime,
   });
-  return {
-    ...built,
-    principalSigningKeyId: `${built.did}#principal-signing-key`,
-    enrollmentKeyId: `${built.did}#device-enrollment-authority`,
-  };
+  return built;
 }
 
 export function buildWebvhGenesisEntry(
@@ -234,7 +179,9 @@ export function buildWebvhGenesisEntry(
       method: WEBVH_METHOD_VERSION,
       updateKeys: [input.rootKey.multibase],
       nextKeyHashes: [
-        sha256MultihashBase58btc(Buffer.from(input.nextRootKey.multibase, "utf8")),
+        sha256MultihashBase58btc(
+          Buffer.from(input.nextRootKey.multibase, "utf8"),
+        ),
       ],
     },
     state: input.document(placeholderDid),

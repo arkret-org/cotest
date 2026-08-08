@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:冷保管确认、恢复策略与首备份、跨设备解密、B 模型 DID entry + 原子 `ak.device.reanchor` / replacement authorize、generation fence 及 E2EE 历史恢复。Recovery Key 是唯一的内容恢复用户凭证,但派生出的 DID root、recovery-proof Ed25519 key 与 backup-only X25519 HPKE key 必须角色分离。
+验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:冷保管确认、恢复策略与首备份、跨设备解密、root-anchored DID entry + 原子 `ak.device.reanchor` / replacement authorize、generation fence 及 E2EE 历史恢复。Recovery Key 是唯一的内容恢复用户凭证,但派生出的 DID root、recovery-proof Ed25519 key 与 backup-only X25519 HPKE key 必须角色分离。
 
 不验证:首次 onboarding(见 identity/onboarding)、多设备配对(见 identity/multi-device)、device 撤销(见 identity/multi-device)。
 
@@ -19,7 +19,7 @@
 - `identity/key-management.md` §7.10 — 自动持续备份
 - `identity/key-management.md` §8 — Threshold recovery service
 - `crypto-media/device-lifecycle.md` §12-§12.1 — Key backup durable form + Backup API (PUT/GET/DELETE)
-- `crypto-media/device-lifecycle.md` 的 B 模型恢复与 device generation fence — 原子 re-anchor unit、旧代拒绝与冲突 quarantine
+- `crypto-media/device-lifecycle.md` 的 root-anchored 恢复与 device generation fence — 原子 re-anchor unit、旧代拒绝与冲突 quarantine
 
 ## 拓扑
 
@@ -69,16 +69,17 @@
 13. 客户端:
     - 生成新 device key(本地)
     - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ 派生 recovery private key → HPKE open `recovery_public_key` envelope
-    - 解 ciphertext → 拿回 self_signing_key + user_signing_key + MLS backup key
-14. 客户端从 accepted policy snapshot 判定身份模型,不得由客户端自报:A 模型只走 SSK reset;B 模型先发布更高且 canonical 的 did:webvh entry,再构造 root-signed `ak.device.reanchor` + enrollment-authority-signed replacement `ak.device.authorize` 原子 unit。
-15. B 模型提交 unit 时绑定 live registry head、完整 `pre_fence_basis` CAS 与 recovery session;无 prior Seal 时 basis 必须显式为 null。任一拆批、错 authority/ref、旧/spent root 或 frontier 漂移均零副作用拒绝。
+    - 解 ciphertext → 拿回 MLS backup key
+14. 客户端发布更高且 canonical 的 did:webvh entry，再构造 root-signed `ak.device.reanchor` + 新设备自签 PoP 的 replacement `ak.device.authorize` 原子 unit。
+15. root-anchored unit 绑定 live registry head、完整 `pre_fence_basis` CAS 与 recovery session;无 prior Seal 时 basis 必须显式为 null。任一拆批、错 authority/ref、旧/spent root 或 frontier 漂移均零副作用拒绝。
 16. 断言 typed receipt 同时绑定两个 Event;`GET /_arkret/self/account/viewer` 显示 device-2 active,当前 generation 等于新 DID version,所有未提交旧代 Event/Seal 被 `device_generation_fenced` 拒绝。
+17. 客户端以仍有效的 Bound AccountHandoff、terminal receipt、completion attestation、replacement authorize 与 `InitialSessionGrantRequest` 调用 recovery-completion issuance；Coauth 直接返回 DPoP-bound Standard grant。exact retry 返回逐字节相同 outcome；不存在临时 recovery grant、第二次 OIDC 或换发步骤。
 
 ### Phase D — alice 在 device-2 上 sync E2EE history
 
-17. device-2 拉 `R_e2ee` 的 MLS state(commit chain 回放)
-18. 用 backup 提供的 MLS history backup key 解 epoch 历史
-19. 断言:Phase B 时 bob 发的消息现在在 device-2 timeline 可见、明文渲染
+18. device-2 拉 `R_e2ee` 的 MLS state(commit chain 回放)
+19. 用 backup 提供的 MLS history backup key 解 epoch 历史
+20. 断言:Phase B 时 bob 发的消息现在在 device-2 timeline 可见、明文渲染
 
 ## Observable assertions(合并)
 
@@ -87,7 +88,7 @@
 - Phase C 步骤 10:fresh browser 优先 existing-device authorization;无 active policy / 无 `did_recovery` 时 fail closed,不尝试 recovery proof,不生成新 24 词
 - Phase C 步骤 13:Recovery Key 错误 → 非法 24 词在输入校验即拒;合法但错误的词串在本地 HPKE open / envelope 校验阶段拒,**不发解锁请求到服务器**(避免 oracle)
 - Phase C 步骤 16:device-2 成功注册、generation 推进,旧代离线队列不重放
-- Phase D 步骤 19:历史消息明文渲染
+- Phase D 步骤 20:历史消息明文渲染
 
 ## Edge cases / sub-tests
 
@@ -97,20 +98,20 @@
 - **E8.4 threshold recovery (3 of 5 shares)**:alice 用恢复 shares 而非 24 词词串;3 个 share holder 各自签发响应,客户端拼凑出 recovery key → 解密 envelope。覆盖 `key-management.md §8`(门限是 recovery policy 层,§7.5.4)
 - **E8.5 trusted recovery service**:走第三方恢复服务(`ak.recovery.service.v1`)发起,验证服务端的 attestation,客户端最终拿到 backup decryption key
 - **E8.6 Mixed-domain backup**:`mixed_secret_storage=true` only 允许在 `personal_node` profile;`high_assurance` 部署 MUST 拒(§7.1)
-- **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke;B 模型恢复仍由 accepted policy + DID update authority 完成,不依赖旧设备,且历史访问仍按当前 membership 评估。
-- **E8.8 A/B 混用**:A 模型携带 re-anchor、B 模型携带 SSK-reset,或同一设备同时呈现两种 authority binding,必须 fail closed。
+- **E8.7 Backup 在 device revoke 后**:device-1 被远程 revoke;root-anchored 恢复仍由 accepted policy + DID update authority 完成,不依赖旧设备,且历史访问仍按当前 membership 评估。
+- **E8.8 authority 混用**：re-anchor authorize 不为 `root_anchored` 或携带额外授权来源时，必须 fail closed。
 - **E8.9 同高度冲突**:同 DID version number 的不同 entry 或同 entry 的不同 unit 均全候选 quarantine,不得 first-seen winner;只允许更高预承诺 root 解除冲突。
 - **E8.10 恢复秘密疑似泄露**:若没有预先存在的独立权威,禁止同 DID 原地 handoff,必须重铸 DID 并重建信任;有独立权威时按 durable checkpoints 完成两 entry handoff、re-anchor、policy、全 active backup series 重封装、pointer 推进,最后撤销旧 policy key。
 
 ## Implementation notes
 
-- **当前可执行 conformance**：Rust `identity_root_conformance` 已直接运行正式 KDF KAT、SDK typed bootstrap/re-anchor helper、A/B 互斥与 generation fence；旧的 direct-authorize recovery harness 已删除。完整 canonical two-entry history、原子 admission/reducer 与 B-model live re-anchor 在对应 runner 落地前仍按未覆盖记录，不得把 fixture 名称检查计作执行。
+- **当前可执行 conformance**：Rust `identity_root_conformance` 已直接运行正式 KDF KAT、SDK typed genesis/re-anchor helper 与 generation fence；`recovery_completion_grant` 运行真实 signed receipt/attestation、direct Standard outcome、exact replay 与逐字段 mutation 矩阵。完整 canonical two-entry history、原子 admission/reducer 与 live re-anchor 在对应 runner 落地前仍按未覆盖记录，不得把 fixture 名称检查计作执行。
 - **inkson 现状**:`/settings/recovery` RecoveryPanel(生成/轮换/copy + restore 面板)与 `/settings/encryption` SettingsMlsRecoveryPanel 已存在;fresh device 先按 device authorization fail-closed,只有 active policy + backup 可用时才进入输入已有 24 词的 restore。旧 `/recover` 路由、Vault passphrase 面板与 `/settings/security` 的手动备份按钮已删除(security 页只剩只读状态 + `key-backup-setup-link`)。
 - **harness**:测试需要在 step 9 真的把 device-1 的 browser context 丢掉(不仅是关页面,而是新 context 完全空 storage)
 
 ## 风险 / 前置依赖
 
-- threshold / recovery service 的客户端 reconstruction、完整 B 模型 live registry/re-anchor harness，以及覆盖全部正式 case 的 Cotest admission/reducer runner 仍是端到端前置依赖；内容恢复段由 `encryption/key-backup` A1/A2 live 覆盖。
+- threshold / recovery service 的客户端 reconstruction、完整 root-anchored live registry/re-anchor harness，以及覆盖全部正式 case 的 Cotest admission/reducer runner 仍是端到端前置依赖；内容恢复段由 `encryption/key-backup` A1/A2 live 覆盖。
 - E2EE history backup key 是否能跨 MLS epoch 解 backfill,实现复杂度高(spec §7.3 step 6)。
 
 ## 总耗时预估

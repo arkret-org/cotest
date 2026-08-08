@@ -119,7 +119,6 @@ def main() -> int:
     src = args.raw_config.read_text(encoding="utf-8-sig")
     src = replace_named_pem_key(
         src,
-        "coauth-device-enrollment-v1",
         "MC4CAQAwBQYDK2VwBCIEIAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
     )
     coauth_base = trailing_slash(args.coauth_base_url)

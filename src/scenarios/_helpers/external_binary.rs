@@ -103,6 +103,25 @@ impl SpawnedExternalProcess {
             _port_reservations: port_reservations,
         }
     }
+
+    /// Terminate and reap the owned child while retaining its durable spawn
+    /// metadata and port reservations for an in-place restart.
+    pub(crate) fn kill_and_wait(&mut self) -> Result<()> {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            child.wait().context("wait for stopped external service")?;
+        }
+        Ok(())
+    }
+
+    /// Install a replacement child after [`Self::kill_and_wait`].
+    pub(crate) fn replace_child(&mut self, child: Child) -> Result<()> {
+        if self.child.is_some() {
+            bail!("cannot replace a running external service child");
+        }
+        self.child = Some(child);
+        Ok(())
+    }
 }
 
 impl Drop for SpawnedExternalProcess {

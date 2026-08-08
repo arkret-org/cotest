@@ -11,7 +11,6 @@
 
 mod anchor;
 mod consent;
-mod cross_signing;
 mod discovery;
 mod e2ee;
 mod federation;
@@ -34,10 +33,6 @@ use anyhow::{Result, anyhow};
 pub use consent::{
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
     run_consent_fixture_suite,
-};
-pub use cross_signing::{
-    run_cross_signing_reset_fixture_suite, run_device_cross_signing_trust_fixture_suite,
-    run_device_verification_fixture_suite,
 };
 pub use discovery::{run_discovery_profile_fixture_suite, run_facet_renderer_query_fixture_suite};
 pub use e2ee::{

@@ -23,7 +23,7 @@
 | 跨浏览器账户恢复 + 历史解密 | ✅ active | `key-backup.spec.ts` A1 |
 | 恢复后第二设备加密 kanban 写入 | ✅ active | `key-backup.spec.ts` A2 |
 | key backup 链/单调/前驱 | ✅ active | `tests/key_backup_three_class_scenarios.rs` |
-| cross-signing reset 时钟偏移/重放 | ✅ active(soland 单测) | `soland/tests/http_api/events.rs` |
+| root-anchored device re-anchor 时钟偏移/重放 | ✅ active(soland 单测) | `soland/tests/http_api/events.rs` |
 | e2ee relaxed window / metadata floor 收紧 | ✅ active | `scenarios/circle/metadata_encryption_floor.rs`、`e2ee_relaxed_window_negative.rs` |
 | **创建者本机加密写入 strand body(description)** | ✅ active **绿(实测真加密)** | `e2e/tests/kanban/end-to-end.spec.ts` E15.7 |
 | **创建者本机加密 synthesis** | ✅ active **绿(实测真加密)** | kanban E15.8 |

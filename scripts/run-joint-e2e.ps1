@@ -40,6 +40,11 @@ param(
     [string]$CoauthBaseUrl,
     [string]$SolandCommand,
     [string]$SolandBin,
+    # Optional PostgreSQL store for the managed process-mode Soland. The
+    # decision-fence race lane requires this; an empty value keeps the normal
+    # lightweight joint stack unchanged.
+    [string]$SolandDatabaseUrl,
+    [switch]$RequireDecisionRace,
     [ValidateSet("process", "docker")]
     [string]$SolandRuntime = "process",
     [string]$SolandImage = "cotest-soland:latest",
@@ -2009,6 +2014,7 @@ if ($JointDir) {
 $serviceLogDir = Join-Path $jointDir "services"
 $screenshotDir = Join-Path $jointDir "screenshots"
 $visualBaselineDir = Join-Path $jointDir "visual-baselines"
+$solandChaosControlFile = Join-Path $jointDir "soland-decision-chaos.json"
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
 $null = New-Item -ItemType Directory -Force -Path $screenshotDir
 $null = New-Item -ItemType Directory -Force -Path $visualBaselineDir
@@ -2030,6 +2036,15 @@ if ($DualSoland) {
 }
 if ($SolandRuntime -eq "docker" -and $SolandCommand) {
     throw "-SolandRuntime docker is incompatible with -SolandCommand; omit -SolandCommand so the harness can start the image."
+}
+if ($SolandDatabaseUrl -and ($SolandRuntime -ne "process" -or $SolandCommand -or -not $solandPort)) {
+    throw "-SolandDatabaseUrl is supported only when the harness owns one process-mode Soland."
+}
+if ($SolandDatabaseUrl -and $DualSoland) {
+    throw "-SolandDatabaseUrl cannot be shared by -DualSoland; provision independent databases instead."
+}
+if ($RequireDecisionRace -and -not $SolandDatabaseUrl) {
+    throw "-RequireDecisionRace requires -SolandDatabaseUrl so the shared fence is exercised in PostgreSQL."
 }
 if ($SkipInkson -and ($InksonCommand -or $InksonBetaCommand -or $PSBoundParameters.ContainsKey("InksonBaseUrl") -or $PSBoundParameters.ContainsKey("InksonBetaBaseUrl"))) {
     throw "-SkipInkson cannot be combined with Inkson URLs or commands."
@@ -2971,7 +2986,7 @@ try {
         $rustLog = if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) { $env:RUST_LOG } else { "info" }
         $values = [ordered]@{
             RUST_LOG = $rustLog
-            DATABASE_URL = ""
+            DATABASE_URL = if ($SolandDatabaseUrl) { $SolandDatabaseUrl } else { "" }
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
             SOLAND_DEVELOPMENT_MODE = "true"
             SOLAND_FIRST_PROVISIONING = "true"
@@ -3014,7 +3029,8 @@ try {
             $values.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
         }
         Write-DotEnvFile -Path $ConfigPath -Values $values
-        return "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
+        return "& {{ `$env:SOLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:SOLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
+            (Quote-PsLiteral $solandChaosControlFile),
             (Quote-PsLiteral $BinaryPath),
             (Quote-PsLiteral $ConfigPath),
             $Port
@@ -3240,6 +3256,19 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
+    if ($generatedSolandCommand -and $SolandDatabaseUrl) {
+        $env:COTEST_SOLAND_CHAOS_CONTROL_FILE = $solandChaosControlFile
+        $env:COTEST_SOLAND_STORAGE = "postgres"
+        if ($RequireDecisionRace) {
+            $env:COTEST_REQUIRE_DECISION_RACE = "1"
+        } else {
+            Remove-Item Env:COTEST_REQUIRE_DECISION_RACE -ErrorAction SilentlyContinue
+        }
+    } else {
+        Remove-Item Env:COTEST_SOLAND_CHAOS_CONTROL_FILE -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_SOLAND_STORAGE -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_REQUIRE_DECISION_RACE -ErrorAction SilentlyContinue
+    }
     $env:COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
     if ($SolandNotarySigningKey) {
         # The peer-surface fixtures must sign as the configured service
@@ -3289,6 +3318,7 @@ try {
         Assert-CoauthDpopGrantSeamReady -BaseUrl $CoauthBaseUrl
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
+        $env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
         # The OAuth client_id soland is configured to advertise (see
         # SOLAND_OAUTH_CLIENT_ID in the generated soland config). Surfaced to e2e so
         # oidc-login-chain.spec.ts can assert /_arkret/describe advertises it.
@@ -3313,6 +3343,7 @@ try {
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue

@@ -120,19 +120,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// 05-2 — Cross-language golden gate for the device-lifecycle §5.1/§5.2
-    /// canonical signing inputs. The SDK (CrossSigningPublish /
-    /// DeviceTrustBinding) must reproduce every golden vector in
-    /// e2e/fixtures/cross-signing-binding-golden.json byte-for-byte. The TS
-    /// byte-mirror (e2e/tests/conformance/cross-signing-binding-golden.spec.ts)
-    /// asserts the same golden, so the e2e helpers can no longer silently drift
-    /// from the SDK signing-input construction.
-    cross_signing_binding_golden_suite_matches_reference_semantics,
-    "cross_signing_binding_golden",
-    cotest::conformance::run_cross_signing_binding_golden_suite,
-);
-
-conformance_test!(
     redaction_fixture_suite_matches_reference_semantics,
     "redaction_fixture",
     cotest::conformance::run_redaction_fixture_suite,
@@ -515,14 +502,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-24 D2 — device verification strand (cross-signing chain, SAS, OOB
-    /// emoji code).
-    device_verification_fixture_suite_matches_reference_semantics,
-    "device_verification_fixture",
-    cotest::conformance::run_device_verification_fixture_suite,
-);
-
-conformance_test!(
     /// Round-25 B4 — history visibility scope vectors (joined / invited /
     /// world_readable / shared) — smoke validation.
     history_visibility_fixture_suite_matches_reference_semantics,
@@ -594,23 +573,6 @@ conformance_test!(
     history_visibility_projection_matrix_round_26,
     "history_visibility_projection_matrix_round_26",
     cotest::conformance::run_history_visibility_projection_matrix_check,
-);
-
-conformance_test!(
-    /// Round-27 D5 — device cross-signing trust boundary (cross-user master ?
-    /// user-signing ? trusted-user master chain; revoke + rotation invariants).
-    device_cross_signing_trust_fixture_suite_matches_reference_semantics,
-    "device_cross_signing_trust_fixture",
-    cotest::conformance::run_device_cross_signing_trust_fixture_suite,
-);
-
-conformance_test!(
-    /// S4 — ak.profile.cross_signing.reset.v1 parser-level conformance
-    /// vectors: proof family, generation monotonicity, replay cache, clock
-    /// skew, and successor-publish window.
-    cross_signing_reset_fixture_suite_matches_reference_semantics,
-    "cross_signing_reset_fixture",
-    cotest::conformance::run_cross_signing_reset_fixture_suite,
 );
 
 conformance_test!(
@@ -764,6 +726,23 @@ conformance_test!(
     key_backup_hardening_fixture_suite_matches_reference_semantics,
     "key_backup_hardening_fixture",
     cotest::conformance::run_key_backup_hardening_fixture_suite,
+);
+
+conformance_test!(
+    /// SessionGrant issuer-ledger pure KATs pin canonical IDs/digests and the
+    /// durable exact-replay reference semantics.
+    session_grant_issuer_ledger,
+    "session_grant_issuer_ledger",
+    cotest::conformance::run_session_grant_issuer_ledger_suite,
+);
+
+conformance_test!(
+    /// Bound recovery completion consumes signed root-anchored terminal
+    /// evidence and issues one directly usable Standard grant. Exact replay
+    /// is byte-identical and every evidence/session mutation fails closed.
+    recovery_completion_grant,
+    "recovery_completion_grant",
+    cotest::conformance::run_recovery_completion_grant_suite,
 );
 
 conformance_test!(

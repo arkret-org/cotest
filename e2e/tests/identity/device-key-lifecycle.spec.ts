@@ -13,7 +13,6 @@ import {
 } from "../../helpers/real-oidc-login";
 import {
   assertJointStackNotRequired,
-  completePendingPrincipalBootstrap,
   openUserPage,
   uniqueUser,
   type JointUserPage,
@@ -64,12 +63,9 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
     const returningUser = uniqueUser("oidc-key-life");
     returningUser.did = principalDid!;
     if (registeredAccount) {
-      returningUser.deviceId = registeredAccount.bootstrapDeviceId;
+      returningUser.deviceId = registeredAccount.genesisDeviceId;
     }
-    const jointPage = await openUserPage(browser, returningUser, {
-      pendingPrincipalRegistration:
-        registeredAccount?.pendingPrincipalRegistration,
-    });
+    const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
     const grants = observeSessionGrants(page);
     const refreshes = observeSessionGrantRefreshes(page);
@@ -84,12 +80,6 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       await test.step("first real OIDC login establishes the device identity", async () => {
         await jointPage.gotoLogin();
         await serverLoginViaCoauth(page, account);
-        if (registeredAccount) {
-          await completePendingPrincipalBootstrap(
-            jointPage,
-            registeredAccount.recoveryKey,
-          );
-        }
       });
 
       let activeGrant = await grants.waitForLatest();

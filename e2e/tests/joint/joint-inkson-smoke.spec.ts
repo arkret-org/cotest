@@ -36,7 +36,10 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     );
     if (!flow) {
       assertJointStackNotRequired("joint-inkson Realm genesis browser login");
-      test.skip(true, "coauth DPoP session-grant login is required for joint UI");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for joint UI",
+      );
       return;
     }
 
@@ -153,7 +156,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     await expect(message).toBeVisible({
       timeout: 30_000,
     });
-    await expect(message.locator(".msg-head .name")).toHaveText(principalHandle);
+    await expect(message.locator(".msg-head .name")).toHaveText(
+      principalHandle,
+    );
 
     const selfParticipant = jointRealm.alicePage.page
       .getByTestId("discussion-user-row")
@@ -166,10 +171,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     await expect(
       jointRealm.alicePage.page.getByTestId("account-menu-handles"),
     ).toHaveText(`@${principalHandle}`);
-    if (
-      accountAuthorityHandle &&
-      accountAuthorityHandle !== principalHandle
-    ) {
+    if (accountAuthorityHandle && accountAuthorityHandle !== principalHandle) {
       for (const identitySurface of [
         message,
         selfParticipant,
@@ -196,7 +198,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     const participantSession = await createDpopUserSession(
       request,
       `joint-participant-${stamp}`,
-      { skipDeviceEnrollment: true },
     );
     expect(participantSession, "joint participant DPoP session").toBeTruthy();
     const participantId = participantSession!.user.did;
@@ -205,7 +206,10 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       participantSession,
       { prepareMlsDevice: false },
     );
-    expect(participantFlow, "joint participant browser enrollment flow").toBeTruthy();
+    expect(
+      participantFlow,
+      "joint participant browser enrollment flow",
+    ).toBeTruthy();
     await participantFlow!.page.gotoHome();
 
     try {
@@ -280,7 +284,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await jointRealm.alicePage.page.goto(`/chat/${jointRealm.realmId}`, {
         waitUntil: "domcontentloaded",
       });
-      await expect(jointRealm.alicePage.page.getByTestId("chat-panel")).toBeVisible({
+      await expect(
+        jointRealm.alicePage.page.getByTestId("chat-panel"),
+      ).toBeVisible({
         timeout: 120_000,
       });
       await expect(jointRealm.alicePage.timelineEvent(replyBody)).toBeVisible({
@@ -295,12 +301,18 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       const participantRow = jointRealm.alicePage.page
         .getByTestId("discussion-user-row")
         .filter({
-          has: jointRealm.alicePage.page.getByTitle(participantId, { exact: true }),
+          has: jointRealm.alicePage.page.getByTitle(participantId, {
+            exact: true,
+          }),
         });
       await expect(participantRow).toBeVisible();
       await expect(participantRow).not.toContainText(forgedDisplayName);
-      await expect(participantRow.getByTestId("member-badge-agent")).toHaveCount(0);
-      await expect(participantRow.getByTestId("participant-agent-selector")).toHaveCount(0);
+      await expect(
+        participantRow.getByTestId("member-badge-agent"),
+      ).toHaveCount(0);
+      await expect(
+        participantRow.getByTestId("participant-agent-selector"),
+      ).toHaveCount(0);
 
       const input = jointRealm.alicePage.page.getByTestId("chat-input");
       await input.fill(`@me/${slug}`);
@@ -360,7 +372,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
           return;
         }
         const body = await response.text().catch(() => "");
-        subscribeFailures.push(`${response.status()} ${response.url()} ${body}`);
+        subscribeFailures.push(
+          `${response.status()} ${response.url()} ${body}`,
+        );
       });
     }
 
@@ -376,20 +390,26 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await alicePage.inviteFromAdmin(realmId, bob.did);
 
       await expect
-        .poll(async () => {
-          const invites = await listInvitesForDpop(
-            request,
-            bobFlow.session,
-            bobPage.serverUrl,
-            bob.did,
-          );
-          return invites.some(
-            (invite) => invite.realm_id === realmId && invite.invitee === bob.did,
-          );
-        }, { timeout: 30_000 })
+        .poll(
+          async () => {
+            const invites = await listInvitesForDpop(
+              request,
+              bobFlow.session,
+              bobPage.serverUrl,
+              bob.did,
+            );
+            return invites.some(
+              (invite) =>
+                invite.realm_id === realmId && invite.invitee === bob.did,
+            );
+          },
+          { timeout: 30_000 },
+        )
         .toBe(true);
 
-      await bobPage.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+      await bobPage.page.goto("/notifications", {
+        waitUntil: "domcontentloaded",
+      });
       const inviteCard = bobPage.page.getByTestId("notification-item").filter({
         has: bobPage.page.locator(`[title="${realmId}"]`),
       });
@@ -403,10 +423,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         inviteCard.getByTestId("notification-action"),
       );
 
-      await expect(bobPage.page.getByTestId("notifications-status")).toContainText(
-        /Joined Realm/,
-        { timeout: 30_000 },
-      );
+      await expect(
+        bobPage.page.getByTestId("notifications-status"),
+      ).toContainText(/Joined Realm/, { timeout: 30_000 });
       await expect(inviteCard).toHaveCount(0, { timeout: 30_000 });
       await expect(bobPage.page.getByTestId("realm-tree-list")).toContainText(
         `joint invite ${stamp}`,
@@ -419,13 +438,17 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       const baselineResponses = subscribeResponses;
       await alicePage.page.reload({ waitUntil: "domcontentloaded" });
       await expect
-        .poll(() => subscribeResponses, { timeout: 30_000, intervals: [250, 500, 1_000] })
+        .poll(() => subscribeResponses, {
+          timeout: 30_000,
+          intervals: [250, 500, 1_000],
+        })
         .toBeGreaterThan(baselineResponses);
 
       expect(
-        subscribeFailures.filter((failure) =>
-          failure.includes("cursor_integrity_invalid") ||
-          failure.includes("cursor principal does not match request actor"),
+        subscribeFailures.filter(
+          (failure) =>
+            failure.includes("cursor_integrity_invalid") ||
+            failure.includes("cursor principal does not match request actor"),
         ),
         subscribeFailures.join("\n"),
       ).toEqual([]);
@@ -517,13 +540,15 @@ async function readRealmActorFrontier(
     throw new Error(`actor frontier sequence is invalid: ${text}`);
   }
   const frontierEventIds = frontier?.frontier_event_ids;
-  expect(Array.isArray(frontierEventIds), "actor frontier event ids").toBe(true);
+  expect(Array.isArray(frontierEventIds), "actor frontier event ids").toBe(
+    true,
+  );
   if (!Array.isArray(frontierEventIds)) {
     throw new Error(`actor frontier event ids are invalid: ${text}`);
   }
-  expect(
-    frontierEventIds.every((eventId) => typeof eventId === "string"),
-  ).toBe(true);
+  expect(frontierEventIds.every((eventId) => typeof eventId === "string")).toBe(
+    true,
+  );
   expect([...frontierEventIds].sort()).toEqual(frontierEventIds);
   expect(new Set(frontierEventIds).size).toBe(frontierEventIds.length);
   expect(frontierEventIds.length === 0).toBe(nextActorSeq === 0);
@@ -551,7 +576,10 @@ async function listInvitesForDpop(
     headers: selfPathHeadersForDpopSession(session, "GET", href),
   });
   const text = await response.text();
-  expect(response.ok(), `list invites returned ${response.status()}: ${text}`).toBeTruthy();
+  expect(
+    response.ok(),
+    `list invites returned ${response.status()}: ${text}`,
+  ).toBeTruthy();
   const body = JSON.parse(text) as {
     invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
   };
@@ -575,7 +603,10 @@ async function resolveDefaultStrandId(
   });
   if (realmResp.ok()) {
     const realm = (await realmResp.json()) as { default_strand_id?: unknown };
-    if (typeof realm.default_strand_id === "string" && realm.default_strand_id) {
+    if (
+      typeof realm.default_strand_id === "string" &&
+      realm.default_strand_id
+    ) {
       return realm.default_strand_id;
     }
   }

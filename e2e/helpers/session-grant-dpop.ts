@@ -63,12 +63,11 @@ export type DpopBoundGrant = {
   audience: string;
   scopes: string[];
   expiresAt: string;
-  /// The minted `did:webvh:…:webvh:<ulid>` principal DID (model B) the grant
-  /// subject is bound to. coauth's debug seam mints this with a
-  /// `ArkretDeviceEnrollmentAuthority` designation, so the harness MUST use it as
-  /// the account identity for device enrollment / MLS to resolve the right DID
-  /// document (not the coauth-local `…:users:<ulid>` fallback).
+  /// The verified principal DID the issuer bound to the grant subject.
   principalDid: string;
+  /// Long-term founding Event signer, deliberately distinct from the
+  /// ephemeral holder/DPoP key. Present on PCR-genesis registration outcomes.
+  eventSigningKey?: DpopDeviceKey;
 };
 
 export type MintDpopGrantOpts = {
@@ -108,6 +107,46 @@ export function generateDpopDeviceKey(): DpopDeviceKey {
   };
 }
 
+/// Rehydrate a persisted Ed25519 seed into the same holder/device-key shape.
+/// Registration fixtures use this to keep the genesis device signer stable
+/// across the accepted PCR receipt and the immediately-issued Standard grant.
+export function dpopDeviceKeyFromSeedB64url(seed: string): DpopDeviceKey {
+  const rawSeed = Buffer.from(seed, "base64url");
+  if (rawSeed.length !== 32) {
+    throw new Error(
+      `persisted Ed25519 seed must be 32 bytes, got ${rawSeed.length}`,
+    );
+  }
+  const privateKey = createPrivateKey({
+    key: Buffer.concat([
+      Buffer.from("302e020100300506032b657004220420", "hex"),
+      rawSeed,
+    ]),
+    format: "der",
+    type: "pkcs8",
+  });
+  const publicKey = createPublicKey(privateKey);
+  const exported = publicKey.export({ format: "jwk" }) as {
+    kty?: string;
+    crv?: string;
+    x?: string;
+  };
+  if (exported.kty !== "OKP" || exported.crv !== "Ed25519" || !exported.x) {
+    throw new Error("persisted Ed25519 seed produced an invalid public JWK");
+  }
+  const publicJwk: Ed25519PublicJwk = {
+    kty: "OKP",
+    crv: "Ed25519",
+    x: exported.x,
+  };
+  return {
+    privateKey,
+    publicKey,
+    publicJwk,
+    thumbprint: jwkThumbprintEd25519(publicJwk.x),
+  };
+}
+
 /// Export an Ed25519 device key's private seed as base64url-no-pad of the 32
 /// raw seed bytes — the exact on-disk form inkson's `DpopDeviceKeyRecord`
 /// persists (`seed_b64`). The JWK `d` member is already base64url-no-pad of the
@@ -116,7 +155,9 @@ export function generateDpopDeviceKey(): DpopDeviceKey {
 export function dpopDeviceSeedB64url(key: DpopDeviceKey): string {
   const jwk = key.privateKey.export({ format: "jwk" }) as { d?: string };
   if (!jwk.d) {
-    throw new Error(`Ed25519 private JWK missing 'd' seed member: ${JSON.stringify(jwk)}`);
+    throw new Error(
+      `Ed25519 private JWK missing 'd' seed member: ${JSON.stringify(jwk)}`,
+    );
   }
   return jwk.d;
 }
@@ -175,12 +216,18 @@ export function mintDpopProof(args: {
   };
   if (args.includeAth !== false) {
     if (!args.grantJwt && args.athOverride === undefined) {
-      throw new Error("mintDpopProof requires grantJwt unless includeAth is false");
+      throw new Error(
+        "mintDpopProof requires grantJwt unless includeAth is false",
+      );
     }
     claims.ath = args.athOverride ?? dpopAth(args.grantJwt!);
   }
   const signingInput = `${base64urlJsonRaw(header)}.${base64urlJsonRaw(claims)}`;
-  const signature = sign(null, Buffer.from(signingInput, "utf8"), args.deviceKey.privateKey);
+  const signature = sign(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    args.deviceKey.privateKey,
+  );
   return `${signingInput}.${base64url(signature)}`;
 }
 
@@ -238,13 +285,21 @@ export function dpopDeviceKeyFromSeedB64url(seedB64url: string): DpopDeviceKey {
     Buffer.from("302e020100300506032b657004220420", "hex"),
     seed,
   ]);
-  const privateKey = createPrivateKey({ key: pkcs8, format: "der", type: "pkcs8" });
+  const privateKey = createPrivateKey({
+    key: pkcs8,
+    format: "der",
+    type: "pkcs8",
+  });
   const publicKey = createPublicKey(privateKey);
   const exported = publicKey.export({ format: "jwk" }) as { x?: string };
   if (!exported.x) {
     throw new Error("failed to derive Ed25519 public x from seed");
   }
-  const publicJwk: Ed25519PublicJwk = { kty: "OKP", crv: "Ed25519", x: exported.x };
+  const publicJwk: Ed25519PublicJwk = {
+    kty: "OKP",
+    crv: "Ed25519",
+    x: exported.x,
+  };
   return {
     privateKey,
     publicKey,

@@ -1,9 +1,9 @@
 // Client-custodied principal onboarding resolver helpers.
 //
 // Principal entry 0 must be built and root-signed by the client after recovery
-// custody confirmation. Coauth only advertises the B-model enrollment
-// authority, verifies/binds the submitted operation, authorizes devices, and
-// issues device-bound grants; it never mints or stores the identity root.
+// custody confirmation. Coauth verifies/binds the submitted operation and the
+// accepted PCR-genesis receipt, then issues a device-bound Standard grant; it
+// never mints or stores the identity root or authorizes the device Event.
 
 import type { APIRequestContext } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
@@ -59,11 +59,15 @@ export async function resolvePrincipalDid(
   const resp = await request.post(url, { data: { did } });
   const text = await resp.text();
   if (!resp.ok()) {
-    throw new Error(`identity resolve ${did} returned ${resp.status()}: ${text}`);
+    throw new Error(
+      `identity resolve ${did} returned ${resp.status()}: ${text}`,
+    );
   }
   const body = parseJsonObject(text);
   if (!body) {
-    throw new Error(`identity resolve ${did} returned non-object JSON: ${text}`);
+    throw new Error(
+      `identity resolve ${did} returned non-object JSON: ${text}`,
+    );
   }
   const didDocument = objectRecord(body.did_document);
   const resolvedDid =
@@ -71,7 +75,9 @@ export async function resolvePrincipalDid(
     stringField(didDocument, "did") ??
     stringField(body, "did");
   if (resolvedDid !== did) {
-    throw new Error(`identity resolve returned ${resolvedDid}, expected ${did}`);
+    throw new Error(
+      `identity resolve returned ${resolvedDid}, expected ${did}`,
+    );
   }
   const document =
     objectRecord(didDocument?.document) ??
@@ -98,7 +104,8 @@ export async function resolvePrincipalDid(
     ? logBody.events.flatMap((entry) => {
         const record = objectRecord(entry);
         const operation =
-          objectRecord(record?.operation_body) ?? objectRecord(record?.operation);
+          objectRecord(record?.operation_body) ??
+          objectRecord(record?.operation);
         return operation ? [operation] : record ? [record] : [];
       })
     : [];

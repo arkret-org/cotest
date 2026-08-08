@@ -962,7 +962,9 @@ async function openSavfoxArkretChannel(
   });
   // The Dioxus shell can render after `goto` resolves. Wait for the actual
   // authenticated-or-login branch before deciding whether a token is needed.
-  await expect(tokenInput.or(configureHeading)).toBeVisible({ timeout: 30_000 });
+  await expect(tokenInput.or(configureHeading)).toBeVisible({
+    timeout: 30_000,
+  });
   if (await tokenInput.isVisible()) {
     await tokenInput.fill(savfoxToken);
     const connect = savfox.getByRole("button", { name: "Connect" });
@@ -1176,7 +1178,6 @@ async function openAndPairSecondController(
     jointRealm.aliceSession.account,
     {
       coauthBase: coauth!,
-      skipDeviceEnrollment: true,
     },
   );
   expect(session, "same-principal Device 2 session").toBeTruthy();

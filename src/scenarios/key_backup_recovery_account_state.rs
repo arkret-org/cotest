@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, PolicyId};
+use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, EventId, PolicyId};
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
@@ -176,8 +176,9 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
                 .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?,
-            ssk_generation: std::num::NonZeroU64::new(1),
-            device_authorize_event_id: None,
+            device_authorize_event_id: EventId::new(
+                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+            )?,
             signed_fields: [
                 "backup_id",
                 "actor_id",

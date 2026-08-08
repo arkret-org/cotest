@@ -138,7 +138,13 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
             other => bail!("unexpected KeyPackage transcript case {other}"),
         };
 
-        assert_eq!(actual_input, expected_input, "case {name}");
+        if actual_input != expected_input {
+            bail!(
+                "case {name} signing input drifted: actual_base64url={}, actual_signature={}",
+                URL_SAFE_NO_PAD.encode(&actual_input),
+                signature.sig
+            );
+        }
         assert_eq!(
             signature.sig.as_str(),
             case.get("signature")

@@ -11,18 +11,14 @@ use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecoveryModel {
-    CrossSigning,
-    EnrollmentAuthority,
+    RootAnchored,
 }
 
 impl RecoveryModel {
     fn steps(self) -> &'static [&'static str] {
         match self {
-            Self::CrossSigning => &["create", "submit_authorize_unit", "issue_terminal_receipt"],
-            Self::EnrollmentAuthority => &[
+            Self::RootAnchored => &[
                 "create",
-                "issue_authority_ticket",
-                "authorize_recovery_device",
                 "publish_did_entry",
                 "submit_reanchor_unit",
                 "issue_terminal_receipt",
@@ -156,10 +152,7 @@ fn author_terminal_with_staged_secret(
 }
 
 pub fn run_recovery_transaction_fault_matrix() -> Result<()> {
-    for model in [
-        RecoveryModel::CrossSigning,
-        RecoveryModel::EnrollmentAuthority,
-    ] {
+    for model in [RecoveryModel::RootAnchored] {
         for (index, step) in model.steps().iter().enumerate() {
             let operation_id = format!("{model:?}:{index}");
             let canonical_request = format!("canonical:{model:?}:{step}").into_bytes();

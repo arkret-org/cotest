@@ -20,7 +20,7 @@ use reqwest::StatusCode;
 
 use super::key_backups::BACKUP_ID;
 use crate::harness::{ArkretServer, expect_json};
-use crate::scenarios::identity_test_support::TEST_PRINCIPAL_SIGNING_KEY_SEED;
+use crate::scenarios::identity_test_support::TEST_ROOT_KEY_SEED;
 
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     let request_id = Base64UrlString::new("Y290ZXN0LWJhY2t1cC1kZWxldGUtMDE".to_owned())
@@ -52,7 +52,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
     let canonical = canonical_json_bytes(&transcript)
         .map_err(|error| anyhow!("delete-intent transcript is not canonical: {error}"))?;
     let jws = arkret_signatures::sign_ed25519_detached_jws(
-        &SigningKey::from_bytes(&TEST_PRINCIPAL_SIGNING_KEY_SEED),
+        &SigningKey::from_bytes(&TEST_ROOT_KEY_SEED),
         &canonical,
     )?;
     let proof = PayloadProof {

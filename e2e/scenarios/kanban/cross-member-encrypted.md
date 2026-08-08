@@ -53,8 +53,8 @@
 
 ## 关键前置(harness/产品修复,均为让本场景真正跑通)
 
-- coauth debug seam 用**模型 B** 铸出的 `did:webvh:…:webvh:` principal DID 当 grant subject 并返回(designate `ArkretDeviceEnrollmentAuthority`);harness 采用它当 `user.did`。
-- session setup 显式 device-enroll(coauth `/device-enroll`→提交 `ak.device.authorize`)让设备可发 MLS KeyPackage。
+- coauth registration 以 root-anchored PCR genesis 接受的 `did:webvh:…:webvh:` principal DID 作为 grant subject；harness 采用它当 `user.did`。
+- session setup 复用 genesis 中已接受的 founding device，使其可发布 MLS KeyPackage。
 - invitee 读加密内容前弹"Set up 24-word Recovery Key"必答模态,测试自动完成。
 - inkson kanban bootstrap:backfill 在 board-View 门之前跑,并把事件 ingest 进 `raw_operations`(跨成员 board/card 投影的真修)。
 

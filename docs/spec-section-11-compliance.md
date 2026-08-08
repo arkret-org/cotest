@@ -35,8 +35,8 @@ cargo test --workspace --test spec_section_11_scenarios
 | V    | Invariant                                                                                                | Observable that closes the gate                                            |
 |------|----------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------|
 | V-1  | `ak.self.agent.command.provision` → `ak.agent.pairing.create` → `ak.capability.grant` MUST land in order.             | Out-of-order replay is rejected with `precondition_failed`.                |
-| V-2  | After `expires_at` elapses, the agent session is auto-revoked.                                            | A `ak.session.grant_revoke{reason="pairing_expired"}` event is produced.   |
-| V-3  | Replaying a session_grant with the same nonce MUST be rejected.                                           | Reducer returns `already_exists` (idempotent close), not double-grant.     |
+| V-2  | After `expires_at` elapses, the agent session becomes inactive in the Account Authority issuer ledger.       | Introspection returns the closed expired state; no grant Event is emitted. |
+| V-3  | The same operation/proof identity and canonical intent MUST replay the issuer's first exact outcome; a changed intent MUST conflict with zero writes. | Issuer-ledger replay is byte-identical; conflict returns `duplicate_conflict`, never a reducer result. |
 | V-4  | Controller deactivate fans out: `ak.self.agent.deactivate` → `ak.agent.key.revoke` → `ak.capability.revoke`.   | Per-agent fan-out is deterministic and ordered.                            |
 | V-5  | Every act-on-behalf event carries `(executed_by, authorization_ref, actor_kind)`.                         | Validator rejects events missing any of the three fields.                  |
 | V-6  | `ak.self.agent.sidecar.command.ensure(controller, Realm)` MUST return the same first-class `sidecar_id` on retry.    | Two consecutive ensure() calls return byte-identical typed-ids.            |

@@ -2,11 +2,13 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::{DeviceId, Did, Hash};
+use arkret_identifiers::{DeviceId, Did, Hash, SessionGrantId};
 use arkret_models_collaboration::session_grant_bodies::{
     SessionGrantOutcome, SessionGrantRequestBody,
 };
-use arkret_models_identity::session_credential::SessionGrantProofKind;
+use arkret_models_identity::session_credential::{
+    CanonicalSessionPublicJwk, SessionGrantProofKind,
+};
 use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
     SignatureVerificationPolicy, SignedRequestParts, canonical_message, sign_message,
@@ -236,9 +238,14 @@ fn issue_session_grant(
         device_id: request.device_id.clone(),
         session_grant: "ak.session.grant.test".to_owned(),
         expires_at,
-        grant_id: None,
-        session_public_key: None,
-        audience: None,
+        grant_id: SessionGrantId::from_issuance_digest(canonical::sha256_bytes(
+            expected_digest.as_str().as_bytes(),
+        )),
+        session_public_key: CanonicalSessionPublicJwk::new(
+            r#"{"crv":"Ed25519","kty":"OKP","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}"#,
+        )
+        .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
+        audience: request.proof.audience.clone(),
         granted_scope: request.requested_scope.clone(),
         scope_details: None,
     })

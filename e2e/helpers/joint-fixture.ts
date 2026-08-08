@@ -1,4 +1,8 @@
-import { test as base, type APIRequestContext, type Browser } from "@playwright/test";
+import {
+  test as base,
+  type APIRequestContext,
+  type Browser,
+} from "@playwright/test";
 import {
   createDpopUserSession,
   type DpopUserSession,
@@ -27,7 +31,10 @@ export const test = base.extend<{ jointRealm: JointRealmFixture }>({
     try {
       await use(jointRealm);
     } finally {
-      await Promise.allSettled([jointRealm.bobPage.close(), jointRealm.alicePage.close()]);
+      await Promise.allSettled([
+        jointRealm.bobPage.close(),
+        jointRealm.alicePage.close(),
+      ]);
     }
   },
 });
@@ -46,16 +53,8 @@ async function createJointTwoUserRealm(
   // make each wait on the other's global identity-binding lease until the
   // caller timeout. Keep user creation sequential; browser bootstrap below is
   // still parallel once both durable principals exist.
-  const aliceSession = await createDpopUserSession(
-    request,
-    "joint-alice",
-    { skipDeviceEnrollment: true },
-  );
-  const bobSession = await createDpopUserSession(
-    request,
-    "joint-bob",
-    { skipDeviceEnrollment: true },
-  );
+  const aliceSession = await createDpopUserSession(request, "joint-alice", {});
+  const bobSession = await createDpopUserSession(request, "joint-bob", {});
   if (!aliceSession || !bobSession) {
     throw new Error("joint fixture requires coauth DPoP session-grant login");
   }

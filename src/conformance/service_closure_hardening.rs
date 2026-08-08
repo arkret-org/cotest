@@ -15,7 +15,6 @@ pub const VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT: &str =
     "ak.vector.range_completeness.witness_disagreement.v1";
 pub const VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE: &str =
     "ak.vector.cursor.revoke_high_assurance.v1";
-pub const VECTOR_ID_DEVICE_RECOVERY_LIFECYCLE: &str = "ak.vector.device_recovery.lifecycle.v1";
 pub const VECTOR_ID_DEVICE_REVOCATION_SEAL_BINDING: &str =
     "ak.vector.device.revocation_seal_binding.v1";
 pub const VECTOR_ID_PUSH_WAKEUP_POLICY: &str = "ak.vector.push.wakeup_policy.v1";
@@ -26,7 +25,6 @@ pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_PROJECTION_PAGINATION_SHAPE,
     VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT,
     VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE,
-    VECTOR_ID_DEVICE_RECOVERY_LIFECYCLE,
     VECTOR_ID_DEVICE_REVOCATION_SEAL_BINDING,
     VECTOR_ID_PUSH_WAKEUP_POLICY,
 ];
@@ -46,7 +44,6 @@ pub fn run_service_closure_hardening_fixture_suite() -> Result<()> {
         VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT,
     )?)?;
     run_cursor_revoke_high_assurance_case(case(&fixture, VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE)?)?;
-    run_device_recovery_lifecycle_case(case(&fixture, VECTOR_ID_DEVICE_RECOVERY_LIFECYCLE)?)?;
     run_device_revocation_seal_binding_case(case(
         &fixture,
         VECTOR_ID_DEVICE_REVOCATION_SEAL_BINDING,
@@ -84,11 +81,6 @@ pub fn run_range_completeness_witness_disagreement_vector() -> Result<()> {
 pub fn run_cursor_revoke_high_assurance_vector() -> Result<()> {
     let fixture = service_closure_hardening_fixture()?;
     run_cursor_revoke_high_assurance_case(case(&fixture, VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE)?)
-}
-
-pub fn run_device_recovery_lifecycle_vector() -> Result<()> {
-    let fixture = service_closure_hardening_fixture()?;
-    run_device_recovery_lifecycle_case(case(&fixture, VECTOR_ID_DEVICE_RECOVERY_LIFECYCLE)?)
 }
 
 pub fn run_device_revocation_seal_binding_vector() -> Result<()> {
@@ -456,69 +448,6 @@ fn evaluate_cursor_step(step: &Value) -> Result<Value> {
             "decision": "reject",
             "reason": "cursor_revoked",
             "subscription_position_advanced": false,
-        }));
-    }
-    Ok(json!({"decision": "accept"}))
-}
-
-fn run_device_recovery_lifecycle_case(case: &Value) -> Result<()> {
-    let current_generation = required_u64(case, "current_ssk_generation")?;
-    let mut seen = BTreeSet::new();
-    for step in required_array(case, "steps")? {
-        let name = required_str(step, "name")?;
-        seen.insert(name.to_owned());
-        let observed = evaluate_device_recovery_step(step, current_generation)?;
-        assert_expected_subset(name, expected(step)?, &observed)?;
-        record_step(VECTOR_ID_DEVICE_RECOVERY_LIFECYCLE, name, step, &observed);
-    }
-    for required in [
-        "stale_ssk_generation",
-        "proof_passed_waiting_for_unlock",
-        "keypackage_claim_failure_low_watermark",
-    ] {
-        if !seen.contains(required) {
-            bail!("device recovery lifecycle vector missing step {required}");
-        }
-    }
-    Ok(())
-}
-
-fn evaluate_device_recovery_step(step: &Value, current_generation: u64) -> Result<Value> {
-    if let Some(proof_generation) = step.get("proof_ssk_generation").and_then(Value::as_u64)
-        && proof_generation != current_generation
-    {
-        return Ok(json!({
-            "decision": "reject",
-            "reason": "device_recovery_ssk_generation_mismatch",
-        }));
-    }
-    if step.get("proof_verified").and_then(Value::as_bool) == Some(true) {
-        let unlocked = step
-            .get("secret_storage_unlocked")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let replayed = step
-            .get("mls_welcome_replayed")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if !unlocked || !replayed {
-            return Ok(json!({
-                "device_state": "recovery_pending",
-                "fully_verified": false,
-            }));
-        }
-    }
-    if step.get("available_count").is_some() {
-        let available = required_u64(step, "available_count")?;
-        let low_watermark = required_u64(step, "low_watermark")?;
-        let suggested_publish_count = low_watermark.saturating_sub(available);
-        let republished =
-            required_str(step, "claimed_package_status_after_failure")? == "published";
-        return Ok(json!({
-            "available_count": available,
-            "low_watermark": low_watermark,
-            "suggested_publish_count": suggested_publish_count,
-            "claimed_package_republished": republished,
         }));
     }
     Ok(json!({"decision": "accept"}))

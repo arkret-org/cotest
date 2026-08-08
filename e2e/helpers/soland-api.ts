@@ -368,7 +368,9 @@ export async function createRealmApi(
       bootstrapEvents[bootstrapEvents.length - 1]?.event_id,
     );
     if (!predecessorId) {
-      throw new Error(`Realm bootstrap predecessor for ${kind} is missing event_id`);
+      throw new Error(
+        `Realm bootstrap predecessor for ${kind} is missing event_id`,
+      );
     }
     bootstrapEvents.push(
       signedEventEnvelope({
@@ -492,10 +494,15 @@ export async function createRealmApi(
     },
   );
 
-  const bootstrapOutcome = await submitSignedEventBatchApi(request, token, bootstrapEvents, {
-    server: opts.server,
-    context: `create realm ${data.title}`,
-  });
+  const bootstrapOutcome = await submitSignedEventBatchApi(
+    request,
+    token,
+    bootstrapEvents,
+    {
+      server: opts.server,
+      context: `create realm ${data.title}`,
+    },
+  );
   opts.onAcceptedBootstrap?.({
     events: structuredClone(bootstrapEvents),
     outcome: structuredClone(bootstrapOutcome),
@@ -1885,7 +1892,11 @@ export async function deleteAccountDataApi(
     {
       headers: authHeaders(token),
       data: {
-        set_event: accountDataSetSubmission({ actorDid, key, expectedRevision }),
+        set_event: accountDataSetSubmission({
+          actorDid,
+          key,
+          expectedRevision,
+        }),
       },
     },
   );
@@ -4091,19 +4102,12 @@ type CotestWireCommand =
   | "account-handoff-request"
   | "principal-registration-fixture"
   | "identity-creation-register-request"
-  | "pre-registration-session-request"
-  | "cross-signing-binding-input"
-  | "device-trust-binding-input";
+  | "pcr-genesis-draft";
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
 type CotestWireCapabilityRegistryDigest = { digest: string };
 type CotestWirePrincipalControlRealm = { realm_id: string };
-type CotestWireCrossSigningBindingInput = {
-  self_signing_input_b64: string;
-  user_signing_input_b64: string;
-};
-type CotestWireDeviceTrustBindingInput = { input_b64: string };
 
 const cotestRepoRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -4132,48 +4136,6 @@ function sdkPrincipalControlRealmId(principalId: string): string {
       principal_id: principalId,
     },
   ).realm_id;
-}
-
-/// 05-2 — SDK-authoritative PSK→SSK / PSK→USK `ak-cross-signing-bind-v1`
-/// canonical signing inputs (base64) for a full `ak.cross_signing.publish`
-/// payload, produced by `CrossSigningPublishContent::{self,user}_signing_binding_input`.
-/// The cross-language golden-vector regression asserts the TS byte-mirror in
-/// `cross-signing-harness.ts` reproduces these exact bytes.
-export function sdkCrossSigningBindingInputs(
-  publishPayload: Record<string, unknown>,
-): { selfSigningInputB64: string; userSigningInputB64: string } {
-  assertJsonTransportable(publishPayload, "$");
-  const out = cotestWire<CotestWireCrossSigningBindingInput>(
-    "cross-signing-binding-input",
-    publishPayload,
-  );
-  return {
-    selfSigningInputB64: out.self_signing_input_b64,
-    userSigningInputB64: out.user_signing_input_b64,
-  };
-}
-
-/// 05-2 — SDK-authoritative `ak-device-trust-bind-v1` canonical signing input
-/// (base64) produced by `DeviceTrustBinding::canonical_input`.
-export function sdkDeviceTrustBindingInput(args: {
-  principalId: string;
-  deviceId: string;
-  devicePublicKey: string;
-  hpkeKey: string;
-  algorithms: string[];
-  sskGeneration: number;
-}): string {
-  return cotestWire<CotestWireDeviceTrustBindingInput>(
-    "device-trust-binding-input",
-    {
-      principal_id: args.principalId,
-      device_id: args.deviceId,
-      device_public_key: args.devicePublicKey,
-      hpke_key: args.hpkeKey,
-      algorithms: args.algorithms,
-      ssk_generation: args.sskGeneration,
-    },
-  ).input_b64;
 }
 
 /// Canonical (JCS key-ordered) JSON serialized to UTF-8 bytes. Authoritative
@@ -4261,10 +4223,14 @@ export function sdkEventDerivedIds(event: Record<string, unknown>): {
   );
 }
 
-export function sdkEventDerivedObjectId(event: Record<string, unknown>): string {
+export function sdkEventDerivedObjectId(
+  event: Record<string, unknown>,
+): string {
   const objectId = sdkEventDerivedIds(event).object_id;
   if (!objectId) {
-    throw new Error(`Event kind ${String(event.kind)} does not derive an object id`);
+    throw new Error(
+      `Event kind ${String(event.kind)} does not derive an object id`,
+    );
   }
   return objectId;
 }

@@ -53,7 +53,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 ### Phase A — Baseline:注册 + 多设备 + 共享 Realm
 
 1. 注册 alice / bob;为 alice 通过 `issueDevSession` 取两个 token —— 对应 alice-device-1 与
-   alice-device-2(参考 `identity/multi-device` Phase A,真实 QR 配对 + cross-signing 还未上线,
+   alice-device-2（参考 `identity/multi-device`，真实 QR 配对尚未上线，
    这里复用 dev-login 双 token 作为代理)
 2. alice (device-1) 通过 `/setup` 多步向导建 Realm `R`:
    - title = `"models/private-read-cursor S ${stamp}"`

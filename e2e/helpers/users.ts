@@ -22,18 +22,15 @@ import {
 } from "./env";
 import { selectDxcOption } from "./dxc-select";
 import {
-  issueCanonicalHandoffSession,
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
 } from "./coauth-register";
 import {
-  dpopDeviceSeedB64url,
   dpopDeviceKeyFromSeedB64url,
-  generateDpopDeviceKey,
+  dpopDeviceSeedB64url,
   selfPathGrantHeaders,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
-import { enrollOnboardedDeviceSigningKey } from "./device-holder-proof";
 import {
   authHeaders,
   canonicalJson,
@@ -101,7 +98,6 @@ export type OpenUserOpts = {
   grantId?: string;
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
-  pendingPrincipalRegistration?: Record<string, unknown>;
   recoveryKey?: string;
 };
 
@@ -117,7 +113,6 @@ export type DpopUserSession = {
   eventSigningSeedB64url: string;
   deviceKey: DpopDeviceKey;
   recoveryKey?: string;
-  pendingPrincipalRegistration?: Record<string, unknown>;
 };
 
 export type DpopUserPageSession = {
@@ -125,15 +120,6 @@ export type DpopUserPageSession = {
   session: DpopUserSession;
   page: JointUserPage;
 };
-
-const pendingBootstrapByGrant = new Map<
-  string,
-  {
-    recoveryKey: string;
-    pendingPrincipalRegistration: Record<string, unknown>;
-    eventSigningSeedB64url: string;
-  }
->();
 
 export type CreateRealmOpts = {
   title: string;
@@ -831,9 +817,7 @@ export class JointUserPage {
     });
     const text = await strand.innerText();
     expect(text, `realm bootstrap failed: ${text}`).not.toContain(" failed:");
-    const match = text.match(
-      /created (ak:realm:[A-Za-z0-9_-]{44})\b/,
-    );
+    const match = text.match(/created (ak:realm:[A-Za-z0-9_-]{44})\b/);
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     return match![1];
   }
@@ -904,8 +888,8 @@ export class JointUserPage {
   // `ak.invite.create` followed by invitee-authored `ak.invite.accept`; soland
   // then cascades the accepted invite into Realm membership.
   async acceptInvite(realmId: string) {
-    // B-model Events must be signed by the device key authorized during the
-    // browser's PCR bootstrap. A Node-side fixture signer cannot impersonate
+    // Principal Events must be signed by the device key accepted in the PCR
+    // genesis unit. A Node-side fixture signer cannot impersonate
     // that key, so drive Inkson's first-party action and let its active event
     // signer author the acceptance.
     await this.acceptInviteFromNotifications(realmId);
@@ -1263,7 +1247,6 @@ export async function createDpopUserSession(
   opts: {
     server?: SolandKey;
     coauthBase?: string;
-    skipDeviceEnrollment?: boolean;
   } = {},
 ): Promise<DpopUserSession | undefined> {
   const coauth = opts.coauthBase ?? coauthBaseUrl();
@@ -1304,39 +1287,34 @@ export async function createDpopUserSessionForAccount(
   opts: {
     server?: SolandKey;
     coauthBase?: string;
-    // Skip the harness-side `ak.device.authorize`. Browser sessions complete
-    // the spec-mandated atomic founding-device bootstrap in Inkson onboarding
-    // with `eventSigningSeedB64url`; later devices use pairing/recovery. The
-    // standalone enrollment endpoint is not a valid fallback for either path.
-    skipDeviceEnrollment?: boolean;
   } = {},
 ): Promise<DpopUserSession | undefined> {
-  const coauth = opts.coauthBase ?? coauthBaseUrl();
-  if (!coauth) {
+  if (!(opts.coauthBase ?? coauthBaseUrl())) {
     return undefined;
   }
   const seed = uniqueUser(prefix);
-  const claimsPrincipalBootstrap = !account.bootstrapClaimed;
-  account.bootstrapClaimed = true;
-  if (claimsPrincipalBootstrap) {
-    seed.deviceId = account.bootstrapDeviceId;
+  const claimsPrincipalGenesis = !account.genesisClaimed;
+  account.genesisClaimed = true;
+  if (!claimsPrincipalGenesis) {
+    // A second device must use the sibling-pairing ceremony. Reusing the
+    // founding handoff would create a second founding transaction and is a
+    // protocol violation; this harness has no pairing material at this call
+    // boundary, so it fails closed.
+    return undefined;
   }
-  const deviceKey = generateDpopDeviceKey();
-  const eventSigningKey = generateDpopDeviceKey();
+  seed.deviceId = account.genesisDeviceId;
   const audience = solandServiceId(opts.server);
-  const grant = await issueCanonicalHandoffSession(request, coauth, {
-    principalId: account.did,
-    deviceId: seed.deviceId,
-    deviceKey,
-    audience,
-    account: { handle: account.handle, password: account.password },
-  });
+  const grant = account.initialGrant;
+  const deviceKey = account.initialHolderKey;
+  const eventSigningKey = grant.eventSigningKey;
+  if (!eventSigningKey) {
+    throw new Error("PCR genesis outcome omitted its founding device signer");
+  }
   expect(grant.audience).toBe(audience);
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(Array.isArray(grant.scopes)).toBeTruthy();
   expect(grant.scopes).toContain(`urn:arkret:client:device:${seed.deviceId}`);
-  // Model-B identity: consume only the verified DID returned by the canonical
-  // pre-registration handoff. There is deliberately no actor-id fallback.
+  // Consume only the verified DID returned by the atomic registration result.
   expect(
     grant.principalDid,
     "handoff session must return the bound principal DID",
@@ -1355,37 +1333,6 @@ export async function createDpopUserSessionForAccount(
     deviceId: user.deviceId,
     signingSeedB64url: eventSigningSeedB64url,
   });
-  // Device authorization up front for API-only sessions that never open a
-  // browser. Browser sessions must complete the atomic founding-device
-  // bootstrap in Inkson onboarding with the event signer injected below.
-  //
-  // For browser sessions, `skipDeviceEnrollment` must remain true: this helper
-  // would authorize the DPoP session key, while the browser signs Events with
-  // the distinct event signer. Pre-authorizing the wrong key would make the
-  // atomic onboarding bootstrap conflict and remote proof verification fail.
-  if (!opts.skipDeviceEnrollment) {
-    const authorizedKey = await enrollOnboardedDeviceSigningKey(
-      request,
-      coauth,
-      {
-        account,
-        principalDid: user.did,
-        deviceId: seed.deviceId,
-        deviceKey,
-        grantJwt: grant.grantJwt,
-        grantId: grant.grantId,
-        grantAudience: grant.audience,
-        scopes: grant.scopes,
-      },
-      { server: opts.server },
-    );
-    if (!authorizedKey) {
-      // The current SDK/Coauth device-enroll DTO cannot bind the exact accepted
-      // actor frontier. Skip this API-only session instead of submitting an
-      // actor_seq=1, prev_refs=[] pseudo-bootstrap Event.
-      return undefined;
-    }
-  }
   const session = {
     user,
     account,
@@ -1395,18 +1342,8 @@ export async function createDpopUserSessionForAccount(
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     eventSigningSeedB64url,
     deviceKey,
-    recoveryKey: claimsPrincipalBootstrap ? account.recoveryKey : undefined,
-    pendingPrincipalRegistration: claimsPrincipalBootstrap
-      ? account.pendingPrincipalRegistration
-      : undefined,
+    recoveryKey: claimsPrincipalGenesis ? account.recoveryKey : undefined,
   };
-  if (session.recoveryKey && session.pendingPrincipalRegistration) {
-    pendingBootstrapByGrant.set(session.grantJwt, {
-      recoveryKey: session.recoveryKey,
-      pendingPrincipalRegistration: session.pendingPrincipalRegistration,
-      eventSigningSeedB64url: session.eventSigningSeedB64url,
-    });
-  }
   return session;
 }
 
@@ -1418,13 +1355,9 @@ export async function openDpopUserPage(
     server?: SolandKey;
     coauthBase?: string;
     prepareMlsDevice?: boolean;
-    skipDeviceEnrollment?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
-  const session = await createDpopUserSession(request, prefix, {
-    ...opts,
-    skipDeviceEnrollment: opts.skipDeviceEnrollment ?? true,
-  });
+  const session = await createDpopUserSession(request, prefix, opts);
   return openDpopUserPageFromSession(browser, session, opts);
 }
 
@@ -1437,7 +1370,6 @@ export async function openDpopUserPageForAccount(
     server?: SolandKey;
     coauthBase?: string;
     prepareMlsDevice?: boolean;
-    skipDeviceEnrollment?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
@@ -1447,7 +1379,6 @@ export async function openDpopUserPageForAccount(
     account,
     {
       ...opts,
-      skipDeviceEnrollment: opts.skipDeviceEnrollment ?? true,
     },
   );
   return openDpopUserPageFromSession(browser, session, opts);
@@ -1472,7 +1403,6 @@ export async function openDpopUserPageFromSession(
     eventSigningSeedB64url: session.eventSigningSeedB64url,
     grantId: session.grantId,
     grantAudience: session.grantAudience,
-    pendingPrincipalRegistration: session.pendingPrincipalRegistration,
     recoveryKey: session.recoveryKey,
     autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
   });
@@ -1482,67 +1412,6 @@ export async function openDpopUserPageFromSession(
     await page.acknowledgeRecommendedEncryptionPromptIfVisible();
   }
   return { user: session.user, session, page };
-}
-
-export async function completePendingPrincipalBootstrap(
-  page: JointUserPage,
-  recoveryKey: string,
-): Promise<void> {
-  const pending = page.page.getByTestId("pending-principal-bootstrap");
-  const completed = page.page
-    .getByTestId("onboarding-complete")
-    .or(page.page.getByRole("heading", { name: "You're all set" }));
-  const retryableFailure = page.page.getByTestId("bootstrap-status").filter({
-    hasText:
-      /auth_unavailable|session grant introspection (?:request failed|service unavailable)/i,
-  });
-  const bootstrapState = pending.or(completed);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    if (attempt === 0) {
-      await page.page.goto("/onboarding", { waitUntil: "domcontentloaded" });
-    } else {
-      await page.page.reload({ waitUntil: "domcontentloaded" });
-    }
-    if (
-      await bootstrapState
-        .waitFor({ state: "visible", timeout: 40_000 })
-        .then(() => true)
-        .catch(() => false)
-    ) {
-      break;
-    }
-  }
-  await expect(bootstrapState).toBeVisible({ timeout: 1_000 });
-  if (await completed.isVisible()) {
-    return;
-  }
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    await page.page.getByTestId("bootstrap-recovery-key").fill(recoveryKey);
-    const submit = page.page.getByTestId("bootstrap-submit");
-    await submit.click();
-    await expect
-      .poll(
-        async () =>
-          (await completed.isVisible()) ||
-          (await submit.isDisabled().catch(() => false)),
-        { timeout: 5_000, intervals: [50, 100, 250] },
-      )
-      .toBe(true);
-    await expect(completed.or(retryableFailure)).toBeVisible({
-      timeout: 45_000,
-    });
-    if (await completed.isVisible()) {
-      return;
-    }
-    if (attempt < 2) {
-      await page.page.waitForTimeout(250 * (attempt + 1));
-    }
-  }
-  throw new Error(
-    `principal bootstrap exhausted retryable introspection attempts: ${
-      (await retryableFailure.textContent())?.trim() ?? "unknown failure"
-    }`,
-  );
 }
 
 export function selfPathHeadersForDpopSession(
@@ -1571,25 +1440,15 @@ export async function openUser(
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
   const sessionInjection =
-    (opts.grantJwt && opts.dpopSeedB64url) || opts.pendingPrincipalRegistration
+    opts.grantJwt && opts.dpopSeedB64url
       ? {
-          ...(opts.grantJwt && opts.dpopSeedB64url
-            ? {
-                grant_jwt: opts.grantJwt,
-                dpop_seed_b64url: opts.dpopSeedB64url,
-                ...(opts.eventSigningSeedB64url
-                  ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
-                  : {}),
-                grant_id: opts.grantId ?? "",
-                audience: opts.grantAudience ?? "",
-              }
+          grant_jwt: opts.grantJwt,
+          dpop_seed_b64url: opts.dpopSeedB64url,
+          ...(opts.eventSigningSeedB64url
+            ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
             : {}),
-          ...(opts.pendingPrincipalRegistration
-            ? {
-                pending_principal_registration:
-                  opts.pendingPrincipalRegistration,
-              }
-            : {}),
+          grant_id: opts.grantId ?? "",
+          audience: opts.grantAudience ?? "",
         }
       : undefined;
   const localStorage = [
@@ -1831,38 +1690,9 @@ export async function openUserPage(
   user: JointUser,
   opts: OpenUserOpts = {},
 ): Promise<JointUserPage> {
-  const registeredBootstrap = opts.grantJwt
-    ? pendingBootstrapByGrant.get(opts.grantJwt)
-    : undefined;
-  const resolvedOpts = registeredBootstrap
-    ? {
-        ...opts,
-        pendingPrincipalRegistration:
-          opts.pendingPrincipalRegistration ??
-          registeredBootstrap.pendingPrincipalRegistration,
-        recoveryKey: opts.recoveryKey ?? registeredBootstrap.recoveryKey,
-        eventSigningSeedB64url:
-          opts.eventSigningSeedB64url ??
-          registeredBootstrap.eventSigningSeedB64url,
-      }
-    : opts;
-  const userPage = new JointUserPage(
-    user,
-    await openUser(browser, user, resolvedOpts),
-  );
+  const userPage = new JointUserPage(user, await openUser(browser, user, opts));
   if (!opts.keepDeviceAuthorizationModal) {
     await dismissDeviceAuthorizationPrompt(userPage.page);
-  }
-  if (
-    resolvedOpts.grantJwt &&
-    resolvedOpts.pendingPrincipalRegistration &&
-    resolvedOpts.recoveryKey
-  ) {
-    // Load the pending bootstrap route directly. Navigating through `/` first
-    // can tear down session-boot WebSocket/IndexedDB callbacks while they are
-    // still resolving, which aborts the WASM runtime before onboarding mounts.
-    await completePendingPrincipalBootstrap(userPage, resolvedOpts.recoveryKey);
-    pendingBootstrapByGrant.delete(resolvedOpts.grantJwt);
   }
   return userPage;
 }

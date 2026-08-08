@@ -16,13 +16,14 @@ import {
 } from "./env";
 import {
   dpopDeviceSeedB64url,
+  dpopDeviceKeyFromSeedB64url,
   generateDpopDeviceKey,
   kickoffDpopHeaders,
   mintDpopProof,
   type DpopBoundGrant,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
-import { cotestWire, typedId } from "./soland-api";
+import { canonicalJson, cotestWire, typedId } from "./soland-api";
 
 export const COAUTH_DEV_EMAIL_CODE = "123456";
 
@@ -33,10 +34,13 @@ export type CoauthPasswordAccount = {
   displayName: string;
   did: string;
   principalId?: string;
-  bootstrapDeviceId: string;
+  genesisDeviceId: string;
   recoveryKey: string;
-  pendingPrincipalRegistration: Record<string, unknown>;
-  bootstrapClaimed?: boolean;
+  initialGrant: DpopBoundGrant;
+  initialHolderKey: DpopDeviceKey;
+  pcrGenesisReceipt: Record<string, unknown>;
+  principalRegistrationCheckpoint: Record<string, unknown>;
+  genesisClaimed?: boolean;
 };
 
 export type CanonicalAccountHandoff = {
@@ -135,8 +139,18 @@ async function registrationEmailCode(
 export async function registerUnboundCoauthPasswordAccount(
   request: APIRequestContext,
   coauthBase: string,
-  args: { handle: string; email?: string; password?: string; displayName?: string },
-): Promise<{ handle: string; email: string; password: string; displayName: string }> {
+  args: {
+    handle: string;
+    email?: string;
+    password?: string;
+    displayName?: string;
+  },
+): Promise<{
+  handle: string;
+  email: string;
+  password: string;
+  displayName: string;
+}> {
   const email = args.email ?? `${args.handle}@example.test`;
   const password = args.password ?? "ArkretE2E!2026";
   const displayName = args.displayName ?? `E2E ${args.handle}`;
@@ -149,9 +163,14 @@ export async function registerUnboundCoauthPasswordAccount(
       password_confirm: password,
     },
   });
-  const started = await responseJsonRecord(startResponse, "coauth account-first registration");
+  const started = await responseJsonRecord(
+    startResponse,
+    "coauth account-first registration",
+  );
   if (started.status !== "success") {
-    throw new Error(`coauth account-first registration was rejected: ${JSON.stringify(started)}`);
+    throw new Error(
+      `coauth account-first registration was rejected: ${JSON.stringify(started)}`,
+    );
   }
   const registrationId = stringValue(started.id);
   if (!registrationId) {
@@ -164,19 +183,25 @@ export async function registerUnboundCoauthPasswordAccount(
     let verified: Record<string, unknown> | undefined;
     while (Date.now() < deadline) {
       verified = await responseJsonRecord(
-        await request.post(`${base}/${registrationId}/verify-email`, { data: { code } }),
+        await request.post(`${base}/${registrationId}/verify-email`, {
+          data: { code },
+        }),
         "coauth account email verification",
       );
       if (verified.status === "success") {
         break;
       }
       if (verified.error !== "invalid_code") {
-        throw new Error(`coauth account email verification failed: ${JSON.stringify(verified)}`);
+        throw new Error(
+          `coauth account email verification failed: ${JSON.stringify(verified)}`,
+        );
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     if (verified?.status !== "success") {
-      throw new Error(`coauth account email verification timed out: ${JSON.stringify(verified)}`);
+      throw new Error(
+        `coauth account email verification timed out: ${JSON.stringify(verified)}`,
+      );
     }
     nextStep = stringValue(verified.next_step);
   }
@@ -188,19 +213,25 @@ export async function registerUnboundCoauthPasswordAccount(
       "coauth account display-name step",
     );
     if (named.status !== "success") {
-      throw new Error(`coauth display-name step failed: ${JSON.stringify(named)}`);
+      throw new Error(
+        `coauth display-name step failed: ${JSON.stringify(named)}`,
+      );
     }
     nextStep = stringValue(named.next_step);
   }
   if (nextStep !== "finish") {
-    throw new Error(`unsupported coauth registration next_step: ${String(nextStep)}`);
+    throw new Error(
+      `unsupported coauth registration next_step: ${String(nextStep)}`,
+    );
   }
   const finished = await responseJsonRecord(
     await request.post(`${base}/${registrationId}/finish`, { data: {} }),
     "coauth account registration finish",
   );
   if (finished.status !== "success" || finished.did != null) {
-    throw new Error(`coauth account-first finish returned an invalid outcome: ${JSON.stringify(finished)}`);
+    throw new Error(
+      `coauth account-first finish returned an invalid outcome: ${JSON.stringify(finished)}`,
+    );
   }
   return { handle: args.handle, email, password, displayName };
 }
@@ -225,19 +256,26 @@ async function authorizeWithCurrentAccount(
   const state = randomBytes(24).toString("base64url");
   const nonce = randomBytes(24).toString("base64url");
   const codeVerifier = randomBytes(32).toString("base64url");
-  const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+  const codeChallenge = createHash("sha256")
+    .update(codeVerifier)
+    .digest("base64url");
   const authorize = new URL(authorizationEndpoint);
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("client_id", clientId);
   authorize.searchParams.set("redirect_uri", redirectUri);
-  authorize.searchParams.set("scope", `openid urn:arkret:client:device:${deviceId}`);
+  authorize.searchParams.set(
+    "scope",
+    `openid urn:arkret:client:device:${deviceId}`,
+  );
   authorize.searchParams.set("state", state);
   authorize.searchParams.set("nonce", nonce);
   authorize.searchParams.set("resource", audience);
   authorize.searchParams.set("code_challenge_method", "S256");
   authorize.searchParams.set("code_challenge", codeChallenge);
 
-  const authorization = await request.get(authorize.toString(), { maxRedirects: 0 });
+  const authorization = await request.get(authorize.toString(), {
+    maxRedirects: 0,
+  });
   const location = authorization.headers().location;
   if (!location || ![302, 303, 307, 308].includes(authorization.status())) {
     throw new Error(
@@ -247,7 +285,9 @@ async function authorizeWithCurrentAccount(
   const approvalUrl = new URL(location, coauthBase);
   const grantId = approvalUrl.pathname.split("/").filter(Boolean).at(-1);
   if (!grantId || !approvalUrl.pathname.includes("/oauth/approval/")) {
-    throw new Error(`coauth authorize returned an unexpected location: ${approvalUrl}`);
+    throw new Error(
+      `coauth authorize returned an unexpected location: ${approvalUrl}`,
+    );
   }
   const approved = await responseJsonRecord(
     await request.post(
@@ -258,7 +298,9 @@ async function authorizeWithCurrentAccount(
   );
   const redirect = stringValue(approved.redirect_url);
   if (approved.status !== "success" || !redirect) {
-    throw new Error(`coauth OAuth approval did not return a callback: ${JSON.stringify(approved)}`);
+    throw new Error(
+      `coauth OAuth approval did not return a callback: ${JSON.stringify(approved)}`,
+    );
   }
   const callback = new URL(redirect);
   if (callback.searchParams.get("state") !== state) {
@@ -315,7 +357,9 @@ export async function createCanonicalAccountHandoff(
       "coauth password authentication",
     );
     if (login.status !== "success") {
-      throw new Error(`coauth password authentication failed: ${JSON.stringify(login)}`);
+      throw new Error(
+        `coauth password authentication failed: ${JSON.stringify(login)}`,
+      );
     }
   }
   const authorization = await authorizeWithCurrentAccount(
@@ -355,73 +399,19 @@ export async function createCanonicalAccountHandoff(
     outcome.request_id !== requestId ||
     JSON.stringify(allowedOperations) !== JSON.stringify(canonicalAllowlist)
   ) {
-    throw new Error(`invalid account handoff outcome: ${JSON.stringify(outcome)}`);
+    throw new Error(
+      `invalid account handoff outcome: ${JSON.stringify(outcome)}`,
+    );
   }
   const accountHandoffGrant = stringValue(outcome.account_handoff_grant);
   const expiresAt = stringValue(outcome.expires_at);
   const binding = objectRecord(outcome.binding);
   if (!accountHandoffGrant || !expiresAt || !binding) {
-    throw new Error(`incomplete account handoff outcome: ${JSON.stringify(outcome)}`);
+    throw new Error(
+      `incomplete account handoff outcome: ${JSON.stringify(outcome)}`,
+    );
   }
   return { requestId, accountHandoffGrant, expiresAt, binding, deviceKey };
-}
-
-export async function issueCanonicalHandoffSession(
-  request: APIRequestContext,
-  coauthBase: string,
-  args: {
-    principalId: string;
-    audience: string;
-    deviceId: string;
-    deviceKey: DpopDeviceKey;
-    account: { handle: string; password: string };
-  },
-): Promise<DpopBoundGrant> {
-  const handoff = await createCanonicalAccountHandoff(request, coauthBase, args);
-  if (handoff.binding.state !== "bound" || handoff.binding.principal_id !== args.principalId) {
-    throw new Error(`bound account handoff expected: ${JSON.stringify(handoff.binding)}`);
-  }
-  const body = cotestWire<Record<string, unknown>>("pre-registration-session-request", {
-    principal_id: args.principalId,
-    device_id: args.deviceId,
-    requested_scope: [],
-    account_handoff_grant: handoff.accountHandoffGrant,
-    audience: args.audience,
-    expires_at: new Date(Date.now() + 4 * 60_000).toISOString(),
-    dpop_seed_b64url: dpopDeviceSeedB64url(args.deviceKey),
-  });
-  const url = `${coauthBase}/_arkret/gate/account/session-grants`;
-  const outcome = await responseJsonRecord(
-    await request.post(url, {
-      data: body,
-      headers: accountHandoffHeaders({
-        deviceKey: args.deviceKey,
-        accountHandoffGrant: handoff.accountHandoffGrant,
-        method: "POST",
-        url,
-      }),
-    }),
-    "pre-registration handoff session grant",
-  );
-  const grantId = stringValue(outcome.grant_id);
-  const grantJwt = stringValue(outcome.session_grant);
-  const audience = stringValue(outcome.audience);
-  const expiresAt = stringValue(outcome.expires_at);
-  const principalDid = stringValue(outcome.principal_id);
-  if (!grantId || !grantJwt || !audience || !expiresAt || !principalDid) {
-    throw new Error(`incomplete session grant outcome: ${JSON.stringify(outcome)}`);
-  }
-  return {
-    grantId,
-    grantJwt,
-    dpopJkt: args.deviceKey.thumbprint,
-    audience,
-    scopes: Array.isArray(outcome.granted_scope)
-      ? outcome.granted_scope.filter((scope): scope is string => typeof scope === "string")
-      : [],
-    expiresAt,
-    principalDid,
-  };
 }
 
 export async function registerCoauthPasswordAccount(
@@ -444,47 +434,31 @@ export async function registerCoauthPasswordAccount(
   });
 
   const deviceSuffix = randomUUID().replace(/-/g, "").slice(0, 12);
-  const bootstrapDeviceId = `ak:device:01904100-0000-7000-8000-${deviceSuffix}`;
+  const genesisDeviceId = `ak:device:01904100-0000-7000-8000-${deviceSuffix}`;
   const principalDescribe = await responseJsonRecord(
     await request.get(`${solandBaseUrl(opts.server)}/_arkret/describe`),
     "soland describe",
   );
-  const authorityDescribe = await responseJsonRecord(
-    await request.get(`${coauthBase}/_arkret/describe`),
-    "coauth describe",
-  );
   const trustDomain = stringValue(principalDescribe.trust_domain);
   const audience =
     stringValue(principalDescribe.service_id) ?? solandServiceId(opts.server);
-  const principalAuthMetadata = objectRecord(principalDescribe.auth_metadata);
-  const principalAccountAuthority = objectRecord(principalAuthMetadata?.account_authority);
-  const enrollmentAuthorityDid = stringValue(
-    principalAccountAuthority?.enrollment_authority_did,
-  );
-  const authorityAuthMetadata = objectRecord(authorityDescribe.auth_metadata);
-  const authorityAccountAuthority = objectRecord(authorityAuthMetadata?.account_authority);
-  const authorityEnrollmentAuthorityDid = stringValue(
-    authorityAccountAuthority?.enrollment_authority_did,
-  );
-  if (!trustDomain || !enrollmentAuthorityDid) {
-    throw new Error("service descriptions omitted trust/enrollment authority pins");
-  }
-  if (authorityEnrollmentAuthorityDid !== enrollmentAuthorityDid) {
-    throw new Error(
-      `Account Authority enrollment DID does not match Principal Server deployment pin: ` +
-        `expected ${enrollmentAuthorityDid}, got ${authorityEnrollmentAuthorityDid ?? "missing"}`,
-    );
+  if (!trustDomain) {
+    throw new Error("Principal Server description omitted trust_domain");
   }
   const handoff = await createCanonicalAccountHandoff(request, coauthBase, {
     audience,
-    deviceId: bootstrapDeviceId,
+    deviceId: genesisDeviceId,
   });
   if (handoff.binding.state !== "identity_creation_active") {
-    throw new Error(`fresh account did not receive an active identity lease: ${JSON.stringify(handoff.binding)}`);
+    throw new Error(
+      `fresh account did not receive an active identity lease: ${JSON.stringify(handoff.binding)}`,
+    );
   }
   const lease = objectRecord(handoff.binding.identity_creation_lease);
   if (!lease) {
-    throw new Error(`identity-creation handoff omitted lease: ${JSON.stringify(handoff.binding)}`);
+    throw new Error(
+      `identity-creation handoff omitted lease: ${JSON.stringify(handoff.binding)}`,
+    );
   }
   const fixture = cotestWire<PrincipalRegistrationFixture>(
     "principal-registration-fixture",
@@ -493,9 +467,17 @@ export async function registerCoauthPasswordAccount(
       gate_account_base: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
       handoff_request_id: handoff.requestId,
       identity_creation_lease: lease,
-      device_id: bootstrapDeviceId,
-      enrollment_authority_did: enrollmentAuthorityDid,
+      device_id: genesisDeviceId,
       trust_domain: trustDomain,
+      initial_session: {
+        device_id: genesisDeviceId,
+        session_public_key: canonicalJson(handoff.deviceKey.publicJwk),
+        audience,
+        requested_scope: [
+          "ak.self.account.read.describe",
+          "ak.self.events.read.scan",
+        ],
+      },
     },
   );
   const did = stringValue(fixture.checkpoint.did);
@@ -520,6 +502,8 @@ export async function registerCoauthPasswordAccount(
     {
       challenge,
       did_operation: fixture.did_operation,
+      pcr_genesis_unit: fixture.checkpoint.pcr_genesis_unit,
+      initial_session: fixture.checkpoint.initial_session,
       recovery_key: fixture.recovery_key,
       display_name: displayName,
     },
@@ -538,9 +522,46 @@ export async function registerCoauthPasswordAccount(
     "canonical identity-creation register",
   );
   const receipt = objectRecord(registered.binding_receipt);
-  if (registered.principal_id !== did || !receipt || receipt.binding_state !== "bound") {
-    throw new Error(`canonical account binding failed: ${JSON.stringify(registered)}`);
+  const pcrGenesisReceipt = objectRecord(registered.pcr_genesis_receipt);
+  const sessionOutcome = objectRecord(registered.session_grant_outcome);
+  const grantId = stringValue(sessionOutcome?.grant_id);
+  const grantJwt = stringValue(sessionOutcome?.session_grant);
+  const grantAudience = stringValue(sessionOutcome?.audience);
+  const expiresAt = stringValue(sessionOutcome?.expires_at);
+  const deviceSigningSeed = stringValue(
+    fixture.checkpoint.device_signing_seed_b64url,
+  );
+  if (
+    registered.principal_id !== did ||
+    !receipt ||
+    receipt.binding_state !== "bound" ||
+    !pcrGenesisReceipt ||
+    !sessionOutcome ||
+    !grantId ||
+    !grantJwt ||
+    !grantAudience ||
+    !expiresAt ||
+    !deviceSigningSeed
+  ) {
+    throw new Error(
+      `canonical account binding failed: ${JSON.stringify(registered)}`,
+    );
   }
+  const eventSigningKey = dpopDeviceKeyFromSeedB64url(deviceSigningSeed);
+  const initialGrant: DpopBoundGrant = {
+    grantId,
+    grantJwt,
+    dpopJkt: handoff.deviceKey.thumbprint,
+    audience: grantAudience,
+    scopes: Array.isArray(sessionOutcome.granted_scope)
+      ? sessionOutcome.granted_scope.filter(
+          (scope): scope is string => typeof scope === "string",
+        )
+      : [],
+    expiresAt,
+    principalDid: did,
+    eventSigningKey,
+  };
   return {
     handle: slug,
     email,
@@ -548,9 +569,12 @@ export async function registerCoauthPasswordAccount(
     displayName,
     did,
     principalId: did,
-    bootstrapDeviceId,
+    genesisDeviceId,
     recoveryKey: fixture.recovery_key,
-    pendingPrincipalRegistration: {
+    initialGrant,
+    initialHolderKey: handoff.deviceKey,
+    pcrGenesisReceipt,
+    principalRegistrationCheckpoint: {
       ...fixture.checkpoint,
       binding_receipt: receipt,
       stage: "binding_registered",

@@ -107,7 +107,7 @@
       }
     },
     {
-      "name": "device_verification_promotes_cross_signed_sas_device_to_trusted",
+      "name": "device_verification_promotes_authorized_sas_device_to_trusted",
       "strand": "device_verification",
       "profile": "ak.profile.e2ee_client.v1",
       "expect": "pass",
@@ -120,7 +120,7 @@
       ],
       "observed": {
         "verification_methods": [
-          "cross_signing",
+          "device_authorization",
           "sas"
         ],
         "trust_state_before": "unverified",

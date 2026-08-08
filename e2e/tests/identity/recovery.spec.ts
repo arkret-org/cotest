@@ -59,7 +59,7 @@ function secretStorageEnvelope(opts: {
   const createdAt = new Date().toISOString();
   const backupClass = opts.backupClass ?? "secret_storage";
   const subdomain = "account_keys";
-  const itemTypes = ["self_signing_key", "user_signing_key"];
+  const itemTypes = ["mls_group_secrets_backup_key"];
   const signedFields = [
     "backup_id",
     "actor_id",
@@ -112,7 +112,10 @@ function secretStorageEnvelope(opts: {
         item_kinds: itemTypes,
       },
     },
-    contents: itemTypes.map((item_kind) => ({ item_kind, secret_id: item_kind })),
+    contents: itemTypes.map((item_kind) => ({
+      item_kind,
+      secret_id: item_kind,
+    })),
     ciphertext: randomBytes(48).toString("base64url"),
     ciphertext_digest: "sha256:" + randomBytes(32).toString("hex"),
     series_id: seriesId,
@@ -122,9 +125,9 @@ function secretStorageEnvelope(opts: {
       verification_method: `${opts.actorId}#device-test`,
       signature_algorithm: "Ed25519",
       signature: randomBytes(64).toString("base64url"),
-      // Exactly one device trust anchor (ssk_generation XOR
-      // device_authorize_event_id); cross-signing path here.
-      ssk_generation: 1,
+      // The PCR accepted-device Event is the sole device trust anchor.
+      device_authorize_event_id:
+        "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
       signed_fields: signedFields,
     },
   };
@@ -151,7 +154,9 @@ async function putBackup(
 }
 
 test.describe("account recovery", () => {
-  test("backup API surface probe (recovery and key-backup endpoints)", async ({ request }) => {
+  test("backup API surface probe (recovery and key-backup endpoints)", async ({
+    request,
+  }) => {
     const alice = uniqueUser("s8-probe");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
@@ -166,7 +171,9 @@ test.describe("account recovery", () => {
     const body = await backupsResp.json();
     const backups = body.backups ?? body.results ?? body;
     expect(Array.isArray(backups)).toBeTruthy();
-    expect(JSON.stringify(body)).not.toMatch(/plaintext|passphrase|private_key/i);
+    expect(JSON.stringify(body)).not.toMatch(
+      /plaintext|passphrase|private_key/i,
+    );
   });
 
   test("alice (device-1) generates a 24-word Recovery Key; account-secret envelope (Argon2id KDF + XChaCha20-Poly1305, key_commitment) uploads automatically", async ({
@@ -183,13 +190,21 @@ test.describe("account recovery", () => {
     // recovery policy AND a did_recovery backup both exist, with no plaintext.
     test.setTimeout(240_000);
     const coauth = coauthBaseUrl();
-    test.skip(!coauth, "coauth DPoP session-grant login is required for device-authorized key backup");
+    test.skip(
+      !coauth,
+      "coauth DPoP session-grant login is required for device-authorized key backup",
+    );
     if (!coauth) {
       return;
     }
-    const device = await openDpopUserPage(browser, request, "recovery-phase-a-alice", {
-      coauthBase: coauth,
-    });
+    const device = await openDpopUserPage(
+      browser,
+      request,
+      "recovery-phase-a-alice",
+      {
+        coauthBase: coauth,
+      },
+    );
     test.skip(!device, "coauth DPoP password login is unavailable");
     if (!device) {
       return;
@@ -201,14 +216,20 @@ test.describe("account recovery", () => {
       // which generates the 24-word Recovery Key and uploads the
       // recovery_public_key envelope before it returns. Verify the durable
       // result rather than waiting for an already-completed browser request.
-      await page.page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
+      await page.page.goto("/settings/recovery", {
+        waitUntil: "domcontentloaded",
+      });
       await expect(page.page.getByTestId("recovery-key-section")).toBeVisible({
         timeout: 120_000,
       });
-      expect(session.recoveryKey?.trim().split(/\s+/).filter(Boolean)).toHaveLength(24);
+      expect(
+        session.recoveryKey?.trim().split(/\s+/).filter(Boolean),
+      ).toHaveLength(24);
       await expect(page.page.getByTestId("recovery-key-current")).toBeVisible();
       // §7.7: the recovery UI MUST NOT request a separate vault passphrase.
-      await expect(page.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
+      await expect(
+        page.page.getByTestId("recovery-key-passphrase"),
+      ).toHaveCount(0);
 
       // Phase A invariant (recovery.md step 6): an active policy AND a
       // did_recovery backup both exist. Read them back over the API.
@@ -219,7 +240,9 @@ test.describe("account recovery", () => {
       await expect
         .poll(
           async () => {
-            const resp = await request.get(policyUrl, { headers: grantHeaders("GET", policyUrl) });
+            const resp = await request.get(policyUrl, {
+              headers: grantHeaders("GET", policyUrl),
+            });
             if (!resp.ok()) {
               return "http-" + resp.status();
             }
@@ -249,9 +272,13 @@ test.describe("account recovery", () => {
         .toBeGreaterThanOrEqual(1);
 
       // No plaintext Recovery Key material is ever surfaced server-side.
-      const listResp = await request.get(backupsUrl, { headers: grantHeaders("GET", backupsUrl) });
+      const listResp = await request.get(backupsUrl, {
+        headers: grantHeaders("GET", backupsUrl),
+      });
       const serialized = JSON.stringify(await listResp.json());
-      expect(serialized).not.toMatch(/plaintext|passphrase|private_key|mnemonic/i);
+      expect(serialized).not.toMatch(
+        /plaintext|passphrase|private_key|mnemonic/i,
+      );
     } finally {
       await page.close();
     }
@@ -335,7 +362,12 @@ test.describe("account recovery", () => {
       // (65536 / 3) is NOT sufficient once the mixed flag is set.
       argon2: { memory_kib: 65_536, iterations: 3, parallelism: 1 },
     });
-    const weakResp = await putBackup(request, token, weakMixed.backupId, weakMixed.envelope);
+    const weakResp = await putBackup(
+      request,
+      token,
+      weakMixed.backupId,
+      weakMixed.envelope,
+    );
     expect(
       weakResp.status(),
       `mixed_secret_storage below the hardened Argon2id floor must be rejected: ${await weakResp.text()}`,

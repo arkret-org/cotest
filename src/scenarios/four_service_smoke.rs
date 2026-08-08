@@ -52,13 +52,13 @@ async fn wait_for_coauth_service_identity(base_url: &str, health_url: &str) -> R
             .await?;
         if response.status().is_success() {
             let body: serde_json::Value = response.json().await?;
-            let authority = body
-                .pointer("/auth_metadata/account_authority/enrollment_authority_did")
+            let service_id = body
+                .get("service_id")
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| anyhow!("coauth describe omitted enrollment authority DID"))?;
-            arkret_identifiers::Did::new(authority.to_owned())
-                .map_err(|error| anyhow!("coauth enrollment authority DID is invalid: {error}"))?;
+                .ok_or_else(|| anyhow!("coauth describe omitted service_id"))?;
+            arkret_identifiers::Did::new(service_id.to_owned())
+                .map_err(|error| anyhow!("coauth service_id is invalid: {error}"))?;
             return Ok(());
         }
         let status = response.status();

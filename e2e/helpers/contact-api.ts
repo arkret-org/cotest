@@ -11,7 +11,7 @@
 // Wire shapes mirror arkret-rust-sdk core::http + core::model::invite_addressing
 // and soland src/routing/identity/account.rs + src/routing/invites.rs.
 
-import { createHash, sign as nodeSign, type KeyObject } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   expect,
   type APIRequestContext,
@@ -30,7 +30,7 @@ import {
   principalControlRealmForDid,
   readRealmSealBasis,
   refreshEventEnvelopeProof,
-  registerEventSigner,
+  signWithRegisteredEventSigner,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
@@ -38,31 +38,9 @@ import {
   type InviteDeliveryRequestBodyBodyBody,
 } from "./soland-api";
 import type { JointUser } from "./users";
-import { ed25519PrivateKeySeedB64url } from "./encoding";
-import {
-  buildCrossSigningPublishPayload,
-  buildDeviceCrossSigningBinding,
-  buildDevicePossessionSignature,
-  generateCrossSigningKey,
-  TEST_DEVICE_ALGORITHMS,
-  type CrossSigningIdentity,
-  type CrossSigningKey,
-} from "./cross-signing-harness";
-import {
-  buildPrincipalGenesisEntry,
-  generateWebvhKey,
-  submitPrincipalGenesisEntry,
-} from "./webvh-api";
-
-export type Ed25519FixtureKey = {
-  privateKey: KeyObject;
-  rawPublicKey: Buffer;
-  publicKeyMultibase: string;
-};
 
 export type PreparedDirectConversationIdentity = {
   user: JointUser;
-  principalSigningKey: Ed25519FixtureKey;
 };
 
 // ── Contact list / request / respond wire types (subset we assert on). ──
@@ -350,157 +328,24 @@ export async function prepareDirectConversationIdentityArkret(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ): Promise<PreparedDirectConversationIdentity> {
-  const principalSigningKey = generateWebvhKey();
-  const built = buildPrincipalGenesisEntry({
-    baseUrl: solandBaseUrl(opts.server),
-    localId: user.name,
-    rootKey: generateWebvhKey(),
-    nextRootKey: generateWebvhKey(),
-    principalSigningKey,
-    enrollmentKey: generateWebvhKey(),
-    serviceEndpoint: solandBaseUrl(opts.server),
-  });
-  await submitPrincipalGenesisEntry(request, solandBaseUrl(opts.server), built);
-  registerEventSigner({
-    actorDid: built.did,
-    deviceId: user.deviceId,
-    verificationMethod: `${built.did}#principal-signing-key`,
-    signingSeedB64url: ed25519PrivateKeySeedB64url(
-      principalSigningKey.privateKey,
-    ),
-  });
-  return {
-    user: { ...user, did: built.did },
-    principalSigningKey: {
-      privateKey: principalSigningKey.privateKey,
-      rawPublicKey: principalSigningKey.publicKey,
-      publicKeyMultibase: principalSigningKey.multibase,
-    },
-  };
+  void request;
+  void opts;
+  return { user };
 }
 
 export async function seedDirectConversationIdentityArkret(
   request: APIRequestContext,
   token: string,
   user: JointUser,
-  opts: { principalSigningKey: Ed25519FixtureKey; server?: SolandKey },
-): Promise<void> {
-  const psk = opts.principalSigningKey;
-  const ssk = generateCrossSigningKey();
-  const usk = generateCrossSigningKey();
-  const pskKid = `${user.did}#principal-signing-key`;
-  const sskKid = `${user.did}#ak_self_signing_v1`;
-  const uskKid = `${user.did}#ak_user_signing_v1`;
-  const trustDomain = await solandTrustDomain(request, opts);
-  const generation = 1;
-  const identity: CrossSigningIdentity = {
-    principalId: user.did,
-    trustDomain,
-    generation,
-    psk: fixtureCrossSigningKey(psk, pskKid),
-    ssk: { ...ssk, verificationMethod: sskKid },
-    usk: { ...usk, verificationMethod: uskKid },
-  };
-
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: user.did,
-      realmId: principalControlRealmForDid(user.did),
-      kind: "ak.cross_signing.publish",
-      payload: buildCrossSigningPublishPayload(identity),
-    }),
-    { server: opts.server, context: `publish cross-signing ${user.did}` },
-  );
-
-  const deviceKey = generateCrossSigningKey();
-  const hpkeKeyMultibase = "z6LSCotestE2eDeviceHpkeKey";
-  const notBefore = canonicalTimestamp();
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: user.did,
-      realmId: principalControlRealmForDid(user.did),
-      kind: "ak.device.authorize",
-      payload: {
-        principal_id: user.did,
-        device_id: user.deviceId,
-        device_public_key: deviceKey.multibase,
-        hpke_key: hpkeKeyMultibase,
-        algorithms: TEST_DEVICE_ALGORITHMS,
-        device_key_algorithm: "Ed25519",
-        device_signature: {
-          kid: `${user.did}#${user.deviceId}`,
-          alg: "Ed25519",
-          sig: buildDevicePossessionSignature({
-            identity,
-            deviceId: user.deviceId,
-            devicePublicKeyMultibase: deviceKey.multibase,
-            hpkeKeyMultibase,
-            algorithms: TEST_DEVICE_ALGORITHMS,
-            deviceKeyAlgorithm: "Ed25519",
-            authorizedBy: user.deviceId,
-            notBefore,
-            privateKey: deviceKey.privateKey,
-          }),
-        },
-        authorized_by: user.deviceId,
-        not_before: notBefore,
-        cross_signing_binding: buildDeviceCrossSigningBinding({
-          identity,
-          deviceId: user.deviceId,
-          devicePublicKeyMultibase: deviceKey.multibase,
-          hpkeKeyMultibase,
-          algorithms: TEST_DEVICE_ALGORITHMS,
-        }),
-      },
-    }),
-    { server: opts.server, context: `authorize device ${user.deviceId}` },
-  );
-
-  await uploadDirectConversationKeyPackage(
-    request,
-    token,
-    user,
-    deviceKey.privateKey,
-    opts,
-  );
-}
-
-function fixtureCrossSigningKey(
-  key: Ed25519FixtureKey,
-  verificationMethod: string,
-): CrossSigningKey {
-  return {
-    privateKey: key.privateKey,
-    rawPublicKey: key.rawPublicKey,
-    multibase: key.publicKeyMultibase,
-    didKey: `did:key:${key.publicKeyMultibase}`,
-    verificationMethod,
-  };
-}
-
-async function solandTrustDomain(
-  request: APIRequestContext,
   opts: { server?: SolandKey } = {},
-): Promise<string> {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/describe`,
-  );
-  const body = await expectJsonOk<{ trust_domain?: string }>(
-    response,
-    "describe trust_domain",
-  );
-  return body.trust_domain ?? "ak:trust_domain:soland.joint-e2e.local";
+): Promise<void> {
+  await uploadDirectConversationKeyPackage(request, token, user, opts);
 }
 
 async function uploadDirectConversationKeyPackage(
   request: APIRequestContext,
   token: string,
   user: JointUser,
-  devicePrivateKey: KeyObject,
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
   const stamp = `${Date.now()}-${Math.random()}`;
@@ -526,17 +371,19 @@ async function uploadDirectConversationKeyPackage(
     device_id: user.deviceId,
     key_packages: keyPackages,
   };
+  const signingInput = `ak.self.keys.keypackages.upload.create\n${canonicalJson(unsigned)}`;
+  const signature = signWithRegisteredEventSigner(
+    user.did,
+    `${user.did}#${user.deviceId}`,
+    signingInput,
+  );
+  if (!signature) {
+    throw new Error(`no accepted device signer registered for ${user.did}`);
+  }
   const deviceSignature = {
     kid: `${user.did}#${user.deviceId}`,
     alg: "Ed25519",
-    sig: nodeSign(
-      null,
-      Buffer.concat([
-        Buffer.from("ak.self.keys.keypackages.upload.create\n", "utf8"),
-        Buffer.from(canonicalJson(unsigned), "utf8"),
-      ]),
-      devicePrivateKey,
-    ).toString("base64url"),
+    sig: signature,
   };
   const response = await request.post(
     `${solandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`,

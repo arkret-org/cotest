@@ -18,7 +18,9 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::canonical_json_bytes;
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
-use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, Hash, RecoverySessionId};
+use arkret_identifiers::{
+    BackupId, BackupSeriesId, DeviceId, Did, EventId, Hash, RecoverySessionId,
+};
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
     KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
@@ -81,9 +83,8 @@ async fn put_backup(server: &ArkretServer, token: &str, actor_id: &str) -> Resul
 }
 
 /// Build the `ak.schema.key_backup.v1` envelope including the §7.4.1
-/// `auth_data` device-signature block (device key signs the canonical
-/// envelope minus `auth_data.signature`; `ssk_generation` binds the
-/// cross-signing generation).
+/// `auth_data` device-signature block. The device authorization Event is the
+/// trust anchor for this signature.
 fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
@@ -154,8 +155,9 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
                 .map_err(|error| anyhow!(error))?,
             signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
             signature: Base64UrlString::new("AA").map_err(|error| anyhow!(error))?,
-            ssk_generation: std::num::NonZeroU64::new(1),
-            device_authorize_event_id: None,
+            device_authorize_event_id: EventId::new(
+                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+            )?,
             signed_fields: key_backup_signed_fields(),
             extra: Default::default(),
         }),

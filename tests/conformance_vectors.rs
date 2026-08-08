@@ -611,17 +611,17 @@ fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
     Ok(())
 }
 
-/// Gating: B-model live registry + re-anchor harness is not yet wired.
+/// Gating: root-anchored live registry + re-anchor harness is not yet wired.
 /// Tier: live
 #[test]
-#[ignore = "B-model live registry entry + atomic re-anchor harness not yet wired"]
+#[ignore = "root-anchored live registry entry + atomic re-anchor harness not yet wired"]
 fn test_5_recovery_policy_state_machine_live() {
     // Live integration:
     //   1. Resolve an accepted policy snapshot with distinct signing/HPKE keys.
     //   2. Publish the higher canonical DID registry entry.
-    //   3. Atomically submit root-signed re-anchor + authority-signed authorize.
+    //   3. Atomically submit root-signed re-anchor + replacement-device-signed authorize.
     //   4. Verify the receipt and reject old-generation Event/Seal replay.
-    unreachable!("integration target gated on B-model registry/re-anchor harness");
+    unreachable!("integration target gated on root-anchored registry/re-anchor harness");
 }
 
 // ─── P0 / TEST-6 — Internationalized identifier profiles ───────────────────

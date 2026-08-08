@@ -19,7 +19,6 @@ mod canonical_fixture;
 mod capability;
 mod coauth_lifecycle;
 mod control_proposal;
-mod cross_signing_binding_golden;
 mod cursor_vectors;
 mod decision_0017_vectors;
 mod did_binding_digests;
@@ -62,6 +61,7 @@ mod profile_registry;
 mod protocol_gap_closure;
 mod push_rule_core;
 mod read_receipt_signal;
+mod recovery_completion_grant;
 pub mod recovery_transaction_faults;
 mod redaction;
 mod scaffold_gate;
@@ -73,6 +73,7 @@ mod security_negative;
 mod security_transaction_resilience;
 mod security_transaction_resilience_reference;
 mod service_closure_hardening;
+mod session_grant_issuer_ledger;
 mod sidecar_vectors;
 mod signal_federation;
 mod signal_sequence_high_water;
@@ -176,7 +177,6 @@ pub use coauth_lifecycle::run_coauth_account_lifecycle_fixture_suite;
 pub use control_proposal::{
     run_control_proposal_ack_suite, run_control_proposal_bounded_decision_suite,
 };
-pub use cross_signing_binding_golden::run_cross_signing_binding_golden_suite;
 pub use cursor_vectors::{
     ALL_CURSOR_VECTOR_IDS, run_cursor_opaque_core_vector, run_cursor_vector_suite,
 };
@@ -355,6 +355,7 @@ pub use read_receipt_signal::{
     VECTOR_ID_READ_RECEIPT_ROUND_TRIP, run_genesis_join_policy_bundle_vector,
     run_read_receipt_round_trip_vector, run_read_receipt_signal_vector_suite,
 };
+pub use recovery_completion_grant::run_recovery_completion_grant_suite;
 pub use redaction::run_redaction_fixture_suite;
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
@@ -376,10 +377,14 @@ pub use security_negative::run_security_negative_profile_suite;
 pub use security_transaction_resilience::run_security_transaction_resilience_joint_gate;
 pub use service_closure_hardening::{
     ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS, run_cursor_revoke_high_assurance_vector,
-    run_device_recovery_lifecycle_vector, run_device_revocation_seal_binding_vector,
-    run_invite_consumed_token_resubject_rejected_vector, run_projection_pagination_shape_vector,
-    run_push_wakeup_policy_vector, run_range_completeness_witness_disagreement_vector,
+    run_device_revocation_seal_binding_vector, run_invite_consumed_token_resubject_rejected_vector,
+    run_projection_pagination_shape_vector, run_push_wakeup_policy_vector,
+    run_range_completeness_witness_disagreement_vector,
     run_service_closure_hardening_fixture_suite, run_signal_class_ttl_vector,
+};
+pub use session_grant_issuer_ledger::{
+    run_session_grant_issuance_kat_suite, run_session_grant_issuer_ledger_reference_model_suite,
+    run_session_grant_issuer_ledger_suite,
 };
 pub use sidecar_vectors::{
     ALL_SIDECAR_VECTOR_IDS, run_sidecar_accepted_request_identity_vector,
@@ -427,23 +432,22 @@ pub use wire::{
     run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
     run_conflict_repair_fixture_suite, run_consent_fixture_suite,
     run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
-    run_cross_signing_reset_fixture_suite, run_device_cross_signing_trust_fixture_suite,
-    run_device_message_negative_fixture_suite, run_device_verification_fixture_suite,
-    run_discovery_profile_fixture_suite, run_event_kind_lattice_dispatch_fixture_suite,
-    run_event_kind_payload_coverage_fixture_suite, run_facet_renderer_query_fixture_suite,
-    run_frontier_conflict_resolution_fixture_suite, run_history_visibility_fixture_suite,
-    run_history_visibility_projection_matrix_check, run_interop_downgrade_fixture_suite,
-    run_key_backup_aead_round_trip_check, run_key_backup_encryption_fixture_suite,
-    run_late_arriving_anchor_fixture_suite, run_late_arriving_anchor_idempotency_check,
-    run_megolm_ratchet_kdf_chain_check, run_megolm_ratcheting_fixture_suite,
-    run_membership_fsm_fixture_suite, run_mimi_components_fixture_suite,
-    run_mimi_interop_fixture_suite, run_mls_e2ee_basic_fixture_suite,
-    run_mls_security_frontier_fixture_suite, run_multi_admin_distinct_approver_gate_check,
-    run_multi_realm_federation_fixture_suite, run_production_signing_fixture_suite,
-    run_read_receipt_policy_fixture_suite, run_recovery_bridge_full_chain_fixture_suite,
-    run_recovery_ticket_state_machine_check, run_redacted_cross_server_fixture_suite,
-    run_redaction_history_visibility_fixture_suite, run_restore_full_workflows_fixture_suite,
-    run_state_resolution_quarantine_fixture_suite, run_threshold_multisig_fixture_suite,
+    run_device_message_negative_fixture_suite, run_discovery_profile_fixture_suite,
+    run_event_kind_lattice_dispatch_fixture_suite, run_event_kind_payload_coverage_fixture_suite,
+    run_facet_renderer_query_fixture_suite, run_frontier_conflict_resolution_fixture_suite,
+    run_history_visibility_fixture_suite, run_history_visibility_projection_matrix_check,
+    run_interop_downgrade_fixture_suite, run_key_backup_aead_round_trip_check,
+    run_key_backup_encryption_fixture_suite, run_late_arriving_anchor_fixture_suite,
+    run_late_arriving_anchor_idempotency_check, run_megolm_ratchet_kdf_chain_check,
+    run_megolm_ratcheting_fixture_suite, run_membership_fsm_fixture_suite,
+    run_mimi_components_fixture_suite, run_mimi_interop_fixture_suite,
+    run_mls_e2ee_basic_fixture_suite, run_mls_security_frontier_fixture_suite,
+    run_multi_admin_distinct_approver_gate_check, run_multi_realm_federation_fixture_suite,
+    run_production_signing_fixture_suite, run_read_receipt_policy_fixture_suite,
+    run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
+    run_redacted_cross_server_fixture_suite, run_redaction_history_visibility_fixture_suite,
+    run_restore_full_workflows_fixture_suite, run_state_resolution_quarantine_fixture_suite,
+    run_threshold_multisig_fixture_suite,
 };
 
 // ── Shared fixture types ────────────────────────────────────────────────────

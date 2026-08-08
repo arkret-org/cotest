@@ -146,6 +146,23 @@ fn parse_time(value: &str) -> Result<DateTime<Utc>> {
     Ok(arkret_canonical::parse_timestamp_canonical(value)?)
 }
 
+fn require_root_generation_ref<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    let generation_ref = required_str(value, field)?;
+    let (version, entry_hash) = generation_ref
+        .split_once('-')
+        .ok_or_else(|| anyhow!("{field} must be a did:webvh version id"))?;
+    if version
+        .parse::<u64>()
+        .ok()
+        .filter(|version| *version > 0)
+        .is_none()
+        || entry_hash.is_empty()
+    {
+        bail!("{field} must be a non-zero did:webvh version id");
+    }
+    Ok(generation_ref)
+}
+
 fn did(value: &str) -> Result<Did> {
     Did::new(value.to_owned()).map_err(Into::into)
 }
@@ -190,7 +207,7 @@ fn claim_record_value(
         "key_package": "AQID",
         "capabilities": ["ak.mls.profile.full"],
         "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "ssk_generation": 7,
+        "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
         "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
         "device_signature": {
             "kid": format!("{}#{}", principal_id.as_str(), device_id.as_str()),
@@ -886,7 +903,8 @@ struct WelcomePayloadFixture<'a> {
     envelope_digest: &'a str,
     capabilities_digest: &'a str,
     claim_id: &'a str,
-    ssk_generation: u64,
+    device_authorize_event_id: &'a str,
+    requester_device_id: &'a str,
     intended_realm_id: &'a str,
     requester_did: &'a str,
     claim_nonce: &'a str,
@@ -907,7 +925,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "keypackage_ref": fixture.keypackage_ref,
             "keypackage_digest": fixture.claim_digest,
             "capabilities_digest": fixture.capabilities_digest,
-            "ssk_generation": fixture.ssk_generation
+            "device_authorize_event_id": fixture.device_authorize_event_id
         },
         "claim_envelope": {
             "keypackage_ref": fixture.keypackage_ref,
@@ -915,12 +933,12 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "intended_realm_id": fixture.intended_realm_id,
             "claim_id": fixture.claim_id,
             "requester_did": fixture.requester_did,
-            "ssk_generation": fixture.ssk_generation,
+            "requester_device_id": fixture.requester_device_id,
             "nonce": fixture.claim_nonce,
             "welcome_digest": fixture.welcome_digest,
             "created_at": "2026-05-25T00:00:00.000Z",
             "signature": {
-                "kid": "did:web:alice.example#ak_self_signing_v1",
+                "kid": "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
                 "signature_algorithm": "Ed25519",
                 "sig": "c2ln"
             }
@@ -958,10 +976,11 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let requester_did = required_str(vector, "requester_did")?;
     let claim_nonce = required_str(vector, "claim_nonce")?;
     let welcome_digest = required_str(vector, "welcome_digest")?;
-    let ssk_generation = vector
-        .get("ssk_generation")
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("welcome vector missing ssk_generation"))?;
+    let device_authorize_event_id = required_str(vector, "device_authorization_event_id")?;
+    let requester_device_id = required_str(vector, "requester_device_id")?;
+    arkret_wire::EventId::new(device_authorize_event_id.to_owned())?;
+    device(requester_device_id)?;
+    require_root_generation_ref(vector, "model_generation_ref")?;
     let intended_realm_id = realm(intended_realm_id)?;
     let requester_did = did(requester_did)?;
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
@@ -991,7 +1010,8 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         envelope_digest: digest,
         capabilities_digest,
         claim_id,
-        ssk_generation,
+        device_authorize_event_id,
+        requester_device_id,
         intended_realm_id: intended_realm_id.as_str(),
         requester_did: requester_did.as_str(),
         claim_nonce,
@@ -1008,11 +1028,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        Some(ssk_generation),
+        Some(device_authorize_event_id),
         None,
-        None,
-        Some(ssk_generation),
-        None,
+        Some(requester_device_id),
     )
     .map_err(|reason| anyhow!("good welcome rejected: {reason}"))?;
 
@@ -1030,11 +1048,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &requester_did,
             &welcome_digest,
             claim_nonce,
-            Some(ssk_generation),
+            Some(device_authorize_event_id),
             None,
-            None,
-            Some(ssk_generation),
-            None,
+            Some(requester_device_id),
         )
         .err()
         .ok_or_else(|| anyhow!("mismatched top-level welcome digest was accepted"))?,
@@ -1062,11 +1078,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &requester_did,
             &welcome_digest,
             claim_nonce,
-            Some(ssk_generation),
+            Some(device_authorize_event_id),
             None,
-            None,
-            Some(ssk_generation),
-            None,
+            Some(requester_device_id),
         )
         .is_err(),
         Err(reason) => reason == arkret_wire::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
@@ -1088,11 +1102,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        Some(ssk_generation),
+        Some(device_authorize_event_id),
         None,
-        None,
-        Some(ssk_generation),
-        None,
+        Some(requester_device_id),
     )
     .is_ok()
     {
@@ -1116,11 +1128,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        Some(ssk_generation),
+        Some(device_authorize_event_id),
         None,
-        None,
-        Some(ssk_generation),
-        None,
+        Some(requester_device_id),
     )
     .is_ok()
     {
@@ -1140,11 +1150,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &requester_did,
         &welcome_digest,
         claim_nonce,
-        Some(ssk_generation),
+        Some(device_authorize_event_id),
         None,
-        None,
-        Some(ssk_generation),
-        None,
+        Some(requester_device_id),
     )
     .is_ok()
     {
@@ -1184,10 +1192,18 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         &fixture,
         VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
     )?;
+    let requester = required_str(&vector["proof_free_request"], "requester")?;
+    let requester_device_id = required_str(vector, "requester_device_id")?;
+    let device_authorization_event_id = required_str(vector, "device_authorization_event_id")?;
+    let expected_verification_method = format!("{requester}#{requester_device_id}");
+    device(requester_device_id)?;
+    arkret_wire::EventId::new(device_authorization_event_id.to_owned())?;
+    require_root_generation_ref(vector, "model_generation_ref")?;
+
     let mut request = vector["proof_free_request"].clone();
     request["holder_acceptance_proof"] = json!({
         "kind": "detached_jws",
-        "verification_method": "did:webvh:z6mkfixture:alice.example#ak_self_signing_v1",
+        "verification_method": expected_verification_method.clone(),
         "payload_digest": required_str(vector, "payload_digest")?,
         "created_at": "2026-07-31T00:00:00.000Z",
         "audience": required_str(vector, "authority_service_id")?,
@@ -1196,8 +1212,22 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     });
     let typed: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(request.clone())?;
-    if typed.payload_digest()?.as_str() != required_str(vector, "payload_digest")? {
-        bail!("self-claim proof-free payload digest drifted");
+    if typed.holder_acceptance_proof.verification_method.as_str() != expected_verification_method {
+        bail!("self-claim proof is not bound to the canonical accepted-device method");
+    }
+    let typed_payload_digest = typed.payload_digest()?;
+    if typed_payload_digest.as_str() != required_str(vector, "payload_digest")? {
+        let mut typed_proof_free = serde_json::to_value(&typed)?;
+        typed_proof_free
+            .as_object_mut()
+            .expect("request object")
+            .remove("holder_acceptance_proof");
+        bail!(
+            "self-claim proof-free payload digest drifted: expected {}, got {}, projection={}",
+            required_str(vector, "payload_digest")?,
+            typed_payload_digest,
+            String::from_utf8(arkret_canonical::canonical_json_bytes(&typed_proof_free)?)?
+        );
     }
     let proof_free_bytes = arkret_canonical::canonical_json_bytes(&vector["proof_free_request"])?;
     if std::str::from_utf8(&proof_free_bytes)?

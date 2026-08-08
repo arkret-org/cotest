@@ -9,21 +9,20 @@ use arkret::identity_root::{
 };
 use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
-    self_principal_bootstrap_submit_request,
+    build_self_principal_pcr_genesis_unit, validate_self_principal_pcr_genesis_unit,
 };
-use arkret_identifiers::{DeviceId, Did, EventId, Hash, Hlc, RealmId, TypedTrustDomainId};
+use arkret_identifiers::{DeviceId, Did, Hash, Hlc, RealmId, TypedTrustDomainId};
 use arkret_models_collaboration::events_payloads::device_identity::{
-    DeviceAuthorizePayload, DeviceOrPrincipalRef, DeviceReanchorPayload,
-    validate_device_reanchor_recovery_first_seal,
+    DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
+    DeviceReanchorPayload, validate_device_reanchor_recovery_first_seal,
 };
-use arkret_models_crypto::{
-    DeviceGenerationState, DeviceGenerationStatus, DeviceStatus, QueryDeviceCrossSigningBinding,
-    QueryDeviceRecord,
+use arkret_models_collaboration::events_payloads::{
+    FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
+    FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
-use arkret_models_identity::artifacts_device_identity::{
-    DeviceEnrollmentAuthorityBinding, DeviceEnrollmentAuthorityBindingKind,
-};
-use arkret_wire::{Audience, Base64UrlString, DidUrl, Event, EventRef, NonEmptyString, Proof};
+use arkret_wire::{Audience, Event, EventRef, NonEmptyString, Proof};
+use base64::Engine as _;
+use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{Value, json};
 
 use super::load_fixture_value;
@@ -180,7 +179,7 @@ pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
 /// fixture and verifies the remaining reducer cases stay explicitly declared.
 ///
 /// This is deliberately named a checkpoint suite: presence checks for the
-/// 63-case formal matrix are not reported as executed reducer coverage.
+/// 58-case formal matrix are not reported as executed reducer coverage.
 pub fn run_identity_root_anchor_checkpoint_suite() -> Result<()> {
     let fixture = load_fixture_value(ROOT_ANCHOR_FIXTURE)?;
     for vector in [
@@ -192,72 +191,73 @@ pub fn run_identity_root_anchor_checkpoint_suite() -> Result<()> {
         require_vector(&fixture, vector)?;
     }
     require_declared_case_checkpoints(&fixture)?;
-    validate_bootstrap_helpers()?;
+    validate_pcr_genesis_helpers()?;
     validate_reanchor_helpers()?;
     validate_recovery_handoff_checkpoints(&fixture)
 }
 
 pub fn run_identity_model_generation_fence_suite() -> Result<()> {
-    let mut model_a = QueryDeviceRecord {
-        device_status: Some(DeviceStatus::Active),
-        cross_signing_binding: Some(QueryDeviceCrossSigningBinding {
-            verification_method: did_url("did:webvh:z6mkfixture:alice.example#ak_self_signing_v1")?,
-            signature_algorithm: Some(non_empty("Ed25519")?),
-            ssk_generation: 1,
-            signature: base64_url("c2ln")?,
-        }),
-        ..QueryDeviceRecord::default()
-    };
-    if !model_a.is_usable_in_generation(None) {
-        bail!("model A device was not usable under its cross-signing authority");
-    }
-
-    let authority = enrollment_binding()?;
-    let active_generation = DeviceGenerationState {
-        current_device_generation_ref: non_empty("2-QmCurrent")?,
-        device_generation_status: DeviceGenerationStatus::Active,
-    };
-    let conflicted_generation = DeviceGenerationState {
-        current_device_generation_ref: active_generation.current_device_generation_ref.clone(),
-        device_generation_status: DeviceGenerationStatus::Conflicted,
-    };
-    let mut model_b = QueryDeviceRecord {
-        device_status: Some(DeviceStatus::Active),
-        enrollment_authority_binding: Some(authority.clone()),
-        device_authorize_event_id: Some(EventId::new(
-            "ak:event:Ac0RSITUWs2Ftqgb902qaA5SlygUXgX0yAce_06OOjek",
-        )?),
-        authorized_generation_ref: Some(non_empty("2-QmCurrent")?),
-        ..QueryDeviceRecord::default()
-    };
-    if !model_b.is_usable_in_generation(Some(&active_generation))
-        || model_b.is_usable_in_generation(None)
-        || model_b.is_usable_in_generation(Some(&conflicted_generation))
-    {
-        bail!("model B generation admission did not fail closed");
-    }
-    model_b.authorized_generation_ref = Some(non_empty("1-QmPrevious")?);
-    if model_b.is_usable_in_generation(Some(&active_generation)) {
-        bail!("old-generation model B device remained usable after the fence");
-    }
-
-    model_a.enrollment_authority_binding = Some(authority);
-    if model_a.is_usable_in_generation(None) {
-        bail!("mixed model A/B authority was accepted");
-    }
-    model_b.authorized_generation_ref = Some(non_empty("2-QmCurrent")?);
-    model_b.cross_signing_binding = model_a.cross_signing_binding;
-    if model_b.is_usable_in_generation(Some(&active_generation)) {
-        bail!("mixed model B/A authority was accepted");
-    }
-    Ok(())
+    // Generation fencing is now a single PCR directory rule. Its reducer and
+    // remote-evidence matrices live in the SDK; this Cotest entrypoint keeps
+    // the release gate wired to the canonical genesis/possession KAT.
+    validate_pcr_genesis_helpers()
 }
 
-fn validate_bootstrap_helpers() -> Result<()> {
+fn validate_pcr_genesis_helpers() -> Result<()> {
     let principal = Did::new("did:webvh:z6mkfixture:alice.example")?;
     let created_at = "2026-07-15T00:00:00.000Z".parse()?;
     let realm_id =
         RealmId::new(arkret_models_identity::did_document::principal_control_realm_id(&principal))?;
+    let device_id = DeviceId::new("ak:device:01904100-0000-7000-8000-000000000001")?;
+    let device_key = SigningKey::from_bytes(&[0x42; 32]);
+    let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        &device_key.verifying_key().to_bytes(),
+    );
+    let device_public_key = non_empty(format!("did:key:{device_multibase}"))?;
+    let hpke_key = non_empty("z6LSCotestPcrGenesisHpkeKey")?;
+    let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
+    let mut authorize_payload = DeviceAuthorizePayload {
+        principal_id: principal.clone(),
+        device_id: device_id.clone(),
+        device_public_key: device_public_key.clone(),
+        hpke_key: hpke_key.clone(),
+        algorithms: algorithms.clone(),
+        device_key_algorithm: Some(non_empty("Ed25519")?),
+        authorized_by: DeviceOrPrincipalRef::Did(principal.clone()),
+        scopes: None,
+        not_before: created_at,
+        expires_at: None,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::RootAnchored,
+        device_signature: SignatureMaterial::NonEmptyString(non_empty("pending")?),
+        recovery_session_id: None,
+    };
+    let signature = device_key.sign(&authorize_payload.device_possession_signature_input()?);
+    authorize_payload.device_signature = SignatureMaterial::NonEmptyString(non_empty(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+    )?);
+    arkret_signatures::verify_device_authorize_possession(&authorize_payload)
+        .map_err(|error| anyhow!(error.to_string()))?;
+    let authorize_value = serde_json::to_value(&authorize_payload)?;
+    let descriptor = FoundingDeviceDescriptor {
+        descriptor_version: 1,
+        device_id: device_id.clone(),
+        device_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
+            device_public_key.as_bytes(),
+        ))?,
+        device_public_key,
+        device_key_algorithm: FoundingDeviceKeyAlgorithm::Ed25519,
+        device_key_purpose: FoundingDeviceKeyPurpose::EventSigningAndMlsIdentity,
+        hpke_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
+            hpke_key.as_bytes(),
+        ))?,
+        hpke_key,
+        hpke_key_algorithm: FoundingDeviceHpkeKeyAlgorithm::X25519,
+        algorithms,
+        founding_authorize_payload_digest: device_authorize_payload_digest(
+            &authorize_value,
+            arkret_canonical::DigestSuite::Sha256,
+        )?,
+    };
     let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
@@ -267,88 +267,57 @@ fn validate_bootstrap_helpers() -> Result<()> {
                 "did:webvh:z6mkfixture:alice.example#entry-0",
                 DID_INCEPTION_REF_ROLE,
             ),
+            founding_device_descriptor: descriptor,
             capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
             created_at,
             hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         },
         &crate::publication::project_cells,
     )?;
-    let mut create = with_proof(
+    let create = with_proof(
         create,
         &crate::fixture_did_url(
             "did:key:z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ#z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ",
         ),
     )?;
-    let authority = enrollment_binding()?;
-    let payload = DeviceAuthorizePayload {
-        principal_id: principal.clone(),
-        device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-000000000001")?,
-        device_public_key: non_empty("z6MkiDeviceKey")?,
-        hpke_key: non_empty("z6LSDeviceHpkeKey")?,
-        algorithms: vec![
-            non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?,
-            non_empty("ak.mls.v1")?,
-        ],
-        device_key_algorithm: Some(non_empty("Ed25519")?),
-        authorized_by: DeviceOrPrincipalRef::Did(authority.authority_did.clone()),
-        scopes: None,
-        not_before: created_at,
-        expires_at: None,
-        device_signature: None,
-        proof: None,
-        cross_signing_binding: None,
-        enrollment_authority_binding: Some(authority.clone()),
-        recovery_session_id: None,
-    };
     let mut authorize = Event::new(
         arkret_wire::EventKind::DEVICE_AUTHORIZE,
         arkret_wire::ScopeRef::Realm { realm_id },
-        principal,
+        principal.clone(),
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
-        serde_json::to_value(payload)?,
+        authorize_value,
     )?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
-    authorize.executed_by = Some(authority.authority_did.clone());
-    authorize.authorization_ref = Some(
-        arkret_wire::AuthorizationRef::new(authority.authorization_ref.to_string())
-            .map_err(anyhow::Error::msg)?,
-    );
     authorize = with_proof(
         authorize,
-        &crate::fixture_did_url(format!("{}#enrollment", authority.authority_did)),
+        &crate::fixture_did_url(format!("{principal}#{device_id}")),
+    )?;
+    let unit = build_self_principal_pcr_genesis_unit(
+        create.clone(),
+        authorize.clone(),
+        &crate::publication::project_cells,
+    )?;
+    unit.validate_ordered_envelopes()?;
+    validate_self_principal_pcr_genesis_unit(
+        &create,
+        &authorize,
+        &crate::publication::project_cells,
     )?;
 
-    // The admitting service pre-authorizes the complete ordered anchor, so
-    // both transport wrappers carry leases with the same unit basis while the
-    // signed Events remain unchanged (`offline-publication.md` §2.1).
-    let [create_submission, authorize_submission] =
-        crate::publication::self_principal_bootstrap_submissions(
-            [create.clone(), authorize],
-            ["ak.realm.admin", "ak.device.authorize"],
-        )?;
-    let request = self_principal_bootstrap_submit_request(
-        create_submission,
-        authorize_submission.clone(),
-        &crate::publication::project_cells,
-    )?;
-    let arkret_models_collaboration::http_bodies::EventsSubmitRequestBody::Batch(batch) = &request
-    else {
-        bail!("self principal bootstrap was not emitted as one closed two-event batch");
-    };
-    if batch.events.len() != 2 {
-        bail!("self principal bootstrap was not emitted as one closed two-event unit");
-    }
-    create.refs.clear();
-    if self_principal_bootstrap_submit_request(
-        crate::publication::initial_submission(create, "ak.realm.admin")?,
-        authorize_submission,
-        &crate::publication::project_cells,
-    )
-    .is_ok()
+    let mut split = authorize.clone();
+    split.prev_refs.clear();
+    if validate_self_principal_pcr_genesis_unit(&create, &split, &crate::publication::project_cells)
+        .is_ok()
     {
-        bail!("self principal bootstrap accepted a missing did_inception anchor");
+        bail!("PCR genesis accepted a split create/authorize unit");
+    }
+
+    let mut tampered: DeviceAuthorizePayload = authorize.typed_payload("ak.device.authorize")?;
+    tampered.device_signature = SignatureMaterial::NonEmptyString(non_empty("AA")?);
+    if arkret_signatures::verify_device_authorize_possession(&tampered).is_ok() {
+        bail!("PCR genesis accepted a mutated founding-device possession proof");
     }
     Ok(())
 }
@@ -451,9 +420,9 @@ fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
         .get("cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("{ROOT_ANCHOR_FIXTURE} missing cases[]"))?;
-    if cases.len() != 63 {
+    if cases.len() != 58 {
         bail!(
-            "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 63 cases, found {}",
+            "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 58 cases, found {}",
             cases.len()
         );
     }
@@ -473,11 +442,11 @@ fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
         )?;
     }
     for required in [
-        "accept_atomic_principal_control_bootstrap",
+        "reject_bootstrap_missing_unique_critical_inception_ref",
         "accept_delegated_agent_pcr_genesis_without_did_inception",
         "reject_self_principal_pcr_genesis_without_did_inception",
-        "accept_reanchor_without_prior_seal",
-        "accept_reanchor_with_complete_current_frontier",
+        "accept_byte_identical_reanchor_retry",
+        "reject_incomplete_or_older_frontier",
         "reject_split_or_partially_committed_reanchor_unit",
         "reject_old_generation_event_after_fence",
         "reject_old_generation_seal_after_fence",
@@ -495,14 +464,6 @@ fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
         }
     }
     Ok(())
-}
-
-fn enrollment_binding() -> Result<DeviceEnrollmentAuthorityBinding> {
-    Ok(DeviceEnrollmentAuthorityBinding {
-        kind: DeviceEnrollmentAuthorityBindingKind::ServiceAttested,
-        authority_did: Did::new("did:webvh:z6mkauthority:auth.example")?,
-        authorization_ref: non_empty("did:webvh:z6mkfixture:alice.example#enrollment-authority")?,
-    })
 }
 
 fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Result<Event> {
@@ -552,12 +513,4 @@ fn compare_text(name: &str, field: &str, actual: &str, expected: &str) -> Result
 
 fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
     NonEmptyString::new(value).map_err(anyhow::Error::msg)
-}
-
-fn did_url(value: impl Into<String>) -> Result<DidUrl> {
-    DidUrl::new(value).map_err(anyhow::Error::msg)
-}
-
-fn base64_url(value: impl Into<String>) -> Result<Base64UrlString> {
-    Base64UrlString::new(value).map_err(anyhow::Error::msg)
 }

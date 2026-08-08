@@ -87,8 +87,8 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
     - Argon2id 派生(词串为 KDF 输入,用 backup 提供的 kdf_params)→ derived_key;或对 `recovery_public_key` envelope 做 HPKE open
     - 计算 commitment,与 backup 的 `key_commitment` 比对
     - **commitment mismatch → 客户端在本地拒绝,不向服务器发任何 oracle 查询**(spec §7.2)
-    - commitment match → 用 derived_key 解 ciphertext → 拿回 SSK / USK / mls_history_backup_key
-15. 客户端从 accepted policy snapshot 判定 A/B 模型:A 只走 SSK reset;B 先提交更高 canonical DID entry,再构造 root-signed `ak.device.reanchor` + enrollment-authority-signed replacement authorize 原子 unit。
+    - commitment match → 用 derived_key 解 ciphertext → 拿回 mls_history_backup_key
+15. 客户端提交更高 canonical DID entry，再构造 root-signed `ak.device.reanchor` + 新设备自签 PoP 的 replacement authorize 原子 unit。
 16. soland 校验 registry head、recovery policy、完整 frontier CAS 与 replacement binding 后原子接受;旧 generation 的 Event/Seal/离线队列立即 fenced。
 17. 断言:device-B `/settings/devices` 显示 alice 的 device 列表(可能含 device-A,看是否 revoke;此时未 revoke,所以 A 还在)
 
@@ -113,7 +113,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 (可选 sub-test,与 identity/multi-device 联动)
 25. 在 Phase C 之后,device-A 在 mid-recovery 时被远程 revoke
 26. 触发 MLS Remove,生成 epoch N+1,device-A 失去新 key
-27. 但 device-B 已用 backup 恢复了 SSK/USK → device-B 应该被 alice 主动 Add 进 MLS group(via Commit Add)
+27. device-B 已用 backup 恢复历史 MLS key → device-B 应该被 alice 主动 Add 进 MLS group（via Commit Add）
 28. spec `crypto-media/encryption-and-audit.md` §2.3.5/§2.4:old message access honors current membership — device-B 恢复后,过滤 access by current frontier
 
 ## Observable assertions(合并)
@@ -132,7 +132,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 - **E13.4 mixed-domain backup**:`mixed_secret_storage=true` 只在 `personal_node` profile 接受;`high_assurance` 部署 MUST 拒(§7.1)
 - **E13.5 epoch gap**:bob 在 device-A 离线期间发了 commits + 消息,backup 的 `mls_history_backup_key` 不含某些 epoch → 那些消息标 `decryption_pending`(spec §2.4)
 - **E13.6 backup 在 recovery policy 变更后**:alice 在 Phase A 之后改了 recovery policy → device-B 恢复时,reducer 校验新 policy,若新 policy 拒绝 → 恢复失败
-- **E13.7 删除 backup**:`DELETE /_arkret/self/keys/backups/<id>` 应需要 ownership proof(SSK 签名),无法仅凭 session token 删
+- **E13.7 删除 backup**：`DELETE /_arkret/self/keys/backups/<id>` 应需要 accepted-device ownership proof，无法仅凭 session token 删除
 
 ## Implementation notes
 

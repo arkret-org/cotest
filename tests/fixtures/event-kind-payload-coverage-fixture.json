@@ -221,14 +221,6 @@
       "lattice": "ordered_log",
       "bottom": "expose",
       "payload_shape": { "status": "active" }
-    },
-    {
-      "name": "session_grant_or_set",
-      "event_kind": "ak.session.grant",
-      "cell_family": "ak.component.session.grant.v1",
-      "lattice": "or_set",
-      "bottom": "inert",
-      "payload_shape": { "session_id": "ak:session:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "device_id": "dev_alice_01" }
     }
   ],
   "negative_vectors": [

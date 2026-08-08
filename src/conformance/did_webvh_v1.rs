@@ -1,9 +1,8 @@
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::verify_did_webvh_v1_log;
 use arkret::webvh::{
-    PreparedPrincipalInception, PrincipalDidDocumentProfile, PrincipalEnrollmentDelegation,
-    PrincipalInceptionInput, PrincipalRotationInput, prepare_principal_inception,
-    prepare_principal_rotation, validate_principal_did_document_profile,
+    PreparedPrincipalInception, PrincipalInceptionInput, PrincipalRotationInput,
+    prepare_principal_inception, prepare_principal_rotation,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_models_identity::did_document::validate_did_webvh_v1_method;
@@ -125,83 +124,8 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             )?;
             Ok(reject())
         }
-        "accept_current_entry_active_update_key_with_prerotation" => {
-            let inception = external_inception()?;
-            let current_seed = [2_u8; 32];
-            let next_key = public_multikey([3_u8; 32]);
-            let rotation = prepare_principal_rotation(&PrincipalRotationInput {
-                did: &inception.did,
-                local_id: &inception.local_id,
-                previous_entries: std::slice::from_ref(&inception.log_entry),
-                version_time: timestamp("2026-07-16T00:00:00.000Z")?,
-                current_root_seed: &current_seed,
-                next_root_public_key_multibase: &next_key,
-                state: &inception.log_entry["state"],
-            })?;
-            let did = Did::new(inception.did.clone())?;
-            let verified =
-                verify_did_webvh_v1_log(&did, &[inception.log_entry, rotation.log_entry.clone()])?;
-            if verified.active_update_keys != vec![rotation.current_root_public_key_multibase] {
-                bail!("{name} did not activate the current entry update key");
-            }
-            let profile = validate_principal_did_document_profile(
-                did.as_str(),
-                &verified.head_state,
-                &verified
-                    .active_update_keys
-                    .iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>(),
-            )?;
-            if profile != PrincipalDidDocumentProfile::ExternalAuthority {
-                bail!("{name} resolved the wrong principal profile");
-            }
-            let mut outcome = accept(Some("enrollment_authority"));
-            outcome.verification_key_source =
-                Some("current_entry.parameters.updateKeys".to_owned());
-            outcome.verification_method_may_be_empty = Some(true);
-            Ok(outcome)
-        }
-        "accept_self_authority_model_with_distinct_psk_and_enrollment_key" => {
-            let inception = self_authority_inception()?;
-            let did = Did::new(inception.did.clone())?;
-            let verified = verify_did_webvh_v1_log(&did, &[inception.log_entry])?;
-            let profile = validate_principal_did_document_profile(
-                did.as_str(),
-                &verified.head_state,
-                &verified
-                    .active_update_keys
-                    .iter()
-                    .map(String::as_str)
-                    .collect::<Vec<_>>(),
-            )?;
-            if profile != PrincipalDidDocumentProfile::SelfAuthority {
-                bail!("{name} resolved the wrong principal profile");
-            }
-            Ok(accept(Some("cross_signing")))
-        }
-        "reject_both_enrollment_delegation_models" => {
-            let state = required_value(input, "state")?;
-            expect_rejected(
-                validate_principal_did_document_profile(required_str(state, "id")?, state, &[]),
-                name,
-            )?;
-            Ok(reject())
-        }
-        "reject_dangling_self_authority_delegation" => {
-            let mut state = required_value(input, "state")?.clone();
-            state
-                .as_object_mut()
-                .ok_or_else(|| anyhow!("{name} state is not an object"))?
-                .insert("service".to_owned(), json!([]));
-            expect_rejected(
-                validate_principal_did_document_profile(required_str(&state, "id")?, &state, &[]),
-                name,
-            )?;
-            Ok(reject())
-        }
         "reject_previous_entry_update_key_proof" => {
-            let inception = external_inception()?;
+            let inception = principal_inception()?;
             let next_key = public_multikey([3_u8; 32]);
             let mut rotation = prepare_principal_rotation(&PrincipalRotationInput {
                 did: &inception.did,
@@ -222,7 +146,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             Ok(reject())
         }
         "reject_omitted_current_update_keys" => {
-            let inception = external_inception()?;
+            let inception = principal_inception()?;
             let next_key = public_multikey([3_u8; 32]);
             let mut rotation = prepare_principal_rotation(&PrincipalRotationInput {
                 did: &inception.did,
@@ -246,7 +170,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             Ok(reject())
         }
         "reject_spent_update_key_reuse" => {
-            let inception = external_inception()?;
+            let inception = principal_inception()?;
             let spent_root = inception.root_public_key_multibase.clone();
             expect_rejected(
                 prepare_principal_rotation(&PrincipalRotationInput {
@@ -263,7 +187,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             Ok(reject())
         }
         "reject_state_id_s_method_or_scid_mismatch" => {
-            let inception = external_inception()?;
+            let inception = principal_inception()?;
             let mut entry = inception.log_entry;
             entry["state"]["id"] = required_value(input, "current_state")?["id"].clone();
             let did = Did::new(required_str(input, "resolved_did")?)?;
@@ -271,7 +195,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             Ok(reject())
         }
         "reject_current_key_not_precommitted" => {
-            let inception = external_inception()?;
+            let inception = principal_inception()?;
             let next_key = public_multikey([3_u8; 32]);
             expect_rejected(
                 prepare_principal_rotation(&PrincipalRotationInput {
@@ -291,7 +215,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
     }
 }
 
-fn external_inception() -> Result<PreparedPrincipalInception> {
+fn principal_inception() -> Result<PreparedPrincipalInception> {
     let endpoint = Url::parse("https://starid.local/")?;
     let next_root = public_multikey([2_u8; 32]);
     Ok(prepare_principal_inception(&PrincipalInceptionInput {
@@ -301,30 +225,6 @@ fn external_inception() -> Result<PreparedPrincipalInception> {
         version_time: timestamp("2026-07-15T00:00:00.000Z")?,
         root_seed: &[1_u8; 32],
         next_root_public_key_multibase: &next_root,
-        enrollment: PrincipalEnrollmentDelegation::ExternalAuthority {
-            authority_did: "did:web:auth.example",
-        },
-    })?)
-}
-
-fn self_authority_inception() -> Result<PreparedPrincipalInception> {
-    let endpoint = Url::parse("https://starid.local/")?;
-    let next_root = public_multikey([2_u8; 32]);
-    let principal_signing = public_multikey([4_u8; 32]);
-    let enrollment = public_multikey([5_u8; 32]);
-    Ok(prepare_principal_inception(&PrincipalInceptionInput {
-        principal_endpoint: &endpoint,
-        local_id: "alice-self-authority",
-        also_known_as: &[],
-        version_time: timestamp("2026-07-15T00:00:00.000Z")?,
-        root_seed: &[1_u8; 32],
-        next_root_public_key_multibase: &next_root,
-        enrollment: PrincipalEnrollmentDelegation::SelfAuthority {
-            principal_signing_public_key_multibase: &principal_signing,
-            enrollment_public_key_multibase: &enrollment,
-            principal_signing_fragment: None,
-            enrollment_fragment: None,
-        },
     })?)
 }
 
@@ -359,7 +259,7 @@ mod tests {
 
     #[test]
     fn rotation_builder_receives_the_complete_predecessor_chain() {
-        let inception = external_inception().unwrap();
+        let inception = principal_inception().unwrap();
         let third_root = public_multikey([3_u8; 32]);
         let first_rotation = prepare_principal_rotation(&PrincipalRotationInput {
             did: &inception.did,

@@ -115,6 +115,22 @@ pub struct SpawnedCoauth {
     pub config: NamedTempFile,
     _internal_port_reservation: ReservedPort,
     pub pg: EphemeralPg,
+    restart_with_test_endpoints: bool,
+    restart_chaos: Option<CoauthChaosConfig>,
+}
+
+/// Debug-only post-commit pause injected into a spawned Coauth process.
+#[derive(Clone)]
+pub struct CoauthChaosConfig {
+    /// Exact handler breakpoint name.
+    pub breakpoint: String,
+    /// Optional exact durable request identity selector.
+    pub request_identity: Option<String>,
+    /// Time the real handler pauses after commit and before response rendering.
+    pub delay_ms: u64,
+    /// Optional marker written only after the durable commit is visible and
+    /// immediately before the pause begins.
+    pub reached_file: Option<PathBuf>,
 }
 
 impl SpawnedCoauth {
@@ -127,6 +143,41 @@ impl SpawnedCoauth {
     /// `health` on a separate listener from the public REST surface).
     pub fn health_url(&self) -> String {
         format!("{}/health", self.internal_base_url)
+    }
+
+    /// Kill the real Coauth process without touching its PostgreSQL database,
+    /// generated configuration, service keys, or reserved listener ports.
+    pub fn kill_immediately(&mut self) -> Result<()> {
+        self.server.kill_and_wait()
+    }
+
+    /// Restart Coauth from the exact same binary and generated config over the
+    /// same PostgreSQL ledger and listener ports.
+    pub async fn restart_same_config(&mut self) -> Result<()> {
+        self.server.kill_and_wait()?;
+        let mut command = coauth_server_command(
+            &self.server.bin_path,
+            self.config.path(),
+            self.restart_with_test_endpoints,
+            self.restart_chaos.as_ref(),
+        );
+        if std::env::var_os("COTEST_COAUTH_BOOTSTRAP_DEBUG").is_some() {
+            command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+        } else {
+            command.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        let child = command
+            .spawn()
+            .context("restart coauth from retained config")?;
+        self.server.replace_child(child)?;
+        if !wait_for_health(&self.internal_base_url, Duration::from_secs(60)).await {
+            self.server.kill_and_wait()?;
+            anyhow::bail!(
+                "restarted coauth did not become healthy at {}",
+                self.internal_base_url
+            );
+        }
+        Ok(())
     }
 }
 
@@ -166,14 +217,7 @@ impl PreparedCoauth {
         )?;
         run_coauth_migrations(&coauth_bin, bundle.file.path())?;
 
-        let mut command = Command::new(&coauth_bin);
-        command
-            .arg("server")
-            .arg("--config")
-            .arg(bundle.file.path())
-            .arg("--no-sync")
-            .env("COAUTH_ENABLE_TEST_ENDPOINTS", "1")
-            .env("COAUTH_ALLOW_INSECURE_LOOPBACK_HTTP", "1");
+        let mut command = coauth_server_command(&coauth_bin, bundle.file.path(), true, None);
         if std::env::var_os("COTEST_COAUTH_BOOTSTRAP_DEBUG").is_some() {
             command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
         } else {
@@ -195,6 +239,8 @@ impl PreparedCoauth {
             config: bundle.file,
             _internal_port_reservation: bundle.internal_port_reservation,
             pg,
+            restart_with_test_endpoints: true,
+            restart_chaos: None,
         })
     }
 }
@@ -585,6 +631,18 @@ pub fn run_coauth_migrations(coauth_bin: &Path, config_path: &Path) -> Result<()
 /// we still return `Ok(None)` and the postgres container is reaped via
 /// `EphemeralPg::Drop`.
 pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
+    spawn_coauth_with_db_options(None).await
+}
+
+/// Spawn the real Coauth server over PostgreSQL with one selected debug-only
+/// post-commit response pause. Intended solely for owned-process fault tests.
+pub async fn spawn_coauth_with_db_chaos(chaos: CoauthChaosConfig) -> Result<Option<SpawnedCoauth>> {
+    spawn_coauth_with_db_options(Some(chaos)).await
+}
+
+async fn spawn_coauth_with_db_options(
+    chaos: Option<CoauthChaosConfig>,
+) -> Result<Option<SpawnedCoauth>> {
     // Verbose diagnostic logging is gated on the `COTEST_COAUTH_BOOTSTRAP_DEBUG`
     // env var so opt-in tests + CI can surface the exact failure step
     // without spamming the conformance run with normal-path bootstrap noise.
@@ -676,12 +734,12 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     //    config YAML, so the standard try_spawn helper that allocates its own port is the wrong
     //    tool here).
     step!("spawning coauth server bound to {bind_addr}");
-    let mut command = Command::new(&coauth_bin);
-    command
-        .arg("server")
-        .arg("--config")
-        .arg(bundle.file.path())
-        .arg("--no-sync");
+    let mut command = coauth_server_command(
+        &coauth_bin,
+        bundle.file.path(),
+        chaos.is_some(),
+        chaos.as_ref(),
+    );
     if debug {
         command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
     } else {
@@ -724,6 +782,8 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
         config: config_file,
         _internal_port_reservation: internal_port_reservation,
         pg,
+        restart_with_test_endpoints: chaos.is_some(),
+        restart_chaos: chaos,
     }))
 }
 
@@ -742,6 +802,37 @@ fn coauth_binary_probe_spec() -> ExternalBinarySpec {
         health_path: "/health",
         health_timeout: Duration::from_secs(45),
     }
+}
+
+fn coauth_server_command(
+    bin_path: &Path,
+    config_path: &Path,
+    test_endpoints: bool,
+    chaos: Option<&CoauthChaosConfig>,
+) -> Command {
+    let mut command = Command::new(bin_path);
+    command
+        .arg("server")
+        .arg("--config")
+        .arg(config_path)
+        .arg("--no-sync");
+    if test_endpoints {
+        command
+            .env("COAUTH_ENABLE_TEST_ENDPOINTS", "1")
+            .env("COAUTH_ALLOW_INSECURE_LOOPBACK_HTTP", "1");
+    }
+    if let Some(chaos) = chaos {
+        command
+            .env("COAUTH_TEST_CHAOS_BREAKPOINT", &chaos.breakpoint)
+            .env("COAUTH_TEST_CHAOS_DELAY_MS", chaos.delay_ms.to_string());
+        if let Some(request_identity) = &chaos.request_identity {
+            command.env("COAUTH_TEST_CHAOS_REQUEST_IDENTITY", request_identity);
+        }
+        if let Some(reached_file) = &chaos.reached_file {
+            command.env("COAUTH_TEST_CHAOS_REACHED_FILE", reached_file);
+        }
+    }
+    command
 }
 
 fn docker_available() -> bool {

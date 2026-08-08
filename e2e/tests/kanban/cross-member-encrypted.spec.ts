@@ -125,7 +125,8 @@ async function readE2eeStorageEvidence(
     const requestResult = (request: IDBRequest): Promise<unknown> =>
       new Promise((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
+        request.onerror = () =>
+          reject(request.error ?? new Error("IndexedDB request failed"));
       });
     const openRequest = window.indexedDB.open("inkson.secret.inkson", 1);
     const db = (await requestResult(openRequest)) as IDBDatabase;
@@ -152,7 +153,10 @@ async function readE2eeStorageEvidence(
         .join("\n");
       const encryptedSecureEntryCount = secureEntryIndexes.filter((index) => {
         const value = values[index];
-        return toBytes(value?.iv).byteLength === 12 && toBytes(value?.ct).byteLength > 16;
+        return (
+          toBytes(value?.iv).byteLength === 12 &&
+          toBytes(value?.ct).byteLength > 16
+        );
       }).length;
 
       const wrappingTx = db.transaction("wrapping_keys", "readonly");
@@ -162,14 +166,20 @@ async function readE2eeStorageEvidence(
 
       return {
         secureEntryKeys: secureEntryIndexes.map((index) => keys[index]),
-        localStorageE2eeKeys: localStorageKeys.filter((key) => key.includes(prefix)),
+        localStorageE2eeKeys: localStorageKeys.filter((key) =>
+          key.includes(prefix),
+        ),
         localStoragePlaintextMatches: markers.filter((marker) =>
           localStorageValues.some((value) => value.includes(marker)),
         ),
-        indexedDbPlaintextMatches: markers.filter((marker) => rawIndexedDbText.includes(marker)),
+        indexedDbPlaintextMatches: markers.filter((marker) =>
+          rawIndexedDbText.includes(marker),
+        ),
         encryptedSecureEntryCount,
         wrappingKeyExtractable:
-          typeof wrappingKey?.extractable === "boolean" ? wrappingKey.extractable : null,
+          typeof wrappingKey?.extractable === "boolean"
+            ? wrappingKey.extractable
+            : null,
       };
     } finally {
       db.close();
@@ -177,7 +187,10 @@ async function readE2eeStorageEvidence(
   }, plaintextMarkers);
 }
 
-async function assertE2eeStorageIsHardened(page: Page, plaintextMarkers: string[]): Promise<void> {
+async function assertE2eeStorageIsHardened(
+  page: Page,
+  plaintextMarkers: string[],
+): Promise<void> {
   await expect
     .poll(() => readE2eeStorageEvidence(page, plaintextMarkers), {
       timeout: 30_000,
@@ -207,14 +220,21 @@ async function buildEncryptedBoardListCard(
   cardTitle: string,
 ): Promise<string> {
   await page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+    timeout: 120_000,
+  });
   await page.getByTestId("new-board-toggle").click();
   await page.getByTestId("new-board-title-input").fill(boardTitle);
   await page.getByTestId("create-board-space-button").click();
-  await expect(page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
-    timeout: 45_000,
-  });
-  await expect.poll(() => page.url(), { timeout: 30_000 }).toContain("/board/ak:space:");
+  await expect(page.getByTestId("kanban-empty-board")).toContainText(
+    /No lists yet/,
+    {
+      timeout: 45_000,
+    },
+  );
+  await expect
+    .poll(() => page.url(), { timeout: 30_000 })
+    .toContain("/board/ak:space:");
   const boardId = decodeURIComponent(
     new URL(page.url()).pathname.split("/board/")[1]?.split("/")[0] ?? "",
   );
@@ -222,7 +242,10 @@ async function buildEncryptedBoardListCard(
 
   await page.getByTestId("new-column-input").fill(listTitle);
   await page.getByTestId("add-column-button").click();
-  const column = page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
+  const column = page
+    .getByTestId("kanban-column")
+    .filter({ hasText: listTitle })
+    .first();
   await expect(column).toBeVisible({ timeout: 45_000 });
   await column.getByTestId("add-card-button").click();
   await column.getByTestId("new-card-title-input").fill(cardTitle);
@@ -241,8 +264,14 @@ async function addEncryptedDescription(
   cardTitle: string,
   description: string,
 ): Promise<void> {
-  await page.getByTestId("kanban-card").filter({ hasText: cardTitle }).first().click();
-  await expect(page.getByTestId("card-detail-modal")).toBeVisible({ timeout: 45_000 });
+  await page
+    .getByTestId("kanban-card")
+    .filter({ hasText: cardTitle })
+    .first()
+    .click();
+  await expect(page.getByTestId("card-detail-modal")).toBeVisible({
+    timeout: 45_000,
+  });
   await page.getByTestId("card-detail-tab-description").click();
   await page.getByTestId("card-detail-add-description-button").click();
 
@@ -252,7 +281,11 @@ async function addEncryptedDescription(
     const textarea = node as HTMLTextAreaElement;
     textarea.value = value;
     textarea.dispatchEvent(
-      new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }),
+      new InputEvent("input", {
+        bubbles: true,
+        inputType: "insertText",
+        data: value,
+      }),
     );
   }, description);
 
@@ -271,7 +304,10 @@ async function addEncryptedDescription(
     response = await strandUpdate.catch(() => undefined);
     if (response) break;
 
-    const status = (await page.getByTestId("card-detail-edit-status").textContent())?.trim() ?? "";
+    const status =
+      (
+        await page.getByTestId("card-detail-edit-status").textContent()
+      )?.trim() ?? "";
     expect(
       status,
       "description save produced neither ak.strand.update nor a visible failure status",
@@ -301,9 +337,12 @@ async function addEncryptedDescription(
     "description leaked as plaintext into the ak.strand.update wire — realm not actually encrypted",
   ).toBe(false);
 
-  await expect(page.getByTestId("card-description-panel")).toContainText(description, {
-    timeout: 120_000,
-  });
+  await expect(page.getByTestId("card-description-panel")).toContainText(
+    description,
+    {
+      timeout: 120_000,
+    },
+  );
   // Close the modal so the invitee-side assertions start from the board.
   await page.getByTestId("card-detail-close-button").click();
 }
@@ -315,14 +354,22 @@ async function assertCardDecrypts(
   cardTitle: string,
   expectedDescription: string,
 ): Promise<void> {
-  const card = reader.page.getByTestId("kanban-card").filter({ hasText: cardTitle }).first();
-  await expect(card, `${reader.user.name} must see the card (cross-member projection)`).toBeVisible({
+  const card = reader.page
+    .getByTestId("kanban-card")
+    .filter({ hasText: cardTitle })
+    .first();
+  await expect(
+    card,
+    `${reader.user.name} must see the card (cross-member projection)`,
+  ).toBeVisible({
     timeout: 90_000,
   });
   // The card must be the real, hydrated card — never the withdrawn-content
   // placeholder that a decrypt/hydration failure renders.
   await expect(
-    reader.page.getByTestId("kanban-card-redacted").filter({ hasText: cardTitle }),
+    reader.page
+      .getByTestId("kanban-card-redacted")
+      .filter({ hasText: cardTitle }),
   ).toHaveCount(0);
 
   // The recovery/backup nag modal can re-pop and its backdrop intercepts the
@@ -352,7 +399,9 @@ async function assertCardDecrypts(
     { timeout: 120_000 },
   );
   // ...and the "locked / cannot decrypt" affordance is NOT shown.
-  await expect(reader.page.getByTestId("card-detail-body-locked")).toHaveCount(0);
+  await expect(reader.page.getByTestId("card-detail-body-locked")).toHaveCount(
+    0,
+  );
   await reader.page.getByTestId("card-detail-close-button").click();
 }
 
@@ -387,9 +436,14 @@ async function dismissRecoveryNags(reader: JointUserPage): Promise<void> {
 // and this throws — which is itself the cross-member-projection bug this test
 // hunts. Forces past the board-toolbar button overlap and retries the open with
 // nag-dismissal in case a late modal intercepts.
-async function readyReaderBoard(reader: JointUserPage, boardId: string): Promise<void> {
+async function readyReaderBoard(
+  reader: JointUserPage,
+  boardId: string,
+): Promise<void> {
   const page = reader.page;
-  await expect(page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByTestId("kanban-panel")).toBeVisible({
+    timeout: 120_000,
+  });
   // Clear the recovery/backup nags whose modal backdrop blocks board interaction
   // and which re-appear on navigation.
   for (let i = 0; i < 5; i += 1) {
@@ -403,12 +457,16 @@ async function readyReaderBoard(reader: JointUserPage, boardId: string): Promise
   // Select here is NOT fatal — assertCardDecrypts (a 90s poll for the decrypted
   // card) is the real gate.
   const selectScope = page.getByTestId("board-space-select");
-  const trigger = selectScope.locator('button[aria-haspopup="listbox"]').first();
+  const trigger = selectScope
+    .locator('button[aria-haspopup="listbox"]')
+    .first();
   const quoted = boardId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   const option = selectScope.locator(`[role="option"][data-value="${quoted}"]`);
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await dismissRecoveryNags(reader);
-    if ((await trigger.getAttribute("aria-expanded").catch(() => null)) !== "true") {
+    if (
+      (await trigger.getAttribute("aria-expanded").catch(() => null)) !== "true"
+    ) {
       await trigger.click({ force: true, timeout: 3_000 }).catch(() => {});
     }
     if (await option.isVisible({ timeout: 1_500 }).catch(() => false)) {
@@ -416,7 +474,9 @@ async function readyReaderBoard(reader: JointUserPage, boardId: string): Promise
       break;
     }
   }
-  if ((await trigger.getAttribute("aria-expanded").catch(() => null)) === "true") {
+  if (
+    (await trigger.getAttribute("aria-expanded").catch(() => null)) === "true"
+  ) {
     await trigger.press("Escape").catch(() => {});
   }
 }
@@ -440,14 +500,18 @@ test.describe("cross-member encrypted kanban", () => {
     test.setTimeout(240_000);
 
     const stamp = Date.now();
-    const creatorSession = await createDpopUserSession(request, "e2ee-cache-creator", {
-      skipDeviceEnrollment: true,
-    });
+    const creatorSession = await createDpopUserSession(
+      request,
+      "e2ee-cache-creator",
+    );
     if (!creatorSession) {
       assertJointStackNotRequired(
         "E2EE secure-cache browser acceptance requires coauth DPoP session-grant login",
       );
-      test.skip(true, "coauth DPoP session-grant login is required for MLS encryption");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for MLS encryption",
+      );
       return;
     }
 
@@ -481,7 +545,11 @@ test.describe("cross-member encrypted kanban", () => {
         listTitle,
         cardTitle,
       );
-      await addEncryptedDescription(creator.page, cardTitle, privateDescription);
+      await addEncryptedDescription(
+        creator.page,
+        cardTitle,
+        privateDescription,
+      );
 
       await assertE2eeStorageIsHardened(creator.page, [privateDescription]);
       await stepShot(creator.page, testInfo, "A-secure-cache-before-reload");
@@ -508,8 +576,8 @@ test.describe("cross-member encrypted kanban", () => {
 
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
-      createDpopUserSession(request, "xmenc-alice", { skipDeviceEnrollment: true }),
-      createDpopUserSession(request, "xmenc-bob", { skipDeviceEnrollment: true }),
+      createDpopUserSession(request, "xmenc-alice"),
+      createDpopUserSession(request, "xmenc-bob"),
     ]);
     if (!aliceSession || !bobSession) {
       // Do not silently green-skip the crown-jewel cross-member decrypt path on
@@ -517,7 +585,10 @@ test.describe("cross-member encrypted kanban", () => {
       assertJointStackNotRequired(
         "cross-member encrypted kanban requires coauth DPoP session-grant login",
       );
-      test.skip(true, "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for MLS device-authorized KeyPackages",
+      );
       return;
     }
 
@@ -577,12 +648,7 @@ test.describe("cross-member encrypted kanban", () => {
       //    cross-member collaboration path this test exercises.)
       await bobPage.acceptInvite(realmId);
       await bobPage.gotoTimelineRealm(realmId);
-      await waitForMlsWelcome(
-        request,
-        aliceSession,
-        realmId,
-        bob.did,
-      );
+      await waitForMlsWelcome(request, aliceSession, realmId, bob.did);
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await bobPage.completeRecoveryKeySetupIfPrompted();
 
@@ -595,7 +661,11 @@ test.describe("cross-member encrypted kanban", () => {
         listTitle,
         aliceCard,
       );
-      await addEncryptedDescription(alicePage.page, aliceCard, aliceDescription);
+      await addEncryptedDescription(
+        alicePage.page,
+        aliceCard,
+        aliceDescription,
+      );
       await stepShot(alicePage.page, testInfo, "A-alice-encrypted-card");
 
       // 4b) Cross-member DELIVERY gate (isolates soland delivery from inkson
@@ -646,11 +716,16 @@ test.describe("cross-member encrypted kanban", () => {
 
       // 6) Reverse direction: bob adds his own card; it must project back to
       //    alice (the admission fork historically broke BOTH directions).
-      const bobColumn = bobPage.page.getByTestId("kanban-column").filter({ hasText: listTitle }).first();
+      const bobColumn = bobPage.page
+        .getByTestId("kanban-column")
+        .filter({ hasText: listTitle })
+        .first();
       await bobColumn.getByTestId("add-card-button").click();
       await bobColumn.getByTestId("new-card-title-input").fill(bobCard);
       await bobColumn.getByTestId("save-card-button").click();
-      await expect(bobColumn.getByTestId("kanban-card").filter({ hasText: bobCard })).toBeVisible({
+      await expect(
+        bobColumn.getByTestId("kanban-card").filter({ hasText: bobCard }),
+      ).toBeVisible({
         timeout: 45_000,
       });
 
@@ -660,7 +735,9 @@ test.describe("cross-member encrypted kanban", () => {
         "bob's card must project back to alice (reverse cross-member sync)",
       ).toBeVisible({ timeout: 90_000 });
       await expect(
-        alicePage.page.getByTestId("kanban-card-redacted").filter({ hasText: bobCard }),
+        alicePage.page
+          .getByTestId("kanban-card-redacted")
+          .filter({ hasText: bobCard }),
       ).toHaveCount(0);
       await stepShot(alicePage.page, testInfo, "D-alice-sees-bob-card");
 
@@ -678,7 +755,9 @@ test.describe("cross-member encrypted kanban", () => {
         }),
       });
       expect(rawEvents.status()).toBe(200);
-      expect(JSON.stringify(await rawEvents.json())).not.toContain(aliceDescription);
+      expect(JSON.stringify(await rawEvents.json())).not.toContain(
+        aliceDescription,
+      );
     } finally {
       await Promise.allSettled([
         bobPage?.close() ?? Promise.resolve(),
@@ -695,14 +774,17 @@ test.describe("cross-member encrypted kanban", () => {
 
     const stamp = Date.now();
     const [aliceSession, bobSession] = await Promise.all([
-      createDpopUserSession(request, "xmhist-alice", { skipDeviceEnrollment: true }),
-      createDpopUserSession(request, "xmhist-bob", { skipDeviceEnrollment: true }),
+      createDpopUserSession(request, "xmhist-alice"),
+      createDpopUserSession(request, "xmhist-bob"),
     ]);
     if (!aliceSession || !bobSession) {
       assertJointStackNotRequired(
         "shared-history encrypted kanban requires coauth DPoP session-grant login",
       );
-      test.skip(true, "coauth DPoP session-grant login is required for MLS history sharing");
+      test.skip(
+        true,
+        "coauth DPoP session-grant login is required for MLS history sharing",
+      );
       return;
     }
 
@@ -746,8 +828,16 @@ test.describe("cross-member encrypted kanban", () => {
         listTitle,
         aliceCard,
       );
-      await addEncryptedDescription(alicePage.page, aliceCard, aliceDescription);
-      await stepShot(alicePage.page, testInfo, "A-alice-prejoin-encrypted-card");
+      await addEncryptedDescription(
+        alicePage.page,
+        aliceCard,
+        aliceDescription,
+      );
+      await stepShot(
+        alicePage.page,
+        testInfo,
+        "A-alice-prejoin-encrypted-card",
+      );
 
       // 3) Alice invites Bob only after the encrypted content already exists,
       // while Bob still has no browser-published KeyPackage.
@@ -763,12 +853,7 @@ test.describe("cross-member encrypted kanban", () => {
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
       await bobPage.acceptInvite(realmId);
       await bobPage.gotoTimelineRealm(realmId);
-      await waitForMlsWelcome(
-        request,
-        aliceSession,
-        realmId,
-        bob.did,
-      );
+      await waitForMlsWelcome(request, aliceSession, realmId, bob.did);
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await bobPage.completeRecoveryKeySetupIfPrompted();
 
@@ -808,7 +893,11 @@ test.describe("cross-member encrypted kanban", () => {
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await readyReaderBoard(bobPage, boardId);
       await assertCardDecrypts(bobPage, aliceCard, aliceDescription);
-      await stepShot(bobPage.page, testInfo, "C-bob-prejoin-card-survives-reload");
+      await stepShot(
+        bobPage.page,
+        testInfo,
+        "C-bob-prejoin-card-survives-reload",
+      );
 
       const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const rawEvents = await request.fetch(rawEventsUrl, {
@@ -822,7 +911,9 @@ test.describe("cross-member encrypted kanban", () => {
         }),
       });
       expect(rawEvents.status()).toBe(200);
-      expect(JSON.stringify(await rawEvents.json())).not.toContain(aliceDescription);
+      expect(JSON.stringify(await rawEvents.json())).not.toContain(
+        aliceDescription,
+      );
     } finally {
       await Promise.allSettled([
         bobPage?.close() ?? Promise.resolve(),

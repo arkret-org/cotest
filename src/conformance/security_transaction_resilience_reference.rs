@@ -91,10 +91,7 @@ fn strings_at<'a>(fixture: &'a Value, pointer: &str) -> Result<Vec<&'a str>, Str
 
 fn steps(kind: &str) -> Result<Vec<String>, String> {
     let values = match kind {
-        "recovery_cross_signing" => vec!["submit_authorize_unit", "issue_terminal_receipt"],
-        "recovery_enrollment_authority" => vec![
-            "issue_authority_ticket",
-            "authorize_recovery_device",
+        "recovery_root_anchored" => vec![
             "publish_did_entry",
             "submit_reanchor_unit",
             "issue_terminal_receipt",
@@ -113,8 +110,7 @@ fn steps(kind: &str) -> Result<Vec<String>, String> {
 
 fn transaction_id(kind: &str) -> Result<String, String> {
     let suffix = match kind {
-        "recovery_cross_signing" => "000000000001",
-        "recovery_enrollment_authority" => "000000000002",
+        "recovery_root_anchored" => "000000000001",
         "security_rotation" => "000000000003",
         _ => return Err(format!("unknown transaction kind {kind}")),
     };

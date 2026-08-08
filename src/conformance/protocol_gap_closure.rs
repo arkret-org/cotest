@@ -26,11 +26,7 @@ pub fn run_protocol_gap_closure_fixture_suite() -> Result<()> {
     let kinds = strings(&matrix["transaction_kinds"])?;
     let positions = strings(&matrix["fault_positions"])?;
     let faults = strings(&matrix["faults"])?;
-    for required in [
-        "recovery_cross_signing",
-        "recovery_enrollment_authority",
-        "security_rotation",
-    ] {
+    for required in ["recovery_root_anchored", "security_rotation"] {
         require(&kinds, required, "transaction kind")?;
     }
     for required in [
@@ -109,8 +105,7 @@ fn run_independent_replay_model(
     let mut executed = 0usize;
     for kind in kinds {
         let effect_count = match *kind {
-            "recovery_cross_signing" => 2,
-            "recovery_enrollment_authority" => 5,
+            "recovery_root_anchored" => 3,
             "security_rotation" => 5,
             other => bail!("unknown transaction kind {other}"),
         };
@@ -163,8 +158,8 @@ fn run_independent_replay_model(
     let expected: usize = kinds
         .iter()
         .map(|kind| match *kind {
-            "recovery_cross_signing" => 2,
-            "recovery_enrollment_authority" | "security_rotation" => 5,
+            "recovery_root_anchored" => 3,
+            "security_rotation" => 5,
             _ => 0,
         })
         .sum::<usize>()

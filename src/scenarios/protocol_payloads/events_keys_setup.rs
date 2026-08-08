@@ -20,7 +20,7 @@ const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<String> {
     // keys/upload verifies its typed request signature against the accepted
-    // device projection. Publish the principal/self-signing hierarchy before
+    // device projection. Publish the principal device directory before
     // authorizing the device; the adapter realm/message then continue at actor
     // sequence 3/4.
     let device_key = SigningKey::from_bytes(&[0x7a; 32]);
@@ -106,7 +106,7 @@ async fn upload_and_inspect_keys(
         StatusCode::OK,
     )
     .await?;
-    // Query returns the accepted device directory projection and cross-signing
+    // Query returns the accepted device directory projection and authorization
     // link. The upload request signature authorizes the mutation; it is not a
     // prekey algorithm entry and therefore is not echoed under `algorithms`.
     let queried_device = &query_keys["device_keys"][actor_id][KEYS_DEVICE_ID];

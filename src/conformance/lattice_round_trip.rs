@@ -210,7 +210,12 @@ fn realm_link_payload(target_realm_id: RealmId, status: RealmLinkStatus) -> Real
 }
 
 fn realm_id(suffix: &str) -> Result<RealmId> {
-    RealmId::new(format!("ak:realm:0196419b-0000-8000-8000-{suffix:0>12}")).map_err(Into::into)
+    let event_id = crate::fixture_event_id(format!("lattice-realm-{suffix}"));
+    let token = event_id
+        .as_str()
+        .strip_prefix("ak:event:")
+        .expect("fixture_event_id has the canonical ak:event prefix");
+    RealmId::new(format!("ak:realm:{token}")).map_err(Into::into)
 }
 
 pub fn run_realm_link_fsm_transition_matrix_vector() -> Result<()> {

@@ -7,7 +7,6 @@
 //     continuous backup)
 //   - crypto-media/device-lifecycle.md §12-§12.1 (key backup durable form + API)
 
-
 import {
   expect,
   test,
@@ -25,7 +24,6 @@ import {
 import {
   ensureRegistered,
   assertJointStackNotRequired,
-  completePendingPrincipalBootstrap,
   createDpopUserSessionForAccount,
   issueDevSession,
   openUserPage,
@@ -122,20 +120,30 @@ test.describe("key backup + restore", () => {
       // response listener registered by this test; verify its durable state.
       const firstKey = session.recoveryKey ?? "";
       expect(firstKey.split(/\s+/)).toHaveLength(24);
-      await device.page.goto("/settings/recovery", { waitUntil: "domcontentloaded" });
-      await expect(device.page.getByTestId("recovery-key-section")).toBeVisible({
-        timeout: 120_000,
+      await device.page.goto("/settings/recovery", {
+        waitUntil: "domcontentloaded",
       });
+      await expect(device.page.getByTestId("recovery-key-section")).toBeVisible(
+        {
+          timeout: 120_000,
+        },
+      );
 
       // The settings page MUST NOT ask for a user passphrase.
-      await expect(device.page.getByTestId("recovery-key-passphrase")).toHaveCount(0);
+      await expect(
+        device.page.getByTestId("recovery-key-passphrase"),
+      ).toHaveCount(0);
 
       const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=did_recovery`;
       await expect
         .poll(
           async () => {
             const response = await request.get(backupsUrl, {
-              headers: selfPathHeadersForDpopSession(session, "GET", backupsUrl),
+              headers: selfPathHeadersForDpopSession(
+                session,
+                "GET",
+                backupsUrl,
+              ),
             });
             if (!response.ok()) {
               return false;
@@ -149,7 +157,8 @@ test.describe("key backup + restore", () => {
             return backups.some(
               (backup: any) =>
                 backup?.backup_kind === "did_recovery" &&
-                backup?.encryption?.recipient_method === "recovery_public_key" &&
+                backup?.encryption?.recipient_method ===
+                  "recovery_public_key" &&
                 Array.isArray(backup?.contents) &&
                 backup.contents.some(
                   (item: any) => item?.item_kind === "recovery_key_share",
@@ -162,11 +171,12 @@ test.describe("key backup + restore", () => {
 
       // Direct replacement was removed by the staged two-entry handoff
       // protocol. The settings surface must not silently rotate the key.
-      await expect(device.page.getByTestId("recovery-key-regenerate")).toBeDisabled();
-      await expect(device.page.getByTestId("recovery-key-regenerate")).toHaveAttribute(
-        "title",
-        /staged handoff/i,
-      );
+      await expect(
+        device.page.getByTestId("recovery-key-regenerate"),
+      ).toBeDisabled();
+      await expect(
+        device.page.getByTestId("recovery-key-regenerate"),
+      ).toHaveAttribute("title", /staged handoff/i);
     } finally {
       await device.close();
     }
@@ -339,12 +349,9 @@ test.describe("key backup + restore", () => {
     const deviceAUser = uniqueUser("a3-oidc-mls-a");
     if (registeredAccount) {
       deviceAUser.did = registeredAccount.did;
-      deviceAUser.deviceId = registeredAccount.bootstrapDeviceId;
+      deviceAUser.deviceId = registeredAccount.genesisDeviceId;
     }
-    const deviceA = await openUserPage(browser, deviceAUser, {
-      pendingPrincipalRegistration:
-        registeredAccount?.pendingPrincipalRegistration,
-    });
+    const deviceA = await openUserPage(browser, deviceAUser);
     const sessionsToClose: JointUserPage[] = [deviceA];
     const protocolFailures: string[] = [];
     const deviceATrace = collectSessionGrantHolderProofTrace(deviceA.page);
@@ -354,12 +361,6 @@ test.describe("key backup + restore", () => {
     try {
       await deviceA.gotoLogin();
       await serverLoginViaCoauth(deviceA.page, account);
-      if (registeredAccount) {
-        await completePendingPrincipalBootstrap(
-          deviceA,
-          registeredAccount.recoveryKey,
-        );
-      }
       await expectGrantDpopSelfPath(deviceATrace, "device A real OIDC login");
 
       const realmId = await deviceA.createRealm({
@@ -381,7 +382,9 @@ test.describe("key backup + restore", () => {
         "real OIDC device A must not fall back to naked bearer self/root calls",
       ).toEqual([]);
       expect(
-        deviceATrace.keyBackupWrites.some((hit) => hit.status === 200 && hit.hasDpop),
+        deviceATrace.keyBackupWrites.some(
+          (hit) => hit.status === 200 && hit.hasDpop,
+        ),
         "key backup write must be authenticated by the real grant plus DPoP holder proof",
       ).toBe(true);
 
@@ -408,15 +411,19 @@ test.describe("key backup + restore", () => {
         timeout: 90_000,
       });
       await unlockMlsAccountSecret(deviceB.page, recoveryKey);
-      const successfulUnlock = await expectSuccessfulUnlockWithHolderProof(deviceBTrace);
+      const successfulUnlock =
+        await expectSuccessfulUnlockWithHolderProof(deviceBTrace);
 
-      const nakedUnlock = await deviceB.page.request.post(successfulUnlock.url, {
-        headers: {
-          authorization: `Bearer ${successfulUnlock.grantJwt}`,
-          "content-type": "application/json",
+      const nakedUnlock = await deviceB.page.request.post(
+        successfulUnlock.url,
+        {
+          headers: {
+            authorization: `Bearer ${successfulUnlock.grantJwt}`,
+            "content-type": "application/json",
+          },
+          data: JSON.parse(successfulUnlock.postData),
         },
-        data: JSON.parse(successfulUnlock.postData),
-      });
+      );
       expect(
         [401, 403],
         `bearer-only key-backup unlock must fail closed, got ${nakedUnlock.status()}: ${await nakedUnlock.text()}`,
@@ -586,12 +593,9 @@ test.describe("key backup + restore", () => {
       });
       await expect(
         deviceB.page.getByTestId("board-space-select-button"),
-      ).toContainText(
-        boardTitle,
-        {
-          timeout: 45_000,
-        },
-      );
+      ).toContainText(boardTitle, {
+        timeout: 45_000,
+      });
       await expect(
         deviceB.page.getByTestId("kanban-card").filter({ hasText: cardTitle }),
       ).toBeVisible({ timeout: 90_000 });
@@ -648,7 +652,6 @@ test.describe("key backup + restore", () => {
       );
     }
   });
-
 });
 
 type KeyBackupPut = {
@@ -671,10 +674,14 @@ async function openDpopDeviceForAccount(
   coauth: string,
   autoCompleteRecoveryKeySetup = true,
 ): Promise<{ page: JointUserPage; session: DpopUserSession } | undefined> {
-  const session = await createDpopUserSessionForAccount(request, prefix, account, {
-    coauthBase: coauth,
-    skipDeviceEnrollment: true,
-  });
+  const session = await createDpopUserSessionForAccount(
+    request,
+    prefix,
+    account,
+    {
+      coauthBase: coauth,
+    },
+  );
   if (!session) {
     return undefined;
   }
@@ -773,10 +780,9 @@ async function pairBrowserDevice(
   await expect(approvalModal).toBeHidden({ timeout: 90_000 });
 
   await requestingDevice.page.getByTestId("pair-device-status-button").click();
-  await expect(requestingDevice.page.getByTestId("pair-device-status")).toContainText(
-    "Approved.",
-    { timeout: 30_000 },
-  );
+  await expect(
+    requestingDevice.page.getByTestId("pair-device-status"),
+  ).toContainText("Approved.", { timeout: 30_000 });
 }
 
 type HolderProofRequest = {
@@ -1112,15 +1118,15 @@ function mlsPrivatePlaintextBackupPutCount(
   return keyBackupPuts.filter(
     (hit) =>
       hit.status === 200 &&
-      /"item_kind"\s*:\s*"mls_private_plaintext"/.test(
-        keyBackupWireData(hit),
-      ),
+      /"item_kind"\s*:\s*"mls_private_plaintext"/.test(keyBackupWireData(hit)),
   ).length;
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {
   const unlockPrompt = page
-    .locator('[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]')
+    .locator(
+      '[data-testid="mls-unlock-modal"], [data-testid="mls-unlock-banner"]',
+    )
     .last();
   const visibleUnlockStatus = page.locator(
     '[data-testid="mls-unlock-status"]:visible',
