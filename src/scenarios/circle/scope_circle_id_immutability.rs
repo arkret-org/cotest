@@ -33,17 +33,17 @@ fn strand_id() -> Result<StrandId> {
     // `Strand::new` now takes a typed `StrandId` (was a raw String). The id MUST be
     // a strict `ak:strand:<uuid7>` literal; all four prev/next states below share
     // the same entity id so the scope-rebind helper compares the same Strand.
-    StrandId::new("ak:strand:0196419b-0000-8000-8000-000000000605".to_owned())
+    StrandId::new("ak:strand:AUPBmq7QR4lk0rsMlC7RbEozfyVLQip3G8_BtBgsac5q".to_owned())
         .map_err(|e| anyhow!("strand id: {e}"))
 }
 
 fn circle_a() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000603".to_owned())
+    CircleId::new("ak:circle:AX9anEuv4kLqEOpQN0jl_TIAk07pok7Y5_6oHBNWePol".to_owned())
         .map_err(|e| anyhow!("circle a: {e}"))
 }
 
 fn circle_b() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000604".to_owned())
+    CircleId::new("ak:circle:ATecgrI4iY7n4uPXnQQq0gWg2-oLVgVm951bSkLPfZ82".to_owned())
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 

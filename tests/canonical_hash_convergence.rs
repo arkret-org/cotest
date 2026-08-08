@@ -87,7 +87,7 @@ fn vectors() -> Vec<CanonicalVector> {
                         "kind": "ak.content.text",
                         "body": "hello"
                     },
-                    "strand_id": "ak:strand:01904100-0000-8000-8000-6c663fa0205f",
+                    "strand_id": "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9",
                     "track_name": "discussion",
                 },
                 "schema_version": 1,

@@ -32,7 +32,7 @@ use crate::harness::{
 };
 use crate::transcripts::record_vector_event;
 
-const INVITE_ID: &str = "ak:invite:01999999-0000-7000-8000-00000000f201";
+const INVITE_ID: &str = "ak:invite:Ab2mdbLAvV-mV7SAcSUEftBepKmgdvgtACiB4Dd4qwHd";
 
 /// The three server-side observables a rejected Control Move must leave
 /// untouched.

@@ -45,7 +45,7 @@ fn event_id() -> Result<EventId> {
 
 fn strand_id() -> Result<StrandId> {
     Ok(StrandId::new(
-        "ak:strand:01904100-0000-8000-8000-000000000001",
+        "ak:strand:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
     )?)
 }
 

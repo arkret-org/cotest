@@ -155,7 +155,7 @@
       "coordinates": {
         "pair_key": "sha256:a97a411daac39d8fe9c29755109c5785e86b83e9f966c65363bafcf02654790b",
         "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
-        "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
+        "main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
         "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
       },
       "send_blockers": [],
@@ -169,7 +169,7 @@
         "did:webvh:z6mkfixture:bob.example"
       ],
       "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
-      "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
+      "main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
       "authorization_basis": {
         "kind": "accepted_contact",
         "event_refs": [
@@ -200,16 +200,16 @@
       ],
       "direct_conversation": {
         "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
-        "main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
+        "main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
         "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
         "state": "active"
       }
     },
     "derived_strand_selection": {
       "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
-      "binding_main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401",
-      "default_strand_id_for_realm": "ak:strand:0196b39d-0000-8000-8000-000000000499",
-      "selected_main_strand_id": "ak:strand:0196b39d-0000-8000-8000-000000000401"
+      "binding_main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
+      "default_strand_id_for_realm": "ak:strand:AQVrrRvV5VUaU3io4x4YwielG5St6X8BLRf3Vi7Vh3Li",
+      "selected_main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3"
     },
     "pending_contact_negative": {
       "name": "pending_incoming_contact_must_not_create_dm_realm",

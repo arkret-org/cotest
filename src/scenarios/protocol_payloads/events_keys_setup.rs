@@ -52,7 +52,7 @@ async fn submit_adapter_event(
             &realm_id,
             "ak.message.create",
             message_create_text_payload_for_strand(
-                parse_strand_id("ak:strand:0196419b-0000-8000-8000-000000000001")?,
+                parse_strand_id("ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-")?,
                 "hello",
             )?,
         )

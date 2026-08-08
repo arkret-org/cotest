@@ -420,7 +420,7 @@ pub fn run_projection_position_discriminator_fixture_suite() -> Result<()> {
         }),
         json!({
             "mode": "relation_container",
-            "board_space_id": "ak:space:019640b6-8000-8000-8000-000000000000",
+            "board_space_id": "ak:space:AdouNWm0_Osk7GwYrppoMcCJUjPlKufC8wapFR7Bj4eN",
             "container_relation_kind": "contains",
             "item_relation_kind": "contains",
             "rank": "V"

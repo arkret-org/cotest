@@ -247,8 +247,8 @@ mod tests {
             },
             "payload": {
                 "content": {"kind": "ak.content.text", "body": "hello"},
-                "message_id": "ak:message:019f3b1c-86c8-8000-8000-000000000001",
-                "strand_id": "ak:strand:019f3b1c-86c8-8000-8000-000000000001"
+                "message_id": "ak:message:AWb5Nken0jbCnqSrJsuRfB0gnGenpREJucvnn6MsxwLz",
+                "strand_id": "ak:strand:AWb5Nken0jbCnqSrJsuRfB0gnGenpREJucvnn6MsxwLz"
             },
             "proofs": [{
                 "kind": "detached_jws",

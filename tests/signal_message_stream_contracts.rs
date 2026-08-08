@@ -22,7 +22,7 @@ fn realm() -> RealmId {
 }
 
 fn strand() -> StrandId {
-    StrandId::new("ak:strand:01904100-0000-8000-8000-000000000002").unwrap()
+    StrandId::new("ak:strand:ASeIBHNVQyeIcU4aBIt2t2BF_ikuVMH0kNru_HgO_gG1").unwrap()
 }
 
 fn final_event() -> Event {

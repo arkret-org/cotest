@@ -103,7 +103,7 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
 pub fn run_private_view_account_data_vector() -> Result<()> {
     let value = json!({
         "schema": "ak.schema.view.v1",
-        "id": "ak:view:0196419b-0000-8000-8000-000000000001",
+        "id": "ak:view:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",
         "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
         "kind": "collection",
         "visibility": "private",
@@ -120,7 +120,7 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
 
     for (field, replacement) in [
         ("visibility", json!("shared")),
-        ("id", json!("ak:view:0196419b-0000-8000-8000-000000000009")),
+        ("id", json!("ak:view:AWRG_dEWzM4Zq0kKT_o7Ki7Pbl39AAAer0QSkhWLhblO")),
         ("state", json!("tombstoned")),
     ] {
         let mut invalid = value.clone();
@@ -167,7 +167,7 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
         "none"
     );
 
-    let target = "ak:message:01904100-0000-8000-8000-00000000d520";
+    let target = "ak:message:AezGbwu72cSXxrMK4QxMKyWVgI6i_yoX0AnYt4iKz49P";
     for (index, decision) in [(2, "quarantine"), (3, "hard_deny")] {
         let decision_event_id = crate::fixture_event_id(format!("moderation-decision:{index}"));
         let event = operation(

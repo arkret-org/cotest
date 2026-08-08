@@ -164,7 +164,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                 record_vector_event(
                     "redaction.space_target_ref_schema",
                     &json!({
-                        "target_ref": "ak:space:019640b6-8000-8000-8000-000000000000",
+                        "target_ref": "ak:space:AdouNWm0_Osk7GwYrppoMcCJUjPlKufC8wapFR7Bj4eN",
                         "reason": "privacy_cleanup",
                     }),
                     &json!({
@@ -227,7 +227,7 @@ fn assert_space_target_ref_schema() -> Result<()> {
     let validator = env.compile(schema_ref)?;
 
     let accepted = json!({
-        "target_ref": "ak:space:019640b6-8000-8000-8000-000000000000",
+        "target_ref": "ak:space:AdouNWm0_Osk7GwYrppoMcCJUjPlKufC8wapFR7Bj4eN",
         "reason": "privacy_cleanup",
     });
     if !validator.is_valid(&accepted) {

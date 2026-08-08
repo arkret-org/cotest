@@ -22,12 +22,12 @@ fn realm_id() -> Result<RealmId> {
 }
 
 fn circle_a() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000402".to_owned())
+    CircleId::new("ak:circle:AXJJ3Wq52U54Sfzppwqi9lX4GYEY7f-KmeK4Cg2rwJlX".to_owned())
         .map_err(|e| anyhow!("circle a: {e}"))
 }
 
 fn circle_b() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000403".to_owned())
+    CircleId::new("ak:circle:AZbWiXwUJ_XtBRJwBsG1Ce8QECnJXJPyEoJL2blyZ2w1".to_owned())
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 

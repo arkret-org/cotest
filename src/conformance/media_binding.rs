@@ -403,7 +403,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         0xf0, 0x01,
     ];
     let actor_id = "did:web:alice.example.com";
-    let call_id = "ak:call:0196441c-0000-7000-8000-000000000000";
+    let call_id = "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz";
     let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
     let expires_at = "2026-05-27T12:34:56.000Z";
     let focus_id = "fra-1";
@@ -443,7 +443,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     // 2. Tampering each authoritative field breaks verification.
     let tampers: [(&str, &str); 7] = [
         (actor_id, "did:web:eve.example.com"),
-        (call_id, "ak:call:0196441c-0000-7000-8000-00000000dead"),
+        (call_id, "ak:call:AXeSRv0BBNTmteRf54F8yu5ahdBtw9_GfJ47WLgnrkD5"),
         (device_id, "ak:device:01964137-0000-7000-8000-00000000dead"),
         (expires_at, "2099-01-01T00:00:00.000Z"),
         (focus_id, "fra-2"),
@@ -597,7 +597,7 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // The canonical Context MUST be exactly this 6-tuple.
     let realm_id = "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1";
-    let call_id = "ak:call:0196441c-0000-7000-8000-000000000000";
+    let call_id = "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz";
     let focus_id = "fra-1";
     let epoch_id = "ak:mls_epoch:7";
     let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
@@ -805,7 +805,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
 
     let context = recording_context(
         "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-        "ak:call:0196441c-0000-7000-8000-000000000000",
+        "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",
@@ -878,7 +878,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
 
     let other_context = recording_context(
         "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-        "ak:call:0196441c-0000-7000-8000-000000000000",
+        "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
         "did:web:recorder.example",

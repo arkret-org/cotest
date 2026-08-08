@@ -703,11 +703,11 @@ mod tests {
             "prev_refs": [],
             "refs": [{
                 "role": "authorized_by",
-                "id": "ak:grant:019f3b1c-784d-7fc0-965f-0550baae7185"
+                "id": "ak:grant:AVmnCiapkC3K0OFT032clTI00FaccV3R4XoEuGk4xygg"
             }],
             "requirements": {"schema": ["ak.schema.event_payload.v1"]},
             "payload": {
-                "morph_id": "ak:morph:019f3b1c-884d-8fc0-965f-0550baae7186",
+                "morph_id": "ak:morph:Aa8s5OtJTr4DL7dYQbiLrzNhuis8EyjprcGjTo_qPZDF",
                 "from_schema_refs": ["ak.schema.morph.customer_risk.v1"],
                 "to_schema_refs": ["ak.schema.morph.customer_risk.ext.v1"],
                 "compatibility_class": "transformation"

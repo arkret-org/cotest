@@ -63,7 +63,7 @@
       "cell_family": "ak.component.space.parent.v1",
       "lattice": "cas_register",
       "bottom": "reject",
-      "payload_shape": { "space_id": "ak:space:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "parent_space_id": "ak:space:7fd5ae82-44e2-8a8a-9a4b-885799114210" }
+      "payload_shape": { "space_id": "ak:space:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "parent_space_id": "ak:space:AU7Y3ChbCb0rIEVl3WISCsmf84D2KFlxocStDW4qiPD2" }
     },
     {
       "name": "realm_organization_active_cas_register",
@@ -148,7 +148,7 @@
       "cell_family": "ak.component.capability.grant.v1",
       "lattice": "or_set",
       "bottom": "inert",
-      "payload_shape": { "grant_id": "ak:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "actions": ["ak.message.create"] }
+      "payload_shape": { "grant_id": "ak:grant:ATxHutN0UMOT1bdNS_tnq6vK0vncmTpZ4MRGOU9dmJaZ", "actions": ["ak.message.create"] }
     },
     {
       "name": "capability_revoke_or_set",
@@ -156,7 +156,7 @@
       "cell_family": "ak.component.capability.grant.v1",
       "lattice": "or_set",
       "bottom": "inert",
-      "payload_shape": { "revokes_grant_id": "ak:grant:7fd5ae82-44e2-7a8a-9a4b-8857991142f9" }
+      "payload_shape": { "revokes_grant_id": "ak:grant:ATxHutN0UMOT1bdNS_tnq6vK0vncmTpZ4MRGOU9dmJaZ" }
     },
     {
       "name": "device_authorized_or_set",
@@ -180,7 +180,7 @@
       "cell_family": "ak.component.view.create.v1",
       "lattice": "mv_register",
       "bottom": "expose",
-      "payload_shape": { "view_id": "ak:view:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "kind": "kanban" }
+      "payload_shape": { "view_id": "ak:view:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "kind": "kanban" }
     },
     {
       "name": "view_update_mv_register",
@@ -188,7 +188,7 @@
       "cell_family": "ak.component.view.update.v1",
       "lattice": "mv_register",
       "bottom": "expose",
-      "payload_shape": { "view_id": "ak:view:7fd5ae82-44e2-8a8a-9a4b-8857991142f9", "patch": { "title": "Updated" } }
+      "payload_shape": { "view_id": "ak:view:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "patch": { "title": "Updated" } }
     },
     {
       "name": "profile_create_mv_register",
@@ -212,7 +212,7 @@
       "cell_family": "ak.component.strand.position.v1",
       "lattice": "cas_register",
       "bottom": "reject",
-      "payload_shape": { "rank": "K1", "space_id": "ak:space:7fd5ae82-44e2-8a8a-9a4b-8857991142f9" }
+      "payload_shape": { "rank": "K1", "space_id": "ak:space:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN" }
     },
     {
       "name": "account_status_ordered_log",

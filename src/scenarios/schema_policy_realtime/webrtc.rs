@@ -21,7 +21,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
         .await?;
 
     let realm_id = alice.create_realm("RTC Media Realm").await?;
-    let call_id = "ak:call:01964137-0000-7000-8000-000000000001";
+    let call_id = "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it";
 
     expect_api_error(
         carol
@@ -148,7 +148,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
                 arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
             >(json!({
                 "realm_id": realm_id,
-                "call_id": "ak:call:01964137-0000-7000-8000-000000000002",
+                "call_id": "ak:call:AYVFZWhohYwHaEnPNmKhgMBK35WYy2igGfoeZIIOtwAy",
                 "actor_id": alice.actor.as_str(),
                 "device_id": alice.device_id.as_str(),
                 "mode": "turn"

@@ -55,7 +55,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         "authz/check is diagnostic and must not mint signed policy decisions"
     );
 
-    let manage_grant_id = "ak:grant:01999999-0000-7000-8000-0000000000a1";
+    let manage_grant_id = "ak:grant:AcsO3-ZmHpy-cklVCR-imHjpMotob9AWdczUjQnrpU0n";
     let actions = vec!["ak.realm.admin".to_owned()];
     let current_registry_digest = arkret::current_capability_action_registry_digest()?;
     let missing_basis = arkret::validate_capability_action_registry_binding(&actions, None)
@@ -483,7 +483,7 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
                 arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
             >(json!({
                 "realm_id": policy_realm_id,
-                "call_id": "ak:call:01964137-0000-7000-8000-000000000001",
+                "call_id": "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it",
                 "actor_id": alice.actor.as_str(),
                 "device_id": alice.device_id.as_str(),
                 "mode": "p2p"

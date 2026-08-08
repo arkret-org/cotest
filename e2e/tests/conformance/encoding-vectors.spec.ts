@@ -562,7 +562,7 @@ test.describe("conformance encoding vectors", () => {
       kind: "ak.message.create",
       sender_actor_id: ownerDid,
       payload: {
-        strand_id: "ak:strand:019640ed-8000-8000-8000-000000000000",
+        strand_id: "ak:strand:ASH_OYgk3yTng0ptjCny23EVDMiKLUxD8bxiWI7MuZ8E",
         content: { kind: "ak.content.text", body: "private message" },
       },
     };

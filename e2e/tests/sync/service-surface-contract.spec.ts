@@ -845,7 +845,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         realmId: "ak:realm:Abf_EFzG0z16A5W8192VSnWPMSNVFmuS4X2gQVKgT4ml",
         kind: "ak.message.create",
         payload: {
-          strand_id: "ak:strand:01904100-0000-8000-8000-000000001101",
+          strand_id: "ak:strand:AT1HF1YvomUEeLiFM_RlAKpElTAO-fucR-mcH9QGgZpR",
           track_name: "discussion",
           content: { kind: "ak.content.text", body: "must not accept unknown feature" },
         },
@@ -881,7 +881,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         realmId: "ak:realm:AZi2ri6b3n9gy8t4vZ4PaHWctnb2kQBJ7o-ajv9MjXsg",
         kind: "ak.message.create",
         payload: {
-          strand_id: "ak:strand:01904100-0000-8000-8000-000000001102",
+          strand_id: "ak:strand:AT2MvgWCCOiDFC2VdKu_HdL7RSppsE30BTn8iodC2Zof",
           track_name: "discussion",
           content: {
             kind: "ak.content.text",

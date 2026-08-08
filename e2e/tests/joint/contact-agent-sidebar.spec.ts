@@ -80,7 +80,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         agent_slug: `allowed-${stamp.toString(36)}`,
         direct_conversation: {
           realm_id: "ak:realm:AdrCf1FpSdW2-osrupL1Va1DkS3PNlzZsPum0wyLnQwz",
-          main_strand_id: "ak:strand:01964137-0000-8000-8000-0000000000b2",
+          main_strand_id: "ak:strand:AQAG6N7vDa1nxssksTCIdqNm-FTDJoKuBrHIclJ7FBy0",
           binding_event_ref: "ak:event:ARn7D_ihLMur4IPmD8Tz75ZThvC26r14I60hC2_uRS8q",
           state: "active",
         },

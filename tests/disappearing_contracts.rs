@@ -26,7 +26,7 @@ struct ProjectionOutcome {
 }
 
 fn strand_id() -> StrandId {
-    StrandId::new("ak:strand:01904100-0000-8000-8000-000000000002").unwrap()
+    StrandId::new("ak:strand:ASeIBHNVQyeIcU4aBIt2t2BF_ikuVMH0kNru_HgO_gG1").unwrap()
 }
 
 fn expiry(trigger: DisappearingMessageExpiryTrigger) -> DisappearingMessageExpiry {
@@ -78,7 +78,7 @@ fn project_on_send(
         body_present: false,
         key_material_present: false,
         stub: json!({
-            "message_id": "ak:message:01904100-0000-8000-8000-000000000003",
+            "message_id": "ak:message:AcsFZ3o2tOdN3EFpNceeLV-aI3jZkB9S34_4YIwJ5DLy",
             "strand_id": strand_id().as_str(),
             "track_name": "discussion",
             "expiry_stub": true,

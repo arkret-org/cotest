@@ -48,7 +48,7 @@ fn realm_id() -> Result<RealmId> {
 }
 
 fn circle_id() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000602".to_owned())
+    CircleId::new("ak:circle:AWj4-tJVX8xPhBVRd4rqfkaFKC6oLKNjA5jk5BuxmTjt".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 

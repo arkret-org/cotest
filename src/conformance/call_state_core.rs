@@ -133,7 +133,7 @@ fn anchors_with_issuer_key(key: &SigningKey) -> MediaServiceAnchors {
 fn token_request() -> CallMediaTokenExchangeRequestBody {
     call_media_token_exchange(
         RealmId::new("ak:realm:AdDiiHSzv3bH7EOLwQDdq-UHvwHaUaPammx6UQbpQnb4").unwrap(),
-        CallId::new("ak:call:0196441c-0000-7000-8000-000000000000").unwrap(),
+        CallId::new("ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz").unwrap(),
         did("alice"),
         DeviceId::new("ak:device:01904100-0000-7000-8000-000000000005").unwrap(),
         "fra-1",

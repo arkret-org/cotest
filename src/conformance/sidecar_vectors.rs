@@ -212,7 +212,7 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
     };
     let binding = MlsGovernanceBindingPayload::circle(
         realm_id,
-        arkret::CircleId::new("ak:circle:01964137-0000-8000-8000-000000000030".to_owned())?,
+        arkret::CircleId::new("ak:circle:AVYxXzYx_KzaGx7X62doksaQR0ISkneyOwwF1k6ExHKy".to_owned())?,
         "YXJrcmV0LXNpZGVjYXItZ3JvdXA",
         0,
         0,
@@ -811,17 +811,17 @@ fn fixed_sidecar_time() -> DateTime<Utc> {
 
 fn fixed_sidecar_coordinates(existing_context: bool) -> Result<SidecarCoordinates> {
     Ok(SidecarCoordinates {
-        sidecar_id: SidecarId::new("ak:sidecar:01964137-0000-7000-8000-000000000101")?,
-        backing_circle_id: CircleId::new("ak:circle:01964137-0000-8000-8000-000000000102")?,
+        sidecar_id: SidecarId::new("ak:sidecar:AZ405CdsF4uWwxBhArLvqgzVvWHWYcB3QJ6845E-2ET3")?,
+        backing_circle_id: CircleId::new("ak:circle:AYJQpfy2j1-bINqZ9tOmgr_mmWWvioag-E32_voxxol5")?,
         private_strand_id: StrandId::new(if existing_context {
-            "ak:strand:01964137-0000-8000-8000-000000000104"
+            "ak:strand:ARhFJl7dGnkM2RkcnUKJN6sOF9l6BTis905f7rS8-l_f"
         } else {
-            "ak:strand:01964137-0000-8000-8000-000000000103"
+            "ak:strand:AUo3ePM-Hi_XH_1lOcj3PFGvLutG2hW-SxIEnaiZpzBm"
         })?,
         private_relation_id: RelationId::new(if existing_context {
-            "ak:relation:01964137-0000-8000-8000-000000000106"
+            "ak:relation:AV63ulzfk64Dz36IrV4K7iP5osjs5kLMEak9gXJBaaXH"
         } else {
-            "ak:relation:01964137-0000-8000-8000-000000000105"
+            "ak:relation:AR2slzqBfU_P0Rv5uFjgEmO1DULVUrIdA4IxxZ35Geas"
         })?,
     })
 }
@@ -853,9 +853,9 @@ fn fixed_prepare_request_for_operation(
         controller_id: controller_id.clone(),
         context_ref: SidecarContextRef::Strand {
             strand_id: StrandId::new(if second_context {
-                "ak:strand:01964137-0000-8000-8000-000000000112"
+                "ak:strand:AasLcOpdB_lTv6ay3bQ6xOzA6mDGOT67AC66Gd65H8-W"
             } else {
-                "ak:strand:01964137-0000-8000-8000-000000000111"
+                "ak:strand:AU2cJh8QNyuarSldoS2B-_cxDy9txc1y_dOrH6JgFYKb"
             })?,
         },
     })
@@ -1464,7 +1464,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         .ok_or_else(|| anyhow!("fixed Sidecar object missing"))?
         .insert(
             "backing_circle_id".to_owned(),
-            Value::String("ak:circle:01964137-0000-8000-8000-000000000198".to_owned()),
+            Value::String("ak:circle:AXeaYP8-Z4VTLwc8C3egj3Efq_jN9cyDleDhahC7LCfs".to_owned()),
         );
     assert_new_commit_failure_is_write_free(
         &mut model,
@@ -1849,7 +1849,7 @@ pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
 // ─── VECT-SC-4 — hosted_projection ─────────────────────────────────────────
 
 pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
-    let sidecar = SidecarId::new("ak:sidecar:01964137-0000-7000-8000-000000000021".to_owned())?;
+    let sidecar = SidecarId::new("ak:sidecar:ARp3V6IbuRJ1DuhggcFb2nOBwbPGWXaO4GLVY9SVMM5u".to_owned())?;
     if !sidecar.as_str().starts_with("ak:sidecar:") {
         bail!("Sidecar identity is not first-class");
     }
@@ -1862,8 +1862,8 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         bail!("hosted Sidecar closed enums drifted");
     }
     let realm_id = RealmId::new("ak:realm:AQcksDTzb8Sxrn1BUVVlHtH4vBOy99RKUB4EwOq_413b")?;
-    let source_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000031")?;
-    let private_strand_id = StrandId::new("ak:strand:01964137-0000-8000-8000-000000000032")?;
+    let source_strand_id = StrandId::new("ak:strand:AcweNVvZUYNuOdCMey9HT7PQHKPbHPJwOFTgn_cx7yjo")?;
+    let private_strand_id = StrandId::new("ak:strand:ATxk9k3t-DqTNiiB9n8GoSjjar3vZJvO3Dtpd1SzdHZF")?;
     let anchor_id = EventId::new("ak:event:AVmh6k5n-qXekmKueZzJW_ZoqYSe8zyTeMC9sRwYlIGS")?;
     let request_id = EventId::new("ak:event:AU7uNevwc0Cp8J79qQnR0XFIA6sS-Ey-sAx6QesaglRs")?;
     let native_id = EventId::new("ak:event:AZjT-hpiUOSks1wjNlYAqMixCtZTrdsCsZzB-uVQC4hr")?;
@@ -2023,8 +2023,8 @@ fn exchange_agent_t() -> Result<Did> {
 fn exchange_scope() -> Result<SidecarExchangeFoldScope> {
     Ok(SidecarExchangeFoldScope {
         controller_id: exchange_controller()?,
-        sidecar_id: SidecarId::new("ak:sidecar:01964137-0000-7000-8000-000000000021")?,
-        private_strand_id: StrandId::new("ak:strand:01964137-0000-8000-8000-000000000032")?,
+        sidecar_id: SidecarId::new("ak:sidecar:ARp3V6IbuRJ1DuhggcFb2nOBwbPGWXaO4GLVY9SVMM5u")?,
+        private_strand_id: StrandId::new("ak:strand:ATxk9k3t-DqTNiiB9n8GoSjjar3vZJvO3Dtpd1SzdHZF")?,
     })
 }
 
@@ -2036,7 +2036,7 @@ fn exchange_request_context() -> Result<AgentSidecarExchangeRequestContext> {
     Ok(AgentSidecarExchangeRequestContext {
         source_track_ref: AgentSidecarSourceTrackRef {
             realm_id: RealmId::new("ak:realm:AQcksDTzb8Sxrn1BUVVlHtH4vBOy99RKUB4EwOq_413b")?,
-            strand_id: StrandId::new("ak:strand:01964137-0000-8000-8000-000000000031")?,
+            strand_id: StrandId::new("ak:strand:AcweNVvZUYNuOdCMey9HT7PQHKPbHPJwOFTgn_cx7yjo")?,
             track_name: "discussion".to_owned(),
         },
         source_hlc: exchange_hlc(1)?,
@@ -2246,7 +2246,7 @@ pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
             "schema": "ak.schema.agent_sidecar_event_exchange_binding.v1",
             "exchange_id": exchange.as_str(),
             "role": "user_facing_response",
-            "request_event_id": "ak:message:01964137-0000-8000-8000-000000000034",
+            "request_event_id": "ak:message:AX0TNnklqIlzhGa2OXRoCVE1dmOt3VUwpuOvqt4iPt5F",
         }),
     ] {
         let metadata: MessageMetadata =
@@ -2986,7 +2986,7 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
                         .ok_or_else(|| anyhow!("digest sibling HLC is missing"))?,
                 )?,
                 serde_json::json!({
-                    "strand_id": "ak:strand:01964137-0000-8000-8000-000000000010",
+                    "strand_id": "ak:strand:AV56KkeEaMSR4caEiVYFp1MtJk3sQ_Zn0VETrzEWQlU3",
                     "track_name": "discussion",
                     "content": {
                         "kind": "ak.content.text",
@@ -3263,7 +3263,7 @@ pub fn run_sidecar_accepted_request_identity_vector() -> Result<()> {
     if invalid != BTreeSet::from(["message_id", "local_intent_id", "unaccepted_event_id"]) {
         bail!("accepted request identity negatives are incomplete");
     }
-    if EventId::new("ak:message:01964137-0000-8000-8000-000000000034").is_ok()
+    if EventId::new("ak:message:AX0TNnklqIlzhGa2OXRoCVE1dmOt3VUwpuOvqt4iPt5F").is_ok()
         || EventId::new("local-intent-34").is_ok()
     {
         bail!("message and local intent identities must fail the Event-id type gate");

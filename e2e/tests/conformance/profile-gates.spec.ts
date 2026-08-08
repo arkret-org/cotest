@@ -294,7 +294,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
       realmId: "ak:realm:AVAS1PeoJLynuHDRgmf-2LvFQSeNYWxMtub5zKMmPWtI",
       kind: "ak.message.create",
       payload: {
-        strand_id: "ak:strand:01904100-0000-8000-8000-000000001000",
+        strand_id: "ak:strand:AdGCQqzuG2c1_NhzvkJ6aU8RcePRF6KHFaD0ObxpalrU",
         track_name: "discussion",
         content: { kind: "ak.content.text", body: "must not accept unknown critical extension" },
       },

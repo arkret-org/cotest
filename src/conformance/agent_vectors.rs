@@ -932,7 +932,7 @@ fn expect_aob_denial(
 fn valid_act_on_behalf_request() -> MiniActOnBehalfRequest<'static> {
     MiniActOnBehalfRequest {
         executed_by: Some("did:web:agent.example"),
-        authorization_ref: Some("ak:grant:01904100-0000-7000-8000-000000000001"),
+        authorization_ref: Some("ak:grant:AbrgMKK4KXMpRsGsFrsEQEsjo207metUd4zt8yjzB-UH"),
         participation_allows: true,
         grant_covers_action: true,
         approval: Some(("ak:agent-action-request:01904100", "nonce-01904100")),

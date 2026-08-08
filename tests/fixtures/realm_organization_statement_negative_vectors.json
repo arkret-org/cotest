@@ -64,7 +64,7 @@
       "name": "non_delegated_role_with_delegation_ref",
       "surface": "verifier",
       "comment": "organization_did is NOT a delegated role; carrying a delegation_ref is invalid coupling ⇒ schema_violation.",
-      "mutation": { "set": { "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001" } },
+      "mutation": { "set": { "authorization.delegation_ref": "ak:grant:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS" } },
       "resolver": "no_delegation",
       "expected": { "outcome": "reject", "reason_code": "schema_violation" }
     },
@@ -75,7 +75,7 @@
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS"
         }
       },
       "resolver": "no_delegation",
@@ -88,7 +88,7 @@
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS"
         }
       },
       "resolver": "delegation_not_live",
@@ -101,7 +101,7 @@
       "mutation": {
         "set": {
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS"
         }
       },
       "resolver": "delegation_covers_realm_admin_only",
@@ -115,7 +115,7 @@
         "set": {
           "relationship": "governance",
           "authorization.issuer_role": "governance_service",
-          "authorization.delegation_ref": "ak:grant:0196419b-0000-7000-8000-000000000001"
+          "authorization.delegation_ref": "ak:grant:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS"
         }
       },
       "resolver": "delegation_covers_owner_only",

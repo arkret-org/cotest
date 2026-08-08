@@ -147,7 +147,7 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     let mut frontier: BTreeMap<CallSignalSeqKey, u64> = BTreeMap::new();
     let key = CallSignalSeqKey {
         realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
-        call_id: CallId::new("ak:call:0196441c-0000-7000-8000-000000000000")?,
+        call_id: CallId::new("ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz")?,
         actor_id: Did::new("did:web:alice.example.com")?,
         device_id: DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?,
     };
@@ -295,7 +295,7 @@ fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
     json!({
         "kind": "ak.call.signal",
         "payload_sequence": 11,
-        "call_id": "ak:call:0196441c-0000-7000-8000-000000000000",
+        "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "signal_kind": signal_kind,
         "seq": seq,
         "data": {}

@@ -418,7 +418,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let before = realm_event_kinds(&alice, &realm_id).await?;
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
     let payload = crate::harness::invite_create_payload(
-        "ak:invite:01999999-0000-7000-8000-00000000de01",
+        "ak:invite:AcZ6iSYQbdgsYh_GrfFneFToJ6GZmoBo9TnQhY6fErrX",
         bob.actor.as_str(),
         alice.service_id(),
         "sha256:3333333333333333333333333333333333333333333333333333333333333333",

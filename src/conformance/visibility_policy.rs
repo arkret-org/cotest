@@ -285,7 +285,7 @@ fn locked_stub_projection() -> Projection {
 fn realm_member_preview_projection() -> Projection {
     Projection {
         body: json!({
-            "circle_id": "ak:circle:0196419c-0000-8000-8000-000000000000",
+            "circle_id": "ak:circle:AUSenBRnepSegLPN_3QRmalt393LbZ9xTHIOK-qXDnHw",
             "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
             "visibility": "realm_members",
             "display": {
@@ -305,7 +305,7 @@ fn realm_member_preview_projection() -> Projection {
 fn circle_member_full_projection() -> Projection {
     Projection {
         body: json!({
-            "circle_id": "ak:circle:0196419c-0000-8000-8000-000000000000",
+            "circle_id": "ak:circle:AUSenBRnepSegLPN_3QRmalt393LbZ9xTHIOK-qXDnHw",
             "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
             "visibility": "members",
             "title": "Security Review",

@@ -24,7 +24,7 @@ fn display() -> CircleDisplay {
 }
 
 fn circle_id() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000201".to_owned())
+    CircleId::new("ak:circle:AVBgYTmzSkzTSd1dlFH4ZADaQRkVcx_iTAvXdxlTfxrg".to_owned())
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 

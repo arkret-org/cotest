@@ -149,7 +149,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         alice_token,
         service_id: server.service_id().to_owned(),
         realm_id: String::new(),
-        space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
+        space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };
     // The parity Realm's id is derived from the genesis Event the setup case
     // submits, so it has to be computed from that batch rather than chosen.
@@ -240,7 +240,7 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
         alice_token: "cotest-format-smoke-token".to_owned(),
         service_id: "did:web:soland.mock-parity-smoke.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
-        space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
+        space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };
     assert_mock_contract_format(&contract_path, &fixture, &ctx)
 }
@@ -261,7 +261,7 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
         alice_token: "cotest-artifact-gate-token".to_owned(),
         service_id: "did:web:soland.mock-parity-gate.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
-        space_id: "ak:space:01999999-0000-8000-8000-000000000451".to_owned(),
+        space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };
     assert_mock_contract_artifact_gate(&root, &contract_path, &fixture, &ctx)
 }

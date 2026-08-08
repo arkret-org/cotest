@@ -23,12 +23,12 @@ use arkret_models_collaboration::objects::space::ChildScopePolicy;
 use arkret_wire::EncryptionProfile;
 
 fn circle_a() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000701".to_owned())
+    CircleId::new("ak:circle:AXqScWrSVbMRHSSnD37HwS-fgoTGt3HbHkvBV3SttpCU".to_owned())
         .map_err(|e| anyhow!("circle a: {e}"))
 }
 
 fn circle_b() -> Result<CircleId> {
-    CircleId::new("ak:circle:0196419b-0000-8000-8000-000000000702".to_owned())
+    CircleId::new("ak:circle:AbwFx1nfp4TbvjhgAyRUPT_GCkNEI2G826LNOg_7fllt".to_owned())
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 

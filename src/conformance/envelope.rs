@@ -43,8 +43,8 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.move_item.accept.v1",
             "ak.container.move_item",
             json!({
-                "item_ref": "ak:morph:01904100-0000-8000-8000-000000000201",
-                "container_ref": "ak:morph:01904100-0000-8000-8000-000000000101",
+                "item_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0",
+                "container_ref": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
                 "relation_kind": "contains",
                 "rank": "A"
             }),
@@ -54,8 +54,8 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.move_item.legacy_rejected.v1",
             "ak.container.move_item",
             json!({
-                "object_ref": "ak:morph:01904100-0000-8000-8000-000000000201",
-                "to_container_id": "ak:morph:01904100-0000-8000-8000-000000000101",
+                "object_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0",
+                "to_container_id": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
                 "relation_kind": "contains",
                 "rank": "A"
             }),
@@ -65,11 +65,11 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.rebalance.accept.v1",
             "ak.container.rebalance",
             json!({
-                "container_ref": "ak:morph:01904100-0000-8000-8000-000000000101",
+                "container_ref": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
                 "relation_kind": "contains",
                 "positions": [
-                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000201", "rank": "A"},
-                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000202", "rank": "B"}
+                    {"item_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0", "rank": "A"},
+                    {"item_ref": "ak:morph:AaIJHtxd23N3TkS66mYyI4XGESjS7Gjt_fonMdJe9inQ", "rank": "B"}
                 ],
                 "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             }),
@@ -79,11 +79,11 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             "ak.cotest_vector.container.rebalance.duplicate_rank_rejected.v1",
             "ak.container.rebalance",
             json!({
-                "container_ref": "ak:morph:01904100-0000-8000-8000-000000000101",
+                "container_ref": "ak:morph:AfqXI4jyBJWA5HRhSr3SdFP5Qb_2V210Q00mFqUjA7_z",
                 "relation_kind": "contains",
                 "positions": [
-                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000201", "rank": "A"},
-                    {"item_ref": "ak:morph:01904100-0000-8000-8000-000000000202", "rank": "A"}
+                    {"item_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0", "rank": "A"},
+                    {"item_ref": "ak:morph:AaIJHtxd23N3TkS66mYyI4XGESjS7Gjt_fonMdJe9inQ", "rank": "A"}
                 ],
                 "expected_order_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             }),
@@ -168,7 +168,7 @@ pub fn run_deprecated_event_alias_suite() -> Result<()> {
                 "01970e589d21-0001-a13f9c2e",
                 "2026-05-02T00:00:00.000Z",
                 json!({
-                    "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
+                    "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
                     "body": "legacy alias"
                 }),
             );
@@ -428,7 +428,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d21-0001-a13f9c2e",
         "2026-05-02T00:00:00.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
+            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
             "content": {
                 "kind": "ak.content.text",
                 "body": "hello"
@@ -455,7 +455,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
+            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
             "content": {
                 "kind": "ak.content.text",
                 "body": "a"
@@ -468,7 +468,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d22-0001-a13f9c2e",
         "2026-05-02T00:00:01.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
+            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
             "content": {
                 "kind": "ak.content.text",
                 "body": "b"
@@ -490,7 +490,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e700000-0001-a13f9c2e",
         "2026-05-02T00:30:00.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
+            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
             "content": {
                 "kind": "ak.content.text",
                 "body": "future"
@@ -516,7 +516,7 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d23-0001-a13f9c2e",
         "2026-05-02T00:00:02.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
+            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
             "content": {
                 "kind": "ak.content.text",
                 "body": "backdated"
@@ -540,14 +540,14 @@ fn validate_synthetic_event_envelope_negatives(
         "01970e589d24-0001-a13f9c2e",
         "2026-05-02T00:00:03.000Z",
         json!({
-            "strand_id": "ak:strand:019a7140-0000-8000-8000-000000000000",
+            "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
             "content": {
                 "kind": "ak.content.text",
                 "body": "legacy field"
             }
         }),
     );
-    unknown_field_event["space_id"] = json!("ak:space:019a7360-0000-8000-8000-000000000000");
+    unknown_field_event["space_id"] = json!("ak:space:AafktYXx8-v8PgfMovcpfbkFAJzUiT8l2GHJJ9UmF3fP");
     let unknown_field_decision =
         validate_event_envelope(&unknown_field_event, event_kinds, &context)?;
     assert_event_decision(

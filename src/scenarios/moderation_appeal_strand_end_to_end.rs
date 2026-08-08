@@ -65,7 +65,7 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
         ));
     }
     // Typed appeal id round-trip.
-    let appeal = TypedAppealId::new("ak:appeal:01904100-0000-7000-8000-000000000aaa")
+    let appeal = TypedAppealId::new("ak:appeal:Ac-zHHAGOy4ppip8x-O9v3rVum3VX-qqv0V187R1F4ci")
         .map_err(|e| anyhow!("SDK rejected well-formed TypedAppealId: {e}"))?;
     if !appeal.as_str().starts_with(APPEAL_ID_PREFIX) {
         return Err(anyhow!(

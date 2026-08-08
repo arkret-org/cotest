@@ -141,7 +141,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         "proof_required": false,
         "one_time_use_consumed": false,
         "grant": {
-            "id": "ak:grant:0196419b-0000-7000-8000-000000000901",
+            "id": "ak:grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD",
             "issuer": "did:web:coauth.cotest.local",
             "subject": subject,
             "service_account_id": "alice-session-grant",

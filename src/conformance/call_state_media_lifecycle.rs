@@ -202,7 +202,7 @@ fn realm_id() -> RealmId {
 }
 
 fn call_id() -> CallId {
-    CallId::new("ak:call:019a7360-0000-7000-8000-000000000001").unwrap()
+    CallId::new("ak:call:AWRz9zKjOlGmvDeLp4ws-Eb6jsg4I5jJdj5J8o3cGYz0").unwrap()
 }
 
 fn start_event_id() -> EventId {
@@ -254,7 +254,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         },
         produced_by: Did::new("did:web:recorder.example").unwrap(),
         recording_initiator_capability_ref: GrantId::new(
-            "ak:grant:019a7360-0000-7000-8000-000000000006",
+            "ak:grant:AY8a0-KhSVbHOk2IStjbvFlEdGofW0ZyqMsOoZu6_Cqv",
         )
         .unwrap(),
         created_at: ts("2026-06-19T00:00:00.000Z"),

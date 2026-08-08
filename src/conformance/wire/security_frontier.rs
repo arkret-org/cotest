@@ -135,7 +135,7 @@ fn assert_realm_circle_isolation(
         cell_ref(
             CellFamilyId::CIRCLE_MEMBER_V1,
             &[
-                "ak:circle:019809f4-a800-8000-8000-000000000601",
+                "ak:circle:AchuvpOGLMUeMqy1BDF30nl0o5YQFspCofWyFbnX0_8u",
                 "did:webvh:zfixture:bob.example",
             ],
         )?,
@@ -149,7 +149,7 @@ fn assert_realm_circle_isolation(
     let circle_scope: ScopeRef = serde_json::from_value(json!({
         "kind": "circle",
         "realm_id": "ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE",
-        "circle_id": "ak:circle:019809f4-a800-8000-8000-000000000601"
+        "circle_id": "ak:circle:AchuvpOGLMUeMqy1BDF30nl0o5YQFspCofWyFbnX0_8u"
     }))?;
     let circle_observed = derive_mls_security_frontier(&with_other_circle, &circle_scope, leaves)?;
     if circle_observed == *baseline {

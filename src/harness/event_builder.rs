@@ -886,7 +886,7 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
             let strand_id = realm_id
                 .strip_prefix("ak:realm:")
                 .map(|suffix| format!("ak:strand:{suffix}"))
-                .unwrap_or_else(|| "ak:strand:01904100-0000-8000-8000-f10dc0000001".to_owned());
+                .unwrap_or_else(|| "ak:strand:AR3ud0srmtpodQ47XfsVC4uD75mQDAGaKLEww6VGMZZC".to_owned());
             object
                 .entry("strand_id".to_owned())
                 .or_insert_with(|| Value::String(strand_id));
