@@ -1680,8 +1680,11 @@ export async function queryRealmEventsApi(
     `${solandBaseUrl(opts.server)}/_arkret/self/events`,
     {
       method: "QUERY",
-      data: { realms: [realmId], limit: opts.limit ?? 100 },
-      headers: authHeaders(token),
+      data: canonicalJson({ realms: [realmId], limit: opts.limit ?? 100 }),
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
+      },
     },
   );
   return await expectJsonOk<Record<string, unknown>>(
