@@ -40,6 +40,7 @@ export type SignedEventEnvelopeArgs = {
   /// schema_refs-changing ak.morph.update) to bind the active Morph schema set
   /// (the union of from/to schema_refs) here, not just the payload schema id.
   requirementsSchema?: string[];
+  requirementsCriticalExtensions?: Array<Record<string, unknown>>;
   proofVerificationMethod?: string;
   refs?: Array<Record<string, unknown>>;
   preconditions?: Array<Record<string, unknown>>;
@@ -2040,6 +2041,9 @@ export function signedEventEnvelope(
       schema: args.requirementsSchema ?? [
         args.schemaId ?? schemaIdForEventKind(args.kind),
       ],
+      ...(args.requirementsCriticalExtensions?.length
+        ? { critical_extensions: args.requirementsCriticalExtensions }
+        : {}),
     },
     payload,
   }) as Record<string, unknown>;
@@ -2605,6 +2609,10 @@ export function localPrincipalControlProposalAck(
   delete proposalPayload.proofs;
   delete proposalPayload.unsigned;
   delete proposalPayload.actor_kind;
+  // `event_id` is derived from the Event digest and therefore cannot be part
+  // of that digest's preimage. Keep this local principal ack byte-identical to
+  // `arkret_wire::event_digest_preimage`.
+  delete proposalPayload.event_id;
   const proposalDigest = `sha256:${sha256CanonicalJson(proposalPayload)}`;
   const authoritySetRef = `sha256:${sha256CanonicalJson({
     kind: "single_did",
@@ -3237,11 +3245,12 @@ async function forceConformanceCbaBasis(
   const response = await request.post(
     `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
     {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         realm_id: realmId,
         subject: actorDid,
         data_plane_actions: [fixtureCapabilityAction(kind)],
-      },
+      }),
     },
   );
   const basis = await expectJsonOk<{
@@ -3252,8 +3261,6 @@ async function forceConformanceCbaBasis(
   if (descriptor.plane === "control") {
     envelope.seal_basis = {
       leaves: [basis.seal_id],
-      control_event_set_root: basis.control_event_set_root,
-      state_root: basis.state_root,
     };
     delete envelope.seal_ref;
     delete envelope.auth_context;
