@@ -46,7 +46,7 @@
 - E15.9 discussion comment(`ak.message.create`,MLS encrypted-payload envelope)
 
 **P1 — create-locked(`e2e/tests/encryption/mls-group.spec.ts`,API 级)**:
-- E11.6 `ak.realm.update` patch `encryption_profile` → `realm_encryption_profile_create_locked`
+- E11.6 closed `ak.realm.policy_bundle` carrying forbidden `encryption_profile` → `schema_violation`
 - E11.7 `ak.circle.update` patch `encryption_profile` → `circle_encryption_profile_create_locked`
 
 **P1 — 未就绪守卫(fixme)**:

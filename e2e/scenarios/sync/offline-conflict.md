@@ -2,7 +2,7 @@
 
 ## 目标
 
-bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / metadata 的 `ak.realm.update` 已注册为 `cas_register / bottom=reject`：同一 single-chain Seal 中的互斥 sibling 必须至多接受一条，因果有序的后继更新保持单值；它不得被误报成 `bottom=expose`。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
+bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending move。Realm title / summary / avatar 的唯一写入面 `ak.realm.profile` 使用 `ak.component.realm.profile.v1` 的 `cas_register / bottom=reject`：同一 single-chain Seal 中的互斥 sibling 必须至多接受一条，因果有序的后继 profile 保持单值；它不得被误报成 `bottom=expose`。当前规范还没有注册可由 inkson 提交的 repair event kind,所以 Realm admin 的 repair 区保持只读,不渲染未注册的修复提交控件。
 
 ## Spec 锚点
 
@@ -47,8 +47,8 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ### Phase D — 因果有序 title update 不产生 bottom
 
-12. alice 在线提交 `ak.realm.update { patch.title }`，等待其 Seal finality；bob 再以该后继 basis 提交第二条更新
-13. soland 因果应用两条 Realm metadata 更新，保持 `ak.component.realm.metadata.v1` 单值，不得把它误投影成 `bottom=expose`
+12. alice 在线提交完整 `ak.realm.profile`，等待其 Seal finality；bob 再以该后继 basis 提交第二条完整 profile
+13. soland 因果应用两条 Realm profile 更新，保持 `ak.component.realm.profile.v1` 单值，不得把它误投影成 `bottom=expose`
 14. 断言:`GET /_soland/admin/realms/<S>/bottom` 返回空数组
 
 ### Phase E — repair 区仍为只读
@@ -71,7 +71,7 @@ bob 在网络断开时编辑(本地 outbox);重连后 sync 上传所有 pending 
 
 ## Implementation notes
 
-- **soland 已落地**:`ak.realm.update` title patch 不产生 bottom diagnostics;admin bottom diagnostics 在没有标准 bottom producer 时返回空数组。
+- **soland 已落地**:`ak.realm.profile` 完整值更新不产生 bottom diagnostics;admin bottom diagnostics 在没有标准 bottom producer 时返回空数组。
 - **inkson 已落地**:Realm admin repair 区当前不 mint 未注册的 `ak.conflict.repair`,无 bottom 时保持只读空态。
 - **测试侧已激活**:offline outbox / pending reconcile 在 `sync/offline-queue-replay` live 覆盖;本 scenario 覆盖因果有序 title update 的单值语义与 read-only repair surface。同 Seal sibling 的 `cas_conflict` / defer 义务由 control-state conformance vectors 覆盖。
 - **剩余边界**:outbox capacity、标准 bottom producer、bottom 状态下再写拒绝、篡改 witness 拒绝、多个 bottom cell 排序仍保留为后续边界 fixme。

@@ -115,7 +115,7 @@
 - **E11.3 KeyPackage 不可用**:bob 没上传 KeyPackage → alice claim 失败,`POST /keypackages/claim` 返回 404 / `no_keypackage`
 - **E11.4 加入前已发消息 + history_visibility=shared**:把 Phase D 改用 `history_visibility=shared` — carol 加入后应当能解(spec §3.4 shared rule + §6 offline epoch retention)
 - **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 Realm 时指定 suite,bob 的 KeyPackage 不支持 → soland 提示客户端
-- **E11.6 Realm encryption_profile create-locked**(active):对已建的 `mls_rfc9420` Realm 发 `ak.realm.update` patch `encryption_profile` → soland 拒绝,wire code `realm_encryption_profile_create_locked`(spec realm-and-space.md §2.3;soland operations.rs `operation_touches_encryption_profile`)。防止把已加密 Realm 静默降级成明文。此前 soland 无单测、cotest 无端到端覆盖。
+- **E11.6 Realm encryption_profile create-locked**(active):对已建的 `mls_rfc9420` Realm 发送夹带 `encryption_profile` 的 `ak.realm.policy_bundle` → closed payload schema 以 `schema_violation` 拒绝。`encryption_profile` 只有 genesis carrier，任何可变 facet 都不能把已加密 Realm 静默降级成明文。
 - **E11.7 Circle encryption_profile create-locked**(fixme,blocking-on soland#circle-submit-validation-gap):在加密 Realm 下按 floor 建 Circle 后,`ak.circle.update` patch `encryption_profile`。**实测确认 gap**:soland 提交时**接受**(返回 200),因为 `operation_schema_for_kind` 无 circle arm → 提交时操作校验整段被跳过;create-lock 只在异步 reducer 兜底(状态安全但响应误导)。修后转 active:断言 wire code `circle_encryption_profile_create_locked`。
 - **E11.8 未就绪不得静默降级**(fixme,blocking-on inkson#mls-not-ready-write-guard):未收 welcome、未恢复账户密钥的同账户新设备尝试写私有内容 → 客户端必须呈现可恢复的"MLS 未就绪"提示并拒绝提交,**绝不**把明文 `ak.strand.update` 发给服务端(也不应触发 `content_encryption_floor_violation`)。需第二设备 rig + 实跑确认未就绪 UX 后从 fixme 升 active。
 
