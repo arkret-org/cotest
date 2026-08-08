@@ -8,11 +8,11 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  principalControlRealmForDid,
   queryRealmEventsApi,
   sdkCapabilityActionRegistryDigest,
   sendMessageApi,
   submitSignedEventBatchApi,
-  typedId,
   type AcceptedRealmBootstrap,
 } from "../../helpers/soland-api";
 import {
@@ -28,7 +28,9 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const alice = uniqueUser("events-batch-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const missingRealmId = typedId("realm");
+    const missingRealmId = principalControlRealmForDid(
+      `did:web:missing-${Date.now()}.example`,
+    );
 
     const missingFrontier = await request.get(
       `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(missingRealmId)}`,
@@ -121,8 +123,12 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(realmId)}`,
       { headers: authHeaders(aliceToken) },
     );
-    expect(frontierResponse.status()).toBe(200);
-    const frontierBody = (await frontierResponse.json()) as {
+    const frontierText = await frontierResponse.text();
+    expect(
+      frontierResponse.status(),
+      `query actor frontier returned ${frontierResponse.status()}: ${frontierText}`,
+    ).toBe(200);
+    const frontierBody = JSON.parse(frontierText) as {
       frontier?: {
         kind?: string;
         realm_id?: string;
