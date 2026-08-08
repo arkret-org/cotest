@@ -16,6 +16,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   expectJsonOk,
+  localPrincipalControlProposalAck,
   queryRealmEventsApi,
   refreshEventEnvelopeProof,
   sdkCapabilityActionRegistryDigest,
@@ -80,9 +81,10 @@ async function prepareAndCommitContactEvent(
       data: canonicalJson({
         phase: "commit",
         operation_id: prepared.operation_id,
-        idempotency_key: `commit-${prepareBody.idempotency_key}`,
+        idempotency_key: prepareBody.idempotency_key,
         reservation_handle: prepared.reservation_handle,
         signed_event: event,
+        control_proposal_ack: localPrincipalControlProposalAck(event),
       }),
     },
   );
@@ -454,12 +456,23 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     expect(acceptedEvents.map((event) => event.event_id)).toEqual(
       accepted.events.map((event) => event.event_id),
     );
-    const losingHistory = await queryRealmEventsApi(
-      request,
-      bobToken,
-      losing.realmId,
+    const losingHistory = await request.fetch(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
+        method: "QUERY",
+        headers: {
+          ...authHeaders(bobToken),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({ realms: [losing.realmId], limit: 100 }),
+      },
     );
-    expect((losingHistory.events ?? []) as JsonObject[]).toHaveLength(0);
+    const losingHistoryText = await losingHistory.text();
+    expect(losingHistory.status(), losingHistoryText).toBe(404);
+    expect(wireErrCode(JSON.parse(losingHistoryText) as JsonObject)).toBe(
+      "not_found",
+    );
+    expect(losingHistoryText).not.toContain(losing.realmId);
 
     const postConflictRetry = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,

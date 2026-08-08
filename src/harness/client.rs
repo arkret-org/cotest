@@ -122,6 +122,7 @@ impl TestActorClient {
             idempotency_key,
             reservation_handle,
             signed_event: self.sign_prepared_contact_event(&event_draft)?,
+            control_proposal_ack: None,
         });
         let accepted = self.sdk.contacts_request(&commit).await?;
         let accepted_replay = self.sdk.contacts_request(&commit).await?;
@@ -191,6 +192,7 @@ impl TestActorClient {
             idempotency_key,
             reservation_handle,
             signed_event: self.sign_prepared_contact_event(&event_draft)?,
+            control_proposal_ack: None,
         });
         match self.sdk.contacts_respond(&commit).await? {
             ContactOperationOutcome::Accepted {

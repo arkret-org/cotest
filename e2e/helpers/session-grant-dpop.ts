@@ -270,44 +270,6 @@ export function kickoffDpopHeaders(args: {
   };
 }
 
-/// Reconstruct a `DpopDeviceKey` from a base64url-no-pad 32-byte Ed25519 seed —
-/// the inverse of [`dpopDeviceSeedB64url`]. Used by session-bound helpers that
-/// persist only the seed (not the live `KeyObject`) and later need to mint a
-/// proof.
-export function dpopDeviceKeyFromSeedB64url(seedB64url: string): DpopDeviceKey {
-  const seed = Buffer.from(seedB64url, "base64url");
-  if (seed.length !== 32) {
-    throw new Error(`Ed25519 seed must be 32 bytes, got ${seed.length}`);
-  }
-  // Wrap the raw 32-byte seed in the fixed Ed25519 PKCS#8 DER prefix so Node can
-  // import it as a private KeyObject (RFC 8410 OneAsymmetricKey, OID 1.3.101.112).
-  const pkcs8 = Buffer.concat([
-    Buffer.from("302e020100300506032b657004220420", "hex"),
-    seed,
-  ]);
-  const privateKey = createPrivateKey({
-    key: pkcs8,
-    format: "der",
-    type: "pkcs8",
-  });
-  const publicKey = createPublicKey(privateKey);
-  const exported = publicKey.export({ format: "jwk" }) as { x?: string };
-  if (!exported.x) {
-    throw new Error("failed to derive Ed25519 public x from seed");
-  }
-  const publicJwk: Ed25519PublicJwk = {
-    kty: "OKP",
-    crv: "Ed25519",
-    x: exported.x,
-  };
-  return {
-    privateKey,
-    publicKey,
-    publicJwk,
-    thumbprint: jwkThumbprintEd25519(publicJwk.x),
-  };
-}
-
 /// Request a DPoP-bound `ak.session.grant` from coauth's cotest debug seam.
 ///
 /// Returns `undefined` when the debug endpoint is not available (404 — the
