@@ -55,7 +55,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         "authz/check is diagnostic and must not mint signed policy decisions"
     );
 
-    let manage_grant_id = "ak:grant:AcsO3-ZmHpy-cklVCR-imHjpMotob9AWdczUjQnrpU0n";
     let actions = vec!["ak.realm.admin".to_owned()];
     let current_registry_digest = arkret::current_capability_action_registry_digest()?;
     let missing_basis = arkret::validate_capability_action_registry_binding(&actions, None)
@@ -76,52 +75,9 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .contains("capability_registry_basis_unavailable")
     );
     arkret::validate_capability_action_registry_binding(&actions, Some(&current_registry_digest))?;
-    let grant_id = arkret_identifiers::GrantId::new(manage_grant_id.to_owned())?;
-    let issued_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
-        .with_timezone(&chrono::Utc);
-    let typed_grant = arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
-        id: grant_id.clone(),
-        schema: "ak.schema.capability.v1".to_owned(),
-        realm_id: Some(arkret_identifiers::RealmId::new(realm_id.clone())?),
-        issuer: arkret_identifiers::Did::new(alice.actor.clone())?,
-        subject: arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
-            arkret_identifiers::Did::new(bob.actor.clone())?,
-        ),
-        actions,
-        resources: vec![serde_json::from_value(json!({
-            "kind": "realm",
-            "realm_id": realm_id
-        }))?],
-        capability_action_registry_digest: Some(current_registry_digest),
-        constraints: Vec::new(),
-        issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
-            realm_id: arkret_identifiers::RealmId::new(realm_id.clone())?,
-            cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),
-            controller_epoch_at_issuance: 0,
-            authority_generation: 0,
-        }],
-        issued_at,
-        not_before: None,
-        expires_at: None,
-        updated_by: None,
-        updated_at: None,
-        revoked_by: None,
-        revoked_at: None,
-    };
-    let grant_payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
-        grant: typed_grant,
-        grant_id,
-    };
-    let manage_grant = submit_event(
-        &server,
-        &alice.token,
-        &alice.actor,
-        &realm_id,
-        "ak.capability.grant",
-        serde_json::to_value(grant_payload)?,
-        StatusCode::OK,
-    )
-    .await?;
+    let (manage_grant_id, manage_grant) = alice
+        .grant_realm_actions_to(&realm_id, &bob.actor, &["ak.realm.admin"])
+        .await?;
     assert_eq!(manage_grant["status"], "accepted");
 
     let effective_grants = expect_json(
@@ -138,8 +94,10 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|grant| grant["id"].as_str() == Some(manage_grant_id)
-                || grant["grant_id"].as_str() == Some(manage_grant_id)),
+            .any(
+                |grant| grant["id"].as_str() == Some(manage_grant_id.as_str())
+                    || grant["grant_id"].as_str() == Some(manage_grant_id.as_str())
+            ),
         "effective grants did not include projected manage grant: {effective_grants}"
     );
 

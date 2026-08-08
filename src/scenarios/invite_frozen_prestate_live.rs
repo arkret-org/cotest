@@ -32,8 +32,6 @@ use crate::harness::{
 };
 use crate::transcripts::record_vector_event;
 
-const INVITE_ID: &str = "ak:invite:Ab2mdbLAvV-mV7SAcSUEftBepKmgdvgtACiB4Dd4qwHd";
-
 /// The three server-side observables a rejected Control Move must leave
 /// untouched.
 #[derive(Debug, PartialEq, Eq)]
@@ -177,13 +175,20 @@ async fn submit_invite_move(
     };
     let before_seal_id = before.seal_id.to_string();
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
+    let event_id = event.event_id.clone();
     let response = actor
         .post("/_arkret/self/events")
         .canonical_json(&crate::publication::initial_submission(event, "")?)?
         .send()
         .await?;
     let status = response.status();
-    let body = response.json::<Value>().await.unwrap_or(Value::Null);
+    let mut body = response.json::<Value>().await.unwrap_or(Value::Null);
+    if status.is_success()
+        && body.get("event_id").and_then(Value::as_str).is_none()
+        && let Some(object) = body.as_object_mut()
+    {
+        object.insert("event_id".to_owned(), Value::String(event_id.to_string()));
+    }
     if status.is_success() {
         eventually(
             "accepted invite Control Move advances the Realm Seal frontier",
@@ -250,7 +255,6 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
 
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
     let create_payload = crate::harness::invite_create_payload(
-        INVITE_ID,
         bob.actor.as_str(),
         alice.service_id(),
         "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -259,6 +263,12 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     let (status, body) =
         submit_invite_move(&alice, &realm_id, "ak.invite.create", create_payload).await?;
     assert_eq!(status, StatusCode::OK, "invite create: {body}");
+    let create_event_id = arkret_identifiers::EventId::new(
+        body["event_id"]
+            .as_str()
+            .ok_or_else(|| anyhow!("accepted invite create omitted event_id: {body}"))?,
+    )?;
+    let invite_id = arkret_identifiers::InviteId::from_event_id(&create_event_id).to_string();
 
     // Predicate 1 — a directed cancel with NO `payload.invitee`.
     let before = observe(&alice, &realm_id, bob.actor.as_str()).await?;
@@ -267,7 +277,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         &realm_id,
         "ak.invite.cancel",
         json!({
-            "invite_id": INVITE_ID,
+            "invite_id": invite_id,
             "target_state": "revoked",
             "reason": "missing invitee negative",
         }),
@@ -290,7 +300,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         &realm_id,
         "ak.invite.cancel",
         json!({
-            "invite_id": INVITE_ID,
+            "invite_id": invite_id,
             "invitee": "did:web:mallory-invite-frozen.example",
             "target_state": "revoked",
             "reason": "invitee mismatch negative",
@@ -313,7 +323,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     let inkson_cancel = inkson::operation::ak_ops::invite_cancel(
         &realm_id,
         &alice.actor,
-        INVITE_ID,
+        &invite_id,
         bob.actor.as_str(),
         "revoked",
         Some("inkson_producer_cancel"),
@@ -383,7 +393,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
 
     record_vector_event(
         "invite.membership_transition_atomicity",
-        &json!({"realm_id": realm_id, "invite_id": INVITE_ID}),
+        &json!({"realm_id": realm_id, "invite_id": invite_id}),
         &json!({
             "missing_invitee": "reducer_projection_failed",
             "mismatched_invitee": "reducer_projection_failed",

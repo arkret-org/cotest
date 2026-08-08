@@ -95,7 +95,6 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             &invite_only_realm_id,
             "ak.invite.create",
             invite_create_payload(
-                "ak:invite:ATwAg9fZa5lCP5LeS1pSU4-n8xY_KMMfQFZafO0ck2Ju",
                 bob.actor.as_str(),
                 server.service_id(),
                 canonical_sha256(&introduction_evidence)?,

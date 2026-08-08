@@ -20,8 +20,8 @@
 //!   - `ak.vector.sidecar.accepted_request_identity.v1`
 //!   - `ak.vector.sidecar.hosted_ui_matrix.v1`
 //!
-//! These vectors pin the first-class Sidecar wire model. Backing scope is an
-//! internal MLS implementation detail and may not appear in public outcomes.
+//! These vectors pin the first-class native Sidecar wire model. A Sidecar has
+//! no backing Circle, private Strand, or private Relation.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -36,19 +36,19 @@ use arkret::{
     AgentSidecarExchangeOrigin, AgentSidecarExchangeProjection,
     AgentSidecarExchangeProjectionSchema, AgentSidecarExchangeRequestContext,
     AgentSidecarExchangeStatus, AgentSidecarMlsContext, AgentSidecarProjectionProvenance,
-    AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, CircleId,
-    Did, DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata, MlsGovernanceBindingPayload,
+    AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, Did,
+    DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata, MlsGovernanceBindingPayload,
     NonEmptyString, PendingSidecarAccessReconciliationItem,
-    PendingSidecarAccessReconciliationStage, RealmId, RelationCreatePayload, ScopeRef, SidecarId,
-    SidecarMlsBinding, Strand, StrandCreatePayload, StrandId, agent_sidecar_desired_access_digest,
-    agent_sidecar_exchange_event_set_digest, recover_agent_sidecar_context_locators,
+    PendingSidecarAccessReconciliationStage, RealmId, ScopeRef, SidecarId, SidecarMlsBinding,
+    StrandId, agent_sidecar_exchange_event_set_digest, agent_sidecar_participant_authority_digest,
+    recover_agent_sidecar_context_locators,
 };
 use arkret_models_collaboration::agent_signer_evidence::AgentLifecycleStatus;
 use arkret_models_collaboration::sidecar_operations::{
     SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAttachPhase, SidecarCommitPhase,
-    SidecarContextRef, SidecarEnsureAttachRequestBody, SidecarEnsureCommitRequestBody,
-    SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody, SidecarPreparePhase,
-    SidecarPreparedEventDraft, SidecarPreparedOutcome,
+    SidecarContextAttachPayload, SidecarContextRef, SidecarEnsureAttachRequestBody,
+    SidecarEnsureCommitRequestBody, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
+    SidecarPreparePhase, SidecarPreparedEventDraft, SidecarPreparedOutcome,
 };
 use arkret_signatures::{
     Ed25519PayloadSigner, PublicKeyMaterial, SignEventOptions, sign_event,
@@ -56,7 +56,7 @@ use arkret_signatures::{
 };
 use arkret_wire::{
     Base64UrlString, CapabilityActionId, EventRequirements, IdempotencyKey, ProfileId,
-    ProtocolOperationId, RelationId, ReservationHandle,
+    ProtocolOperationId, ReservationHandle,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -165,7 +165,7 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
             })
         })
         .ok_or_else(|| anyhow!("Sidecar MLS bootstrap fixture case is missing"))?;
-    let transcript = &case["desired_access_transcript"];
+    let transcript = &case["participant_authority_transcript"];
     let sidecar_id = SidecarId::new(
         transcript["sidecar_id"]
             .as_str()
@@ -184,43 +184,47 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
             .ok_or_else(|| anyhow!("fixture controller_id is missing"))?
             .to_owned(),
     )?;
-    let desired_agent_ids = transcript["principal_ids"]
+    let owned_agent_ids = transcript["owned_agent_ids"]
         .as_array()
-        .ok_or_else(|| anyhow!("fixture principal_ids are missing"))?
+        .ok_or_else(|| anyhow!("fixture owned_agent_ids are missing"))?
         .iter()
         .filter_map(Value::as_str)
-        .filter(|principal_id| *principal_id != controller_id.as_str())
         .map(|principal_id| Did::new(principal_id.to_owned()))
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    let digest = agent_sidecar_desired_access_digest(
+    let effective_agent_ids = transcript["effective_agent_ids"]
+        .as_array()
+        .ok_or_else(|| anyhow!("fixture effective_agent_ids are missing"))?
+        .iter()
+        .filter_map(Value::as_str)
+        .map(|principal_id| Did::new(principal_id.to_owned()))
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    let digest = agent_sidecar_participant_authority_digest(
         sidecar_id.clone(),
         realm_id.clone(),
         controller_id,
-        &desired_agent_ids,
+        &owned_agent_ids,
+        &effective_agent_ids,
     )?;
-    if case["expected_desired_access_digest"].as_str() != Some(digest.as_str()) {
-        bail!("Sidecar desired-access canonical digest differs from the fixture KAT");
-    }
 
     let sidecar_binding = SidecarMlsBinding {
-        sidecar_id,
-        desired_access_digest: digest,
+        sidecar_id: sidecar_id.clone(),
+        participant_authority_digest: digest,
         control_frontier: vec![
             NonEmptyString::new("ak:event:ATLNYjgAv7kFEef4jwHjtdjjTC9rAZqvGekqKcxx7pSX")
                 .map_err(anyhow::Error::msg)?,
         ],
     };
-    let binding = MlsGovernanceBindingPayload::circle(
+    let binding = MlsGovernanceBindingPayload::sidecar(
         realm_id,
-        arkret::CircleId::new("ak:circle:AVYxXzYx_KzaGx7X62doksaQR0ISkneyOwwF1k6ExHKy".to_owned())?,
+        sidecar_id,
         "YXJrcmV0LXNpZGVjYXItZ3JvdXA",
         0,
         0,
         Hash::new(format!("sha256:{}", "1".repeat(64)))?,
+        sidecar_binding.clone(),
         "ak.profile.mls_governance_binding.full.v1",
         "ak.reducer.core.v1",
-    )?
-    .with_sidecar_binding(sidecar_binding.clone())?;
+    )?;
     let cbor = binding.to_deterministic_cbor()?;
     let decoded = MlsGovernanceBindingPayload::from_deterministic_cbor(&cbor)?;
     if decoded.sidecar_binding() != Some(&sidecar_binding)
@@ -332,16 +336,14 @@ type SidecarModelResult<T> = std::result::Result<T, SidecarModelError>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SidecarCoordinates {
     sidecar_id: SidecarId,
-    backing_circle_id: CircleId,
-    private_strand_id: StrandId,
-    private_relation_id: RelationId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct SidecarContextCoordinates {
-    target_ref: String,
-    private_strand_id: StrandId,
-    private_relation_id: RelationId,
+    source_context_ref: SidecarContextRef,
+    mapping_event_id: EventId,
+    version: u64,
+    predecessor_event_ref: Option<EventId>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -349,7 +351,6 @@ struct SidecarDurableState {
     coordinates: Option<SidecarCoordinates>,
     contexts: BTreeMap<String, SidecarContextCoordinates>,
     accepted_event_ids: BTreeSet<EventId>,
-    controller_membership: bool,
 }
 
 #[derive(Clone)]
@@ -418,7 +419,6 @@ impl SidecarExecutableModel {
     ) -> Result<Self> {
         let mut model = Self::new(authenticated_controller, has_ensure_capability, lifecycle);
         model.durable.coordinates = Some(fixed_sidecar_coordinates(false)?);
-        model.durable.controller_membership = true;
         Ok(model)
     }
 
@@ -535,9 +535,6 @@ impl SidecarExecutableModel {
             operation_id,
             reservation_handle,
             sidecar_id,
-            backing_circle_id,
-            private_strand_id,
-            private_relation_id,
             create_event_id,
             context_attach_event_id,
             create_event_draft,
@@ -562,29 +559,23 @@ impl SidecarExecutableModel {
 
         let coordinates = SidecarCoordinates {
             sidecar_id: sidecar_id.clone(),
-            backing_circle_id: backing_circle_id.clone(),
-            private_strand_id: private_strand_id.clone(),
-            private_relation_id: private_relation_id.clone(),
         };
         let context = context_coordinates_from_event(&request.context_attach_event)?;
         let context_key = normalized_context_key_from_event(&request.context_attach_event)?;
         let mut next = self.durable.clone();
         if let Some(existing) = &next.coordinates {
-            if existing.sidecar_id != coordinates.sidecar_id
-                || existing.backing_circle_id != coordinates.backing_circle_id
-            {
+            if existing.sidecar_id != coordinates.sidecar_id {
                 return Err(SidecarModelError::BranchMismatch);
             }
         } else {
             next.coordinates = Some(coordinates.clone());
-            next.controller_membership = true;
         }
         if let Some(existing) = next.contexts.get(&context_key)
             && existing != &context
         {
             return Err(SidecarModelError::BranchMismatch);
         }
-        next.contexts.insert(context_key, context);
+        next.contexts.insert(context_key, context.clone());
         next.accepted_event_ids.insert(create_event_id.clone());
         next.accepted_event_ids
             .insert(context_attach_event_id.clone());
@@ -593,6 +584,7 @@ impl SidecarExecutableModel {
             operation_id.clone(),
             SidecarAcceptedPhase::Commit,
             &coordinates,
+            &context,
         );
         // The durable projection, finalized reservation, and accepted replay
         // ledger become visible as one modeled transaction after every check.
@@ -647,9 +639,6 @@ impl SidecarExecutableModel {
             operation_id,
             reservation_handle,
             sidecar_id,
-            backing_circle_id,
-            private_strand_id,
-            private_relation_id,
             context_attach_event_id,
             context_attach_event_draft,
             ..
@@ -670,36 +659,30 @@ impl SidecarExecutableModel {
         let Some(existing) = &self.durable.coordinates else {
             return Err(SidecarModelError::BranchMismatch);
         };
-        if existing.sidecar_id != *sidecar_id || existing.backing_circle_id != *backing_circle_id {
+        if existing.sidecar_id != *sidecar_id {
             return Err(SidecarModelError::BranchMismatch);
         }
 
         let coordinates = SidecarCoordinates {
             sidecar_id: sidecar_id.clone(),
-            backing_circle_id: backing_circle_id.clone(),
-            private_strand_id: private_strand_id.clone(),
-            private_relation_id: private_relation_id.clone(),
         };
         let context = context_coordinates_from_event(&request.context_attach_event)?;
-        if context.private_strand_id != coordinates.private_strand_id
-            || context.private_relation_id != coordinates.private_relation_id
-        {
-            return Err(SidecarModelError::DraftMismatch);
-        }
         let context_key = normalized_context_key_from_event(&request.context_attach_event)?;
         let mut next = self.durable.clone();
         if let Some(existing) = next.contexts.get(&context_key)
             && existing != &context
+            && !context_advances(existing, &context)
         {
             return Err(SidecarModelError::BranchMismatch);
         }
-        next.contexts.insert(context_key, context);
+        next.contexts.insert(context_key, context.clone());
         next.accepted_event_ids
             .insert(context_attach_event_id.clone());
         let outcome = accepted_sidecar_outcome(
             operation_id.clone(),
             SidecarAcceptedPhase::Attach,
             &coordinates,
+            &context,
         );
         self.durable = next;
         self.reservations
@@ -765,39 +748,42 @@ fn normalized_context_key_from_event(event: &Event) -> SidecarModelResult<String
 }
 
 fn context_coordinates_from_event(event: &Event) -> SidecarModelResult<SidecarContextCoordinates> {
-    let private_strand_id = event
-        .payload
-        .get("private_strand")
-        .and_then(|value| value.get("id"))
-        .and_then(Value::as_str)
-        .ok_or(SidecarModelError::DraftMismatch)?;
-    let private_relation_id = event
-        .payload
-        .get("relation")
-        .and_then(|value| value.get("id"))
-        .and_then(Value::as_str)
-        .ok_or(SidecarModelError::DraftMismatch)?;
+    let payload: SidecarContextAttachPayload = serde_json::from_value(
+        serde_json::to_value(&event.payload).map_err(|_| SidecarModelError::DraftMismatch)?,
+    )
+    .map_err(|_| SidecarModelError::DraftMismatch)?;
+    payload
+        .validate()
+        .map_err(|_| SidecarModelError::DraftMismatch)?;
     Ok(SidecarContextCoordinates {
-        target_ref: context_target_from_event(event)?,
-        private_strand_id: StrandId::new(private_strand_id)
-            .map_err(|_| SidecarModelError::DraftMismatch)?,
-        private_relation_id: RelationId::new(private_relation_id)
-            .map_err(|_| SidecarModelError::DraftMismatch)?,
+        source_context_ref: payload.source_context_ref,
+        mapping_event_id: event.event_id.clone(),
+        version: payload.version,
+        predecessor_event_ref: payload.predecessor_event_ref,
     })
+}
+
+fn context_advances(
+    existing: &SidecarContextCoordinates,
+    next: &SidecarContextCoordinates,
+) -> bool {
+    next.source_context_ref == existing.source_context_ref
+        && existing.version.checked_add(1) == Some(next.version)
+        && next.predecessor_event_ref.as_ref() == Some(&existing.mapping_event_id)
 }
 
 fn accepted_sidecar_outcome(
     operation_id: ProtocolOperationId,
     accepted_phase: SidecarAcceptedPhase,
     coordinates: &SidecarCoordinates,
+    context: &SidecarContextCoordinates,
 ) -> SidecarEnsureOutcome {
     SidecarEnsureOutcome::Accepted {
         operation_id,
         accepted_phase,
         ok: SidecarAcceptedOk,
         sidecar_id: coordinates.sidecar_id.clone(),
-        private_strand_id: coordinates.private_strand_id.clone(),
-        private_relation_id: coordinates.private_relation_id.clone(),
+        source_context_ref: context.source_context_ref.clone(),
         access_readiness: AgentSidecarAccessReadiness::KeyMaterialPending,
         pending_access_reconciliations: Vec::new(),
     }
@@ -809,20 +795,11 @@ fn fixed_sidecar_time() -> DateTime<Utc> {
         .expect("fixed Sidecar timestamp")
 }
 
-fn fixed_sidecar_coordinates(existing_context: bool) -> Result<SidecarCoordinates> {
+fn fixed_sidecar_coordinates(_existing_context: bool) -> Result<SidecarCoordinates> {
     Ok(SidecarCoordinates {
-        sidecar_id: SidecarId::new("ak:sidecar:AZ405CdsF4uWwxBhArLvqgzVvWHWYcB3QJ6845E-2ET3")?,
-        backing_circle_id: CircleId::new("ak:circle:AYJQpfy2j1-bINqZ9tOmgr_mmWWvioag-E32_voxxol5")?,
-        private_strand_id: StrandId::new(if existing_context {
-            "ak:strand:ARhFJl7dGnkM2RkcnUKJN6sOF9l6BTis905f7rS8-l_f"
-        } else {
-            "ak:strand:AUo3ePM-Hi_XH_1lOcj3PFGvLutG2hW-SxIEnaiZpzBm"
-        })?,
-        private_relation_id: RelationId::new(if existing_context {
-            "ak:relation:AV63ulzfk64Dz36IrV4K7iP5osjs5kLMEak9gXJBaaXH"
-        } else {
-            "ak:relation:AR2slzqBfU_P0Rv5uFjgEmO1DULVUrIdA4IxxZ35Geas"
-        })?,
+        sidecar_id: SidecarId::from_event_id(&EventId::new(
+            "ak:event:AZ405CdsF4uWwxBhArLvqgzVvWHWYcB3QJ6845E-2ET3",
+        )?),
     })
 }
 
@@ -869,96 +846,65 @@ fn build_fixed_sidecar_prepare(
 ) -> SidecarModelResult<SidecarPreparedOutcome> {
     let created_at = fixed_sidecar_time();
     let expires_at = created_at + chrono::Duration::minutes(10);
-    let coordinates = match existing {
-        Some(existing) => match existing_context {
-            Some(context) => SidecarCoordinates {
-                sidecar_id: existing.sidecar_id.clone(),
-                backing_circle_id: existing.backing_circle_id.clone(),
-                private_strand_id: context.private_strand_id.clone(),
-                private_relation_id: context.private_relation_id.clone(),
-            },
-            None => SidecarCoordinates {
-                sidecar_id: existing.sidecar_id.clone(),
-                backing_circle_id: existing.backing_circle_id.clone(),
-                ..fixed_sidecar_coordinates(true).map_err(|_| SidecarModelError::ModelInvariant)?
-            },
-        },
-        None => fixed_sidecar_coordinates(false).map_err(|_| SidecarModelError::ModelInvariant)?,
-    };
-    let context_target = match &request.context_ref {
-        SidecarContextRef::Relation { relation_id } => relation_id.to_string(),
-        SidecarContextRef::Strand { strand_id } => strand_id.to_string(),
-    };
     let frontier = EventId::new("ak:event:AXt_8tC5N1gjLn_b-DdVFC0jdOuhwjrtAUmJGOZzUaVJ")
         .map_err(|_| SidecarModelError::ModelInvariant)?;
-    // The create Event must exist before the attach Event, because the attach
-    // links to it by id and that id is now derived from the create's content
-    // (spec encoding.md section 4.0) rather than pinned.
-    let sidecar = AgentSidecar {
-        id: coordinates.sidecar_id.clone(),
-        schema: AgentSidecarSchema::V1,
-        realm_id: request.source_realm_id.clone(),
-        controller_id: request.controller_id.clone(),
-        backing_circle_id: coordinates.backing_circle_id.clone(),
-        encryption_profile: AgentSidecarEncryptionProfile::MlsRfc9420,
-        state: AgentSidecarState::Active,
-        state_changed_at: None,
-        created_at,
-        updated_at: None,
-    };
-    sidecar
-        .validate()
-        .map_err(|_| SidecarModelError::ModelInvariant)?;
-    let create_event = fixed_unsigned_sidecar_event(
-        EventKind::SIDECAR_CREATE,
-        request.source_realm_id.clone(),
-        ScopeRef::Realm {
-            realm_id: request.source_realm_id.clone(),
-        },
-        request.controller_id.clone(),
-        1,
-        vec![frontier.clone()],
-        Vec::new(),
-        json!({"object": sidecar}),
-    )?;
-    let create_event_id = create_event.event_id.clone();
-    let (attach_prev_refs, attach_refs) = if existing.is_some() {
-        (vec![frontier.clone()], Vec::new())
+    // Native Sidecar genesis carries only the immutable encryption intent.
+    // Its SidecarId is retyped from the accepted create Event identity.
+    let create_event = if existing.is_none() {
+        Some(fixed_unsigned_sidecar_event(
+            EventKind::SIDECAR_CREATE,
+            request.source_realm_id.clone(),
+            ScopeRef::Realm {
+                realm_id: request.source_realm_id.clone(),
+            },
+            request.controller_id.clone(),
+            1,
+            vec![frontier.clone()],
+            Vec::new(),
+            json!({"encryption_profile": "mls_rfc9420"}),
+        )?)
     } else {
-        (
-            vec![create_event_id.clone()],
-            vec![EventRef::new(create_event_id.to_string(), "after")],
-        )
+        None
     };
+    let sidecar_id = existing.map_or_else(
+        || {
+            create_event
+                .as_ref()
+                .map(|event| SidecarId::from_event_id(&event.event_id))
+                .ok_or(SidecarModelError::ModelInvariant)
+        },
+        |coordinates| Ok(coordinates.sidecar_id.clone()),
+    )?;
+    let (version, predecessor_event_ref) = existing_context.map_or((1, None), |context| {
+        (context.version + 1, Some(context.mapping_event_id.clone()))
+    });
+    let (attach_prev_refs, attach_refs) = create_event.as_ref().map_or_else(
+        || (vec![frontier.clone()], Vec::new()),
+        |create| {
+            (
+                vec![create.event_id.clone()],
+                vec![EventRef::new(create.event_id.to_string(), "after")],
+            )
+        },
+    );
     let attach_event = fixed_unsigned_sidecar_event(
         EventKind::SIDECAR_CONTEXT_ATTACH,
         request.source_realm_id.clone(),
-        ScopeRef::Circle {
+        ScopeRef::Sidecar {
             realm_id: request.source_realm_id.clone(),
-            circle_id: coordinates.backing_circle_id.clone(),
+            sidecar_id: sidecar_id.clone(),
         },
         request.controller_id.clone(),
         if existing.is_some() { 3 } else { 2 },
         attach_prev_refs,
         attach_refs,
-        json!({
-            "sidecar_id": coordinates.sidecar_id,
-            "private_strand": {
-                "id": coordinates.private_strand_id,
-                "realm_id": request.source_realm_id,
-                "scope_circle_id": coordinates.backing_circle_id,
-                "created_by": request.controller_id,
-            },
-            "relation": {
-                "id": coordinates.private_relation_id,
-                "kind": "agent_sidecar_of",
-                "from_ref": coordinates.private_strand_id,
-                "to_ref": context_target,
-                "scope_circle_id": coordinates.backing_circle_id,
-                "created_by": request.controller_id,
-            },
-            "version": 1,
-        }),
+        serde_json::to_value(SidecarContextAttachPayload {
+            sidecar_id: sidecar_id.clone(),
+            source_context_ref: request.context_ref.clone(),
+            version,
+            predecessor_event_ref,
+        })
+        .map_err(|_| SidecarModelError::ModelInvariant)?,
     )?;
     let context_attach_event_draft = fixed_sidecar_draft(&attach_event)?;
     let reservation_handle = unique_reservation_handle(request, device_id)?;
@@ -968,10 +914,7 @@ fn build_fixed_sidecar_prepare(
             operation_id: request.operation_id.clone(),
             reservation_handle,
             expires_at,
-            sidecar_id: coordinates.sidecar_id,
-            backing_circle_id: coordinates.backing_circle_id,
-            private_strand_id: coordinates.private_strand_id,
-            private_relation_id: coordinates.private_relation_id,
+            sidecar_id,
             context_attach_event_id: attach_event.event_id.clone(),
             context_attach_event_draft,
         })
@@ -982,13 +925,18 @@ fn build_fixed_sidecar_prepare(
             operation_id: request.operation_id.clone(),
             reservation_handle,
             expires_at,
-            sidecar_id: coordinates.sidecar_id,
-            backing_circle_id: coordinates.backing_circle_id,
-            private_strand_id: coordinates.private_strand_id,
-            private_relation_id: coordinates.private_relation_id,
-            create_event_id,
+            sidecar_id,
+            create_event_id: create_event
+                .as_ref()
+                .ok_or(SidecarModelError::ModelInvariant)?
+                .event_id
+                .clone(),
             context_attach_event_id: attach_event.event_id.clone(),
-            create_event_draft: fixed_sidecar_draft(&create_event)?,
+            create_event_draft: fixed_sidecar_draft(
+                create_event
+                    .as_ref()
+                    .ok_or(SidecarModelError::ModelInvariant)?,
+            )?,
             context_attach_event_draft,
         })
     }
@@ -1005,24 +953,47 @@ fn fixed_unsigned_sidecar_event(
     refs: Vec<EventRef>,
     payload: Value,
 ) -> SidecarModelResult<Event> {
-    if !payload.is_object() {
-        return Err(SidecarModelError::ModelInvariant);
-    }
-    let digest_payload = json!({
-        "kind": EventKind::from_wire(kind),
-        "realm_id": realm_id,
-        "scope_ref": scope_ref,
-        "actor_id": actor_id,
-        "actor_seq": actor_seq,
-        "created_at": fixed_sidecar_time(),
-        "prev_refs": prev_refs,
-        "refs": refs,
-        "payload": payload,
-        "requirements": EventRequirements::default(),
-    });
-    let bytes = arkret_canonical::canonical_json_bytes(&digest_payload)
+    let payload = payload
+        .as_object()
+        .cloned()
+        .ok_or(SidecarModelError::ModelInvariant)?
+        .into_iter()
+        .collect();
+    // Match the producer path exactly: construct the unsigned envelope, then
+    // derive and stamp its content-bound identity. Draft reconstruction is
+    // tested separately by `decode_prepared_event` below.
+    let mut event = Event {
+        event_id: EventId::new("ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+            .map_err(|_| SidecarModelError::ModelInvariant)?,
+        kind: EventKind::from_wire(kind),
+        realm_id,
+        scope_ref,
+        actor_id,
+        executed_by: None,
+        authorization_ref: None,
+        applet_id: None,
+        external_ref: None,
+        actor_kind: None,
+        actor_seq,
+        created_at: fixed_sidecar_time(),
+        hlc: None,
+        prev_refs,
+        refs,
+        causal_refs: Vec::new(),
+        preconditions: Vec::new(),
+        seal_ref: None,
+        auth_context: None,
+        seal_basis: None,
+        payload,
+        redacts: None,
+        unsigned: BTreeMap::new(),
+        proofs: Vec::new(),
+        requirements: EventRequirements::default(),
+    };
+    event.event_id = event
+        .derive_event_id()
         .map_err(|_| SidecarModelError::ModelInvariant)?;
-    Event::from_digest_payload_bytes(&bytes).map_err(|_| SidecarModelError::ModelInvariant)
+    Ok(event)
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEventDraft> {
@@ -1091,23 +1062,11 @@ fn validate_prepared_outcome(
     prepared: &SidecarPreparedOutcome,
     request: &SidecarEnsurePrepareRequestBody,
 ) -> SidecarModelResult<()> {
-    let (
-        operation_id,
-        expires_at,
-        sidecar_id,
-        backing_circle_id,
-        private_strand_id,
-        private_relation_id,
-        create,
-        attach,
-    ) = match prepared {
+    let (operation_id, expires_at, sidecar_id, create, attach) = match prepared {
         SidecarPreparedOutcome::New {
             operation_id,
             expires_at,
             sidecar_id,
-            backing_circle_id,
-            private_strand_id,
-            private_relation_id,
             create_event_id,
             context_attach_event_id,
             create_event_draft,
@@ -1123,9 +1082,6 @@ fn validate_prepared_outcome(
                 operation_id,
                 expires_at,
                 sidecar_id,
-                backing_circle_id,
-                private_strand_id,
-                private_relation_id,
                 Some(decode_prepared_event(create_event_draft)?),
                 decode_prepared_event(context_attach_event_draft)?,
             )
@@ -1134,9 +1090,6 @@ fn validate_prepared_outcome(
             operation_id,
             expires_at,
             sidecar_id,
-            backing_circle_id,
-            private_strand_id,
-            private_relation_id,
             context_attach_event_id,
             context_attach_event_draft,
             ..
@@ -1148,9 +1101,6 @@ fn validate_prepared_outcome(
                 operation_id,
                 expires_at,
                 sidecar_id,
-                backing_circle_id,
-                private_strand_id,
-                private_relation_id,
                 None,
                 decode_prepared_event(context_attach_event_draft)?,
             )
@@ -1168,52 +1118,33 @@ fn validate_prepared_outcome(
         {
             return Err(SidecarModelError::DraftMismatch);
         }
-        let sidecar: AgentSidecar = serde_json::from_value(
-            create
-                .payload
-                .get("object")
-                .cloned()
-                .ok_or(SidecarModelError::DraftMismatch)?,
-        )
-        .map_err(|_| SidecarModelError::DraftMismatch)?;
-        sidecar
-            .validate()
-            .map_err(|_| SidecarModelError::DraftMismatch)?;
-        if sidecar.id != *sidecar_id
-            || sidecar.realm_id != request.source_realm_id
-            || sidecar.controller_id != request.controller_id
-            || sidecar.backing_circle_id != *backing_circle_id
+        if create.payload
+            != BTreeMap::from([(
+                "encryption_profile".to_owned(),
+                Value::String("mls_rfc9420".to_owned()),
+            )])
+            || SidecarId::from_event_id(&create.event_id) != *sidecar_id
         {
             return Err(SidecarModelError::DraftMismatch);
         }
     }
+    let attach_payload: SidecarContextAttachPayload = serde_json::from_value(
+        serde_json::to_value(&attach.payload).map_err(|_| SidecarModelError::DraftMismatch)?,
+    )
+    .map_err(|_| SidecarModelError::DraftMismatch)?;
+    attach_payload
+        .validate()
+        .map_err(|_| SidecarModelError::DraftMismatch)?;
     if attach.kind != EventKind::SIDECAR_CONTEXT_ATTACH
         || attach.actor_id != request.controller_id
         || attach.realm_id != request.source_realm_id
         || attach.scope_ref
-            != (ScopeRef::Circle {
+            != (ScopeRef::Sidecar {
                 realm_id: request.source_realm_id.clone(),
-                circle_id: backing_circle_id.clone(),
+                sidecar_id: sidecar_id.clone(),
             })
-        || attach.payload.get("sidecar_id").and_then(Value::as_str) != Some(sidecar_id.as_str())
-        || attach
-            .payload
-            .get("private_strand")
-            .and_then(|value| value.get("id"))
-            .and_then(Value::as_str)
-            != Some(private_strand_id.as_str())
-        || attach
-            .payload
-            .get("relation")
-            .and_then(|value| value.get("id"))
-            .and_then(Value::as_str)
-            != Some(private_relation_id.as_str())
-        || attach
-            .payload
-            .get("relation")
-            .and_then(|value| value.get("scope_circle_id"))
-            .and_then(Value::as_str)
-            != Some(backing_circle_id.as_str())
+        || attach_payload.sidecar_id != *sidecar_id
+        || attach_payload.source_context_ref != request.context_ref
     {
         return Err(SidecarModelError::DraftMismatch);
     }
@@ -1326,13 +1257,14 @@ fn validate_signed_draft(
 }
 
 fn context_target_from_event(event: &Event) -> SidecarModelResult<String> {
-    event
-        .payload
-        .get("relation")
-        .and_then(|value| value.get("to_ref"))
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .ok_or(SidecarModelError::DraftMismatch)
+    let payload: SidecarContextAttachPayload = serde_json::from_value(
+        serde_json::to_value(&event.payload).map_err(|_| SidecarModelError::DraftMismatch)?,
+    )
+    .map_err(|_| SidecarModelError::DraftMismatch)?;
+    Ok(match payload.source_context_ref {
+        SidecarContextRef::Relation { relation_id } => relation_id.to_string(),
+        SidecarContextRef::Strand { strand_id } => strand_id.to_string(),
+    })
 }
 
 fn assert_new_commit_failure_is_write_free(
@@ -1377,8 +1309,6 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let SidecarPreparedOutcome::New {
         operation_id,
         reservation_handle,
-        private_strand_id: initial_private_strand_id,
-        private_relation_id: initial_private_relation_id,
         create_event_draft,
         context_attach_event_draft,
         ..
@@ -1456,19 +1386,14 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         &public_key,
         SidecarModelError::DraftMismatch,
     )?;
-    let mut circle_mutation = create_event.clone();
-    circle_mutation
-        .payload
-        .get_mut("object")
-        .and_then(Value::as_object_mut)
-        .ok_or_else(|| anyhow!("fixed Sidecar object missing"))?
-        .insert(
-            "backing_circle_id".to_owned(),
-            Value::String("ak:circle:AXeaYP8-Z4VTLwc8C3egj3Efq_jN9cyDleDhahC7LCfs".to_owned()),
-        );
+    let mut legacy_scope_mutation = create_event.clone();
+    legacy_scope_mutation.payload.insert(
+        "backing_circle_id".to_owned(),
+        Value::String("ak:circle:AXeaYP8-Z4VTLwc8C3egj3Efq_jN9cyDleDhahC7LCfs".to_owned()),
+    );
     assert_new_commit_failure_is_write_free(
         &mut model,
-        &commit(circle_mutation, attach_event.clone()),
+        &commit(legacy_scope_mutation, attach_event.clone()),
         &public_key,
         SidecarModelError::DraftMismatch,
     )?;
@@ -1486,7 +1411,6 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         .commit_new(&commit_request, &public_key)
         .map_err(|error| anyhow!("{error:?}"))?;
     if model.atomic_commit_epoch != 1
-        || !model.durable.controller_membership
         || model.durable.accepted_event_ids.len() != 2
         || model.durable.contexts.len() != 1
     {
@@ -1526,22 +1450,20 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let SidecarPreparedOutcome::Existing {
         operation_id: same_operation_id,
         reservation_handle: same_reservation_handle,
-        private_strand_id: same_private_strand_id,
-        private_relation_id: same_private_relation_id,
         context_attach_event_draft: same_context_draft,
         ..
     } = same_context
     else {
         bail!("same normalized context did not return Existing");
     };
-    if same_private_strand_id != *initial_private_strand_id
-        || same_private_relation_id != *initial_private_relation_id
-    {
-        bail!("same normalized context allocated replacement private coordinates");
-    }
     let same_context_event =
         sign_prepared_draft(&same_context_draft, &signer, &verification_method)
             .map_err(|error| anyhow!("{error:?}"))?;
+    let same_context_payload: SidecarContextAttachPayload =
+        serde_json::from_value(serde_json::to_value(&same_context_event.payload)?)?;
+    if same_context_payload.version != 2 || same_context_payload.predecessor_event_ref.is_none() {
+        bail!("same normalized context did not advance the native attachment version chain");
+    }
     let same_context_attach = SidecarEnsureAttachRequestBody {
         phase: SidecarAttachPhase::Attach,
         operation_id: same_operation_id,
@@ -1566,7 +1488,6 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         operation_id,
         reservation_handle,
         sidecar_id,
-        backing_circle_id,
         context_attach_event_draft,
         ..
     } = existing
@@ -1578,8 +1499,8 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         .coordinates
         .as_ref()
         .ok_or_else(|| anyhow!("committed Sidecar coordinates missing"))?;
-    if sidecar_id != durable.sidecar_id || backing_circle_id != durable.backing_circle_id {
-        bail!("Existing branch changed singleton Sidecar/backing Circle coordinates");
+    if sidecar_id != durable.sidecar_id {
+        bail!("Existing branch changed the singleton native Sidecar identity");
     }
     let attach_event =
         sign_prepared_draft(&context_attach_event_draft, &signer, &verification_method)
@@ -1647,9 +1568,6 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         operation_id: operation_a,
         reservation_handle: handle_a,
         sidecar_id: sidecar_a,
-        backing_circle_id: circle_a,
-        private_strand_id: strand_a,
-        private_relation_id: relation_a,
         create_event_draft: create_a,
         context_attach_event_draft: attach_a,
         ..
@@ -1661,9 +1579,6 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         operation_id: operation_b,
         reservation_handle: handle_b,
         sidecar_id: sidecar_b,
-        backing_circle_id: circle_b,
-        private_strand_id: strand_b,
-        private_relation_id: relation_b,
         create_event_draft: create_b,
         context_attach_event_draft: attach_b,
         ..
@@ -1671,13 +1586,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     else {
         bail!("device B concurrent prepare was not New");
     };
-    if handle_a == handle_b
-        || concurrent.reservations.len() != 2
-        || sidecar_a != sidecar_b
-        || circle_a != circle_b
-        || strand_a != strand_b
-        || relation_a != relation_b
-    {
+    if handle_a == handle_b || concurrent.reservations.len() != 2 || sidecar_a != sidecar_b {
         bail!("concurrent device reservations overwrote or diverged fixed coordinates");
     }
     let concurrent_commit = |operation_id: ProtocolOperationId,
@@ -1708,14 +1617,9 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let accepted_coordinates = |outcome: &SidecarEnsureOutcome| match outcome {
         SidecarEnsureOutcome::Accepted {
             sidecar_id,
-            private_strand_id,
-            private_relation_id,
+            source_context_ref,
             ..
-        } => Some((
-            sidecar_id.clone(),
-            private_strand_id.clone(),
-            private_relation_id.clone(),
-        )),
+        } => Some((sidecar_id.clone(), source_context_ref.clone())),
         SidecarEnsureOutcome::Prepared { .. } => None,
     };
     if accepted_coordinates(&accepted_a) != accepted_coordinates(&accepted_b)
@@ -1864,8 +1768,6 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     }
     let realm_id = RealmId::new("ak:realm:AQcksDTzb8Sxrn1BUVVlHtH4vBOy99RKUB4EwOq_413b")?;
     let source_strand_id = StrandId::new("ak:strand:AcweNVvZUYNuOdCMey9HT7PQHKPbHPJwOFTgn_cx7yjo")?;
-    let private_strand_id =
-        StrandId::new("ak:strand:ATxk9k3t-DqTNiiB9n8GoSjjar3vZJvO3Dtpd1SzdHZF")?;
     let anchor_id = EventId::new("ak:event:AVmh6k5n-qXekmKueZzJW_ZoqYSe8zyTeMC9sRwYlIGS")?;
     let request_id = EventId::new("ak:event:AU7uNevwc0Cp8J79qQnR0XFIA6sS-Ey-sAx6QesaglRs")?;
     let native_id = EventId::new("ak:event:AZjT-hpiUOSks1wjNlYAqMixCtZTrdsCsZzB-uVQC4hr")?;
@@ -1876,7 +1778,6 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         schema: AgentSidecarExchangeProjectionSchema::V1,
         controller_id: Did::new("did:webvh:z6mkfixture:example.com:users:alice")?,
         sidecar_id: sidecar,
-        private_strand_id: private_strand_id.clone(),
         exchange_id: AgentSidecarExchangeId::new("Abcdefghijklmnopqrstuv")?,
         origin: AgentSidecarExchangeOrigin::SourceTrackRouted,
         source_track_ref: AgentSidecarSourceTrackRef {
@@ -2784,25 +2685,16 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
             .as_str()
             .ok_or_else(|| anyhow!("recovery fixture sidecar_id is missing"))?,
     )?;
-    let backing_circle_id = CircleId::new(
-        locator["backing_circle_id"]
-            .as_str()
-            .ok_or_else(|| anyhow!("recovery fixture backing_circle_id is missing"))?,
-    )?;
-    let private_strand_id = StrandId::new(
-        locator["private_strand_id"]
-            .as_str()
-            .ok_or_else(|| anyhow!("recovery fixture private_strand_id is missing"))?,
-    )?;
     let source_strand_id = StrandId::new(
         locator["source_context_ref"]
             .as_str()
             .ok_or_else(|| anyhow!("recovery fixture source_context_ref is missing"))?,
     )?;
-    let desired_access_digest = agent_sidecar_desired_access_digest(
+    let participant_authority_digest = agent_sidecar_participant_authority_digest(
         sidecar_id.clone(),
         realm_id.clone(),
         controller_id.clone(),
+        &[],
         &[],
     )?;
     let created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
@@ -2812,17 +2704,16 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
             schema: AgentSidecarSchema::V1,
             realm_id: realm_id.clone(),
             controller_id: controller_id.clone(),
-            backing_circle_id: backing_circle_id.clone(),
             encryption_profile: AgentSidecarEncryptionProfile::MlsRfc9420,
             state: AgentSidecarState::Active,
             state_changed_at: None,
             created_at,
             updated_at: None,
         },
-        desired_agent_ids: Vec::new(),
+        owned_agent_ids: Vec::new(),
         effective_agent_ids: Vec::new(),
         mls_context: AgentSidecarMlsContext {
-            desired_access_digest,
+            participant_authority_digest,
             control_frontier: vec![
                 NonEmptyString::new("ak:event:AW7v_e06yQzTyt3cQnfQqZgcb1qUW5O5flxXbw4ZEahY")
                     .map_err(anyhow::Error::msg)?,
@@ -2835,70 +2726,57 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         access_readiness: AgentSidecarAccessReadiness::Opening,
         pending_access_reconciliations: Vec::new(),
     };
-    let scope = ScopeRef::Circle {
+    view.validate()?;
+    let scope = ScopeRef::Sidecar {
         realm_id: realm_id.clone(),
-        circle_id: backing_circle_id.clone(),
+        sidecar_id: sidecar_id.clone(),
     };
-    let mut private_strand = Strand::new(
-        private_strand_id.clone(),
-        realm_id.clone(),
-        "Private Sidecar context",
-        controller_id.clone(),
-    );
-    private_strand.scope_circle_id = Some(backing_circle_id.clone());
-    private_strand.created_at = created_at;
-    let strand_event = Event::new_with_derived_id_at(
-        EventKind::STRAND_CREATE,
-        scope.clone(),
+    let attach_event = Event::new_with_derived_id_at(
+        EventKind::SIDECAR_CONTEXT_ATTACH,
+        scope,
         controller_id.clone(),
         20,
         exchange_hlc(0x81)?,
-        serde_json::to_value(StrandCreatePayload {
-            object: private_strand,
-            initial_relations: None,
+        serde_json::to_value(SidecarContextAttachPayload {
+            sidecar_id: sidecar_id.clone(),
+            source_context_ref: SidecarContextRef::Strand {
+                strand_id: source_strand_id.clone(),
+            },
+            version: 1,
+            predecessor_event_ref: None,
         })?,
         created_at,
     )?;
-    // The relation id is derived from this create Event's event_id.
-    let relation_payload = RelationCreatePayload::new(
-        "agent_sidecar_of",
-        private_strand_id.to_string(),
-        source_strand_id.to_string(),
-    );
-    let mut relation_event = Event::new_with_derived_id_at(
-        EventKind::RELATION_CREATE,
-        scope,
-        controller_id,
-        21,
-        exchange_hlc(0x82)?,
-        serde_json::to_value(relation_payload)?,
-        created_at,
-    )?;
-    relation_event
-        .refs
-        .push(EventRef::new(strand_event.event_id.to_string(), "after"));
 
     let recovered = recover_agent_sidecar_context_locators(
         std::slice::from_ref(&view),
-        &[relation_event.clone(), strand_event.clone()],
+        std::slice::from_ref(&attach_event),
     )?;
     if recovered.len() != 1
         || recovered[0].sidecar_id != sidecar_id
-        || recovered[0].backing_circle_id != backing_circle_id
-        || recovered[0].private_strand_id != private_strand_id
+        || recovered[0].mapping_event_id != attach_event.event_id
+        || recovered[0].version != 1
         || recovered[0].source_context_ref
             != AgentSidecarContextRef::strand(realm_id, source_strand_id)
     {
-        bail!("complete structural history did not recover the canonical Sidecar locator");
+        bail!("accepted native Sidecar attachment did not recover the canonical locator");
     }
-    relation_event.refs.clear();
+    let unauthorized_attach = Event::new_with_derived_id_at(
+        EventKind::SIDECAR_CONTEXT_ATTACH,
+        attach_event.scope_ref.clone(),
+        Did::new("did:webvh:z6mkfixture:mallory.example")?,
+        21,
+        exchange_hlc(0x82)?,
+        serde_json::to_value(&attach_event.payload)?,
+        created_at,
+    )?;
     if !recover_agent_sidecar_context_locators(
         std::slice::from_ref(&view),
-        &[strand_event, relation_event],
+        std::slice::from_ref(&unauthorized_attach),
     )?
     .is_empty()
     {
-        bail!("a Relation without causal coverage must remain unresolved");
+        bail!("a non-controller Sidecar attachment must remain unresolved");
     }
     let pagination = &case["pagination"];
     if pagination["repeated_cursor_outcome"].as_str() != Some("backfill_pending")
@@ -2940,7 +2818,7 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
     // genuine counterexample.
     let mut events = Vec::new();
     let mut found = false;
-    'search: for gap in 1_i64..256 {
+    'search: for gap in 1_i64..1_024 {
         for offsets in [[0_i64, gap], [gap, 0_i64]] {
             events = build_sibling_digest_events(
                 siblings,
@@ -3098,20 +2976,19 @@ pub fn run_sidecar_union_history_frontier_vector() -> Result<()> {
     let device_b = ids("device_b")?;
     let expected_union = ids("union")?;
     let expected_heads = ids("maximal_heads")?;
-    let mut union = device_a
+    let union_set = device_a
         .iter()
         .chain(&device_b)
         .cloned()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect::<Vec<_>>();
-    union.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-    if union != expected_union || device_a.last() == device_b.last() {
+        .collect::<BTreeSet<_>>();
+    let expected_union_set = expected_union.iter().cloned().collect::<BTreeSet<_>>();
+    if union_set != expected_union_set || device_a.last() == device_b.last() {
         bail!("incomparable device histories did not refold their complete set union");
     }
     if expected_heads != vec![device_a[1].clone(), device_b[1].clone()] {
         bail!("union-history frontier lost one incomparable maximal causal head");
     }
+    let union = union_set.into_iter().collect::<Vec<_>>();
     let digest = agent_sidecar_exchange_event_set_digest(&union)?;
     let mut reversed = union.clone();
     reversed.reverse();
@@ -3166,7 +3043,16 @@ pub fn run_sidecar_non_disclosure_surface_matrix_vector() -> Result<()> {
             bail!("non-disclosure matrix lost surface {required}");
         }
     }
-    if forbidden.len() != 7 || case["server_plaintext_access"].as_bool() != Some(false) {
+    if forbidden
+        != BTreeSet::from([
+            "sidecar".to_owned(),
+            "native_sidecar_scope".to_owned(),
+            "exchange_identity".to_owned(),
+            "private_content".to_owned(),
+            "fold_input".to_owned(),
+        ])
+        || case["server_plaintext_access"].as_bool() != Some(false)
+    {
         bail!("non-disclosure matrix widened private data or server plaintext access");
     }
     Ok(())

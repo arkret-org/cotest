@@ -237,8 +237,6 @@ async fn bootstrap_test_device_authorization(
         &root_verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
-    let create_event_id = create.event_id.clone();
-
     let enrollment_method = format!("{actor}#cotest-device-enrollment-authority");
     let device_public_key =
         ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
@@ -299,8 +297,6 @@ async fn bootstrap_test_device_authorization(
         &enrollment_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
-    let authorize_event_id = authorize.event_id.clone();
-
     let lease_request = AuthorizationLeaseIssueRequest {
         events: vec![create.clone(), authorize.clone()],
         intents: Vec::new(),

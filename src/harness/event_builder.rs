@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow};
 use arkret::{
     DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
 };
-use arkret_identifiers::{Did, EventId, Hash, Hlc, InviteId, MessageId, RealmId, StrandId};
+use arkret_identifiers::{Did, EventId, Hash, Hlc, MessageId, RealmId, StrandId};
 use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
 };
@@ -1173,14 +1173,12 @@ pub(crate) fn member_transition_payload(
 }
 
 pub(crate) fn invite_create_payload(
-    invite_id: &str,
     invitee: &str,
     recipient_service_id: &str,
     introduction_evidence_digest: impl Into<String>,
     expires_at: DateTime<Utc>,
 ) -> Result<Value> {
     InviteCreatePayload::new(
-        InviteId::new(invite_id.to_owned()).map_err(|err| anyhow!("invalid invite_id: {err}"))?,
         Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee did: {err}"))?,
         InviteDeliveryTarget::principal_server(
             Did::new(recipient_service_id.to_owned())
@@ -1295,6 +1293,8 @@ pub(crate) fn event_envelope_with_causal_refs(
 
 #[cfg(test)]
 mod realm_bootstrap_tests {
+    use arkret_wire::EventKind;
+
     use super::*;
 
     const ACTOR: &str = "did:webvh:z6mkfixture:alice.soland.local";

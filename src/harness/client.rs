@@ -515,10 +515,8 @@ impl TestActorClient {
         subject: &str,
         actions: &[&str],
     ) -> Result<(String, Value)> {
-        let grant_id = next_typed_id("grant");
         let issued_at = chrono::Utc::now();
-        let grant = arkret_models_collaboration::governance::grant_constraint::CapabilityGrant {
-            id: arkret_identifiers::GrantId::new(grant_id.clone())?,
+        let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
             realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
             issuer: arkret_identifiers::Did::new(self.actor.clone())?,
@@ -545,23 +543,25 @@ impl TestActorClient {
             issued_at,
             not_before: None,
             expires_at: None,
-            updated_by: None,
-            updated_at: None,
-            revoked_by: None,
-            revoked_at: None,
         };
-        let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload {
-            grant,
-            grant_id: arkret_identifiers::GrantId::new(grant_id.clone())?,
-        };
-        let response = self
-            .submit_event(
+        let payload =
+            arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant };
+        let event = self
+            .author_event(
                 realm_id,
                 arkret_wire::EventKind::CAPABILITY_GRANT,
                 serde_json::to_value(payload)?,
             )
             .await?;
-        Ok((grant_id, response))
+        let grant_id = arkret_identifiers::GrantId::from_event_id(&event.event_id);
+        let mut response = expect_json(
+            self.post("/_arkret/self/events")
+                .json(&crate::publication::initial_submission(event.clone(), "")?),
+            StatusCode::OK,
+        )
+        .await?;
+        ensure_submit_event_id(&mut response, &event);
+        Ok((grant_id.to_string(), response))
     }
 
     pub async fn send_message(

@@ -636,15 +636,13 @@ async fn create_invite_now(
     realm_id: &str,
     invitee: &crate::harness::TestActorClient,
 ) -> Result<String> {
-    let invite_id = arkret::new_prefixed_uuid7("ak:invite:");
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
-    submit_event_now(
+    let accepted = submit_event_now(
         inviter,
         inviter,
         realm_id,
         "ak.invite.create",
         invite_create_payload(
-            &invite_id,
             invitee.actor.as_str(),
             invitee.service_id(),
             "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -652,7 +650,13 @@ async fn create_invite_now(
         )?,
     )
     .await?;
-    Ok(invite_id)
+    let event_id = accepted["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("accepted invite create omitted event_id: {accepted}"))?;
+    Ok(
+        arkret_identifiers::InviteId::from_event_id(&arkret_identifiers::EventId::new(event_id)?)
+            .to_string(),
+    )
 }
 
 async fn accept_invite_join_now(

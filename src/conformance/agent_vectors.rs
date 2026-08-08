@@ -813,7 +813,7 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_PAUSE,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RESUME,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_DEACTIVATE,
-        arkret_wire::ServiceOperationId::SELF_AGENT_QUERY_LIST,
+        arkret_wire::ServiceOperationId::SELF_AGENT_READ_LIST,
         arkret_wire::ServiceOperationId::SELF_AGENT_RESOURCE_GET,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING,
         arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH,

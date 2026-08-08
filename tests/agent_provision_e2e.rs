@@ -4140,10 +4140,8 @@ async fn grant_controller_strand_create(
     actor_client: &cotest::harness::TestActorClient,
     realm_id: &str,
 ) -> Result<()> {
-    let grant_id = arkret::GrantId::new(arkret::new_prefixed_uuid7("ak:grant:"))?;
     let issued_at = canonical_now();
-    let grant = arkret::CapabilityGrant {
-        id: grant_id.clone(),
+    let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
         schema: "ak.schema.capability.v1".to_owned(),
         realm_id: Some(arkret::RealmId::new(realm_id.to_owned())?),
         issuer: Did::new(ALICE_DID.to_owned())?,
@@ -4167,19 +4165,13 @@ async fn grant_controller_strand_create(
         issued_at,
         not_before: None,
         expires_at: None,
-        updated_by: None,
-        updated_at: None,
-        revoked_by: None,
-        revoked_at: None,
     };
+    let payload = arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant };
     let mut event = actor_client
         .author_event(
             realm_id,
             "ak.capability.grant",
-            json!({
-                "grant_id": grant_id,
-                "grant": grant
-            }),
+            serde_json::to_value(payload)?,
         )
         .await?;
     refresh_typed_event_proof_with_signing_seed(&mut event, [21_u8; 32])?;

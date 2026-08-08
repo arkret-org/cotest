@@ -46,7 +46,6 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             &invite_realm_id,
             "ak.invite.create",
             invite_create_payload(
-                "ak:invite:AR_rFFtMT6VYnlWy4iHNEgpWCjrgoTqOtGquoaeaSk0_",
                 bob.actor.as_str(),
                 server.service_id(),
                 canonical_sha256(&introduction_evidence)?,
