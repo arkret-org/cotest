@@ -334,24 +334,18 @@ test.describe("consent grant", () => {
           cellUrl,
         ),
       });
-      expect(cell.status()).toBe(200);
-      expect(await cell.json()).toMatchObject({
-        holder_did: alice.did,
-        peer_did: bob.did,
-        consent_scope: "direct_message",
-        state: "pending",
-      });
+      expect(cell.status()).toBe(404);
     } finally {
       await Promise.allSettled([bobPage.close(), aliceFlow.page.close()]);
     }
   });
 
-  test("consent API smoke: MIMI request/update returns holder-private receipts", async ({
+  test("consent API smoke: MIMI request is opaque and update fails closed without an Event carrier", async ({
     request,
   }) => {
-    // Live G2.T5 API smoke: soland has a consent-adjacent MIMI surface today.
-    // The general ak.consent.* cell reducer is still not implemented, so the
-    // full identity consent lifecycle remains fixme below.
+    // A MiMi detached operation proof is not an Event Envelope proof. Until
+    // the protocol registers a caller-authored Event carrier, the facade must
+    // not synthesize a consent Event or expose a fabricated event_ref.
     const alice = uniqueUser("g2t5-consent-api-alice");
     const bob = uniqueUser("g2t5-consent-api-bob");
     await Promise.all([
@@ -428,11 +422,12 @@ test.describe("consent grant", () => {
       headers: authHeaders(aliceToken),
       data: signedUpdate,
     });
-    expect(update.status()).toBe(200);
+    expect(update.status()).toBe(412);
     const updateBody = await update.json();
-    expect(updateBody.status).toBe("accepted");
-    expect(typeof updateBody.updated_at).toBe("string");
-    expect(updateBody.event_ref).toMatch(/^ak:event:/);
+    expect(updateBody.error?.code ?? updateBody.code).toBe(
+      "consent_event_authoring_required",
+    );
+    expect(updateBody.event_ref).toBeUndefined();
 
     const replay = await request.post(updateUrl, {
       headers: authHeaders(aliceToken),
