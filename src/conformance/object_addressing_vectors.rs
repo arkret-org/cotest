@@ -15,7 +15,8 @@
 //!   * realm-only / strand / message hierarchy forms.
 //!   * unknown keyword and wrong hierarchy order fail closed (`parse_address` returns Err); retired
 //!     `via` hints are ignored.
-//!   * `<realm>` disambiguation: 44-character token → RealmRef::RealmId, dotted/domain → RealmRef::Alias.
+//!   * `<realm>` disambiguation: 44-character token → RealmRef::RealmId, dotted/domain →
+//!     RealmRef::Alias.
 //!   * `target_digest` covers ONLY the identity tuple + address_link_kind — adding / removing
 //!     action/tok/lt does NOT change it; switching strand/message DOES; absent hierarchy fields are
 //!     OMITTED (not `null`) in the canonical shape.

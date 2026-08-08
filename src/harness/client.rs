@@ -70,6 +70,7 @@ impl TestActorClient {
                 },
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
                 introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
+                previous_terminal_basis_id: None,
                 message: None,
             },
         ))

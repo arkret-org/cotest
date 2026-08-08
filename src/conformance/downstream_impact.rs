@@ -120,7 +120,10 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
 
     for (field, replacement) in [
         ("visibility", json!("shared")),
-        ("id", json!("ak:view:AWRG_dEWzM4Zq0kKT_o7Ki7Pbl39AAAer0QSkhWLhblO")),
+        (
+            "id",
+            json!("ak:view:AWRG_dEWzM4Zq0kKT_o7Ki7Pbl39AAAer0QSkhWLhblO"),
+        ),
         ("state", json!("tombstoned")),
     ] {
         let mut invalid = value.clone();

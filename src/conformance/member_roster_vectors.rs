@@ -66,7 +66,8 @@ fn alice_subject() -> Result<Did> {
 }
 
 fn fake_realm() -> Result<RealmId> {
-    RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K").map_err(|e| anyhow!("realm: {e}"))
+    RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K")
+        .map_err(|e| anyhow!("realm: {e}"))
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {

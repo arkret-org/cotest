@@ -547,7 +547,8 @@ fn validate_synthetic_event_envelope_negatives(
             }
         }),
     );
-    unknown_field_event["space_id"] = json!("ak:space:AafktYXx8-v8PgfMovcpfbkFAJzUiT8l2GHJJ9UmF3fP");
+    unknown_field_event["space_id"] =
+        json!("ak:space:AafktYXx8-v8PgfMovcpfbkFAJzUiT8l2GHJJ9UmF3fP");
     let unknown_field_decision =
         validate_event_envelope(&unknown_field_event, event_kinds, &context)?;
     assert_event_decision(

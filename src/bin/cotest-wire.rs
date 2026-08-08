@@ -8,7 +8,9 @@ use arkret_identifiers::{ConsentId, DeviceId, Did, Hash};
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
 use arkret_models_identity::artifacts_device_identity::CrossSigningPublish;
 use arkret_models_identity::did_document::principal_control_realm_id;
-use arkret_wire::{Audience, Event, NonEmptyString, PayloadProof, Proof, proof_kind};
+use arkret_wire::{
+    Audience, Event, EventInitialSubmission, NonEmptyString, PayloadProof, Proof, proof_kind,
+};
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -544,6 +546,11 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         .get("actor_id")
         .and_then(Value::as_str)
         .context("MIMI consent request requires actor_id")?;
+    let consent_event = input
+        .request
+        .get("consent_event")
+        .cloned()
+        .context("MIMI consent request requires consent_event")?;
     let reason = input
         .request
         .get("reason")
@@ -562,6 +569,8 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         decision: serde_json::from_value::<MimiConsentDecision>(decision)
             .context("parse consent decision")?,
         actor_id: Did::new(actor_id.to_owned()).context("parse consent actor DID")?,
+        consent_event: serde_json::from_value::<EventInitialSubmission>(consent_event)
+            .context("parse MIMI consent Event")?,
         signature: PayloadProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
             verification_method: input.verification_method.clone(),

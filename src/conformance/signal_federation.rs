@@ -209,7 +209,8 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             }
             "signal_peer_relay_request" => {
                 if generator["same_realm"].as_bool() == Some(false) {
-                    let other = RealmId::new("ak:realm:Aa2wBBPOONHiiqIv1IKaV84axlqDTBPpa3Yw_hNef_Zl")?;
+                    let other =
+                        RealmId::new("ak:realm:Aa2wBBPOONHiiqIv1IKaV84axlqDTBPpa3Yw_hNef_Zl")?;
                     let cross_realm = SignalRelayRequest {
                         realm_id: other,
                         signals: vec![signal.clone()],

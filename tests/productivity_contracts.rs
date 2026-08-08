@@ -230,7 +230,8 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 #[test]
 fn private_account_data_keys_do_not_leak_raw_refs() {
     let ns = b"cotest productivity namespace";
-    let message_id = MessageId::new("ak:message:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19").unwrap();
+    let message_id =
+        MessageId::new("ak:message:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19").unwrap();
     let scheduled_send_id =
         ScheduledSendId::new("ak:scheduled_send:01904100-0000-7000-8000-000000000003").unwrap();
     let realm_id = RealmId::new("ak:realm:AT1FV5Oc-IicigRsbtaKiJcXWc0f4WBgwlQTJk_XFuyQ").unwrap();

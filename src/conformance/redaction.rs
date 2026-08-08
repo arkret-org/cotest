@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
+use sha2::Digest;
 
 use super::schema_validation_fixture::SchemaEnv;
-use super::{RedactionFixture, load_fixture};
+use super::{RedactionFixture, load_artifact_json, load_fixture};
 use crate::transcripts::record_vector_event;
 
 const DIGEST64: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -390,6 +391,9 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
 fn assert_hard_erasure_receipt() -> Result<()> {
     let env = SchemaEnv::load()?;
     let receipt_validator = env.compile("schemas/erasure-receipt.schema.json")?;
+    let carrier_validator = env.compile(
+        "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_request_body",
+    )?;
     let stub_validator =
         env.compile("schemas/erasure-receipt.schema.json#/$defs/verification_stub")?;
 
@@ -426,7 +430,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         );
     }
 
-    let receipt = json!({
+    let mut receipt = json!({
         "schema": "ak.schema.erasure_receipt.v1",
         "receipt_id": receipt_id,
         "issuer": "did:web:erasure.example.com",
@@ -443,6 +447,15 @@ fn assert_hard_erasure_receipt() -> Result<()> {
             "signature": "z3erasurereceiptsignatureplaceholder",
         }],
     });
+    let mut proof_input = receipt.clone();
+    proof_input
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("hard_erasure_receipt: receipt must be an object"))?
+        .remove("proofs");
+    receipt["proofs"][0]["payload_digest"] = Value::String(
+        arkret_canonical::canonical_sha256(&proof_input)
+            .map_err(|err| anyhow!("hard_erasure_receipt: proof digest failed: {err}"))?,
+    );
     if !receipt_validator.is_valid(&receipt) {
         let detail = receipt_validator
             .iter_errors(&receipt)
@@ -452,6 +465,39 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         bail!("hard_erasure_receipt: completed receipt rejected by schema: {detail}");
     }
     verify_erasure_receipt_stub_digest(&receipt, &stub)?;
+
+    let canonical_receipt = arkret_canonical::canonical_json_bytes(&receipt)
+        .map_err(|err| anyhow!("hard_erasure_receipt: package digest input failed: {err}"))?;
+    let mut package_preimage = b"ak.erasure-receipt.v1\n".to_vec();
+    package_preimage.extend_from_slice(&canonical_receipt);
+    let receipt_digest = format!(
+        "sha256:{}",
+        hex::encode(sha2::Sha256::digest(package_preimage))
+    );
+    let package = json!({
+        "receipt": receipt.clone(),
+        "receipt_digest": receipt_digest,
+        "retained_stub": stub.clone(),
+    });
+    let carrier_request = json!({"package": package});
+    if !carrier_validator.is_valid(&carrier_request) {
+        let detail = carrier_validator
+            .iter_errors(&carrier_request)
+            .next()
+            .map(|error| format!("{error}"))
+            .unwrap_or_else(|| "<no error reported>".to_owned());
+        bail!("hard_erasure_receipt: standard carrier rejected by schema: {detail}");
+    }
+    let typed_package = serde_json::from_value::<
+        arkret_models_collaboration::governance::erasure::ErasureReceiptSubmitRequestBody,
+    >(carrier_request.clone())?;
+    typed_package.package.validate_bindings()?;
+    let mut tampered_package = typed_package.package.clone();
+    tampered_package.receipt_digest = arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?;
+    if tampered_package.validate_bindings().is_ok() {
+        bail!("hard_erasure_receipt: tampered package digest was accepted");
+    }
+    assert_erasure_receipt_operations_registered()?;
 
     let tampered_stub = json!({
         "stub_schema": "ak.schema.erasure_verification_stub.v1",
@@ -491,6 +537,37 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+fn assert_erasure_receipt_operations_registered() -> Result<()> {
+    let registry = load_artifact_json("registry/operation-registry.json")?;
+    let operations = registry
+        .get("operations")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("operation registry missing operations[]"))?;
+    for (operation_id, http, response_ref) in [
+        (
+            "ak.peer.erasure_receipt.command.submit",
+            "POST /_arkret/peer/erasure-receipts",
+            "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_outcome",
+        ),
+        (
+            "ak.peer.erasure_receipt.resource.get",
+            "GET /_arkret/peer/erasure-receipts/{receipt_id}",
+            "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_resource",
+        ),
+    ] {
+        let operation = operations
+            .iter()
+            .find(|row| row.get("operation_id").and_then(Value::as_str) == Some(operation_id))
+            .ok_or_else(|| anyhow!("operation registry missing {operation_id}"))?;
+        if operation.get("http").and_then(Value::as_str) != Some(http)
+            || operation.get("response_schema_ref").and_then(Value::as_str) != Some(response_ref)
+        {
+            bail!("standard erasure receipt operation binding drifted for {operation_id}");
+        }
+    }
     Ok(())
 }
 

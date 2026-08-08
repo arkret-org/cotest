@@ -443,7 +443,10 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     // 2. Tampering each authoritative field breaks verification.
     let tampers: [(&str, &str); 7] = [
         (actor_id, "did:web:eve.example.com"),
-        (call_id, "ak:call:AXeSRv0BBNTmteRf54F8yu5ahdBtw9_GfJ47WLgnrkD5"),
+        (
+            call_id,
+            "ak:call:AXeSRv0BBNTmteRf54F8yu5ahdBtw9_GfJ47WLgnrkD5",
+        ),
         (device_id, "ak:device:01964137-0000-7000-8000-00000000dead"),
         (expires_at, "2099-01-01T00:00:00.000Z"),
         (focus_id, "fra-2"),
@@ -451,7 +454,10 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
             participant_identity,
             "ak:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
         ),
-        (realm_id, "ak:realm:AeqRpQIZxaoTV-G0Cl9jzAJ6wSak3GJUvizlNJRsvSFY"),
+        (
+            realm_id,
+            "ak:realm:AeqRpQIZxaoTV-G0Cl9jzAJ6wSak3GJUvizlNJRsvSFY",
+        ),
     ];
     for (idx, (_orig, replacement)) in tampers.iter().enumerate() {
         let tampered = participant_binding_signing_input(

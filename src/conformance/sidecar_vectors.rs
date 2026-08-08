@@ -1849,7 +1849,8 @@ pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
 // ─── VECT-SC-4 — hosted_projection ─────────────────────────────────────────
 
 pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
-    let sidecar = SidecarId::new("ak:sidecar:ARp3V6IbuRJ1DuhggcFb2nOBwbPGWXaO4GLVY9SVMM5u".to_owned())?;
+    let sidecar =
+        SidecarId::new("ak:sidecar:ARp3V6IbuRJ1DuhggcFb2nOBwbPGWXaO4GLVY9SVMM5u".to_owned())?;
     if !sidecar.as_str().starts_with("ak:sidecar:") {
         bail!("Sidecar identity is not first-class");
     }
@@ -1863,7 +1864,8 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     }
     let realm_id = RealmId::new("ak:realm:AQcksDTzb8Sxrn1BUVVlHtH4vBOy99RKUB4EwOq_413b")?;
     let source_strand_id = StrandId::new("ak:strand:AcweNVvZUYNuOdCMey9HT7PQHKPbHPJwOFTgn_cx7yjo")?;
-    let private_strand_id = StrandId::new("ak:strand:ATxk9k3t-DqTNiiB9n8GoSjjar3vZJvO3Dtpd1SzdHZF")?;
+    let private_strand_id =
+        StrandId::new("ak:strand:ATxk9k3t-DqTNiiB9n8GoSjjar3vZJvO3Dtpd1SzdHZF")?;
     let anchor_id = EventId::new("ak:event:AVmh6k5n-qXekmKueZzJW_ZoqYSe8zyTeMC9sRwYlIGS")?;
     let request_id = EventId::new("ak:event:AU7uNevwc0Cp8J79qQnR0XFIA6sS-Ey-sAx6QesaglRs")?;
     let native_id = EventId::new("ak:event:AZjT-hpiUOSks1wjNlYAqMixCtZTrdsCsZzB-uVQC4hr")?;
