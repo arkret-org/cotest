@@ -484,7 +484,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
     let start_payload = serde_json::from_value::<RecordingStartPayload>(start_value.clone())
         .map_err(|error| anyhow::anyhow!("valid transcript start rejected: {error}"))?;
     start_payload
-        .validate(&start_event_id())
+        .validate()
         .map_err(|error| anyhow::anyhow!("valid transcript start rejected: {error}"))?;
     let mut missing_mode = start_value.clone();
     missing_mode.as_object_mut().unwrap().remove("mode");

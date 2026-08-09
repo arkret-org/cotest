@@ -86,10 +86,12 @@ fn completion_vector() -> Result<CompletionVector> {
             new_device_id: device_id.parse()?,
             identity_model: arkret_models_crypto::RecoveryIdentityModel::RootAnchored,
             previous_model_generation_ref: arkret_models_crypto::RecoveryModelGenerationRef::new(
-                arkret_wire::NonEmptyString::new(previous_generation.to_owned())?,
+                arkret_wire::NonEmptyString::new(previous_generation.to_owned())
+                    .map_err(anyhow::Error::msg)?,
             )?,
             result_model_generation_ref: arkret_models_crypto::RecoveryModelGenerationRef::new(
-                arkret_wire::NonEmptyString::new(result_generation.to_owned())?,
+                arkret_wire::NonEmptyString::new(result_generation.to_owned())
+                    .map_err(anyhow::Error::msg)?,
             )?,
             authorization_event_id: authorization_event_id.parse()?,
             device_list_update_event_id: None,
@@ -120,7 +122,8 @@ fn completion_vector() -> Result<CompletionVector> {
     let signature = arkret_wire::Base64UrlString::new(sign_b64url(
         &coordinator_key,
         &receipt.signing_payload_bytes()?,
-    ))?;
+    ))
+    .map_err(anyhow::Error::msg)?;
     let receipt = receipt.attach_signature(signature)?;
     let terminal_receipt = serde_json::to_value(&receipt)?;
     let terminal_receipt_digest = arkret_canonical::canonical_sha256(&terminal_receipt)?;
@@ -149,7 +152,8 @@ fn completion_vector() -> Result<CompletionVector> {
     let signature = arkret_wire::Base64UrlString::new(sign_b64url(
         &coordinator_key,
         &attestation.signing_bytes()?,
-    ))?;
+    ))
+    .map_err(anyhow::Error::msg)?;
     let attestation = attestation.attach_signature(signature)?;
 
     let holder_key = SigningKey::from_bytes(&[0x52; 32]);

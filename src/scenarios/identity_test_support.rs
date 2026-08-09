@@ -18,8 +18,8 @@ use arkret_models_crypto::{
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_models_identity::{
-    IdentityBindingPurpose, IdentityCreationControlProof, IdentityCreationControlProofKind,
-    PCR_GENESIS_UNIT_KINDS,
+    IdentityBindingPurpose, PCR_GENESIS_UNIT_KINDS, UnsignedIdentityCreationControlProof,
+    UnsignedIdentityCreationControlProofBody,
 };
 use arkret_signatures::http_signature::{
     Component, SignedRequestParts, canonical_message, format_signature_input_component_list,
@@ -417,7 +417,7 @@ async fn bootstrap_test_device_authorization(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
     let mut authorize = arkret_wire::test_support::raw_event(
-        arkret_wire::EventKind::DeviceAuthorize,
+        arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm {
             realm_id: realm_id.clone(),
         },
@@ -448,32 +448,31 @@ async fn bootstrap_test_device_authorization(
     )?;
     let validated_inception = validate_principal_inception_operation(&prepared.submit_body)?;
     let issued_at = chrono::Utc::now();
-    let mut control_proof = IdentityCreationControlProof {
-        proof_kind: IdentityCreationControlProofKind::DidWebvhInceptionUpdateKey,
-        challenge_id: format!("cotest-pcr-genesis-{local_id}"),
-        challenge: format!("cotest-pcr-genesis-challenge-{local_id}"),
-        purpose: IdentityBindingPurpose::AccountBindingAndPcrGenesis,
-        principal_id: principal.clone(),
-        operation_digest: validated_inception.operation_digest,
-        pcr_realm_id: realm_id.clone(),
-        realm_create_payload_digest: Hash::new(canonical_sha256(&unit.create().payload)?)?,
-        founding_authorize_payload_digest: Hash::new(canonical_sha256(
-            &unit.founding_authorize().payload,
-        )?)?,
-        initial_session_request_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-        genesis_unit_kinds: PCR_GENESIS_UNIT_KINDS,
-        identity_creation_lease_id: format!("cotest-identity-creation-{local_id}"),
-        lease_fence: 1,
-        dpop_jkt: format!("cotest-dpop-jkt-{local_id}"),
-        audience: Did::new(harness_account_authority_id())?,
-        origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
-        trust_domain: server.trust_domain().clone(),
-        issued_at,
-        expires_at: issued_at + chrono::Duration::minutes(4),
-        verification_key_multibase: validated_inception.root_public_key_multibase,
-        signature: String::new(),
-    };
-    sign_identity_creation_control_proof(&mut control_proof, &root_seed)?;
+    let control_proof =
+        UnsignedIdentityCreationControlProof::new(UnsignedIdentityCreationControlProofBody {
+            challenge_id: format!("cotest-pcr-genesis-{local_id}"),
+            challenge: format!("cotest-pcr-genesis-challenge-{local_id}"),
+            purpose: IdentityBindingPurpose::AccountBindingAndPcrGenesis,
+            principal_id: principal.clone(),
+            operation_digest: validated_inception.operation_digest,
+            pcr_realm_id: realm_id.clone(),
+            realm_create_payload_digest: Hash::new(canonical_sha256(&unit.create().payload)?)?,
+            founding_authorize_payload_digest: Hash::new(canonical_sha256(
+                &unit.founding_authorize().payload,
+            )?)?,
+            initial_session_request_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+            genesis_unit_kinds: PCR_GENESIS_UNIT_KINDS,
+            identity_creation_lease_id: format!("cotest-identity-creation-{local_id}"),
+            lease_fence: 1,
+            dpop_jkt: format!("cotest-dpop-jkt-{local_id}"),
+            audience: Did::new(harness_account_authority_id())?,
+            origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
+            trust_domain: server.trust_domain().clone(),
+            issued_at,
+            expires_at: issued_at + chrono::Duration::minutes(4),
+            verification_key_multibase: validated_inception.root_public_key_multibase,
+        })?;
+    let control_proof = sign_identity_creation_control_proof(control_proof, &root_seed)?;
     let idempotency_key = IdempotencyKey::new(format!("cotest-pcr-genesis-{local_id}"))
         .map_err(anyhow::Error::msg)?;
     let request = arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody {

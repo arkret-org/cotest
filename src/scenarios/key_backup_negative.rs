@@ -276,6 +276,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
     )?;
     UnsignedKeyBackup::new(backup, auth_data)?
         .attach_signature(Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?)
+        .map_err(anyhow::Error::from)
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {

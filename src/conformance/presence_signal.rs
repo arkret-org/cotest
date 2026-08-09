@@ -290,7 +290,6 @@ fn device_presence(
         payload_sequence,
         ttl_ms: Some(TTL_MS),
         payload,
-        body: body.into_iter().collect(),
         sent_at,
         expires_at: sent_at + Duration::milliseconds(TTL_MS as i64),
         scope_ref: ScopeRef::Realm { realm_id: realm()? },

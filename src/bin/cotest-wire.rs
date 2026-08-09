@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
+use arkret_event_draft::EventPayloadExt as _;
 use arkret_identifiers::{ConsentId, DeviceId, Did, Hash};
 use arkret_models_collaboration::direct_conversation_ops::{
     AcceptedAtServiceBinding, DidBindingEvidenceKind, DidBindingEvidenceReceipt,
@@ -655,8 +656,9 @@ fn principal_bootstrap_seal(input: Value) -> Result<Value> {
         .context("parse PCR genesis unit for bootstrap Seal")?;
     let create = unit.create();
     let authorize = unit.founding_authorize();
-    let create_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload =
-        create.payload_as().context("parse PCR create payload")?;
+    let create_payload = create
+        .typed_payload::<arkret::event_spec::RealmCreate>()
+        .context("parse PCR create payload")?;
     let descriptor = create_payload
         .object
         .founding_device_descriptor
@@ -704,8 +706,9 @@ fn principal_successor_seal(input: Value) -> Result<Value> {
     let create = events
         .first()
         .context("principal successor Seal history is empty")?;
-    let create_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload =
-        create.payload_as().context("parse PCR create payload")?;
+    let create_payload = create
+        .typed_payload::<arkret::event_spec::RealmCreate>()
+        .context("parse PCR create payload")?;
     let descriptor = create_payload
         .object
         .founding_device_descriptor

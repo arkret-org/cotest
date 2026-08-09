@@ -170,10 +170,12 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
     )?;
     let unsigned = UnsignedKeyBackup::new(envelope, auth_data)?;
     let signature = signing_key.sign(&unsigned.signing_payload_bytes()?);
-    unsigned.attach_signature(
-        Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
-            .map_err(|error| anyhow!(error))?,
-    )
+    unsigned
+        .attach_signature(
+            Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+                .map_err(|error| anyhow!(error))?,
+        )
+        .map_err(anyhow::Error::from)
 }
 
 async fn list_backups(server: &ArkretServer, token: &str) -> Result<()> {
@@ -292,10 +294,12 @@ fn unlock_proof(actor_id: &str) -> Result<KeyBackupUnlockProof> {
         auth_data,
     )?;
     let signature = signing_key.sign(&unsigned.signing_payload_bytes()?);
-    unsigned.attach_signature(
-        Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
-            .map_err(|error| anyhow!(error))?,
-    )
+    unsigned
+        .attach_signature(
+            Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes()))
+                .map_err(|error| anyhow!(error))?,
+        )
+        .map_err(anyhow::Error::from)
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {

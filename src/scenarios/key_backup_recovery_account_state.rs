@@ -194,6 +194,7 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
     )?;
     UnsignedKeyBackup::new(backup, auth_data)?
         .attach_signature(Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?)
+        .map_err(anyhow::Error::from)
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {
