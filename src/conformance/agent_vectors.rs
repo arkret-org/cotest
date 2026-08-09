@@ -624,13 +624,13 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     let genesis = serde_json::json!({
         "created_by": agent,
         "notary": {"kind": "single_did", "did": agent},
-        "purpose": "principal_control",
+        "purpose": "managed_agent_control",
         "encryption_profile": "e2ee_required",
         "event_encryption_floor": "e2ee_required"
     });
     if genesis["created_by"] != agent
         || genesis["notary"]["did"] != agent
-        || genesis["purpose"] != "principal_control"
+        || genesis["purpose"] != "managed_agent_control"
         || genesis["encryption_profile"] != "e2ee_required"
         || genesis["event_encryption_floor"] != "e2ee_required"
     {
