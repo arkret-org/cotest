@@ -219,6 +219,7 @@ fn completion_vector() -> Result<CompletionVector> {
     let handoff: AccountHandoffOutcome = serde_json::from_value(json!({
         "request_id": "ak:request:019a8400-0000-7000-8000-000000000007",
         "account_handle": "alice:example.com",
+        "account_subject": hash('a'),
         "account_handoff_grant": "g".repeat(32),
         "expires_at": completed_at + Duration::minutes(5),
         "allowed_operations": ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
