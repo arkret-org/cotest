@@ -480,7 +480,7 @@ async fn bootstrap_test_device_authorization(
             identity_creation_lease_id: format!("cotest-identity-creation-{local_id}"),
             lease_fence: 1,
             dpop_jkt: format!("cotest-dpop-jkt-{local_id}"),
-            audience: Did::new(harness_account_authority_id())?,
+            audience: Did::new(server.service_id().to_owned())?,
             origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             trust_domain: server.trust_domain().clone(),
             issued_at,

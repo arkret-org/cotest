@@ -48,7 +48,7 @@ const SERIES_ID: &str = "ak:backup_series:01964137-0000-7000-8000-000000000000";
 /// a `ak:device:` typed id; it is not required to equal the session device).
 const ENVELOPE_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000000";
 const CIPHERTEXT_DIGEST: &str =
-    "sha256:897dab5b0127d49c794f0f3f39cbb6aefb2ef22184ee0540a8c9f46909b9c90d";
+    "sha256:305531dcc50ebca31cf1d5b31e9fc76ed51f66b3b6dd5a030c6539ae6532f979";
 
 /// Deterministic Ed25519 device key shared by the envelope `auth_data`
 /// signature and the unlock-proof transcript signature.
@@ -145,7 +145,7 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
             secret_version: None,
             extra: Default::default(),
         }],
-        ciphertext: "ciphertext".to_owned(),
+        ciphertext: "Y2lwaGVydGV4dA".to_owned(),
         ciphertext_digest: CIPHERTEXT_DIGEST.to_owned(),
         plaintext_commitment: None,
         auth_data: None,
