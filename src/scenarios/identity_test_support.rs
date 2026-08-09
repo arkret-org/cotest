@@ -182,7 +182,21 @@ pub async fn seal_current_principal_control_frontier(
     let principal = Did::new(client.actor.clone())?;
     let mut selected = None;
     for candidate in client.controlled_realm_ids() {
-        let events = client.sdk().events_read_all_pages(&candidate).await?.events;
+        let events = client
+            .sdk()
+            .events_read_all_pages(&candidate)
+            .await?
+            .events
+            .into_iter()
+            .enumerate()
+            .map(|(index, row)| {
+                row.into_event().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "controlled Realm history requires complete Events; row {index} for {candidate} is redacted or reference-locked"
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
         let is_pcr = events.first().is_some_and(|event| {
             event.actor_id == principal
                 && event
