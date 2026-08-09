@@ -24,7 +24,7 @@
       "components_array": ["ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG", "default"],
       "components_order_source": "[realm_id, policy_name]",
       "expected_canonical_json": "[\"ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG\",\"default\"]",
-      "expected_state_subject": "oWt24-I1SX_wawUrwoeXS4xbeJ_W7z4IiV27Wmcv2mA"
+      "expected_state_subject": "lg6PHAc3ue-WsHPT_NvGrMC_fgLfnYW9Lgn-9rlFiC4"
     },
     {
       "name": "realm_member_carol",
@@ -32,7 +32,7 @@
       "components_array": ["ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG", "did:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
       "expected_canonical_json": "[\"ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG\",\"did:web:carol.example\"]",
-      "expected_state_subject": "jySVHHmiICU8qFiOkFbanUE9CvSnztq_vgUuEc0XG9Y"
+      "expected_state_subject": "Bglo4pGVpqIifh7FDA-5gOZZ7zznjiPWKdUaXq4zDG0"
     }
   ],
   "deprecated_wire_vectors": [
@@ -42,7 +42,7 @@
       "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
       "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "LcdCKbYzgZadA3KgEfbSBgXMl9bx3n6dhXWlNACDGj8",
+      "expected_state_subject": "3XHyRXUhfSgDjRFD858U6e8muuUSo5Eh1I_rEOgwjbQ",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
@@ -51,7 +51,7 @@
       "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main"],
       "components_order_source": "[strand_id, track]",
       "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\"]",
-      "expected_state_subject": "PNpB2wjzXRXe0boWhYxWF68aKoeJPgWV0PZ409Ehvs4",
+      "expected_state_subject": "zy1FlA4tLa4Q6Guu2UVDk8-3sAXOOi9t7LadhQ-tfNE",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
     },
     {
@@ -60,7 +60,7 @@
       "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "feature-x", "did:web:alice.example"],
       "components_order_source": "[strand_id, track, actor_id]",
       "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"feature-x\",\"did:web:alice.example\"]",
-      "expected_state_subject": "MB92dtoGtnZL7WRyjivpGApdcqimGx-YBD_5YLHUUSc",
+      "expected_state_subject": "-bzUQyY2Nv2Xzz2QWJSwcYst-IEIypmEEi8rfLnRaR4",
       "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
       "comment": "Same strand_id + actor_id as strand_track_member_alice but different track segment — must produce a distinct state_subject."
     }
@@ -71,7 +71,7 @@
       "kind": "cx.strand.track.member",
       "components_array": ["main", "ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "did:web:alice.example"],
       "comment": "Component reordering (track before strand_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
-      "must_differ_from": "LcdCKbYzgZadA3KgEfbSBgXMl9bx3n6dhXWlNACDGj8"
+      "must_differ_from": "3XHyRXUhfSgDjRFD858U6e8muuUSo5Eh1I_rEOgwjbQ"
     }
   ],
   "reserved_name_negatives": [

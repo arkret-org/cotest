@@ -167,7 +167,7 @@ pub(crate) fn member_join_payload(realm_id: &str, actor_id: &str) -> Value {
     member_join_payload_value(realm_id, actor_id).expect("valid cotest member.join payload")
 }
 
-fn next_typed_id(kind: &str) -> String {
+pub(crate) fn next_typed_id(kind: &str) -> String {
     let seq = NEXT_EVENT_SEQ.fetch_add(1, Ordering::Relaxed);
     format!("ak:{kind}:01999999-0000-7000-8000-{seq:012x}")
 }

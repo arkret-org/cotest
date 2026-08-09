@@ -2,10 +2,15 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::canonical_sha256;
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ArkretServer, expect_api_error, expect_json, invite_create_payload};
+use crate::harness::{expect_api_error, expect_json, invite_create_payload};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, authorize_device_public_key, seal_current_principal_control_frontier,
+    spawn_with_harness_account_authority,
+};
 
 /// Extract the `realm_id` string from a `create_realm` response, turning a
 /// missing/non-string field into a located error instead of a context-free
@@ -18,24 +23,41 @@ fn realm_id_from(created: &serde_json::Value, label: &str) -> Result<String> {
 }
 
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
-    let server = ArkretServer::spawn("directory-privacy").await?;
+    let server = spawn_with_harness_account_authority("directory-privacy", &[]).await?;
+    let alice_did = actor_did_for_service(server.service_id(), "privacy-alice")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
+    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
+    authorize_device_public_key(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &alice.device_id,
+        &alice_device_key,
+    )
+    .await?;
     // Register account-first, then publish bob's primary localpart through the
     // authenticated localpart lifecycle. Soland derives the canonical handle
     // domain and signed handle claim from that binding.
+    let bob_did = actor_did_for_service(server.service_id(), "privacy-bob")?;
     let bob = server
         .register_client_with_localpart(
-            "did:web:bob-privacy.example",
+            &bob_did,
             "@bob-privacy",
             "bob-privacy-example",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
+    let bob_device_key = SigningKey::from_bytes(&[0xb0; 32]);
+    authorize_device_public_key(
+        &server,
+        &bob.token,
+        &bob.actor,
+        &bob.device_id,
+        &bob_device_key,
+    )
+    .await?;
     let service_host = server
         .base_url()
         .host_str()
@@ -273,9 +295,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(
-        anonymous_alice["actors"][0]["actor_id"],
-        "did:web:alice.example"
+    assert!(
+        anonymous_alice["actors"]
+            .as_array()
+            .expect("search-actors response actors")
+            .iter()
+            .any(|actor| actor["actor_id"].as_str() == Some("did:web:alice.example")),
+        "public demo Alice identity was not anonymously discoverable: {anonymous_alice}"
     );
 
     let alice_before_contact = expect_json(
@@ -305,7 +331,9 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     assert_eq!(bob_self["actors"][0]["actor_id"], bob.actor);
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
+    seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
     bob.accept_contact(request_receipt).await?;
+    seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let alice_after_contact = expect_json(
         alice

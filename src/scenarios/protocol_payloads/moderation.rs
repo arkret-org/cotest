@@ -10,6 +10,7 @@ pub async fn run(
     server: &ArkretServer,
     token: &str,
     actor_id: &str,
+    target_realm_id: &str,
     target_event_id: &str,
 ) -> Result<()> {
     let report = expect_json(
@@ -22,7 +23,7 @@ pub async fn run(
             >(json!({
                 // soland validates that the reported target exists; point at the
                 // adapter message Event authored in the events/keys setup phase.
-                "realm_id": "ak:realm:AdoahEryEldhLbQHY9vRcm90ddQW1gjDVrYmHsbaLIJc",
+                "realm_id": target_realm_id,
                 "target_ref": target_event_id,
                 "report_reason_code": "spam",
                 "reporter": actor_id

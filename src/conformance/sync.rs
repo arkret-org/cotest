@@ -48,39 +48,58 @@ fn validate_realm_actor_frontier_vectors(value: &Value) -> Result<()> {
         let decoded = serde_json::from_value::<
             arkret_models_collaboration::event_sync::RealmActorFrontierView,
         >(required_field(case, "instance")?.clone());
-        let valid = decoded
-            .as_ref()
-            .is_ok_and(|frontier| frontier.validate().is_ok());
+        let validation: Result<()> = match decoded {
+            Ok(frontier) => frontier.validate().map_err(Into::into),
+            Err(error) => Err(error.into()),
+        };
+        let valid = validation.is_ok();
         if expect_valid != valid {
             bail!(
-                "frontier case {} validity mismatch",
-                value_field_str(case, "name")?
+                "frontier case {} validity mismatch: {}",
+                value_field_str(case, "name")?,
+                validation.expect_err("validity mismatch must carry a decode or validation error")
             );
         }
     }
 
     let vector = required_field(value, "actor_frontier_digest")?;
-    let realm_id = arkret_identifiers::RealmId::new(
-        "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K".to_owned(),
-    )?;
-    let actor_id = arkret_identifiers::Did::new("did:web:alice.example".to_owned())?;
-    let event_ids = vec![
-        arkret_identifiers::EventId::new(
-            "ak:event:AZYdi3qlzHC9BLa3vihHvgrhFh0AYuNTNpOD7a8MiN5J".to_owned(),
-        )?,
-        arkret_identifiers::EventId::new(
-            "ak:event:AfgGQBNqha39-nDeQUUb6PfHADeASPNO2ficO33h96Kq".to_owned(),
-        )?,
-    ];
+    let valid_case = cases
+        .iter()
+        .find(|case| {
+            case.get("name").and_then(Value::as_str)
+                == Some("realm_actor_frontier_sibling_set_valid")
+        })
+        .ok_or_else(|| anyhow!("sync fixture lacks the valid sibling frontier case"))?;
+    let frontier = serde_json::from_value::<
+        arkret_models_collaboration::event_sync::RealmActorFrontierView,
+    >(required_field(valid_case, "instance")?.clone())?;
+    let suite = arkret_canonical::digest_suite(value_field_str(vector, "digest_algorithm")?)?;
     let digest = arkret_models_collaboration::event_sync::RealmActorFrontierView::compute_digest(
-        &realm_id,
-        &actor_id,
-        43,
-        &event_ids,
-        arkret_canonical::DigestSuite::Sha256,
+        &frontier.realm_id,
+        &frontier.actor_id,
+        frontier.next_actor_seq,
+        &frontier.frontier_event_ids,
+        suite,
     )?;
-    if digest.as_str() != value_field_str(vector, "expected_digest")? {
+    if digest != frontier.frontier_digest
+        || digest.as_str() != value_field_str(vector, "expected_digest")?
+    {
         bail!("Realm actor frontier digest golden mismatch");
+    }
+    let canonical = String::from_utf8(arkret_canonical::canonical_json_bytes(&json!({
+        "kind": "realm_actor",
+        "realm_id": frontier.realm_id,
+        "actor_id": frontier.actor_id,
+        "next_actor_seq": frontier.next_actor_seq,
+        "frontier_event_ids": frontier.frontier_event_ids,
+    }))?)?;
+    if canonical != value_field_str(vector, "canonical_json")? {
+        bail!("Realm actor frontier canonical transcript golden mismatch");
+    }
+    if value_field_str(vector, "transcript_label_utf8_nul")?.as_bytes()
+        != arkret_models_collaboration::event_sync::REALM_ACTOR_FRONTIER_DIGEST_DOMAIN
+    {
+        bail!("Realm actor frontier digest domain label drifted");
     }
     Ok(())
 }

@@ -34,6 +34,7 @@ import {
 import {
   authHeaders,
   canonicalJson,
+  cotestWire,
   registerEventSigner,
   typedId,
 } from "./soland-api";
@@ -113,6 +114,7 @@ export type DpopUserSession = {
   eventSigningSeedB64url: string;
   deviceKey: DpopDeviceKey;
   recoveryKey?: string;
+  principalControlEvents: Array<Record<string, unknown>>;
 };
 
 export type DpopUserPageSession = {
@@ -1343,7 +1345,46 @@ export async function createDpopUserSessionForAccount(
     eventSigningSeedB64url,
     deviceKey,
     recoveryKey: claimsPrincipalGenesis ? account.recoveryKey : undefined,
+    principalControlEvents: [] as Array<Record<string, unknown>>,
   };
+  const checkpoint = account.principalRegistrationCheckpoint;
+  const pcrGenesisUnit = checkpoint.pcr_genesis_unit as {
+    events?: Array<Record<string, unknown>>;
+  };
+  if (!Array.isArray(pcrGenesisUnit.events) || pcrGenesisUnit.events.length !== 2) {
+    throw new Error("principal registration checkpoint omitted its closed PCR genesis unit");
+  }
+  session.principalControlEvents = pcrGenesisUnit.events.map((event) =>
+    JSON.parse(canonicalJson(event)) as Record<string, unknown>,
+  );
+  const bootstrapSeal = cotestWire<Record<string, unknown>>(
+    "principal-bootstrap-seal",
+    {
+      pcr_genesis_unit: checkpoint.pcr_genesis_unit,
+      device_signing_seed_b64url: checkpoint.device_signing_seed_b64url,
+    },
+  );
+  const viewerUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`;
+  const viewerResponse = await request.get(viewerUrl, {
+    headers: selfPathHeadersForDpopSession(session, "GET", viewerUrl),
+  });
+  const viewerText = await viewerResponse.text();
+  expect(
+    viewerResponse.ok(),
+    `principal bootstrap account viewer returned ${viewerResponse.status()}: ${viewerText}`,
+  ).toBeTruthy();
+  const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events/seals`;
+  const sealResponse = await request.post(sealUrl, {
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "POST", sealUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson(bootstrapSeal),
+  });
+  expect(
+    sealResponse.ok(),
+    `principal bootstrap Seal returned ${sealResponse.status()}: ${await sealResponse.text()}; account=${viewerText}`,
+  ).toBeTruthy();
   return session;
 }
 

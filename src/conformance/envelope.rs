@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use anyhow::{Result, anyhow, bail};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use super::{
     canonical_json, load_artifact_json, load_fixture_value, looks_like_sha256_digest,
@@ -1009,16 +1009,7 @@ pub(crate) fn event_kind_metadata(registry: &Value) -> Result<HashMap<String, Ev
 }
 
 pub(crate) fn event_without_proofs(event: &Value) -> Result<Value> {
-    let object = event
-        .as_object()
-        .ok_or_else(|| anyhow!("event must be an object"))?;
-    let mut payload = Map::new();
-    for (key, value) in object {
-        if key != "proofs" && key != "unsigned" {
-            payload.insert(key.clone(), value.clone());
-        }
-    }
-    Ok(Value::Object(payload))
+    arkret_wire::event_digest_preimage(event).map_err(Into::into)
 }
 
 pub(crate) fn canonical_event_payload(event: &Value) -> Result<String> {

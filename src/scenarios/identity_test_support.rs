@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use arkret_bootstrap::{
-    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
+    DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_bootstrap_seal,
+    build_self_principal_linear_successor_seal, build_self_principal_pcr_create,
     build_self_principal_pcr_genesis_unit,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
@@ -16,24 +17,57 @@ use arkret_models_crypto::{
     keys_upload_signing_input,
 };
 use arkret_models_identity::did_document::principal_control_realm_id;
+use arkret_models_identity::{
+    IdentityBindingPurpose, IdentityCreationControlProof, IdentityCreationControlProofKind,
+    PCR_GENESIS_UNIT_KINDS,
+};
+use arkret_signatures::http_signature::{
+    Component, SignedRequestParts, canonical_message, format_signature_input_component_list,
+    parse_signature_input, sign_message,
+};
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalInceptionInput, prepare_principal_inception,
+    sign_identity_creation_control_proof, validate_principal_inception_operation,
 };
-use arkret_wire::{
-    AuthorizationLeaseIssueOutcome, AuthorizationLeaseIssueRequest, Base64UrlString, Event,
-    EventInitialSubmission, EventRef, NonEmptyString,
-};
+use arkret_wire::{Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString};
 use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
 
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::{ArkretServer, TestActorClient, expect_json};
 
-pub(crate) const TEST_ROOT_KEY_SEED: [u8; 32] = [0x51; 32];
+pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
+pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
+
+pub(crate) fn harness_account_authority_id() -> String {
+    let key = SigningKey::from_bytes(&HARNESS_ACCOUNT_AUTHORITY_KEY_SEED);
+    format!(
+        "did:key:{}",
+        ed25519_pubkey_to_did_key_multibase(&key.verifying_key().to_bytes())
+    )
+}
+
+pub async fn spawn_with_harness_account_authority(
+    name: &str,
+    extra_env: &[(&str, &str)],
+) -> Result<ArkretServer> {
+    let account_authority_id = harness_account_authority_id();
+    let mut env = Vec::with_capacity(extra_env.len() + 2);
+    env.push((
+        "SOLAND_ACCOUNT_AUTHORITY_URL",
+        HARNESS_ACCOUNT_AUTHORITY_ORIGIN,
+    ));
+    env.push((
+        "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID",
+        account_authority_id.as_str(),
+    ));
+    env.extend_from_slice(extra_env);
+    ArkretServer::spawn_with_env(name, &env).await
+}
 
 fn registry_digest() -> arkret_identifiers::Hash {
     arkret::current_capability_action_registry_digest()
@@ -44,16 +78,11 @@ fn test_device_record_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[0x52; 32])
 }
 
-async fn install_test_principal_control_document(server: &ArkretServer, actor: &str) -> Result<()> {
-    let (_, remainder) = actor
-        .strip_prefix("did:webvh:")
-        .and_then(|remainder| remainder.split_once(':'))
-        .context("test principal is not a did:webvh DID")?;
-    let (method_authority, local_id) = remainder
-        .split_once(":webvh:")
-        .context("test principal DID has no local id")?;
-    let host = method_authority.replace("%3A", ":").replace("%3a", ":");
-    let prepared = test_principal_inception(&host, local_id)?;
+async fn install_test_principal_control_document(
+    server: &ArkretServer,
+    actor: &str,
+) -> Result<PreparedPrincipalInception> {
+    let prepared = prepared_test_principal_inception(actor)?;
     anyhow::ensure!(
         prepared.did == actor,
         "deterministic native inception does not reproduce test principal DID"
@@ -81,19 +110,47 @@ async fn install_test_principal_control_document(server: &ArkretServer, actor: &
     )
     .await?;
     anyhow::ensure!(
-        resolved["did_document"]["verificationMethod"]
-            .as_array()
-            .is_some_and(|methods| methods.iter().any(|method| {
-                method["id"].as_str() == Some(prepared.root_verification_method.as_str())
-            })),
-        "installed identity root is absent from resolved DID document: {resolved}"
+        resolved["did_document"]["id"].as_str() == Some(actor)
+            && resolved["key_log_head"].as_str().is_some(),
+        "installed identity anchor is absent from resolved DID document: {resolved}"
     );
     crate::harness::register_event_signing_identity(
         actor,
-        TEST_ROOT_KEY_SEED,
-        prepared.root_verification_method,
+        test_principal_root_key_seed(actor)?,
+        prepared.root_verification_method.clone(),
     );
-    Ok(())
+    Ok(prepared)
+}
+
+fn prepared_test_principal_inception(actor: &str) -> Result<PreparedPrincipalInception> {
+    let (host, local_id) = test_principal_coordinates(actor)?;
+    test_principal_inception(&host, &local_id)
+}
+
+fn test_principal_coordinates(actor: &str) -> Result<(String, String)> {
+    let (_, remainder) = actor
+        .strip_prefix("did:webvh:")
+        .and_then(|remainder| remainder.split_once(':'))
+        .context("test principal is not a did:webvh DID")?;
+    let (method_authority, local_id) = remainder
+        .split_once(":webvh:")
+        .context("test principal DID has no local id")?;
+    let host = method_authority.replace("%3A", ":").replace("%3a", ":");
+    Ok((host, local_id.to_owned()))
+}
+
+pub(crate) fn test_principal_root_signing_authority(
+    actor: &str,
+) -> Result<(arkret_wire::DidUrl, [u8; 32])> {
+    let prepared = prepared_test_principal_inception(actor)?;
+    let verification_method = arkret_wire::DidUrl::new(prepared.root_verification_method)
+        .map_err(|error| anyhow::anyhow!("test principal root verification method: {error}"))?;
+    Ok((verification_method, test_principal_root_key_seed(actor)?))
+}
+
+fn test_principal_root_key_seed(actor: &str) -> Result<[u8; 32]> {
+    let (host, local_id) = test_principal_coordinates(actor)?;
+    Ok(test_principal_root_seed(&host, &local_id))
 }
 
 pub async fn authorize_device_public_key(
@@ -103,9 +160,73 @@ pub async fn authorize_device_public_key(
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<()> {
-    install_test_principal_control_document(server, actor).await?;
-    bootstrap_test_device_authorization(server, token, actor, device_id, device_signing_key)
-        .await?;
+    let prepared = install_test_principal_control_document(server, actor).await?;
+    bootstrap_test_device_authorization(
+        server,
+        token,
+        actor,
+        device_id,
+        device_signing_key,
+        &prepared,
+    )
+    .await?;
+    Ok(())
+}
+
+/// Publish the current device-signed successor Seal for every accepted Event
+/// after this principal's already-accepted PCR frontier.
+pub async fn seal_current_principal_control_frontier(
+    client: &TestActorClient,
+    device_signing_key: &SigningKey,
+) -> Result<()> {
+    let principal = Did::new(client.actor.clone())?;
+    let realm_id = RealmId::new(principal_control_realm_id(&principal))?;
+    let mut events = client
+        .sdk()
+        .events_read_all_pages(realm_id.as_str())
+        .await?
+        .events;
+    events.sort_by_key(|event| event.actor_seq);
+    anyhow::ensure!(
+        events.len() >= 3,
+        "PCR successor Seal requires at least one accepted post-genesis Event"
+    );
+    let frontier_state = serde_json::from_value::<
+        arkret_models_collaboration::event_sync::EventsFrontierAccountClientState,
+    >(client.realm_seal_frontier(realm_id.as_str()).await?)?;
+    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
+        frontier_state.frontier
+    else {
+        anyhow::bail!("PCR Realm selector returned a non-Seal frontier");
+    };
+    let device_method = crate::fixture_did_url(format!("{}#{}", client.actor, client.device_id));
+    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
+        device_signing_key.to_bytes(),
+        principal,
+        device_method,
+    );
+    let physical_millis = chrono::Utc::now().timestamp_millis();
+    let seal = build_self_principal_linear_successor_seal(
+        &events,
+        &frontier,
+        Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?,
+        &signer,
+        &crate::publication::project_cells,
+    )?;
+    let outcome =
+        serde_json::from_value::<arkret_models_collaboration::http_bodies::EventSealSubmitOutcome>(
+            expect_json(
+                client.post("/_arkret/self/events/seals").json(&seal),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    anyhow::ensure!(
+        outcome.seal_id == seal.id
+            && outcome.accepted_event_digests == seal.delta
+            && outcome.post_state_root == seal.state_root,
+        "principal server returned a mismatched PCR successor Seal outcome"
+    );
     Ok(())
 }
 
@@ -125,11 +246,8 @@ pub(crate) fn signed_keys_upload_body(
     };
     let signing_input = keys_upload_signing_input(&unsigned)?;
     let signature = signing_key.sign(&signing_input);
-    let device_public_key =
-        ed25519_pubkey_to_did_key_multibase(&signing_key.verifying_key().to_bytes());
     Ok(unsigned.into_signed(KeyOperationSignature {
-        kid: NonEmptyString::new(format!("did:key:{device_public_key}#{device_public_key}"))
-            .unwrap(),
+        kid: NonEmptyString::new(format!("{actor}#{device_id}")).unwrap(),
         signature_algorithm: Some(NonEmptyString::new("Ed25519").unwrap()),
         sig: Base64UrlString::new(URL_SAFE_NO_PAD.encode(signature.to_bytes())).unwrap(),
     }))
@@ -195,6 +313,7 @@ async fn bootstrap_test_device_authorization(
     actor: &str,
     device_id: &str,
     device_signing_key: &SigningKey,
+    prepared: &PreparedPrincipalInception,
 ) -> Result<()> {
     let (_, remainder) = actor
         .strip_prefix("did:webvh:")
@@ -204,7 +323,6 @@ async fn bootstrap_test_device_authorization(
         .split_once(":webvh:")
         .context("test principal DID has no local id")?;
     let host = method_authority.replace("%3A", ":").replace("%3a", ":");
-    let prepared = test_principal_inception(&host, local_id)?;
     let principal = Did::new(actor.to_owned()).context("invalid test principal DID")?;
     let realm_id = RealmId::new(principal_control_realm_id(&principal))?;
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
@@ -299,8 +417,10 @@ async fn bootstrap_test_device_authorization(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
     let mut authorize = arkret_wire::test_support::raw_event(
-        arkret_wire::EventKind::DeviceAuthorize.as_str(),
-        arkret_wire::ScopeRef::Realm { realm_id },
+        arkret_wire::EventKind::DeviceAuthorize,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: realm_id.clone(),
+        },
         principal.clone(),
         1,
         Hlc::new("01970e589d21-0001-a13f9c2e")?,
@@ -321,75 +441,177 @@ async fn bootstrap_test_device_authorization(
         &device_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
-    let _unit = build_self_principal_pcr_genesis_unit(
-        create.clone(),
-        authorize.clone(),
+    let unit = build_self_principal_pcr_genesis_unit(
+        create,
+        authorize,
         &crate::publication::project_cells,
     )?;
-    let lease_request = AuthorizationLeaseIssueRequest {
-        events: vec![create.clone(), authorize.clone()],
-        intents: Vec::new(),
+    let validated_inception = validate_principal_inception_operation(&prepared.submit_body)?;
+    let issued_at = chrono::Utc::now();
+    let mut control_proof = IdentityCreationControlProof {
+        proof_kind: IdentityCreationControlProofKind::DidWebvhInceptionUpdateKey,
+        challenge_id: format!("cotest-pcr-genesis-{local_id}"),
+        challenge: format!("cotest-pcr-genesis-challenge-{local_id}"),
+        purpose: IdentityBindingPurpose::AccountBindingAndPcrGenesis,
+        principal_id: principal.clone(),
+        operation_digest: validated_inception.operation_digest,
+        pcr_realm_id: realm_id.clone(),
+        realm_create_payload_digest: Hash::new(canonical_sha256(&unit.create().payload)?)?,
+        founding_authorize_payload_digest: Hash::new(canonical_sha256(
+            &unit.founding_authorize().payload,
+        )?)?,
+        initial_session_request_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+        genesis_unit_kinds: PCR_GENESIS_UNIT_KINDS,
+        identity_creation_lease_id: format!("cotest-identity-creation-{local_id}"),
+        lease_fence: 1,
+        dpop_jkt: format!("cotest-dpop-jkt-{local_id}"),
+        audience: Did::new(harness_account_authority_id())?,
+        origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
+        trust_domain: server.trust_domain().clone(),
+        issued_at,
+        expires_at: issued_at + chrono::Duration::minutes(4),
+        verification_key_multibase: validated_inception.root_public_key_multibase,
+        signature: String::new(),
     };
-    let idempotency_key = format!(
-        "cotest-bootstrap-{}",
-        canonical_sha256(&lease_request)?
-            .strip_prefix("sha256:")
-            .unwrap_or_default()
-    );
-    let lease_value = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/authorization-leases"))
-            .bearer_auth(token)
-            .header("Idempotency-Key", idempotency_key)
-            .json(&lease_request),
-        StatusCode::OK,
-    )
-    .await?;
-    let lease_outcome: AuthorizationLeaseIssueOutcome =
-        serde_json::from_value(lease_value).context("decode founding authorization leases")?;
-    lease_outcome
-        .validate_against_request(&lease_request)
-        .context("validate founding authorization leases")?;
-    let [create_lease, authorize_lease] = lease_outcome.authorization_leases.as_slice() else {
-        anyhow::bail!("founding authorization lease issue did not preserve unit cardinality");
+    sign_identity_creation_control_proof(&mut control_proof, &root_seed)?;
+    let idempotency_key = IdempotencyKey::new(format!("cotest-pcr-genesis-{local_id}"))
+        .map_err(anyhow::Error::msg)?;
+    let request = arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody {
+        account_authority_id: Did::new(harness_account_authority_id())?,
+        principal_id: principal,
+        pcr_realm_id: realm_id,
+        idempotency_key: idempotency_key.clone(),
+        registration_request_digest: Hash::new(format!("sha256:{}", "1".repeat(64)))?,
+        identity_creation_control_proof: control_proof,
+        genesis_unit: unit,
     };
-
-    let create_event_id = create.event_id.clone();
-    let authorize_event_id = authorize.event_id.clone();
-    let request = arkret_models_collaboration::http_bodies::EventsSubmitRequestBody::Batch(
-        arkret_models_collaboration::http_bodies::EventsSubmitBatchRequestBody {
-            events: vec![
-                EventInitialSubmission {
-                    event: create,
-                    authorization_lease: Some(create_lease.clone()),
-                    cba_proof_bundles: Vec::new(),
-                    control_proposal_ack: None,
-                    membership_compensation_evidence: None,
-                },
-                EventInitialSubmission {
-                    event: authorize.clone(),
-                    authorization_lease: Some(authorize_lease.clone()),
-                    cba_proof_bundles: Vec::new(),
-                    control_proposal_ack: None,
-                    membership_compensation_evidence: None,
-                },
-            ],
-        },
+    request.validate()?;
+    let accepted = submit_harness_pcr_genesis(server, &request).await?;
+    accepted.validate_against(&request)?;
+    let seal_physical_millis = chrono::Utc::now().timestamp_millis();
+    let bootstrap_seal = build_self_principal_bootstrap_seal(
+        request.genesis_unit.create(),
+        request.genesis_unit.founding_authorize(),
+        Hlc::new(format!("{seal_physical_millis:012x}-0000-a13f9c2e"))?,
+        &device_signer,
+        &crate::publication::project_cells,
+    )?;
+    let seal_outcome =
+        serde_json::from_value::<arkret_models_collaboration::http_bodies::EventSealSubmitOutcome>(
+            expect_json(
+                server
+                    .http()
+                    .post(server.url("/_arkret/self/events/seals"))
+                    .bearer_auth(token)
+                    .json(&bootstrap_seal),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    anyhow::ensure!(
+        seal_outcome.seal_id == bootstrap_seal.id
+            && seal_outcome.accepted_event_digests == bootstrap_seal.delta
+            && seal_outcome.post_state_root == bootstrap_seal.state_root,
+        "principal server returned a mismatched PCR bootstrap Seal outcome"
     );
-    let accepted = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(token)
-            .json(&request),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_json_array_contains(&accepted["accepted"], create_event_id.as_str());
-    assert_json_array_contains(&accepted["accepted"], authorize_event_id.as_str());
+    crate::harness::register_event_signing_identity(
+        actor,
+        device_signing_key.to_bytes(),
+        device_method.as_str().to_owned(),
+    );
 
     Ok(())
+}
+
+async fn submit_harness_pcr_genesis(
+    server: &ArkretServer,
+    request: &arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody,
+) -> Result<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome> {
+    let body = canonical_json_bytes(request)?;
+    let content_digest = format!("sha-256=:{}:", STANDARD.encode(Sha256::digest(&body)));
+    let source_service_id = harness_account_authority_id();
+    let destination_service_id = server.service_id().to_owned();
+    let source_trust_domain = server.trust_domain().as_str().to_owned();
+    let destination_trust_domain = source_trust_domain.clone();
+    let target_uri = server.url("/_arkret/peer/principal-genesis");
+    let target = Url::parse(&target_uri)?;
+    let authority = match target.port() {
+        Some(port) => format!("{}:{port}", target.host_str().context("peer target host")?),
+        None => target.host_str().context("peer target host")?.to_owned(),
+    };
+    let headers = vec![
+        ("content-digest".to_owned(), content_digest.clone()),
+        ("source-service-id".to_owned(), source_service_id.clone()),
+        (
+            "destination-service-id".to_owned(),
+            destination_service_id.clone(),
+        ),
+        (
+            "source-trust-domain".to_owned(),
+            source_trust_domain.clone(),
+        ),
+        (
+            "destination-trust-domain".to_owned(),
+            destination_trust_domain.clone(),
+        ),
+        (
+            "idempotency-key".to_owned(),
+            request.idempotency_key.as_str().to_owned(),
+        ),
+    ];
+    let components = vec![
+        Component::Method,
+        Component::TargetUri,
+        Component::Authority,
+        Component::Header("content-digest".to_owned()),
+        Component::Header("source-service-id".to_owned()),
+        Component::Header("destination-service-id".to_owned()),
+        Component::Header("source-trust-domain".to_owned()),
+        Component::Header("destination-trust-domain".to_owned()),
+        Component::Header("idempotency-key".to_owned()),
+    ];
+    let created = chrono::Utc::now().timestamp();
+    let expires = created + 120;
+    let key_id = format!("{source_service_id}#federation-fanout-key");
+    let signature_input = format!(
+        "{};created={created};expires={expires};keyid=\"{key_id}\";alg=\"ed25519\"",
+        format_signature_input_component_list("sig1", &components)?
+    );
+    let parsed_signature_input = parse_signature_input(&signature_input)?;
+    let signature_base = canonical_message(
+        &SignedRequestParts {
+            method: "POST".to_owned(),
+            target_uri: target_uri.clone(),
+            authority,
+            path: target.path().to_owned(),
+            headers,
+            body_digest: Some(content_digest.clone()),
+        },
+        &parsed_signature_input,
+    )?;
+    let account_authority_key = SigningKey::from_bytes(&HARNESS_ACCOUNT_AUTHORITY_KEY_SEED);
+    let signature = format!(
+        "sig1=:{}:",
+        sign_message(&signature_base, &account_authority_key)
+    );
+    let value = expect_json(
+        server
+            .http()
+            .post(target_uri)
+            .header("content-type", "application/json")
+            .header("content-digest", content_digest)
+            .header("source-service-id", source_service_id)
+            .header("destination-service-id", destination_service_id)
+            .header("source-trust-domain", source_trust_domain)
+            .header("destination-trust-domain", destination_trust_domain)
+            .header("idempotency-key", request.idempotency_key.as_str())
+            .header("signature-input", signature_input)
+            .header("signature", signature)
+            .body(body),
+        StatusCode::OK,
+    )
+    .await?;
+    serde_json::from_value(value).context("decode harness PCR genesis outcome")
 }
 
 pub fn actor_did_for_service(service_id: &str, actor: &str) -> Result<String> {
@@ -427,8 +649,7 @@ fn did_web_host_to_url_authority(host: &str) -> String {
 fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrincipalInception> {
     let endpoint = Url::parse(&format!("https://{host}/"))
         .with_context(|| format!("invalid test principal WebVH host {host}"))?;
-    let root_seed: [u8; 32] =
-        Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into();
+    let root_seed = test_principal_root_seed(host, local_id);
     let next_root_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:next-root:{host}:{local_id}").as_bytes()).into();
     let next_root = SigningKey::from_bytes(&next_root_seed);
@@ -448,6 +669,10 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
             "prepare deterministic native principal inception for local id {local_id:?} at {endpoint}"
         )
     })
+}
+
+fn test_principal_root_seed(host: &str, local_id: &str) -> [u8; 32] {
+    Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into()
 }
 
 /// Extract the DID method authority while retaining an encoded local port.
@@ -474,14 +699,4 @@ fn did_authority_from_service_id(service_id: &str) -> String {
         .unwrap_or(service_id)
         .to_ascii_lowercase()
         .replace(':', ".")
-}
-fn assert_json_array_contains(array: &Value, expected: &str) {
-    assert!(
-        array
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|value| value.as_str() == Some(expected)),
-        "expected accepted Event ids {array} to contain {expected}"
-    );
 }

@@ -141,7 +141,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         "proof_required": false,
         "one_time_use_consumed": false,
         "grant": {
-            "id": "ak:grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD",
+            "id": "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD",
             "issuer": "did:web:coauth.cotest.local",
             "subject": subject,
             "service_account_id": "alice-session-grant",
@@ -154,11 +154,16 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "revoked_at": null,
             "revocation_ref": "ak:session:mock",
             "credential_class": "standard",
+            "cnf_jkt": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k",
+            "holder_binding": {
+                "kind": "human_device",
+                "device_binding": device_id
+            },
             // `SessionGrantIntrospectGrant.session_public_key` is a required
             // (non-Option) field in the SDK wire type; omitting it makes soland
             // fail to deserialize the introspection outcome and return 503.
             // Supply a well-formed Ed25519 OKP JWK so the S2S contract holds.
-            "session_public_key": "{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\"}"
+            "session_public_key": "{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\"}"
         }
     })));
 }

@@ -78,7 +78,7 @@ fn productivity_registry_entries_are_present_and_exact() {
         .collect();
     for expected in [
         "ak.reminders.v1:<id>",
-        "ak.scheduled_send.v1:<planned_message_id>",
+        "ak.scheduled_send.v1:<scheduled_send_id>",
         "ak.snooze.v1:<target_key>",
         "ak.saved.v1:<collection_key>:<target_key>",
         "ak.draft.v1:<kind>:<target_key>:<slot_key>",

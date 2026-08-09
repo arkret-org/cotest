@@ -1,55 +1,93 @@
 use anyhow::{Result, anyhow};
+use arkret_identifiers::{EventId, MessageId, ReadCursorId};
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    ArkretServer, events_query_for_realm, expect_json, expect_response, expect_status,
-    message_redact_payload, message_revise_text_payload,
+    events_query_for_realm, expect_json, expect_response, expect_status, message_redact_payload,
+    message_revise_text_payload, next_typed_id,
+};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, authorize_device_public_key, spawn_with_harness_account_authority,
 };
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
-    let server = ArkretServer::spawn("interaction-messages").await?;
-    // Alice is the demo identity the server pre-seeds at boot; the builder is
-    // for fresh accounts only.
+    let server = spawn_with_harness_account_authority("interaction-messages", &[]).await?;
+    let alice_did = actor_did_for_service(server.service_id(), "interaction-alice")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
+    authorize_device_public_key(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &alice.device_id,
+        &alice_device_key,
+    )
+    .await?;
+
+    let bob_did = actor_did_for_service(server.service_id(), "interaction-bob")?;
+    let bob = server
+        .register_client(
+            &bob_did,
+            "@bob-interaction",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    // Bob / Carol / Dave are freshly registered via the builder. Default
-    // derivations (`did:web:<bare-handle>.example` and `dev_<bare-handle>`)
-    // would collide with other scenarios sharing the same server log dir, so
-    // each gets an explicit `-interaction` suffix in the DID/device.
-    let bob_actor = TestActorBuilder::new(&server, "@bob-interaction")
-        .with_did("did:web:bob-interaction.example")
-        .with_device("ak:device:01904100-0000-7000-8000-0000000000b0")
-        .create()
+    authorize_device_public_key(
+        &server,
+        &bob.token,
+        &bob.actor,
+        &bob.device_id,
+        &SigningKey::from_bytes(&[0xb0; 32]),
+    )
+    .await?;
+
+    let carol_did = actor_did_for_service(server.service_id(), "interaction-carol")?;
+    let carol = server
+        .register_client(
+            &carol_did,
+            "@carol-interaction",
+            "ak:device:01904100-0000-7000-8000-000000000ca0",
+        )
         .await?;
-    let carol_actor = TestActorBuilder::new(&server, "@carol-interaction")
-        .with_did("did:web:carol-interaction.example")
-        .with_device("ak:device:01904100-0000-7000-8000-000000000ca0")
-        .create()
+    authorize_device_public_key(
+        &server,
+        &carol.token,
+        &carol.actor,
+        &carol.device_id,
+        &SigningKey::from_bytes(&[0xca; 32]),
+    )
+    .await?;
+
+    let dave_did = actor_did_for_service(server.service_id(), "interaction-dave")?;
+    let dave = server
+        .register_client(
+            &dave_did,
+            "@dave-interaction",
+            "ak:device:01904100-0000-7000-8000-000000000da0",
+        )
         .await?;
-    let dave_actor = TestActorBuilder::new(&server, "@dave-interaction")
-        .with_did("did:web:dave-interaction.example")
-        .with_device("ak:device:01904100-0000-7000-8000-000000000da0")
-        .create()
-        .await?;
-    let bob = bob_actor.client();
-    let carol = carol_actor.client();
-    let dave = dave_actor.client();
+    authorize_device_public_key(
+        &server,
+        &dave.token,
+        &dave.actor,
+        &dave.device_id,
+        &SigningKey::from_bytes(&[0xda; 32]),
+    )
+    .await?;
 
     let realm_id = alice.create_realm("Interaction Model Realm").await?;
-    for member in [bob, carol, dave] {
+    for member in [&bob, &carol, &dave] {
         alice.add_member(&realm_id, member).await?;
     }
     alice
-        .grant_realm_actions_to_client(&realm_id, bob, &["ak.reaction.add"])
+        .grant_realm_actions_to_client(&realm_id, &bob, &["ak.reaction.add"])
         .await?;
     alice
-        .grant_realm_actions_to_client(&realm_id, carol, &["ak.reaction.remove"])
+        .grant_realm_actions_to_client(&realm_id, &carol, &["ak.reaction.remove"])
         .await?;
 
     let sent = alice
@@ -145,19 +183,18 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
     // thread's root *message* (`ak:message:<uuidv7>`), not an opaque
     // `ak:thread:` string. Derive it from the root message's event id.
-    let thread_root_ref = sent["event_id"]
+    let thread_root_event_id = sent["event_id"]
         .as_str()
-        .map(|event_id| event_id.replacen("ak:event:", "ak:message:", 1))
         .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
+    let thread_root_ref =
+        MessageId::from_event_id(&EventId::new(thread_root_event_id)?).to_string();
+    let read_cursor_id = ReadCursorId::new(next_typed_id("read_cursor"))?;
     let marker = dave
         .submit_event(
             &realm_id,
             "ak.read_cursor.advance",
             json!({
-                "id": sent["event_id"]
-                    .as_str()
-                    .expect("sent event id")
-                    .replacen("ak:event:", "ak:read_cursor:", 1),
+                "id": read_cursor_id,
                 "schema": "ak.schema.read_cursor.v1",
                 "actor_id": dave.actor,
                 "device_id": dave.device_id,

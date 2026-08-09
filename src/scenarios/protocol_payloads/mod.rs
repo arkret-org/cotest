@@ -28,8 +28,10 @@
 
 use anyhow::Result;
 
-use crate::harness::{ArkretServer, dev_login};
-use crate::scenarios::identity_test_support::actor_did_for_service;
+use crate::harness::dev_login;
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, spawn_with_harness_account_authority,
+};
 
 mod backup_delete;
 mod blob;
@@ -40,7 +42,7 @@ mod moderation;
 mod push;
 
 pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Result<()> {
-    let server = ArkretServer::spawn_with_env(
+    let server = spawn_with_harness_account_authority(
         "protocol-payloads",
         &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )
@@ -53,13 +55,21 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     )
     .await?;
 
-    let adapter_message_event_id = events_keys_setup::run(&server, &token, &actor_id).await?;
+    let (adapter_realm_id, adapter_message_event_id) =
+        events_keys_setup::run(&server, &token, &actor_id).await?;
     device_messages::run(&server, &token, &actor_id).await?;
     key_backups::run(&server, &token, &actor_id).await?;
     backup_delete::run(&server, &token, &actor_id).await?;
     blob::run(&server, &token).await?;
     push::run(&server, &token).await?;
-    moderation::run(&server, &token, &actor_id, &adapter_message_event_id).await?;
+    moderation::run(
+        &server,
+        &token,
+        &actor_id,
+        &adapter_realm_id,
+        &adapter_message_event_id,
+    )
+    .await?;
 
     Ok(())
 }

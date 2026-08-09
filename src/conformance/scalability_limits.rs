@@ -165,20 +165,13 @@ fn run_case(case: &Value) -> Result<()> {
             bounded_outcome(generator, "count", 1_024, "accept", "fail_closed")?
         }
         "active_circle_count" => decision(generator, "realm_active_circle_count", 999)?,
-        "active_circle_count_by_composition" => composition_decision(
-            generator,
-            &["ordinary_active_circles", "sidecar_backing_circles"],
-            999,
-        )?,
+        "active_circle_count_by_composition" => {
+            composition_decision(generator, &["ordinary_active_circles"], 999)?
+        }
         "actor_active_mls_circle_memberships" => decision(generator, "count", 255)?,
-        "actor_active_mls_circle_memberships_by_composition" => composition_decision(
-            generator,
-            &[
-                "ordinary_mls_circle_memberships",
-                "sidecar_backing_circle_memberships",
-            ],
-            255,
-        )?,
+        "actor_active_mls_circle_memberships_by_composition" => {
+            composition_decision(generator, &["ordinary_mls_circle_memberships"], 255)?
+        }
         "sibling_forks" if generator["same_actor_sequence"].as_bool() == Some(true) => {
             bounded_outcome(
                 generator,

@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 import { chromium, type FullConfig } from "@playwright/test";
 
 export default async function verifyBuildIdentity(config: FullConfig) {
+  if (process.env.COTEST_SKIP_INKSON === "1") {
+    return;
+  }
+
   const solandBaseUrl = process.env.COTEST_SOLAND_BASE_URL?.replace(/\/$/, "");
   if (!solandBaseUrl) {
     return;

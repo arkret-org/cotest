@@ -1,9 +1,13 @@
 use anyhow::Result;
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::fixtures::TestScaffold;
 use crate::harness::{ArkretServer, expect_api_error, expect_json, expect_status};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, authorize_device_public_key, spawn_with_harness_account_authority,
+};
 
 pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
     // CT-12: scaffold-driven, parallel-safe.
@@ -134,52 +138,69 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 }
 
 pub async fn contact_edges_are_rejected() -> Result<()> {
-    let server = ArkretServer::spawn("contact-edges").await?;
+    let server = spawn_with_harness_account_authority("contact-edges", &[]).await?;
+    let alice_actor = actor_did_for_service(server.service_id(), "alice-contact")?;
     let alice = server
-        .register_client(
-            "did:web:alice-contact.example",
-            "@alice-contact",
+        .demo_client(
+            &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
+    authorize_device_public_key(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &alice.device_id,
+        &SigningKey::from_bytes(&[0xa1; 32]),
+    )
+    .await?;
+    let bob_actor = actor_did_for_service(server.service_id(), "bob-contact")?;
     let bob = server
-        .register_client(
-            "did:web:bob-contact.example",
-            "@bob-contact",
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
+        .demo_client(&bob_actor, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;
+    authorize_device_public_key(
+        &server,
+        &bob.token,
+        &bob.actor,
+        &bob.device_id,
+        &SigningKey::from_bytes(&[0xb0; 32]),
+    )
+    .await?;
 
-    for (target, expected_status, expected_code) in [
-        (
-            alice.actor.as_str(),
-            StatusCode::BAD_REQUEST,
-            "invalid_param",
-        ),
-        (
-            "did:web:missing-contact.example",
-            StatusCode::NOT_FOUND,
-            "not_found",
-        ),
-    ] {
-        let request = alice.contact_request_prepare(target)?;
-        match alice.sdk().contacts_request(&request).await {
-            Err(arkret_http_client::Error::Api { status, error }) => {
-                assert_eq!(status, expected_status.as_u16());
-                assert_eq!(error.error.code, expected_code);
-            }
-            Err(error) => return Err(error.into()),
-            Ok(outcome) => {
-                return Err(anyhow::anyhow!(
-                    "invalid Contact target {target} was accepted: {outcome:?}"
-                ));
-            }
+    let self_request = alice.contact_request_prepare(&alice.actor)?;
+    match alice.sdk().contacts_request(&self_request).await {
+        Err(arkret_http_client::Error::Api { status, error }) => {
+            assert_eq!(status, StatusCode::BAD_REQUEST.as_u16());
+            assert_eq!(error.error.code, "invalid_param");
+        }
+        Err(error) => return Err(error.into()),
+        Ok(outcome) => {
+            return Err(anyhow::anyhow!(
+                "self-targeted Contact request was accepted: {outcome:?}"
+            ));
         }
     }
 
-    let receipt = alice.request_contact(&bob.actor).await?;
-    assert_eq!(receipt.core.holder.subject_id().as_str(), alice.actor);
-    assert_eq!(receipt.core.peer.subject_id().as_str(), bob.actor);
+    // Contact prepare/commit records the holder-local request fact. Target
+    // resolution and delivery are a later phase, so an offline or currently
+    // unresolvable peer is not rejected while authoring that local fact.
+    let missing_target = "did:web:missing-contact.example";
+    let missing_receipt = alice.request_contact(missing_target).await?;
+    assert_eq!(
+        missing_receipt.core.holder.subject_id().as_str(),
+        alice.actor
+    );
+    assert_eq!(
+        missing_receipt.core.peer.subject_id().as_str(),
+        missing_target
+    );
+
+    // Alice's first accepted Contact Event is intentionally still awaiting a
+    // device-signed successor Seal. Exercise the independent valid-target
+    // branch from Bob's fresh PCR rather than bypassing that finality fence.
+    let receipt = bob.request_contact(&alice.actor).await?;
+    assert_eq!(receipt.core.holder.subject_id().as_str(), bob.actor);
+    assert_eq!(receipt.core.peer.subject_id().as_str(), alice.actor);
 
     Ok(())
 }
