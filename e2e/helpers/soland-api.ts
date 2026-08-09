@@ -2315,6 +2315,79 @@ export async function submitSignedEventApi(
   throw new Error(`${context}: exhausted actor-frontier retry loop`);
 }
 
+export async function prepareSignedEventSubmissionApi(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  opts: { server?: SolandKey; context?: string } = {},
+): Promise<Record<string, unknown>> {
+  const context = opts.context ?? `prepare ${String(envelope.kind)}`;
+  await applyRegisteredCbaPlane(request, token, envelope, opts.server);
+  // This helper returns an EventInitialSubmission for a later endpoint to
+  // admit, so it cannot rely on the ordinary submit path's retry after an
+  // actor-frontier rejection. Bind the envelope to the current frontier
+  // before issuing its authorization lease.
+  await advanceEnvelopeToActorFrontier(
+    request,
+    token,
+    envelope,
+    opts.server,
+  );
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const leaseResponse = await issueAuthorizationLeasesApi(
+      request,
+      token,
+      [envelope],
+      opts.server,
+    );
+    const leaseText = await leaseResponse.text();
+    if (![200, 201].includes(leaseResponse.status())) {
+      const leaseBody = parseJsonOrRaw(leaseText);
+      if (
+        !requiresActorFrontierRefresh(
+          leaseResponse.status(),
+          leaseBody,
+          leaseText,
+        ) ||
+        attempt === 2
+      ) {
+        expect(
+          [200, 201],
+          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
+        ).toContain(leaseResponse.status());
+      }
+      await advanceEnvelopeToActorFrontier(
+        request,
+        token,
+        envelope,
+        opts.server,
+      );
+      continue;
+    }
+    const authorizationLease = authorizationLeasesFromIssueOutcome(
+      leaseText,
+      1,
+      context,
+    )[0];
+    const controlProposalAck = await issueControlProposalAckApi(
+      request,
+      token,
+      envelope,
+      authorizationLease,
+      opts.server,
+      context,
+    );
+    return {
+      event: envelope,
+      authorization_lease: authorizationLease,
+      ...(controlProposalAck
+        ? { control_proposal_ack: controlProposalAck }
+        : {}),
+    };
+  }
+  throw new Error(`${context}: exhausted actor-frontier retry loop`);
+}
+
 export async function submitSignedEventBatchApi(
   request: APIRequestContext,
   token: string,
