@@ -37,7 +37,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                 "action": "ak.realm.admin",
                 "resource": {
                     "kind": "realm",
-                    "id": realm_id,
                     "realm_id": realm_id
                 }
             }))?),
@@ -112,7 +111,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                 "action": "ak.realm.admin",
                 "resource": {
                     "kind": "realm",
-                    "id": realm_id,
                     "realm_id": realm_id
                 }
             }))?),
@@ -141,7 +139,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak.message.create",
             json!({
                 "kind": "strand",
-                "id": strand_id,
                 "realm_id": realm_id,
                 "strand_id": strand_id
             }),
@@ -151,7 +148,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak.pin.add",
             json!({
                 "kind": "strand",
-                "id": strand_id,
                 "realm_id": realm_id,
                 "strand_id": strand_id
             }),
@@ -161,7 +157,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak.rsvp.set",
             json!({
                 "kind": "strand",
-                "id": strand_id,
                 "realm_id": realm_id,
                 "strand_id": strand_id
             }),
@@ -171,7 +166,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak.policy.manage",
             json!({
                 "kind": "realm",
-                "id": realm_id,
                 "realm_id": realm_id
             }),
             "capability_denied",
@@ -180,9 +174,8 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak.relation.create",
             json!({
                 "kind": "relation",
-                "id": relation_id,
                 "realm_id": realm_id,
-                "cell": format!("ak:cell:ak.component.relation.v1:{relation_id}")
+                "relation_id": relation_id
             }),
             "capability_denied",
         ),
@@ -190,9 +183,8 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak.morph.create",
             json!({
                 "kind": "morph",
-                "id": morph_id,
                 "realm_id": realm_id,
-                "cell": format!("ak:cell:ak.component.morph.v1:{morph_id}")
+                "morph_id": morph_id
             }),
             "capability_denied",
         ),
@@ -222,7 +214,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                 "action": "ak.realm.admin",
                 "resource": {
                     "kind": "realm",
-                    "id": realm_id,
                     "realm_id": realm_id
                 }
             }))?),
