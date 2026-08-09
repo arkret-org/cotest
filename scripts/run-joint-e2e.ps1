@@ -1493,9 +1493,10 @@ function Start-ManagedCommand {
     $stderr = Join-Path $LogDirectory "$Name.stderr.log"
     $commandLog = Join-Path $LogDirectory "$Name.command.txt"
     $Command | Set-Content -Path $commandLog -Encoding UTF8
+    $wrappedCommand = "$Command; `$managedCommandSucceeded = `$?; `$managedCommandExitCode = `$LASTEXITCODE; if (-not `$managedCommandSucceeded) { if (`$null -ne `$managedCommandExitCode -and `$managedCommandExitCode -ne 0) { exit `$managedCommandExitCode }; exit 1 }; exit 0"
     $process = Start-Process `
         -FilePath "powershell" `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $Command) `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $wrappedCommand) `
         -WorkingDirectory $WorkingDirectory `
         -RedirectStandardOutput $stdout `
         -RedirectStandardError $stderr `
@@ -1908,6 +1909,17 @@ function Invoke-RunnerSelfTest {
         $failures = @(Get-ManagedServiceFailures -Services @($exitedService))
         if ($failures.Count -ne 1 -or $failures[0].exit_code -ne 23) {
             throw "managed service exit self-test did not preserve exit code 23"
+        }
+
+        $wrappedFailure = Start-ManagedCommand `
+            -Name "self-test-native-failure" `
+            -Command "cmd /c exit 29" `
+            -WorkingDirectory $tempRoot `
+            -LogDirectory $tempRoot
+        $wrappedFailure.Process.WaitForExit()
+        $wrappedFailure.Process.Refresh()
+        if ($wrappedFailure.Process.ExitCode -ne 29) {
+            throw "managed command wrapper lost native exit code 29"
         }
 
         $failureJson = Join-Path $tempRoot "managed-service-failures.json"
@@ -2921,6 +2933,7 @@ try {
             DATABASE_URL = ""
             SOLAND_BIND = "0.0.0.0:$SolandContainerPort"
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
+            SOLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
             SOLAND_DEVELOPMENT_MODE = "true"
             SOLAND_FIRST_PROVISIONING = "true"
             SOLAND_KEYSTORE_BACKEND = "encrypted_file"
@@ -2988,6 +3001,7 @@ try {
             RUST_LOG = $rustLog
             DATABASE_URL = if ($SolandDatabaseUrl) { $SolandDatabaseUrl } else { "" }
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
+            SOLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
             SOLAND_DEVELOPMENT_MODE = "true"
             SOLAND_FIRST_PROVISIONING = "true"
             SOLAND_KEYSTORE_BACKEND = "encrypted_file"
@@ -3256,6 +3270,11 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
+    if ($SkipInkson) {
+        $env:COTEST_SKIP_INKSON = "1"
+    } else {
+        Remove-Item Env:COTEST_SKIP_INKSON -ErrorAction SilentlyContinue
+    }
     if ($generatedSolandCommand -and $SolandDatabaseUrl) {
         $env:COTEST_SOLAND_CHAOS_CONTROL_FILE = $solandChaosControlFile
         $env:COTEST_SOLAND_STORAGE = "postgres"

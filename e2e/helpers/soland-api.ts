@@ -2670,7 +2670,9 @@ export function localPrincipalControlProposalAck(
   event: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   const actorDid = stringValue(event.actor_id);
-  const realmId = stringValue(event.realm_id);
+  const scopeRef = event.scope_ref as Record<string, unknown> | undefined;
+  const realmId =
+    stringValue(event.realm_id) ?? stringValue(scopeRef?.realm_id);
   if (
     !actorDid ||
     !realmId ||
@@ -4096,19 +4098,23 @@ function developmentProtocolPrivateKey(verificationMethod: string) {
 
 // FIXTURE ONLY: mirrors soland development_mode service HTTP signing keys.
 function serviceHttpPrivateKey(serviceId: string) {
-  const configuredSeed = configuredServiceSigningSeed(serviceId);
-  const seed =
-    configuredSeed ??
-    createHash("sha256")
-      .update("soland:notary-ephemeral:")
-      .update(serviceId)
-      .digest();
+  const seed = serviceSigningSeed(serviceId);
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({
     key: Buffer.concat([pkcs8Prefix, seed]),
     format: "der",
     type: "pkcs8",
   });
+}
+
+function serviceSigningSeed(serviceId: string): Buffer {
+  return (
+    configuredServiceSigningSeed(serviceId) ??
+    createHash("sha256")
+      .update("soland:notary-ephemeral:")
+      .update(serviceId)
+      .digest()
+  );
 }
 
 function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
@@ -4174,8 +4180,10 @@ type CotestWireCommand =
   | "principal-control-realm-id"
   | "account-handoff-request"
   | "principal-registration-fixture"
+  | "principal-service-binding"
   | "identity-creation-register-request"
-  | "pcr-genesis-draft";
+  | "principal-bootstrap-seal"
+  | "principal-successor-seal";
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
@@ -4356,6 +4364,61 @@ export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
       `cotest-wire ${command} returned non-JSON output: ${result.stdout}`,
     );
   }
+}
+
+export function sdkAcceptedAtServiceBinding(args: {
+  principalId: string;
+  deviceId: string;
+  principalSigningSeedB64url: string;
+  registrationCheckpoint: Record<string, unknown>;
+  trustDomain: string;
+  acceptedAt: string;
+  server?: SolandKey;
+}): Record<string, unknown> {
+  const checkpoint = args.registrationCheckpoint;
+  const didDocument = checkpoint.did_document;
+  const historyHead = stringValue(checkpoint.history_head);
+  const versionId = stringValue(checkpoint.version_id);
+  const notBefore = stringValue(checkpoint.genesis_created_at);
+  const expectedDocumentDigest = stringValue(checkpoint.document_digest);
+  if (
+    !didDocument ||
+    !historyHead ||
+    !versionId ||
+    !notBefore ||
+    !expectedDocumentDigest
+  ) {
+    throw new Error(
+      "principal registration checkpoint omitted DID binding evidence",
+    );
+  }
+  const serviceId = solandServiceId(args.server);
+  const routeOrigin = new URL(solandBaseUrl(args.server)).origin;
+  const endpointOrigin = routeOrigin.replace(/^http:/, "https:");
+  const binding = cotestWire<Record<string, unknown>>(
+    "principal-service-binding",
+    {
+      principal_id: args.principalId,
+      device_id: args.deviceId,
+      principal_signing_seed_b64url: args.principalSigningSeedB64url,
+      service_id: serviceId,
+      service_signing_seed_b64url:
+        serviceSigningSeed(serviceId).toString("base64url"),
+      trust_domain: args.trustDomain,
+      endpoint_origin: endpointOrigin,
+      did_document: didDocument,
+      history_head: historyHead,
+      version_id: versionId,
+      not_before: notBefore,
+      accepted_at: args.acceptedAt,
+    },
+  );
+  if (binding.document_digest !== expectedDocumentDigest) {
+    throw new Error(
+      "principal-service binding document digest disagrees with registration checkpoint",
+    );
+  }
+  return binding;
 }
 
 function assertJsonTransportable(value: unknown, path: string): void {

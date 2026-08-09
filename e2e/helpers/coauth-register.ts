@@ -394,6 +394,7 @@ export async function createCanonicalAccountHandoff(
     "ak.gate.account.command.issue_identity_binding_challenge",
     "ak.gate.account.command.register",
     "ak.gate.account.command.issue_session_grant",
+    "ak.gate.account.command.issue_recovery_completion_grant",
   ];
   if (
     outcome.request_id !== requestId ||
@@ -474,8 +475,8 @@ export async function registerCoauthPasswordAccount(
         session_public_key: canonicalJson(handoff.deviceKey.publicJwk),
         audience,
         requested_scope: [
-          "ak.self.account.read.describe",
-          "ak.self.events.read.scan",
+          "urn:arkret:principal-server:session.bind",
+          `urn:arkret:client:device:${genesisDeviceId}`,
         ],
       },
     },

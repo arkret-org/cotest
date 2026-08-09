@@ -7,18 +7,13 @@ import { randomBytes } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
-  prepareDirectConversationIdentityArkret,
-  seedDirectConversationIdentityArkret,
-} from "../../helpers/contact-api";
-import {
-  authHeaders,
   base64url,
   canonicalJson,
   canonicalTimestamp,
+  cotestWire,
   expectJsonOk,
-  localPrincipalControlProposalAck,
-  queryRealmEventsApi,
   refreshEventEnvelopeProof,
+  sdkAcceptedAtServiceBinding,
   sdkCapabilityActionRegistryDigest,
   sdkEventDerivedObjectId,
   sha256CanonicalJson,
@@ -29,9 +24,9 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
-  ensureRegistered,
-  issueDevSession,
-  uniqueUser,
+  createDpopUserSession,
+  selfPathHeadersForDpopSession,
+  type DpopUserSession,
 } from "../../helpers/users";
 
 type JsonObject = Record<string, any>;
@@ -40,17 +35,64 @@ const REALM_AUTHORITY_ROOT_CELL =
   "ak:cell:ak.component.realm.authority_root.v1:null";
 const DIRECT_CONVERSATION_PROFILE = "ak.profile.direct_conversation_realm.v1";
 
+async function sealPrincipalControlEvent(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  event: JsonObject,
+): Promise<void> {
+  const realmId = cotestWire<{ realm_id: string }>(
+    "principal-control-realm-id",
+    { principal_id: session.user.did },
+  ).realm_id;
+  expect(realmId, "principal control Realm id").toBeTruthy();
+  const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+  const frontierResponse = await request.fetch(frontierUrl, {
+    method: "QUERY",
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "QUERY", frontierUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ realm_id: realmId }),
+  });
+  const frontierBody = await expectJsonOk<JsonObject>(
+    frontierResponse,
+    "read principal Seal frontier",
+  );
+  const predecessorFrontier = frontierBody.frontier as JsonObject;
+  expect(predecessorFrontier?.kind).toBe("realm_seal");
+  const events = [...session.principalControlEvents, event];
+  const seal = cotestWire<JsonObject>(
+    "principal-successor-seal",
+    {
+      events,
+      predecessor_frontier: predecessorFrontier,
+      device_signing_seed_b64url: session.eventSigningSeedB64url,
+    },
+  );
+  const sealUrl = `${solandBaseUrl()}/_arkret/self/events/seals`;
+  const sealResponse = await request.post(sealUrl, {
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "POST", sealUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson(seal),
+  });
+  await expectJsonOk<JsonObject>(sealResponse, "submit principal successor Seal");
+  session.principalControlEvents.push(event);
+}
+
 async function prepareAndCommitContactEvent(
   request: APIRequestContext,
-  token: string,
+  session: DpopUserSession,
   path: "request" | "respond" | "scope-update",
   prepareBody: JsonObject,
 ): Promise<JsonObject> {
+  const url = `${solandBaseUrl()}/_arkret/self/contacts/${path}`;
   const prepareResponse = await request.post(
-    `${solandBaseUrl()}/_arkret/self/contacts/${path}`,
+    url,
     {
       headers: {
-        ...authHeaders(token),
+        ...selfPathHeadersForDpopSession(session, "POST", url),
         "content-type": "application/json",
       },
       data: canonicalJson(prepareBody),
@@ -72,10 +114,10 @@ async function prepareAndCommitContactEvent(
   expect(event.event_id).toBe(draft.event_id);
 
   const commitResponse = await request.post(
-    `${solandBaseUrl()}/_arkret/self/contacts/${path}`,
+    url,
     {
       headers: {
-        ...authHeaders(token),
+        ...selfPathHeadersForDpopSession(session, "POST", url),
         "content-type": "application/json",
       },
       data: canonicalJson({
@@ -84,7 +126,6 @@ async function prepareAndCommitContactEvent(
         idempotency_key: prepareBody.idempotency_key,
         reservation_handle: prepared.reservation_handle,
         signed_event: event,
-        control_proposal_ack: localPrincipalControlProposalAck(event),
       }),
     },
   );
@@ -96,25 +137,24 @@ async function prepareAndCommitContactEvent(
     status: "accepted",
     operation_id: prepareBody.operation_id,
   });
+  await sealPrincipalControlEvent(request, session, event);
   return committed;
 }
 
 async function acceptedDirectMessageEvidence(
   request: APIRequestContext,
-  aliceToken: string,
-  aliceDid: string,
-  bobToken: string,
-  bobDid: string,
+  alice: DpopUserSession,
+  bob: DpopUserSession,
 ): Promise<JsonObject> {
   const requestOutcome = await prepareAndCommitContactEvent(
     request,
-    aliceToken,
+    alice,
     "request",
     {
       phase: "prepare",
       operation_id: typedId("operation"),
       idempotency_key: typedId("contact-request"),
-      peer: { kind: "human", principal_id: bobDid },
+      peer: { kind: "human", principal_id: bob.user.did },
       granted_to_peer_scopes: ["direct_message"],
       introduction_evidence: { kind: "explicit_address" },
     },
@@ -124,7 +164,7 @@ async function acceptedDirectMessageEvidence(
 
   const responseOutcome = await prepareAndCommitContactEvent(
     request,
-    bobToken,
+    bob,
     "respond",
     {
       phase: "prepare",
@@ -145,13 +185,13 @@ async function acceptedDirectMessageEvidence(
   // founder basis.
   const aliceScopeOutcome = await prepareAndCommitContactEvent(
     request,
-    aliceToken,
+    alice,
     "scope-update",
     {
       phase: "prepare",
       operation_id: typedId("operation"),
       idempotency_key: typedId("contact-scope"),
-      peer: { kind: "human", principal_id: bobDid },
+      peer: { kind: "human", principal_id: bob.user.did },
       basis_id: responseReceipt.basis_id,
       version: 2,
       predecessor_event_ref: requestReceipt.core.request_event_ref,
@@ -159,7 +199,7 @@ async function acceptedDirectMessageEvidence(
     },
   );
   const aliceCurrentProof = aliceScopeOutcome.current_proof as JsonObject;
-  const pair = [aliceDid, bobDid].sort();
+  const pair = [alice.user.did, bob.user.did].sort();
   const basis = {
     kind: "normal",
     sorted_pair_members: pair,
@@ -314,37 +354,20 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
   test("same slot rejects a lower-salt/lower-Realm candidate and preserves the receipt", async ({
     request,
   }) => {
-    const [aliceIdentity, bobIdentity] = await Promise.all([
-      prepareDirectConversationIdentityArkret(
-        request,
-        uniqueUser("dc-slot-alice"),
-      ),
-      prepareDirectConversationIdentityArkret(
-        request,
-        uniqueUser("dc-slot-bob"),
-      ),
+    const [aliceSession, bobSession] = await Promise.all([
+      createDpopUserSession(request, "dc-slot-alice"),
+      createDpopUserSession(request, "dc-slot-bob"),
     ]);
-    const alice = aliceIdentity.user;
-    const bob = bobIdentity.user;
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
-    await Promise.all([
-      seedDirectConversationIdentityArkret(request, aliceToken, alice),
-      seedDirectConversationIdentityArkret(request, bobToken, bob),
-    ]);
+    if (!aliceSession || !bobSession) {
+      throw new Error("Direct Conversation live test requires canonical Coauth PCR sessions");
+    }
+    const alice = aliceSession.user;
+    const bob = bobSession.user;
 
     const founderBasisEvidence = await acceptedDirectMessageEvidence(
       request,
-      aliceToken,
-      alice.did,
-      bobToken,
-      bob.did,
+      aliceSession,
+      bobSession,
     );
     // Normal Contact basis fixes the responder (Bob), not the requester, as
     // the only founder.
@@ -374,17 +397,36 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     expect(losingSalt < acceptedSalt).toBe(true);
     expect(losing.realmId < accepted.realmId).toBe(true);
 
+    const describe = await expectJsonOk<{
+      service_id: string;
+      trust_domain: string;
+    }>(
+      await request.get(`${solandBaseUrl()}/_arkret/describe`),
+      "Direct Conversation source service describe",
+    );
+    expect(describe.service_id).toBe(solandServiceId());
+    const sourceServiceBinding = sdkAcceptedAtServiceBinding({
+      principalId: bob.did,
+      deviceId: bob.deviceId,
+      principalSigningSeedB64url: bobSession.eventSigningSeedB64url,
+      registrationCheckpoint: bobSession.account.principalRegistrationCheckpoint,
+      trustDomain: describe.trust_domain,
+      acceptedAt: canonicalTimestamp(),
+    });
+
     const acceptedBody = {
       unit_kind: "direct_conversation_founding",
       idempotency_key: typedId("dc-founding"),
       events: accepted.events.map((event) => ({ event })),
       founder_basis_evidence: founderBasisEvidence,
+      source_service_binding: sourceServiceBinding,
     };
+    const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
     const firstResponse = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      eventsUrl,
       {
         headers: {
-          ...authHeaders(bobToken),
+          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
           "content-type": "application/json",
         },
         data: canonicalJson(acceptedBody),
@@ -409,10 +451,10 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     });
 
     const retryResponse = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      eventsUrl,
       {
         headers: {
-          ...authHeaders(bobToken),
+          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
           "content-type": "application/json",
         },
         data: canonicalJson(acceptedBody),
@@ -430,10 +472,10 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       events: losing.events.map((event) => ({ event })),
     };
     const conflictResponse = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      eventsUrl,
       {
         headers: {
-          ...authHeaders(bobToken),
+          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
           "content-type": "application/json",
         },
         data: canonicalJson(conflictBody),
@@ -447,21 +489,27 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       "direct_conversation_slot_already_committed",
     );
 
-    const acceptedHistory = await queryRealmEventsApi(
-      request,
-      bobToken,
-      accepted.realmId,
+    const acceptedHistory = await expectJsonOk<JsonObject>(
+      await request.fetch(eventsUrl, {
+        method: "QUERY",
+        headers: {
+          ...selfPathHeadersForDpopSession(bobSession, "QUERY", eventsUrl),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({ realms: [accepted.realmId], limit: 100 }),
+      }),
+      `query events for accepted Direct Conversation ${accepted.realmId}`,
     );
     const acceptedEvents = (acceptedHistory.events ?? []) as JsonObject[];
     expect(acceptedEvents.map((event) => event.event_id)).toEqual(
       accepted.events.map((event) => event.event_id),
     );
     const losingHistory = await request.fetch(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      eventsUrl,
       {
         method: "QUERY",
         headers: {
-          ...authHeaders(bobToken),
+          ...selfPathHeadersForDpopSession(bobSession, "QUERY", eventsUrl),
           "content-type": "application/json",
         },
         data: canonicalJson({ realms: [losing.realmId], limit: 100 }),
@@ -475,10 +523,10 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     expect(losingHistoryText).not.toContain(losing.realmId);
 
     const postConflictRetry = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
+      eventsUrl,
       {
         headers: {
-          ...authHeaders(bobToken),
+          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
           "content-type": "application/json",
         },
         data: canonicalJson(acceptedBody),

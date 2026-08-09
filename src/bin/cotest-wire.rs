@@ -4,10 +4,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
 use arkret_identifiers::{ConsentId, DeviceId, Did, Hash};
+use arkret_models_collaboration::direct_conversation_ops::{
+    AcceptedAtServiceBinding, DidBindingEvidenceKind, DidBindingEvidenceReceipt,
+    DidBindingMethodProof, DidBindingMethodProofKind, MultikeyMethodType,
+    PrincipalServiceBindingProofPurpose, PrincipalServiceKind, ServiceVerificationMethod,
+};
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
 use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
-    Audience, Event, EventInitialSubmission, NonEmptyString, PayloadProof, Proof, proof_kind,
+    Audience, Base64UrlString, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof,
+    Proof, ProtocolSignature, proof_kind,
 };
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
@@ -57,6 +63,22 @@ struct PrincipalRegistrationFixtureInput {
 }
 
 #[derive(Debug, Deserialize)]
+struct PrincipalServiceBindingFixtureInput {
+    principal_id: String,
+    device_id: String,
+    principal_signing_seed_b64url: String,
+    service_id: String,
+    service_signing_seed_b64url: String,
+    trust_domain: String,
+    endpoint_origin: String,
+    did_document: Value,
+    history_head: String,
+    version_id: String,
+    not_before: String,
+    accepted_at: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct AccountHandoffRequestFixtureInput {
     request_id: String,
     audience: String,
@@ -80,6 +102,19 @@ struct IdentityCreationRegisterFixtureInput {
     display_name: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct PrincipalBootstrapSealInput {
+    pcr_genesis_unit: Value,
+    device_signing_seed_b64url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrincipalSuccessorSealInput {
+    events: Vec<Value>,
+    predecessor_frontier: Value,
+    device_signing_seed_b64url: String,
+}
+
 fn main() -> Result<()> {
     let command = std::env::args().nth(1).context("missing command")?;
     let input = read_stdin_json()?;
@@ -95,7 +130,10 @@ fn main() -> Result<()> {
         "principal-control-realm-id" => principal_control_realm(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
+        "principal-service-binding" => principal_service_binding(input)?,
         "identity-creation-register-request" => identity_creation_register_request(input)?,
+        "principal-bootstrap-seal" => principal_bootstrap_seal(input)?,
+        "principal-successor-seal" => principal_successor_seal(input)?,
         _ => bail!("unknown cotest-wire command {command:?}"),
     };
 
@@ -168,6 +206,13 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     );
     let did_operation = serde_json::to_value(&draft.submit_body)
         .context("serialize prepared principal DID operation")?;
+    let did_document = draft
+        .log_entry
+        .get("state")
+        .cloned()
+        .context("prepared principal inception omitted DID document state")?;
+    let document_digest = canonical::canonical_sha256(&did_document)
+        .context("digest prepared principal DID document")?;
     let lease: arkret::IdentityCreationLease =
         serde_json::from_value(input.identity_creation_lease)
             .context("parse identity-creation lease")?;
@@ -220,6 +265,9 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "backup_hpke_public_key_multibase": key_material.backup_hpke_public_key_multikey,
         "recovery_key_fingerprint": recovery_key_fingerprint,
         "did_operation": did_operation,
+        "did_document": did_document,
+        "document_digest": document_digest,
+        "history_head": draft.version_id,
         // The signed genesis Event itself, not a reserved id for it. `ak:event:`
         // is an event-derived kind, so its id is a function of this finished
         // envelope; the id-only field this fixture used to emit was both
@@ -240,6 +288,133 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "checkpoint": checkpoint,
         "challenge_request": challenge_request,
     }))
+}
+
+fn principal_service_binding(input: Value) -> Result<Value> {
+    let input: PrincipalServiceBindingFixtureInput =
+        serde_json::from_value(input).context("parse principal-service binding fixture input")?;
+    let principal_id = Did::new(input.principal_id).context("parse binding principal DID")?;
+    let service_id = Did::new(input.service_id).context("parse binding service DID")?;
+    let device_id = DeviceId::new(input.device_id).context("parse binding device id")?;
+    let document: arkret_models_identity::did_document::DidDocument =
+        serde_json::from_value(input.did_document).context("parse binding DID document")?;
+    if document.id != principal_id {
+        bail!("binding DID document does not belong to principal");
+    }
+    document
+        .validate()
+        .context("validate binding DID document")?;
+    if document.method() != "webvh" || input.history_head.is_empty() || input.version_id.is_empty()
+    {
+        bail!("principal-service binding requires pinned did:webvh history evidence");
+    }
+    let document_digest =
+        Hash::new(canonical::canonical_sha256(&document).context("digest binding DID document")?)
+            .context("parse binding DID document digest")?;
+    let endpoint =
+        url::Url::parse(&input.endpoint_origin).context("parse service endpoint origin")?;
+    if endpoint.scheme() != "https"
+        || endpoint.host_str().is_none()
+        || endpoint.path() != "/"
+        || endpoint.query().is_some()
+        || endpoint.fragment().is_some()
+        || !endpoint.username().is_empty()
+        || endpoint.password().is_some()
+    {
+        bail!("service endpoint origin must be a canonical HTTPS origin");
+    }
+    let not_before = canonical::parse_timestamp_canonical(&input.not_before)
+        .context("parse binding not_before")?;
+    let accepted_at = canonical::parse_timestamp_canonical(&input.accepted_at)
+        .context("parse binding accepted_at")?;
+    let service_verification_method = DidUrl::new(format!("{service_id}#notary-key"))
+        .map_err(|error| anyhow::anyhow!("build service notary method: {error}"))?;
+    let principal_verification_method = DidUrl::new(format!("{principal_id}#{device_id}"))
+        .map_err(|error| anyhow::anyhow!("build principal device method: {error}"))?;
+    let service_key = signing_key_from_seed(&input.service_signing_seed_b64url)
+        .context("parse service signing seed")?;
+    let principal_key = signing_key_from_seed(&input.principal_signing_seed_b64url)
+        .context("parse principal device signing seed")?;
+    let witness_proofs_digest = Hash::new(
+        canonical::canonical_sha256(&Vec::<Value>::new())
+            .context("digest empty webvh witness proof set")?,
+    )
+    .context("parse webvh witness proof digest")?;
+    let placeholder = Base64UrlString::new("AA".to_owned())
+        .map_err(|error| anyhow::anyhow!("build proof placeholder: {error}"))?;
+    let mut binding = AcceptedAtServiceBinding {
+        principal_id,
+        service_id: service_id.clone(),
+        trust_domain: input.trust_domain,
+        service_kind: PrincipalServiceKind::PrincipalServer,
+        service_verification_method: ServiceVerificationMethod {
+            id: service_verification_method.clone(),
+            controller: service_id,
+            method_type: MultikeyMethodType::Multikey,
+            public_key_multibase: arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+                service_key.verifying_key().as_bytes(),
+            ),
+        },
+        endpoint_origins: vec![input.endpoint_origin],
+        document_digest: document_digest.clone(),
+        authority_evidence: DidBindingEvidenceReceipt {
+            kind: DidBindingEvidenceKind::AkDidBindingEvidenceV1,
+            method: document.method().to_owned(),
+            document_digest,
+            method_proofs: vec![DidBindingMethodProof {
+                kind: DidBindingMethodProofKind::WebvhLog,
+                history_head: input.history_head.clone(),
+                witnesses: Vec::new(),
+                witness_proofs_digest,
+            }],
+        },
+        history_head: Some(input.history_head),
+        version_id: Some(input.version_id),
+        not_before,
+        expires_at: None,
+        accepted_at,
+        binding_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
+            .context("build binding digest placeholder")?,
+        service_acceptance_proof: ProtocolSignature {
+            verification_method: service_verification_method.clone(),
+            created_at: accepted_at,
+            jws: placeholder.clone(),
+        },
+        principal_authorization_proof: ProtocolSignature {
+            verification_method: principal_verification_method.clone(),
+            created_at: accepted_at,
+            jws: placeholder,
+        },
+    };
+    binding.binding_digest = binding
+        .computed_binding_digest()
+        .context("compute principal-service binding digest")?;
+    let service_input = binding
+        .proof_signing_input_bytes(
+            PrincipalServiceBindingProofPurpose::ServiceAcceptance,
+            &service_verification_method,
+        )
+        .context("build service acceptance proof input")?;
+    binding.service_acceptance_proof.jws = Base64UrlString::new(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(service_key.sign(&service_input).to_bytes()),
+    )
+    .map_err(|error| anyhow::anyhow!("encode service acceptance proof: {error}"))?;
+    let principal_input = binding
+        .proof_signing_input_bytes(
+            PrincipalServiceBindingProofPurpose::PrincipalAuthorization,
+            &principal_verification_method,
+        )
+        .context("build principal authorization proof input")?;
+    binding.principal_authorization_proof.jws = Base64UrlString::new(
+        base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(principal_key.sign(&principal_input).to_bytes()),
+    )
+    .map_err(|error| anyhow::anyhow!("encode principal authorization proof: {error}"))?;
+    binding
+        .validate_shape()
+        .context("validate principal-service binding")?;
+    serde_json::to_value(binding).context("serialize principal-service binding")
 }
 
 /// The founding Principal Control Realm genesis Event, signed by the identity
@@ -472,6 +647,103 @@ fn identity_creation_register_request(input: Value) -> Result<Value> {
     )
     .context("build identity-creation register request")?;
     serde_json::to_value(request).context("serialize identity-creation register request")
+}
+
+fn principal_bootstrap_seal(input: Value) -> Result<Value> {
+    let input: PrincipalBootstrapSealInput =
+        serde_json::from_value(input).context("parse principal bootstrap Seal input")?;
+    let unit: arkret_wire::PcrGenesisUnit = serde_json::from_value(input.pcr_genesis_unit)
+        .context("parse PCR genesis unit for bootstrap Seal")?;
+    let create = unit.create();
+    let authorize = unit.founding_authorize();
+    let create_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload =
+        create.payload_as().context("parse PCR create payload")?;
+    let descriptor = create_payload
+        .object
+        .founding_device_descriptor
+        .context("PCR create omits founding device descriptor")?;
+    let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
+    let verification_method =
+        arkret_wire::DidUrl::new(format!("{}#{}", create.actor_id, descriptor.device_id)).map_err(
+            |error| anyhow::anyhow!("build founding device verification method: {error}"),
+        )?;
+    let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
+        seed,
+        create.actor_id.clone(),
+        verification_method,
+    );
+    let mut hlc = arkret_hlc::HlcGenerator::new(
+        create.realm_id.as_str(),
+        descriptor.device_id.as_str(),
+        &seed,
+    );
+    let seal = arkret_bootstrap::build_self_principal_bootstrap_seal(
+        create,
+        authorize,
+        hlc.generate(),
+        &signer,
+        &|event| {
+            arkret_schema::project_registered_cell_writes(
+                event,
+                arkret_canonical::DigestSuite::Sha256,
+            )
+            .map_err(|error| error.to_string())
+        },
+    )
+    .context("build self-principal bootstrap Seal")?;
+    serde_json::to_value(seal).context("serialize self-principal bootstrap Seal")
+}
+
+fn principal_successor_seal(input: Value) -> Result<Value> {
+    let input: PrincipalSuccessorSealInput =
+        serde_json::from_value(input).context("parse principal successor Seal input")?;
+    let events = input
+        .events
+        .into_iter()
+        .map(|event| serde_json::from_value(event).context("parse principal control Event"))
+        .collect::<Result<Vec<Event>>>()?;
+    let create = events
+        .first()
+        .context("principal successor Seal history is empty")?;
+    let create_payload: arkret_models_collaboration::events_payloads::RealmCreatePayload =
+        create.payload_as().context("parse PCR create payload")?;
+    let descriptor = create_payload
+        .object
+        .founding_device_descriptor
+        .context("PCR create omits founding device descriptor")?;
+    let predecessor: arkret_models_collaboration::event_sync::RealmSealFrontierView =
+        serde_json::from_value(input.predecessor_frontier)
+            .context("parse principal predecessor Seal frontier")?;
+    let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
+    let verification_method =
+        arkret_wire::DidUrl::new(format!("{}#{}", create.actor_id, descriptor.device_id)).map_err(
+            |error| anyhow::anyhow!("build founding device verification method: {error}"),
+        )?;
+    let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
+        seed,
+        create.actor_id.clone(),
+        verification_method,
+    );
+    let mut hlc = arkret_hlc::HlcGenerator::new(
+        create.realm_id.as_str(),
+        descriptor.device_id.as_str(),
+        &seed,
+    );
+    let seal = arkret_bootstrap::build_self_principal_linear_successor_seal(
+        &events,
+        &predecessor,
+        hlc.generate(),
+        &signer,
+        &|event| {
+            arkret_schema::project_registered_cell_writes(
+                event,
+                arkret_canonical::DigestSuite::Sha256,
+            )
+            .map_err(|error| error.to_string())
+        },
+    )
+    .context("build self-principal successor Seal")?;
+    serde_json::to_value(seal).context("serialize self-principal successor Seal")
 }
 
 fn signing_key_from_seed(seed_b64url: &str) -> Result<SigningKey> {
