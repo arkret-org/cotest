@@ -36,6 +36,7 @@ import {
   canonicalJson,
   cotestWire,
   registerEventSigner,
+  registerPrincipalControlRealm,
   typedId,
 } from "./soland-api";
 
@@ -1357,6 +1358,11 @@ export async function createDpopUserSessionForAccount(
   session.principalControlEvents = pcrGenesisUnit.events.map((event) =>
     JSON.parse(canonicalJson(event)) as Record<string, unknown>,
   );
+  const principalControlRealmId = session.principalControlEvents[0]?.realm_id;
+  if (typeof principalControlRealmId !== "string") {
+    throw new Error("principal registration checkpoint PCR create omitted realm_id");
+  }
+  registerPrincipalControlRealm(user.did, principalControlRealmId);
   const bootstrapSeal = cotestWire<Record<string, unknown>>(
     "principal-bootstrap-seal",
     {

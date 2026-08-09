@@ -15,7 +15,7 @@
 7. 一次 `account_register` 提交完整 draft。Coauth 不生成、不修改、不签 PCR Event。
 8. Soland 只在两条 Event、root commitment、设备 PoP、lease 与 DID entry 0 全部匹配时原子接受，并返回 `pcr_genesis_unit` receipt。
 9. Coauth 验 receipt 后绑定账号并直接返回 durable Standard SessionGrant；不存在临时 grant 或 promotion。
-10. 客户端完成首个 Seal、recovery policy 与 `did_recovery` backup 后进入 Ready。
+10. 客户端完成首个 Seal 与 genesis recovery policy 后进入 Ready；encrypted account/history backup 是独立的持续备份流程。
 
 ## 必测恢复
 

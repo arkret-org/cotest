@@ -372,9 +372,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let account_data_key = "client.durable-effect-spotcheck";
     let set_event = crate::harness::event_envelope(
         &alice.actor,
-        &arkret_models_identity::principal_control_realm_id(&arkret_wire::Did::new(
-            alice.actor.clone(),
-        )?),
+        &realm_id,
         arkret_wire::event_kind_str::ACCOUNT_DATA_SET,
         json!({
             "key": account_data_key,

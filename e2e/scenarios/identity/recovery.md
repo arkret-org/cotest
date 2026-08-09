@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:冷保管确认、恢复策略与首备份、跨设备解密、root-anchored DID entry + 原子 `ak.device.reanchor` / replacement authorize、generation fence 及 E2EE 历史恢复。Recovery Key 是唯一的内容恢复用户凭证,但派生出的 DID root、recovery-proof Ed25519 key 与 backup-only X25519 HPKE key 必须角色分离。
+验证用户在丢失主设备后,通过预设的恢复手段(24 词 Recovery Key / 阈值恢复 shares / 信任恢复服务)在新设备上完整恢复访问。包含:冷保管确认、恢复策略、加密账户备份、跨设备解密、root-anchored DID entry + 原子 `ak.device.reanchor` / replacement authorize、generation fence 及 E2EE 历史恢复。Recovery Key 是唯一的内容恢复用户凭证,但派生出的 DID root、recovery-proof Ed25519 key 与 backup-only X25519 HPKE key 必须角色分离。
 
 不验证:首次 onboarding(见 identity/onboarding)、多设备配对(见 identity/multi-device)、device 撤销(见 identity/multi-device)。
 
@@ -45,13 +45,11 @@
    - 按规范 HKDF 从 Recovery Key 派生代际 DID root、独立 recovery-proof signing key 与 backup-only HPKE key
    - entry 0 的 `updateKeys` 使用 root;root 不进入 DID Document `verificationMethod`
    - 发布或确认同时绑定 recovery signing / HPKE pair 的 genesis recovery policy accepted
-   - 上传 `backup_kind="did_recovery"`、`series_seq=0`、`recipient_method="recovery_public_key"`、带 `recovery_policy_ref` 的 first-backup envelope；或保存 root-signed offline-sealed receipt 并要求用户二次确认离线持有
    - 只用配对的 X25519 backup key HPKE 加密账户 secret;不得把 signing key 当 recipient
-4. `PUT /_arkret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_kind: "did_recovery" | "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref?, ciphertext, ciphertext_digest }`
+4. `PUT /_arkret/self/keys/backups/<backup_id>` 上传 envelope:`{ backup_kind: "secret_storage", encryption.recipient_method: "recovery_public_key", recovery_policy_ref, ciphertext, ciphertext_digest }`
 5. 服务端**只能存** ciphertext,不接受 Recovery Key 词串明文
 6. 断言:
    - `GET /_arkret/root/identity/recovery-policy` 返回 non-null `active_policy`
-   - `GET /_arkret/self/keys/backups?backup_kind=did_recovery` 至少 1 条
    - `GET /_arkret/self/keys/backups?backup_kind=secret_storage` 至少 1 条(有本地 account MLS secret 时)
    - metadata **不含** Recovery Key plaintext;此后新材料按 §7.10 自动持续备份
 
@@ -63,7 +61,7 @@
 ### Phase C — Device 1 "丢失",alice 在 Device 2 恢复
 
 9. 开新 browser context = device-2,空 localStorage
-10. alice 登录进入 app;若当前设备未在 durable device list 中,UI 先进入 existing-device authorization。只有用户确认旧设备不可用,且服务器存在 active policy + `did_recovery` backup 时,才进入 Recovery Key restore。新浏览器不得自动生成第二套 24 词。
+10. alice 登录进入 app;若当前设备未在 durable device list 中,UI 先进入 existing-device authorization。只有用户确认旧设备不可用且服务器存在 active policy 时,才进入 Recovery Key restore。新浏览器不得自动生成第二套 24 词。
 11. 检测到服务器有可用备份但本地无 MLS state → 自动弹出 `MlsUnlockPrompt`(`/recover` 独立路由已不存在;手动入口是 `/settings/recovery` restore 面板)
 12. UI 提示输入已有 24 词 Recovery Key("Decrypt with Recovery Key")
 13. 客户端:
@@ -84,8 +82,8 @@
 ## Observable assertions(合并)
 
 - Phase A 步骤 6:backup metadata 暴露 ✓,plaintext 不暴露 ✓
-- Phase A 步骤 6:`active_policy` + (`did_recovery` 或经校验且二次确认的 root-signed offline receipt) 才算 recovery configured；普通本地指纹或无签名 receipt 不得绕过 gate
-- Phase C 步骤 10:fresh browser 优先 existing-device authorization;无 active policy / 无 `did_recovery` 时 fail closed,不尝试 recovery proof,不生成新 24 词
+- Phase A 步骤 6:`active_policy` accepted 才算 recovery-material gate configured；普通本地指纹不得绕过 gate
+- Phase C 步骤 10:fresh browser 优先 existing-device authorization;无 active policy 时 fail closed,不尝试 recovery proof,不生成新 24 词
 - Phase C 步骤 13:Recovery Key 错误 → 非法 24 词在输入校验即拒;合法但错误的词串在本地 HPKE open / envelope 校验阶段拒,**不发解锁请求到服务器**(避免 oracle)
 - Phase C 步骤 16:device-2 成功注册、generation 推进,旧代离线队列不重放
 - Phase D 步骤 20:历史消息明文渲染

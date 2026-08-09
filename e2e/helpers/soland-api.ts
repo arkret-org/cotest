@@ -141,9 +141,26 @@ export function typedId(kind: string): string {
   return `ak:${kind}:${uuidV7()}`;
 }
 
+const acceptedPrincipalControlRealms = new Map<string, string>();
+
+export function registerPrincipalControlRealm(
+  did: string,
+  realmId: string,
+): void {
+  const previous = acceptedPrincipalControlRealms.get(did);
+  if (previous && previous !== realmId) {
+    throw new Error(`principal ${did} was bound to two different PCR ids`);
+  }
+  acceptedPrincipalControlRealms.set(did, realmId);
+}
+
 export function principalControlRealmForDid(did: string): string {
-  const realmId = sdkPrincipalControlRealmId(did);
-  assertPrincipalControlRealmVectors(did, realmId);
+  const realmId = acceptedPrincipalControlRealms.get(did);
+  if (!realmId) {
+    throw new Error(
+      `event-derived PCR id for ${did} is unavailable; register its accepted create Event first`,
+    );
+  }
   return realmId;
 }
 
@@ -3899,50 +3916,6 @@ const E2E_FIXTURES_ROOT = resolve(
   "fixtures",
 );
 
-let principalControlRealmVectorsChecked = false;
-
-function assertPrincipalControlRealmVectors(
-  did: string,
-  realmId: string,
-): void {
-  const fixture = JSON.parse(
-    readFileSync(
-      join(E2E_FIXTURES_ROOT, "principal-control-realm-vectors.json"),
-      "utf8",
-    ),
-  ) as {
-    vectors?: Array<{
-      principal_id?: string;
-      principal_control_realm_id?: string;
-    }>;
-  };
-  const vectors = fixture.vectors ?? [];
-  if (!principalControlRealmVectorsChecked) {
-    for (const vector of vectors) {
-      if (!vector.principal_id || !vector.principal_control_realm_id) {
-        throw new Error(
-          "principal-control-realm-vectors.json contains an incomplete vector",
-        );
-      }
-      const actual = sdkPrincipalControlRealmId(vector.principal_id);
-      if (actual !== vector.principal_control_realm_id) {
-        throw new Error(
-          `principal_control_realm_id ${actual} drifted from vector ${vector.principal_control_realm_id} for ${vector.principal_id}`,
-        );
-      }
-    }
-    principalControlRealmVectorsChecked = true;
-  }
-  const pinned = vectors.find((vector) => vector.principal_id === did);
-  if (
-    pinned?.principal_control_realm_id &&
-    pinned.principal_control_realm_id !== realmId
-  ) {
-    throw new Error(
-      `principal_control_realm_id ${realmId} drifted from pinned vector ${pinned.principal_control_realm_id} for ${did}`,
-    );
-  }
-}
 
 // federation.md §4.1: membership_frontier / delivery_binding_frontier are the
 // sender's causal frontiers (`id[]`). The harness acts as the origin peer of a
@@ -4188,8 +4161,6 @@ type CotestWireCommand =
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
 type CotestWireCapabilityRegistryDigest = { digest: string };
-type CotestWirePrincipalControlRealm = { realm_id: string };
-
 const cotestRepoRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -4208,15 +4179,6 @@ export function canonicalJson(value: unknown): string {
   return cotestWire<CotestWireCanonicalJson>("canonical-json", {
     value,
   }).canonical;
-}
-
-function sdkPrincipalControlRealmId(principalId: string): string {
-  return cotestWire<CotestWirePrincipalControlRealm>(
-    "principal-control-realm-id",
-    {
-      principal_id: principalId,
-    },
-  ).realm_id;
 }
 
 /// Canonical (JCS key-ordered) JSON serialized to UTF-8 bytes. Authoritative

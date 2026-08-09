@@ -6,6 +6,7 @@ use arkret_bootstrap::{
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
+use arkret_event_draft::EventPayloadExt as _;
 use arkret_identifiers::{DeviceId, Did, Hlc, RealmId};
 use arkret_models_collaboration::events_payloads::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
@@ -16,7 +17,6 @@ use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
     keys_upload_signing_input,
 };
-use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_models_identity::{
     IdentityBindingPurpose, PCR_GENESIS_UNIT_KINDS, UnsignedIdentityCreationControlProof,
     UnsignedIdentityCreationControlProofBody,
@@ -180,22 +180,25 @@ pub async fn seal_current_principal_control_frontier(
     device_signing_key: &SigningKey,
 ) -> Result<()> {
     let principal = Did::new(client.actor.clone())?;
-    let realm_id = RealmId::new(principal_control_realm_id(&principal))?;
-    let mut events = client
-        .sdk()
-        .events_read_all_pages(realm_id.as_str())
-        .await?
-        .events
-        .into_iter()
-        .enumerate()
-        .map(|(index, row)| {
-            row.into_event().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "PCR successor Seal requires complete Events; row {index} is redacted or reference-locked"
-                )
-            })
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let mut selected = None;
+    for candidate in client.controlled_realm_ids() {
+        let events = client.sdk().events_read_all_pages(&candidate).await?.events;
+        let is_pcr = events.first().is_some_and(|event| {
+            event.actor_id == principal
+                && event
+                    .typed_payload::<arkret_wire::event_spec::RealmCreate>()
+                    .is_ok_and(|payload| {
+                        payload.object.purpose
+                            == arkret_models_collaboration::events_payloads::RealmPurpose::PrincipalControl
+                    })
+        });
+        if is_pcr {
+            selected = Some((RealmId::new(candidate)?, events));
+            break;
+        }
+    }
+    let (realm_id, mut events) =
+        selected.context("client has no accepted event-derived Principal Control Realm")?;
     events.sort_by_key(|event| event.actor_seq);
     anyhow::ensure!(
         events.len() >= 3,
@@ -334,7 +337,6 @@ async fn bootstrap_test_device_authorization(
         .context("test principal DID has no local id")?;
     let host = method_authority.replace("%3A", ":").replace("%3a", ":");
     let principal = Did::new(actor.to_owned()).context("invalid test principal DID")?;
-    let realm_id = RealmId::new(principal_control_realm_id(&principal))?;
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
 
@@ -400,7 +402,7 @@ async fn bootstrap_test_device_authorization(
     let mut create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
-            realm_id: realm_id.clone(),
+            genesis_salt: arkret_wire::GenesisSalt::generate()?,
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             founding_device_descriptor: descriptor,
@@ -426,6 +428,7 @@ async fn bootstrap_test_device_authorization(
         &root_verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
+    let realm_id = create.realm_id.clone();
     let mut authorize = arkret_wire::test_support::raw_event(
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm {

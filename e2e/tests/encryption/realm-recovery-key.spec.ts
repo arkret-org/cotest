@@ -145,7 +145,7 @@ function realmCreateEnvelope(args: {
 
 // A RecoveryRecipient (models/realm-and-space.md §2.3.1). verification_method
 // MUST resolve to a VM designated by an active ArkretRealmHistoryRecoveryKey
-// service entry (identity-did.md §8.3); domain-separated from did_recovery.
+// service entry (identity-did.md §8.3); domain-separated from identity backup HPKE.
 function recoveryRecipient(args: {
   recipientId: string;
   principalId: string;
@@ -466,7 +466,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     // org-rrk publishes a DID Document with an active
     // ArkretRealmHistoryRecoveryKey service entry whose serviceEndpoint
     // .verificationMethod points to a keyAgreement HPKE VM, domain=mls_history,
-    // domain-separated from did_recovery (identity-did.md §8.3). The live
+    // domain-separated from identity backup HPKE (identity-did.md §8.3). The live
     // helper for this is a inkson/soland concern (publishRrkServiceEntry).
     const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
 

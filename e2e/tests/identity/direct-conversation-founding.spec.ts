@@ -40,10 +40,10 @@ async function sealPrincipalControlEvent(
   session: DpopUserSession,
   event: JsonObject,
 ): Promise<void> {
-  const realmId = cotestWire<{ realm_id: string }>(
-    "principal-control-realm-id",
-    { principal_id: session.user.did },
-  ).realm_id;
+  const realmId = session.principalControlEvents[0]?.realm_id;
+  if (typeof realmId !== "string") {
+    throw new Error("session omitted its accepted event-derived PCR create");
+  }
   expect(realmId, "principal control Realm id").toBeTruthy();
   const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
   const frontierResponse = await request.fetch(frontierUrl, {

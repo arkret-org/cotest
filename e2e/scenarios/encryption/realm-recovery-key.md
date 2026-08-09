@@ -45,7 +45,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
 
 1. org-rrk 发布 DID Document,含 active `ArkretRealmHistoryRecoveryKey` service entry
    (`serviceEndpoint.verificationMethod` 指向一把 `keyAgreement` HPKE VM,`domain=mls_history`,
-   独立于 `did_recovery` 域)。
+   独立于 identity backup HPKE 域)。
 2. alice 建 Realm:`encryption_profile=mls_rfc9420`、`content_scheme=mls_exporter_aead_v1`、
    `durability_policy={mode:org_recovery_key, recovery_recipients:[org-rrk RRK]}`。
 3. alice 提交 `ak.mls.genesis`,推进若干 `ak.mls.commit`(epoch 1..N);每个 epoch alice+bob
@@ -73,7 +73,7 @@ notary `mixed` profile 的 `recovery_members`(finality 轴,正交)。
   reason=`durability_scheme_incompatible`(§2.3.1 / §2.10.8 适用条件)。
 - **C2 `durability_recovery_recipient_unverified`**:`recovery_recipients[].verification_method`
   解析不到 active `ArkretRealmHistoryRecoveryKey` service entry(已撤销 / 未被 service entry 指定 /
-  指向 `did_recovery` 域 key)→ **发送客户端在 HPKE seal 前** fail closed,
+  指向 identity backup HPKE 域 key)→ **发送客户端在 HPKE seal 前** fail closed,
   reason=`durability_recovery_recipient_unverified`,MUST NOT 回退到任意公钥，也不得发出
   `ak.realm_key.share`。仅写入 `durability_policy` 不是该诊断的触发点。
 - **C3 `durability_seal_missing_before_gc`**:某 epoch 的 RRK share 尚未 accepted(RYW 未满足)即

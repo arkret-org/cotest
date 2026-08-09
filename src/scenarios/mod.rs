@@ -33,7 +33,6 @@ pub mod identity_test_support;
 pub mod interaction_models;
 pub mod invite_frozen_prestate_live;
 pub mod key_backup_negative;
-pub mod key_backup_recovery_account_state;
 pub mod late_key_recovery_removed_actor;
 pub mod media_plaintext_downgrade_no_governance_binding;
 pub mod moderation_appeal_strand_end_to_end;

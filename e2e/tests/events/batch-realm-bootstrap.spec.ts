@@ -8,7 +8,6 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
-  principalControlRealmForDid,
   queryRealmEventsApi,
   sdkCapabilityActionRegistryDigest,
   sendMessageApi,
@@ -28,9 +27,8 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const alice = uniqueUser("events-batch-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const missingRealmId = principalControlRealmForDid(
-      `did:web:missing-${Date.now()}.example`,
-    );
+    const missingRealmId =
+      "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19";
 
     const missingFrontier = await request.get(
       `${solandBaseUrl()}/_arkret/self/events/frontier?actor_id=${encodeURIComponent(alice.did)}&realm_id=${encodeURIComponent(missingRealmId)}`,

@@ -77,7 +77,7 @@ test.describe("key backup + restore", () => {
     }
   });
 
-  test("first-device bootstrap generates a 24-word Recovery Key and durable did_recovery backup; direct replacement requires staged handoff", async ({
+  test("first-device bootstrap activates a recovery policy and durable encrypted account backup; direct replacement requires staged handoff", async ({
     browser,
     request,
   }) => {
@@ -134,7 +134,7 @@ test.describe("key backup + restore", () => {
         device.page.getByTestId("recovery-key-passphrase"),
       ).toHaveCount(0);
 
-      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=did_recovery`;
+      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`;
       await expect
         .poll(
           async () => {
@@ -156,12 +156,12 @@ test.describe("key backup + restore", () => {
                 : [];
             return backups.some(
               (backup: any) =>
-                backup?.backup_kind === "did_recovery" &&
+                backup?.backup_kind === "secret_storage" &&
                 backup?.encryption?.recipient_method ===
                   "recovery_public_key" &&
                 Array.isArray(backup?.contents) &&
                 backup.contents.some(
-                  (item: any) => item?.item_kind === "recovery_key_share",
+                  (item: any) => item?.item_kind === "mls_account_secret",
                 ),
             );
           },

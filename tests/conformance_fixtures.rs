@@ -256,6 +256,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// FLOW-002/004/005/008/014 — joined generation-0 history, exact
+    /// first-valid founding replay, Commit/Welcome finality fences and
+    /// same-coordinate replacement-generation repair.
+    direct_conversation_end_to_end_flow_matches_reference_semantics,
+    "direct_conversation_end_to_end_flow",
+    cotest::conformance::run_direct_conversation_flow_suite,
+);
+
+conformance_test!(
     /// C40.5 — security negative profile vectors. Hard-fails bad signatures,
     /// canonical-byte conflicts, schema/payload violations, replay, downgrade,
     /// and query-string auth leakage.

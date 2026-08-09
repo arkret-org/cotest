@@ -100,13 +100,18 @@ export async function resolvePrincipalDid(
   if (!logBody) {
     throw new Error(`identity log ${did} returned non-object JSON: ${logText}`);
   }
-  const log = Array.isArray(logBody.events)
-    ? logBody.events.flatMap((entry) => {
+  if (
+    stringField(logBody, "did") !== did ||
+    stringField(logBody, "method") !== "did:webvh" ||
+    logBody.native_history !== true ||
+    logBody.has_more !== false
+  ) {
+    throw new Error(`identity log ${did} is not a complete native WebVH history`);
+  }
+  const log = Array.isArray(logBody.entries)
+    ? logBody.entries.flatMap((entry) => {
         const record = objectRecord(entry);
-        const operation =
-          objectRecord(record?.operation_body) ??
-          objectRecord(record?.operation);
-        return operation ? [operation] : record ? [record] : [];
+        return record ? [record] : [];
       })
     : [];
   return { document, log };

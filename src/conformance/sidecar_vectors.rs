@@ -1927,7 +1927,6 @@ fn exchange_scope() -> Result<SidecarExchangeFoldScope> {
     Ok(SidecarExchangeFoldScope {
         controller_id: exchange_controller()?,
         sidecar_id: SidecarId::new("ak:sidecar:ARp3V6IbuRJ1DuhggcFb2nOBwbPGWXaO4GLVY9SVMM5u")?,
-        private_strand_id: StrandId::new("ak:strand:ATxk9k3t-DqTNiiB9n8GoSjjar3vZJvO3Dtpd1SzdHZF")?,
     })
 }
 
@@ -2613,7 +2612,7 @@ pub fn run_sidecar_exchange_binding_containment_vector() -> Result<()> {
         "exchange_id": exchange_id,
         "sidecar_exchange_binding": raw["sidecar_exchange_binding"].clone(),
         "sidecar_id": exchange_scope()?.sidecar_id,
-        "private_strand_id": exchange_scope()?.private_strand_id,
+        "registered_source_context": exchange_request_context()?.source_track_ref,
         "scratchpad": "never publish this",
         "draft_history": ["private draft"]
     });

@@ -14,6 +14,7 @@ use crate::harness::{TestServerGroup, expect_api_error, expect_json};
 const ACTOR: &str = "did:web:security-transaction-live.example";
 const DEVICE: &str = "ak:device:01975510-0000-7000-8000-0000000000b1";
 const TRANSACTION: &str = "ak:transaction:01975510-0000-7000-8000-0000000000b2";
+const PCR_REALM: &str = "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19";
 
 pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<()> {
     let group = TestServerGroup::single("security-transaction-live-create").await?;
@@ -162,9 +163,9 @@ fn event_unit(
 }
 
 fn event_submission(principal: &Did, kind: &str) -> Result<EventInitialSubmission> {
-    let realm_id = arkret_wire::RealmId::new(
-        arkret_models_identity::did_document::principal_control_realm_id(principal),
-    )?;
+    // The live fixture uses an already accepted event-derived PCR coordinate;
+    // it must never reconstruct one from the principal DID.
+    let realm_id = arkret_wire::RealmId::new(PCR_REALM.to_owned())?;
     let scope_ref = ScopeRef::Realm {
         realm_id: realm_id.clone(),
     };

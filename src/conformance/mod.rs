@@ -23,6 +23,7 @@ mod cursor_vectors;
 mod decision_0017_vectors;
 mod did_binding_digests;
 mod did_webvh_v1;
+mod direct_conversation_flow;
 mod downstream_impact;
 mod encoding;
 mod envelope;
@@ -190,6 +191,7 @@ pub use did_binding_digests::{
     run_did_binding_evidence_receipt_kat_vector, run_did_binding_policy_snapshot_kat_vector,
 };
 pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
+pub use direct_conversation_flow::run_direct_conversation_flow_suite;
 pub use downstream_impact::{
     run_account_status_authority_binding_vector, run_downstream_impact_contract_suite,
     run_error_status_context_vector, run_moderation_dismiss_and_concurrent_fold_vector,

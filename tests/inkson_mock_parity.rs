@@ -1163,7 +1163,7 @@ fn normalize_snapshot(case_id: &str, snapshot: HttpSnapshot) -> HttpSnapshot {
         "events_list" => json!({
             "events": snapshot.body.get("events").is_some_and(Value::is_array),
         }),
-        "keys_backups" | "keys_backups_did_recovery_filter" => json!({
+        "keys_backups" | "keys_backups_secret_storage_filter" => json!({
             "backups": snapshot.body.get("backups").is_some_and(Value::is_array),
         }),
         "directory_search_realms" => {

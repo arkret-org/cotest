@@ -52,12 +52,11 @@ function secretStorageEnvelope(opts: {
   deviceId: string;
   mixed: boolean;
   argon2: { memory_kib: number; iterations: number; parallelism: number };
-  backupClass?: "secret_storage" | "did_recovery";
 }): { backupId: string; envelope: Record<string, unknown> } {
   const backupId = `ak:backup:${uuidv7Like()}`;
   const seriesId = `ak:backup_series:${uuidv7Like()}`;
   const createdAt = new Date().toISOString();
-  const backupClass = opts.backupClass ?? "secret_storage";
+  const backupClass = "secret_storage";
   const subdomain = "account_keys";
   const itemTypes = ["mls_group_secrets_backup_key"];
   const signedFields = [
@@ -162,7 +161,7 @@ test.describe("account recovery", () => {
     const token = await issueDevSession(request, alice);
 
     const backupsResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=did_recovery`,
+      `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`,
       {
         headers: { authorization: `Bearer ${token}` },
       },
@@ -182,12 +181,9 @@ test.describe("account recovery", () => {
   }) => {
     // spec: key-management.md §3.3 / §7.1-§7.2 / §7.10
     // The full UI flow (settings/recovery generate → recovery_public_key
-    // account-secret envelope auto-upload) is the device-authorized
-    // `did_recovery` path, which requires a real coauth DPoP session-grant
-    // device (a dev-login device cannot satisfy the §7.4.1 backup signature
-    // trust-root anchoring for a did_recovery envelope). When coauth is up we
-    // drive that path and assert the recovery.md Phase A invariant: an active
-    // recovery policy AND a did_recovery backup both exist, with no plaintext.
+    // account-secret envelope auto-upload) requires a real coauth DPoP
+    // session-grant device. When coauth is up we assert the recovery-material
+    // gate (active policy) and the separate encrypted account backup.
     test.setTimeout(240_000);
     const coauth = coauthBaseUrl();
     test.skip(
@@ -231,8 +227,8 @@ test.describe("account recovery", () => {
         page.page.getByTestId("recovery-key-passphrase"),
       ).toHaveCount(0);
 
-      // Phase A invariant (recovery.md step 6): an active policy AND a
-      // did_recovery backup both exist. Read them back over the API.
+      // The gate is the active policy; encrypted account material is a
+      // separate secret_storage recovery path. Read both back over the API.
       const grantHeaders = (method: string, url: string) =>
         selfPathHeadersForDpopSession(session, method, url);
 
@@ -253,7 +249,7 @@ test.describe("account recovery", () => {
         )
         .toBe("active");
 
-      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=did_recovery`;
+      const backupsUrl = `${solandBaseUrl()}/_arkret/self/keys/backups?backup_kind=secret_storage`;
       await expect
         .poll(
           async () => {
@@ -265,7 +261,13 @@ test.describe("account recovery", () => {
             }
             const body = await resp.json();
             const backups = body.backups ?? body.results ?? body;
-            return Array.isArray(backups) ? backups.length : -1;
+            return Array.isArray(backups)
+              ? backups.filter(
+                  (backup: any) =>
+                    backup?.backup_kind === "secret_storage" &&
+                    backup?.encryption?.recipient_method === "recovery_public_key",
+                ).length
+              : -1;
           },
           { timeout: 120_000 },
         )
@@ -325,35 +327,14 @@ test.describe("account recovery", () => {
     // `mixed_secret_storage=true`; the dedicated profile reason code was
     // dropped from the registry (spec C47), so soland now enforces the
     // mixed-storage discipline through the key-management decode path:
-    //   (a) a `did_recovery` envelope MUST NOT use passphrase_kdf (the mixed
-    //       single-passphrase failure mode is forbidden for DID recovery);
-    //   (b) a `mixed_secret_storage=true` envelope MUST satisfy the hardened
+    // A `mixed_secret_storage=true` envelope MUST satisfy the hardened
     //       Argon2id floor (memory_kib >= 262144, iterations >= 4) — a weaker
     //       KDF is rejected as schema_violation regardless of profile.
     const alice = uniqueUser("recovery-e8-6");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
-    // (a) did_recovery + passphrase_kdf is forbidden outright.
-    const didRecovery = secretStorageEnvelope({
-      actorId: alice.did,
-      deviceId: alice.deviceId,
-      mixed: false,
-      argon2: { memory_kib: 262_144, iterations: 4, parallelism: 1 },
-      backupClass: "did_recovery",
-    });
-    const didRecoveryResp = await putBackup(
-      request,
-      token,
-      didRecovery.backupId,
-      didRecovery.envelope,
-    );
-    expect(
-      didRecoveryResp.status(),
-      `did_recovery passphrase_kdf must be rejected: ${await didRecoveryResp.text()}`,
-    ).toBeGreaterThanOrEqual(400);
-
-    // (b) mixed_secret_storage=true with a weak Argon2id floor is rejected.
+    // mixed_secret_storage=true with a weak Argon2id floor is rejected.
     const weakMixed = secretStorageEnvelope({
       actorId: alice.did,
       deviceId: alice.deviceId,

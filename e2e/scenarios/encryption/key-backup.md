@@ -47,7 +47,7 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
 
 1. alice 进 `/settings/recovery`(RecoveryPanel)点 "Generate"(`recovery-key-regenerate`);或首次创建 encrypted Realm 时自动弹出 `MlsBackupPrompt`(`mls-backup-modal`),点 `mls-backup-submit` 自动生成 — **无用户口令输入**(spec §7.7/§7.10)
 2. UI 生成 24 词 BIP-39 Recovery Key,只显示一次并要求抄写(`mls-backup-generated-key` / `recovery-key-current`);本地只保存 SHA-256 指纹,词串不上传
-3. 客户端用 Recovery Key 建立 `recovery_public_key` 恢复根,发布 `backup_kind="did_recovery"` envelope 并保存本地 recovery public key metadata。若此时本地已经存在 account MLS secret,客户端同时上传 HPKE `recovery_public_key` 的 `mls_account_secret` envelope;若 account MLS secret 尚未生成,则在首次加密写入后由 §7.10 自动补传。
+3. 客户端用 Recovery Key 建立并发布 recovery policy，保存本地 recovery public key metadata。若此时本地已经存在 account MLS secret,客户端上传 `backup_kind="secret_storage"`、HPKE `recovery_public_key` 的 `mls_account_secret` envelope;若 account MLS secret 尚未生成,则在首次加密写入后由 §7.10 自动补传。
 4. 首次 encrypted write 生成/轮换 account MLS secret 后,客户端自动上传 `PUT /_arkret/self/keys/backups/<backup_id>`:
    - `backup_kind: "secret_storage"`
    - `encryption.recipient_method: "recovery_public_key"`

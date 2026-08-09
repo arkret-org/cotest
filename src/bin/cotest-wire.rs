@@ -11,7 +11,6 @@ use arkret_models_collaboration::direct_conversation_ops::{
     PrincipalServiceBindingProofPurpose, PrincipalServiceKind, ServiceVerificationMethod,
 };
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
-use arkret_models_identity::did_document::principal_control_realm_id;
 use arkret_wire::{
     Audience, Base64UrlString, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof,
     Proof, ProtocolSignature, proof_kind,
@@ -195,9 +194,12 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         })
         .context("prepare principal inception")?;
     let principal = Did::new(draft.did.clone()).context("parse prepared principal DID")?;
-    let control_realm = principal_control_realm_id(&principal);
+    let genesis_salt = arkret::GenesisSalt::generate()?;
+    // The create Event has no Realm id yet. This value is only a local HLC
+    // allocator namespace and is never emitted as the PCR coordinate.
+    let genesis_stamp_scope = "ak:realm:ASyOHakrqmsRPkLKvhTD20V-YWCl-X7zYrlca5tdQLaR";
     let mut hlc = arkret::hlc::HlcGenerator::new(
-        &control_realm,
+        genesis_stamp_scope,
         &input.device_id,
         input.handoff_request_id.as_bytes(),
     );
@@ -224,7 +226,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     let (genesis_create_event, founding_authorize_event, device_signing_seed) =
         build_pcr_genesis_unit(
             &principal,
-            &control_realm,
+            genesis_salt.clone(),
             &input.trust_domain,
             &draft.version_id,
             &draft.root_public_key_multibase,
@@ -252,7 +254,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "principal_server_url": input.principal_server_url,
         "gate_account_base": input.gate_account_base,
         "handoff_request_id": input.handoff_request_id,
-        "lease_id": lease.lease_id,
+        "lease_id": lease.identity_creation_lease_id,
         "lease_fence": lease.fence,
         "device_id": input.device_id,
         "trust_domain": input.trust_domain,
@@ -266,6 +268,9 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "backup_hpke_public_key_multibase": key_material.backup_hpke_public_key_multikey,
         "recovery_key_fingerprint": recovery_key_fingerprint,
         "did_operation": did_operation,
+        "did_entry0_canonical_base64url": arkret::base64url_encode(
+            canonical::canonical_json_bytes(&draft.log_entry)?
+        ),
         "did_document": did_document,
         "document_digest": document_digest,
         "history_head": draft.version_id,
@@ -280,6 +285,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "device_signing_seed_b64url": device_signing_seed,
         "genesis_created_at": arkret_canonical::format_timestamp_canonical(created_at),
         "genesis_hlc": bootstrap_hlc,
+        "genesis_salt": genesis_salt,
         "binding_receipt": null,
         "stage": "custody_confirmed",
     });
@@ -429,7 +435,7 @@ fn principal_service_binding(input: Value) -> Result<Value> {
 #[allow(clippy::too_many_arguments)]
 fn build_pcr_genesis_unit(
     principal: &Did,
-    control_realm: &str,
+    genesis_salt: arkret::GenesisSalt,
     trust_domain: &str,
     version_id: &str,
     root_public_key_multibase: &str,
@@ -513,8 +519,7 @@ fn build_pcr_genesis_unit(
     let mut create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
-            realm_id: arkret::RealmId::new(control_realm.to_owned())
-                .context("parse Principal Control Realm id")?,
+            genesis_salt,
             trust_domain: arkret::TypedTrustDomainId::new(trust_domain.to_owned())
                 .context("parse trust domain")?,
             did_inception_ref: arkret::EventRef::new(
@@ -561,16 +566,21 @@ fn build_pcr_genesis_unit(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .context("sign the PCR genesis Event with the identity root")?;
-    let mut authorize =
-        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::DeviceAuthorize>::new(
-            arkret::ScopeRef::Realm {
-                realm_id: arkret::RealmId::new(control_realm.to_owned())?,
-            },
-            principal.clone(),
-            authorize_payload,
-        )?
-        .with_prev_refs(vec![create.event_id.clone()])
-        .author(1, arkret::Hlc::new(hlc.to_owned())?, created_at)?;
+    let mut authorize = arkret_event_draft::TypedEventDraft::<
+        arkret_wire::event_spec::DeviceAuthorize,
+    >::new(
+        arkret::ScopeRef::Realm {
+            realm_id: create.realm_id.clone(),
+        },
+        principal.clone(),
+        authorize_payload,
+    )?
+    .with_prev_refs(vec![create.event_id.clone()])
+    .author(
+        1,
+        arkret::hlc::HlcGenerator::new(create.realm_id.as_str(), device_id, root_seed).generate(),
+        created_at,
+    )?;
     let device_method =
         arkret_wire::DidUrl::new(format!("{principal}#{device_id}")).map_err(anyhow::Error::msg)?;
     let device_did = Did::new(format!("did:key:{device_multibase}"))?;
@@ -785,10 +795,10 @@ fn sha256_canonical_json(input: Value) -> Result<Value> {
 fn principal_control_realm(input: Value) -> Result<Value> {
     let input: PrincipalControlRealmInput =
         serde_json::from_value(input).context("parse principal-control realm input")?;
-    let principal = Did::new(input.principal_id).context("parse principal DID")?;
-    Ok(json!({
-        "realm_id": principal_control_realm_id(&principal),
-    }))
+    let _principal = Did::new(input.principal_id).context("parse principal DID")?;
+    bail!(
+        "principal-control Realm is event-derived; this command requires an accepted create Event and cannot derive it from a DID"
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -924,11 +934,7 @@ fn event_derived_id(event: Value) -> Result<Value> {
     // Event that creates it and can only be computed once the Event has its
     // own id. Callers get both back because neither is theirs to choose.
     if event.scope_ref.realm_id_opt().is_none() {
-        event.realm_id = arkret_wire::derive_genesis_realm_id(
-            &event.event_id,
-            &event.actor_id,
-            event.payload.get("object"),
-        );
+        event.realm_id = arkret_wire::derive_genesis_realm_id(&event.event_id);
     }
     let object_id = arkret_schema::derived_object_id_for_kind(event.kind.as_str(), &event.event_id);
     Ok(serde_json::json!({

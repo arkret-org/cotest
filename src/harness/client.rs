@@ -354,6 +354,15 @@ impl TestActorClient {
             .contains(realm_id)
     }
 
+    pub fn controlled_realm_ids(&self) -> Vec<String> {
+        self.controlled_realms
+            .lock()
+            .expect("cotest controlled-Realm set is not poisoned")
+            .iter()
+            .cloned()
+            .collect()
+    }
+
     pub fn service_id(&self) -> &str {
         &self.service_id
     }

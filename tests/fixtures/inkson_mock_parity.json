@@ -134,10 +134,10 @@
       "auth": "alice"
     },
     {
-      "id": "keys_backups_did_recovery_filter",
+      "id": "keys_backups_secret_storage_filter",
       "operation_id": "ak.self.keys.backups.read.list",
       "method": "GET",
-      "path": "/_arkret/self/keys/backups?backup_kind=did_recovery",
+      "path": "/_arkret/self/keys/backups?backup_kind=secret_storage",
       "auth": "alice"
     },
     {

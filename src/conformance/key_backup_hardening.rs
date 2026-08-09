@@ -179,7 +179,6 @@ fn proof_digest_str(proof: &KeyBackupUnlockProof) -> Result<&str> {
 
 fn backup_class_str(backup_kind: BackupKind) -> &'static str {
     match backup_kind {
-        BackupKind::DidRecovery => "did_recovery",
         BackupKind::SecretStorage => "secret_storage",
         BackupKind::MlsHistory => "mls_history",
     }
