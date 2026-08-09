@@ -62,7 +62,7 @@
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.authorize_recovery_device",
+          "operation_id": "ak.gate.account.command.issue_recovery_completion_grant",
           "surfaces": [
             "account_auth"
           ]
@@ -86,9 +86,9 @@
         },
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/recovery/session.rs",
+          "path": "../soland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
           "markers": [
-            "/_arkret/root/identity/recovery-sessions",
+            "recovery-sessions",
             "ak.root.identity.recovery_session.command.submit_proof"
           ]
         },
@@ -103,7 +103,6 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
           "markers": [
-            "continue_authorize_recovery_device",
             "continue_submit_reanchor_unit"
           ]
         },
@@ -111,7 +110,7 @@
           "kind": "ordinary",
           "path": "../coauth/crates/backend/src/handlers/arkret/recovery_authority.rs",
           "markers": [
-            "authorize_recovery_device"
+            "issue_recovery_completion_grant_endpoint"
           ]
         }
       ]
@@ -571,12 +570,20 @@
       ],
       "coverage": [
         {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/identity/device_pairing_open.rs",
+          "markers": [
+            "ak.open.device_pairing.command.stage",
+            "ak.open.device_pairing.read.resolve",
+            "ak.open.device_pairing.read.status"
+          ]
+        },
+        {
           "kind": "joint_e2e",
           "path": "e2e/tests/identity/multi-device.spec.ts",
           "markers": [
-            "/_arkret/open/device-pairing/requests",
-            "/_arkret/open/device-pairing/resolve",
-            "/_arkret/open/device-pairing/requests/status"
+            "acceptedDeviceAuthorizePayload",
+            "ak.device.authorize"
           ]
         },
         {
@@ -930,10 +937,10 @@
         },
         {
           "kind": "joint_e2e",
-          "path": "tests/agent_provision_e2e.rs",
+          "path": "src/scenarios/extension_surface_gaps.rs",
           "markers": [
             "ak.self.agent.command.provision",
-            "/_arkret/gate/account/agent-key-pair"
+            "/_arkret/self/agents"
           ]
         },
         {

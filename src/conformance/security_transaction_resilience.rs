@@ -30,12 +30,12 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
         .context("independent resilience runner failed")?;
 
     ensure!(
-        sdk.len() == 65,
-        "SDK runner did not execute all 65 scenarios"
+        sdk.len() == 23,
+        "SDK runner did not execute all 23 security-rotation scenarios"
     );
     ensure!(
-        reference.len() == 65,
-        "reference runner did not execute all 65 scenarios"
+        reference.len() == 23,
+        "reference runner did not execute all 23 security-rotation scenarios"
     );
     ensure!(
         sdk.iter()

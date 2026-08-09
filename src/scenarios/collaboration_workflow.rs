@@ -2,40 +2,53 @@ use std::collections::BTreeSet;
 
 use anyhow::Result;
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, events_query_for_realm, expect_json, expect_status,
-    member_join_payload_value, member_transition_payload,
+    TestActorClient, events_query_for_realm, expect_json, expect_status, member_join_payload_value,
+    member_transition_payload,
+};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, authorize_device_public_key, seal_current_principal_control_frontier,
+    spawn_with_harness_account_authority,
 };
 
-const ALICE_DID: &str = "did:web:cotest-collab-alice.example";
-const BOB_DID: &str = "did:web:cotest-collab-bob.example";
-const BOB_HANDLE: &str = "@cotest-collab-bob";
+const BOB_HANDLE: &str = "@collab-bob";
 
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
-    let server = ArkretServer::spawn("collaboration-workflow").await?;
+    let server = spawn_with_harness_account_authority("collaboration-workflow", &[]).await?;
+    let alice_did = actor_did_for_service(server.service_id(), "collab-alice")?;
     let alice = server
-        .register_client(
-            ALICE_DID,
-            "@cotest-collab-alice",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
+    authorize_device_public_key(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &alice.device_id,
+        &SigningKey::from_bytes(&[0xa1; 32]),
+    )
+    .await?;
+    let bob_did = actor_did_for_service(server.service_id(), "collab-bob")?;
     let bob = server
-        .register_client(
-            BOB_DID,
-            BOB_HANDLE,
-            "ak:device:01904100-0000-7000-8000-0000000000b0",
-        )
+        .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;
+    authorize_device_public_key(
+        &server,
+        &bob.token,
+        &bob.actor,
+        &bob.device_id,
+        &SigningKey::from_bytes(&[0xb0; 32]),
+    )
+    .await?;
 
     let bob_second_device = expect_json(
         server
             .account_registration_request()
             .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "principal_id": BOB_DID,
+                "principal_id": bob.actor,
                 "display_name": BOB_HANDLE.trim_start_matches('@'),
                 "device_id": "ak:device:01904100-0000-7000-8000-0000000000b2"
             }))),
@@ -67,7 +80,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert!(
         !hidden_results
             .iter()
-            .any(|result| result["did"].as_str() == Some(BOB_DID))
+            .any(|result| result["did"].as_str() == Some(bob.actor.as_str()))
     );
 
     let me = expect_json(
@@ -78,12 +91,17 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(me["principal_id"], BOB_DID);
+    assert_eq!(me["principal_id"], bob.actor);
 
-    let request_receipt = alice.request_contact(BOB_DID).await?;
-    assert_eq!(request_receipt.core.holder.subject_id().as_str(), ALICE_DID);
-    assert_eq!(request_receipt.core.peer.subject_id().as_str(), BOB_DID);
+    let request_receipt = alice.request_contact(&bob.actor).await?;
+    assert_eq!(
+        request_receipt.core.holder.subject_id().as_str(),
+        alice.actor
+    );
+    assert_eq!(request_receipt.core.peer.subject_id().as_str(), bob.actor);
+    seal_current_principal_control_frontier(&alice, &SigningKey::from_bytes(&[0xa1; 32])).await?;
     bob.accept_contact(request_receipt).await?;
+    seal_current_principal_control_frontier(&bob, &SigningKey::from_bytes(&[0xb0; 32])).await?;
 
     let visible_bob = expect_json(
         alice
@@ -101,7 +119,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .expect("search-users response users")
             .iter()
-            .any(|result| result["did"].as_str() == Some(BOB_DID))
+            .any(|result| result["did"].as_str() == Some(bob.actor.as_str()))
     );
 
     let realm_id = create_collaboration_realm(&alice).await?;
@@ -110,7 +128,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(created_space["owner"], ALICE_DID);
+    assert_eq!(created_space["owner"], alice.actor);
 
     expect_status(
         server
@@ -127,7 +145,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .submit_event(
             &realm_id,
             "ak.member.state",
-            member_join_payload_value(&realm_id, BOB_DID)?,
+            member_join_payload_value(&realm_id, &bob.actor)?,
         )
         .await?;
     assert_eq!(member_join["status"], "accepted");
@@ -141,7 +159,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|member| member == BOB_DID)
+            .any(|member| member == &bob.actor)
     );
 
     let sent = alice
@@ -220,7 +238,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .submit_event(
             &realm_id,
             "ak.member.state",
-            member_transition_payload(&realm_id, BOB_DID, MembershipPayloadState::Ban, None)?,
+            member_transition_payload(&realm_id, &bob.actor, MembershipPayloadState::Ban, None)?,
         )
         .await?;
     assert_eq!(member_ban["status"], "accepted");
@@ -234,7 +252,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|member| member == BOB_DID)
+            .any(|member| member == &bob.actor)
     );
 
     let lifecycle = expect_json(
@@ -282,10 +300,8 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 }
 
 async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
-    let realm_id = "ak:realm:AUzPQJX0wuP3GUxC5w9VcTuSxJmR9lvBhpIEMBFTM_NJ".to_owned();
     let created = alice
         .create_realm_with(json!({
-            "realm_id": &realm_id,
             "title": "Collaboration Workflow Space",
             "summary": "single server collaboration",
             "discoverability": "invite_only",
@@ -295,8 +311,12 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
-    assert_eq!(created["realm_id"], realm_id);
-    Ok(realm_id)
+    let realm_id = created["realm_id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("realm create response has no realm_id: {created}"))?;
+    Ok(arkret_identifiers::RealmId::new(realm_id.to_owned())?
+        .as_str()
+        .to_owned())
 }
 
 fn timeline_events<'a>(delta: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>> {

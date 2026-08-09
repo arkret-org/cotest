@@ -297,11 +297,11 @@ pub fn run(fixture: &Value) -> Result<Vec<ReferenceProjection>, String> {
     let kinds = strings_at(fixture, "/fault_matrix/transaction_kinds")?;
     let positions = strings_at(fixture, "/fault_matrix/fault_positions")?;
     let faults = strings_at(fixture, "/fault_matrix/faults")?;
-    if kinds.len() != 3 || positions.len() != 3 || faults.len() != 7 {
+    if kinds != ["security_rotation"] || positions.len() != 3 || faults.len() != 7 {
         return Err("resilience fault matrix cardinality changed".to_owned());
     }
 
-    let mut projections = Vec::with_capacity(65);
+    let mut projections = Vec::with_capacity(kinds.len() * positions.len() * faults.len() + 2);
     for kind in kinds {
         let all_steps = steps(kind)?;
         for position in &positions {

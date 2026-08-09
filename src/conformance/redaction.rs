@@ -394,8 +394,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let carrier_validator = env.compile(
         "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_request_body",
     )?;
-    let stub_validator =
-        env.compile("schemas/erasure-receipt.schema.json#/$defs/verification_stub")?;
+    let stub_validator = env.compile("schemas/erasure-verification-stub.schema.json")?;
 
     let original_event_id = "ak:event:AagGd6PB1SqZp__DzubMh3BTpUU-oWosY3NoR_k38pxq";
     let redaction_event_id = "ak:event:AVT646YSuJEmqd74GGTJeNPstd7RiLkX4UvuFWM_F23V";

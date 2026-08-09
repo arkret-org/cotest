@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -51,7 +51,8 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
 
     let mut cursor = None;
     let mut collected = Vec::new();
-    for _ in 0..12 {
+    let mut reached_end = false;
+    for _ in 0..256 {
         let body = json!({"realms": [realm_id], "limit": 1, "after": cursor});
         let page = expect_json(
             alice.query("/_arkret/self/events").json(&body),
@@ -64,9 +65,19 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
             .or_else(|| page["limited"].as_bool())
             .unwrap_or(false)
         {
+            reached_end = true;
             break;
         }
-        cursor = page["next_cursor"].as_str().map(ToOwned::to_owned);
+        let next_cursor = page["next_cursor"]
+            .as_str()
+            .ok_or_else(|| anyhow!("events page has_more=true without next_cursor: {page}"))?;
+        if cursor.as_deref() == Some(next_cursor) {
+            bail!("events pagination cursor did not advance: {next_cursor}");
+        }
+        cursor = Some(next_cursor.to_owned());
+    }
+    if !reached_end {
+        bail!("events backfill exceeded the 256-page safety bound");
     }
 
     let recovered_message_ids = collected

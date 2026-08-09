@@ -9,11 +9,11 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
+use arkret_wire::{PayloadSignature, Seal};
 use serde_json::{Map, Value, json};
 
 use super::{
-    canonical_json, load_fixture_value, looks_like_sha256_digest, required_str, sha256_prefixed,
-    validate_profile,
+    load_fixture_value, looks_like_sha256_digest, required_str, sha256_prefixed, validate_profile,
 };
 use crate::transcripts::record_vector_event;
 
@@ -46,6 +46,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_compaction_interval = false;
     let mut seen_inclusion_list = false;
     let mut seen_notary_fault = false;
+    let mut seen_sealed_control_collision = false;
     let mut seen_threshold_forensics = false;
     let mut seen_concurrent_revocation = false;
     let mut seen_actor_chain_realm_scope = false;
@@ -415,6 +416,25 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "sealed_control_move_full_digest_collision" => {
+                validate_sealed_control_move_full_digest_collision(vector, name)?;
+                seen_sealed_control_collision = true;
+                record_vector_event(
+                    "state_resolution.cba.sealed_control_move_full_digest_collision",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "quarantine_scope": "entire_collision_group",
+                        "accepted_seal_commitments": "unchanged",
+                        "digest_only_resolution": "reject",
+                        "canonical_bytes_resolution": "accept",
+                    }),
+                    &json!({
+                        "quarantine_group": vector.pointer("/expected/quarantine_group"),
+                        "accepted_seal_commitments": pointer_str(vector, "/expected/accepted_seal_commitments"),
+                        "resolution_case_count": required_array(vector, "/resolution_cases", name)?.len(),
+                    }),
+                );
+            }
             "threshold_forensic_attribution" => {
                 validate_threshold_forensic_attribution(vector, name)?;
                 seen_threshold_forensics = true;
@@ -566,6 +586,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_compaction_interval
         && seen_inclusion_list
         && seen_notary_fault
+        && seen_sealed_control_collision
         && seen_threshold_forensics
         && seen_concurrent_revocation
         && seen_actor_chain_realm_scope
@@ -576,16 +597,128 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_realm_alias_single_carrier)
     {
         bail!(
-            "cba lattice fixture must cover all 21 normative vectors \
+            "cba lattice fixture must cover all 22 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
-              auth_epoch / compaction_interval / inclusion_list / notary_fault / \
+              auth_epoch / compaction_interval / inclusion_list / notary_fault / sealed_control_collision / \
               threshold_forensics / concurrent_revocation / actor_chain_realm_scope / \
               conflict_recovery / same_seal_bottom_serialization / realm_create_projection_closure / \
               null_cell_subject_wire_form / realm_alias_single_carrier)"
         );
     }
 
+    Ok(())
+}
+
+fn validate_sealed_control_move_full_digest_collision(
+    vector: &Value,
+    vector_name: &str,
+) -> Result<()> {
+    let event_id = required_pointer_str(vector, "/colliding_identity/event_id", vector_name)?;
+    let event_id = arkret_wire::EventId::new(event_id.to_owned())
+        .map_err(|error| anyhow!("vector {vector_name} collision event_id is invalid: {error}"))?;
+    require_str_eq(
+        vector,
+        "/colliding_identity/digest_suite",
+        "sha256",
+        vector_name,
+    )?;
+    if event_id.identity_key().suite().as_str() != "sha256" {
+        bail!("vector {vector_name} collision event_id must carry the sha256 suite code");
+    }
+    require_str_eq(
+        vector,
+        "/sealed_state/seal_covered_variant",
+        "variant_a",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/sealed_state/materialized_reducer_output_from",
+        "variant_a_canonical_bytes",
+        vector_name,
+    )?;
+
+    let quarantine_group = string_vec_at(vector, "/expected/quarantine_group", vector_name)?
+        .into_iter()
+        .map(ToOwned::to_owned)
+        .collect::<BTreeSet<_>>();
+    if quarantine_group.len()
+        != required_array(vector, "/expected/quarantine_group", vector_name)?.len()
+    {
+        bail!("vector {vector_name} collision quarantine group contains duplicates");
+    }
+    let required_group = BTreeSet::from([
+        "variant_a".to_owned(),
+        "variant_b".to_owned(),
+        "event_derived_objects_of_either_variant".to_owned(),
+        "non_final_writes_of_either_variant".to_owned(),
+        "successors_referencing_the_event_id".to_owned(),
+    ]);
+    if quarantine_group != required_group {
+        bail!("vector {vector_name} must quarantine the entire collision group");
+    }
+    for (path, expected) in [
+        (
+            "/expected/subsequent_control_moves_for_actor",
+            "fail_closed",
+        ),
+        ("/expected/accepted_seal_commitments", "unchanged"),
+        ("/expected/recompute_sealed_state_root", "forbidden"),
+        (
+            "/expected/receiver_without_retained_canonical_bytes",
+            "range_unverifiable_fail_closed",
+        ),
+        ("/expected/compaction_across_unresolved_range", "forbidden"),
+    ] {
+        require_str_eq(vector, path, expected, vector_name)?;
+    }
+
+    let mut cases = std::collections::BTreeMap::new();
+    for case in required_array(vector, "/resolution_cases", vector_name)? {
+        let name = required_str(case, "name")?;
+        if cases.insert(name, case).is_some() {
+            bail!("vector {vector_name} repeats resolution case {name}");
+        }
+    }
+    for (name, discriminator, expected, reason) in [
+        (
+            "resolution_names_winner_by_digest_only",
+            "event_digest",
+            "reject",
+            Some(arkret_wire::ReasonCode::WITNESS_DISAGREEMENT),
+        ),
+        (
+            "resolution_names_winner_by_canonical_bytes",
+            "canonical_bytes",
+            "accept",
+            None,
+        ),
+        (
+            "cross_suite_discriminator_is_diagnostic_only",
+            "blake3_digest_of_same_preimage",
+            "reject",
+            Some(arkret_wire::ReasonCode::WITNESS_DISAGREEMENT),
+        ),
+    ] {
+        let case = cases
+            .get(name)
+            .ok_or_else(|| anyhow!("vector {vector_name} missing resolution case {name}"))?;
+        require_str_eq(
+            case,
+            "/fork_resolution_identifies_winner_by",
+            discriminator,
+            vector_name,
+        )?;
+        require_str_eq(case, "/expected", expected, vector_name)?;
+        if let Some(reason) = reason {
+            require_str_eq(case, "/reason_code", reason, vector_name)?;
+        } else if case.get("reason_code").is_some() {
+            bail!(
+                "vector {vector_name} canonical-bytes resolution must not carry a rejection reason"
+            );
+        }
+    }
     Ok(())
 }
 
@@ -680,7 +813,7 @@ fn validate_realm_alias_single_carrier(vector: &Value, vector_name: &str) -> Res
     // MUST stay covered; dropping one is how a second carrier creeps back in.
     for (name, expected_fragment) in [
         ("alias_on_realm_object", "schema_violation"),
-        ("alias_in_realm_patch", "schema_violation"),
+        ("alias_in_realm_profile", "schema_violation"),
         ("alias_at_payload_top_level", "schema_violation"),
         ("foreign_authority_domain", "realm_alias_authority_mismatch"),
         ("alias_held_by_another_realm", "realm_alias_taken"),
@@ -993,6 +1126,8 @@ fn validate_seal_canonical_no_self_reference(vector: &Value, vector_name: &str) 
         "delta",
         "control_event_set_root",
         "state_root",
+        "completeness_root",
+        "notary_seq",
         "sealed_at",
         "hlc",
     ] {
@@ -1003,10 +1138,34 @@ fn validate_seal_canonical_no_self_reference(vector: &Value, vector_name: &str) 
         require_sha256_digest(digest, "/seal_body/delta", vector_name)?;
     }
 
-    let canonical = canonical_json(body_value)?;
-    let digest = sha256_prefixed(canonical.as_bytes());
     let expected_id = required_pointer_str(vector, "/expected/id", vector_name)?;
-    let computed_id = format!("ak:seal:{digest}");
+    let mut seal_value = body_value.clone();
+    let seal_object = seal_value
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("vector {vector_name} seal_body must be an object"))?;
+    seal_object.insert("id".to_owned(), json!(expected_id));
+    seal_object.insert(
+        "notary_signature".to_owned(),
+        json!({
+            "verification_method": "did:web:notary.example#k1",
+            "payload_digest": required_pointer_str(
+                vector,
+                "/expected/notary_signature_payload_digest",
+                vector_name,
+            )?,
+            "created_at": "2026-06-11T00:00:00.000Z",
+            "jws": "AAAA.BBBB.CCCC"
+        }),
+    );
+    let seal: Seal = serde_json::from_value(seal_value)
+        .map_err(|error| anyhow!("vector {vector_name} seal_body is not a typed Seal: {error}"))?;
+    let canonical = seal
+        .canonical_bytes_for_id()
+        .map_err(|error| anyhow!("vector {vector_name} Seal canonicalization failed: {error}"))?;
+    let digest = sha256_prefixed(&canonical);
+    let computed_id = seal
+        .derive_id()
+        .map_err(|error| anyhow!("vector {vector_name} Seal id derivation failed: {error}"))?;
     if expected_id != computed_id.as_str() {
         bail!("vector {vector_name} expected id must be {computed_id}, got {expected_id}");
     }
@@ -1366,17 +1525,24 @@ fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Resu
         "detached_jws",
         vector_name,
     )?;
-    require_str_eq(
-        vector,
-        "/inclusion_list/signature/alg",
-        "Ed25519",
-        vector_name,
-    )?;
-    let payload_digest = required_pointer_str(
-        vector,
-        "/inclusion_list/signature/payload_digest",
-        vector_name,
-    )?;
+    let signature_value = vector
+        .pointer("/inclusion_list/signature")
+        .cloned()
+        .ok_or_else(|| anyhow!("vector {vector_name} missing inclusion-list signature"))?;
+    let signature: PayloadSignature = serde_json::from_value(signature_value).map_err(|error| {
+        anyhow!("vector {vector_name} inclusion-list signature is not a PayloadSignature: {error}")
+    })?;
+    if !signature
+        .verification_method
+        .as_str()
+        .starts_with(&format!("{signer}#"))
+    {
+        bail!("vector {vector_name} inclusion-list signature is not bound to signer {signer}");
+    }
+    if signature.jws.is_empty() {
+        bail!("vector {vector_name} inclusion-list signature JWS must be non-empty");
+    }
+    let payload_digest = signature.payload_digest.as_str();
     require_sha256_digest(
         payload_digest,
         "/inclusion_list/signature/payload_digest",

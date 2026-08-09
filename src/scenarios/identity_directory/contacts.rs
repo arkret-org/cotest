@@ -1,31 +1,55 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use arkret_canonical::canonical_sha256;
+use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ArkretServer, account_subscribe_delta_from_text, expect_audit_action, expect_json,
-    expect_response, expect_status, invite_create_payload,
+    account_subscribe_delta_from_text, expect_audit_action, expect_json, expect_response,
+    expect_status, invite_create_payload,
+};
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service, authorize_device_public_key, seal_current_principal_control_frontier,
+    spawn_with_harness_account_authority,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
-    let server = ArkretServer::spawn("directory-workflow").await?;
+    let server = spawn_with_harness_account_authority("directory-workflow", &[]).await?;
+    let alice_did = actor_did_for_service(server.service_id(), "directory-alice")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
+    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
+    authorize_device_public_key(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &alice.device_id,
+        &alice_device_key,
+    )
+    .await?;
+    let bob_did = actor_did_for_service(server.service_id(), "directory-bob")?;
     let bob = server
         .register_client(
-            "did:web:bob-directory.example",
+            &bob_did,
             "@bob-directory",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
+    let bob_device_key = SigningKey::from_bytes(&[0xb0; 32]);
+    authorize_device_public_key(
+        &server,
+        &bob.token,
+        &bob.actor,
+        &bob.device_id,
+        &bob_device_key,
+    )
+    .await?;
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
+    seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
     bob.accept_contact(request_receipt).await?;
+    seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let contacts = expect_json(bob.get("/_arkret/self/contacts"), StatusCode::OK).await?;
     assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
@@ -166,11 +190,18 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
     assert_eq!(exported["schema"], "ak.export.realm.v1");
-    let sent_operation_id =
-        sent["event_id"]
-            .as_str()
-            .unwrap()
-            .replacen("ak:event:", "ak:operation:", 1);
+    let sent_event_id = sent["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("message submit outcome omitted event_id: {sent}"))?;
+    let exported_event = exported["events"]
+        .as_array()
+        .ok_or_else(|| anyhow!("Realm export omitted events array: {exported}"))?
+        .iter()
+        .find(|event| event["event_id"].as_str() == Some(sent_event_id))
+        .ok_or_else(|| anyhow!("Realm export omitted submitted Event {sent_event_id}"))?;
+    let sent_operation_id = exported_event["operation_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("exported Event {sent_event_id} omitted operation_id"))?;
     assert!(
         exported["operations"]
             .as_array()

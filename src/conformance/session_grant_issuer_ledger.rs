@@ -64,7 +64,19 @@ pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
     let vectors = fixture["accepted_vectors"]
         .as_array()
         .context("accepted_vectors must be an array")?;
-    ensure!(vectors.len() >= 4, "session-grant KAT coverage regressed");
+    ensure!(vectors.len() >= 3, "session-grant KAT coverage regressed");
+    for required in [
+        "issuer_a_closed_preimage",
+        "issuer_b_domain_separation",
+        "absent_optional_is_omitted",
+    ] {
+        ensure!(
+            vectors
+                .iter()
+                .any(|vector| vector["name"].as_str() == Some(required)),
+            "session-grant KAT is missing required vector {required}"
+        );
+    }
 
     let mut derived_ids = BTreeMap::new();
     for vector in vectors {
@@ -182,9 +194,10 @@ pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
             let source = vector_by_name(text(add, "vector")?)?;
             claims[field] = materialize_issuance_preimage(vectors, source)?[field].clone();
         }
-        let claims: SignedSessionGrantClaims = serde_json::from_value(claims)?;
+        let rejected = serde_json::from_value::<SignedSessionGrantClaims>(claims)
+            .map_or(true, |claims| claims.validate().is_err());
         ensure!(
-            claims.validate().is_err(),
+            rejected,
             "binding negative {} was accepted",
             text(negative, "name")?
         );

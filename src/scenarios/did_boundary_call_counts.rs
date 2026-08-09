@@ -48,9 +48,11 @@
 //!   green.
 
 use anyhow::{Context, Result, bail};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 use super::_helpers::service_metrics::{DidBoundaryDelta, ServiceMetricsClient};
-use crate::harness::{ArkretServer, TestActorClient};
+use crate::harness::{ArkretServer, CanonicalJsonBody, TestActorClient};
 
 /// Bring up soland with its metrics listener, or explain why the scenario
 /// cannot observe the counters in this run.
@@ -121,14 +123,18 @@ fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
     let (header, signature) = jws
         .rsplit_once('.')
         .context("proofs[0].jws is not a detached JWS")?;
-    let mut bytes: Vec<char> = signature.chars().collect();
-    let last = bytes
-        .last_mut()
+    let mut bytes = URL_SAFE_NO_PAD
+        .decode(signature)
+        .context("proofs[0].jws signature is not canonical base64url")?;
+    let first = bytes
+        .first_mut()
         .context("proofs[0].jws has an empty signature segment")?;
-    // Base64url alphabet: swap within it so only the signature value changes,
-    // not the encoding's validity.
-    *last = if *last == 'A' { 'B' } else { 'A' };
-    let corrupted: String = bytes.into_iter().collect();
+    // Mutate a real signature bit, then re-encode canonically. Ed25519's
+    // 64-byte signature encodes to 86 base64url characters, so replacing its
+    // final character can accidentally alter padding bits and be rejected by
+    // the structural decoder before signature verification.
+    *first ^= 1;
+    let corrupted = URL_SAFE_NO_PAD.encode(bytes);
     event
         .proofs
         .first_mut()
@@ -229,7 +235,7 @@ pub async fn a_reused_binding_still_rejects_a_bad_signature_run() -> Result<()> 
         .measure_did_boundary(None, || async {
             let response = alice
                 .post("/_arkret/self/events")
-                .json(&crate::publication::initial_submission(forged.clone(), "")?)
+                .canonical_json(&crate::publication::initial_submission(forged.clone(), "")?)?
                 .send()
                 .await?;
             let status = response.status();

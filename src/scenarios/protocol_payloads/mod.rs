@@ -55,13 +55,21 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     )
     .await?;
 
-    let adapter_message_event_id = events_keys_setup::run(&server, &token, &actor_id).await?;
+    let (adapter_realm_id, adapter_message_event_id) =
+        events_keys_setup::run(&server, &token, &actor_id).await?;
     device_messages::run(&server, &token, &actor_id).await?;
     key_backups::run(&server, &token, &actor_id).await?;
     backup_delete::run(&server, &token, &actor_id).await?;
     blob::run(&server, &token).await?;
     push::run(&server, &token).await?;
-    moderation::run(&server, &token, &actor_id, &adapter_message_event_id).await?;
+    moderation::run(
+        &server,
+        &token,
+        &actor_id,
+        &adapter_realm_id,
+        &adapter_message_event_id,
+    )
+    .await?;
 
     Ok(())
 }
