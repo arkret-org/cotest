@@ -292,13 +292,29 @@ fn observe_seq(
 
 /// The closed decrypted plaintext object of §5.
 fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
+    let data = match signal_kind {
+        "invite" => json!({
+            "lifetime_ms": 60_000,
+            "mode": "p2p",
+            "offer": {
+                "type": "offer",
+                "sdp": "v=0"
+            },
+            "media": {
+                "audio": true,
+                "video": false
+            }
+        }),
+        "candidate" => json!({ "candidates": [] }),
+        _ => json!({}),
+    };
     json!({
         "kind": "ak.call.signal",
         "payload_sequence": 11,
         "call_id": "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "signal_kind": signal_kind,
         "seq": seq,
-        "data": {}
+        "data": data
     })
 }
 

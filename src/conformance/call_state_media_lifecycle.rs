@@ -475,7 +475,6 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
         "mode": "audio",
         "visible_notice": true,
         "result": {
-            "transcript_start_event_id": start_event_id(),
             "retention": {
                 "consent_confirmed": true
             }
