@@ -7,9 +7,12 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   authHeaders,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
+  prepareSignedEventSubmissionApi,
+  principalControlRealmForDid,
   signedEventEnvelope,
   sdkMimiConsentProof,
   submitSignedEventApi,
@@ -340,21 +343,21 @@ test.describe("consent grant", () => {
     }
   });
 
-  test("consent API smoke: MIMI request is opaque and update fails closed without an Event carrier", async ({
+  test("MIMI consent update admits exact Events, rejects conflicts, and hides correlations", async ({
     request,
   }) => {
-    // A MiMi detached operation proof is not an Event Envelope proof. Until
-    // the protocol registers a caller-authored Event carrier, the facade must
-    // not synthesize a consent Event or expose a fabricated event_ref.
     const alice = uniqueUser("g2t5-consent-api-alice");
     const bob = uniqueUser("g2t5-consent-api-bob");
+    const charlie = uniqueUser("g2t5-consent-api-charlie");
     await Promise.all([
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
+      ensureRegistered(request, charlie),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
+    const [aliceToken, bobToken, charlieToken] = await Promise.all([
       issueDevSession(request, alice),
       issueDevSession(request, bob),
+      issueDevSession(request, charlie),
     ]);
     const describe = await expectJsonOk<{
       service_id: string;
@@ -367,24 +370,45 @@ test.describe("consent grant", () => {
     const open = await request.post(
       `${solandBaseUrl()}/_arkret/open/mimi/consent/request`,
       {
-        headers: authHeaders(bobToken),
-        data: {
+        headers: {
+          ...authHeaders(bobToken),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
           requester_id: bob.did,
           target: { kind: "did", id: alice.did },
           purpose: "direct_message",
-        },
+        }),
       },
     );
-    expect(open.status()).toBe(200);
-    const openBody = await open.json();
+    const openText = await open.text();
+    expect(open.status(), openText).toBe(200);
+    const openBody = JSON.parse(openText) as Record<string, unknown>;
     expect(openBody.status).toBe("requested");
     expect(openBody.consent_id).toMatch(/^ak:consent:/);
 
     const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/consent/update`;
+    const grantEvent = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: principalControlRealmForDid(alice.did),
+      kind: "ak.consent.grant",
+      payload: {
+        consent_id: openBody.consent_id,
+        peer: bob.did,
+        consent_scope: "direct_message",
+      },
+    });
+    const consentEvent = await prepareSignedEventSubmissionApi(
+      request,
+      aliceToken,
+      grantEvent,
+      { context: "prepare MIMI consent grant" },
+    );
     const unsignedUpdate = {
       consent_id: openBody.consent_id,
       decision: "accept",
       actor_id: alice.did,
+      consent_event: consentEvent,
     };
     const signature = sdkMimiConsentProof({
       request: unsignedUpdate,
@@ -394,50 +418,131 @@ test.describe("consent grant", () => {
       audience: describe.service_id,
     });
 
-    const eventProofShape: Record<string, unknown> = {
-      ...signature,
-      event_digest: signature.payload_digest,
-    };
-    delete eventProofShape.payload_digest;
-    const wrongFamily = await request.post(updateUrl, {
-      headers: authHeaders(aliceToken),
-      data: { ...unsignedUpdate, signature: eventProofShape },
-    });
-    expect(wrongFamily.status()).toBe(422);
-
-    const tampered = await request.post(updateUrl, {
-      headers: authHeaders(aliceToken),
-      data: {
-        ...unsignedUpdate,
-        decision: "revoke",
-        signature,
-      },
-    });
-    expect(tampered.status()).toBe(400);
-    const tamperedBody = await tampered.json();
-    expect(tamperedBody.error?.code ?? tamperedBody.code).toBe("invalid_proof");
-
     const signedUpdate = { ...unsignedUpdate, signature };
     const update = await request.post(updateUrl, {
-      headers: authHeaders(aliceToken),
-      data: signedUpdate,
+      headers: {
+        ...authHeaders(aliceToken),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(signedUpdate),
     });
-    expect(update.status()).toBe(412);
-    const updateBody = await update.json();
-    expect(updateBody.error?.code ?? updateBody.code).toBe(
-      "consent_event_authoring_required",
-    );
-    expect(updateBody.event_ref).toBeUndefined();
+    const updateText = await update.text();
+    expect(update.status(), updateText).toBe(200);
+    const updateBody = JSON.parse(updateText);
+    expect(updateBody.status).toBe("accepted");
+    expect(updateBody.event_ref).toBe(grantEvent.event_id);
 
     const replay = await request.post(updateUrl, {
-      headers: authHeaders(aliceToken),
-      data: signedUpdate,
+      headers: {
+        ...authHeaders(aliceToken),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(signedUpdate),
     });
-    expect(replay.status()).toBe(409);
+    expect(replay.status()).toBe(200);
     const replayBody = await replay.json();
-    expect(replayBody.error?.code ?? replayBody.code).toBe(
+    expect(replayBody).toEqual(updateBody);
+
+    const conflictingEvent = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId: principalControlRealmForDid(alice.did),
+      eventId: String(grantEvent.event_id),
+      kind: "ak.consent.grant",
+      payload: {
+        consent_id: openBody.consent_id,
+        peer: bob.did,
+        consent_scope: "direct_message",
+      },
+    });
+    const conflictingUnsigned = {
+      ...unsignedUpdate,
+      consent_event: { ...consentEvent, event: conflictingEvent },
+    };
+    const conflictingBody = {
+      ...conflictingUnsigned,
+      signature: sdkMimiConsentProof({
+        request: conflictingUnsigned,
+        verificationMethod: `${alice.did}#mimi-consent`,
+        createdAt: canonicalTimestamp(),
+        domain: describe.trust_domain,
+        audience: describe.service_id,
+      }),
+    };
+    const conflicting = await request.post(updateUrl, {
+      headers: {
+        ...authHeaders(aliceToken),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(conflictingBody),
+    });
+    expect(conflicting.status()).toBe(409);
+    const conflictingOutcome = await conflicting.json();
+    expect(conflictingOutcome.error?.code ?? conflictingOutcome.code).toBe(
       "duplicate_conflict",
     );
+
+    const invisibleUnsigned = structuredClone(unsignedUpdate);
+    invisibleUnsigned.actor_id = charlie.did;
+    const invisibleSubmission = invisibleUnsigned.consent_event as Record<
+      string,
+      unknown
+    >;
+    const invisibleEvent = invisibleSubmission.event as Record<string, unknown>;
+    invisibleEvent.actor_id = charlie.did;
+    const invisibleBody = {
+      ...invisibleUnsigned,
+      signature: sdkMimiConsentProof({
+        request: invisibleUnsigned,
+        verificationMethod: `${charlie.did}#mimi-consent`,
+        createdAt: canonicalTimestamp(),
+        domain: describe.trust_domain,
+        audience: describe.service_id,
+      }),
+    };
+    const invisible = await request.post(updateUrl, {
+      headers: {
+        ...authHeaders(charlieToken),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(invisibleBody),
+    });
+
+    const unknownConsentId = typedId("operation").replace(
+      "ak:operation:",
+      "ak:consent:",
+    );
+    const unknownUnsigned = structuredClone(invisibleUnsigned);
+    unknownUnsigned.consent_id = unknownConsentId;
+    const unknownSubmission = unknownUnsigned.consent_event as Record<
+      string,
+      unknown
+    >;
+    const unknownEvent = unknownSubmission.event as Record<string, unknown>;
+    const unknownPayload = unknownEvent.payload as Record<string, unknown>;
+    unknownPayload.consent_id = unknownConsentId;
+    const unknownBody = {
+      ...unknownUnsigned,
+      signature: sdkMimiConsentProof({
+        request: unknownUnsigned,
+        verificationMethod: `${charlie.did}#mimi-consent`,
+        createdAt: canonicalTimestamp(),
+        domain: describe.trust_domain,
+        audience: describe.service_id,
+      }),
+    };
+    const unknown = await request.post(updateUrl, {
+      headers: {
+        ...authHeaders(charlieToken),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(unknownBody),
+    });
+    expect(unknown.status()).toBe(invisible.status());
+    const invisibleOutcome = await invisible.json();
+    const unknownOutcome = await unknown.json();
+    delete invisibleOutcome.request_id;
+    delete unknownOutcome.request_id;
+    expect(unknownOutcome).toEqual(invisibleOutcome);
   });
 
   test("ak.consent.grant event projects consent cell and contact gate", async ({

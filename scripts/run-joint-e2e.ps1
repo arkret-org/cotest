@@ -3283,6 +3283,11 @@ try {
     } else {
         Remove-Item Env:COTEST_INKSON_BASE_URL -ErrorAction SilentlyContinue
     }
+    if ($SkipInkson) {
+        $env:COTEST_SKIP_INKSON = "1"
+    } else {
+        Remove-Item Env:COTEST_SKIP_INKSON -ErrorAction SilentlyContinue
+    }
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
         $env:COTEST_SOLAND_ALPHA_SERVICE_ID = $SolandServiceId
