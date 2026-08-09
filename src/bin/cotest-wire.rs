@@ -634,8 +634,10 @@ fn identity_creation_register_request(input: Value) -> Result<Value> {
         0,
     )
     .context("derive identity root for control proof")?;
+    let expected_account_subject = challenge.account_subject.clone();
     let request = garth::identity_creation_register_request(
         &challenge,
+        &expected_account_subject,
         did_operation,
         serde_json::from_value(input.pcr_genesis_unit).context("parse PCR genesis unit")?,
         serde_json::from_value(input.initial_session).context("parse initial session request")?,
