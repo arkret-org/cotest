@@ -32,7 +32,7 @@ fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> 
         .map_err(|err| anyhow!("invalid actor did: {err}"))?;
     let hlc = Hlc::new("01970e589d21-0001-a13f9c2e".to_owned())
         .map_err(|err| anyhow!("invalid hlc: {err}"))?;
-    Event::new(
+    arkret_wire::test_support::raw_event(
         kind.to_owned(),
         arkret_wire::ScopeRef::Realm {
             realm_id: realm_id.clone(),
@@ -61,19 +61,19 @@ fn positive_vectors() -> Vec<WireVector> {
     vec![
         WireVector {
             label: "ak.realm.create",
-            kind: arkret_wire::EventKind::REALM_CREATE,
+            kind: arkret_wire::event_kind_str::REALM_CREATE,
             payload: json!({"action": "create", "title": "Engineering Realm"}),
             expected_class: EventProductClass::Realm,
         },
         WireVector {
             label: "ak.space.create (container)",
-            kind: arkret_wire::EventKind::SPACE_CREATE,
+            kind: arkret_wire::event_kind_str::SPACE_CREATE,
             payload: json!({"title": "Launch Board", "kind": "board"}),
             expected_class: EventProductClass::Space,
         },
         WireVector {
             label: "ak.realm.delivery_binding_policy",
-            kind: arkret_wire::EventKind::REALM_DELIVERY_BINDING_POLICY,
+            kind: arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,
             payload: json!({
                 "allowed_recipient_services": ["did:web:soland.example"],
                 "binding_source_policy": "endorsed_only",
@@ -82,7 +82,7 @@ fn positive_vectors() -> Vec<WireVector> {
         },
         WireVector {
             label: "ak.realm.link",
-            kind: arkret_wire::EventKind::REALM_LINK,
+            kind: arkret_wire::event_kind_str::REALM_LINK,
             payload: json!({
                 "link_kind": "parent",
                 "target_realm_id": "ak:realm:AQptIWDEF2d4jlsnzTQVXGqZs6h-vPkYXuYqwewKqIjr",

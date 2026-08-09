@@ -385,19 +385,16 @@ fn build_pcr_genesis_unit(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .context("sign the PCR genesis Event with the identity root")?;
-    let mut authorize = Event::new_at(
-        arkret_wire::EventKind::DEVICE_AUTHORIZE,
-        arkret::ScopeRef::Realm {
-            realm_id: arkret::RealmId::new(control_realm.to_owned())?,
-        },
-        principal.clone(),
-        1,
-        arkret::Hlc::new(hlc.to_owned())?,
-        authorize_payload_value,
-        created_at,
-    )?;
-    authorize.prev_refs = vec![create.event_id.clone()];
-    authorize.refresh_content_bound_identity()?;
+    let mut authorize =
+        arkret_event_draft::TypedEventDraft::<arkret_wire::event_spec::DeviceAuthorize>::new(
+            arkret::ScopeRef::Realm {
+                realm_id: arkret::RealmId::new(control_realm.to_owned())?,
+            },
+            principal.clone(),
+            authorize_payload,
+        )?
+        .with_prev_refs(vec![create.event_id.clone()])
+        .author(1, arkret::Hlc::new(hlc.to_owned())?, created_at)?;
     let device_method =
         arkret_wire::DidUrl::new(format!("{principal}#{device_id}")).map_err(anyhow::Error::msg)?;
     let device_did = Did::new(format!("did:key:{device_multibase}"))?;

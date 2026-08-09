@@ -5,7 +5,8 @@ use std::collections::BTreeSet;
 use std::fs;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_event_draft::Operation;
+use arkret_event_draft::ProjectedEventOperation as Operation;
+use arkret_event_draft::test_support::raw_projected_operation;
 use arkret_identifiers::{
     AuthorizationLeaseId, CellRef, DeviceId, Did, Hash, Hlc, OperationId, RealmId, SealId,
 };
@@ -661,7 +662,7 @@ fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
 }
 
 fn operation(kind: &str, payload: Value, suffix: u8) -> Operation {
-    let mut operation = Operation::create(
+    let mut operation = raw_projected_operation(
         OperationId::new(format!(
             "ak:operation:0196419b-0000-7000-8000-{suffix:012x}"
         ))

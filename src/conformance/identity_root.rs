@@ -11,6 +11,7 @@ use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_pcr_create,
     build_self_principal_pcr_genesis_unit, validate_self_principal_pcr_genesis_unit,
 };
+use arkret_event_draft::EventPayloadExt;
 use arkret_identifiers::{DeviceId, Did, Hash, Hlc, RealmId, TypedTrustDomainId};
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
@@ -280,8 +281,8 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
             "did:key:z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ#z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ",
         ),
     )?;
-    let mut authorize = Event::new(
-        arkret_wire::EventKind::DEVICE_AUTHORIZE,
+    let mut authorize = arkret_wire::test_support::raw_event(
+        arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm { realm_id },
         principal.clone(),
         1,
@@ -314,7 +315,8 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         bail!("PCR genesis accepted a split create/authorize unit");
     }
 
-    let mut tampered: DeviceAuthorizePayload = authorize.typed_payload("ak.device.authorize")?;
+    let mut tampered: DeviceAuthorizePayload =
+        authorize.typed_payload::<arkret_wire::event_spec::DeviceAuthorize>()?;
     tampered.device_signature = SignatureMaterial::NonEmptyString(non_empty("AA")?);
     if arkret_signatures::verify_device_authorize_possession(&tampered).is_ok() {
         bail!("PCR genesis accepted a mutated founding-device possession proof");

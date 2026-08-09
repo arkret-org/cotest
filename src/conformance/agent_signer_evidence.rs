@@ -648,8 +648,8 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         "01970e589d21-0001-a13f9c2e",
         &authority_verification_method,
     )?;
-    let accepted_status_event = Event::new(
-        EventKind::AGENT_PROVISION,
+    let accepted_status_event = arkret_wire::test_support::raw_event(
+        EventKind::AgentProvision.as_str(),
         ScopeRef::Realm {
             realm_id: realm_id.clone(),
         },

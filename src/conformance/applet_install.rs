@@ -95,7 +95,7 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
 
     let pair = [
         "ak.identity.accountability_grant",
-        arkret_wire::EventKind::PROFILE_CREATE,
+        arkret_wire::event_kind_str::PROFILE_CREATE,
     ];
     if !ghost_provision_pair_authorized("ak.applet.ghost.provision", &pair)
         || ghost_provision_pair_authorized("ak.applet.ghost.provision", &pair[..1])
@@ -159,6 +159,6 @@ fn ghost_provision_pair_authorized(action: &str, event_kinds: &[&str]) -> bool {
         && event_kinds
             == [
                 "ak.identity.accountability_grant",
-                arkret_wire::EventKind::PROFILE_CREATE,
+                arkret_wire::event_kind_str::PROFILE_CREATE,
             ]
 }

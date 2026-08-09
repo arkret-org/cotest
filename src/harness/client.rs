@@ -551,7 +551,7 @@ impl TestActorClient {
         let event = self
             .author_event(
                 realm_id,
-                arkret_wire::EventKind::CAPABILITY_GRANT,
+                arkret_wire::event_kind_str::CAPABILITY_GRANT,
                 serde_json::to_value(payload)?,
             )
             .await?;
@@ -703,7 +703,7 @@ impl TestActorClient {
                 .into_iter()
                 .map(|grant_id| EventRef::new(grant_id, arkret_wire::EVENT_REF_ROLE_AUTHORIZED_BY))
                 .collect();
-            if kind == arkret_wire::EventKind::STRAND_UPDATE
+            if kind == arkret_wire::event_kind_str::STRAND_UPDATE
                 && event
                     .payload
                     .get("patch")

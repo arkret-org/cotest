@@ -2,9 +2,10 @@ use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, EventId, PolicyId};
 use arkret_models_crypto::{
-    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
-    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
-    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, RecoveryPolicyRef,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupContentItem,
+    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
+    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, RecoveryPolicyRef, UnsignedKeyBackup,
+    UnsignedKeyBackupAuthData,
 };
 use arkret_wire::{Base64UrlString, DidUrl};
 use chrono::{DateTime, Utc};
@@ -106,7 +107,7 @@ fn did_key_principal(signing: &SigningKey) -> (String, String) {
 
 fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBackup> {
     let created_at = ts("2026-05-30T00:00:00.000Z")?;
-    Ok(KeyBackup {
+    let backup = KeyBackup {
         backup_id: BackupId::new(DID_RECOVERY_BACKUP_ID.to_owned())?,
         actor_id: Did::new(principal_id.to_owned())?,
         device_id: Some(DeviceId::new(DEVICE_A.to_owned())?),
@@ -146,16 +147,16 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
                 backup_kind: BackupKind::DidRecovery,
                 backup_version: "kb_1".to_owned(),
                 created_at,
-                item_kinds: vec!["recovery_secret".to_owned()],
+                item_kinds: vec!["recovery_key_share".to_owned()],
                 managed_principal_bindings: Vec::new(),
-                recipient_method: None,
-                recipient_key_ref: None,
+                recipient_method: Some(KeyBackupRecipientMethod::RecoveryPublicKey),
+                recipient_key_ref: Some("did:key:z6MkrecoveryKey#z6MkrecoveryKey".to_owned()),
                 extra: Default::default(),
             },
             extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
-            item_kind: "recovery_secret".to_owned(),
+            item_kind: "recovery_key_share".to_owned(),
             realm_id: None,
             managed_principal_binding: None,
             mls_group_id: None,
@@ -168,35 +169,9 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
         }],
         ciphertext: "cotest-did-recovery-ciphertext".to_owned(),
         ciphertext_digest:
-            "sha256:2108421084217842908421084210842121084210842178429084210842108421".to_owned(),
+            "sha256:aab7f06698b2ea1374a66d33d22b1a91ffdb5a9dd9b19c5f50506b5257996f7d".to_owned(),
         plaintext_commitment: None,
-        auth_data: Some(KeyBackupAuthData {
-            device_id: DeviceId::new(DEVICE_A.to_owned())?,
-            verification_method: DidUrl::new("did:key:z6Mkdevice#z6Mkdevice")
-                .map_err(|error| anyhow!(error))?,
-            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
-            signature: Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?,
-            device_authorize_event_id: EventId::new(
-                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-            )?,
-            signed_fields: [
-                "backup_id",
-                "actor_id",
-                "backup_kind",
-                "backup_version",
-                "series_id",
-                "series_seq",
-                "encryption",
-                "domain_separation",
-                "contents",
-                "ciphertext_digest",
-                "recovery_policy_ref",
-            ]
-            .into_iter()
-            .map(str::to_owned)
-            .collect(),
-            extra: Default::default(),
-        }),
+        auth_data: None,
         retention: None,
         series_id: BackupSeriesId::new(
             "ak:backup_series:01975510-0000-7000-8000-0000000000a2".to_owned(),
@@ -210,7 +185,15 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             policy_version: 1,
         }),
         extra: Default::default(),
-    })
+    };
+    let auth_data = UnsignedKeyBackupAuthData::new(
+        DeviceId::new(DEVICE_A.to_owned())?,
+        DidUrl::new("did:key:z6Mkdevice#z6Mkdevice").map_err(|error| anyhow!(error))?,
+        KeyBackupSignatureAlgorithm::Ed25519,
+        EventId::new("ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM")?,
+    )?;
+    UnsignedKeyBackup::new(backup, auth_data)?
+        .attach_signature(Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?)
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {

@@ -852,7 +852,7 @@ fn build_fixed_sidecar_prepare(
     // Its SidecarId is retyped from the accepted create Event identity.
     let create_event = if existing.is_none() {
         Some(fixed_unsigned_sidecar_event(
-            EventKind::SIDECAR_CREATE,
+            EventKind::SidecarCreate,
             request.source_realm_id.clone(),
             ScopeRef::Realm {
                 realm_id: request.source_realm_id.clone(),
@@ -888,7 +888,7 @@ fn build_fixed_sidecar_prepare(
         },
     );
     let attach_event = fixed_unsigned_sidecar_event(
-        EventKind::SIDECAR_CONTEXT_ATTACH,
+        EventKind::SidecarContextAttach,
         request.source_realm_id.clone(),
         ScopeRef::Sidecar {
             realm_id: request.source_realm_id.clone(),
@@ -944,7 +944,7 @@ fn build_fixed_sidecar_prepare(
 
 #[allow(clippy::too_many_arguments)]
 fn fixed_unsigned_sidecar_event(
-    kind: &'static str,
+    kind: EventKind,
     realm_id: RealmId,
     scope_ref: ScopeRef,
     actor_id: Did,
@@ -965,7 +965,7 @@ fn fixed_unsigned_sidecar_event(
     let mut event = Event {
         event_id: EventId::new("ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
             .map_err(|_| SidecarModelError::ModelInvariant)?,
-        kind: EventKind::from_wire(kind),
+        kind,
         realm_id,
         scope_ref,
         actor_id,
@@ -1110,7 +1110,7 @@ fn validate_prepared_outcome(
         return Err(SidecarModelError::ReservationMismatch);
     }
     if let Some(create) = &create {
-        if create.kind != EventKind::SIDECAR_CREATE
+        if create.kind != EventKind::SidecarCreate
             || create.scope_ref
                 != (ScopeRef::Realm {
                     realm_id: request.source_realm_id.clone(),
@@ -1135,7 +1135,7 @@ fn validate_prepared_outcome(
     attach_payload
         .validate()
         .map_err(|_| SidecarModelError::DraftMismatch)?;
-    if attach.kind != EventKind::SIDECAR_CONTEXT_ATTACH
+    if attach.kind != EventKind::SidecarContextAttach
         || attach.actor_id != request.controller_id
         || attach.realm_id != request.source_realm_id
         || attach.scope_ref
@@ -2731,8 +2731,8 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         realm_id: realm_id.clone(),
         sidecar_id: sidecar_id.clone(),
     };
-    let attach_event = Event::new_with_derived_id_at(
-        EventKind::SIDECAR_CONTEXT_ATTACH,
+    let attach_event = arkret_wire::test_support::raw_event_at(
+        EventKind::SidecarContextAttach.as_str(),
         scope,
         controller_id.clone(),
         20,
@@ -2761,8 +2761,8 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     {
         bail!("accepted native Sidecar attachment did not recover the canonical locator");
     }
-    let unauthorized_attach = Event::new_with_derived_id_at(
-        EventKind::SIDECAR_CONTEXT_ATTACH,
+    let unauthorized_attach = arkret_wire::test_support::raw_event_at(
+        EventKind::SidecarContextAttach.as_str(),
         attach_event.scope_ref.clone(),
         Did::new("did:webvh:z6mkfixture:mallory.example")?,
         21,
@@ -2851,8 +2851,8 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
         let mut events = Vec::new();
         for (index, sibling) in siblings.iter().enumerate() {
             let created_at = base_created_at + chrono::Duration::seconds(offsets[index]);
-            events.push(Event::new_with_derived_id_at(
-                EventKind::MESSAGE_CREATE,
+            events.push(arkret_wire::test_support::raw_event_at(
+                EventKind::MessageCreate.as_str(),
                 ScopeRef::Realm {
                     realm_id: realm_id.clone(),
                 },

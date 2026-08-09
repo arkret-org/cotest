@@ -167,7 +167,7 @@ fn event_submission(principal: &Did, kind: &str) -> Result<EventInitialSubmissio
         realm_id: realm_id.clone(),
     };
     let now = Utc::now();
-    let mut event = Event::new_with_derived_id_at(
+    let mut event = arkret_wire::test_support::raw_event_at(
         kind,
         scope_ref.clone(),
         principal.clone(),

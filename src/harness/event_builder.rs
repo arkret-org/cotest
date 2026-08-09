@@ -376,28 +376,28 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         Ok(())
     };
     push_followup(
-        arkret_wire::EventKind::REALM_PROFILE,
+        arkret_wire::event_kind_str::REALM_PROFILE,
         profile.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_PROFILE_V1),
     )?;
     push_followup(
-        arkret_wire::EventKind::REALM_POLICY_BUNDLE,
+        arkret_wire::event_kind_str::REALM_POLICY_BUNDLE,
         policy_bundle.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_POLICY_BUNDLE_V1),
     )?;
     push_followup(
-        arkret_wire::EventKind::REALM_JOIN_RULE,
+        arkret_wire::event_kind_str::REALM_JOIN_RULE,
         join_rule.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_JOIN_RULE_V1),
     )?;
     push_followup(
-        arkret_wire::EventKind::REALM_HISTORY_VISIBILITY,
+        arkret_wire::event_kind_str::REALM_HISTORY_VISIBILITY,
         history_visibility.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_HISTORY_VISIBILITY_V1),
     )?;
     if let Some(policy) = history_sharing_policy {
         push_followup(
-            arkret_wire::EventKind::REALM_HISTORY_SHARING_POLICY,
+            arkret_wire::event_kind_str::REALM_HISTORY_SHARING_POLICY,
             policy.to_value()?,
             arkret_wire::null_subject_cell(
                 arkret_wire::CellFamilyId::REALM_HISTORY_SHARING_POLICY_V1,
@@ -405,20 +405,20 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         )?;
     }
     push_followup(
-        arkret_wire::EventKind::REALM_DISCOVERY,
+        arkret_wire::event_kind_str::REALM_DISCOVERY,
         discovery.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DISCOVERY_V1),
     )?;
     if let Some(alias) = alias {
         push_followup(
-            arkret_wire::EventKind::REALM_ALIAS,
+            arkret_wire::event_kind_str::REALM_ALIAS,
             alias.to_value()?,
             arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_ALIAS_V1),
         )?;
     }
     if let Some(services) = plaintext_visible_services {
         push_followup(
-            arkret_wire::EventKind::REALM_PLAINTEXT_VISIBLE_SERVICES,
+            arkret_wire::event_kind_str::REALM_PLAINTEXT_VISIBLE_SERVICES,
             services.to_value()?,
             arkret_wire::null_subject_cell(
                 arkret_wire::CellFamilyId::REALM_PLAINTEXT_VISIBLE_SERVICES_V1,
@@ -426,12 +426,12 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         )?;
     };
     push_followup(
-        arkret_wire::EventKind::REALM_DELIVERY_BINDING_POLICY,
+        arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,
         delivery_binding_policy.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DELIVERY_BINDING_POLICY_V1),
     )?;
     push_followup(
-        arkret_wire::EventKind::MEMBER_STATE,
+        arkret_wire::event_kind_str::MEMBER_STATE,
         member_join_payload_value(&derived_realm_id, actor)?,
         format!("ak:cell:ak.component.member.state.v1:{actor}"),
     )?;
@@ -895,7 +895,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // `event_id` from the Event's own content, so the harness builds with the
     // derived constructor and callers read the id back off the built Event.
     let _ = &suffix;
-    let mut event = arkret_wire::Event::new_with_derived_id_at(
+    let mut event = arkret_wire::test_support::raw_event_at(
         kind,
         // A Realm genesis carries the closed genesis scope and no realm_id;
         // the Realm's id is derived from the Event (spec realm-and-space.md
@@ -1283,8 +1283,6 @@ pub(crate) fn event_envelope_with_causal_refs(
 
 #[cfg(test)]
 mod realm_bootstrap_tests {
-    use arkret_wire::EventKind;
-
     use super::*;
 
     const ACTOR: &str = "did:webvh:z6mkfixture:alice.soland.local";
@@ -1322,15 +1320,15 @@ mod realm_bootstrap_tests {
         assert_eq!(
             kinds,
             [
-                EventKind::REALM_CREATE,
-                EventKind::REALM_PROFILE,
-                EventKind::REALM_POLICY_BUNDLE,
-                EventKind::REALM_JOIN_RULE,
-                EventKind::REALM_HISTORY_VISIBILITY,
-                EventKind::REALM_DISCOVERY,
-                EventKind::REALM_ALIAS,
-                EventKind::REALM_DELIVERY_BINDING_POLICY,
-                EventKind::MEMBER_STATE,
+                arkret_wire::event_kind_str::REALM_CREATE,
+                arkret_wire::event_kind_str::REALM_PROFILE,
+                arkret_wire::event_kind_str::REALM_POLICY_BUNDLE,
+                arkret_wire::event_kind_str::REALM_JOIN_RULE,
+                arkret_wire::event_kind_str::REALM_HISTORY_VISIBILITY,
+                arkret_wire::event_kind_str::REALM_DISCOVERY,
+                arkret_wire::event_kind_str::REALM_ALIAS,
+                arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,
+                arkret_wire::event_kind_str::MEMBER_STATE,
             ]
         );
         assert_eq!(

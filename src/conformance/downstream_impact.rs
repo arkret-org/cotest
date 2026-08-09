@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow, bail};
-use arkret_event_draft::Operation;
+use arkret_event_draft::ProjectedEventOperation as Operation;
+use arkret_event_draft::test_support::raw_projected_operation;
 use arkret_models_collaboration::events_payloads::account::{
     AccountStatusPayload, AccountStatusServiceBinding,
 };
@@ -8,7 +9,7 @@ use arkret_models_collaboration::governance::policy_check::{
     PolicyCheckOutcome, policy_decision_transcript_bytes,
 };
 use arkret_models_collaboration::objects::queries::View;
-use arkret_wire::{Did, ErrorCode, ErrorStatusContext, EventKind, OperationId, RealmId};
+use arkret_wire::{Did, ErrorCode, ErrorStatusContext, OperationId, RealmId};
 use ed25519_dalek::{Signer as _, SigningKey, Verifier as _};
 use serde_json::{Value, json};
 use soland_domain::hlc::ServerHlc;
@@ -195,10 +196,10 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
 }
 
 fn operation(index: u32, realm: &RealmId, payload: Value) -> Result<Operation> {
-    Ok(Operation::create(
+    Ok(raw_projected_operation(
         OperationId::new(format!("ak:operation:01904100-0000-7000-8000-{index:012x}"))?,
         realm.clone(),
-        EventKind::MODERATION_DECISION,
+        arkret_wire::event_kind_str::MODERATION_DECISION,
         payload,
     ))
 }

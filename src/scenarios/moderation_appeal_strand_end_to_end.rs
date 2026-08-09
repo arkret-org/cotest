@@ -77,7 +77,6 @@ pub async fn moderation_appeal_strand_end_to_end_run() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use arkret_wire::events::EventKind;
 
     use super::*;
 
@@ -91,10 +90,10 @@ mod tests {
     #[test]
     fn appeal_kinds_are_distinct_and_well_formed() {
         for k in [
-            EventKind::MODERATION_APPEAL_SUBMIT,
-            EventKind::MODERATION_APPEAL_REVIEW,
-            EventKind::MODERATION_APPEAL_DECISION,
-            EventKind::MODERATION_APPEAL_CLOSE,
+            arkret_wire::event_kind_str::MODERATION_APPEAL_SUBMIT,
+            arkret_wire::event_kind_str::MODERATION_APPEAL_REVIEW,
+            arkret_wire::event_kind_str::MODERATION_APPEAL_DECISION,
+            arkret_wire::event_kind_str::MODERATION_APPEAL_CLOSE,
         ] {
             assert!(
                 k.starts_with("ak.moderation.appeal."),
@@ -109,12 +108,12 @@ mod tests {
             .await
             .expect("appeal error codes + TypedAppealId must stay registered");
         assert_eq!(
-            EventKind::MODERATION_DECISION_LIFT,
+            arkret_wire::event_kind_str::MODERATION_DECISION_LIFT,
             "ak.moderation.decision.lift"
         );
         assert_ne!(
-            EventKind::MODERATION_APPEAL_DECISION,
-            EventKind::MODERATION_DECISION_LIFT
+            arkret_wire::event_kind_str::MODERATION_APPEAL_DECISION,
+            arkret_wire::event_kind_str::MODERATION_DECISION_LIFT
         );
     }
 }

@@ -34,12 +34,12 @@ fn productivity_registry_entries_are_present_and_exact() {
         .filter_map(|entry| entry["event_kind"].as_str())
         .collect();
     for expected in [
-        arkret_wire::EventKind::RSVP_SET,
-        arkret_wire::EventKind::PIN_ADD,
-        arkret_wire::EventKind::PIN_REMOVE,
-        arkret_wire::EventKind::PIN_REORDER,
-        arkret_wire::EventKind::REALM_DISAPPEARING_POLICY,
-        arkret_wire::EventKind::REALM_SEARCH_POLICY,
+        arkret_wire::event_kind_str::RSVP_SET,
+        arkret_wire::event_kind_str::PIN_ADD,
+        arkret_wire::event_kind_str::PIN_REMOVE,
+        arkret_wire::event_kind_str::PIN_REORDER,
+        arkret_wire::event_kind_str::REALM_DISAPPEARING_POLICY,
+        arkret_wire::event_kind_str::REALM_SEARCH_POLICY,
     ] {
         assert!(
             event_kinds.contains(expected),
@@ -100,7 +100,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     // basis, so both converge as one lattice value.
     catalog
         .validate_payload(
-            arkret_wire::EventKind::RSVP_SET,
+            arkret_wire::event_kind_str::RSVP_SET,
             &json!({
                 "event_ref": "ak:strand:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
                 "occurrence": null,
@@ -114,7 +114,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     assert!(
         catalog
             .validate_payload(
-                arkret_wire::EventKind::RSVP_SET,
+                arkret_wire::event_kind_str::RSVP_SET,
                 &json!({
                     "event_ref": "ak:strand:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
                     "occurrence": null,
@@ -130,7 +130,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     assert!(
         catalog
             .validate_payload(
-                arkret_wire::EventKind::RSVP_SET,
+                arkret_wire::event_kind_str::RSVP_SET,
                 &json!({
                     "event_ref": "ak:strand:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
                     "occurrence": null,
@@ -143,7 +143,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     assert!(
         catalog
             .validate_payload(
-                arkret_wire::EventKind::RSVP_SET,
+                arkret_wire::event_kind_str::RSVP_SET,
                 &json!({
                     "event_ref": "ak:strand:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
                     "occurrence": null,
@@ -160,7 +160,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     });
     catalog
         .validate_payload(
-            arkret_wire::EventKind::PIN_ADD,
+            arkret_wire::event_kind_str::PIN_ADD,
             &json!({
                 "pin_scope": pin_scope,
                 "target_ref": "ak:message:ASeIBHNVQyeIcU4aBIt2t2BF_ikuVMH0kNru_HgO_gG1",
@@ -171,7 +171,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 
     catalog
         .validate_payload(
-            arkret_wire::EventKind::REALM_DISAPPEARING_POLICY,
+            arkret_wire::event_kind_str::REALM_DISAPPEARING_POLICY,
             &json!({
                 "enabled": true,
                 "max_ttl_ms": 3600000,
@@ -187,7 +187,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     assert!(
         catalog
             .validate_payload(
-                arkret_wire::EventKind::REALM_DISAPPEARING_POLICY,
+                arkret_wire::event_kind_str::REALM_DISAPPEARING_POLICY,
                 &json!({
                     "enabled": true,
                     "max_ttl_ms": 3600000,
@@ -201,7 +201,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
 
     catalog
         .validate_payload(
-            arkret_wire::EventKind::REALM_SEARCH_POLICY,
+            arkret_wire::event_kind_str::REALM_SEARCH_POLICY,
             &json!({
                 "enabled_profile_refs": ["ak.profile.search.blind_index.v1"],
                 "allowed_service_ids": ["did:web:search.example"],
@@ -214,7 +214,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
     assert!(
         catalog
             .validate_payload(
-                arkret_wire::EventKind::REALM_SEARCH_POLICY,
+                arkret_wire::event_kind_str::REALM_SEARCH_POLICY,
                 &json!({
                     "profile_refs": ["ak.profile.search.blind_index.v1"],
                     "service_ids": ["did:web:search.example"],

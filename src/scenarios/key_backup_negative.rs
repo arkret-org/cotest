@@ -1,9 +1,10 @@
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, Did, EventId};
 use arkret_models_crypto::{
-    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupAuthData,
-    KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupDomainSeparationAad,
-    KeyBackupEncryption, KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm,
+    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupContentItem,
+    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
+    KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, UnsignedKeyBackup,
+    UnsignedKeyBackupAuthData,
 };
 use arkret_wire::{Base64UrlString, DidUrl};
 use chrono::{DateTime, Utc};
@@ -235,8 +236,8 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
                 created_at,
                 item_kinds: vec!["mls_group_state".to_owned()],
                 managed_principal_bindings: Vec::new(),
-                recipient_method: None,
-                recipient_key_ref: None,
+                recipient_method: Some(KeyBackupRecipientMethod::SecretStorageKey),
+                recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
                 extra: Default::default(),
             },
             extra: Default::default(),
@@ -255,20 +256,9 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
         }],
         ciphertext: "cotest-d3-ciphertext".to_owned(),
         ciphertext_digest:
-            "sha256:2108421084217842908421084210842121084210842178429084210842108421".to_owned(),
+            "sha256:099bf8f3386d21514c1fbd8282454fb2485018aa4cc3ede46d7f1fa6c3287d40".to_owned(),
         plaintext_commitment: None,
-        auth_data: Some(KeyBackupAuthData {
-            device_id: DeviceId::new(device_id.to_owned())?,
-            verification_method: DidUrl::new(format!("{actor}#device"))
-                .map_err(|error| anyhow!(error))?,
-            signature_algorithm: KeyBackupSignatureAlgorithm::Ed25519,
-            signature: Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?,
-            device_authorize_event_id: EventId::new(
-                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-            )?,
-            signed_fields: key_backup_signed_fields(),
-            extra: Default::default(),
-        }),
+        auth_data: None,
         retention: None,
         series_id: BackupSeriesId::new(backup_id.replacen("ak:backup:", "ak:backup_series:", 1))?,
         series_seq: 0,
@@ -278,26 +268,14 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
         recovery_policy_ref: None,
         extra: Default::default(),
     };
-    Ok(backup)
-}
-
-fn key_backup_signed_fields() -> Vec<String> {
-    [
-        "backup_id",
-        "actor_id",
-        "backup_kind",
-        "backup_version",
-        "series_id",
-        "series_seq",
-        "supersedes",
-        "encryption",
-        "domain_separation",
-        "contents",
-        "ciphertext_digest",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect()
+    let auth_data = UnsignedKeyBackupAuthData::new(
+        DeviceId::new(device_id.to_owned())?,
+        DidUrl::new(format!("{actor}#device")).map_err(|error| anyhow!(error))?,
+        KeyBackupSignatureAlgorithm::Ed25519,
+        EventId::new("ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM")?,
+    )?;
+    UnsignedKeyBackup::new(backup, auth_data)?
+        .attach_signature(Base64UrlString::new("c2lnbmF0dXJl").map_err(|error| anyhow!(error))?)
 }
 
 fn ts(value: &str) -> Result<DateTime<Utc>> {

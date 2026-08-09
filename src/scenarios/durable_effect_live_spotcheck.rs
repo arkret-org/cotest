@@ -196,7 +196,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
                     alice
                         .author_event(
                             &realm_id,
-                            arkret_wire::EventKind::REALM_POLICY_SERVER,
+                            arkret_wire::event_kind_str::REALM_POLICY_SERVER,
                             declaration.clone(),
                         )
                         .await?,
@@ -238,7 +238,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
                     alice
                         .author_event_with_preconditions(
                             &realm_id,
-                            arkret_wire::EventKind::REALM_POLICY_SERVER,
+                            arkret_wire::event_kind_str::REALM_POLICY_SERVER,
                             json!({ "tombstone": true }),
                             vec![crate::harness::head_eq_precondition(
                                 "ak:cell:ak.component.realm.policy_server.v1:null",
@@ -375,7 +375,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         &arkret_models_identity::principal_control_realm_id(&arkret_wire::Did::new(
             alice.actor.clone(),
         )?),
-        arkret_wire::EventKind::ACCOUNT_DATA_SET,
+        arkret_wire::event_kind_str::ACCOUNT_DATA_SET,
         json!({
             "key": account_data_key,
             "owner": alice.actor.clone(),

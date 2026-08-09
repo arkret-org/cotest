@@ -35,7 +35,7 @@ use arkret_policy::{
 use arkret_schema::{
     EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
-use arkret_wire::{Did, EventKind, RealmId};
+use arkret_wire::{Did, RealmId};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -55,11 +55,11 @@ fn strong_catalog() -> EventPayloadValidatorCatalog {
     // Guard against silently falling back to the hand-written shapes: the
     // regression value of these tests depends on the strong schema dispatch.
     assert!(
-        catalog.rules[EventKind::REALM_ORGANIZATION]
+        catalog.rules[arkret_wire::event_kind_str::REALM_ORGANIZATION]
             .payload_schema_id
             .ends_with("#/$defs/realm_organization_payload"),
         "ak.realm.organization must dispatch to the realm_organization_payload def, got {}",
-        catalog.rules[EventKind::REALM_ORGANIZATION].payload_schema_id
+        catalog.rules[arkret_wire::event_kind_str::REALM_ORGANIZATION].payload_schema_id
     );
     catalog
 }
@@ -79,7 +79,9 @@ fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() ->
     let mut active_seen = false;
     let mut revoked_seen = false;
     for vector in positives {
-        if vector.get("event_kind").and_then(Value::as_str) != Some(EventKind::REALM_ORGANIZATION) {
+        if vector.get("event_kind").and_then(Value::as_str)
+            != Some(arkret_wire::event_kind_str::REALM_ORGANIZATION)
+        {
             continue;
         }
         let name = vector
@@ -92,7 +94,7 @@ fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() ->
 
         // Strong schema acceptance.
         catalog
-            .validate_payload(EventKind::REALM_ORGANIZATION, payload)
+            .validate_payload(arkret_wire::event_kind_str::REALM_ORGANIZATION, payload)
             .with_context(|| format!("strong schema must accept {name}"))?;
         // Strong-typed deserialization round-trip (rejects the legacy shape).
         let _typed: RealmOrganizationPayload = serde_json::from_value(payload.clone())
@@ -136,7 +138,7 @@ fn coverage_fixture_drops_legacy_organization_ref_shape() {
     let legacy = serde_json::json!({ "organization_ref": "did:web:org.example" });
     assert!(
         catalog
-            .validate_payload(EventKind::REALM_ORGANIZATION, &legacy)
+            .validate_payload(arkret_wire::event_kind_str::REALM_ORGANIZATION, &legacy)
             .is_err(),
         "legacy {{ organization_ref }} shape must be rejected by the strong validator"
     );
@@ -309,7 +311,7 @@ fn realm_organization_statement_negative_vectors_match_spec_codes() -> Result<()
 
     // Positive control: the unmutated base statement passes both surfaces.
     catalog
-        .validate_payload(EventKind::REALM_ORGANIZATION, base)
+        .validate_payload(arkret_wire::event_kind_str::REALM_ORGANIZATION, base)
         .context("positive control must pass the strong schema")?;
     let base_typed: RealmOrganizationPayload =
         serde_json::from_value(base.clone()).context("positive control must deserialize")?;
@@ -369,7 +371,7 @@ fn realm_organization_statement_negative_vectors_match_spec_codes() -> Result<()
                     );
                 }
                 if catalog
-                    .validate_payload(EventKind::REALM_ORGANIZATION, &candidate)
+                    .validate_payload(arkret_wire::event_kind_str::REALM_ORGANIZATION, &candidate)
                     .is_ok()
                 {
                     bail!("schema vector {name} unexpectedly validated against the strong schema");

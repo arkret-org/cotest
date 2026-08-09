@@ -298,8 +298,8 @@ async fn bootstrap_test_device_authorization(
         &root_verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
-    let mut authorize = Event::new(
-        arkret_wire::EventKind::DEVICE_AUTHORIZE,
+    let mut authorize = arkret_wire::test_support::raw_event(
+        arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm { realm_id },
         principal.clone(),
         1,

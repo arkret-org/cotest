@@ -2,6 +2,64 @@
 //!
 //! `cotest` keeps the executable harness and scenario logic in the main crate.
 //! Integration test files are intentionally thin entrypoints.
+//!
+//! The standard Event authoring boundary is also a compile-time contract. A
+//! marker cannot accept another kind's payload:
+//!
+//! ```compile_fail
+//! use arkret_event_draft::TypedEventDraft;
+//! use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
+//! use arkret_wire::{Did, RealmId, ScopeRef, StrandId, event_spec};
+//!
+//! let scope = ScopeRef::Realm {
+//!     realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
+//! };
+//! let payload = MessageCreatePayload::with_content(
+//!     StrandId::new("ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9").unwrap(),
+//!     "main",
+//!     ContentBlock::text("wrong family"),
+//! );
+//! let _ = TypedEventDraft::<event_spec::RealmPolicy>::new(
+//!     scope,
+//!     Did::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     payload,
+//! );
+//! ```
+//!
+//! A typed draft exposes no runtime kind override:
+//!
+//! ```compile_fail
+//! use arkret_event_draft::TypedEventDraft;
+//! use arkret_models_collaboration::events_payloads::StatePayload;
+//! use arkret_wire::{Did, EventKind, RealmId, ScopeRef, event_spec};
+//!
+//! let draft = TypedEventDraft::<event_spec::RealmPolicy>::new(
+//!     ScopeRef::Realm {
+//!         realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
+//!     },
+//!     Did::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     StatePayload { value: None, state: Some("active".to_owned()), reason: None },
+//! ).unwrap();
+//! let _ = draft.with_kind(EventKind::MessageCreate);
+//! ```
+//!
+//! The raw standard constructor is not public outside `arkret-wire`:
+//!
+//! ```compile_fail
+//! use arkret_wire::{Did, Event, Hlc, RealmId, ScopeRef};
+//!
+//! let scope = ScopeRef::Realm {
+//!     realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
+//! };
+//! let _ = Event::new(
+//!     "ak.message.create",
+//!     scope,
+//!     Did::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     1,
+//!     Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
+//!     serde_json::json!({}),
+//! );
+//! ```
 
 // Doc-comment formatting in this crate uses heavily indented continuation
 // lines, ASCII tables, and free-form bullet structures that pre-date

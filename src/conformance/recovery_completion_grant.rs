@@ -4,15 +4,18 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
-use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
+use arkret_models_crypto::{
+    RecoveryProofKind, RecoveryProofSummary, RecoveryReceipt, RecoveryReceiptOutcome,
+    UnsignedRecoveryReceipt, UnsignedRecoveryReceiptBody,
+};
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffOutcome,
     CanonicalSessionPublicJwk, InitialSessionGrantRequest,
 };
 use arkret_wire::{
     IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
-    RECOVERY_COMPLETION_ATTESTATION_SIGNED_FIELDS, RecoveryCompletionAttestation,
-    RecoveryCompletionAttestationAuthData, RecoveryModelGenerationRef,
+    RecoveryModelGenerationRef, UnsignedRecoveryCompletionAttestation,
+    UnsignedRecoveryCompletionAttestationBody,
 };
 use base64::Engine as _;
 use chrono::{Duration, TimeZone as _, Utc};
@@ -68,102 +71,86 @@ fn completion_vector() -> Result<CompletionVector> {
     let audience = format!("did:key:{coordinator_multibase}");
     let verification_method = format!("{audience}#{coordinator_multibase}");
 
-    let receipt_signed_fields = [
-        "schema",
-        "receipt_id",
-        "transaction_id",
-        "transaction_request_digest",
-        "prepared_plan_digest",
-        "principal_id",
-        "recovery_session_id",
-        "policy_id",
-        "policy_version",
-        "trust_domain",
-        "new_device_id",
-        "identity_model",
-        "previous_model_generation_ref",
-        "result_model_generation_ref",
-        "authorization_event_id",
-        "reanchor_event_id",
-        "reanchor_batch_receipt_id",
-        "did_entry_ref",
-        "proof_summary",
-        "backup_classes_unlocked",
-        "welcome_count",
-        "outcome",
-        "started_at",
-        "completed_at",
-    ]
-    .into_iter()
-    .map(str::to_owned)
-    .collect::<Vec<_>>();
-    let mut receipt: RecoveryReceipt = serde_json::from_value(json!({
-        "schema": "ak.schema.recovery_receipt.v1",
-        "receipt_id": "ak:receipt:019a8400-0000-7000-8000-000000000003",
-        "transaction_id": transaction_id,
-        "transaction_request_digest": transaction_request_digest,
-        "prepared_plan_digest": prepared_plan_digest,
-        "principal_id": principal_id,
-        "recovery_session_id": "ak:recovery_session:019a8400-0000-7000-8000-000000000004",
-        "policy_id": "ak:policy:019a8400-0000-7000-8000-000000000005",
-        "policy_version": 1,
-        "trust_domain": "ak:trust_domain:example.net",
-        "new_device_id": device_id,
-        "identity_model": "root_anchored",
-        "previous_model_generation_ref": previous_generation,
-        "result_model_generation_ref": result_generation,
-        "authorization_event_id": authorization_event_id,
-        "reanchor_event_id": "ak:event:AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq",
-        "reanchor_batch_receipt_id": "ak:receipt:019a8400-0000-7000-8000-000000000006",
-        "did_entry_ref": "2-QmReplacementRoot",
-        "proof_summary": { "kind": "recovery_unlock", "proof_digest": hash('4') },
-        "backup_classes_unlocked": [],
-        "welcome_count": 0,
-        "outcome": "completed",
-        "started_at": arkret_canonical::format_timestamp_canonical(started_at),
-        "completed_at": arkret_canonical::format_timestamp_canonical(completed_at),
-        "auth_data": {
-            "verification_method": verification_method,
-            "signature_algorithm": "Ed25519",
-            "signature": "pending",
-            "signed_fields": receipt_signed_fields
-        }
-    }))
-    .context("construct recovery terminal receipt")?;
-    receipt.validate()?;
-    receipt.auth_data.signature =
-        sign_b64url(&coordinator_key, &receipt.signature_transcript_bytes()?);
+    let receipt = UnsignedRecoveryReceipt::new(
+        UnsignedRecoveryReceiptBody {
+            receipt_id: "ak:receipt:019a8400-0000-7000-8000-000000000003".parse()?,
+            transaction_id: transaction_id.parse()?,
+            transaction_request_digest: transaction_request_digest.parse()?,
+            prepared_plan_digest: prepared_plan_digest.parse()?,
+            principal_id: principal_id.parse()?,
+            recovery_session_id: "ak:recovery_session:019a8400-0000-7000-8000-000000000004"
+                .parse()?,
+            policy_id: "ak:policy:019a8400-0000-7000-8000-000000000005".parse()?,
+            policy_version: 1,
+            trust_domain: "ak:trust_domain:example.net".parse()?,
+            new_device_id: device_id.parse()?,
+            identity_model: arkret_models_crypto::RecoveryIdentityModel::RootAnchored,
+            previous_model_generation_ref: arkret_models_crypto::RecoveryModelGenerationRef::new(
+                arkret_wire::NonEmptyString::new(previous_generation.to_owned())?,
+            )?,
+            result_model_generation_ref: arkret_models_crypto::RecoveryModelGenerationRef::new(
+                arkret_wire::NonEmptyString::new(result_generation.to_owned())?,
+            )?,
+            authorization_event_id: authorization_event_id.parse()?,
+            device_list_update_event_id: None,
+            reanchor_event_id: Some(
+                "ak:event:AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq".parse()?,
+            ),
+            reanchor_batch_receipt_id: Some(
+                "ak:receipt:019a8400-0000-7000-8000-000000000006".parse()?,
+            ),
+            did_entry_ref: Some("2-QmReplacementRoot".to_owned()),
+            proof_summary: RecoveryProofSummary {
+                kind: RecoveryProofKind::RecoveryUnlock,
+                proof_digest: hash('4').parse()?,
+                quorum_participant_count: None,
+                share_ids: None,
+            },
+            backup_classes_unlocked: Vec::new(),
+            welcome_count: 0,
+            welcome_realm_summary: None,
+            outcome: RecoveryReceiptOutcome::Completed,
+            outcome_reason_code: None,
+            started_at,
+            completed_at,
+            extra: Default::default(),
+        },
+        crate::fixture_did_url(verification_method.clone()),
+    )?;
+    let signature = arkret_wire::Base64UrlString::new(sign_b64url(
+        &coordinator_key,
+        &receipt.signing_payload_bytes()?,
+    ))?;
+    let receipt = receipt.attach_signature(signature)?;
     let terminal_receipt = serde_json::to_value(&receipt)?;
     let terminal_receipt_digest = arkret_canonical::canonical_sha256(&terminal_receipt)?;
 
-    let mut attestation = RecoveryCompletionAttestation {
-        schema: "ak.schema.recovery_completion_attestation.v1".to_owned(),
-        transaction_id: transaction_id.parse()?,
-        transaction_request_digest: transaction_request_digest.parse()?,
-        prepared_plan_digest: prepared_plan_digest.parse()?,
-        principal_id: principal_id.parse()?,
-        coordinator_service_id: audience.parse()?,
-        recovery_session_id: "ak:recovery_session:019a8400-0000-7000-8000-000000000004".parse()?,
-        terminal_receipt_id: "ak:receipt:019a8400-0000-7000-8000-000000000003".parse()?,
-        terminal_receipt_digest: terminal_receipt_digest.parse()?,
-        replacement_device_id: device_id.parse()?,
-        device_authorization_event_id: authorization_event_id.parse()?,
-        device_authorization_event_digest: authorization_event_digest.parse()?,
-        result_model_generation_ref: RecoveryModelGenerationRef::RootAnchored(
-            result_generation.to_owned(),
-        ),
-        completed_at,
-        auth_data: RecoveryCompletionAttestationAuthData {
-            verification_method: crate::fixture_did_url(verification_method.clone()),
-            signature_algorithm: "Ed25519".to_owned(),
-            signature: "pending".to_owned(),
-            signed_fields: RECOVERY_COMPLETION_ATTESTATION_SIGNED_FIELDS
-                .into_iter()
-                .map(str::to_owned)
-                .collect(),
+    let attestation = UnsignedRecoveryCompletionAttestation::new(
+        UnsignedRecoveryCompletionAttestationBody {
+            transaction_id: transaction_id.parse()?,
+            transaction_request_digest: transaction_request_digest.parse()?,
+            prepared_plan_digest: prepared_plan_digest.parse()?,
+            principal_id: principal_id.parse()?,
+            coordinator_service_id: audience.parse()?,
+            recovery_session_id: "ak:recovery_session:019a8400-0000-7000-8000-000000000004"
+                .parse()?,
+            terminal_receipt_id: "ak:receipt:019a8400-0000-7000-8000-000000000003".parse()?,
+            terminal_receipt_digest: terminal_receipt_digest.parse()?,
+            replacement_device_id: device_id.parse()?,
+            device_authorization_event_id: authorization_event_id.parse()?,
+            device_authorization_event_digest: authorization_event_digest.parse()?,
+            result_model_generation_ref: RecoveryModelGenerationRef::RootAnchored(
+                result_generation.to_owned(),
+            ),
+            completed_at,
         },
-    };
-    attestation.auth_data.signature = sign_b64url(&coordinator_key, &attestation.signing_bytes()?);
+        crate::fixture_did_url(verification_method.clone()),
+    )?;
+    let signature = arkret_wire::Base64UrlString::new(sign_b64url(
+        &coordinator_key,
+        &attestation.signing_bytes()?,
+    ))?;
+    let attestation = attestation.attach_signature(signature)?;
 
     let holder_key = SigningKey::from_bytes(&[0x52; 32]);
     let holder_x = base64::engine::general_purpose::URL_SAFE_NO_PAD

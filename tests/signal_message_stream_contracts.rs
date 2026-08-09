@@ -31,7 +31,7 @@ fn final_event() -> Event {
         "discussion",
         arkret::ContentBlock::text("complete final"),
     );
-    Event::new_with_derived_id_at(
+    arkret_wire::test_support::raw_event_at(
         "ak.message.create",
         ScopeRef::Realm { realm_id: realm() },
         actor(),

@@ -383,9 +383,14 @@ fn run_strand_tracks_update_atomic_case(case: &Value) -> Result<()> {
 }
 
 fn assert_strand_tracks_registry_binding() -> Result<()> {
-    let descriptor = EventKind::try_new(EventKind::STRAND_TRACKS_UPDATE)
+    let descriptor = EventKind::try_new(arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE)
         .and_then(|kind| kind.descriptor())
-        .ok_or_else(|| anyhow!("SDK missing {}", EventKind::STRAND_TRACKS_UPDATE))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "SDK missing {}",
+                arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
+            )
+        })?;
     let write = descriptor
         .cell_writes
         .iter()
@@ -395,7 +400,7 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
         .ok_or_else(|| {
             anyhow!(
                 "{} has no SDK-declared {} write",
-                EventKind::STRAND_TRACKS_UPDATE,
+                arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE,
                 STRAND_TRACKS_CELL_FAMILY
             )
         })?;
@@ -403,25 +408,25 @@ fn assert_strand_tracks_registry_binding() -> Result<()> {
     if write.cell_family.map(|family| family.as_str()) != Some(STRAND_TRACKS_CELL_FAMILY) {
         bail!(
             "{eventkind_strand_tracks_update} cell family drifted",
-            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+            eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }
     if write.lattice != Some(EventCellLattice::MvRegister) {
         bail!(
             "{eventkind_strand_tracks_update} lattice must remain mv_register",
-            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+            eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }
     if write.bottom != Some(EventCellBottom::Expose) {
         bail!(
             "{eventkind_strand_tracks_update} bottom policy must remain expose",
-            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+            eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }
     if !descriptor.reducer_input {
         bail!(
             "{eventkind_strand_tracks_update} must remain reducer_input",
-            eventkind_strand_tracks_update = EventKind::STRAND_TRACKS_UPDATE
+            eventkind_strand_tracks_update = arkret_wire::event_kind_str::STRAND_TRACKS_UPDATE
         );
     }
 

@@ -129,7 +129,7 @@ async fn delete_policy_server(
             client
                 .author_event_with_preconditions(
                     realm_id,
-                    arkret_wire::EventKind::REALM_POLICY_SERVER,
+                    arkret_wire::event_kind_str::REALM_POLICY_SERVER,
                     json!({ "tombstone": true }),
                     preconditions,
                 )
@@ -156,7 +156,7 @@ async fn put_policy_server(
             client
                 .author_event(
                     realm_id,
-                    arkret_wire::EventKind::REALM_POLICY_SERVER,
+                    arkret_wire::event_kind_str::REALM_POLICY_SERVER,
                     declaration,
                 )
                 .await?,
@@ -178,7 +178,7 @@ async fn link_governed_by(client: &TestActorClient, realm_id: &str, target: &str
             client
                 .author_event(
                     realm_id,
-                    arkret_wire::EventKind::REALM_LINK,
+                    arkret_wire::event_kind_str::REALM_LINK,
                     json!({
                         "target_realm_id": target,
                         "link_kind": "governed_by",
