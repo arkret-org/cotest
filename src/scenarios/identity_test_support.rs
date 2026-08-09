@@ -447,6 +447,17 @@ async fn bootstrap_test_device_authorization(
         &crate::publication::project_cells,
     )?;
     let validated_inception = validate_principal_inception_operation(&prepared.submit_body)?;
+    // This harness stands in for the Account Authority and therefore owns the
+    // opaque deployment-local account subject. Keep the production domain
+    // separator and bind the fixture subject to its stable local account id.
+    let mut account_subject_preimage = b"ak.account-subject.v1\n".to_vec();
+    account_subject_preimage.extend(canonical_json_bytes(&serde_json::json!({
+        "account_authority_id": harness_account_authority_id(),
+        "service_account_id": local_id,
+    }))?);
+    let account_subject = Hash::new(arkret_canonical::canonical::sha256_digest(
+        &account_subject_preimage,
+    ))?;
     let issued_at = chrono::Utc::now();
     let control_proof =
         UnsignedIdentityCreationControlProof::new(UnsignedIdentityCreationControlProofBody {
@@ -454,7 +465,11 @@ async fn bootstrap_test_device_authorization(
             challenge: format!("cotest-pcr-genesis-challenge-{local_id}"),
             purpose: IdentityBindingPurpose::AccountBindingAndPcrGenesis,
             principal_id: principal.clone(),
-            operation_digest: validated_inception.operation_digest,
+            account_subject,
+            operation_digest: validated_inception.operation_digest.clone(),
+            did_version_id: validated_inception.did_version_id.clone(),
+            log_head_digest: validated_inception.log_head_digest.clone(),
+            control_key_digest: validated_inception.control_key_digest.clone(),
             pcr_realm_id: realm_id.clone(),
             realm_create_payload_digest: Hash::new(canonical_sha256(&unit.create().payload)?)?,
             founding_authorize_payload_digest: Hash::new(canonical_sha256(
@@ -481,6 +496,9 @@ async fn bootstrap_test_device_authorization(
         pcr_realm_id: realm_id,
         idempotency_key: idempotency_key.clone(),
         registration_request_digest: Hash::new(format!("sha256:{}", "1".repeat(64)))?,
+        did_version_id: validated_inception.did_version_id,
+        log_head_digest: validated_inception.log_head_digest,
+        control_key_digest: validated_inception.control_key_digest,
         identity_creation_control_proof: control_proof,
         genesis_unit: unit,
     };
