@@ -167,9 +167,9 @@ fn did_recovery_backup_body(principal_id: &str, policy_id: &str) -> Result<KeyBa
             secret_version: None,
             extra: Default::default(),
         }],
-        ciphertext: "cotest-did-recovery-ciphertext".to_owned(),
+        ciphertext: "Y290ZXN0LWRpZC1yZWNvdmVyeS1jaXBoZXJ0ZXh0".to_owned(),
         ciphertext_digest:
-            "sha256:aab7f06698b2ea1374a66d33d22b1a91ffdb5a9dd9b19c5f50506b5257996f7d".to_owned(),
+            "sha256:1f2833eac784592b919f23156254f73ff620d857517d57162abd294c68b0fd90".to_owned(),
         plaintext_commitment: None,
         auth_data: None,
         retention: None,

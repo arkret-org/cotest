@@ -1,13 +1,13 @@
 use anyhow::Result;
 use arkret_wire::{
     BackupId, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
-    BackupSeriesId, CanonicalPublicMaterial, Did, Event, EventInitialSubmission,
+    BackupSeriesId, CanonicalPublicMaterial, Did, EventInitialSubmission,
     EventsSubmitBatchRequestBody, Hash, Hlc, RiskTier, ScopeRef, SealId,
     SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
 };
 use chrono::Utc;
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::harness::{TestServerGroup, expect_api_error, expect_json};
 
@@ -132,13 +132,15 @@ fn rotation_plan(
         BackupRotationKind::SecretStorage => "secret_storage",
         BackupRotationKind::MlsHistory => "mls_history",
     };
-    let material = CanonicalPublicMaterial::canonical_json(Value::Array(vec![json!({
-        "actor_id": principal,
-        "backup_id": binding.new_backups[0].backup_id,
-        "backup_kind": backup_kind,
-        "ciphertext_digest": binding.new_backups[0].ciphertext_digest,
-        "series_id": binding.new_series_id,
-    })]))?;
+    let material = CanonicalPublicMaterial::canonical_json(json!({
+        "backups": [{
+            "actor_id": principal,
+            "backup_id": binding.new_backups[0].backup_id,
+            "backup_kind": backup_kind,
+            "ciphertext_digest": binding.new_backups[0].ciphertext_digest,
+            "series_id": binding.new_series_id,
+        }]
+    }))?;
     Ok(BackupRotationPlan {
         active_series_unit: event_unit(coordinator, active_series_submission)?,
         encrypted_backup_material: material,

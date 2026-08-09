@@ -808,7 +808,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/devices_webrtc.rs",
           "markers": [
-            "post_signal(",
+            "post_canonical_signal(",
             "rtc_media_token"
           ]
         },

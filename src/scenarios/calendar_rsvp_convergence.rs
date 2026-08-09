@@ -97,7 +97,21 @@ async fn inkson_schedule_frontier(
     realm_id: &str,
     strand_id: &str,
 ) -> Result<Vec<String>> {
-    let events = client.sdk().events_read_all_pages(realm_id).await?.events;
+    let events = client
+        .sdk()
+        .events_read_all_pages(realm_id)
+        .await?
+        .events
+        .into_iter()
+        .enumerate()
+        .map(|(index, row)| {
+            row.into_event().ok_or_else(|| {
+                anyhow!(
+                    "calendar schedule frontier requires complete Events; row {index} is redacted or reference-locked"
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
     Ok(
         inkson::calendar::schedule_revision_heads(&events, strand_id)?
             .into_iter()

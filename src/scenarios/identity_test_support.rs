@@ -185,7 +185,17 @@ pub async fn seal_current_principal_control_frontier(
         .sdk()
         .events_read_all_pages(realm_id.as_str())
         .await?
-        .events;
+        .events
+        .into_iter()
+        .enumerate()
+        .map(|(index, row)| {
+            row.into_event().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "PCR successor Seal requires complete Events; row {index} is redacted or reference-locked"
+                )
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
     events.sort_by_key(|event| event.actor_seq);
     anyhow::ensure!(
         events.len() >= 3,
