@@ -274,7 +274,8 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
         bail!("vector base proof must be a valid signature control");
     }
     let proof_verification_method =
-        arkret_identifiers::DidUrl::new(case.base.proof.verification_method.clone())
+        arkret_wire::DidUrl::new(case.base.proof.verification_method.clone())
+            .map_err(anyhow::Error::msg)
             .context("vector proof verification_method must be a DID URL")?;
     let proof_controller = case
         .base
@@ -337,9 +338,10 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                 realm_declares_minimal_metadata_profile = false;
             }
             "verification_method_base_projection_mismatch" => {
-                proof_method = arkret_identifiers::DidUrl::new(
+                proof_method = arkret_wire::DidUrl::new(
                     "did:key:z6MkpairwiseMallory#z6MkpairwiseAuthorKey".to_owned(),
-                )?;
+                )
+                .map_err(anyhow::Error::msg)?;
             }
             "duplicate_active_leaf_identity" => {
                 let mut duplicate = base_leaf(&base);
@@ -388,7 +390,7 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                 .map_err(|error| error.reason_code().to_owned())
         };
         let accepted = outcome.is_ok();
-        let rejected_reason = outcome.as_ref().err().map(String::as_str);
+        let rejected_reason = outcome.as_ref().err().cloned();
 
         match mutation_case.expected.result.as_str() {
             "accept_pairwise_author" => {

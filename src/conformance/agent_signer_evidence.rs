@@ -26,8 +26,9 @@ use arkret_signatures::agent_evidence::{
 };
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
-    Base64UrlString, Did, DidUrl, Event, EventId, EventKind, Hash, Hlc, NonEmptyString, NotarySig,
-    PayloadSignature, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId, SealKind,
+    ActorId, Base64UrlString, CoreId, Did, DidUrl, EventId, EventKind, Hash, Hlc, NonEmptyString,
+    NotarySig, PayloadSignature, PrincipalId, ProtocolOperationId, RealmId, SchemaId, ScopeRef,
+    Seal, SealId, SealKind, ServiceId, project_full_id_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -96,18 +97,18 @@ impl Default for EvidenceConfig {
 struct ExecutableEvidence {
     current: AgentSignerEvidence,
     historical: AgentSignerEvidence,
-    signer_id: Did,
+    signer_id: ActorId,
     agent_key_id: NonEmptyString,
-    controller_id: Did,
+    controller_id: ActorId,
     verification_method: DidUrl,
     authorize_event_id: EventId,
     authorize_public_key_digest: Hash,
     binding_digest: Hash,
-    authority_service_id: Did,
+    authority_service_id: ServiceId,
     authority_verification_method: DidUrl,
-    account_authority_service_id: Did,
+    account_authority_service_id: ServiceId,
     account_authority_verification_method: DidUrl,
-    receiver_service_id: Did,
+    receiver_service_id: ServiceId,
     receiver_verification_method: DidUrl,
     controller_public_key: [u8; 32],
     authority_public_key: [u8; 32],
@@ -115,8 +116,8 @@ struct ExecutableEvidence {
     receiver_public_key: [u8; 32],
     operation_id: ProtocolOperationId,
     request_digest: Hash,
-    verifier_id: Did,
-    audience: Did,
+    verifier_id: ServiceId,
+    audience: ServiceId,
     challenge: NonEmptyString,
     event_id: EventId,
     event_digest: Hash,
@@ -166,6 +167,11 @@ fn expected_class(expected: &str) -> Result<OutcomeClass> {
     }
 }
 
+fn service_id(value: &str) -> Result<ServiceId> {
+    let full_id = Did::new(value.to_owned())?;
+    Ok(ServiceId::from(project_full_id_to_core_id(&full_id)?))
+}
+
 fn execute_case(name: &str) -> Result<OutcomeClass> {
     match name {
         "current_exact_request_and_three_active_gates_verified" => {
@@ -175,7 +181,7 @@ fn execute_case(name: &str) -> Result<OutcomeClass> {
             let fixture = build_evidence(EvidenceConfig::default())?;
             current_outcome(
                 &fixture,
-                Some(CurrentOverride::Verifier(Did::new(
+                Some(CurrentOverride::Verifier(service_id(
                     "did:webvh:z6mkother:verifier.example",
                 )?)),
             )
@@ -238,7 +244,7 @@ fn execute_case(name: &str) -> Result<OutcomeClass> {
             let fixture = build_evidence(EvidenceConfig::default())?;
             historical_outcome(
                 &fixture,
-                Some(Did::new("did:webvh:z6mkwrong:receiver.example")?),
+                Some(service_id("did:webvh:z6mkwrong:receiver.example")?),
                 false,
             )
         }
@@ -321,8 +327,14 @@ fn execute_case(name: &str) -> Result<OutcomeClass> {
                 ..
             } = &mut fixture.historical
             {
+                let controller = fixture
+                    .verification_method
+                    .as_str()
+                    .split_once('#')
+                    .map(|(controller, _)| controller)
+                    .context("fixture verification method has no controller")?;
                 event_admission_receipt.verification_method =
-                    DidUrl::new(format!("{}#mismatched-mls-leaf", fixture.signer_id))
+                    DidUrl::new(format!("{controller}#mismatched-mls-leaf"))
                         .map_err(anyhow::Error::msg)?;
             }
             historical_outcome(&fixture, None, false)
@@ -342,7 +354,7 @@ fn execute_case(name: &str) -> Result<OutcomeClass> {
 }
 
 enum CurrentOverride {
-    Verifier(Did),
+    Verifier(ServiceId),
     RequestDigest(Hash),
 }
 
@@ -422,7 +434,7 @@ fn current_stale_outcome(fixture: &ExecutableEvidence) -> Result<OutcomeClass> {
 
 fn historical_outcome(
     fixture: &ExecutableEvidence,
-    receiver_override: Option<Did>,
+    receiver_override: Option<ServiceId>,
     deny_key_resolution: bool,
 ) -> Result<OutcomeClass> {
     historical_outcome_with(
@@ -436,7 +448,7 @@ fn historical_outcome(
 fn historical_outcome_with(
     fixture: &ExecutableEvidence,
     evidence: Option<&AgentSignerEvidence>,
-    receiver_override: Option<Did>,
+    receiver_override: Option<ServiceId>,
     deny_key_resolution: bool,
 ) -> Result<OutcomeClass> {
     let state_source = evidence.unwrap_or(&fixture.historical);
@@ -561,22 +573,34 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let account_signing = SigningKey::from_bytes(&[14; 32]);
     let receiver_signing = SigningKey::from_bytes(&[15; 32]);
 
-    let signer_id = Did::new("did:webvh:z6mkagent:agent.example")?;
-    let controller_id = Did::new("did:webvh:z6mkcontroller:controller.example")?;
-    let authority_service_id = Did::new("did:webvh:z6mkauthority:authority.example")?;
-    let account_authority_service_id = Did::new("did:webvh:z6mkaccount:account-authority.example")?;
-    let receiver_service_id = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
+    let signer_full_id = Did::new("did:webvh:z6mkagent:agent.example")?;
+    let controller_full_id = Did::new("did:webvh:z6mkcontroller:controller.example")?;
+    let authority_service_full_id = Did::new("did:webvh:z6mkauthority:authority.example")?;
+    let account_authority_service_full_id =
+        Did::new("did:webvh:z6mkaccount:account-authority.example")?;
+    let receiver_service_full_id = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
+    let signer_id = ActorId::from(project_full_id_to_core_id(&signer_full_id)?);
+    let controller_id = ActorId::from(project_full_id_to_core_id(&controller_full_id)?);
+    let authority_service_id =
+        ServiceId::from(project_full_id_to_core_id(&authority_service_full_id)?);
+    let account_authority_service_id = ServiceId::from(project_full_id_to_core_id(
+        &account_authority_service_full_id,
+    )?);
+    let receiver_service_id =
+        ServiceId::from(project_full_id_to_core_id(&receiver_service_full_id)?);
     let verification_method =
-        DidUrl::new(format!("{signer_id}#runtime-1")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{signer_full_id}#runtime-1")).map_err(anyhow::Error::msg)?;
     let controller_verification_method =
-        DidUrl::new(format!("{controller_id}#controller-1")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{controller_full_id}#controller-1")).map_err(anyhow::Error::msg)?;
     let authority_verification_method =
-        DidUrl::new(format!("{authority_service_id}#assertion-1")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{authority_service_full_id}#assertion-1"))
+            .map_err(anyhow::Error::msg)?;
     let account_authority_verification_method =
-        DidUrl::new(format!("{account_authority_service_id}#assertion-1"))
+        DidUrl::new(format!("{account_authority_service_full_id}#assertion-1"))
             .map_err(anyhow::Error::msg)?;
     let receiver_verification_method =
-        DidUrl::new(format!("{receiver_service_id}#assertion-1")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{receiver_service_full_id}#assertion-1"))
+            .map_err(anyhow::Error::msg)?;
     let agent_key_id = nes("runtime-1")?;
     let authorize_event_id = event_id(1)?;
     let realm_id = RealmId::new("ak:realm:AUf0Zz23_ZBqZYNvzHTY6qhhx-2YyO94WTorNCFnnvvN")?;
@@ -742,7 +766,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     };
     let mut gate = ControllerAccountGateAttestation {
         schema: nes(SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1)?,
-        principal_id: controller_id.clone(),
+        principal_id: PrincipalId::from(CoreId::from(controller_id.clone())),
         eligibility: config.controller_eligibility,
         status: config.controller_status,
         basis_digest: canonical_hash(&basis)?,
@@ -773,8 +797,8 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let operation_id = ProtocolOperationId::new("ak:operation:cotest.agent-evidence")
         .map_err(anyhow::Error::msg)?;
     let request_digest = hash_byte(0x41)?;
-    let verifier_id = Did::new("did:webvh:z6mkverifier:verifier.example")?;
-    let audience = Did::new("did:webvh:z6mkaudience:audience.example")?;
+    let verifier_id = service_id("did:webvh:z6mkverifier:verifier.example")?;
+    let audience = service_id("did:webvh:z6mkaudience:audience.example")?;
     let challenge = nes("cotest-agent-evidence-challenge-0001")?;
     let observation = AgentCurrentObservation {
         operation_id: operation_id.clone(),
@@ -961,7 +985,7 @@ fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> R
 }
 
 fn pending_outer(
-    service_id: &Did,
+    service_id: &ServiceId,
     method: &DidUrl,
     issued_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,

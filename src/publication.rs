@@ -135,6 +135,22 @@ fn authorization_lease_for_basis(
     basis_ref: LeaseBasisRef,
 ) -> Result<AuthorizationLease> {
     let issued_at = event.created_at - Duration::minutes(5);
+    let actor_full_id = if let Some(auth_context) = &event.auth_context {
+        auth_context.did.clone()
+    } else {
+        let verification_method = event
+            .proofs
+            .first()
+            .context("authorization lease Event has no full-id signing material")?
+            .verification_method
+            .as_str();
+        let controller = verification_method
+            .split_once('#')
+            .map(|(controller, _)| controller)
+            .context("authorization lease verification method has no controller")?;
+        arkret_identifiers::FullId::new(controller.to_owned())
+            .context("authorization lease verification-method controller is not a full id")?
+    };
     let authorization_rule_id = "realm_admission";
     let authority_set_policy = AuthoritySetPolicy {
         schema: SchemaId::AUTHORITY_SET_POLICY_V1.to_owned(),
@@ -171,7 +187,7 @@ fn authorization_lease_for_basis(
         )
         .context("static harness lease id is typed")?,
         basis_ref,
-        actor_id: event.actor_id.clone(),
+        actor_id: actor_full_id,
         device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb")
             .context("static harness lease device id is typed")?,
         scope_ref: event.scope_ref.clone(),

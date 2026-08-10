@@ -984,6 +984,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     require_root_generation_ref(vector, "model_generation_ref")?;
     let intended_realm_id = realm(intended_realm_id)?;
     let requester_did = did(requester_did)?;
+    let requester_core_id = arkret_identifiers::project_full_id_to_core_id(&requester_did)?;
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 
     let claim_record = claim_record_value(
@@ -1026,7 +1027,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &claim,
         &published,
         &intended_realm_id,
-        &requester_did,
+        &requester_core_id,
         &welcome_digest,
         claim_nonce,
         Some(device_authorize_event_id),
@@ -1047,7 +1048,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &claim,
             &published,
             &intended_realm_id,
-            &requester_did,
+            &requester_core_id,
             &welcome_digest,
             claim_nonce,
             Some(device_authorize_event_id),
@@ -1078,7 +1079,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &claim,
             &published,
             &intended_realm_id,
-            &requester_did,
+            &requester_core_id,
             &welcome_digest,
             claim_nonce,
             Some(device_authorize_event_id),
@@ -1103,7 +1104,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &claim,
         &published,
         &intended_realm_id,
-        &requester_did,
+        &requester_core_id,
         &welcome_digest,
         claim_nonce,
         Some(device_authorize_event_id),
@@ -1130,7 +1131,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &claim,
         &published,
         &intended_realm_id,
-        &requester_did,
+        &requester_core_id,
         &welcome_digest,
         claim_nonce,
         Some(device_authorize_event_id),
@@ -1153,7 +1154,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &claim,
         &published,
         &intended_realm_id,
-        &requester_did,
+        &requester_core_id,
         &welcome_digest,
         claim_nonce,
         Some(device_authorize_event_id),

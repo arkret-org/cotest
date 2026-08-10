@@ -212,7 +212,10 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
 
 fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<()> {
     let verification_method = format!("{actor}#cotest");
-    event.actor_id = arkret_identifiers::Did::new(actor.to_owned())?;
+    let actor_full_id = arkret_identifiers::Did::new(actor.to_owned())?;
+    event.actor_id = arkret_identifiers::ActorId::from(
+        arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?,
+    );
     event.actor_seq = 0;
     event.prev_refs.clear();
     if event.seal_basis.is_some() {

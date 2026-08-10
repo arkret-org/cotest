@@ -90,8 +90,10 @@ pub async fn register_account(
     device_id: &str,
 ) -> Result<String> {
     let device_id = canonical_device_id(device_id);
+    let full_id = arkret_identifiers::FullId::new(did.to_owned())?;
     let body = arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
-        principal_id: arkret_identifiers::Did::new(did.to_owned())?,
+        principal_id: arkret_identifiers::project_full_id_to_core_id(&full_id)?,
+        full_id,
         display_name: Some(handle.trim_start_matches('@').to_owned()),
         device_id: Some(arkret_identifiers::DeviceId::new(device_id.clone())?),
         proof: None,
@@ -884,7 +886,11 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // `created_at_before_causal_predecessor`. Anchor on the process clock and
     // step once per built Event so successors are strictly later.
     let created_at = harness_event_created_at();
-    let actor_id = Did::new(actor.to_owned()).expect("cotest actor DID");
+    let actor_full_id = Did::new(actor.to_owned()).expect("cotest actor DID");
+    let actor_id = arkret_identifiers::ActorId::from(
+        arkret_identifiers::project_full_id_to_core_id(&actor_full_id)
+            .expect("cotest actor DID projects to a core id"),
+    );
     // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
     // `event_id` from the Event's own content, so the harness builds with the
     // derived constructor and callers read the id back off the built Event.
@@ -925,7 +931,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     );
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         signing_seed,
-        actor_id,
+        actor_full_id,
         verification_method.to_owned(),
     );
     arkret::signatures::sign_event(
@@ -1153,11 +1159,25 @@ pub(crate) fn invite_create_payload(
     introduction_evidence_digest: impl Into<String>,
     expires_at: DateTime<Utc>,
 ) -> Result<Value> {
+    let invitee_full_id =
+        Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee full id: {err}"))?;
+    let recipient_full_id = Did::new(recipient_service_id.to_owned())
+        .map_err(|err| anyhow!("invalid recipient service full id: {err}"))?;
+    let recipient_service_id = arkret_identifiers::ServiceId::from(
+        arkret_identifiers::project_full_id_to_core_id(&recipient_full_id)?,
+    );
+    let current_record_url = format!(
+        "https://cotest.invalid{}",
+        arkret_models_identity::canonical_service_current_record_path(&recipient_service_id)
+    );
     InviteCreatePayload::new(
-        Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee did: {err}"))?,
+        arkret_identifiers::project_full_id_to_core_id(&invitee_full_id)?,
         InviteDeliveryTarget::principal_server(
-            Did::new(recipient_service_id.to_owned())
-                .map_err(|err| anyhow!("invalid recipient_service_id: {err}"))?,
+            recipient_service_id,
+            arkret_models_identity::ServiceResolutionCarrier::CurrentRecordUrl {
+                current_record_url,
+                pinned_record_digest: None,
+            },
         ),
         Hash::new(introduction_evidence_digest.into())
             .map_err(|err| anyhow!("invalid introduction_evidence_digest: {err}"))?,
@@ -1188,7 +1208,11 @@ fn member_payload(
         membership,
         strand_id: None,
         realm_id: Some(RealmId::new(realm_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
-        actor_id: Some(Did::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
+        actor_id: Some(arkret_identifiers::ActorId::from(
+            arkret_identifiers::project_full_id_to_core_id(
+                &Did::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
+            )?,
+        )),
         delivery_status,
         delivery_binding,
         gate_proofs: Vec::new(),

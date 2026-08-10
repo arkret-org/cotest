@@ -448,7 +448,10 @@ impl TestActorClient {
         )
         .await?;
         let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
-        let actor_id = arkret_identifiers::Did::new(self.actor.clone())?;
+        let actor_full_id = arkret_identifiers::FullId::new(self.actor.clone())?;
+        let actor_id = arkret_identifiers::ActorId::from(
+            arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?,
+        );
         let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
         strand.tracks.clear();
         strand.tracks.insert(

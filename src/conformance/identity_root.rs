@@ -12,7 +12,9 @@ use arkret_bootstrap::{
     build_self_principal_pcr_genesis_unit, validate_self_principal_pcr_genesis_unit,
 };
 use arkret_event_draft::EventPayloadExt;
-use arkret_identifiers::{DeviceId, Did, Hash, Hlc, RealmId, TypedTrustDomainId};
+use arkret_identifiers::{
+    ActorId, DeviceId, Did, Hash, Hlc, RealmId, TypedTrustDomainId, project_full_id_to_core_id,
+};
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
     DeviceReanchorPayload, validate_device_reanchor_recovery_first_seal,
@@ -283,7 +285,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let mut authorize = arkret_wire::test_support::raw_event(
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm { realm_id },
-        principal.clone(),
+        ActorId::from(project_full_id_to_core_id(&principal)?),
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         authorize_value,

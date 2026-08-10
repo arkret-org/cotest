@@ -2,6 +2,10 @@
 //! founding durability, MLS finality fences, and same-coordinate repair.
 
 use anyhow::{Result, anyhow, bail};
+use arkret_models_collaboration::direct_conversation_repair::{
+    DirectConversationRepairAuthorization, DirectConversationRepairDispatchRequest,
+};
+use arkret_wire::{Base64UrlString, DeviceId, DidUrl, EventId, NonEmptyString, ProtocolSignature};
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
@@ -263,6 +267,52 @@ fn validate_repair(fixture: &Value) -> Result<()> {
         arkret_models_collaboration::events_payloads::MemberRepairRequestPayload,
     >(repair_request)?;
     typed_request.validate()?;
+
+    // The trigger must bind the exact requester KeyPackage. This exercises
+    // the SDK DTO and canonical signing input directly: changing only the
+    // KeyPackage ref must change the signed bytes, while changing the device
+    // branch without matching content must fail shape validation.
+    let signed_at = arkret_canonical::parse_timestamp_canonical("2026-08-10T00:00:00.000Z")?;
+    let verification_method = DidUrl::new("did:webvh:z6mkfixture:alice.example#device-key-1")
+        .map_err(|error| anyhow!(error))?;
+    let requester_device_id = DeviceId::new("ak:device:01964137-1000-7000-8000-000000000011")?;
+    let dispatch = DirectConversationRepairDispatchRequest {
+        request_id: Base64UrlString::new("repair_request_fixture_01")
+            .map_err(|error| anyhow!(error))?,
+        content: typed_request.clone(),
+        requester_authorization: DirectConversationRepairAuthorization::Device {
+            requester_device_id,
+            verification_method: verification_method.clone(),
+            device_authorize_event_id: EventId::new(
+                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+            )?,
+            signed_at,
+            signature: ProtocolSignature {
+                verification_method,
+                created_at: signed_at,
+                jws: Base64UrlString::new("c2ln".to_owned()).map_err(|error| anyhow!(error))?,
+            },
+        },
+    };
+    dispatch.validate_shape()?;
+    let exact_input = dispatch.signing_input()?;
+    let mut other_keypackage = dispatch.clone();
+    other_keypackage.content.requester_keypackage_ref =
+        NonEmptyString::new("ak:keypackage:fixture-requester-2").map_err(|error| anyhow!(error))?;
+    if other_keypackage.signing_input()? == exact_input {
+        bail!("repair dispatch signature did not bind the exact requester KeyPackage");
+    }
+    let mut mismatched_device = dispatch;
+    if let DirectConversationRepairAuthorization::Device {
+        requester_device_id,
+        ..
+    } = &mut mismatched_device.requester_authorization
+    {
+        *requester_device_id = DeviceId::new("ak:device:01964137-1000-7000-8000-000000000012")?;
+    }
+    if mismatched_device.validate_shape().is_ok() {
+        bail!("repair dispatch accepted a device authorization for another requester");
+    }
     stage = advance_repair(stage, "ak.member.repair.request")?;
     stage = advance_repair(stage, "exact_pair_readd")?;
     stage = advance_repair(stage, "replacement_generation_activate")?;

@@ -62,6 +62,23 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// FLOW-GAP-015 — execute the embedded service-route handover/mirror
+    /// fixture: closed wire schemas, durable floors, cache hard expiry,
+    /// dual idempotency, sequential notice publication, blinded resolution,
+    /// and stable-core routing boundaries.
+    service_route_handover_mirror_fixture_suite_matches_reference_semantics,
+    "service_route_handover_mirror_fixture",
+    cotest::conformance::run_service_route_handover_mirror_fixture_suite,
+);
+
+#[tokio::test]
+#[serial(conformance_fixtures)]
+async fn service_route_handover_mirror_exercises_soland_production_paths() -> Result<()> {
+    let _guard = enter_scenario("service_route_handover_mirror_production");
+    cotest::conformance::run_service_route_handover_mirror_production_suite().await
+}
+
+conformance_test!(
     operation_clause_registry_closes_universal_behavior,
     "operation_clause_registry",
     cotest::conformance::validate_operation_clause_registry,

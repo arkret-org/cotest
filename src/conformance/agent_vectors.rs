@@ -20,7 +20,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::Did;
+use arkret_identifiers::{Did, ServiceId};
 use arkret_models_collaboration::agent_operations::agent_requested_scope_digest;
 use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
 use arkret_models_collaboration::sync_frames::account_sync::{
@@ -502,7 +502,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
                 .map_err(|error| anyhow!(error))?,
             pairing_code,
             expires_at.parse()?,
-            &Did::new(audience)?,
+            &ServiceId::new(audience)?,
             &binding,
             &proof,
         )?;

@@ -173,7 +173,9 @@ fn event_submission(principal: &Did, kind: &str) -> Result<EventInitialSubmissio
     let mut event = arkret_wire::test_support::raw_event_at(
         kind,
         scope_ref.clone(),
-        principal.clone(),
+        arkret_identifiers::ActorId::from(arkret_identifiers::project_full_id_to_core_id(
+            principal,
+        )?),
         1,
         Hlc::new("01970e589d21-0004-c07e57aa".to_owned())?,
         json!({"fixture": true}),

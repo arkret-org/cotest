@@ -28,8 +28,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret::events::EventKind;
 use arkret::{
-    AgentSidecar, AgentSidecarAccessReadiness, AgentSidecarContextRef, AgentSidecarDisplayMode,
-    AgentSidecarEncryptionProfile, AgentSidecarEventExchangeBinding,
+    ActorId, AgentSidecar, AgentSidecarAccessReadiness, AgentSidecarContextRef,
+    AgentSidecarDisplayMode, AgentSidecarEncryptionProfile, AgentSidecarEventExchangeBinding,
     AgentSidecarExchangeBindingRole, AgentSidecarExchangeCompletionPolicy,
     AgentSidecarExchangeControl, AgentSidecarExchangeControlAction,
     AgentSidecarExchangeControlSchema, AgentSidecarExchangeFoldedFrontier, AgentSidecarExchangeId,
@@ -41,15 +41,15 @@ use arkret::{
     NonEmptyString, PendingSidecarAccessReconciliationItem,
     PendingSidecarAccessReconciliationStage, RealmId, ScopeRef, SidecarId, SidecarMlsBinding,
     StrandId, agent_sidecar_exchange_event_set_digest, agent_sidecar_participant_authority_digest,
-    recover_agent_sidecar_context_locators,
+    project_full_id_to_core_id, recover_agent_sidecar_context_locators,
 };
-use arkret_models_identity::agent_signer_evidence::AgentLifecycleStatus;
 use arkret_models_collaboration::sidecar_operations::{
     SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAttachPhase, SidecarCommitPhase,
     SidecarContextAttachPayload, SidecarContextRef, SidecarEnsureAttachRequestBody,
     SidecarEnsureCommitRequestBody, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
     SidecarPreparePhase, SidecarPreparedEventDraft, SidecarPreparedOutcome,
 };
+use arkret_models_identity::agent_signer_evidence::AgentLifecycleStatus;
 use arkret_signatures::{
     Ed25519PayloadSigner, PublicKeyMaterial, SignEventOptions, sign_event,
     verify_ed25519_detached_jws_proof,
@@ -857,7 +857,7 @@ fn build_fixed_sidecar_prepare(
             ScopeRef::Realm {
                 realm_id: request.source_realm_id.clone(),
             },
-            request.controller_id.clone(),
+            sidecar_actor_id(&request.controller_id)?,
             1,
             vec![frontier.clone()],
             Vec::new(),
@@ -894,7 +894,7 @@ fn build_fixed_sidecar_prepare(
             realm_id: request.source_realm_id.clone(),
             sidecar_id: sidecar_id.clone(),
         },
-        request.controller_id.clone(),
+        sidecar_actor_id(&request.controller_id)?,
         if existing.is_some() { 3 } else { 2 },
         attach_prev_refs,
         attach_refs,
@@ -947,7 +947,7 @@ fn fixed_unsigned_sidecar_event(
     kind: EventKind,
     realm_id: RealmId,
     scope_ref: ScopeRef,
-    actor_id: Did,
+    actor_id: ActorId,
     actor_seq: u64,
     prev_refs: Vec<EventId>,
     refs: Vec<EventRef>,
@@ -994,6 +994,12 @@ fn fixed_unsigned_sidecar_event(
         .derive_event_id()
         .map_err(|_| SidecarModelError::ModelInvariant)?;
     Ok(event)
+}
+
+fn sidecar_actor_id(full_id: &Did) -> SidecarModelResult<ActorId> {
+    project_full_id_to_core_id(full_id)
+        .map(ActorId::from)
+        .map_err(|_| SidecarModelError::ModelInvariant)
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEventDraft> {
@@ -1136,7 +1142,7 @@ fn validate_prepared_outcome(
         .validate()
         .map_err(|_| SidecarModelError::DraftMismatch)?;
     if attach.kind != EventKind::SidecarContextAttach
-        || attach.actor_id != request.controller_id
+        || attach.actor_id != sidecar_actor_id(&request.controller_id)?
         || attach.realm_id != request.source_realm_id
         || attach.scope_ref
             != (ScopeRef::Sidecar {
@@ -2733,7 +2739,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     let attach_event = arkret_wire::test_support::raw_event_at(
         EventKind::SidecarContextAttach.as_str(),
         scope,
-        controller_id.clone(),
+        arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(&controller_id)?),
         20,
         exchange_hlc(0x81)?,
         serde_json::to_value(SidecarContextAttachPayload {
@@ -2763,7 +2769,9 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     let unauthorized_attach = arkret_wire::test_support::raw_event_at(
         EventKind::SidecarContextAttach.as_str(),
         attach_event.scope_ref.clone(),
-        Did::new("did:webvh:z6mkfixture:mallory.example")?,
+        arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(&Did::new(
+            "did:webvh:z6mkfixture:mallory.example",
+        )?)?),
         21,
         exchange_hlc(0x82)?,
         serde_json::to_value(&attach_event.payload)?,
@@ -2846,7 +2854,7 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
         offsets: [i64; 2],
     ) -> Result<Vec<Event>> {
         let realm_id = realm_id.clone();
-        let actor = actor.clone();
+        let actor = arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(actor)?);
         let mut events = Vec::new();
         for (index, sibling) in siblings.iter().enumerate() {
             let created_at = base_created_at + chrono::Duration::seconds(offsets[index]);

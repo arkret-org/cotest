@@ -1904,6 +1904,7 @@ dependencies = [
  "arkret-signatures",
  "arkret-state",
  "arkret-wire",
+ "async-trait",
  "base64 0.22.1",
  "bip39",
  "chacha20poly1305",
@@ -1927,6 +1928,9 @@ dependencies = [
  "serial_test",
  "sha2 0.11.0",
  "soland-domain",
+ "soland-services",
+ "soland-storage",
+ "soland-storage-memory",
  "tempfile",
  "testcontainers",
  "tokio",
@@ -8554,6 +8558,78 @@ dependencies = [
 ]
 
 [[package]]
+name = "soland-services"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-lattice-registry",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-policy",
+ "arkret-schema",
+ "arkret-signatures",
+ "arkret-state",
+ "arkret-wire",
+ "async-trait",
+ "bytes",
+ "chrono",
+ "futures-util",
+ "hex",
+ "parking_lot",
+ "serde_json",
+ "sha2 0.11.0",
+ "soland-domain",
+ "soland-storage",
+ "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "soland-storage"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-identifiers",
+ "arkret-identity",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-models-identity",
+ "arkret-wire",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "serde",
+ "serde_json",
+ "soland-domain",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "soland-storage-memory"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-event-draft",
+ "arkret-identity",
+ "arkret-models-collaboration",
+ "arkret-models-identity",
+ "arkret-wire",
+ "async-trait",
+ "chrono",
+ "parking_lot",
+ "serde_json",
+ "soland-storage",
+ "uuid",
+]
+
+[[package]]
 name = "soup3"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9680,9 +9756,9 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
 name = "uuid"
-version = "1.23.1"
+version = "1.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
+checksum = "bf3923a6f5c4c6382e0b653c4117f48d631ea17f38ed86e2a828e6f7412f5239"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",

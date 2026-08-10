@@ -43,6 +43,7 @@ test-with-containers = ["dep:testcontainers"]
 # stable `Container` / `RunnableImage` surface so a minor bump in
 # testcontainers itself shouldn't affect us.
 anyhow = {workspace = true}
+async-trait = {workspace = true}
 argon2 = {workspace = true,default-features = false,features = ["alloc", "password-hash"]}
 arbitrary = {workspace = true,features = ["derive"]}
 base64 = {workspace = true}
@@ -75,6 +76,9 @@ arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
 arkret-signatures = {workspace = true}
 arkret-wire = {workspace = true,features = ["test-support"]}
 soland-domain = {workspace = true}
+soland-services = {workspace = true}
+soland-storage = {workspace = true}
+soland-storage-memory = {workspace = true}
 ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
 hkdf = {workspace = true}
 hmac = {workspace = true}
@@ -109,6 +113,7 @@ resolver = "3"
 
 [workspace.dependencies]
 anyhow = "1.0.102"
+async-trait = "0.1.89"
 argon2 = {version = "0.5.3",default-features = false,features = ["alloc", "password-hash"]}
 arbitrary = "1.4"
 base64 = "0.22.1"
@@ -140,6 +145,9 @@ arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-featu
 arkret-state = {path = "../arkret-rust-sdk/crates/state"}
 arkret-wire = {path = "../arkret-rust-sdk/crates/wire"}
 soland-domain = {path = "../soland/crates/domain"}
+soland-services = {path = "../soland/crates/services"}
+soland-storage = {path = "../soland/crates/storage"}
+soland-storage-memory = {path = "../soland/crates/storage-memory"}
 ed25519-dalek = {version = "2.2.0",default-features = false}
 hkdf = "0.13.0"
 hmac = "0.13.0"

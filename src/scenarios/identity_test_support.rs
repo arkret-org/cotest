@@ -7,7 +7,9 @@ use arkret_bootstrap::{
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
 use arkret_event_draft::EventPayloadExt as _;
-use arkret_identifiers::{DeviceId, Did, Hlc, RealmId};
+use arkret_identifiers::{
+    ActorId, DeviceId, Did, Hlc, RealmId, ServiceId, project_full_id_to_core_id,
+};
 use arkret_models_collaboration::events_payloads::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
@@ -180,6 +182,7 @@ pub async fn seal_current_principal_control_frontier(
     device_signing_key: &SigningKey,
 ) -> Result<()> {
     let principal = Did::new(client.actor.clone())?;
+    let principal_actor_id = ActorId::from(project_full_id_to_core_id(&principal)?);
     let mut selected = None;
     for candidate in client.controlled_realm_ids() {
         let events = client
@@ -198,7 +201,7 @@ pub async fn seal_current_principal_control_frontier(
             })
             .collect::<Result<Vec<_>>>()?;
         let is_pcr = events.first().is_some_and(|event| {
-            event.actor_id == principal
+            event.actor_id == principal_actor_id
                 && event
                     .typed_payload::<arkret_wire::event_spec::RealmCreate>()
                     .is_ok_and(|payload| {
@@ -351,6 +354,8 @@ async fn bootstrap_test_device_authorization(
         .context("test principal DID has no local id")?;
     let host = method_authority.replace("%3A", ":").replace("%3a", ":");
     let principal = Did::new(actor.to_owned()).context("invalid test principal DID")?;
+    let principal_core_id = project_full_id_to_core_id(&principal)?;
+    let principal_actor_id = ActorId::from(principal_core_id.clone());
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
 
@@ -448,7 +453,7 @@ async fn bootstrap_test_device_authorization(
         arkret_wire::ScopeRef::Realm {
             realm_id: realm_id.clone(),
         },
-        principal.clone(),
+        principal_actor_id,
         1,
         Hlc::new("01970e589d21-0001-a13f9c2e")?,
         payload_value,
@@ -491,7 +496,8 @@ async fn bootstrap_test_device_authorization(
             challenge_id: format!("cotest-pcr-genesis-{local_id}"),
             challenge: format!("cotest-pcr-genesis-challenge-{local_id}"),
             purpose: IdentityBindingPurpose::AccountBindingAndPcrGenesis,
-            principal_id: principal.clone(),
+            principal_id: principal_core_id.clone(),
+            full_id: principal.clone(),
             account_subject,
             operation_digest: validated_inception.operation_digest.clone(),
             did_version_id: validated_inception.did_version_id.clone(),
@@ -507,7 +513,10 @@ async fn bootstrap_test_device_authorization(
             identity_creation_lease_id: format!("cotest-identity-creation-{local_id}"),
             lease_fence: 1,
             dpop_jkt: format!("cotest-dpop-jkt-{local_id}"),
-            audience: Did::new(server.service_id().to_owned())?,
+            audience: {
+                let full_id = Did::new(server.service_id().to_owned())?;
+                ServiceId::from(project_full_id_to_core_id(&full_id)?)
+            },
             origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             trust_domain: server.trust_domain().clone(),
             issued_at,
@@ -519,7 +528,7 @@ async fn bootstrap_test_device_authorization(
         .map_err(anyhow::Error::msg)?;
     let request = arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody {
         account_authority_id: Did::new(harness_account_authority_id())?,
-        principal_id: principal,
+        principal_id: principal_core_id,
         pcr_realm_id: realm_id,
         idempotency_key: idempotency_key.clone(),
         registration_request_digest: Hash::new(format!("sha256:{}", "1".repeat(64)))?,

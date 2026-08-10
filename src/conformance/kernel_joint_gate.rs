@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use arkret_event_draft::ProjectedEventOperation as Operation;
 use arkret_event_draft::test_support::raw_projected_operation;
 use arkret_identifiers::{
-    AuthorizationLeaseId, CellRef, DeviceId, Did, Hash, Hlc, OperationId, RealmId, SealId,
+    ActorId, AuthorizationLeaseId, CellRef, DeviceId, Did, Hash, Hlc, OperationId, RealmId, SealId,
 };
 use arkret_state::lattice::ordered_log::{IssuedOp, OrderedLog};
 use arkret_state::lattice::{CasRegister, CellState, Lattice, OrSet, SealedOp};
@@ -285,7 +285,7 @@ fn kernel_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
         let Some(value) = write.get("value").cloned() else {
             return error("schema_violation", "data_value_missing");
         };
-        let (Ok(issuer), Ok(move_id)) = (Did::new(actor), Hash::new(digest)) else {
+        let (Ok(issuer), Ok(move_id)) = (ActorId::new(actor), Hash::new(digest)) else {
             return error("schema_violation", "offline_write_identifier_invalid");
         };
         ops.push(IssuedOp {

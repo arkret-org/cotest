@@ -4,7 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
 use arkret_event_draft::EventPayloadExt as _;
-use arkret_identifiers::{ConsentId, DeviceId, Did, Hash};
+use arkret_identifiers::{
+    ActorId, ConsentId, DeviceId, Did, Hash, PrincipalId, ServiceId, project_full_id_to_core_id,
+};
 use arkret_models_collaboration::direct_conversation_ops::{
     AcceptedAtServiceBinding, DidBindingEvidenceKind, DidBindingEvidenceReceipt,
     DidBindingMethodProof, DidBindingMethodProofKind, MultikeyMethodType,
@@ -300,12 +302,20 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
 fn principal_service_binding(input: Value) -> Result<Value> {
     let input: PrincipalServiceBindingFixtureInput =
         serde_json::from_value(input).context("parse principal-service binding fixture input")?;
-    let principal_id = Did::new(input.principal_id).context("parse binding principal DID")?;
-    let service_id = Did::new(input.service_id).context("parse binding service DID")?;
+    let principal_full_id = Did::new(input.principal_id).context("parse binding principal DID")?;
+    let principal_id = PrincipalId::from(
+        project_full_id_to_core_id(&principal_full_id)
+            .context("project binding principal DID to its core id")?,
+    );
+    let service_full_id = Did::new(input.service_id).context("parse binding service DID")?;
+    let service_id = ServiceId::from(
+        project_full_id_to_core_id(&service_full_id)
+            .context("project binding service DID to its core id")?,
+    );
     let device_id = DeviceId::new(input.device_id).context("parse binding device id")?;
     let document: arkret_models_identity::did_document::DidDocument =
         serde_json::from_value(input.did_document).context("parse binding DID document")?;
-    if document.id != principal_id {
+    if document.id != principal_full_id {
         bail!("binding DID document does not belong to principal");
     }
     document
@@ -334,9 +344,9 @@ fn principal_service_binding(input: Value) -> Result<Value> {
         .context("parse binding not_before")?;
     let accepted_at = canonical::parse_timestamp_canonical(&input.accepted_at)
         .context("parse binding accepted_at")?;
-    let service_verification_method = DidUrl::new(format!("{service_id}#notary-key"))
+    let service_verification_method = DidUrl::new(format!("{service_full_id}#notary-key"))
         .map_err(|error| anyhow::anyhow!("build service notary method: {error}"))?;
-    let principal_verification_method = DidUrl::new(format!("{principal_id}#{device_id}"))
+    let principal_verification_method = DidUrl::new(format!("{principal_full_id}#{device_id}"))
         .map_err(|error| anyhow::anyhow!("build principal device method: {error}"))?;
     let service_key = signing_key_from_seed(&input.service_signing_seed_b64url)
         .context("parse service signing seed")?;
@@ -349,6 +359,11 @@ fn principal_service_binding(input: Value) -> Result<Value> {
     .context("parse webvh witness proof digest")?;
     let placeholder = Base64UrlString::new("AA".to_owned())
         .map_err(|error| anyhow::anyhow!("build proof placeholder: {error}"))?;
+    let service_current_record_url = format!(
+        "{}{}",
+        input.endpoint_origin.trim_end_matches('/'),
+        arkret_models_identity::canonical_service_current_record_path(&service_id)
+    );
     let mut binding = AcceptedAtServiceBinding {
         principal_id,
         service_id: service_id.clone(),
@@ -356,7 +371,7 @@ fn principal_service_binding(input: Value) -> Result<Value> {
         service_kind: PrincipalServiceKind::PrincipalServer,
         service_verification_method: ServiceVerificationMethod {
             id: service_verification_method.clone(),
-            controller: service_id,
+            controller: service_full_id,
             method_type: MultikeyMethodType::Multikey,
             public_key_multibase: arkret_canonical::ed25519_pubkey_to_did_key_multibase(
                 service_key.verifying_key().as_bytes(),
@@ -374,6 +389,10 @@ fn principal_service_binding(input: Value) -> Result<Value> {
                 witnesses: Vec::new(),
                 witness_proofs_digest,
             }],
+        },
+        service_resolution: arkret_models_identity::ServiceResolutionCarrier::CurrentRecordUrl {
+            current_record_url: service_current_record_url,
+            pinned_record_digest: None,
         },
         authorization_challenge: Base64UrlString::new(
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
@@ -577,7 +596,10 @@ fn build_pcr_genesis_unit(
         arkret::ScopeRef::Realm {
             realm_id: create.realm_id.clone(),
         },
-        principal.clone(),
+        ActorId::from(
+            project_full_id_to_core_id(principal)
+                .context("project principal DID for founding DeviceAuthorize")?,
+        ),
         authorize_payload,
     )?
     .with_prev_refs(vec![create.event_id.clone()])
@@ -615,11 +637,16 @@ fn account_handoff_request(input: Value) -> Result<Value> {
     let input: AccountHandoffRequestFixtureInput =
         serde_json::from_value(input).context("parse account-handoff request input")?;
     let signing_key = signing_key_from_seed(&input.dpop_seed_b64url)?;
+    let audience_full_id = Did::new(input.audience).context("parse handoff audience")?;
+    let audience = ServiceId::from(
+        project_full_id_to_core_id(&audience_full_id)
+            .context("project handoff audience to its service core id")?,
+    );
     let request = garth::oidc_account_handoff_request(
         garth::OidcAccountHandoffInput {
             request_id: arkret::RequestId::new(input.request_id)
                 .context("parse account-handoff request id")?,
-            audience: Did::new(input.audience).context("parse handoff audience")?,
+            audience,
             issuer: input.issuer,
             client_id: input.client_id,
             redirect_uri: input.redirect_uri,
@@ -664,6 +691,30 @@ fn identity_creation_register_request(input: Value) -> Result<Value> {
     serde_json::to_value(request).context("serialize identity-creation register request")
 }
 
+fn trusted_actor_signer_material(event: &Event) -> Result<(Did, DidUrl)> {
+    let verification_method = event
+        .proofs
+        .first()
+        .context("founding DeviceAuthorize lacks its signed proof")?
+        .verification_method
+        .clone();
+    let controller = verification_method
+        .as_str()
+        .split_once('#')
+        .map(|(controller, _)| controller)
+        .context("founding DeviceAuthorize proof method lacks a controller fragment")?;
+    let controller = Did::new(controller.to_owned())
+        .context("parse founding DeviceAuthorize proof controller DID")?;
+    let controller_actor = ActorId::from(
+        project_full_id_to_core_id(&controller)
+            .context("project founding DeviceAuthorize proof controller")?,
+    );
+    if controller_actor != event.actor_id {
+        bail!("founding DeviceAuthorize proof controller does not match its actor core id");
+    }
+    Ok((controller, verification_method))
+}
+
 fn principal_bootstrap_seal(input: Value) -> Result<Value> {
     let input: PrincipalBootstrapSealInput =
         serde_json::from_value(input).context("parse principal bootstrap Seal input")?;
@@ -679,15 +730,9 @@ fn principal_bootstrap_seal(input: Value) -> Result<Value> {
         .founding_device_descriptor
         .context("PCR create omits founding device descriptor")?;
     let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
-    let verification_method =
-        arkret_wire::DidUrl::new(format!("{}#{}", create.actor_id, descriptor.device_id)).map_err(
-            |error| anyhow::anyhow!("build founding device verification method: {error}"),
-        )?;
-    let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
-        seed,
-        create.actor_id.clone(),
-        verification_method,
-    );
+    let (signer_full_id, verification_method) = trusted_actor_signer_material(authorize)?;
+    let signer =
+        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_full_id, verification_method);
     let mut hlc = arkret_hlc::HlcGenerator::new(
         create.realm_id.as_str(),
         descriptor.device_id.as_str(),
@@ -728,19 +773,19 @@ fn principal_successor_seal(input: Value) -> Result<Value> {
         .object
         .founding_device_descriptor
         .context("PCR create omits founding device descriptor")?;
+    let founding_authorize = events
+        .get(1)
+        .context("principal successor Seal history omits founding DeviceAuthorize")?;
+    if founding_authorize.actor_id != create.actor_id {
+        bail!("founding DeviceAuthorize actor does not match PCR create actor");
+    }
     let predecessor: arkret_models_collaboration::event_sync::RealmSealFrontierView =
         serde_json::from_value(input.predecessor_frontier)
             .context("parse principal predecessor Seal frontier")?;
     let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
-    let verification_method =
-        arkret_wire::DidUrl::new(format!("{}#{}", create.actor_id, descriptor.device_id)).map_err(
-            |error| anyhow::anyhow!("build founding device verification method: {error}"),
-        )?;
-    let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
-        seed,
-        create.actor_id.clone(),
-        verification_method,
-    );
+    let (signer_full_id, verification_method) = trusted_actor_signer_material(founding_authorize)?;
+    let signer =
+        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_full_id, verification_method);
     let mut hlc = arkret_hlc::HlcGenerator::new(
         create.realm_id.as_str(),
         descriptor.device_id.as_str(),
@@ -814,7 +859,10 @@ enum EventDigestMode {
 fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let input: EventProofInput =
         serde_json::from_value(input).context("parse event proof input")?;
-    let actor = Did::new(input.actor_did.clone()).context("parse actor DID")?;
+    let actor_full_id = Did::new(input.actor_did.clone()).context("parse actor DID")?;
+    let actor = ActorId::from(
+        project_full_id_to_core_id(&actor_full_id).context("project actor DID to its core id")?,
+    );
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
     let event_digest =

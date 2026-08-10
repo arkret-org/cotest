@@ -20,7 +20,9 @@
 //! locally that any future SDK helper / reducer SHOULD match bit-for-bit.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{CircleId, Did, RealmId, StrandId};
+use arkret_identifiers::{
+    ActorId, CircleId, FullId, RealmId, StrandId, project_full_id_to_core_id,
+};
 use arkret_models_collaboration::objects::strand::Strand;
 use serde_json::Value;
 
@@ -47,10 +49,10 @@ fn circle_b() -> Result<CircleId> {
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 
-fn actor() -> Result<Did> {
-    "did:web:alice.example"
-        .parse()
-        .map_err(|e| anyhow!("actor did: {e}"))
+fn actor() -> Result<ActorId> {
+    let full_id =
+        FullId::new("did:web:alice.example").map_err(|e| anyhow!("actor full id: {e}"))?;
+    Ok(ActorId::from(project_full_id_to_core_id(&full_id)?))
 }
 
 /// Reducer-pure invariant: for two sequential states of the same Strand /

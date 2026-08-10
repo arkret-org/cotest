@@ -49,6 +49,18 @@ fn event_value_with_parseable_proof_digests(event: &Value) -> Value {
     typed_value
 }
 
+fn controller_full_id(
+    verification_method: &arkret_wire::DidUrl,
+) -> Result<arkret_identifiers::FullId> {
+    let controller = verification_method
+        .as_str()
+        .split_once('#')
+        .map(|(controller, _)| controller)
+        .ok_or_else(|| anyhow!("verification method has no controller fragment"))?;
+    arkret_identifiers::FullId::new(controller.to_owned())
+        .map_err(|error| anyhow!("invalid verification-method controller: {error}"))
+}
+
 /// Re-sign a mutated cotest Event through the SDK's canonical Event-proof
 /// transcript using the SDK's deterministic development identity.
 pub fn refresh_event_proof(event: &mut Value) -> Result<()> {
@@ -78,10 +90,7 @@ pub fn refresh_event_proof_with_signing_seed(
     let mut typed: arkret_wire::Event =
         serde_json::from_value(event_value_with_parseable_proof_digests(event))
             .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
-    let signer_did = typed
-        .executed_by
-        .clone()
-        .unwrap_or_else(|| typed.actor_id.clone());
+    let signer_did = controller_full_id(&verification_method)?;
     let created_at = typed.created_at;
     typed.proofs.clear();
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
@@ -111,10 +120,7 @@ pub fn refresh_typed_event_proof_with_signing_seed(
         .first()
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
-    let signer_did = event
-        .executed_by
-        .clone()
-        .unwrap_or_else(|| event.actor_id.clone());
+    let signer_did = controller_full_id(&verification_method)?;
     let created_at = event.created_at;
     event.proofs.clear();
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(

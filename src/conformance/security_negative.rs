@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::Did;
+use arkret_identifiers::ActorId;
 use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
 use arkret_wire::Proof;
 use serde_json::{Value, json};
@@ -119,7 +119,7 @@ fn verify_event_proof_signature(
     public_key: &PublicKeyMaterial,
 ) -> std::result::Result<(), &'static str> {
     let actor_id = required_str(event, "actor_id")
-        .and_then(|value| Did::new(value).map_err(Into::into))
+        .and_then(|value| ActorId::new(value).map_err(Into::into))
         .map_err(|_| "invalid_signature")?;
     let canonical_bytes = canonical_event_payload_bytes(event).map_err(|_| "invalid_signature")?;
     verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &actor_id, public_key)

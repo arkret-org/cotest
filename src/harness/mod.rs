@@ -84,7 +84,12 @@ pub fn events_frontier_request_body(
     Ok(
         arkret_models_collaboration::event_query::EventsFrontierRequestBody {
             actor_id: actor_id
-                .map(|value| arkret_identifiers::Did::new(value.to_owned()))
+                .map(|value| {
+                    arkret_identifiers::FullId::new(value.to_owned()).and_then(|full_id| {
+                        arkret_identifiers::project_full_id_to_core_id(&full_id)
+                            .map(arkret_identifiers::ActorId::from)
+                    })
+                })
                 .transpose()?,
             realm_id: realm_id
                 .map(|value| arkret_identifiers::RealmId::new(value.to_owned()))

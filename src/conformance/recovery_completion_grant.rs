@@ -243,7 +243,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
     vector.handoff.validate()?;
     if !matches!(
         &vector.handoff.binding,
-        AccountHandoffBinding::Bound { principal_id }
+        AccountHandoffBinding::Bound { principal_id, .. }
             if principal_id.as_str() == vector.context.principal_id
     ) {
         bail!("recovery completion requires a Bound account handoff");
