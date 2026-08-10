@@ -43,7 +43,7 @@ use arkret::{
     StrandId, agent_sidecar_exchange_event_set_digest, agent_sidecar_participant_authority_digest,
     recover_agent_sidecar_context_locators,
 };
-use arkret_models_collaboration::agent_signer_evidence::AgentLifecycleStatus;
+use arkret_models_identity::agent_signer_evidence::AgentLifecycleStatus;
 use arkret_models_collaboration::sidecar_operations::{
     SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAttachPhase, SidecarCommitPhase,
     SidecarContextAttachPayload, SidecarContextRef, SidecarEnsureAttachRequestBody,

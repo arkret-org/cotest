@@ -180,7 +180,50 @@
       }
     },
     "resolve_creation_required_response": {
-      "state": "creation_required"
+      "state": "creation_required",
+      "next_founding_input": {
+        "founder_basis_evidence": {
+          "kind": "controller_agent",
+          "agent_provision_ref": "ak:event:AWAIb405aEEenVBHYRG-ZfDs-f9_j3E67tWGI36uYxFJ",
+          "agent_provision_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "controller_binding_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "source_service_binding": {
+          "principal_id": "did:webvh:z6mkfixture:alice.example",
+          "service_id": "did:webvh:z6mkfixture:principal.example",
+          "trust_domain": "ak:trust_domain:example.test",
+          "service_kind": "principal_server",
+          "service_verification_method": {
+            "id": "did:webvh:z6mkfixture:principal.example#key-1",
+            "controller": "did:webvh:z6mkfixture:principal.example",
+            "type": "Multikey",
+            "public_key_multibase": "z6MkhFixtureKey"
+          },
+          "endpoint_origins": [
+            "https://principal.example"
+          ],
+          "document_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "authority_evidence": {
+            "kind": "ak.did.binding_evidence.v1",
+            "method": "webvh",
+            "document_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "method_proofs": []
+          },
+          "not_before": "2026-08-01T00:00:00.000Z",
+          "accepted_at": "2026-08-01T00:00:00.000Z",
+          "binding_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "service_acceptance_proof": {
+            "verification_method": "did:webvh:z6mkfixture:principal.example#key-1",
+            "created_at": "2026-08-01T00:00:00.000Z",
+            "jws": "a"
+          },
+          "principal_authorization_proof": {
+            "verification_method": "did:webvh:z6mkfixture:alice.example#key-1",
+            "created_at": "2026-08-01T00:00:00.000Z",
+            "jws": "a"
+          }
+        }
+      }
     },
     "resolve_response": {
       "state": "found",

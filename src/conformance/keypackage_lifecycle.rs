@@ -934,6 +934,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "claim_id": fixture.claim_id,
             "requester_did": fixture.requester_did,
             "requester_device_id": fixture.requester_device_id,
+            "requester_device_authorize_event_id": fixture.device_authorize_event_id,
             "nonce": fixture.claim_nonce,
             "welcome_digest": fixture.welcome_digest,
             "created_at": "2026-05-25T00:00:00.000Z",
@@ -1031,6 +1032,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
+        Some(device_authorize_event_id),
     )
     .map_err(|reason| anyhow!("good welcome rejected: {reason}"))?;
 
@@ -1051,6 +1053,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             Some(device_authorize_event_id),
             None,
             Some(requester_device_id),
+            Some(device_authorize_event_id),
         )
         .err()
         .ok_or_else(|| anyhow!("mismatched top-level welcome digest was accepted"))?,
@@ -1081,6 +1084,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             Some(device_authorize_event_id),
             None,
             Some(requester_device_id),
+            Some(device_authorize_event_id),
         )
         .is_err(),
         Err(reason) => reason == arkret_wire::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH,
@@ -1105,6 +1109,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
+        Some(device_authorize_event_id),
     )
     .is_ok()
     {
@@ -1131,6 +1136,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
+        Some(device_authorize_event_id),
     )
     .is_ok()
     {
@@ -1153,6 +1159,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
+        Some(device_authorize_event_id),
     )
     .is_ok()
     {

@@ -649,6 +649,34 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     {
         bail!("managed-controller authoring boundary drifted");
     }
+    let create = arkret_wire::EventKind::RealmCreate
+        .descriptor()
+        .ok_or_else(|| anyhow!("ak.realm.create descriptor is missing"))?;
+    let status_write = create
+        .cell_writes
+        .iter()
+        .find(|write| {
+            write.cell_family.map(|family| family.as_str())
+                == Some(arkret_wire::CellFamilyId::AGENT_STATUS_V1)
+        })
+        .ok_or_else(|| anyhow!("managed Agent genesis status write is missing"))?;
+    if status_write.condition_rule.map(|rule| rule.to_json_value())
+        != Some(serde_json::json!({
+            "kind": "field_equals",
+            "field": "payload.object.purpose",
+            "const": "managed_agent_control"
+        }))
+        || status_write
+            .effect_projection_rule
+            .map(|rule| rule.to_json_value())
+            != Some(serde_json::json!({
+                "kind": "transition",
+                "from": {"const": "uninitialized"},
+                "to": {"const": "active"}
+            }))
+    {
+        bail!("managed Agent genesis initial lifecycle transition drifted");
+    }
     Ok(())
 }
 

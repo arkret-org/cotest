@@ -154,6 +154,9 @@ struct VectorCase {
 #[derive(Clone, Debug, Deserialize)]
 struct BaseFixture {
     actor_id: String,
+    transport_session_actor: String,
+    realm_declares_minimal_metadata_profile: bool,
+    pairwise_actor_current_member: bool,
     group_id: String,
     epoch: u64,
     group_state_ref: String,
@@ -225,7 +228,7 @@ fn bystander_leaf() -> AuthorLeaf {
     AuthorLeaf {
         leaf_index: 0,
         credential: AuthorLeafCredential::Basic {
-            identity: b"did:key:z6MkpairwiseBob".to_vec(),
+            identity: b"ak:did_core:key:z6MkpairwiseBob".to_vec(),
         },
         signature_key: b"z6MkpairwiseBystanderKey".to_vec(),
     }
@@ -270,40 +273,74 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
     if !case.base.proof.signature_valid {
         bail!("vector base proof must be a valid signature control");
     }
-    if !case
+    let proof_verification_method =
+        arkret_identifiers::DidUrl::new(case.base.proof.verification_method.clone())
+            .context("vector proof verification_method must be a DID URL")?;
+    let proof_controller = case
         .base
         .proof
         .verification_method
-        .starts_with(&case.base.actor_id)
-    {
-        bail!("vector base verification_method is not rooted in the pairwise actor");
+        .split_once('#')
+        .map(|(controller, _)| controller)
+        .ok_or_else(|| anyhow!("vector proof verification_method has no fragment"))?;
+    let proof_controller = arkret_identifiers::FullId::new(proof_controller.to_owned())
+        .context("vector proof controller must be a FullId")?;
+    let projected_actor = arkret_identifiers::ActorId::from(
+        arkret_identifiers::project_full_id_to_core_id(&proof_controller)
+            .context("vector proof controller has no active adapter")?,
+    );
+    if projected_actor.as_str() != case.base.actor_id {
+        bail!("vector proof FullId does not project to the pairwise Core ActorId");
     }
     if case.base.proof.resolved_public_key != case.base.leaf.signature_key {
         bail!("vector base proof key must equal the leaf signature_key byte for byte");
     }
-    if case.cases.len() != 6 {
+    if case.base.transport_session_actor == case.base.actor_id {
+        bail!("transport session actor must differ from the pairwise Event actor");
+    }
+    if !case.base.realm_declares_minimal_metadata_profile
+        || !case.base.pairwise_actor_current_member
+    {
+        bail!("vector base must be an admitted current pairwise member");
+    }
+    if case.cases.len() != 9 {
         bail!(
-            "minimal-metadata author credential vector must contain 6 cases, got {}",
+            "minimal-metadata author credential vector must contain 9 cases, got {}",
             case.cases.len()
         );
     }
-    if case.assertions.len() != 5 {
+    if case.assertions.len() != 8 {
         bail!("minimal-metadata author credential assertion catalogue drifted");
     }
 
-    let actor_id = arkret_identifiers::Did::new(case.base.actor_id.clone())
-        .context("vector base actor_id must be a valid DID")?;
+    let actor_id = arkret_identifiers::ActorId::new(case.base.actor_id.clone())
+        .context("vector base actor_id must be a valid Core ActorId")?;
 
     for mutation_case in &case.cases {
         // Per-case rebuild from base: mutations never leak across cases.
         let base = case.base.clone();
         let mut proof_key = base.proof.resolved_public_key.clone().into_bytes();
+        let mut proof_method = proof_verification_method.clone();
         let mut claim_group_state_ref = base.group_state_ref.clone();
         let mut active_leaves = vec![bystander_leaf(), base_leaf(&base)];
+        let mut realm_declares_minimal_metadata_profile =
+            base.realm_declares_minimal_metadata_profile;
+        let mut pairwise_actor_current_member = base.pairwise_actor_current_member;
         let directory = PrincipalDirectorySpy::default();
 
         match mutation_case.mutation.as_str() {
             "none" => {}
+            "pairwise_actor_current_member_false" => {
+                pairwise_actor_current_member = false;
+            }
+            "realm_declares_minimal_metadata_profile_false" => {
+                realm_declares_minimal_metadata_profile = false;
+            }
+            "verification_method_base_projection_mismatch" => {
+                proof_method = arkret_identifiers::DidUrl::new(
+                    "did:key:z6MkpairwiseMallory#z6MkpairwiseAuthorKey".to_owned(),
+                )?;
+            }
             "duplicate_active_leaf_identity" => {
                 let mut duplicate = base_leaf(&base);
                 duplicate.leaf_index = base.leaf.leaf_index + 1;
@@ -339,11 +376,19 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
             epoch: base.epoch,
             group_state_ref: &claim_group_state_ref,
             actor_id: &actor_id,
+            proof_verification_method: &proof_method,
             proof_public_key: &proof_key,
         };
-        let outcome = verify_minimal_metadata_author(&view, &claim);
+        let outcome = if !realm_declares_minimal_metadata_profile {
+            Err("actor_session_mismatch".to_owned())
+        } else if !pairwise_actor_current_member {
+            Err("capability_denied".to_owned())
+        } else {
+            verify_minimal_metadata_author(&view, &claim)
+                .map_err(|error| error.reason_code().to_owned())
+        };
         let accepted = outcome.is_ok();
-        let rejected_reason = outcome.as_ref().err().map(|error| error.reason_code());
+        let rejected_reason = outcome.as_ref().err().map(String::as_str);
 
         match mutation_case.expected.result.as_str() {
             "accept_pairwise_author" => {
@@ -370,14 +415,12 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                     Err(error) => error,
                 };
                 if let Some(expected_reason) = mutation_case.expected.reason_code.as_deref()
-                    && (error.reason_code() != expected_reason
-                        || expected_reason
-                            != arkret_wire::ReasonCode::MINIMAL_METADATA_AUTHOR_CREDENTIAL_INVALID)
+                    && error != expected_reason
                 {
                     bail!(
                         "case {} rejected with {} (expected {expected_reason})",
                         mutation_case.name,
-                        error.reason_code()
+                        error
                     );
                 }
             }

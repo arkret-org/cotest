@@ -92,6 +92,7 @@ fn advance_admission(stage: AdmissionStage, observation: &str) -> Result<Admissi
 enum RepairStage {
     ActiveGenerationRemoved,
     SelfRejoined,
+    RepairRequestRelayed,
     ExactPairReadded,
     ReplacementActivated,
 }
@@ -100,7 +101,8 @@ fn advance_repair(stage: RepairStage, action: &str) -> Result<RepairStage> {
     use RepairStage::*;
     match (stage, action) {
         (ActiveGenerationRemoved, "ak.member.rejoin.own") => Ok(SelfRejoined),
-        (SelfRejoined, "exact_pair_readd") => Ok(ExactPairReadded),
+        (SelfRejoined, "ak.member.repair.request") => Ok(RepairRequestRelayed),
+        (RepairRequestRelayed, "exact_pair_readd") => Ok(ExactPairReadded),
         (ExactPairReadded, "replacement_generation_activate") => Ok(ReplacementActivated),
         _ => bail!("Direct Conversation repair action is out of order or outside its profile"),
     }
@@ -236,6 +238,10 @@ fn validate_commit_welcome_fences() -> Result<()> {
 
 fn validate_repair(fixture: &Value) -> Result<()> {
     semantic_case(fixture, "rejoin_uses_same_realm_without_old_keys")?;
+    semantic_case(
+        fixture,
+        "repair_dispatch_is_a_non_authorizing_durable_trigger",
+    )?;
     let realm = "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD";
     let strand = "ak:strand:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS";
     let current_generation = 7_u64;
@@ -244,6 +250,20 @@ fn validate_repair(fixture: &Value) -> Result<()> {
         bail!("repair authority accepted daily self-leave instead of rejoin.own");
     }
     stage = advance_repair(stage, "ak.member.rejoin.own")?;
+    let repair_request = json!({
+        "realm_id": realm,
+        "requester_principal_id": "ak:did_core:webvh:z6mkfixture:alice.example",
+        "requester_device_id": "ak:device:01964137-1000-7000-8000-000000000011",
+        "requester_keypackage_ref": "ak:keypackage:fixture-requester-1",
+        "observed_active_generation_value_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "rejoin_event_id": "ak:event:AWAIb405aEEenVBHYRG-ZfDs-f9_j3E67tWGI36uYxFJ",
+        "created_at": "2026-08-10T00:00:00.000Z"
+    });
+    let typed_request = serde_json::from_value::<
+        arkret_models_collaboration::events_payloads::MemberRepairRequestPayload,
+    >(repair_request)?;
+    typed_request.validate()?;
+    stage = advance_repair(stage, "ak.member.repair.request")?;
     stage = advance_repair(stage, "exact_pair_readd")?;
     stage = advance_repair(stage, "replacement_generation_activate")?;
     let replacement_generation = current_generation + 1;
@@ -272,7 +292,7 @@ pub fn run_direct_conversation_flow_suite() -> Result<()> {
             "flow_002": "joined_generation_zero_history_shared",
             "flow_004_008": "exact_three_event_first_valid_unit_and_byte_identical_retry",
             "flow_005": "commit_and_welcome_each_wait_for_exact_covering_seal",
-            "flow_014": "remove_rejoin_readd_replacement_generation_without_old_keys"
+            "flow_014": "remove_rejoin_durable_request_readd_replacement_generation_without_old_keys"
         }),
         &json!({"status": "validated"}),
     );

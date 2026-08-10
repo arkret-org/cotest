@@ -375,11 +375,16 @@ fn principal_service_binding(input: Value) -> Result<Value> {
                 witness_proofs_digest,
             }],
         },
+        authorization_challenge: Base64UrlString::new(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        )
+        .map_err(|error| anyhow::anyhow!("build binding challenge: {error}"))?,
         history_head: Some(input.history_head),
         version_id: Some(input.version_id),
         not_before,
         expires_at: None,
         accepted_at,
+        predecessor_binding_digest: None,
         binding_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))
             .context("build binding digest placeholder")?,
         service_acceptance_proof: ProtocolSignature {

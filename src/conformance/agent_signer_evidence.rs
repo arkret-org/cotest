@@ -5,7 +5,7 @@
 //! regime dispatcher against cryptographically signed evidence.
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_models_collaboration::agent_signer_evidence::{
+use arkret_models_identity::agent_signer_evidence::{
     AGENT_KEY_COMPONENT, AGENT_STATUS_COMPONENT, AgentAdmissionEvidence, AgentAuthoritySnapshot,
     AgentAuthoritySnapshotCore, AgentAuthorizationEvidence, AgentAuthorizationStateWitness,
     AgentAuthorizationStatus, AgentCurrentObservation, AgentDetachedJws,
