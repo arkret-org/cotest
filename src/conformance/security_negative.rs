@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::ActorId;
+use arkret_identifiers::{ActorId, Did};
 use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
 use arkret_wire::Proof;
 use serde_json::{Value, json};
@@ -387,7 +387,12 @@ mod tests {
     /// object.
     fn signed_proof(event: &Value, signing_key: &SigningKey) -> Proof {
         let canonical = canonical_event_payload_bytes(event).unwrap();
-        let actor_id = Did::new(event["actor_id"].as_str().unwrap()).unwrap();
+        let actor_id = ActorId::from(
+            arkret_wire::project_full_id_to_core_id(
+                &Did::new(event["actor_id"].as_str().unwrap()).unwrap(),
+            )
+            .unwrap(),
+        );
         let mut proof = Proof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
             verification_method: crate::fixture_did_url("did:web:alice.example#device"),

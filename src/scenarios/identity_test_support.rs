@@ -162,6 +162,18 @@ pub async fn authorize_device_public_key(
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<()> {
+    authorize_device_public_key_with_event_id(server, token, actor, device_id, device_signing_key)
+        .await?;
+    Ok(())
+}
+
+pub async fn authorize_device_public_key_with_event_id(
+    server: &ArkretServer,
+    token: &str,
+    actor: &str,
+    device_id: &str,
+    device_signing_key: &SigningKey,
+) -> Result<arkret_identifiers::EventId> {
     let prepared = install_test_principal_control_document(server, actor).await?;
     bootstrap_test_device_authorization(
         server,
@@ -171,8 +183,7 @@ pub async fn authorize_device_public_key(
         device_signing_key,
         &prepared,
     )
-    .await?;
-    Ok(())
+    .await
 }
 
 /// Publish the current device-signed successor Seal for every accepted Event
@@ -344,7 +355,7 @@ async fn bootstrap_test_device_authorization(
     device_id: &str,
     device_signing_key: &SigningKey,
     prepared: &PreparedPrincipalInception,
-) -> Result<()> {
+) -> Result<arkret_identifiers::EventId> {
     let (_, remainder) = actor
         .strip_prefix("did:webvh:")
         .and_then(|remainder| remainder.split_once(':'))
@@ -473,6 +484,7 @@ async fn bootstrap_test_device_authorization(
         &device_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )?;
+    let authorize_event_id = authorize.event_id.clone();
     let unit = build_self_principal_pcr_genesis_unit(
         create,
         authorize,
@@ -573,7 +585,7 @@ async fn bootstrap_test_device_authorization(
         device_method.as_str().to_owned(),
     );
 
-    Ok(())
+    Ok(authorize_event_id)
 }
 
 async fn submit_harness_pcr_genesis(

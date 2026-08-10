@@ -21,6 +21,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
 use soland_services::service_route::{
     RouteSource, ServiceRouteFetcher, ServiceRouteResolver, VerifiedRouteCandidate,
+    VerifiedServiceDescribeMetadata,
 };
 use soland_services::{ServiceError, ServiceResult};
 use soland_storage::{
@@ -179,6 +180,23 @@ struct ProductionFetcher {
 }
 
 impl ProductionFetcher {
+    fn description(record: &ServiceResolutionRecord) -> VerifiedServiceDescribeMetadata {
+        VerifiedServiceDescribeMetadata {
+            service_id: record.record.service_id.clone(),
+            service_kind: record.record.service_kind.clone(),
+            service_resolution: arkret_models_identity::ResolutionCommitment {
+                full_id: record.record.full_id.clone(),
+                method_history_head: record.record.method_history_head.clone(),
+                version_id: record.record.version_id.clone(),
+            },
+            http_json_base_url: record.record.base_url.clone(),
+            route_binding_digest: record.record.describe_digest.clone(),
+            trust_domain: arkret_wire::TypedTrustDomainId::new("ak:trust_domain:route.example")
+                .expect("fixed trust domain"),
+            protocol_version: "1".to_owned(),
+        }
+    }
+
     fn take_candidate(
         &self,
         source: RouteSource,
@@ -188,9 +206,11 @@ impl ProductionFetcher {
             .lock()
             .expect("fetch call log poisoned")
             .push(source);
-        record
-            .clone()
-            .map(|record| VerifiedRouteCandidate { source, record })
+        record.clone().map(|record| VerifiedRouteCandidate {
+            source,
+            description: Self::description(&record),
+            record,
+        })
     }
 
     fn calls(&self) -> Vec<RouteSource> {

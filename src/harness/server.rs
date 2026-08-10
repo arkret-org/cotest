@@ -747,6 +747,27 @@ impl TestServerGroup {
         }))
     }
 
+    /// Spawn a mutually wired pre-built Soland mesh while giving every node
+    /// its own environment. Durable cross-service scenarios use this to bind
+    /// each process to a distinct PostgreSQL database without weakening the
+    /// normal role-scoped Describe federation bootstrap.
+    pub async fn try_multi_external_with_node_envs(
+        name: &str,
+        node_envs: &[Vec<(String, String)>],
+    ) -> Result<Option<Self>> {
+        use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
+
+        let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) else {
+            return Ok(None);
+        };
+        let servers =
+            Self::spawn_external_federated_with_node_envs(name, node_envs, &bin_path).await?;
+        Ok(Some(Self {
+            servers,
+            docker_network: None,
+        }))
+    }
+
     /// Spawn `count` pre-built soland binaries with each node wired to every
     /// other through endpoint-only `SOLAND_FEDERATION_PEERS` entries. Ports
     /// are reserved up front and each node resolves the peer service DID from
@@ -764,6 +785,19 @@ impl TestServerGroup {
         count: usize,
         bin_path: &Path,
     ) -> Result<Vec<ArkretServer>> {
+        let node_envs = vec![Vec::new(); count];
+        Self::spawn_external_federated_with_node_envs(name, &node_envs, bin_path).await
+    }
+
+    async fn spawn_external_federated_with_node_envs(
+        name: &str,
+        node_envs: &[Vec<(String, String)>],
+        bin_path: &Path,
+    ) -> Result<Vec<ArkretServer>> {
+        let count = node_envs.len();
+        if count == 0 {
+            return Err(anyhow!("federated Soland group requires at least one node"));
+        }
         let shared_trust_domain = test_trust_domain(name);
         struct Pending {
             name: String,
@@ -800,11 +834,30 @@ impl TestServerGroup {
 
         let mut servers = Vec::with_capacity(count);
         for (index, node) in pending.into_iter().enumerate() {
-            let extra_env: Vec<(&str, &str)> = vec![
-                ("SOLAND_FEDERATION_PEERS", peer_lists[index].as_str()),
-                ("SOLAND_FEDERATION_OUTBOUND", "0"),
-                ("SOLAND_TRUST_DOMAIN", shared_trust_domain.as_str()),
-            ];
+            let mut owned_env = node_envs[index].clone();
+            owned_env.retain(|(key, _)| {
+                !matches!(
+                    key.as_str(),
+                    "SOLAND_FEDERATION_PEERS"
+                        | "SOLAND_FEDERATION_OUTBOUND"
+                        | "SOLAND_TRUST_DOMAIN"
+                )
+            });
+            owned_env.extend([
+                (
+                    "SOLAND_FEDERATION_PEERS".to_owned(),
+                    peer_lists[index].clone(),
+                ),
+                ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "0".to_owned()),
+                (
+                    "SOLAND_TRUST_DOMAIN".to_owned(),
+                    shared_trust_domain.clone(),
+                ),
+            ]);
+            let extra_env = owned_env
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str()))
+                .collect::<Vec<_>>();
             match ArkretServer::spawn_external_binary_with_ports_and_env(
                 &node.name,
                 bin_path,

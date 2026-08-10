@@ -1184,7 +1184,7 @@ mod tests {
         arkret_signatures::proof::verify_ed25519_detached_jws_proof(
             &proof,
             &canonical_bytes,
-            &actor,
+            &arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(&actor).unwrap()),
             &public_key,
         )
         .unwrap();

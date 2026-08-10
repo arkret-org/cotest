@@ -4,7 +4,7 @@ use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, RealmKeySharePayload, StatePayload,
 };
 use arkret_wire::{
-    ConfidentialityClass, Did, Event, EventKind, ExtensionManifest, Hash, Hlc,
+    ActorId, ConfidentialityClass, Did, Event, EventKind, ExtensionManifest, Hash, Hlc,
     ManifestResourceLimits, ProtocolLayerKind, RealmId, RegistryContentRef, ScopeRef, StrandId,
     WireError, event_spec,
 };
@@ -21,8 +21,8 @@ fn scope() -> ScopeRef {
     }
 }
 
-fn actor() -> Did {
-    Did::new(ACTOR_ID).unwrap()
+fn actor() -> ActorId {
+    ActorId::from(arkret_wire::project_full_id_to_core_id(&Did::new(ACTOR_ID).unwrap()).unwrap())
 }
 
 fn created_at() -> chrono::DateTime<Utc> {

@@ -13,6 +13,7 @@ pub mod collaboration_workflow;
 pub mod consent_revoke_scope_any_cascade;
 pub mod delivery_media;
 pub mod did_boundary_call_counts;
+pub mod direct_conversation_repair_live;
 pub mod directory;
 pub mod directory_service;
 pub mod durable_effect_live_spotcheck;

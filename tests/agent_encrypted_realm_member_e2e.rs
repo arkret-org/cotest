@@ -11,13 +11,13 @@
 
 use anyhow::{Context, Result, bail};
 use arkret::{
-    ArkretMlsGroup, ArkretMlsIdentity, Base64UrlString, DeviceId, Did, Hash, KeyPackageUploadEntry,
-    KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
+    ArkretMlsGroup, ArkretMlsIdentity, Base64UrlString, DeviceId, Did, Hash, KeyPackageConsumer,
+    KeyPackageUploadEntry, KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
     KeyPackagesUploadUnsignedRequest, MlsDeviceWorkflowAction, MlsGroupStateSink, NonEmptyString,
-    RealmId, RecipientMlsDurableReceipt, keypackage_upload_entry_signing_input,
-    keypackages_consume_signing_input, keypackages_revoke_signing_input,
-    keypackages_upload_signing_input, late_device_join_steps, sign_keypackage_signing_input,
-    sign_keypackage_upload_entry, sign_keypackages_consume_request,
+    RealmId, RecipientMlsDurableReceipt, RecipientMlsDurableSigner,
+    keypackage_upload_entry_signing_input, keypackages_consume_signing_input,
+    keypackages_revoke_signing_input, keypackages_upload_signing_input, late_device_join_steps,
+    sign_keypackage_signing_input, sign_keypackage_upload_entry, sign_keypackages_consume_request,
     sign_keypackages_revoke_request, sign_keypackages_upload_request,
     verify_keypackage_signing_input,
 };
@@ -370,17 +370,20 @@ fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Res
         NonEmptyString::new(add.welcome.group_id.clone()).map_err(anyhow::Error::msg)?;
     let durable_at = chrono::Utc::now();
     let receipt_domain = "ak.mls.recipient-durable-receipt.v1";
+    let agent_core_id = arkret_wire::project_full_id_to_core_id(&agent_did)?;
     let key_package_ref = NonEmptyString::new(record.keypackage_ref.as_str().to_owned())
         .map_err(anyhow::Error::msg)?;
-    let recipient_service_id = Did::new("did:webvh:z6mkrecipient:recipient.example")?;
+    let recipient_service_id = arkret_wire::project_full_id_to_core_id(&Did::new(
+        "did:webvh:z6mkrecipient:recipient.example",
+    )?)?;
     let device_verification_method =
-        NonEmptyString::new(verification_method.clone()).map_err(anyhow::Error::msg)?;
+        arkret_wire::DidUrl::new(verification_method.clone()).map_err(anyhow::Error::msg)?;
     let welcome_digest = Hash::new(add.welcome.welcome_hash.as_str().to_owned())?;
     let receipt_unsigned = serde_json::json!({
         "domain": receipt_domain,
         "claim_request_id": claim_request_id,
         "key_package_ref": key_package_ref,
-        "recipient_principal_id": agent_did,
+        "recipient_principal_id": agent_core_id,
         "recipient_device_id": agent_device,
         "recipient_service_id": recipient_service_id,
         "realm_id": realm_id,
@@ -405,8 +408,11 @@ fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Res
         domain: NonEmptyString::new(receipt_domain).map_err(anyhow::Error::msg)?,
         claim_request_id: claim_request_id.clone(),
         key_package_ref,
-        recipient_principal_id: agent_did.clone(),
-        recipient_device_id: agent_device.clone(),
+        recipient_principal_id: agent_core_id.clone(),
+        recipient: RecipientMlsDurableSigner::Device {
+            recipient_device_id: agent_device.clone(),
+            device_verification_method,
+        },
         recipient_service_id,
         realm_id: realm_id.clone(),
         mls_group_id: mls_group_id.clone(),
@@ -414,13 +420,14 @@ fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Res
         welcome_ref: welcome_ref.clone(),
         welcome_digest,
         durable_at,
-        device_verification_method,
         signature: receipt_signature,
     };
     let consume_unsigned = KeyPackagesConsumeUnsignedRequest {
-        owner_account_id: agent_did.clone(),
+        owner_account_id: agent_core_id.clone(),
         key_package_refs: vec![record.keypackage_ref.as_str().to_owned()],
-        consumer_device_id: agent_device.clone(),
+        consumer: KeyPackageConsumer::Device {
+            consumer_device_id: agent_device.clone(),
+        },
         claim_ids: vec![
             NonEmptyString::new("claim-agent-lifecycle-001").map_err(anyhow::Error::msg)?,
         ],
