@@ -3,11 +3,11 @@
 //! Spec source: `artifacts/schemas/handle-claim.schema.json` +
 //! `identity/identity-handles.md §3.2 / §17`.
 //!
-//! R3.2 wire-breaking cleanup:
+//! Wire-breaking cleanup:
 //!   * `claim_kind` enum lost `service_handle` — only `handle_binding` / `organization_handle`
 //!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
-//!   * `subject` MUST be a holder/principal DID. A `ak:actor:` / `ak:account:` typed id or a
-//!     non-DID resource id MUST reject (VECT-COT-7), enforced by
+//!   * `subject` MUST be a holder/principal did_core_id. A full DID, account id, or generic
+//!     resource id MUST reject (VECT-COT-7), enforced by
 //!     [`arkret_models_identity::validate_handle_claim_subject`] and by the schema `subject`
 //!     pattern.
 //!
@@ -19,7 +19,7 @@ use std::ffi::OsStr;
 use std::fs;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use arkret_models_identity::{HandleClaimKind, validate_handle_claim_subject};
 use jsonschema::{Registry, Resource};
 use serde_json::{Value, json};
@@ -87,8 +87,8 @@ fn base_claim() -> Value {
     json!({
         "schema": "ak.schema.handle_claim.v1",
         "handle": "alice:acme.example",
-        "subject": "did:web:alice.principal.example",
-        "issuer": "did:web:coauth.acme.example",
+        "subject": "ak:did_core:web:alice.principal.example",
+        "issuer": "ak:did_core:web:coauth.acme.example",
         "binding_state": "verified",
         "claim_kind": "handle_binding",
         "created_at": "2026-05-20T00:00:00.000Z",
@@ -168,39 +168,32 @@ pub fn run_service_handle_rejected_vector() -> Result<()> {
     Ok(())
 }
 
-// ── VECT-COT-7 — subject not a principal DID rejected ───────────────────────
+// ── VECT-COT-7 — subject not a principal core id rejected ──────────────────
 
 pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
     let validator = compile_handle_claim_schema()?;
 
-    // SDK validator: typed-id subjects MUST reject.
-    for typed in [
-        "ak:actor:01904100-0000-7000-8000-000000000001",
+    for invalid in [
+        "did:web:alice.principal.example",
         "ak:account:01904100-0000-7000-8000-000000000002",
     ] {
-        let did = Did::new(typed.to_owned());
-        // Some typed ids may not even parse as a Did; if they do, the
-        // dedicated validator MUST reject them.
-        if let Ok(did) = did
-            && validate_handle_claim_subject(&did).is_ok()
+        let principal_id = DidCoreId::new(invalid.to_owned());
+        if let Ok(principal_id) = principal_id
+            && validate_handle_claim_subject(&principal_id).is_ok()
         {
             bail!(
-                "VECT-COT-7: validate_handle_claim_subject MUST reject typed id `{typed}` \
+                "VECT-COT-7: validate_handle_claim_subject MUST reject `{invalid}` \
                      (reason handle_claim_subject_not_principal_did)"
             );
         }
     }
 
-    // A genuine holder/principal DID MUST pass the SDK validator.
-    let holder = Did::new("did:web:alice.principal.example".to_owned())?;
+    let holder = DidCoreId::new("ak:did_core:web:alice.principal.example".to_owned())?;
     validate_handle_claim_subject(&holder)
-        .map_err(|e| anyhow!("VECT-COT-7: a principal DID MUST pass the subject validator: {e}"))?;
+        .map_err(|e| anyhow!("VECT-COT-7: a principal core id MUST pass: {e}"))?;
 
-    // Schema layer: the `subject` pattern requires `did:<method>:...`. A
-    // typed `ak:actor:` / `ak:account:` id or a bare resource id MUST
-    // schema-reject.
     for bad_subject in [
-        "ak:actor:01904100-0000-7000-8000-000000000001",
+        "did:web:alice.principal.example",
         "ak:account:01904100-0000-7000-8000-000000000002",
         "resource-handle-7",
     ] {
@@ -209,14 +202,13 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
         if validator.is_valid(&claim) {
             bail!(
                 "VECT-COT-7: handle claim with non-principal subject `{bad_subject}` MUST \
-                 schema-reject (subject pattern requires did:<method>:...)"
+                 schema-reject (subject pattern requires ak:did_core:<method>:...)"
             );
         }
     }
 
-    // Control: the canonical principal-DID subject still validates.
     if !validator.is_valid(&base_claim()) {
-        bail!("VECT-COT-7 control: a principal-DID subject MUST validate");
+        bail!("VECT-COT-7 control: a principal core-id subject MUST validate");
     }
     Ok(())
 }

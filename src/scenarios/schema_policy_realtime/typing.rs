@@ -3,7 +3,8 @@ use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service, authorize_device_public_key, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, authorize_device_public_key,
+    spawn_with_harness_account_authority,
 };
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
@@ -14,7 +15,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let bob_actor = actor_did_for_service(server.service_id(), "bob-typing")?;
+    let bob_actor = actor_did_for_service_full_id(server.service_full_id(), "bob-typing")?;
     let bob = server
         .register_client(
             &bob_actor,

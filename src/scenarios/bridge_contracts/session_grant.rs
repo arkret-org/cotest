@@ -78,7 +78,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     let requests = coauth.requests();
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0]["grant_jwt"], "coauth.session.jwt");
-    assert_eq!(requests[0]["audience"], server.service_id());
+    assert_eq!(requests[0]["audience"], server.service_id().as_str());
     assert_eq!(requests[0]["proof"]["challenge"], "soland-push-challenge");
 
     Ok(())

@@ -13,7 +13,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::{PrimaryHandleSelectInput, select_primary_handle};
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use arkret_models_discovery::{
     DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList,
 };
@@ -49,8 +49,8 @@ pub const ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS: &[&str] = &[
 const ACME_ISSUER: &str = "did:web:coauth.acme.example";
 const OTHER_ISSUER: &str = "did:web:coauth.other.example";
 
-fn subject() -> Result<Did> {
-    Did::new("did:web:alice.principal.example".to_owned()).map_err(|e| anyhow!("subject: {e}"))
+fn subject() -> Result<DidCoreId> {
+    DidCoreId::new("did:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
@@ -65,14 +65,14 @@ fn now_anchor() -> DateTime<Utc> {
 
 fn claim_for(
     handle: &str,
-    subj: &Did,
+    subj: &DidCoreId,
     issuer: &str,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
     Ok(HandleClaim {
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
         subject: Some(subj.clone()),
-        issuer: Some(issuer.to_owned()),
+        issuer: Some(DidCoreId::new(issuer)?),
         binding_state: Some(HandleBindingState::Verified),
         audience: audience.map(str::to_owned),
         created_at: Some(at(2026, 5, 1)),
@@ -129,7 +129,7 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
 
 pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
     let s = subject()?;
-    let other = Did::new("did:web:mallory.principal.example".to_owned())?;
+    let other = DidCoreId::new("did:web:mallory.principal.example")?;
     // A claim whose subject != response.subject MUST fail closed.
     let res = DirectorySubjectHandleList {
         subject: s.clone(),
@@ -204,7 +204,7 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
     let s = subject()?;
     let trusted = claim_for("alice:acme.example", &s, ACME_ISSUER, None)?;
     let untrusted = claim_for("alice:other.example", &s, OTHER_ISSUER, None)?;
-    let accepted_issuers = [ACME_ISSUER.to_owned()];
+    let accepted_issuers = [DidCoreId::new(ACME_ISSUER)?];
 
     // Directory MUST drop claims whose issuer is not in policy
     // accepted_issuers.
@@ -215,7 +215,8 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
             None => false,
         })
         .collect();
-    if visible.len() != 1 || visible[0].issuer.as_deref() != Some(ACME_ISSUER) {
+    if visible.len() != 1 || visible[0].issuer.as_ref().map(DidCoreId::as_str) != Some(ACME_ISSUER)
+    {
         bail!("issuer-trust filter MUST keep only accepted_issuers claims");
     }
     let res = DirectorySubjectHandleList {
@@ -302,7 +303,7 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
         claim_for("alice:other.example", &s, OTHER_ISSUER, None)?,
         claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?,
     ];
-    let accepted = vec![ACME_ISSUER.to_owned(), OTHER_ISSUER.to_owned()];
+    let accepted = vec![DidCoreId::new(ACME_ISSUER)?, DidCoreId::new(OTHER_ISSUER)?];
 
     // The directory's `primary_handle` field MUST equal the §3.2.1
     // selection output for the same context + policy.

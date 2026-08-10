@@ -269,9 +269,9 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
         DirectConversationFounderBasis, direct_conversation_founder, direct_conversation_may_found,
     };
 
-    let alice = arkret_identifiers::Did::new("did:webvh:z6mkcotest:alice.example".to_owned())?;
-    let bob = arkret_identifiers::Did::new("did:webvh:z6mkcotest:bob.example".to_owned())?;
-    let carol = arkret_identifiers::Did::new("did:webvh:z6mkcotest:carol.example".to_owned())?;
+    let alice = arkret_identifiers::DidCoreId::new("did:webvh:z6mkcotest:alice.example")?;
+    let bob = arkret_identifiers::DidCoreId::new("did:webvh:z6mkcotest:bob.example")?;
+    let carol = arkret_identifiers::DidCoreId::new("did:webvh:z6mkcotest:carol.example")?;
 
     // A requests, B accepts -> B founds.
     let normal = DirectConversationFounderBasis::Normal {

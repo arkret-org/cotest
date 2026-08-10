@@ -9,7 +9,7 @@
 //! ```compile_fail
 //! use arkret_event_draft::TypedEventDraft;
 //! use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
-//! use arkret_wire::{Did, RealmId, ScopeRef, StrandId, event_spec};
+//! use arkret_wire::{DidFullId, RealmId, ScopeRef, StrandId, event_spec};
 //!
 //! let scope = ScopeRef::Realm {
 //!     realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
@@ -21,7 +21,7 @@
 //! );
 //! let _ = TypedEventDraft::<event_spec::RealmPolicy>::new(
 //!     scope,
-//!     Did::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     DidFullId::new("did:webvh:z6mkfixture:alice.example").unwrap(),
 //!     payload,
 //! );
 //! ```
@@ -31,13 +31,13 @@
 //! ```compile_fail
 //! use arkret_event_draft::TypedEventDraft;
 //! use arkret_models_collaboration::events_payloads::StatePayload;
-//! use arkret_wire::{Did, EventKind, RealmId, ScopeRef, event_spec};
+//! use arkret_wire::{DidFullId, EventKind, RealmId, ScopeRef, event_spec};
 //!
 //! let draft = TypedEventDraft::<event_spec::RealmPolicy>::new(
 //!     ScopeRef::Realm {
 //!         realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
 //!     },
-//!     Did::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     DidFullId::new("did:webvh:z6mkfixture:alice.example").unwrap(),
 //!     StatePayload { value: None, state: Some("active".to_owned()), reason: None },
 //! ).unwrap();
 //! let _ = draft.with_kind(EventKind::MessageCreate);
@@ -46,7 +46,7 @@
 //! The raw standard constructor is not public outside `arkret-wire`:
 //!
 //! ```compile_fail
-//! use arkret_wire::{Did, Event, Hlc, RealmId, ScopeRef};
+//! use arkret_wire::{DidFullId, Event, Hlc, RealmId, ScopeRef};
 //!
 //! let scope = ScopeRef::Realm {
 //!     realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
@@ -54,7 +54,7 @@
 //! let _ = Event::new(
 //!     "ak.message.create",
 //!     scope,
-//!     Did::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     DidFullId::new("did:webvh:z6mkfixture:alice.example").unwrap(),
 //!     1,
 //!     Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
 //!     serde_json::json!({}),

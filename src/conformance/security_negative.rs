@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::{ActorId, Did};
+use arkret_identifiers::DidCoreId;
 use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
 use arkret_wire::Proof;
 use serde_json::{Value, json};
@@ -119,7 +119,7 @@ fn verify_event_proof_signature(
     public_key: &PublicKeyMaterial,
 ) -> std::result::Result<(), &'static str> {
     let actor_id = required_str(event, "actor_id")
-        .and_then(|value| ActorId::new(value).map_err(Into::into))
+        .and_then(|value| DidCoreId::new(value).map_err(Into::into))
         .map_err(|_| "invalid_signature")?;
     let canonical_bytes = canonical_event_payload_bytes(event).map_err(|_| "invalid_signature")?;
     verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &actor_id, public_key)
@@ -387,12 +387,7 @@ mod tests {
     /// object.
     fn signed_proof(event: &Value, signing_key: &SigningKey) -> Proof {
         let canonical = canonical_event_payload_bytes(event).unwrap();
-        let actor_id = ActorId::from(
-            arkret_wire::project_full_id_to_core_id(
-                &Did::new(event["actor_id"].as_str().unwrap()).unwrap(),
-            )
-            .unwrap(),
-        );
+        let actor_id = DidCoreId::new(event["actor_id"].as_str().unwrap()).unwrap();
         let mut proof = Proof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
             verification_method: crate::fixture_did_url("did:web:alice.example#device"),

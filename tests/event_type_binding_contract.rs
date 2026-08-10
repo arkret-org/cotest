@@ -4,7 +4,7 @@ use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, RealmKeySharePayload, StatePayload,
 };
 use arkret_wire::{
-    ActorId, ConfidentialityClass, Did, Event, EventKind, ExtensionManifest, Hash, Hlc,
+    ConfidentialityClass, DidCoreId, DidFullId, Event, EventKind, ExtensionManifest, Hash, Hlc,
     ManifestResourceLimits, ProtocolLayerKind, RealmId, RegistryContentRef, ScopeRef, StrandId,
     WireError, event_spec,
 };
@@ -21,8 +21,10 @@ fn scope() -> ScopeRef {
     }
 }
 
-fn actor() -> ActorId {
-    ActorId::from(arkret_wire::project_full_id_to_core_id(&Did::new(ACTOR_ID).unwrap()).unwrap())
+fn actor() -> DidCoreId {
+    DidCoreId::from(
+        arkret_wire::project_full_id_to_core_id(&DidFullId::new(ACTOR_ID).unwrap()).unwrap(),
+    )
 }
 
 fn created_at() -> chrono::DateTime<Utc> {
@@ -153,7 +155,7 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
         namespace: "ak.example".to_owned(),
         protocol_layer_kind: ProtocolLayerKind::Extension,
         manifest_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
-        publisher_id: Did::new("did:web:publisher.example").unwrap(),
+        publisher_id: DidCoreId::new("did:web:publisher.example").unwrap(),
         published_at: created_at(),
         dependency_refs: Vec::new(),
         payload_schema_refs: vec![schema_ref.clone()],

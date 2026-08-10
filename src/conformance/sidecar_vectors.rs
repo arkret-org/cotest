@@ -28,20 +28,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret::events::EventKind;
 use arkret::{
-    ActorId, AgentSidecar, AgentSidecarAccessReadiness, AgentSidecarContextRef,
-    AgentSidecarDisplayMode, AgentSidecarEncryptionProfile, AgentSidecarEventExchangeBinding,
+    AgentSidecar, AgentSidecarAccessReadiness, AgentSidecarContextRef, AgentSidecarDisplayMode,
+    AgentSidecarEncryptionProfile, AgentSidecarEventExchangeBinding,
     AgentSidecarExchangeBindingRole, AgentSidecarExchangeCompletionPolicy,
     AgentSidecarExchangeControl, AgentSidecarExchangeControlAction,
     AgentSidecarExchangeControlSchema, AgentSidecarExchangeFoldedFrontier, AgentSidecarExchangeId,
     AgentSidecarExchangeOrigin, AgentSidecarExchangeProjection,
     AgentSidecarExchangeProjectionSchema, AgentSidecarExchangeRequestContext,
     AgentSidecarExchangeStatus, AgentSidecarMlsContext, AgentSidecarProjectionProvenance,
-    AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, Did,
-    DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata, MlsGovernanceBindingPayload,
-    NonEmptyString, PendingSidecarAccessReconciliationItem,
+    AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, DidCoreId,
+    DidFullId, DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata,
+    MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliationItem,
     PendingSidecarAccessReconciliationStage, RealmId, ScopeRef, SidecarId, SidecarMlsBinding,
     StrandId, agent_sidecar_exchange_event_set_digest, agent_sidecar_participant_authority_digest,
-    project_full_id_to_core_id, recover_agent_sidecar_context_locators,
+    recover_agent_sidecar_context_locators,
 };
 use arkret_models_collaboration::sidecar_operations::{
     SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAttachPhase, SidecarCommitPhase,
@@ -178,7 +178,7 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
             .ok_or_else(|| anyhow!("fixture realm_id is missing"))?
             .to_owned(),
     )?;
-    let controller_id = Did::new(
+    let controller_id = DidCoreId::new(
         transcript["controller_id"]
             .as_str()
             .ok_or_else(|| anyhow!("fixture controller_id is missing"))?
@@ -189,14 +189,14 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         .ok_or_else(|| anyhow!("fixture owned_agent_ids are missing"))?
         .iter()
         .filter_map(Value::as_str)
-        .map(|principal_id| Did::new(principal_id.to_owned()))
+        .map(|principal_id| DidCoreId::new(principal_id.to_owned()))
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let effective_agent_ids = transcript["effective_agent_ids"]
         .as_array()
         .ok_or_else(|| anyhow!("fixture effective_agent_ids are missing"))?
         .iter()
         .filter_map(Value::as_str)
-        .map(|principal_id| Did::new(principal_id.to_owned()))
+        .map(|principal_id| DidCoreId::new(principal_id.to_owned()))
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let digest = agent_sidecar_participant_authority_digest(
         sidecar_id.clone(),
@@ -301,7 +301,7 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
         );
     }
     let removal = PendingSidecarAccessReconciliationItem {
-        agent_id: Did::new("did:webvh:z6mkfixture:assistant.agents.example")?,
+        agent_id: DidCoreId::new("did:webvh:z6mkfixture:assistant.agents.example")?,
         provisioning_phase: PendingSidecarAccessReconciliationStage::MlsRemove,
         reason: NonEmptyString::new("mls_remove_obligation_pending").map_err(anyhow::Error::msg)?,
         membership_frontier: Some(vec![EventId::new(
@@ -382,7 +382,7 @@ struct SidecarStateSnapshot {
 }
 
 struct SidecarExecutableModel {
-    authenticated_controller: Did,
+    authenticated_controller: DidCoreId,
     has_ensure_capability: bool,
     lifecycle: AgentLifecycleStatus,
     durable: SidecarDurableState,
@@ -395,7 +395,7 @@ struct SidecarExecutableModel {
 
 impl SidecarExecutableModel {
     fn new(
-        authenticated_controller: Did,
+        authenticated_controller: DidCoreId,
         has_ensure_capability: bool,
         lifecycle: AgentLifecycleStatus,
     ) -> Self {
@@ -413,7 +413,7 @@ impl SidecarExecutableModel {
     }
 
     fn with_existing(
-        authenticated_controller: Did,
+        authenticated_controller: DidCoreId,
         has_ensure_capability: bool,
         lifecycle: AgentLifecycleStatus,
     ) -> Result<Self> {
@@ -804,7 +804,7 @@ fn fixed_sidecar_coordinates(_existing_context: bool) -> Result<SidecarCoordinat
 }
 
 fn fixed_prepare_request(
-    controller_id: &Did,
+    controller_id: &DidCoreId,
     idempotency_key: &str,
     second_context: bool,
 ) -> Result<SidecarEnsurePrepareRequestBody> {
@@ -817,7 +817,7 @@ fn fixed_prepare_request(
 }
 
 fn fixed_prepare_request_for_operation(
-    controller_id: &Did,
+    controller_id: &DidCoreId,
     idempotency_key: &str,
     second_context: bool,
     operation_id: &str,
@@ -947,7 +947,7 @@ fn fixed_unsigned_sidecar_event(
     kind: EventKind,
     realm_id: RealmId,
     scope_ref: ScopeRef,
-    actor_id: ActorId,
+    actor_id: DidCoreId,
     actor_seq: u64,
     prev_refs: Vec<EventId>,
     refs: Vec<EventRef>,
@@ -996,10 +996,8 @@ fn fixed_unsigned_sidecar_event(
     Ok(event)
 }
 
-fn sidecar_actor_id(full_id: &Did) -> SidecarModelResult<ActorId> {
-    project_full_id_to_core_id(full_id)
-        .map(ActorId::from)
-        .map_err(|_| SidecarModelError::ModelInvariant)
+fn sidecar_actor_id(actor_id: &DidCoreId) -> SidecarModelResult<DidCoreId> {
+    Ok(actor_id.clone())
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEventDraft> {
@@ -1297,7 +1295,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     {
         bail!("Sidecar ensure operation/profile registry drifted");
     }
-    let controller = Did::new("did:webvh:z6mksidecar:controller.example")?;
+    let controller = DidCoreId::new("did:webvh:z6mksidecar:controller.example")?;
     let prepare_request = fixed_prepare_request(&controller, "cotest-sidecar-prepare-new", false)?;
     let mut model =
         SidecarExecutableModel::new(controller.clone(), true, AgentLifecycleStatus::Active);
@@ -1337,7 +1335,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         DidUrl::new(format!("{controller}#device-sidecar")).map_err(anyhow::Error::msg)?;
     let signer = Ed25519PayloadSigner::from_did_key_seed(
         [73_u8; 32],
-        controller.clone(),
+        DidFullId::new(controller.as_str()).map_err(anyhow::Error::msg)?,
         verification_method.clone(),
     );
     let create_event = sign_prepared_draft(create_event_draft, &signer, &verification_method)
@@ -1673,7 +1671,7 @@ impl SidecarAccessProjection {
 
 pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     let _fixture_case = sidecar_fixture_case(VECTOR_ID_SIDECAR_ELIGIBILITY_STATES)?;
-    let controller = Did::new("did:webvh:z6mksidecar:eligibility.example")?;
+    let controller = DidCoreId::new("did:webvh:z6mksidecar:eligibility.example")?;
     let request = fixed_prepare_request(&controller, "cotest-sidecar-eligibility", false)?;
     let mut active =
         SidecarExecutableModel::new(controller.clone(), true, AgentLifecycleStatus::Active);
@@ -1719,7 +1717,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
 
 pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
     let _fixture_case = sidecar_fixture_case(VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY)?;
-    let controller = Did::new("did:webvh:z6mksidecar:privacy.example")?;
+    let controller = DidCoreId::new("did:webvh:z6mksidecar:privacy.example")?;
     let request = fixed_prepare_request(&controller, "cotest-sidecar-privacy", false)?;
     let mut absent =
         SidecarExecutableModel::new(controller.clone(), false, AgentLifecycleStatus::Active);
@@ -1778,11 +1776,11 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     let request_id = EventId::new("ak:event:AU7uNevwc0Cp8J79qQnR0XFIA6sS-Ey-sAx6QesaglRs")?;
     let native_id = EventId::new("ak:event:AZjT-hpiUOSks1wjNlYAqMixCtZTrdsCsZzB-uVQC4hr")?;
     let response_id = EventId::new("ak:event:AYc-4BlSOVqQFbwNPwG_8grd4XMcbaWyErQiaMg6uDIK")?;
-    let addressed_agent = Did::new("did:webvh:z6mkfixture:assistant.agents.example")?;
+    let addressed_agent = DidCoreId::new("did:webvh:z6mkfixture:assistant.agents.example")?;
     let terminal_id = EventId::new("ak:event:AcQOShj1JyHhaaSQwjV-D2nyDc1M1yK4DTq0JtH4nPIx")?;
     let projection = AgentSidecarExchangeProjection {
         schema: AgentSidecarExchangeProjectionSchema::V1,
-        controller_id: Did::new("did:webvh:z6mkfixture:example.com:users:alice")?,
+        controller_id: DidCoreId::new("did:webvh:z6mkfixture:example.com:users:alice")?,
         sidecar_id: sidecar,
         exchange_id: AgentSidecarExchangeId::new("Abcdefghijklmnopqrstuv")?,
         origin: AgentSidecarExchangeOrigin::SourceTrackRouted,
@@ -1917,16 +1915,22 @@ fn exchange_hlc(counter: u32) -> Result<Hlc> {
     Ok(Hlc::new(format!("01970e589d21-{counter:04x}-a13f9c2e"))?)
 }
 
-fn exchange_controller() -> Result<Did> {
-    Ok(Did::new("did:webvh:z6mkfixture:example.com:users:alice")?)
+fn exchange_controller() -> Result<DidCoreId> {
+    Ok(DidCoreId::new(
+        "did:webvh:z6mkfixture:example.com:users:alice",
+    )?)
 }
 
-fn exchange_agent_s() -> Result<Did> {
-    Ok(Did::new("did:webvh:z6mkfixture:assistant.agents.example")?)
+fn exchange_agent_s() -> Result<DidCoreId> {
+    Ok(DidCoreId::new(
+        "did:webvh:z6mkfixture:assistant.agents.example",
+    )?)
 }
 
-fn exchange_agent_t() -> Result<Did> {
-    Ok(Did::new("did:webvh:z6mkfixture:reviewer.agents.example")?)
+fn exchange_agent_t() -> Result<DidCoreId> {
+    Ok(DidCoreId::new(
+        "did:webvh:z6mkfixture:reviewer.agents.example",
+    )?)
 }
 
 fn exchange_scope() -> Result<SidecarExchangeFoldScope> {
@@ -1975,7 +1979,7 @@ fn exchange_request_fact(
 fn exchange_agent_fact(
     suffix: u32,
     counter: u32,
-    actor: Did,
+    actor: DidCoreId,
     role: AgentSidecarExchangeBindingRole,
 ) -> Result<SidecarExchangeAgentFact> {
     let request_event_id = exchange_event_id(0x34)?;
@@ -2114,7 +2118,7 @@ pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
     missing_causal_ref.refs_after = Vec::new();
     let mut unaddressed_actor = valid_response.clone();
     unaddressed_actor.event_id = exchange_event_id(0x53)?;
-    unaddressed_actor.actor_id = Did::new("did:webvh:z6mkfixture:stranger.agents.example")?;
+    unaddressed_actor.actor_id = DidCoreId::new("did:webvh:z6mkfixture:stranger.agents.example")?;
     let mut controller_response = valid_response.clone();
     controller_response.event_id = exchange_event_id(0x54)?;
     controller_response.actor_id = exchange_controller()?;
@@ -2680,7 +2684,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
             .as_str()
             .ok_or_else(|| anyhow!("recovery fixture realm_id is missing"))?,
     )?;
-    let controller_id = Did::new(
+    let controller_id = DidCoreId::new(
         locator["controller_id"]
             .as_str()
             .ok_or_else(|| anyhow!("recovery fixture controller_id is missing"))?,
@@ -2739,7 +2743,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     let attach_event = arkret_wire::test_support::raw_event_at(
         EventKind::SidecarContextAttach.as_str(),
         scope,
-        arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(&controller_id)?),
+        controller_id.clone(),
         20,
         exchange_hlc(0x81)?,
         serde_json::to_value(SidecarContextAttachPayload {
@@ -2769,9 +2773,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     let unauthorized_attach = arkret_wire::test_support::raw_event_at(
         EventKind::SidecarContextAttach.as_str(),
         attach_event.scope_ref.clone(),
-        arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(&Did::new(
-            "did:webvh:z6mkfixture:mallory.example",
-        )?)?),
+        DidCoreId::new("did:webvh:z6mkfixture:mallory.example")?,
         21,
         exchange_hlc(0x82)?,
         serde_json::to_value(&attach_event.payload)?,
@@ -2849,12 +2851,12 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
         siblings: &[Value],
         case: &Value,
         realm_id: &RealmId,
-        actor: &Did,
+        actor: &DidCoreId,
         base_created_at: DateTime<Utc>,
         offsets: [i64; 2],
     ) -> Result<Vec<Event>> {
         let realm_id = realm_id.clone();
-        let actor = arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(actor)?);
+        let actor = actor.clone();
         let mut events = Vec::new();
         for (index, sibling) in siblings.iter().enumerate() {
             let created_at = base_created_at + chrono::Duration::seconds(offsets[index]);

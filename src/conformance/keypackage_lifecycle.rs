@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_identifiers::{DeviceId, Did, Hash, RealmId};
+use arkret_identifiers::{DeviceId, DidFullId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::{
     MlsKeypackagePayload, MlsWelcomePayload, validate_mls_welcome_claim_envelope,
 };
@@ -163,8 +163,8 @@ fn require_root_generation_ref<'a>(value: &'a Value, field: &str) -> Result<&'a 
     Ok(generation_ref)
 }
 
-fn did(value: &str) -> Result<Did> {
-    Did::new(value.to_owned()).map_err(Into::into)
+fn did(value: &str) -> Result<DidFullId> {
+    DidFullId::new(value.to_owned()).map_err(Into::into)
 }
 
 fn device(value: &str) -> Result<DeviceId> {
@@ -193,7 +193,7 @@ fn claim_record_value(
     claim_id: &str,
     keypackage_ref: &str,
     keypackage_digest: &str,
-    principal_id: &Did,
+    principal_id: &DidFullId,
     device_id: &DeviceId,
     last_resort: bool,
     expires_at: DateTime<Utc>,
@@ -295,7 +295,7 @@ struct LastResortAuditRecord {
 struct MiniKeypackage {
     keypackage_ref: String,
     keypackage_digest: String,
-    principal_id: Did,
+    principal_id: DidFullId,
     device_id: DeviceId,
     intended_realm_id: RealmId,
     last_resort: bool,
@@ -310,7 +310,7 @@ impl MiniKeypackage {
     fn new_normal(
         keypackage_ref: impl Into<String>,
         keypackage_digest: impl Into<String>,
-        principal_id: Did,
+        principal_id: DidFullId,
         device_id: DeviceId,
         intended_realm_id: RealmId,
         expires_at: DateTime<Utc>,
@@ -333,7 +333,7 @@ impl MiniKeypackage {
     fn new_last_resort(
         keypackage_ref: impl Into<String>,
         keypackage_digest: impl Into<String>,
-        principal_id: Did,
+        principal_id: DidFullId,
         device_id: DeviceId,
         intended_realm_id: RealmId,
         expires_at: DateTime<Utc>,
@@ -1254,7 +1254,8 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
             "self-claim proof binding or digest drifted: binding={actual_binding}, digest={actual_binding_digest}"
         );
     }
-    let authority = did(required_str(vector, "authority_service_id")?)?;
+    let authority =
+        arkret_identifiers::DidCoreId::new(required_str(vector, "authority_service_id")?)?;
     typed.validate_proof_shape(&authority, parse_time("2026-07-31T00:01:00.000Z")?)?;
 
     let identity = (

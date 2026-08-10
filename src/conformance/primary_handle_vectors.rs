@@ -16,7 +16,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
-use arkret_identifiers::{Did, Hash};
+use arkret_identifiers::{DidCoreId, Hash};
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
 use arkret_wire::PayloadProof;
 use chrono::{DateTime, TimeZone, Utc};
@@ -66,8 +66,8 @@ pub const ALL_PRIMARY_HANDLE_VECTOR_IDS: &[&str] = &[
 const ACME_ISSUER: &str = "did:web:coauth.acme.example";
 const OTHER_ISSUER: &str = "did:web:coauth.other.example";
 
-fn subject() -> Result<Did> {
-    Did::new("did:web:alice.principal.example".to_owned()).map_err(|e| anyhow!("subject: {e}"))
+fn subject() -> Result<DidCoreId> {
+    DidCoreId::new("did:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
@@ -92,7 +92,7 @@ fn claim(
     Ok(HandleClaim {
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse {handle}: {e}"))?),
         subject: Some(subject()?),
-        issuer: Some(issuer.to_owned()),
+        issuer: Some(DidCoreId::new(issuer)?),
         binding_state: Some(HandleBindingState::Verified),
         audience: audience.map(str::to_owned),
         created_at: Some(created),
@@ -101,8 +101,11 @@ fn claim(
     })
 }
 
-fn accepted(issuers: &[&str]) -> Vec<String> {
-    issuers.iter().map(|s| s.to_string()).collect()
+fn accepted(issuers: &[&str]) -> Vec<DidCoreId> {
+    issuers
+        .iter()
+        .map(|issuer| DidCoreId::new(*issuer).expect("fixture issuer is a valid core id"))
+        .collect()
 }
 
 fn chosen_handle(claim: &HandleClaim) -> Result<String> {

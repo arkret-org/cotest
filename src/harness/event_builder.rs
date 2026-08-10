@@ -7,7 +7,10 @@ use anyhow::{Result, anyhow};
 use arkret::{
     DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
 };
-use arkret_identifiers::{Did, EventId, Hash, Hlc, MessageId, RealmId, StrandId};
+use arkret_identifiers::{
+    DidCoreId, DidFullId, EventId, Hash, Hlc, MessageId, RealmId, StrandId,
+    project_full_id_to_core_id,
+};
 use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
 };
@@ -27,7 +30,7 @@ use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
     NEXT_EVENT_SEQ, RealmBootstrapDraft, canonical_device_id, events_frontier_request_body,
-    member_join_payload, next_typed_id, query_method, realm_create_payload,
+    member_join_payload, query_method, realm_create_payload,
 };
 
 type RegisteredEventSigner = ([u8; 32], DidUrl);
@@ -90,7 +93,7 @@ pub async fn register_account(
     device_id: &str,
 ) -> Result<String> {
     let device_id = canonical_device_id(device_id);
-    let full_id = arkret_identifiers::FullId::new(did.to_owned())?;
+    let full_id = arkret_identifiers::DidFullId::new(did.to_owned())?;
     let body = arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
         principal_id: arkret_identifiers::project_full_id_to_core_id(&full_id)?,
         full_id,
@@ -173,7 +176,12 @@ pub fn device_message_send_request(
     let mut devices = BTreeMap::new();
     devices.insert(DeviceId::new(device_id.to_owned())?, target);
     let mut messages = BTreeMap::new();
-    messages.insert(Did::new(recipient.to_owned())?, devices);
+    messages.insert(
+        DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+            recipient.to_owned(),
+        )?)?),
+        devices,
+    );
     Ok(DeviceMessagesSendRequestBody { messages })
 }
 
@@ -184,7 +192,7 @@ pub async fn create_realm(
     title: &str,
 ) -> Result<String> {
     let draft = realm_create_payload(
-        server.service_id(),
+        server.service_id().as_str(),
         &json!({
             "title": title,
             "summary": title,
@@ -218,7 +226,7 @@ pub async fn create_realm_with_signing_seed(
     signing_seed: [u8; 32],
 ) -> Result<String> {
     let draft = realm_create_payload(
-        server.service_id(),
+        server.service_id().as_str(),
         &json!({
             "title": title,
             "summary": title,
@@ -616,7 +624,9 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         } else {
             event.seal_ref = Some(frontier.seal_id);
             event.auth_context = Some(AuthContext {
-                did: Did::new(actor.to_owned())?,
+                actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+                    actor.to_owned(),
+                )?)?),
                 key_id: verification_method.to_string(),
                 key_epoch: 0,
                 credential_epoch: None,
@@ -886,8 +896,8 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // `created_at_before_causal_predecessor`. Anchor on the process clock and
     // step once per built Event so successors are strictly later.
     let created_at = harness_event_created_at();
-    let actor_full_id = Did::new(actor.to_owned()).expect("cotest actor DID");
-    let actor_id = arkret_identifiers::ActorId::from(
+    let actor_full_id = DidFullId::new(actor.to_owned()).expect("cotest actor DID");
+    let actor_id = arkret_identifiers::DidCoreId::from(
         arkret_identifiers::project_full_id_to_core_id(&actor_full_id)
             .expect("cotest actor DID projects to a core id"),
     );
@@ -1159,11 +1169,11 @@ pub(crate) fn invite_create_payload(
     introduction_evidence_digest: impl Into<String>,
     expires_at: DateTime<Utc>,
 ) -> Result<Value> {
-    let invitee_full_id =
-        Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee full id: {err}"))?;
-    let recipient_full_id = Did::new(recipient_service_id.to_owned())
+    let invitee_full_id = DidFullId::new(invitee.to_owned())
+        .map_err(|err| anyhow!("invalid invitee full id: {err}"))?;
+    let recipient_full_id = DidFullId::new(recipient_service_id.to_owned())
         .map_err(|err| anyhow!("invalid recipient service full id: {err}"))?;
-    let recipient_service_id = arkret_identifiers::ServiceId::from(
+    let recipient_service_id = arkret_identifiers::DidCoreId::from(
         arkret_identifiers::project_full_id_to_core_id(&recipient_full_id)?,
     );
     let current_record_url = format!(
@@ -1208,11 +1218,12 @@ fn member_payload(
         membership,
         strand_id: None,
         realm_id: Some(RealmId::new(realm_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
-        actor_id: Some(arkret_identifiers::ActorId::from(
+        actor_id: Some(arkret_identifiers::DidCoreId::from(
             arkret_identifiers::project_full_id_to_core_id(
-                &Did::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
+                &DidFullId::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
             )?,
         )),
+        principal_authority_instance: None,
         delivery_status,
         delivery_binding,
         gate_proofs: Vec::new(),

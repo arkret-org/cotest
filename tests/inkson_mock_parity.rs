@@ -10,7 +10,8 @@ use cotest::harness::{
     ArkretServer, events_frontier_request_body, expect_json, query_method, register_account,
 };
 use cotest::scenarios::identity_test_support::{
-    actor_did_for_service, authorize_device_public_key, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, authorize_device_public_key,
+    spawn_with_harness_account_authority,
 };
 use reqwest::Method;
 use serde::Deserialize;
@@ -128,7 +129,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
     }
 
     let server = spawn_with_harness_account_authority("inkson-mock-parity", &[]).await?;
-    let alice_did = actor_did_for_service(server.service_id(), "alice-mock-parity")?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-mock-parity")?;
     let alice_token = register_account(
         &server,
         &alice_did,
@@ -147,7 +148,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
     let mut ctx = TemplateContext {
         alice_did,
         alice_token,
-        service_id: server.service_id().to_owned(),
+        service_id: server.service_id().to_string(),
         realm_id: String::new(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };

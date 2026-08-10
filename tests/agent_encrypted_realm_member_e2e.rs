@@ -11,21 +11,17 @@
 
 use anyhow::{Context, Result, bail};
 use arkret::{
-    ArkretMlsGroup, ArkretMlsIdentity, Base64UrlString, DeviceId, Did, Hash, KeyPackageConsumer,
-    KeyPackageUploadEntry, KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
-    KeyPackagesUploadUnsignedRequest, MlsDeviceWorkflowAction, MlsGroupStateSink, NonEmptyString,
-    RealmId, RecipientMlsDurableReceipt, RecipientMlsDurableSigner,
+    DeviceId, DidCoreId, Hash, KeyPackageUploadEntry, KeyPackagesConsumeUnsignedRequest,
+    KeyPackagesRevokeUnsignedRequest, KeyPackagesUploadUnsignedRequest,
     keypackage_upload_entry_signing_input, keypackages_consume_signing_input,
     keypackages_revoke_signing_input, keypackages_upload_signing_input, late_device_join_steps,
-    sign_keypackage_signing_input, sign_keypackage_upload_entry, sign_keypackages_consume_request,
+    sign_keypackage_upload_entry, sign_keypackages_consume_request,
     sign_keypackages_revoke_request, sign_keypackages_upload_request,
     verify_keypackage_signing_input,
 };
-use arkret_models_crypto::MlsKeyPackageState;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use ed25519_dalek::SigningKey;
-use garth::{CryptoStore, MemoryCryptoStore, MlsRecoveryAction};
 use serde_json::Value;
 
 const MLS_FIXTURE: &str = include_str!("fixtures/mls_e2ee_basic_fixture.json");
@@ -90,7 +86,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                 let request = case
                     .get("unsigned_request")
                     .context("entry case missing unsigned_request")?;
-                let principal_id: Did = serde_json::from_value(
+                let principal_id: DidCoreId = serde_json::from_value(
                     request
                         .get("principal_id")
                         .cloned()
@@ -172,328 +168,25 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
 }
 
 #[test]
-fn agent_member_welcome_fixture_joins_persists_and_recovers_locally() -> Result<()> {
-    let owner_did = did("alice")?;
-    let owner_device = device("000000000101")?;
-    let agent_did = did("summary-agent")?;
-    let agent_device = device("000000000202")?;
-
-    let owner = ArkretMlsIdentity::new_basic(owner_did.clone(), owner_device)?;
-    let mut owner_group = owner.create_group(b"cotest-g2-agent-member-local-fixture")?;
-
-    let agent = ArkretMlsIdentity::new_basic(agent_did.clone(), agent_device.clone())?;
-    let agent_key_package = agent.key_package_record()?;
-    let agent_private_state = agent.export_private_state()?;
-    assert_eq!(agent_key_package.principal_id, agent_did);
-    assert_eq!(agent_key_package.device_id, agent_device);
-    assert_eq!(agent_key_package.state, MlsKeyPackageState::Published);
-    assert!(!agent_key_package.last_resort);
-    assert!(agent_key_package.is_usable());
-
-    let mut runtime_store = MemoryCryptoStore::new();
-    runtime_store.put_key_package(agent_key_package.clone())?;
-    assert_eq!(
-        runtime_store
-            .key_package(&agent_did, &agent_device)
-            .map(|record| record.keypackage_ref.as_str()),
-        Some(agent_key_package.keypackage_ref.as_str())
-    );
-
-    let add = owner_group.add_member(&agent_key_package)?;
-    assert_eq!(add.welcome.recipient_principal_id, agent_did);
-    assert_eq!(add.welcome.recipient_device_id, agent_device);
-    runtime_store.put_welcome(add.welcome.clone())?;
-    runtime_store.put_commit(add.commit.clone())?;
-
-    let pending_welcomes = runtime_store.welcomes_for_device(&agent_did, &agent_device);
-    assert_eq!(pending_welcomes.len(), 1);
-    let late_join_steps = late_device_join_steps(&add.welcome);
-    assert_eq!(late_join_steps.len(), 1);
-    assert_eq!(
-        late_join_steps[0].action,
-        MlsDeviceWorkflowAction::ConsumeWelcome
-    );
-    assert_eq!(
-        late_join_steps[0].group_id.as_deref(),
-        Some(add.welcome.group_id.as_str())
-    );
-    assert!(matches!(
-        runtime_store
-            .plan_mls_recovery(
-                &add.welcome.group_id,
-                None,
-                add.welcome.epoch,
-                &agent_did,
-                &agent_device,
-            )
-            .action,
-        MlsRecoveryAction::RequestEpochRecovery { .. }
-    ));
-    runtime_store.mark_welcome_accepted(&add.welcome.welcome_hash)?;
-    assert!(matches!(
-        runtime_store
-            .plan_mls_recovery(
-                &add.welcome.group_id,
-                None,
-                add.welcome.epoch,
-                &agent_did,
-                &agent_device,
-            )
-            .action,
-        MlsRecoveryAction::ConsumeWelcome
-    ));
-
-    let restarted_identity = ArkretMlsIdentity::restore_from_private_state(
-        agent_did.clone(),
-        agent_device.clone(),
-        &agent_private_state,
+fn native_agent_welcome_is_not_consumed_by_human_device_recovery() -> Result<()> {
+    let agent_id = arkret::DidCoreId::new("ak:did_core:web:summary-agent.example")?;
+    let endpoint = arkret::MlsEndpointIdentity::native_agent_runtime(
+        agent_id,
+        arkret::DidUrl::new("did:web:summary-agent.example#runtime-1")
+            .map_err(anyhow::Error::msg)?,
+        arkret::EventId::new("ak:event:AZ405CdsF4uWwxBhArLvqgzVvWHWYcB3QJ6845E-2ET3")?,
     )?;
-    let agent_group = ArkretMlsGroup::join_from_welcome(restarted_identity, &add.welcome)?;
-    runtime_store.mark_welcome_consumed(&add.welcome.welcome_hash)?;
-    assert_eq!(agent_group.group_id(), add.welcome.group_id);
-    assert_eq!(agent_group.epoch(), add.welcome.epoch);
+    let welcome = arkret::MlsWelcomeEnvelope {
+        group_id: "cotest-native-agent".to_owned(),
+        epoch: 1,
+        recipient: endpoint,
+        welcome: "AA".to_owned(),
+        welcome_hash: Hash::new(format!("sha256:{}", "a".repeat(64)))?,
+        ratchet_tree: None,
+    };
     assert!(
-        agent_group
-            .member_principal_ids()
-            .iter()
-            .any(|principal| principal == &agent_did)
-    );
-    let persisted = agent_group.persist_state(&mut runtime_store)?;
-    assert_eq!(persisted.group_id, add.welcome.group_id);
-    assert_eq!(persisted.epoch, add.welcome.epoch);
-
-    let mut restarted_store = MemoryCryptoStore::new();
-    restarted_store.put_mls_group_state(persisted.clone())?;
-    let restored_state = restarted_store
-        .mls_group_state(&add.welcome.group_id)
-        .expect("agent MLS group state must survive runtime restart")
-        .clone();
-    let mut restarted_agent_group = ArkretMlsGroup::restore_from_state_record(&restored_state)?;
-
-    let agent_payload = restarted_agent_group
-        .encrypt_payload("ak.message.create", b"agent encrypted hello after restart")?;
-    assert_eq!(
-        owner_group.decrypt_payload(&agent_payload)?,
-        b"agent encrypted hello after restart"
-    );
-
-    let owner_next_commit = owner_group.self_update_commit()?;
-    restarted_store.put_commit(owner_next_commit.clone())?;
-    match restarted_store
-        .plan_mls_recovery(
-            &owner_next_commit.group_id,
-            Some(restarted_agent_group.epoch()),
-            owner_next_commit.epoch,
-            &agent_did,
-            &agent_device,
-        )
-        .action
-    {
-        MlsRecoveryAction::ApplyCommits {
-            from_epoch,
-            to_epoch,
-        } => {
-            assert_eq!(from_epoch, add.welcome.epoch + 1);
-            assert_eq!(to_epoch, owner_next_commit.epoch);
-        }
-        other => bail!("expected ApplyCommits recovery after owner epoch advance, got {other:?}"),
-    }
-
-    assert_eq!(
-        restarted_agent_group.apply_commit(&owner_next_commit)?,
-        owner_group.epoch()
-    );
-    restarted_agent_group.persist_state(&mut restarted_store)?;
-
-    let owner_payload = owner_group
-        .encrypt_payload("ak.message.create", b"owner next epoch after agent restart")?;
-    assert_eq!(
-        restarted_agent_group.decrypt_payload(&owner_payload)?,
-        b"owner next epoch after agent restart"
-    );
-
-    Ok(())
-}
-
-/// Local runtime-neutral primitives: authorized key, signed publish/consume/
-/// revoke requests, Welcome persistence, restart recovery, and next epoch.
-#[test]
-fn agent_member_lifecycle_primitives_preserve_welcome_and_restart_state() -> Result<()> {
-    let owner_did = did("agent-lifecycle-owner")?;
-    let owner_device = device("000000000301")?;
-    let agent_did = did("agent-lifecycle-runtime")?;
-    let agent_device = device("000000000302")?;
-    let verification_method = format!("{}#runtime-1", agent_did.as_str());
-
-    let owner = ArkretMlsIdentity::new_basic(owner_did, owner_device)?;
-    let mut owner_group = owner.create_group(b"cotest-g2-native-agent-lifecycle")?;
-    let agent = ArkretMlsIdentity::from_ed25519_signing_seed(
-        agent_did.clone(),
-        agent_device.clone(),
-        [17_u8; 32],
-    )?;
-    let public_key: [u8; 32] = agent
-        .signature_public_key()
-        .try_into()
-        .context("Agent MLS Ed25519 public key must be 32 bytes")?;
-
-    let record = agent.key_package_record()?;
-    let identity_state = agent.export_private_state()?;
-    let mut runtime_store = MemoryCryptoStore::new();
-    runtime_store.put_key_package(record.clone())?;
-    let upload = agent
-        .signed_key_packages_upload_request(std::slice::from_ref(&record), &verification_method)?;
-    verify_keypackage_signing_input(
-        &public_key,
-        &verification_method,
-        &keypackages_upload_signing_input(&upload.unsigned())?,
-        &upload.device_signature,
-    )?;
-
-    let add = owner_group.add_member(&record)?;
-    runtime_store.put_welcome(add.welcome.clone())?;
-    runtime_store.put_commit(add.commit)?;
-
-    let restarted_identity = ArkretMlsIdentity::restore_from_private_state(
-        agent_did.clone(),
-        agent_device.clone(),
-        &identity_state,
-    )?;
-    let agent_group = ArkretMlsGroup::join_from_welcome(restarted_identity, &add.welcome)?;
-    let persisted = agent_group.persist_state(&mut runtime_store)?;
-    let claim_request_id =
-        Base64UrlString::new("Y2xhaW0tYWdlbnQtbGlmZWN5Y2xlLTAwMQ").map_err(anyhow::Error::msg)?;
-    let welcome_ref = NonEmptyString::new(add.welcome.welcome_hash.as_str().to_owned())
-        .map_err(anyhow::Error::msg)?;
-    let realm_id = RealmId::new("ak:realm:AYBkAlmxKX1w02cC-oYLQFXP2f32OJ7ZO4Gn-LGKXyhm")?;
-    let mls_group_id =
-        NonEmptyString::new(add.welcome.group_id.clone()).map_err(anyhow::Error::msg)?;
-    let durable_at = chrono::Utc::now();
-    let receipt_domain = "ak.mls.recipient-durable-receipt.v1";
-    let agent_core_id = arkret_wire::project_full_id_to_core_id(&agent_did)?;
-    let key_package_ref = NonEmptyString::new(record.keypackage_ref.as_str().to_owned())
-        .map_err(anyhow::Error::msg)?;
-    let recipient_service_id = arkret_wire::project_full_id_to_core_id(&Did::new(
-        "did:webvh:z6mkrecipient:recipient.example",
-    )?)?;
-    let device_verification_method =
-        arkret_wire::DidUrl::new(verification_method.clone()).map_err(anyhow::Error::msg)?;
-    let welcome_digest = Hash::new(add.welcome.welcome_hash.as_str().to_owned())?;
-    let receipt_unsigned = serde_json::json!({
-        "domain": receipt_domain,
-        "claim_request_id": claim_request_id,
-        "key_package_ref": key_package_ref,
-        "recipient_principal_id": agent_core_id,
-        "recipient_device_id": agent_device,
-        "recipient_service_id": recipient_service_id,
-        "realm_id": realm_id,
-        "mls_group_id": mls_group_id,
-        "mls_epoch": add.welcome.epoch,
-        "welcome_ref": welcome_ref,
-        "welcome_digest": welcome_digest,
-        "durable_at": durable_at,
-        "device_verification_method": device_verification_method,
-    });
-    let mut receipt_signing_input = format!("{receipt_domain}\n").into_bytes();
-    receipt_signing_input.extend(arkret_canonical::canonical_json_bytes(&receipt_unsigned)?);
-    let receipt_signature =
-        sign_keypackage_signing_input(&[17_u8; 32], &verification_method, &receipt_signing_input)?;
-    verify_keypackage_signing_input(
-        &public_key,
-        &verification_method,
-        &receipt_signing_input,
-        &receipt_signature,
-    )?;
-    let recipient_durable_receipt = RecipientMlsDurableReceipt {
-        domain: NonEmptyString::new(receipt_domain).map_err(anyhow::Error::msg)?,
-        claim_request_id: claim_request_id.clone(),
-        key_package_ref,
-        recipient_principal_id: agent_core_id.clone(),
-        recipient: RecipientMlsDurableSigner::Device {
-            recipient_device_id: agent_device.clone(),
-            device_verification_method,
-        },
-        recipient_service_id,
-        realm_id: realm_id.clone(),
-        mls_group_id: mls_group_id.clone(),
-        mls_epoch: add.welcome.epoch,
-        welcome_ref: welcome_ref.clone(),
-        welcome_digest,
-        durable_at,
-        signature: receipt_signature,
-    };
-    let consume_unsigned = KeyPackagesConsumeUnsignedRequest {
-        owner_account_id: agent_core_id.clone(),
-        key_package_refs: vec![record.keypackage_ref.as_str().to_owned()],
-        consumer: KeyPackageConsumer::Device {
-            consumer_device_id: agent_device.clone(),
-        },
-        claim_ids: vec![
-            NonEmptyString::new("claim-agent-lifecycle-001").map_err(anyhow::Error::msg)?,
-        ],
-        welcome_ref,
-        recipient_durable_receipt,
-        realm_id: Some(realm_id),
-        strand_id: None,
-        mls_group_id: Some(mls_group_id),
-        epoch: Some(add.welcome.epoch),
-    };
-    let consume = agent
-        .signed_key_packages_consume_request(consume_unsigned.clone(), &verification_method)?;
-    verify_keypackage_signing_input(
-        &public_key,
-        &verification_method,
-        &keypackages_consume_signing_input(&consume.unsigned())?,
-        &consume.signature,
-    )?;
-    let retry =
-        agent.signed_key_packages_consume_request(consume_unsigned, &verification_method)?;
-    assert_eq!(
-        serde_json::to_value(&consume)?,
-        serde_json::to_value(&retry)?,
-        "consume retry must preserve the byte-identical idempotent request"
-    );
-
-    let revoke = agent.signed_key_packages_revoke_request(
-        KeyPackagesRevokeUnsignedRequest {
-            owner_account_id: agent_did.clone(),
-            key_package_refs: vec![record.keypackage_ref.as_str().to_owned()],
-            device_id: agent_device.clone(),
-            reason: Some(NonEmptyString::new("authorization_superseded").unwrap()),
-        },
-        &verification_method,
-    )?;
-    verify_keypackage_signing_input(
-        &public_key,
-        &verification_method,
-        &keypackages_revoke_signing_input(&revoke.unsigned())?,
-        &revoke.signature,
-    )?;
-
-    let mut restarted_store = MemoryCryptoStore::new();
-    restarted_store.put_mls_group_state(persisted.clone())?;
-    let restored_state = restarted_store
-        .mls_group_state(&persisted.group_id)
-        .context("persisted Agent group state must survive restart")?
-        .clone();
-    let mut restarted_agent_group = ArkretMlsGroup::restore_from_state_record(&restored_state)?;
-    let agent_payload = restarted_agent_group
-        .encrypt_payload("ak.message.create", b"native agent after restart")?;
-    assert_eq!(
-        owner_group.decrypt_payload(&agent_payload)?,
-        b"native agent after restart"
-    );
-
-    let next_commit = owner_group.self_update_commit()?;
-    restarted_agent_group.apply_commit(&next_commit)?;
-    restarted_agent_group.persist_state(&mut restarted_store)?;
-    let owner_payload = owner_group.encrypt_payload(
-        "ak.message.create",
-        b"owner to native agent in the next epoch",
-    )?;
-    assert_eq!(
-        restarted_agent_group.decrypt_payload(&owner_payload)?,
-        b"owner to native agent in the next epoch"
+        late_device_join_steps(&welcome).is_err(),
+        "human-device recovery must fail closed for a Native Agent endpoint"
     );
     Ok(())
 }
@@ -535,14 +228,4 @@ fn require_named_entry(fixture: &Value, section: &str, name: &str) -> Result<()>
     } else {
         bail!("MLS fixture {section}[] missing {name}")
     }
-}
-
-fn did(name: &str) -> Result<Did> {
-    Ok(Did::new(format!("did:webvh:z6mkfixture:{name}.example"))?)
-}
-
-fn device(suffix: &str) -> Result<DeviceId> {
-    Ok(DeviceId::new(format!(
-        "ak:device:01904100-0000-7000-8000-{suffix}"
-    ))?)
 }

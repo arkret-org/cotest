@@ -4,7 +4,8 @@
 //! strand. The scenario covers:
 //!
 //!   1. **starid mint** — Alice's DID is resolvable against starid (live HTTP probe when STARID_BIN
-//!      is set; otherwise an SDK-level Did::new gate so the canonical-form rejection still runs).
+//!      is set; otherwise an SDK-level DidFullId::new gate so the canonical-form rejection still
+//!      runs).
 //!   2. **coauth issues a handle_claim** — exercised through the `MemberDeliveryBindingCandidate`
 //!      builder (matching T3.5's pattern; coauth's wire surface needs a real DB so we drive the SDK
 //!      candidate that the live coauth would mint).
@@ -45,7 +46,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_identifiers::{Did, EventId, Hash};
+use arkret_identifiers::{DidCoreId, DidFullId, EventId, Hash, RealmId};
 use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
     CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
@@ -55,7 +56,7 @@ use arkret_models_identity::handle_claim::DeliveryBindingHint;
 use arkret_push_policy::blind_payload_sanitizer::{
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
-use arkret_wire::{Audience, Proof};
+use arkret_wire::{Audience, PrincipalAuthorityInstance, Proof};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -128,13 +129,13 @@ pub async fn full_stack_e2e_run() -> Result<()> {
 // ── Step 1: starid mint Alice's DID ────────────────────────────────────────
 
 /// Modelled on the starid resolver: any DID we hand off downstream MUST
-/// parse as a `Did`, which catches the canonical-form gate (rejecting empty
+/// parse as a `DidFullId`, which catches the canonical-form gate (rejecting empty
 /// strings, non-`did:` prefixes, and DIDs without a method). When `STARID_BIN`
 /// is wired, the live-stack probe below additionally verifies the resolver's
 /// `/health` is up.
 fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
-    let _alice =
-        Did::new(ALICE_DID.to_owned()).context("starid MUST mint a parseable did:web for Alice")?;
+    let _alice = DidFullId::new(ALICE_DID.to_owned())
+        .context("starid MUST mint a parseable did:web for Alice")?;
     // Build the rest of the candidate as if `ak.find.directory.read.resolve_handle`
     // returned it (T3.5 pattern).
     sample_candidate()
@@ -232,7 +233,7 @@ fn step_3_teabay_resolve_handle(candidate: &MemberDeliveryBindingCandidate) -> R
 /// before persisting the new binding. We exercise the happy path here.
 fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
     let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned())
-        .with_expected_subject(Did::new(ALICE_DID.to_owned())?);
+        .with_expected_subject(DidCoreId::new(ALICE_DID)?);
     candidate.validate(&ctx).map_err(|e| {
         anyhow!(
             "T8.1 step 4: soland's member_add MUST accept a freshly minted \
@@ -384,9 +385,13 @@ fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
 /// step models the reducer allow-list instead of an SDK outer/inner mismatch.
 fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<()> {
     let mut handover = original.clone();
-    handover.member_delivery_binding.recipient_service_id =
-        Did::new(REBOUND_PRINCIPAL_DID.to_owned())?;
-    handover.validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))?;
+    handover.member_delivery_binding.recipient_service_id = DidCoreId::new(REBOUND_PRINCIPAL_DID)?;
+    if handover
+        .validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))
+        .is_ok()
+    {
+        bail!("T8.1 step 8: recipient substitution escaped exact authority-instance binding");
+    }
 
     let allowed = [PRINCIPAL_DID];
     if allowed.contains(
@@ -632,8 +637,14 @@ async fn live_stack_probe() -> Result<()> {
 /// Mirrors the T3.5 happy-path candidate. Centralised here so the
 /// negative-case mutations stay one diff away from the happy shape.
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
-    let subject = Did::new(ALICE_DID.to_owned())?;
-    let principal = Did::new(PRINCIPAL_DID.to_owned())?;
+    let subject = DidCoreId::new(ALICE_DID)?;
+    let principal = DidCoreId::new(PRINCIPAL_DID)?;
+    let principal_authority_instance = PrincipalAuthorityInstance::new(
+        subject.clone(),
+        principal.clone(),
+        RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K")?,
+        Hash::new(format!("sha256:{}", "5".repeat(64)))?,
+    )?;
     let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
@@ -641,6 +652,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
+        principal_authority_instance,
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {

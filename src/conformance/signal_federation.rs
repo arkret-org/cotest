@@ -1,8 +1,8 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_wire::{
-    DeviceId, Did, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES, MAX_SIGNAL_RELAY_ITEMS, ProfileId,
-    RealmId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
-    SignalProof, SignalRelayOutcome, SignalRelayRequest,
+    DeviceId, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES, MAX_SIGNAL_RELAY_ITEMS,
+    ProfileId, RealmId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
+    SignalKeyRef, SignalProof, SignalRelayOutcome, SignalRelayRequest,
 };
 use chrono::{Duration, TimeZone, Utc};
 use serde_json::Value;
@@ -24,7 +24,7 @@ fn envelope() -> Result<SignalEnvelope> {
         scope_ref: ScopeRef::Realm {
             realm_id: realm_id.clone(),
         },
-        sender_actor_id: Did::new("did:webvh:z6mkfixture:alice.example")?,
+        sender_actor_id: DidCoreId::new("did:webvh:z6mkfixture:alice.example")?,
         sender_device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb")?,
         seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
         signal_class: SignalClass::Session,

@@ -18,7 +18,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{
-    BackupId, BackupSeriesId, DeviceId, Did, EventId, Hash, RecoverySessionId,
+    BackupId, BackupSeriesId, DeviceId, DidCoreId, EventId, Hash, RecoverySessionId,
 };
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupContentItem,
@@ -307,8 +307,8 @@ fn ts(value: &str) -> Result<DateTime<Utc>> {
         .with_context(|| format!("invalid timestamp {value}"))
 }
 
-fn did(value: &str) -> Result<Did> {
-    Ok(Did::new(value.to_owned())?)
+fn did(value: &str) -> Result<DidCoreId> {
+    Ok(DidCoreId::new(value.to_owned())?)
 }
 
 fn device_id(value: &str) -> Result<DeviceId> {

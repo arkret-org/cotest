@@ -8,7 +8,7 @@ use arkret_models_collaboration::objects::interop::{
 };
 use arkret_signatures::Ed25519PayloadSigner;
 use arkret_signatures::signer::verify_ed25519_payload_signature;
-use arkret_wire::{Did, DidUrl, Hash, PayloadProof, PayloadSigner as _};
+use arkret_wire::{DidFullId, DidUrl, Hash, PayloadProof, PayloadSigner as _};
 use chrono::{Duration, Utc};
 
 pub const VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE: &str =
@@ -97,8 +97,10 @@ fn validate_directory(
 }
 
 fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)> {
-    let service_id = Did::new("did:webvh:z6mkfixture:provider.example")?;
-    let verification_method = DidUrl::new(format!("{}#notary-key", service_id.as_str()))
+    let service_full_id = DidFullId::new("did:webvh:z6mkfixture:provider.example")?;
+    let service_id =
+        arkret_wire::DidCoreId::from(arkret_wire::project_full_id_to_core_id(&service_full_id)?);
+    let verification_method = DidUrl::new(format!("{}#notary-key", service_full_id.as_str()))
         .map_err(|error| anyhow!(error))?;
     let placeholder = PayloadProof {
         kind: "detached_jws".to_owned(),
@@ -146,7 +148,7 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
         extra: BTreeMap::new(),
     };
     let signer =
-        Ed25519PayloadSigner::from_did_key_seed([0x51; 32], service_id, verification_method);
+        Ed25519PayloadSigner::from_did_key_seed([0x51; 32], service_full_id, verification_method);
     let signature = signer.sign_payload(&directory.unsigned_projection_bytes()?)?;
     directory.proof = ProviderDirectoryProof(PayloadProof {
         kind: "detached_jws".to_owned(),

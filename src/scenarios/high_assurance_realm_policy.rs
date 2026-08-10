@@ -12,7 +12,7 @@
 //! integration test lives at `soland/tests/high_assurance_policy.rs`.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{Did, RealmId, TypedTrustDomainId};
+use arkret_identifiers::{DidCoreId, DidFullId, RealmId, TypedTrustDomainId};
 use arkret_models_collaboration::governance::circle::EncryptionFloor;
 use arkret_models_collaboration::objects::realm::{NotaryProfile, Realm};
 use arkret_wire::{
@@ -26,9 +26,8 @@ fn realm_id() -> Result<RealmId> {
     RealmId::new(REALM_ID.to_owned()).map_err(|err| anyhow!("invalid realm id: {err}"))
 }
 
-fn principal_id() -> Result<Did> {
-    Did::new("did:web:alice.example".to_owned())
-        .map_err(|err| anyhow!("invalid principal id: {err}"))
+fn principal_id() -> Result<DidCoreId> {
+    DidCoreId::new("did:web:alice.example").map_err(|err| anyhow!("invalid principal id: {err}"))
 }
 
 fn build_realm(
@@ -79,7 +78,7 @@ fn build_realm(
         notary_profile: NotaryProfile::SingleDid,
         availability_policy: None,
         audit_policy: None,
-        notary: NotaryValue::single_did(principal.clone()),
+        notary: NotaryValue::single_did(DidFullId::new(principal.as_str())?),
         // Create-locked genesis basis for the Realm authority-root cell
         // (realm-and-space.md section 2.5).
         capability_action_registry_digest: arkret::current_capability_action_registry_digest()

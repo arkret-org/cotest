@@ -19,7 +19,7 @@
 //! field tamper MUST fail verification.
 
 use arkret_canonical::base64url::base64url_decode;
-use arkret_identifiers::{Did, RealmId};
+use arkret_identifiers::{DidCoreId, RealmId};
 use arkret_models_collaboration::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
@@ -50,7 +50,7 @@ fn active_statement() -> RealmOrganizationPayload {
     RealmOrganizationPayload {
         statement_id: "org-stmt-cot-org-03".to_owned(),
         realm_id: RealmId::new("ak:realm:AaucqKYsYtNwus16IgXDBl88-LWNZZVtRpZ-CqgnPQoi").unwrap(),
-        organization_id: Did::new(ORG_DID.to_owned()).unwrap(),
+        organization_id: DidCoreId::new(ORG_DID).unwrap(),
         relationship: RealmOrganizationRelationship::Owner,
         status: RealmOrganizationStatus::Active,
         control_scopes: vec![
@@ -65,7 +65,7 @@ fn active_statement() -> RealmOrganizationPayload {
         realm_frontier_digest: None,
         organization_policy_ref: None,
         authorization: RealmOrganizationAuthorization {
-            issuer: Did::new(ORG_DID.to_owned()).unwrap(),
+            issuer: DidCoreId::new(ORG_DID).unwrap(),
             issuer_role: RealmOrganizationIssuerRole::OrganizationDid,
             verification_method: DidUrl::new(ORG_VERIFICATION_METHOD).unwrap(),
             delegation_ref: None,

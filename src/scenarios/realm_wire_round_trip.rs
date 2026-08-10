@@ -18,7 +18,7 @@
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_identifiers::{ActorId, Did, Hlc, RealmId, project_full_id_to_core_id};
+use arkret_identifiers::{DidCoreId, DidFullId, Hlc, RealmId, project_full_id_to_core_id};
 use arkret_wire::Event;
 use arkret_wire::events::EventProductClass;
 use serde_json::{Value, json};
@@ -28,9 +28,9 @@ use serde_json::{Value, json};
 /// identifier; `ak.space.*` event kinds now describe containers inside
 /// that Realm.
 fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> {
-    let actor_full_id = Did::new("did:web:alice.example".to_owned())
+    let actor_full_id = DidFullId::new("did:web:alice.example".to_owned())
         .map_err(|err| anyhow!("invalid actor did: {err}"))?;
-    let actor_id = ActorId::from(project_full_id_to_core_id(&actor_full_id)?);
+    let actor_id = DidCoreId::from(project_full_id_to_core_id(&actor_full_id)?);
     let hlc = Hlc::new("01970e589d21-0001-a13f9c2e".to_owned())
         .map_err(|err| anyhow!("invalid hlc: {err}"))?;
     arkret_wire::test_support::raw_event(

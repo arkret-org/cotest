@@ -21,7 +21,7 @@
 //! strings may appear only inside signed `HandleClaim` objects.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{Did, EventId, Hash, RealmId};
+use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
 use arkret_models_collaboration::sync_frames::account_sync::{MemberRosterEntry, MembershipState};
 use arkret_models_identity::{
     EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,
@@ -56,12 +56,12 @@ pub const ALL_MEMBER_ROSTER_VECTOR_IDS: &[&str] = &[
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-fn alice() -> Result<Did> {
-    Did::new("did:web:alice.acme.example".to_owned()).map_err(|e| anyhow!("alice did: {e}"))
+fn alice() -> Result<DidCoreId> {
+    DidCoreId::new("did:web:alice.acme.example").map_err(|e| anyhow!("alice did: {e}"))
 }
 
-fn alice_subject() -> Result<Did> {
-    Did::new("did:web:alice.principal.example".to_owned())
+fn alice_subject() -> Result<DidCoreId> {
+    DidCoreId::new("did:web:alice.principal.example")
         .map_err(|e| anyhow!("alice principal did: {e}"))
 }
 
@@ -90,11 +90,11 @@ fn pinned_claim_digest(byte: &str) -> Result<Hash> {
 }
 
 /// A verified handle claim whose `subject` is `alice_subject()`.
-fn verified_claim_for_subject(handle: &str, subject: &Did) -> Result<HandleClaim> {
+fn verified_claim_for_subject(handle: &str, subject: &DidCoreId) -> Result<HandleClaim> {
     Ok(HandleClaim {
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
         subject: Some(subject.clone()),
-        issuer: Some("did:web:coauth.acme.example".to_owned()),
+        issuer: Some(DidCoreId::new("did:web:coauth.acme.example")?),
         binding_state: Some(HandleBindingState::Verified),
         created_at: Some(
             Utc.with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
@@ -402,7 +402,7 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
         .map_err(|e| anyhow!("VECT-COT-4b: aligned subject MUST validate: {e}"))?;
 
     // Mismatched claim subject MUST fail closed.
-    let other_subject = Did::new("did:web:mallory.principal.example".to_owned())?;
+    let other_subject = DidCoreId::new("did:web:mallory.principal.example")?;
     let mismatched = MemberRosterEntry {
         handle_claims: Some(vec![verified_claim_for_subject(
             "mallory:acme.example",

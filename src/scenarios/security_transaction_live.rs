@@ -1,7 +1,7 @@
 use anyhow::Result;
 use arkret_wire::{
     BackupId, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
-    BackupSeriesId, CanonicalPublicMaterial, Did, EventInitialSubmission,
+    BackupSeriesId, CanonicalPublicMaterial, DidCoreId, DidFullId, EventInitialSubmission,
     EventsSubmitBatchRequestBody, Hash, Hlc, RiskTier, ScopeRef, SealId,
     SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
 };
@@ -72,9 +72,10 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
     Ok(())
 }
 
-fn rotation_create_request(service_id: &str) -> Result<SecurityTransactionCreateRequest> {
-    let coordinator = Did::new(service_id.to_owned())?;
-    let principal = Did::new(ACTOR.to_owned())?;
+fn rotation_create_request(service_id: &DidCoreId) -> Result<SecurityTransactionCreateRequest> {
+    let coordinator = service_id.clone();
+    let principal = DidFullId::new(ACTOR.to_owned())?;
+    let principal_id = DidCoreId::from(arkret_wire::project_full_id_to_core_id(&principal)?);
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
     let revoke_submission = event_submission(&principal, "ak.device.revoke")?;
     let revoke_event_id = revoke_submission.event.event_id.clone();
@@ -89,7 +90,7 @@ fn rotation_create_request(service_id: &str) -> Result<SecurityTransactionCreate
     Ok(SecurityTransactionCreateRequest::SecurityRotation(
         SecurityRotationTransactionCreateRequest::from_prepared_rotations(
             transaction_id,
-            principal.clone(),
+            principal_id,
             Utc::now() + chrono::Duration::hours(1),
             revoke_event_id,
             revoke_unit,
@@ -100,8 +101,8 @@ fn rotation_create_request(service_id: &str) -> Result<SecurityTransactionCreate
 }
 
 fn rotation_plan(
-    coordinator: &Did,
-    principal: &Did,
+    coordinator: &DidCoreId,
+    principal: &DidFullId,
     kind: BackupRotationKind,
     suffix: &str,
 ) -> Result<BackupRotationPlan> {
@@ -150,7 +151,7 @@ fn rotation_plan(
 }
 
 fn event_unit(
-    coordinator: &Did,
+    coordinator: &DidCoreId,
     submission: EventInitialSubmission,
 ) -> Result<arkret_wire::PreparedEventUnit> {
     let request = EventsSubmitBatchRequestBody {
@@ -162,7 +163,7 @@ fn event_unit(
     )?)
 }
 
-fn event_submission(principal: &Did, kind: &str) -> Result<EventInitialSubmission> {
+fn event_submission(principal: &DidFullId, kind: &str) -> Result<EventInitialSubmission> {
     // The live fixture uses an already accepted event-derived PCR coordinate;
     // it must never reconstruct one from the principal DID.
     let realm_id = arkret_wire::RealmId::new(PCR_REALM.to_owned())?;
@@ -173,7 +174,7 @@ fn event_submission(principal: &Did, kind: &str) -> Result<EventInitialSubmissio
     let mut event = arkret_wire::test_support::raw_event_at(
         kind,
         scope_ref.clone(),
-        arkret_identifiers::ActorId::from(arkret_identifiers::project_full_id_to_core_id(
+        arkret_identifiers::DidCoreId::from(arkret_identifiers::project_full_id_to_core_id(
             principal,
         )?),
         1,

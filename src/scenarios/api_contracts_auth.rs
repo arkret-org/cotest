@@ -6,7 +6,8 @@ use serde_json::json;
 use crate::fixtures::TestScaffold;
 use crate::harness::{ArkretServer, expect_api_error, expect_json, expect_status};
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service, authorize_device_public_key, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, authorize_device_public_key,
+    spawn_with_harness_account_authority,
 };
 
 pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
@@ -139,7 +140,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 
 pub async fn contact_edges_are_rejected() -> Result<()> {
     let server = spawn_with_harness_account_authority("contact-edges", &[]).await?;
-    let alice_actor = actor_did_for_service(server.service_id(), "alice-contact")?;
+    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "alice-contact")?;
     let alice = server
         .demo_client(
             &alice_actor,
@@ -154,7 +155,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
         &SigningKey::from_bytes(&[0xa1; 32]),
     )
     .await?;
-    let bob_actor = actor_did_for_service(server.service_id(), "bob-contact")?;
+    let bob_actor = actor_did_for_service_full_id(server.service_full_id(), "bob-contact")?;
     let bob = server
         .demo_client(&bob_actor, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;
@@ -187,11 +188,11 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let missing_target = "did:web:missing-contact.example";
     let missing_receipt = alice.request_contact(missing_target).await?;
     assert_eq!(
-        missing_receipt.core.holder.subject_id().as_str(),
+        missing_receipt.core.holder.contact_actor_id().as_str(),
         alice.actor
     );
     assert_eq!(
-        missing_receipt.core.peer.subject_id().as_str(),
+        missing_receipt.core.peer.contact_actor_id().as_str(),
         missing_target
     );
 
@@ -199,8 +200,8 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     // device-signed successor Seal. Exercise the independent valid-target
     // branch from Bob's fresh PCR rather than bypassing that finality fence.
     let receipt = bob.request_contact(&alice.actor).await?;
-    assert_eq!(receipt.core.holder.subject_id().as_str(), bob.actor);
-    assert_eq!(receipt.core.peer.subject_id().as_str(), alice.actor);
+    assert_eq!(receipt.core.holder.contact_actor_id().as_str(), bob.actor);
+    assert_eq!(receipt.core.peer.contact_actor_id().as_str(), alice.actor);
 
     Ok(())
 }

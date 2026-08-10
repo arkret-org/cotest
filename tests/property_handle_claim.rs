@@ -13,12 +13,12 @@
 //!     carry `audience` + `handle` + `expires_at` or `validate()` rejects.
 //!  4. **expiry boundary.** `binding_state=verified` MUST require `expires_at` regardless of
 //!     whether `verified_at` is set.
-//!  5. **issuer is opaque.** Random issuer strings (no schema effect) never change validation
-//!     outcome on their own.
+//!  5. **issuer is typed.** Valid random issuer core ids do not change validation outcome on their
+//!     own; arbitrary strings are no longer accepted.
 
 use std::collections::BTreeSet;
 
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use arkret_models_identity::{
     DeliveryBindingHint, DeliveryMode, Handle, HandleBindingState, HandleClaim,
     HandleHintBindingSource, RecipientServiceKind,
@@ -96,7 +96,7 @@ proptest! {
         let claim = HandleClaim {
             binding_state: Some(HandleBindingState::Verified),
             handle: Some(Handle::parse(&handle).unwrap()),
-            issuer: Some("did:web:issuer.example".to_owned()),
+            issuer: Some(DidCoreId::new("did:web:issuer.example").unwrap()),
             expires_at: with_expiry.then(|| Utc::now() + Duration::minutes(5)),
             verified_at: with_verified_at.then(Utc::now),
             ..Default::default()
@@ -109,16 +109,16 @@ proptest! {
         }
     }
 
-    /// Issuer is opaque to `validate()` — random strings do not change
-    /// the outcome of an otherwise-valid claim.
+    /// Issuer is a role-typed core id; valid random issuers do not change the
+    /// outcome of an otherwise-valid claim.
     #[test]
     fn issuer_is_validation_opaque(
         handle in arb_handle(),
-        issuer in "[a-z0-9.:_\\-]{4,32}",
+        issuer in "[a-z][a-z0-9-]{3,20}",
     ) {
         let claim = HandleClaim {
             handle: Some(Handle::parse(&handle).unwrap()),
-            issuer: Some(issuer),
+            issuer: Some(DidCoreId::new(format!("did:web:{issuer}.example")).unwrap()),
             ..Default::default()
         };
         // No binding_state, no recipient — should validate trivially.
@@ -130,7 +130,7 @@ fn member_delivery_binding() -> DeliveryBindingHint {
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     DeliveryBindingHint {
-        recipient_service_id: Did::new("did:web:rs.example".to_owned()).unwrap(),
+        recipient_service_id: DidCoreId::new("did:web:rs.example").unwrap(),
         recipient_service_kind: RecipientServiceKind::PrincipalServer,
         binding_source: HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: modes,

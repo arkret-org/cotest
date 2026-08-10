@@ -8,8 +8,8 @@ use serde_json::json;
 
 use crate::harness::{expect_api_error, expect_json, invite_create_payload};
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service, authorize_device_public_key, seal_current_principal_control_frontier,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, authorize_device_public_key,
+    seal_current_principal_control_frontier, spawn_with_harness_account_authority,
 };
 
 /// Extract the `realm_id` string from a `create_realm` response, turning a
@@ -24,7 +24,7 @@ fn realm_id_from(created: &serde_json::Value, label: &str) -> Result<String> {
 
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("directory-privacy", &[]).await?;
-    let alice_did = actor_did_for_service(server.service_id(), "privacy-alice")?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "privacy-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -40,7 +40,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     // Register account-first, then publish bob's primary localpart through the
     // authenticated localpart lifecycle. Soland derives the canonical handle
     // domain and signed handle claim from that binding.
-    let bob_did = actor_did_for_service(server.service_id(), "privacy-bob")?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "privacy-bob")?;
     let bob = server
         .register_client_with_localpart(
             &bob_did,
@@ -118,7 +118,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             "ak.invite.create",
             invite_create_payload(
                 bob.actor.as_str(),
-                server.service_id(),
+                server.service_id().as_str(),
                 canonical_sha256(&introduction_evidence)?,
                 invite_expires_at,
             )?,

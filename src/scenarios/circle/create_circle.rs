@@ -7,7 +7,7 @@
 //! type's wire shape against `spec/v1/artifacts/schemas/circle.schema.json`.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{CircleId, Did, RealmId};
+use arkret_identifiers::{CircleId, DidCoreId, RealmId};
 use arkret_models_collaboration::governance::circle::{
     Circle, CircleColorToken, CircleDirectoryVisibility, CircleDisplay, CircleGlyph,
     CircleJoinRule, CircleState, CircleSymbol,
@@ -33,7 +33,7 @@ fn realm_id() -> Result<RealmId> {
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
-fn actor() -> Result<Did> {
+fn actor() -> Result<DidCoreId> {
     "did:web:alice.example"
         .parse()
         .map_err(|e| anyhow!("actor did: {e}"))

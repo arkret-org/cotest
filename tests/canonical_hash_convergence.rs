@@ -289,18 +289,18 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
 
 fn pinned_r3_2_inputs() -> (
     arkret_identifiers::RealmId,
-    arkret_identifiers::Did,
+    arkret_identifiers::DidCoreId,
     Vec<arkret_models_identity::EffectiveIdentityEntry>,
     Vec<arkret_models_identity::RosterHandleClaimDigestEntry>,
 ) {
-    use arkret_identifiers::{Did, EventId, Hash, RealmId};
+    use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
     use arkret_models_identity::{
         EffectiveIdentityEntry, HandleBindingState, MemberIdentitySegment,
         RosterHandleClaimDigestEntry,
     };
 
     let realm = RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K").unwrap();
-    let actor = Did::new("did:web:alice.acme.example".to_owned()).unwrap();
+    let actor = DidCoreId::new("did:web:alice.acme.example".to_owned()).unwrap();
     let events = vec![
         EffectiveIdentityEntry {
             event_id: EventId::new("ak:event:AaaV5G8rACWz0A_AfDNtAvW_ConNcll4oFZ_LaD4uJgJ")

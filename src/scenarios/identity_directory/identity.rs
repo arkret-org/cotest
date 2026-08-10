@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json};
-use crate::scenarios::identity_test_support::prepare_actor_inception_for_service;
+use crate::scenarios::identity_test_support::prepare_actor_inception_for_service_full_id;
 
 pub async fn identity_surface_and_receipts_work() -> Result<()> {
     let server = ArkretServer::spawn("identity-surface").await?;
@@ -51,7 +51,8 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     assert!(log["entries"].as_array().is_some_and(Vec::is_empty));
     assert_eq!(log["has_more"], false);
 
-    let prepared = prepare_actor_inception_for_service(server.service_id(), "identity-alice")?;
+    let prepared =
+        prepare_actor_inception_for_service_full_id(server.service_full_id(), "identity-alice")?;
     let actor_id = prepared.did.clone();
     let submitted = expect_json(
         server

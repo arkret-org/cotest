@@ -18,7 +18,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{CallId, DeviceId, Did, Hash, RealmId};
+use arkret_identifiers::{CallId, DeviceId, DidCoreId, Hash, RealmId};
 use arkret_models_collaboration::call_signal::CallSignalPlaintext;
 use arkret_signatures::PublicKeyMaterial;
 use arkret_signatures::proof::verify_ed25519_signal_proof;
@@ -148,7 +148,7 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     let key = CallSignalSeqKey {
         realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
         call_id: CallId::new("ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz")?,
-        actor_id: Did::new("did:web:alice.example.com")?,
+        actor_id: DidCoreId::new("did:web:alice.example.com")?,
         device_id: DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?,
     };
 
@@ -272,7 +272,7 @@ pub fn run_outer_metadata_minimal_vector() -> Result<()> {
 struct CallSignalSeqKey {
     realm_id: RealmId,
     call_id: CallId,
-    actor_id: Did,
+    actor_id: DidCoreId,
     device_id: DeviceId,
 }
 
@@ -337,7 +337,7 @@ fn signed_call_signal_envelope(
     signing_key: &SigningKey,
 ) -> Result<SignalEnvelope> {
     let realm_id = RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
-    let actor_id = Did::new("did:web:alice.example.com")?;
+    let actor_id = DidCoreId::new("did:web:alice.example.com")?;
     let device_id = DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?;
     let mut envelope = SignalEnvelope {
         realm_id: realm_id.clone(),

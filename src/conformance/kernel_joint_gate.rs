@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use arkret_event_draft::ProjectedEventOperation as Operation;
 use arkret_event_draft::test_support::raw_projected_operation;
 use arkret_identifiers::{
-    ActorId, AuthorizationLeaseId, CellRef, DeviceId, Did, Hash, Hlc, OperationId, RealmId, SealId,
+    AuthorizationLeaseId, CellRef, DeviceId, DidCoreId, Hash, Hlc, OperationId, RealmId, SealId,
 };
 use arkret_state::lattice::ordered_log::{IssuedOp, OrderedLog};
 use arkret_state::lattice::{CasRegister, CellState, Lattice, OrSet, SealedOp};
@@ -285,7 +285,7 @@ fn kernel_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
         let Some(value) = write.get("value").cloned() else {
             return error("schema_violation", "data_value_missing");
         };
-        let (Ok(issuer), Ok(move_id)) = (ActorId::new(actor), Hash::new(digest)) else {
+        let (Ok(issuer), Ok(move_id)) = (DidCoreId::new(actor), Hash::new(digest)) else {
             return error("schema_violation", "offline_write_identifier_invalid");
         };
         ops.push(IssuedOp {
@@ -654,10 +654,15 @@ fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
         NotaryValue::Mixed {
             did,
             recovery_members,
-        } => std::iter::once(did)
-            .chain(recovery_members)
-            .map(|member| member.as_str().to_owned())
-            .collect(),
+        } => {
+            let mut members = BTreeSet::from([did.as_str().to_owned()]);
+            members.extend(
+                recovery_members
+                    .iter()
+                    .map(|member| member.as_str().to_owned()),
+            );
+            members
+        }
     }
 }
 
@@ -787,7 +792,7 @@ fn sample_lease(
             SealId::new(format!("ak:seal:{}", repeated_hash(0x62).as_str()))
                 .expect("fixed Seal id is valid"),
         ),
-        actor_id: Did::new("did:webvh:z6mkfixture:alice.example")
+        actor_id: DidCoreId::new("did:webvh:z6mkfixture:alice.example")
             .expect("fixed actor DID is valid"),
         device_id: DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
             .expect("fixed device id is valid"),

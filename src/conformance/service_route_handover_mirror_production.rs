@@ -15,7 +15,7 @@ use arkret_models_identity::{
     canonical_service_current_record_path,
 };
 use arkret_wire::{
-    Base64UrlString, DidUrl, FullId, Hash, ProtocolSignature, RealmId, RequestId, ServiceId,
+    Base64UrlString, DidCoreId, DidFullId, DidUrl, Hash, ProtocolSignature, RealmId, RequestId,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
@@ -38,13 +38,13 @@ fn digest(value: &impl serde::Serialize) -> Result<Hash> {
     Ok(Hash::new(arkret_canonical::canonical_sha256(value)?)?)
 }
 
-fn service_id(full_id: &FullId) -> Result<ServiceId> {
-    Ok(ServiceId::from(arkret_wire::project_full_id_to_core_id(
+fn service_id(full_id: &DidFullId) -> Result<DidCoreId> {
+    Ok(DidCoreId::from(arkret_wire::project_full_id_to_core_id(
         full_id,
     )?))
 }
 
-fn signature(full_id: &FullId, created_at: DateTime<Utc>) -> Result<ProtocolSignature> {
+fn signature(full_id: &DidFullId, created_at: DateTime<Utc>) -> Result<ProtocolSignature> {
     Ok(ProtocolSignature {
         verification_method: DidUrl::new(format!("{full_id}#assertion-1"))
             .map_err(|error| anyhow!(error))?,
@@ -59,7 +59,7 @@ fn record(
     previous_record_digest: Option<Hash>,
     base_url: &str,
 ) -> Result<ServiceResolutionRecord> {
-    let full_id = FullId::new(full)?;
+    let full_id = DidFullId::new(full)?;
     let service_id = service_id(&full_id)?;
     let issued_at = Utc.with_ymd_and_hms(2026, 8, 10, 0, 0, 0).unwrap();
     Ok(ServiceResolutionRecord {
@@ -121,8 +121,8 @@ fn scheduled_notice(
 }
 
 fn mirror_entry(
-    source_service_id: &ServiceId,
-    receiver_service_id: &ServiceId,
+    source_service_id: &DidCoreId,
+    receiver_service_id: &DidCoreId,
     realm_id: &RealmId,
     request_id: &str,
     record: Option<ServiceResolutionRecord>,
@@ -143,7 +143,7 @@ fn mirror_entry(
     };
     let artifact_key = request.validate()?;
     let request_digest = request.canonical_digest()?;
-    let receiver_full_id = FullId::new("did:web:mirror.example")?;
+    let receiver_full_id = DidFullId::new("did:web:mirror.example")?;
     let ack = ServiceResolutionPublishAck {
         ack: ServiceResolutionPublishAckCore {
             request_id: request.request_id.clone(),
@@ -222,7 +222,7 @@ impl ProductionFetcher {
 impl ServiceRouteFetcher for ProductionFetcher {
     async fn fetch_current(
         &self,
-        _: &ServiceId,
+        _: &DidCoreId,
         _: &str,
     ) -> ServiceResult<Option<VerifiedRouteCandidate>> {
         Ok(self.take_candidate(RouteSource::CurrentRecord, &self.current))
@@ -230,7 +230,7 @@ impl ServiceRouteFetcher for ProductionFetcher {
 
     async fn fetch_notice_candidate(
         &self,
-        _: &ServiceId,
+        _: &DidCoreId,
         _: &str,
     ) -> ServiceResult<Option<VerifiedRouteCandidate>> {
         Ok(self.take_candidate(RouteSource::ScheduledNotice, &self.notice))
@@ -238,7 +238,7 @@ impl ServiceRouteFetcher for ProductionFetcher {
 
     async fn fetch_realm_peer_mirror(
         &self,
-        _: &ServiceId,
+        _: &DidCoreId,
         _: &str,
     ) -> ServiceResult<Option<VerifiedRouteCandidate>> {
         Ok(self.take_candidate(RouteSource::RealmPeerMirror, &self.peer))
@@ -246,7 +246,7 @@ impl ServiceRouteFetcher for ProductionFetcher {
 
     async fn fetch_configured_mirror(
         &self,
-        _: &ServiceId,
+        _: &DidCoreId,
         _: &str,
     ) -> ServiceResult<Option<VerifiedRouteCandidate>> {
         Ok(self.take_candidate(RouteSource::ConfiguredMirror, &self.configured))
@@ -255,8 +255,8 @@ impl ServiceRouteFetcher for ProductionFetcher {
 
 async fn exercise_atomic_mirror_store() -> Result<()> {
     let store = MemoryServiceRouteStore::new();
-    let source_full_id = FullId::new("did:web:source.example")?;
-    let receiver_full_id = FullId::new("did:web:mirror.example")?;
+    let source_full_id = DidFullId::new("did:web:source.example")?;
+    let receiver_full_id = DidFullId::new("did:web:mirror.example")?;
     let source = service_id(&source_full_id)?;
     let receiver = service_id(&receiver_full_id)?;
     let realm = RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
@@ -416,7 +416,7 @@ async fn exercise_atomic_mirror_store() -> Result<()> {
 
 async fn resolve_with(
     store: Arc<MemoryServiceRouteStore>,
-    expected: &ServiceId,
+    expected: &DidCoreId,
     record: ServiceResolutionRecord,
     now: DateTime<Utc>,
 ) -> (

@@ -209,7 +209,7 @@ fn run_mention_routing_hmac(case: &Value) -> Result<()> {
     if exporter_label != arkret::mls::MENTION_ROUTING_EXPORTER_LABEL {
         bail!("registered mention routing exporter label drifted: {exporter_label}");
     }
-    let mentioned = arkret::Did::new(required_str(input, "mentioned_did_utf8")?.to_owned())
+    let mentioned = arkret::DidFullId::new(required_str(input, "mentioned_did_utf8")?.to_owned())
         .map_err(|error| anyhow!("registered mentioned DID is invalid: {error}"))?;
 
     let routing_key = arkret::mls::derive_mention_routing_key(&exporter_secret, &realm_id)

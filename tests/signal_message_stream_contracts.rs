@@ -1,5 +1,5 @@
 use arkret::{
-    DeviceId, Did, Event, Hlc, MessageCreatePayload, MessageId, MessageStreamDelta,
+    DeviceId, DidCoreId, Event, Hlc, MessageCreatePayload, MessageId, MessageStreamDelta,
     MessageStreamFormat, MessageStreamFrame, MessageStreamId, MessageStreamKeyframe,
     MessageStreamProducer, RealmId, ScopeRef, SealId, StrandId,
 };
@@ -9,8 +9,8 @@ use garth::{
 };
 use serde_json::{Value, json};
 
-fn actor() -> Did {
-    Did::new("did:webvh:z6mkfixture:alice.example").unwrap()
+fn actor() -> DidCoreId {
+    DidCoreId::new("did:webvh:z6mkfixture:alice.example").unwrap()
 }
 
 fn device() -> DeviceId {
@@ -34,7 +34,7 @@ fn final_event() -> Event {
     arkret_wire::test_support::raw_event_at(
         "ak.message.create",
         ScopeRef::Realm { realm_id: realm() },
-        arkret_wire::ActorId::from(arkret_wire::project_full_id_to_core_id(&actor()).unwrap()),
+        actor(),
         1,
         Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),
         payload.to_value().unwrap(),

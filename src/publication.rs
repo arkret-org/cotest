@@ -19,7 +19,7 @@ use arkret_wire::{
     AuthoritySetIssuer, AuthoritySetIssuerRole, AuthoritySetPolicy, AuthoritySetPolicyKind,
     AuthoritySetPolicySource, AuthoritySetRef, AuthoritySetSourceKind, AuthorizationLease,
     AuthorizationLeaseId, ControlProposalAck, ControlProposalAckKind, ControlProposalAuthorityAck,
-    ControlProposalDecisionPolicy, DeviceId, Did, DidUrl, Event, EventFederationSubmission,
+    ControlProposalDecisionPolicy, DeviceId, DidUrl, Event, EventFederationSubmission,
     EventInitialSubmission, Hash, IngressReceipt, LeaseBasisRef, PayloadProof, PayloadSignature,
     ProjectedCellWrite, ReceiptId, RiskTier, SchemaId, SealId, proof_kind,
 };
@@ -135,8 +135,8 @@ fn authorization_lease_for_basis(
     basis_ref: LeaseBasisRef,
 ) -> Result<AuthorizationLease> {
     let issued_at = event.created_at - Duration::minutes(5);
-    let actor_full_id = if let Some(auth_context) = &event.auth_context {
-        auth_context.did.clone()
+    let actor_id = if let Some(auth_context) = &event.auth_context {
+        auth_context.actor_id.clone()
     } else {
         let verification_method = event
             .proofs
@@ -148,8 +148,11 @@ fn authorization_lease_for_basis(
             .split_once('#')
             .map(|(controller, _)| controller)
             .context("authorization lease verification method has no controller")?;
-        arkret_identifiers::FullId::new(controller.to_owned())
-            .context("authorization lease verification-method controller is not a full id")?
+        let full_id = arkret_identifiers::DidFullId::new(controller.to_owned())
+            .context("authorization lease verification-method controller is not a full id")?;
+        arkret_identifiers::DidCoreId::from(arkret_identifiers::project_full_id_to_core_id(
+            &full_id,
+        )?)
     };
     let authorization_rule_id = "realm_admission";
     let authority_set_policy = AuthoritySetPolicy {
@@ -187,7 +190,7 @@ fn authorization_lease_for_basis(
         )
         .context("static harness lease id is typed")?,
         basis_ref,
-        actor_id: actor_full_id,
+        actor_id,
         device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb")
             .context("static harness lease device id is typed")?,
         scope_ref: event.scope_ref.clone(),
@@ -272,7 +275,7 @@ pub fn ingress_receipt_for(event: &Event, lease: &AuthorizationLease) -> Result<
             .context("Event digest is a valid Hash")?,
         authorization_lease_id: lease.authorization_lease_id.clone(),
         received_at,
-        service_id: Did::new("did:webvh:z6mkfixture:ingress.example")
+        service_id: arkret_identifiers::DidCoreId::new("did:webvh:z6mkfixture:ingress.example")
             .context("static harness ingress DID is typed")?,
         authority_set_ref: harness_authority_set("ak.authority_set.realm_ingress.v1"),
         proofs: Vec::new(),

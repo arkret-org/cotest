@@ -30,7 +30,7 @@ use anyhow::Result;
 
 use crate::harness::dev_login;
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
 
 mod backup_delete;
@@ -47,7 +47,8 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
         &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )
     .await?;
-    let actor_id = actor_did_for_service(server.service_id(), "protocol-payloads-alice")?;
+    let actor_id =
+        actor_did_for_service_full_id(server.service_full_id(), "protocol-payloads-alice")?;
     let token = dev_login(
         &server,
         &actor_id,

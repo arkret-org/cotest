@@ -4,16 +4,16 @@
 //!   - an accepted case (Circle members ⊂ Realm members),
 //!   - the empty Realm degenerate accept (no members on either side),
 //!   - a rejected case (Circle member not in Realm) — must surface
-//!     `CircleScopeError::MemberNotInRealm` with the offending Did.
+//!     `CircleScopeError::MemberNotInRealm` with the offending `DidCoreId`.
 //!
 //! The error name pin protects callers that match on the variant to map
 //! to wire reason code `circle_member_must_be_realm_member`.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::governance::circle::{Circle, CircleScopeError};
 
-fn did(local: &str) -> Result<Did> {
+fn did(local: &str) -> Result<DidCoreId> {
     format!("did:web:{local}.example")
         .parse()
         .map_err(|e| anyhow!("did {local}: {e}"))

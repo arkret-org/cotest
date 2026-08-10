@@ -9,7 +9,7 @@ use arkret_models_collaboration::governance::policy_check::{
     PolicyCheckOutcome, policy_decision_transcript_bytes,
 };
 use arkret_models_collaboration::objects::queries::View;
-use arkret_wire::{Did, ErrorCode, ErrorStatusContext, OperationId, RealmId};
+use arkret_wire::{DidCoreId, DidFullId, ErrorCode, ErrorStatusContext, OperationId, RealmId};
 use ed25519_dalek::{Signer as _, SigningKey, Verifier as _};
 use serde_json::{Value, json};
 use soland_domain::hlc::ServerHlc;
@@ -31,9 +31,11 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
         "status": "deactivated",
         "effective_at": "2026-08-01T00:00:00.000Z"
     }))?;
-    let service = Did::new("did:web:coauth.example")?;
-    let holder = Did::new("did:web:holder.example")?;
-    let third_party = Did::new("did:web:third-party.example")?;
+    let service = DidCoreId::new("did:web:coauth.example")?;
+    let holder = DidCoreId::new("did:web:holder.example")?;
+    let third_party = DidCoreId::new("did:web:third-party.example")?;
+    let service_full = DidFullId::new(service.as_str())?;
+    let third_party_full = DidFullId::new(third_party.as_str())?;
 
     let binding = |actor, proof_controller, signature_controller, account, principal| {
         AccountStatusServiceBinding {
@@ -49,8 +51,8 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
     };
     payload.validate_service_binding(&binding(
         &service,
-        &service,
-        &service,
+        &service_full,
+        &service_full,
         "account-cotest-1",
         &holder,
     ))?;
@@ -58,8 +60,8 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
         payload
             .validate_service_binding(&binding(
                 &holder,
-                &service,
-                &service,
+                &service_full,
+                &service_full,
                 "account-cotest-1",
                 &holder,
             ))
@@ -69,8 +71,8 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
         payload
             .validate_service_binding(&binding(
                 &third_party,
-                &third_party,
-                &third_party,
+                &third_party_full,
+                &third_party_full,
                 "account-cotest-1",
                 &holder,
             ))
@@ -80,8 +82,8 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
         payload
             .validate_service_binding(&binding(
                 &service,
-                &service,
-                &service,
+                &service_full,
+                &service_full,
                 "account-cotest-2",
                 &holder,
             ))
@@ -91,8 +93,8 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
         payload
             .validate_service_binding(&binding(
                 &service,
-                &service,
-                &service,
+                &service_full,
+                &service_full,
                 "account-cotest-1",
                 &third_party,
             ))

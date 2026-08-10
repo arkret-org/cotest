@@ -11,15 +11,15 @@ use crate::harness::{
     member_transition_payload,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service, authorize_device_public_key, seal_current_principal_control_frontier,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, authorize_device_public_key,
+    seal_current_principal_control_frontier, spawn_with_harness_account_authority,
 };
 
 const BOB_HANDLE: &str = "@collab-bob";
 
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let server = spawn_with_harness_account_authority("collaboration-workflow", &[]).await?;
-    let alice_did = actor_did_for_service(server.service_id(), "collab-alice")?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "collab-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -31,7 +31,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         &SigningKey::from_bytes(&[0xa1; 32]),
     )
     .await?;
-    let bob_did = actor_did_for_service(server.service_id(), "collab-bob")?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "collab-bob")?;
     let bob = server
         .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;
@@ -95,10 +95,13 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
     assert_eq!(
-        request_receipt.core.holder.subject_id().as_str(),
+        request_receipt.core.holder.contact_actor_id().as_str(),
         alice.actor
     );
-    assert_eq!(request_receipt.core.peer.subject_id().as_str(), bob.actor);
+    assert_eq!(
+        request_receipt.core.peer.contact_actor_id().as_str(),
+        bob.actor
+    );
     seal_current_principal_control_frontier(&alice, &SigningKey::from_bytes(&[0xa1; 32])).await?;
     bob.accept_contact(request_receipt).await?;
     seal_current_principal_control_frontier(&bob, &SigningKey::from_bytes(&[0xb0; 32])).await?;

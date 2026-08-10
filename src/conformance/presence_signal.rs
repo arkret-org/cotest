@@ -15,7 +15,7 @@
 
 use anyhow::{Result, bail};
 use arkret_models_discovery::{PresenceStatus, validate_last_active_at, validate_status_message};
-use arkret_wire::{DeviceId, Did, RealmId, ScopeRef, SealId, SignalClass};
+use arkret_wire::{DeviceId, DidCoreId, RealmId, ScopeRef, SealId, SignalClass};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use garth::signal::{PresenceProjection, SIGNAL_PLAINTEXT_KIND_PRESENCE, SignalPlaintext};
 use serde_json::{Value, json};
@@ -233,8 +233,8 @@ pub fn run_multi_device_aggregation_vector() -> Result<()> {
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-fn actor() -> Result<Did> {
-    Ok(Did::new("did:webvh:z6mkfixture:alice.example")?)
+fn actor() -> Result<DidCoreId> {
+    Ok(DidCoreId::new("did:webvh:z6mkfixture:alice.example")?)
 }
 
 fn realm() -> Result<RealmId> {

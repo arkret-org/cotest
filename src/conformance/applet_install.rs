@@ -6,7 +6,7 @@ use crate::transcripts::record_vector_event;
 
 pub fn run_applet_install_authoring_suite() -> Result<()> {
     let applet_id = arkret_wire::AppletId::new("ak:applet:01974100-0000-7000-8000-000000000001")?;
-    let service_id = arkret_wire::Did::new("did:web:calendar.example")?;
+    let service_id = arkret_wire::DidCoreId::new("did:web:calendar.example")?;
     let registration_epoch = arkret_wire::Hash::new(format!("sha256:{}", "7".repeat(64)))?;
     let constraint = GrantConstraint::applet_authority(
         applet_id.clone(),

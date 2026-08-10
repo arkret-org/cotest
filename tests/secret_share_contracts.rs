@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical::{canonical_json_bytes, from_canonical_json_slice};
 use arkret_crypto::secret_share::{SecretShareRequestContent, SecretShareSendContent};
-use arkret_identifiers::{DeviceId, DeviceMessageId, Did};
+use arkret_identifiers::{DeviceId, DeviceMessageId, DidCoreId};
 use arkret_models_collaboration::sync_frames::account_sync::{
     DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody,
 };
@@ -330,7 +330,7 @@ fn device_message_body(
     let mut by_device = BTreeMap::new();
     by_device.insert(recipient_device_id, target);
     let mut messages = BTreeMap::new();
-    messages.insert(Did::new(ACCOUNT_DID.to_owned())?, by_device);
+    messages.insert(DidCoreId::new(ACCOUNT_DID.to_owned())?, by_device);
     Ok(DeviceMessagesSendRequestBody { messages })
 }
 
@@ -338,9 +338,9 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
     Ok(DeviceMessageEnvelope {
         message_id: DeviceMessageId::new("ak:device_message:0196419b-0000-7000-8000-000000000099")?,
         kind: ProtocolKind::new(SECRET_SEND_KIND).map_err(anyhow::Error::msg)?,
-        sender_principal_id: Did::new(ACCOUNT_DID.to_owned())?,
+        sender_principal_id: DidCoreId::new(ACCOUNT_DID.to_owned())?,
         sender_device_id: device_id(OLD_DEVICE)?,
-        recipient_principal_id: Did::new(ACCOUNT_DID.to_owned())?,
+        recipient_principal_id: DidCoreId::new(ACCOUNT_DID.to_owned())?,
         recipient_device_id: device_id(NEW_DEVICE)?,
         sent_at: parse_utc("2026-06-10T00:00:00.000Z")?,
         expires_at: parse_utc(expires_at)?,

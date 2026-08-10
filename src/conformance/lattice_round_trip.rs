@@ -27,7 +27,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical::canonical_json_bytes;
-use arkret_identifiers::{CellRef, Did, Hash, RealmId};
+use arkret_identifiers::{CellRef, DidFullId, Hash, RealmId};
 use arkret_models_collaboration::governance::realm_governance::{
     REALM_LINK_ALLOWED_TRANSITIONS, REALM_LINK_INITIAL_STATES, REALM_LINK_TERMINAL_STATES,
     RealmLinkKind, RealmLinkPayload, RealmLinkStatus, RealmLinkTransitionCandidate,
@@ -527,9 +527,10 @@ fn op_append(value: serde_json::Value, issuer_seq: u64) -> LatticeOp {
 }
 
 fn issued_op(issuer: &str, suffix: &str, op: LatticeOp) -> IssuedOp {
-    let full_id = Did::new(issuer.to_owned()).expect("test fixture issuer should be a valid did");
+    let full_id =
+        DidFullId::new(issuer.to_owned()).expect("test fixture issuer should be a valid did");
     IssuedOp {
-        issuer: arkret_identifiers::ActorId::from(
+        issuer: arkret_identifiers::DidCoreId::from(
             arkret_identifiers::project_full_id_to_core_id(&full_id)
                 .expect("test fixture issuer should project to a core id"),
         ),

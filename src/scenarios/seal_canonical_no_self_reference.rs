@@ -18,7 +18,7 @@
 //! Seal whose canonical bytes leak `id` or `notary_signature` is rejected.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{Did, Hash, Hlc, RealmId, SealId};
+use arkret_identifiers::{DidFullId, Hash, Hlc, RealmId, SealId};
 use arkret_wire::{
     NotarySig, PayloadSignature, Seal, SealKind, compute_seal_id, seal_canonical_bytes,
 };
@@ -57,8 +57,8 @@ fn signature() -> PayloadSignature {
 
 fn build_seal() -> Result<Seal> {
     let hlc = Hlc::new("0189c4d2af00-0000-aabbccdd".to_owned()).map_err(|e| anyhow!("hlc: {e}"))?;
-    let _notary =
-        Did::new("did:web:notary.example".to_owned()).map_err(|e| anyhow!("notary did: {e}"))?;
+    let _notary = DidFullId::new("did:web:notary.example".to_owned())
+        .map_err(|e| anyhow!("notary did: {e}"))?;
     let mut s = Seal {
         id: seal_id(0x00)?,
         realm_id: realm()?,

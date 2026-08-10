@@ -9,11 +9,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
-use arkret_models_collaboration::direct_conversation_ops::{
-    AcceptedAtServiceBinding, AcceptedAtServiceBindingCore, DidBindingEvidenceKind,
-    DidBindingEvidenceReceipt, MultikeyMethodType, PrincipalServiceBindingProofPurpose,
-    PrincipalServiceKind, ServiceVerificationMethod,
-};
+use arkret_models_collaboration::direct_conversation_ops::AcceptedAtServiceBinding;
 use arkret_models_collaboration::direct_conversation_repair::{
     DirectConversationRepairAuthorization, DirectConversationRepairDispatchRequest,
     DirectConversationRepairEnqueueOutcome,
@@ -34,9 +30,9 @@ use arkret_models_identity::{
 };
 use arkret_wire::notary::NotaryValue;
 use arkret_wire::{
-    ActorId, AuthorizationRef, Base64UrlString, CoreId, DeviceId, DidUrl, Event, EventId, FullId,
-    GenesisSalt, Hash, Hlc, MlsGroupId, NonEmptyString, PrincipalId, ProtocolSignature, ScopeRef,
-    ServiceId, StrandId, project_full_id_to_core_id,
+    AuthorizationRef, Base64UrlString, DeviceId, DidCoreId, DidFullId, DidUrl, Event, EventId,
+    GenesisSalt, Hash, Hlc, MlsGroupId, NonEmptyString, ProtocolSignature, ScopeRef, StrandId,
+    project_full_id_to_core_id,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -48,7 +44,7 @@ use tempfile::TempDir;
 
 use crate::harness::{TestServerGroup, canonical_device_id, expect_json};
 use crate::scenarios::identity_test_support::{
-    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service,
+    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_full_id,
     authorize_device_public_key_with_event_id, harness_account_authority_id,
 };
 
@@ -73,13 +69,13 @@ fn canonical_now() -> DateTime<Utc> {
 
 fn fixture_events(
     trust_domain: arkret_wire::TypedTrustDomainId,
-    requester_full: &FullId,
-    requester: &CoreId,
-    recipient: &CoreId,
+    requester_full: &DidFullId,
+    requester: &DidCoreId,
+    recipient: &DidCoreId,
 ) -> Result<FixtureEvents> {
     let created_at = canonical_now();
-    let requester_actor = ActorId::from(requester.clone());
-    let recipient_actor = ActorId::from(recipient.clone());
+    let requester_actor = DidCoreId::from(requester.clone());
+    let recipient_actor = DidCoreId::from(recipient.clone());
     let pair_key = direct_conversation_pair_key(
         trust_domain.clone(),
         DirectConversationPairKeyParticipant::unmapped(requester_actor.clone()),
@@ -210,9 +206,9 @@ fn fixture_events(
 
 async fn current_service_record(
     server: &crate::harness::ArkretServer,
-) -> Result<(ServiceId, ServiceResolutionRecord)> {
-    let full_id = FullId::new(server.service_id().to_owned())?;
-    let service_id = ServiceId::from(project_full_id_to_core_id(&full_id)?);
+) -> Result<(DidCoreId, ServiceResolutionRecord)> {
+    let full_id = server.service_full_id().clone();
+    let service_id = DidCoreId::from(project_full_id_to_core_id(&full_id)?);
     let record = serde_json::from_value(
         expect_json(
             server
@@ -226,99 +222,23 @@ async fn current_service_record(
 }
 
 fn accepted_local_binding(
-    principal_full: &FullId,
-    principal: &CoreId,
-    service_record: &ServiceResolutionRecord,
-    trust_domain: &str,
-    device_id: &DeviceId,
+    _principal_full: &DidFullId,
+    _principal: &DidCoreId,
+    _service_record: &ServiceResolutionRecord,
+    _trust_domain: &str,
+    _device_id: &DeviceId,
 ) -> Result<AcceptedAtServiceBinding> {
-    let accepted_at = canonical_now();
-    let document_digest = Hash::new(arkret_canonical::sha256_digest(
-        service_record.record.full_id.as_str().as_bytes(),
-    ))?;
-    let authority_evidence = DidBindingEvidenceReceipt {
-        kind: DidBindingEvidenceKind::AkDidBindingEvidenceV1,
-        method: "webvh".to_owned(),
-        document_digest: document_digest.clone(),
-        method_proofs: Vec::new(),
-    };
-    let mut core = AcceptedAtServiceBindingCore {
-        principal_id: PrincipalId::from(principal.clone()),
-        service_id: service_record.record.service_id.clone(),
-        trust_domain: trust_domain.to_owned(),
-        service_kind: PrincipalServiceKind::PrincipalServer,
-        service_verification_method: ServiceVerificationMethod {
-            id: service_record.proof.verification_method.clone(),
-            controller: service_record.record.full_id.clone(),
-            method_type: MultikeyMethodType::Multikey,
-            public_key_multibase: "z6MkCotestServiceBindingKey".to_owned(),
-        },
-        endpoint_origins: vec![service_record.record.base_url.clone()],
-        document_digest,
-        authority_evidence,
-        service_resolution: ServiceResolutionCarrier::Inline {
-            inline: service_record.clone(),
-        },
-        authorization_challenge: Base64UrlString::new("A".repeat(24))
-            .map_err(anyhow::Error::msg)?,
-        history_head: Some(service_record.record.method_history_head.clone()),
-        version_id: Some(service_record.record.version_id.clone()),
-        not_before: accepted_at,
-        expires_at: Some(accepted_at + ChronoDuration::hours(1)),
-        accepted_at,
-        predecessor_binding_digest: None,
-        binding_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-    };
-    core.binding_digest = core.computed_binding_digest()?;
-    let principal_method =
-        DidUrl::new(format!("{principal_full}#{device_id}")).map_err(anyhow::Error::msg)?;
-    let service_input = core.proof_signing_input_bytes(
-        PrincipalServiceBindingProofPurpose::ServiceAcceptance,
-        &core.service_verification_method.id,
-    )?;
-    let principal_input = core.proof_signing_input_bytes(
-        PrincipalServiceBindingProofPurpose::PrincipalAuthorization,
-        &principal_method,
-    )?;
-    Ok(AcceptedAtServiceBinding {
-        principal_id: core.principal_id,
-        service_id: core.service_id,
-        trust_domain: core.trust_domain,
-        service_kind: core.service_kind,
-        service_verification_method: core.service_verification_method.clone(),
-        endpoint_origins: core.endpoint_origins,
-        document_digest: core.document_digest,
-        authority_evidence: core.authority_evidence,
-        service_resolution: core.service_resolution,
-        authorization_challenge: core.authorization_challenge,
-        history_head: core.history_head,
-        version_id: core.version_id,
-        not_before: core.not_before,
-        expires_at: core.expires_at,
-        accepted_at: core.accepted_at,
-        predecessor_binding_digest: core.predecessor_binding_digest,
-        binding_digest: core.binding_digest,
-        service_acceptance_proof: ProtocolSignature {
-            verification_method: core.service_verification_method.id,
-            created_at: accepted_at,
-            jws: Base64UrlString::new(URL_SAFE_NO_PAD.encode(service_input))
-                .map_err(anyhow::Error::msg)?,
-        },
-        principal_authorization_proof: ProtocolSignature {
-            verification_method: principal_method,
-            created_at: accepted_at,
-            jws: Base64UrlString::new(URL_SAFE_NO_PAD.encode(principal_input))
-                .map_err(anyhow::Error::msg)?,
-        },
-    })
+    anyhow::bail!(
+        "direct-repair live fixture is fail-closed: frozen registration DID evidence and exact PrincipalAuthorityInstance are unavailable"
+    )
 }
 
 async fn install_fixture(
     server: &crate::harness::ArkretServer,
     fixture: &FixtureEvents,
-    requester: &CoreId,
-    recipient: &CoreId,
-    peer_service_id: &ServiceId,
+    requester: &DidCoreId,
+    recipient: &DidCoreId,
+    peer_service_id: &DidCoreId,
     peer_record: &ServiceResolutionRecord,
     local_binding: Option<&AcceptedAtServiceBinding>,
 ) -> Result<()> {
@@ -373,7 +293,7 @@ async fn install_fixture(
 
 async fn install_device(
     server: &crate::harness::ArkretServer,
-    actor: &CoreId,
+    actor: &DidCoreId,
     device: &DeviceId,
     key: &SigningKey,
 ) -> Result<()> {
@@ -395,7 +315,7 @@ async fn install_device(
 async fn upload_requester_keypackage(
     server: &crate::harness::ArkretServer,
     token: &str,
-    actor: &FullId,
+    actor: &DidFullId,
     device_id: &DeviceId,
     device_authorize_event_id: &EventId,
     signing_key: &SigningKey,
@@ -438,7 +358,7 @@ async fn upload_requester_keypackage(
 fn signed_dispatch(
     request_id: &str,
     fixture: &FixtureEvents,
-    requester: &CoreId,
+    requester: &DidCoreId,
     device_id: &DeviceId,
     device_authorize_event_id: &EventId,
     keypackage_ref: &NonEmptyString,
@@ -493,7 +413,7 @@ fn signed_dispatch(
 
 async fn observed_messages(
     server: &crate::harness::ArkretServer,
-    recipient: &CoreId,
+    recipient: &DidCoreId,
 ) -> Result<Vec<Value>> {
     let body = expect_json(
         server
@@ -533,7 +453,7 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
     );
     let temp = TempDir::new()?;
     let control = temp.path().join("target-chaos.json");
-    let authority_id = harness_account_authority_id();
+    let authority_id = harness_account_authority_id().to_string();
     let common = |database_url: String| {
         vec![
             ("DATABASE_URL".to_owned(), database_url),
@@ -567,12 +487,12 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
     };
     let source = group.server(0);
     let target = group.server(1);
-    let requester_full = FullId::new(actor_did_for_service(
-        source.service_id(),
+    let requester_full = DidFullId::new(actor_did_for_service_full_id(
+        source.service_full_id(),
         "repair-requester",
     )?)?;
-    let recipient_full = FullId::new(actor_did_for_service(
-        target.service_id(),
+    let recipient_full = DidFullId::new(actor_did_for_service_full_id(
+        target.service_full_id(),
         "repair-recipient",
     )?)?;
     let requester = project_full_id_to_core_id(&requester_full)?;

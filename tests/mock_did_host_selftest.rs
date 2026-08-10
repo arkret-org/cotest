@@ -275,10 +275,10 @@ async fn mock_did_host_counts_reset_and_rotate() {
 #[tokio::test]
 async fn counting_did_resolver_counts_in_process_resolutions() {
     use arkret::identity::{DidDocument, DidResolver};
-    use arkret_wire::Did;
+    use arkret_wire::DidFullId;
     use cotest::scenarios::_helpers::did_host::CountingDidResolver;
 
-    let did = Did::new("did:web:alice.example".to_owned()).expect("parse DID");
+    let did = DidFullId::new("did:web:alice.example".to_owned()).expect("parse DID");
     let resolver = CountingDidResolver::new().with_document(DidDocument::new(
         did.clone(),
         "did:web:alice.example#key-1",
@@ -294,7 +294,7 @@ async fn counting_did_resolver_counts_in_process_resolutions() {
     assert_eq!(resolver.total_calls(), 2);
 
     // Misses are counted too — a resolver call that fails is still a call.
-    let missing = Did::new("did:web:nobody.example".to_owned()).expect("parse DID");
+    let missing = DidFullId::new("did:web:nobody.example".to_owned()).expect("parse DID");
     assert!(resolver.resolve_did(&missing).is_err());
     assert_eq!(resolver.calls_for(missing.as_str()), 1);
     assert_eq!(resolver.total_calls(), 3);

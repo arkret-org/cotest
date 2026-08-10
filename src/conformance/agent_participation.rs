@@ -4,7 +4,7 @@
 //! policy semantics by exercising the SDK wire DTOs and reducer-pure helpers.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{Did, Hash, RealmId};
+use arkret_identifiers::{DidCoreId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode};
 use arkret_models_collaboration::governance::agent_participation::{
     AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome, ParticipationBits,
@@ -150,8 +150,8 @@ fn scope_field(value: &Value, field: &str) -> Result<ParticipationScope> {
     .map_err(|err| anyhow!("invalid scope field {field}: {err}"))
 }
 
-fn did_field(value: &Value, field: &str) -> Result<Did> {
-    Did::new(required_str(value, field)?.to_owned()).map_err(Into::into)
+fn did_field(value: &Value, field: &str) -> Result<DidCoreId> {
+    DidCoreId::new(required_str(value, field)?).map_err(Into::into)
 }
 
 fn participation_reason(error: AgentParticipationError) -> String {
@@ -177,8 +177,8 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
         controller_subject: did_field(case, "controller_subject")?,
         agent_slug: required_str(case, slug_field)?.to_owned(),
         subject: did_field(case, agent_field)?,
-        issuer: Did::new("did:web:directory.acme.example".to_owned())?,
-        issuer_service_id: Some(Did::new("did:web:directory.acme.example".to_owned())?),
+        issuer: DidCoreId::new("did:web:directory.acme.example")?,
+        issuer_service_id: Some(DidCoreId::new("did:web:directory.acme.example")?),
         binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
         audience: Some("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned()),
@@ -482,8 +482,8 @@ fn artifacts_from_expected(value: &Value, pointer: &str) -> Result<DeliveryArtif
 }
 
 fn mention_delivery(
-    author: &Did,
-    controller: &Did,
+    author: &DidCoreId,
+    controller: &DidCoreId,
     effective: ParticipationBits,
 ) -> DeliveryArtifacts {
     if author == controller || effective.accept_third_party_mention {

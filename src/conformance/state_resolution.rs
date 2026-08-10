@@ -1003,8 +1003,8 @@ fn validate_same_seal_bottom_reject_serialization(vector: &Value, vector_name: &
 
 fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result<()> {
     let actor_id = required_pointer_str(vector, "/actor_id", vector_name)?;
-    if !actor_id.starts_with("did:") {
-        bail!("vector {vector_name} actor_id must be a DID");
+    if !actor_id.starts_with("ak:did_core:") {
+        bail!("vector {vector_name} actor_id must be a did_core_id");
     }
 
     let mut seen = BTreeSet::new();

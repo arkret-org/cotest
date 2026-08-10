@@ -24,7 +24,7 @@
 //! error enum grows them.
 
 use anyhow::{Result, bail};
-use arkret_identifiers::{BlobRef, CallId, Did, EventId, GrantId, Hash, PolicyId, RealmId};
+use arkret_identifiers::{BlobRef, CallId, DidCoreId, EventId, GrantId, Hash, PolicyId, RealmId};
 use arkret_models_collaboration::events_payloads::call::{
     CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
@@ -238,7 +238,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
                 call_id: call_id(),
                 focus_id: "fra-1".to_owned(),
                 recording_id,
-                media_service_id: Did::new("did:web:recorder.example").unwrap(),
+                media_service_id: DidCoreId::new("did:web:recorder.example").unwrap(),
                 recording_start_event_id: start_event_id(),
             },
             ciphertext_digest: hash('b'),
@@ -252,7 +252,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
             audit_lock: Some(false),
             consent_confirmed: Some(true),
         },
-        produced_by: Did::new("did:web:recorder.example").unwrap(),
+        produced_by: DidCoreId::new("did:web:recorder.example").unwrap(),
         recording_initiator_capability_ref: GrantId::new(
             "ak:grant:AY8a0-KhSVbHOk2IStjbvFlEdGofW0ZyqMsOoZu6_Cqv",
         )

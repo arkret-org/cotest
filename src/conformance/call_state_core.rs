@@ -11,7 +11,7 @@ use arkret::{
     verify_call_media_token_outcome,
 };
 use arkret_canonical::base64url::base64url_encode;
-use arkret_identifiers::{CallId, CellRef, DeviceId, Did, Hash, RealmId};
+use arkret_identifiers::{CallId, CellRef, DeviceId, DidCoreId, DidFullId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::{
     CallMediaParticipantBinding, CallMediaServiceSignature, CallMediaTokenExchangeOutcome,
@@ -117,8 +117,12 @@ fn fixture_now() -> DateTime<Utc> {
         .expect("fixture timestamp should be valid")
 }
 
-fn did(label: &str) -> Did {
-    Did::new(format!("did:web:{label}.example")).expect("fixture DID should be valid")
+fn did(label: &str) -> DidCoreId {
+    DidCoreId::new(format!("did:web:{label}.example")).expect("fixture DID should be valid")
+}
+
+fn full_did(label: &str) -> DidFullId {
+    DidFullId::new(format!("did:web:{label}.example")).expect("fixture DID should be valid")
 }
 
 fn issuer_key() -> SigningKey {
@@ -126,7 +130,7 @@ fn issuer_key() -> SigningKey {
 }
 
 fn anchors_with_issuer_key(key: &SigningKey) -> MediaServiceAnchors {
-    MediaServiceAnchors::new([did("media")])
+    MediaServiceAnchors::new([full_did("media")])
         .with_keys([(ISSUER_KID.to_owned(), key.verifying_key())])
 }
 

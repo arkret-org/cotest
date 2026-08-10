@@ -7,7 +7,7 @@ use arkret::contact_operations::{
 };
 use arkret::{ContactIntroductionEvidence, IdempotencyKey, ProtocolOperationId};
 use arkret_http_client::Client as SdkClient;
-use arkret_identifiers::{Did, Hash, Hlc};
+use arkret_identifiers::{DidCoreId, DidFullId, Hash, Hlc, project_full_id_to_core_id};
 use arkret_models_collaboration::events_payloads::{
     RealmSetDefaultStrandPayload, StrandCreatePayload,
 };
@@ -76,7 +76,9 @@ impl TestActorClient {
                 operation_id,
                 idempotency_key,
                 peer: ContactPeer::Human {
-                    principal_id: Did::new(target.to_owned())?,
+                    principal_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+                        target.to_owned(),
+                    )?)?),
                 },
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
                 introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
@@ -227,7 +229,7 @@ impl TestActorClient {
         let (signing_seed, verification_method) = event_signing_identity(&self.actor);
         let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
             signing_seed,
-            Did::new(self.actor.clone())?,
+            DidFullId::new(self.actor.clone())?,
             verification_method.clone(),
         );
         arkret_signatures::sign_event(
@@ -448,8 +450,8 @@ impl TestActorClient {
         )
         .await?;
         let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
-        let actor_full_id = arkret_identifiers::FullId::new(self.actor.clone())?;
-        let actor_id = arkret_identifiers::ActorId::from(
+        let actor_full_id = arkret_identifiers::DidFullId::new(self.actor.clone())?;
+        let actor_id = arkret_identifiers::DidCoreId::from(
             arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?,
         );
         let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
@@ -587,11 +589,16 @@ impl TestActorClient {
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
             realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
-            issuer: arkret_identifiers::Did::new(self.actor.clone())?,
+            issuer: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+                self.actor.clone(),
+            )?)?),
             subject:
                 arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
-                    arkret_identifiers::Did::new(subject.to_owned())?,
+                    DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+                        subject.to_owned(),
+                    )?)?),
                 ),
+            subject_authority_instance: None,
             actions: actions.iter().map(|action| (*action).to_owned()).collect(),
             resources: vec![serde_json::from_value(json!({
                 "kind": "realm",
@@ -752,7 +759,9 @@ impl TestActorClient {
             // Capability coverage is per DataEvent: the reducer checks that a
             // named grant actually covers this action on this target.
             event.auth_context = Some(AuthContext {
-                did: Did::new(self.actor.clone())?,
+                actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+                    self.actor.clone(),
+                )?)?),
                 key_id: format!("{}#cotest", self.actor),
                 key_epoch: 0,
                 credential_epoch: None,
@@ -859,7 +868,9 @@ impl TestActorClient {
             } else {
                 event.seal_ref = Some(frontier.seal_id);
                 event.auth_context = Some(AuthContext {
-                    did: Did::new(self.actor.clone())?,
+                    actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+                        self.actor.clone(),
+                    )?)?),
                     key_id: format!("{}#cotest", self.actor),
                     key_epoch: 0,
                     credential_epoch: None,

@@ -42,7 +42,7 @@
 //! string-based state table.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{CircleId, Did, RealmId};
+use arkret_identifiers::{CircleId, DidFullId, RealmId};
 use serde_json::json;
 
 /// Canonical Circle member state names per AKP-0007 §3.6. Mirrors the
@@ -146,7 +146,7 @@ fn circle_id() -> Result<CircleId> {
         .map_err(|e| anyhow!("circle id: {e}"))
 }
 
-fn actor() -> Result<Did> {
+fn actor() -> Result<DidFullId> {
     "did:web:alice.example"
         .parse()
         .map_err(|e| anyhow!("actor did: {e}"))

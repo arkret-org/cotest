@@ -79,7 +79,11 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
         .ok_or_else(|| anyhow!("Realm Seal frontier has no leaf"))?;
     event.seal_ref = Some(seal_ref.clone());
     event.auth_context = Some(arkret_wire::AuthContext {
-        did: arkret_identifiers::Did::new(ACTOR.clone()).map_err(anyhow::Error::msg)?,
+        actor_id: arkret_identifiers::DidCoreId::from(
+            arkret_identifiers::project_full_id_to_core_id(
+                &arkret_identifiers::DidFullId::new(ACTOR.clone()).map_err(anyhow::Error::msg)?,
+            )?,
+        ),
         key_id: format!("{}#cotest", ACTOR.as_str()),
         key_epoch: 0,
         credential_epoch: None,

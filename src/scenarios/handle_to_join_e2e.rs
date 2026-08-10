@@ -36,14 +36,14 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_identifiers::{Did, EventId, Hash};
+use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
 use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
     CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
 use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
 use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
 use arkret_models_identity::handle_claim::DeliveryBindingHint;
-use arkret_wire::{Audience, Proof};
+use arkret_wire::{Audience, PrincipalAuthorityInstance, Proof};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -95,6 +95,8 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_audience_mismatch().context("T3.5 negative — audience != target Realm")?;
     negative_case_service_not_allowed()
         .context("T3.5 negative — recipient_service_id not in Realm allow-list")?;
+    negative_case_same_core_different_authority_instance()
+        .context("T3.5 negative — same principal core with substituted PCR authority")?;
     negative_case_acct_canonical_rejected().context("T3.5 negative — acct: as canonical handle")?;
     negative_case_did_document_fallback_rejected()
         .context("T3.5 negative — DID Document fallback masquerades as handle candidate")?;
@@ -120,7 +122,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
 fn happy_path_via_sdk_candidate() -> Result<()> {
     let candidate = sample_candidate()?;
     let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned())
-        .with_expected_subject(Did::new(ALICE_DID.to_owned())?);
+        .with_expected_subject(DidCoreId::new(ALICE_DID)?);
 
     candidate.validate(&ctx).map_err(|e| {
         anyhow!(
@@ -232,7 +234,7 @@ fn negative_case_verified_false() -> Result<()> {
 /// that reuse a candidate across handle reassignments.
 fn negative_case_subject_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
-    let mallory = Did::new("did:web:mallory.example".to_owned())?;
+    let mallory = DidCoreId::new("did:web:mallory.example")?;
     let ctx =
         CandidateValidationContext::new(TARGET_REALM_ID.to_owned()).with_expected_subject(mallory);
 
@@ -295,9 +297,13 @@ fn negative_case_audience_mismatch() -> Result<()> {
 /// rely on.
 fn negative_case_service_not_allowed() -> Result<()> {
     let mut candidate = sample_candidate()?;
-    candidate.member_delivery_binding.recipient_service_id =
-        Did::new(OTHER_PRINCIPAL_DID.to_owned())?;
-    candidate.validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))?;
+    candidate.member_delivery_binding.recipient_service_id = DidCoreId::new(OTHER_PRINCIPAL_DID)?;
+    if candidate
+        .validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))
+        .is_ok()
+    {
+        bail!("T3.5 service_not_allowed: recipient substitution escaped authority binding");
+    }
 
     let allowed = [PRINCIPAL_DID];
     if allowed.contains(
@@ -307,6 +313,35 @@ fn negative_case_service_not_allowed() -> Result<()> {
             .as_str(),
     ) {
         bail!("T3.5 service_not_allowed: rogue recipient unexpectedly passed allow-list");
+    }
+    Ok(())
+}
+
+/// A stable principal core does not authorize a different PCR generation.
+/// The authority-instance digest is the downstream cache/admission key.
+fn negative_case_same_core_different_authority_instance() -> Result<()> {
+    let accepted = sample_candidate()?;
+    let mut substituted = accepted.clone();
+    substituted.principal_authority_instance = PrincipalAuthorityInstance::new(
+        accepted.subject_id.clone(),
+        accepted
+            .member_delivery_binding
+            .recipient_service_id
+            .clone(),
+        RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
+        Hash::new(format!("sha256:{}", "6".repeat(64)))?,
+    )?;
+    if substituted
+        .principal_authority_instance
+        .authority_instance_digest
+        == accepted
+            .principal_authority_instance
+            .authority_instance_digest
+    {
+        bail!("different PCR lineage produced the same authority-instance digest");
+    }
+    if substituted == accepted {
+        bail!("same-core authority substitution was erased by candidate equality");
     }
     Ok(())
 }
@@ -490,8 +525,14 @@ async fn live_stack_probe() -> Result<()> {
 /// `resolve_handle` response. `audience = TARGET_REALM_ID` so the candidate
 /// validates against the same Realm the SDK builder is asked to join.
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
-    let subject = Did::new(ALICE_DID.to_owned())?;
-    let principal = Did::new(PRINCIPAL_DID.to_owned())?;
+    let subject = DidCoreId::new(ALICE_DID)?;
+    let principal = DidCoreId::new(PRINCIPAL_DID)?;
+    let principal_authority_instance = PrincipalAuthorityInstance::new(
+        subject.clone(),
+        principal.clone(),
+        RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K")?,
+        Hash::new(format!("sha256:{}", "5".repeat(64)))?,
+    )?;
     let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
@@ -499,6 +540,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
+        principal_authority_instance,
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {

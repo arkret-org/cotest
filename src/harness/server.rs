@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
-use arkret::TypedTrustDomainId;
+use arkret::{DidCoreId, DidFullId, TypedTrustDomainId};
 use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -33,7 +33,8 @@ pub struct ArkretServer {
     handle: SutHandle,
     external_restart: Option<ExternalRestartConfig>,
     base_url: Url,
-    service_id: String,
+    service_id: DidCoreId,
+    service_full_id: DidFullId,
     trust_domain: TypedTrustDomainId,
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
@@ -206,7 +207,7 @@ impl ArkretServer {
             let _ = child.wait();
             return Err(error);
         }
-        let (service_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
@@ -223,6 +224,7 @@ impl ArkretServer {
             }),
             base_url,
             service_id,
+            service_full_id,
             trust_domain,
             blob_root: Some(blob_root),
             log_path,
@@ -299,13 +301,14 @@ impl ArkretServer {
             let _ = child.wait();
             return Err(error);
         }
-        let (service_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
             external_restart: None,
             base_url,
             service_id,
+            service_full_id,
             trust_domain,
             blob_root: Some(blob_root),
             log_path,
@@ -401,13 +404,14 @@ impl ArkretServer {
             };
             return Err(anyhow!("{error}{log_suffix}"));
         }
-        let (service_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
             external_restart: None,
             base_url,
             service_id,
+            service_full_id,
             trust_domain,
             blob_root: None,
             log_path,
@@ -422,8 +426,12 @@ impl ArkretServer {
         self.base_url.clone()
     }
 
-    pub fn service_id(&self) -> &str {
+    pub fn service_id(&self) -> &DidCoreId {
         &self.service_id
+    }
+
+    pub fn service_full_id(&self) -> &DidFullId {
+        &self.service_full_id
     }
 
     pub fn trust_domain(&self) -> &TypedTrustDomainId {
@@ -553,8 +561,12 @@ impl ArkretServer {
             let _ = restarted.wait();
             return Err(error);
         }
-        let (service_id, trust_domain) = fetch_service_identity(&self.base_url).await?;
-        if service_id != self.service_id || trust_domain != self.trust_domain {
+        let (service_id, service_full_id, trust_domain) =
+            fetch_service_identity(&self.base_url).await?;
+        if service_id != self.service_id
+            || service_full_id != self.service_full_id
+            || trust_domain != self.trust_domain
+        {
             let _ = restarted.kill();
             let _ = restarted.wait();
             return Err(anyhow!(
@@ -676,7 +688,7 @@ impl ArkretServer {
             http: self.http(),
             sdk,
             base_url: self.base_url(),
-            service_id: self.service_id.clone(),
+            service_id: self.service_id.to_string(),
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             token,
@@ -1289,7 +1301,9 @@ fn test_trust_domain(name: &str) -> String {
     )
 }
 
-async fn fetch_service_identity(base_url: &Url) -> Result<(String, TypedTrustDomainId)> {
+async fn fetch_service_identity(
+    base_url: &Url,
+) -> Result<(DidCoreId, DidFullId, TypedTrustDomainId)> {
     let url = base_url.join("/_arkret/describe")?;
     let response = probe_http_client()?
         .get(url.clone())
@@ -1302,16 +1316,26 @@ async fn fetch_service_identity(base_url: &Url) -> Result<(String, TypedTrustDom
     let service_id = body
         .get("service_id")
         .and_then(Value::as_str)
-        .filter(|value| value.starts_with("did:"))
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("service describe at {url} omitted a valid service_id"))?;
+        .ok_or_else(|| anyhow!("service describe at {url} omitted service_id"))?;
+    let service_id = DidCoreId::new(service_id.to_owned())
+        .with_context(|| format!("service describe at {url} returned invalid service_id"))?;
+    let service_full_id = body
+        .get("full_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("service describe at {url} omitted full_id"))?;
+    let service_full_id = DidFullId::new(service_full_id.to_owned())
+        .with_context(|| format!("service describe at {url} returned invalid full_id"))?;
+    anyhow::ensure!(
+        arkret::project_full_id_to_core_id(&service_full_id)? == service_id,
+        "service describe at {url} returned a mismatched service_id/full_id"
+    );
     let trust_domain = body
         .get("trust_domain")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("service describe at {url} omitted trust_domain"))?;
     let trust_domain = TypedTrustDomainId::new(trust_domain.to_owned())
         .with_context(|| format!("service describe at {url} returned invalid trust_domain"))?;
-    Ok((service_id, trust_domain))
+    Ok((service_id, service_full_id, trust_domain))
 }
 
 fn probe_http_client() -> Result<HttpClient> {

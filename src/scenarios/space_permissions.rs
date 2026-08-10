@@ -212,8 +212,8 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
 
 fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<()> {
     let verification_method = format!("{actor}#cotest");
-    let actor_full_id = arkret_identifiers::Did::new(actor.to_owned())?;
-    event.actor_id = arkret_identifiers::ActorId::from(
+    let actor_full_id = arkret_identifiers::DidFullId::new(actor.to_owned())?;
+    event.actor_id = arkret_identifiers::DidCoreId::from(
         arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?,
     );
     event.actor_seq = 0;
@@ -222,7 +222,11 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
         event.auth_context = None;
     } else {
         event.auth_context = Some(arkret_wire::AuthContext {
-            did: arkret_identifiers::Did::new(actor.to_owned())?,
+            actor_id: arkret_identifiers::DidCoreId::from(
+                arkret_identifiers::project_full_id_to_core_id(
+                    &arkret_identifiers::DidFullId::new(actor.to_owned())?,
+                )?,
+            ),
             key_id: verification_method.clone(),
             key_epoch: 0,
             credential_epoch: None,

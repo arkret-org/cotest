@@ -644,7 +644,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     // effective-set filter that soland's MID reducer MUST mirror. An
     // initial event followed by a replacement event with a matching
     // payload_digest collapses to a single effective entry — the second.
-    use arkret_identifiers::{Did, EventId, Hash, RealmId};
+    use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
     use arkret_models_identity::{
         DisplayProfile, IdentityPayloadCarrier, MemberIdentity, MemberIdentityProof,
         MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
@@ -653,8 +653,8 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
     let realm = RealmId::new("ak:realm:AQfJRAZvIVyNOdrjtAPw9Q2gKR0o_3Ud-xQZQB8gx_r9")
         .map_err(|e| anyhow!("realm: {e}"))?;
-    let alice = Did::new("did:web:alice.acme.example".to_owned())?;
-    let subject = Did::new("did:web:alice.principal.example".to_owned())?;
+    let alice = DidCoreId::new("did:web:alice.acme.example")?;
+    let subject = DidCoreId::new("did:web:alice.principal.example")?;
 
     // R3.2: MemberIdentity discloses subject_id + display_profile only;
     // handle lifecycle (the retired `primary_handle` / `handles[]`) has
@@ -771,14 +771,14 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     // live `#[ignore]` companion below.
     use std::collections::BTreeSet;
 
-    use arkret_identifiers::{Did, EventId, Hash};
+    use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
     use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
         CandidateIntent, MemberDeliveryBindingCandidate,
     };
     use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
     use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
     use arkret_models_identity::handle_claim::DeliveryBindingHint;
-    use arkret_wire::{Audience, Proof};
+    use arkret_wire::{Audience, PrincipalAuthorityInstance, Proof};
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     if invite_handle.canonical() != "alice:acme.example" {
@@ -788,11 +788,19 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         );
     }
 
-    let principal = Did::new("did:web:principal.acme.example".to_owned())?;
+    let principal = DidCoreId::new("did:web:principal.acme.example")?;
+    let subject = DidCoreId::new("did:web:alice.acme.example")?;
+    let principal_authority_instance = PrincipalAuthorityInstance::new(
+        subject.clone(),
+        principal.clone(),
+        RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K")?,
+        Hash::new(format!("sha256:{}", "8".repeat(64)))?,
+    )?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     let candidate = MemberDeliveryBindingCandidate {
-        subject_id: Did::new("did:web:alice.acme.example".to_owned())?,
+        subject_id: subject,
+        principal_authority_instance,
         handle: invite_handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {

@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use anyhow::{Context, Result, bail};
 use arkret::identity::{DidDocument, DidResolver};
-use arkret_wire::Did;
+use arkret_wire::DidFullId;
 use serde::Deserialize;
 
 use crate::harness::NonProtocolTestBody;
@@ -385,11 +385,14 @@ impl CountingDidResolver {
 }
 
 impl DidResolver for CountingDidResolver {
-    fn supports(&self, did: &Did) -> bool {
+    fn supports(&self, did: &DidFullId) -> bool {
         matches!(did.method(), "web" | "webvh" | "key")
     }
 
-    fn resolve_did(&self, did: &Did) -> arkret::identity::Result<arkret::identity::ResolvedDid> {
+    fn resolve_did(
+        &self,
+        did: &DidFullId,
+    ) -> arkret::identity::Result<arkret::identity::ResolvedDid> {
         *self
             .calls
             .lock()

@@ -22,7 +22,7 @@ use arkret_models_collaboration::events_payloads::RealmPolicyBundlePayload;
 use arkret_models_collaboration::signal_plaintext::{
     ReadReceipt, SignalPlaintext, SignalPlaintextKind, open_signal_plaintext, seal_signal_plaintext,
 };
-use arkret_wire::{Did, EventId, ReadReceiptScope, StrandId};
+use arkret_wire::{DidCoreId, EventId, ReadReceiptScope, StrandId};
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_READ_RECEIPT_ROUND_TRIP: &str = "ak.vector.receipt.read.signal_round_trip.v1";
@@ -33,8 +33,8 @@ pub const ALL_READ_RECEIPT_SIGNAL_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE,
 ];
 
-fn actor() -> Result<Did> {
-    Ok(Did::new("did:web:alice.example")?)
+fn actor() -> Result<DidCoreId> {
+    Ok(DidCoreId::new("did:web:alice.example")?)
 }
 
 fn event_id() -> Result<EventId> {

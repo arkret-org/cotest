@@ -35,7 +35,7 @@ use arkret_policy::{
 use arkret_schema::{
     EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
-use arkret_wire::{Did, RealmId};
+use arkret_wire::{DidCoreId, RealmId};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
@@ -152,8 +152,8 @@ fn coverage_fixture_drops_legacy_organization_ref_shape() {
 
 /// Resolver fixtures selected by the vector's `resolver` field. Mirrors the
 /// shapes verify_realm_organization_statement distinguishes.
-fn org_did() -> Did {
-    Did::new("did:webvh:example.test:orgs:01J0000000000000000000000A".to_owned()).unwrap()
+fn org_did() -> DidCoreId {
+    DidCoreId::new("did:webvh:example.test:orgs:01J0000000000000000000000A").unwrap()
 }
 
 struct FixedResolver(Option<RealmOrganizationDelegation>);
@@ -163,7 +163,7 @@ impl RealmOrganizationDelegationResolver for FixedResolver {
     fn resolve_delegation(
         &self,
         _delegation_ref: &ObjectRef,
-        _organization_id: &Did,
+        _organization_id: &DidCoreId,
     ) -> Result<Option<RealmOrganizationDelegation>, Self::Error> {
         Ok(self.0.clone())
     }

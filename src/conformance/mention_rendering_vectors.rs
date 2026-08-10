@@ -16,7 +16,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
-use arkret_identifiers::Did;
+use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::events_payloads::mention::Mention;
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
 use chrono::{DateTime, TimeZone, Utc};
@@ -51,8 +51,8 @@ pub const ALL_MENTION_RENDERING_VECTOR_IDS: &[&str] = &[
 
 const ISSUER: &str = "did:web:coauth.acme.example";
 
-fn subject() -> Result<Did> {
-    Did::new("did:web:alice.principal.example".to_owned()).map_err(|e| anyhow!("subject: {e}"))
+fn subject() -> Result<DidCoreId> {
+    DidCoreId::new("did:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
@@ -65,11 +65,15 @@ fn now_anchor() -> DateTime<Utc> {
     at(2026, 5, 27)
 }
 
-fn verified_claim(handle: &str, subject: &Did, audience: Option<&str>) -> Result<HandleClaim> {
+fn verified_claim(
+    handle: &str,
+    subject: &DidCoreId,
+    audience: Option<&str>,
+) -> Result<HandleClaim> {
     Ok(HandleClaim {
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
         subject: Some(subject.clone()),
-        issuer: Some(ISSUER.to_owned()),
+        issuer: Some(DidCoreId::new(ISSUER)?),
         binding_state: Some(HandleBindingState::Verified),
         audience: audience.map(str::to_owned),
         created_at: Some(at(2026, 5, 1)),
@@ -79,7 +83,7 @@ fn verified_claim(handle: &str, subject: &Did, audience: Option<&str>) -> Result
 }
 
 fn empty_selection<'a>(
-    subject: &'a Did,
+    subject: &'a DidCoreId,
     snapshot: &'a [HandleClaim],
 ) -> PrimaryHandleSelectInput<'a> {
     PrimaryHandleSelectInput {
@@ -261,8 +265,8 @@ pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()
     Ok(())
 }
 
-fn issuer_string() -> String {
-    ISSUER.to_owned()
+fn issuer_string() -> DidCoreId {
+    DidCoreId::new(ISSUER).expect("fixture issuer is a valid core id")
 }
 
 // ── Suite entry-point ──────────────────────────────────────────────────────

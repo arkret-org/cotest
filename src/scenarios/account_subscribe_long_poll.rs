@@ -753,7 +753,11 @@ async fn submit_event_now(
             // marks an Event as a Control Move.
             event.seal_ref = Some(frontier.seal_id);
             event.auth_context = Some(arkret_wire::AuthContext {
-                did: arkret_identifiers::Did::new(actor.actor.clone())?,
+                actor_id: arkret_identifiers::DidCoreId::from(
+                    arkret_identifiers::project_full_id_to_core_id(
+                        &arkret_identifiers::DidFullId::new(actor.actor.clone())?,
+                    )?,
+                ),
                 key_id: format!("{}#cotest", actor.actor),
                 key_epoch: 0,
                 credential_epoch: None,

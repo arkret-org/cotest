@@ -137,7 +137,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
                 .rsplit_once('#')
                 .map(|(controller, _)| controller)
                 .ok_or_else(|| anyhow!("member verification method is not a DID URL"))?;
-            arkret_wire::Did::new(controller).map_err(anyhow::Error::msg)
+            arkret_wire::DidCoreId::new(controller).map_err(anyhow::Error::msg)
         })
         .collect::<Result<Vec<_>>>()?;
     let notary = NotaryValue::Threshold {

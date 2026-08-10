@@ -57,7 +57,7 @@ async fn wait_for_coauth_service_identity(base_url: &str, health_url: &str) -> R
                 .and_then(serde_json::Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| anyhow!("coauth describe omitted service_id"))?;
-            arkret_identifiers::Did::new(service_id.to_owned())
+            arkret_identifiers::DidFullId::new(service_id.to_owned())
                 .map_err(|error| anyhow!("coauth service_id is invalid: {error}"))?;
             return Ok(());
         }

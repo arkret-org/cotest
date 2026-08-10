@@ -26,9 +26,9 @@ use arkret_signatures::agent_evidence::{
 };
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
-    ActorId, Base64UrlString, CoreId, Did, DidUrl, EventId, EventKind, Hash, Hlc, NonEmptyString,
-    NotarySig, PayloadSignature, PrincipalId, ProtocolOperationId, RealmId, SchemaId, ScopeRef,
-    Seal, SealId, SealKind, ServiceId, project_full_id_to_core_id,
+    Base64UrlString, DidCoreId, DidFullId, DidUrl, EventId, EventKind, Hash, Hlc, NonEmptyString,
+    NotarySig, PayloadSignature, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId,
+    SealKind, project_full_id_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -97,18 +97,18 @@ impl Default for EvidenceConfig {
 struct ExecutableEvidence {
     current: AgentSignerEvidence,
     historical: AgentSignerEvidence,
-    signer_id: ActorId,
+    signer_id: DidCoreId,
     agent_key_id: NonEmptyString,
-    controller_id: ActorId,
+    controller_id: DidCoreId,
     verification_method: DidUrl,
     authorize_event_id: EventId,
     authorize_public_key_digest: Hash,
     binding_digest: Hash,
-    authority_service_id: ServiceId,
+    authority_service_id: DidCoreId,
     authority_verification_method: DidUrl,
-    account_authority_service_id: ServiceId,
+    account_authority_service_id: DidCoreId,
     account_authority_verification_method: DidUrl,
-    receiver_service_id: ServiceId,
+    receiver_service_id: DidCoreId,
     receiver_verification_method: DidUrl,
     controller_public_key: [u8; 32],
     authority_public_key: [u8; 32],
@@ -116,8 +116,8 @@ struct ExecutableEvidence {
     receiver_public_key: [u8; 32],
     operation_id: ProtocolOperationId,
     request_digest: Hash,
-    verifier_id: ServiceId,
-    audience: ServiceId,
+    verifier_id: DidCoreId,
+    audience: DidCoreId,
     challenge: NonEmptyString,
     event_id: EventId,
     event_digest: Hash,
@@ -167,9 +167,9 @@ fn expected_class(expected: &str) -> Result<OutcomeClass> {
     }
 }
 
-fn service_id(value: &str) -> Result<ServiceId> {
-    let full_id = Did::new(value.to_owned())?;
-    Ok(ServiceId::from(project_full_id_to_core_id(&full_id)?))
+fn service_id(value: &str) -> Result<DidCoreId> {
+    let full_id = DidFullId::new(value.to_owned())?;
+    Ok(DidCoreId::from(project_full_id_to_core_id(&full_id)?))
 }
 
 fn execute_case(name: &str) -> Result<OutcomeClass> {
@@ -354,7 +354,7 @@ fn execute_case(name: &str) -> Result<OutcomeClass> {
 }
 
 enum CurrentOverride {
-    Verifier(ServiceId),
+    Verifier(DidCoreId),
     RequestDigest(Hash),
 }
 
@@ -434,7 +434,7 @@ fn current_stale_outcome(fixture: &ExecutableEvidence) -> Result<OutcomeClass> {
 
 fn historical_outcome(
     fixture: &ExecutableEvidence,
-    receiver_override: Option<ServiceId>,
+    receiver_override: Option<DidCoreId>,
     deny_key_resolution: bool,
 ) -> Result<OutcomeClass> {
     historical_outcome_with(
@@ -448,7 +448,7 @@ fn historical_outcome(
 fn historical_outcome_with(
     fixture: &ExecutableEvidence,
     evidence: Option<&AgentSignerEvidence>,
-    receiver_override: Option<ServiceId>,
+    receiver_override: Option<DidCoreId>,
     deny_key_resolution: bool,
 ) -> Result<OutcomeClass> {
     let state_source = evidence.unwrap_or(&fixture.historical);
@@ -573,21 +573,21 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let account_signing = SigningKey::from_bytes(&[14; 32]);
     let receiver_signing = SigningKey::from_bytes(&[15; 32]);
 
-    let signer_full_id = Did::new("did:webvh:z6mkagent:agent.example")?;
-    let controller_full_id = Did::new("did:webvh:z6mkcontroller:controller.example")?;
-    let authority_service_full_id = Did::new("did:webvh:z6mkauthority:authority.example")?;
+    let signer_full_id = DidFullId::new("did:webvh:z6mkagent:agent.example")?;
+    let controller_full_id = DidFullId::new("did:webvh:z6mkcontroller:controller.example")?;
+    let authority_service_full_id = DidFullId::new("did:webvh:z6mkauthority:authority.example")?;
     let account_authority_service_full_id =
-        Did::new("did:webvh:z6mkaccount:account-authority.example")?;
-    let receiver_service_full_id = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
-    let signer_id = ActorId::from(project_full_id_to_core_id(&signer_full_id)?);
-    let controller_id = ActorId::from(project_full_id_to_core_id(&controller_full_id)?);
+        DidFullId::new("did:webvh:z6mkaccount:account-authority.example")?;
+    let receiver_service_full_id = DidFullId::new("did:webvh:z6mkreceiver:receiver.example")?;
+    let signer_id = DidCoreId::from(project_full_id_to_core_id(&signer_full_id)?);
+    let controller_id = DidCoreId::from(project_full_id_to_core_id(&controller_full_id)?);
     let authority_service_id =
-        ServiceId::from(project_full_id_to_core_id(&authority_service_full_id)?);
-    let account_authority_service_id = ServiceId::from(project_full_id_to_core_id(
+        DidCoreId::from(project_full_id_to_core_id(&authority_service_full_id)?);
+    let account_authority_service_id = DidCoreId::from(project_full_id_to_core_id(
         &account_authority_service_full_id,
     )?);
     let receiver_service_id =
-        ServiceId::from(project_full_id_to_core_id(&receiver_service_full_id)?);
+        DidCoreId::from(project_full_id_to_core_id(&receiver_service_full_id)?);
     let verification_method =
         DidUrl::new(format!("{signer_full_id}#runtime-1")).map_err(anyhow::Error::msg)?;
     let controller_verification_method =
@@ -766,7 +766,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     };
     let mut gate = ControllerAccountGateAttestation {
         schema: nes(SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1)?,
-        principal_id: PrincipalId::from(CoreId::from(controller_id.clone())),
+        principal_id: DidCoreId::from(DidCoreId::from(controller_id.clone())),
         eligibility: config.controller_eligibility,
         status: config.controller_status,
         basis_digest: canonical_hash(&basis)?,
@@ -985,7 +985,7 @@ fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> R
 }
 
 fn pending_outer(
-    service_id: &ServiceId,
+    service_id: &DidCoreId,
     method: &DidUrl,
     issued_at: DateTime<Utc>,
     expires_at: DateTime<Utc>,

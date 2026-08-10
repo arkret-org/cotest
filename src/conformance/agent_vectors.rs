@@ -20,7 +20,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{Did, ServiceId};
+use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::agent_operations::agent_requested_scope_digest;
 use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
 use arkret_models_collaboration::sync_frames::account_sync::{
@@ -171,14 +171,14 @@ pub fn run_agent_provision_vector() -> Result<()> {
     let commitment = vector
         .get("requested_scope_commitment")
         .ok_or_else(|| anyhow!("agent provision vector commitment is missing"))?;
-    let agent_id = Did::new(
+    let agent_id = DidCoreId::new(
         commitment
             .get("agent_id")
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("commitment agent_id is missing"))?
             .to_owned(),
     )?;
-    let controller_id = Did::new(
+    let controller_id = DidCoreId::new(
         commitment
             .get("controller_id")
             .and_then(Value::as_str)
@@ -341,7 +341,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             })
         })
         .ok_or_else(|| anyhow!("runtime-key-binding vector case missing"))?;
-    let agent_id = Did::new("did:webvh:z6mkagent:agent.example")?;
+    let agent_id = DidCoreId::new("did:webvh:z6mkagent:agent.example")?;
     let public_key = case
         .get("source_public_key")
         .ok_or_else(|| anyhow!("runtime-key-binding source_public_key missing"))?;
@@ -392,13 +392,13 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         .get("pairing_request_binding_input")
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow!("pairing_request_binding_input missing"))?;
-    let controller_id = Did::new(
+    let controller_id = DidCoreId::new(
         pairing
             .get("controller_id")
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("pairing controller_id missing"))?,
     )?;
-    let pairing_agent_id = Did::new(
+    let pairing_agent_id = DidCoreId::new(
         pairing
             .get("agent_id")
             .and_then(Value::as_str)
@@ -502,7 +502,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
                 .map_err(|error| anyhow!(error))?,
             pairing_code,
             expires_at.parse()?,
-            &ServiceId::new(audience)?,
+            &DidCoreId::new(audience)?,
             &binding,
             &proof,
         )?;

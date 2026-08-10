@@ -85,9 +85,9 @@ pub fn events_frontier_request_body(
         arkret_models_collaboration::event_query::EventsFrontierRequestBody {
             actor_id: actor_id
                 .map(|value| {
-                    arkret_identifiers::FullId::new(value.to_owned()).and_then(|full_id| {
+                    arkret_identifiers::DidFullId::new(value.to_owned()).and_then(|full_id| {
                         arkret_identifiers::project_full_id_to_core_id(&full_id)
-                            .map(arkret_identifiers::ActorId::from)
+                            .map(arkret_identifiers::DidCoreId::from)
                     })
                 })
                 .transpose()?,
@@ -117,7 +117,11 @@ pub fn events_query_for_actor(
 ) -> Result<arkret_models_collaboration::event_query::EventsQueryPostRequestBody> {
     Ok(
         arkret_models_collaboration::event_query::EventsQueryPostRequestBody {
-            actors: vec![arkret_identifiers::Did::new(actor_id.to_owned())?],
+            actors: vec![arkret_identifiers::DidCoreId::from(
+                arkret_identifiers::project_full_id_to_core_id(
+                    &arkret_identifiers::DidFullId::new(actor_id.to_owned())?,
+                )?,
+            )],
             limit: Some(limit),
             ..Default::default()
         },
@@ -301,17 +305,17 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
 
-    let notary_did = arkret_identifiers::Did::new(service_id.to_owned())?;
+    let notary_full_id = arkret_identifiers::DidFullId::new(service_id.to_owned())?;
     let notary = arkret_wire::notary::NotaryValue::single_did_with_org(
-        notary_did.clone(),
-        vec![arkret_identifiers::Did::new(
-            "did:webvh:z6mkfixture:recovery.soland.local".to_owned(),
+        notary_full_id,
+        vec![arkret_identifiers::DidCoreId::new(
+            "did:webvh:z6mkfixture:recovery.soland.local",
         )?],
-        arkret_identifiers::Did::new(
-            "did:webvh:z6mkfixture:organization.primary.soland.local".to_owned(),
+        arkret_identifiers::DidCoreId::new(
+            "did:webvh:z6mkfixture:organization.primary.soland.local",
         )?,
-        vec![arkret_identifiers::Did::new(
-            "did:webvh:z6mkfixture:organization.recovery.soland.local".to_owned(),
+        vec![arkret_identifiers::DidCoreId::new(
+            "did:webvh:z6mkfixture:organization.recovery.soland.local",
         )?],
     );
     let genesis_salt = input

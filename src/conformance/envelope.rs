@@ -686,7 +686,7 @@ fn validate_event_envelope(
             "invalid realm_id",
         ));
     }
-    if !value_field_str(event, "actor_id")?.starts_with("did:") {
+    if !value_field_str(event, "actor_id")?.starts_with("ak:did_core:") {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
             "invalid actor_id",

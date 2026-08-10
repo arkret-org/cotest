@@ -51,13 +51,13 @@ fn event_value_with_parseable_proof_digests(event: &Value) -> Value {
 
 fn controller_full_id(
     verification_method: &arkret_wire::DidUrl,
-) -> Result<arkret_identifiers::FullId> {
+) -> Result<arkret_identifiers::DidFullId> {
     let controller = verification_method
         .as_str()
         .split_once('#')
         .map(|(controller, _)| controller)
         .ok_or_else(|| anyhow!("verification method has no controller fragment"))?;
-    arkret_identifiers::FullId::new(controller.to_owned())
+    arkret_identifiers::DidFullId::new(controller.to_owned())
         .map_err(|error| anyhow!("invalid verification-method controller: {error}"))
 }
 

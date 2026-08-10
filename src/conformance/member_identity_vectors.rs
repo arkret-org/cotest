@@ -28,7 +28,7 @@
 //! `tests/r3_conformance_vectors.rs` under `#[ignore]` gates.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_identifiers::{Did, EventId, Hash, RealmId};
+use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
 use arkret_models_identity::{
     DisplayProfile, EffectiveIdentityEntry, IdentityPayloadCarrier, MemberIdentity,
     MemberIdentityProof, MemberIdentityReplacementRef, MemberIdentitySegment,
@@ -79,12 +79,12 @@ fn fake_realm() -> Result<RealmId> {
     RealmId::new(STABLE_REALM_ID).map_err(|e| anyhow!("invalid stable realm id: {e}"))
 }
 
-fn fake_actor() -> Result<Did> {
-    Did::new(ALICE_ACTOR_DID.to_owned()).map_err(|e| anyhow!("invalid actor did: {e}"))
+fn fake_actor() -> Result<DidCoreId> {
+    DidCoreId::new(ALICE_ACTOR_DID).map_err(|e| anyhow!("invalid actor did: {e}"))
 }
 
-fn fake_subject() -> Result<Did> {
-    Did::new(ALICE_SUBJECT_DID.to_owned()).map_err(|e| anyhow!("invalid subject did: {e}"))
+fn fake_subject() -> Result<DidCoreId> {
+    DidCoreId::new(ALICE_SUBJECT_DID).map_err(|e| anyhow!("invalid subject did: {e}"))
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
@@ -540,7 +540,7 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
             .map_err(|e| anyhow!("bogus digest as Hash: {e}"))?;
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: Did::new("did:web:bob.acme.example".to_owned())?,
+        actor_id: DidCoreId::new("did:web:bob.acme.example")?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![MemberIdentityReplacementRef {
             event_id: cross_subject_event,

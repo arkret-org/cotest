@@ -7,7 +7,8 @@ use crate::harness::{
     ArkretServer, TestActorClient, expect_api_error, expect_json, expect_status, submit_event,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service, authorize_device_public_key, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, authorize_device_public_key,
+    spawn_with_harness_account_authority,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -262,7 +263,7 @@ async fn expect_authz_check_hard_deny(
 
 pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("presence-policy", &[]).await?;
-    let alice_actor = actor_did_for_service(server.service_id(), "presence-alice")?;
+    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "presence-alice")?;
     let alice = server
         .demo_client(
             &alice_actor,

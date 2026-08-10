@@ -13,7 +13,7 @@ use arkret_bootstrap::{
 };
 use arkret_event_draft::EventPayloadExt;
 use arkret_identifiers::{
-    ActorId, DeviceId, Did, Hash, Hlc, RealmId, TypedTrustDomainId, project_full_id_to_core_id,
+    DeviceId, DidCoreId, DidFullId, Hash, Hlc, TypedTrustDomainId, project_full_id_to_core_id,
 };
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
@@ -207,7 +207,8 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
 }
 
 fn validate_pcr_genesis_helpers() -> Result<()> {
-    let principal = Did::new("did:webvh:z6mkfixture:alice.example")?;
+    let principal_full_id = DidFullId::new("did:webvh:z6mkfixture:alice.example")?;
+    let principal = DidCoreId::from(project_full_id_to_core_id(&principal_full_id)?);
     let created_at = "2026-07-15T00:00:00.000Z".parse()?;
     let device_id = DeviceId::new("ak:device:01904100-0000-7000-8000-000000000001")?;
     let device_key = SigningKey::from_bytes(&[0x42; 32]);
@@ -224,7 +225,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         hpke_key: hpke_key.clone(),
         algorithms: algorithms.clone(),
         device_key_algorithm: Some(non_empty("Ed25519")?),
-        authorized_by: DeviceOrPrincipalRef::Did(principal.clone()),
+        authorized_by: DeviceOrPrincipalRef::Principal(principal.clone()),
         scopes: None,
         not_before: created_at,
         expires_at: None,
@@ -262,6 +263,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
+            principal_full_id,
             genesis_salt: arkret_wire::GenesisSalt::generate()?,
             trust_domain: TypedTrustDomainId::new("ak:trust_domain:example.net")?,
             did_inception_ref: EventRef::new(
@@ -285,7 +287,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let mut authorize = arkret_wire::test_support::raw_event(
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm { realm_id },
-        ActorId::from(project_full_id_to_core_id(&principal)?),
+        principal.clone(),
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         authorize_value,
