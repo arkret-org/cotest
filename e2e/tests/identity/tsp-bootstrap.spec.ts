@@ -30,6 +30,16 @@ type RelationshipBootstrap = {
   established_at: string;
 };
 
+// Frozen identities of accepted Realm-create Event fixtures. These are full
+// event-derived tokens; the TSP mock only transports the nested Arkret payload
+// and must not mint Realm ids from UUID placeholders.
+const TSP_FIXTURE_REALM_IDS = {
+  invite: "ak:realm:AY61QviMxoJ0ALEn5U39bA7Qbi1BxHCrOq4950m2JRjM",
+  fallback: "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
+  degraded: "ak:realm:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",
+  nested: "ak:realm:AV56KkeEaMSR4caEiVYFp1MtJk3sQ_Zn0VETrzEWQlU3",
+} as const;
+
 /**
  * The mock encodes one TSP endpoint identity per run. `bob_extern`'s
  * `did:web` VID is the endpoint VID the mock announces; alice's VID is a
@@ -149,7 +159,7 @@ test.describe("tsp bootstrap", () => {
     // Phase C — wrap a Arkret `ak.invite.create` as a TSP application payload
     // (nested mode: the outer envelope's VID is pairwise; the inner Arkret
     // operation carries alice's real DID + event signature).
-    const realmId = `ak:realm:${randomUUID()}`;
+    const realmId = TSP_FIXTURE_REALM_IDS.invite;
     const innerArkret = {
       type: "ak.invite.create",
       content_type: "application/arkret+json",
@@ -232,7 +242,7 @@ test.describe("tsp bootstrap", () => {
     });
     expect(inject.ok()).toBeTruthy();
 
-    const realmId = `ak:realm:${randomUUID()}`;
+    const realmId = TSP_FIXTURE_REALM_IDS.fallback;
     const tspAttempt = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
         from_vid: alice.did,
@@ -305,7 +315,7 @@ test.describe("tsp bootstrap", () => {
         // `tsp_authenticity=ok` (spec §8 trust assessment result).
         payload_b64: b64({
           type: "ak.invite.create",
-          realm_id: `ak:realm:${randomUUID()}`,
+          realm_id: TSP_FIXTURE_REALM_IDS.degraded,
           invitee: bobExternVid,
           actor: alice.did,
           vid_trust: "degraded_no_witness",
@@ -363,7 +373,7 @@ test.describe("tsp bootstrap", () => {
       type: "ak.invite.create",
       operation: "ak.invite.create",
       actor: alice.did, // the real vid_local — MUST stay hidden from a relay
-      realm_id: `ak:realm:${randomUUID()}`,
+      realm_id: TSP_FIXTURE_REALM_IDS.nested,
       invitee: bobExternVid,
       secret_marker: `nested-secret-${randomUUID()}`,
     };

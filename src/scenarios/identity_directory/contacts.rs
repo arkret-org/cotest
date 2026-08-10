@@ -175,11 +175,12 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     );
 
     let shared_realm_id = alice.create_realm("Workflow Export Realm").await?;
+    let shared_strand_id = alice.default_strand_id(&shared_realm_id)?;
     alice.add_member(&shared_realm_id, &bob).await?;
     let sent = alice
         .send_message(
             &shared_realm_id,
-            "ak:thread:directory-workflow",
+            &shared_strand_id,
             "hello directory workflow",
         )
         .await?;

@@ -212,7 +212,10 @@ export function buildSignalEnvelope(args: {
       scheme: "ak.signal_exporter_aead.v1",
       key_ref: {
         algorithm: "MLS-EXPORTER-AEAD",
-        group_state_ref: `ak:event:${uuidV7()}`,
+        // Frozen accepted MLS group-state Event fixture. Event references use
+        // full identity tokens, never UUID placeholders.
+        group_state_ref:
+          "ak:event:Ab8fF-_JIKTb1BX6GXVZLOEoeeVFftSuQTq3Y8wtAvJT",
       },
       purpose: "ak.signal.v1",
       aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",

@@ -8,6 +8,11 @@ use arkret::contact_operations::{
 use arkret::{ContactIntroductionEvidence, IdempotencyKey, ProtocolOperationId};
 use arkret_http_client::Client as SdkClient;
 use arkret_identifiers::{Did, Hash, Hlc};
+use arkret_models_collaboration::events_payloads::{
+    RealmSetDefaultStrandPayload, StrandCreatePayload,
+};
+use arkret_models_collaboration::objects::profiles::StrandTrackConfig;
+use arkret_models_collaboration::objects::strand::Strand;
 use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::{Value, json};
@@ -39,6 +44,11 @@ pub struct TestActorClient {
     /// scenarios clone the client freely and the controller does not change.
     pub(super) controlled_realms:
         std::sync::Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+    /// Exact accepted default-Strand coordinates for Realms created by this
+    /// harness actor. Realm and Strand ids are independent Event-derived
+    /// identities, so callers must consume this carrier rather than retype.
+    pub(super) default_strands:
+        std::sync::Arc<std::sync::Mutex<std::collections::BTreeMap<String, String>>>,
     /// Grants issued to this actor, keyed by Realm. Membership derives read
     /// access only (`capabilities.md` line 700); every write action still needs
     /// a covering grant, which a DataEvent names in `refs[role=authorized_by]`.
@@ -363,6 +373,15 @@ impl TestActorClient {
             .collect()
     }
 
+    pub fn default_strand_id(&self, realm_id: &str) -> Result<String> {
+        self.default_strands
+            .lock()
+            .expect("cotest default-Strand map is not poisoned")
+            .get(realm_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("accepted default Strand is unavailable for Realm {realm_id}"))
+    }
+
     pub fn service_id(&self) -> &str {
         &self.service_id
     }
@@ -412,11 +431,7 @@ impl TestActorClient {
     }
 
     pub async fn create_realm_with(&self, body: Value) -> Result<Value> {
-        // Only a construction placeholder: the create payload drops the object
-        // id (R3.1) and the real Realm id comes back out of the genesis Event.
-        let placeholder_realm_id = next_typed_id("realm");
-        let draft =
-            realm_create_payload(&self.actor, &self.service_id, &placeholder_realm_id, &body)?;
+        let draft = realm_create_payload(&self.service_id, &body)?;
         let (realm_id, events) = realm_bootstrap_event_batch(&self.actor, draft)?;
         self.controlled_realms
             .lock()
@@ -432,12 +447,51 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
+        let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
+        let actor_id = arkret_identifiers::Did::new(self.actor.clone())?;
+        let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
+        strand.tracks.clear();
+        strand.tracks.insert(
+            "discussion".to_owned(),
+            StrandTrackConfig::discussion_primary(),
+        );
+        let created = self
+            .submit_event(
+                realm_id.as_str(),
+                arkret_wire::event_kind_str::STRAND_CREATE,
+                serde_json::to_value(StrandCreatePayload {
+                    object: strand,
+                    initial_relations: None,
+                })?,
+            )
+            .await?;
+        let strand_event_id = created
+            .get("event_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("default Strand create response missing event_id: {created}"))?;
+        let strand_id = arkret_identifiers::StrandId::from_event_id(
+            &arkret_identifiers::EventId::new(strand_event_id.to_owned())?,
+        );
+        self.submit_event(
+            realm_id.as_str(),
+            arkret_wire::event_kind_str::REALM_SET_DEFAULT_STRAND,
+            serde_json::to_value(RealmSetDefaultStrandPayload::new(
+                realm_id.clone(),
+                strand_id.clone(),
+            ))?,
+        )
+        .await?;
+        self.default_strands
+            .lock()
+            .expect("cotest default-Strand map is not poisoned")
+            .insert(realm_id.to_string(), strand_id.to_string());
         // A DataEvent that writes a cell has to name a covering authority in
         // `refs[role=authorized_by]` / `authorization_ref`. For the creator that
         // authority is the Realm authority-root cell the create contract wrote,
         // not a grant id: v1 genesis issues no capability grant at all.
         Ok(json!({
             "realm_id": realm_id,
+            "default_strand_id": strand_id,
             "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
             "event_response": event_response,
         }))
@@ -575,16 +629,11 @@ impl TestActorClient {
         Ok((grant_id.to_string(), response))
     }
 
-    pub async fn send_message(
-        &self,
-        realm_id: &str,
-        _thread_id: &str,
-        body: &str,
-    ) -> Result<Value> {
+    pub async fn send_message(&self, realm_id: &str, strand_id: &str, body: &str) -> Result<Value> {
         self.submit_event(
             realm_id,
             "ak.message.create",
-            message_create_text_payload(realm_id, body)?,
+            message_create_text_payload(strand_id, body)?,
         )
         .await
     }

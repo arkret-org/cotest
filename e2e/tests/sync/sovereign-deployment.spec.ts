@@ -11,6 +11,28 @@ test.describe.configure({ mode: "serial" });
 
 let cleanupAdminTokens: { alpha: string; beta: string } | undefined;
 
+// The deployment-admin harness seeds accepted projections directly, so each
+// scenario uses frozen full Realm tokens standing for its accepted create
+// Events. UUID-shaped Realm placeholders are not valid protocol identities.
+const SOVEREIGN_REALM_FIXTURES = {
+  core: [
+    "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
+    "ak:realm:AaucqKYsYtNwus16IgXDBl88-LWNZZVtRpZ-CqgnPQoi",
+  ],
+  escape: [
+    "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
+    "ak:realm:Abf_EFzG0z16A5W8192VSnWPMSNVFmuS4X2gQVKgT4ml",
+  ],
+  outage: [
+    "ak:realm:AbL8oOUkpZusQ-VqkYVKoKNNlWviopqGNtOPvbl98WW4",
+    "ak:realm:AdrCf1FpSdW2-osrupL1Va1DkS3PNlzZsPum0wyLnQwz",
+  ],
+  trust: [
+    "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
+    "ak:realm:Af3OjcIxjJQXyc7V8D_U6DEKRicQF4XRAClC-IUu0EHg",
+  ],
+} as const;
+
 test.describe("sovereign deployment", () => {
   test.beforeEach(() => {
     test.skip(!hasDualSoland(), "requires -DualSoland alpha/beta topology");
@@ -253,8 +275,13 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   const short = stamp.slice(-12);
   const aliceDid = `did:web:alice-int-${label}-${stamp}.example`;
   const bobDid = `did:web:bob-ext-${label}-${stamp}.example.org`;
-  const enclaveRealmId = `ak:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
-  const internalRealmId = `ak:realm:019e0000-${short.slice(0, 4)}-7000-8000-${short}`;
+  const fixtureRealmIds = SOVEREIGN_REALM_FIXTURES[
+    label as keyof typeof SOVEREIGN_REALM_FIXTURES
+  ];
+  if (!fixtureRealmIds) {
+    throw new Error(`missing sovereign Realm fixture identities for ${label}`);
+  }
+  const [enclaveRealmId, internalRealmId] = fixtureRealmIds;
   const operator = uniqueUser(`sovereign-operator-${label}-${stamp}`);
   const [alphaAdminToken, betaAdminToken] = await Promise.all([
     issueDevSession(request, operator, { server: "alpha" }),

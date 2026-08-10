@@ -123,6 +123,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     );
 
     let realm_id = create_collaboration_realm(&alice).await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
     let created_space = expect_json(
         alice.get(&format!("/_arkret/self/realms/{realm_id}")),
         StatusCode::OK,
@@ -163,11 +164,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     );
 
     let sent = alice
-        .send_message(
-            &realm_id,
-            "ak:thread:collaboration",
-            "hello from collaboration workflow",
-        )
+        .send_message(&realm_id, &strand_id, "hello from collaboration workflow")
         .await?;
     assert_eq!(sent["status"], "accepted");
     assert!(sent["event_id"].as_str().unwrap().starts_with("ak:event:"));
@@ -188,7 +185,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let bob_reply = bob
         .send_message(
             &realm_id,
-            "ak:thread:collaboration",
+            &strand_id,
             "hello alice from collaboration workflow",
         )
         .await?;

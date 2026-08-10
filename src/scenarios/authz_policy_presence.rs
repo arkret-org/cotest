@@ -130,10 +130,12 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     );
 
     alice.add_member(&realm_id, &bob).await?;
-    let id_suffix = realm_id.trim_start_matches("ak:realm:");
-    let strand_id = format!("ak:strand:{id_suffix}");
-    let relation_id = format!("ak:relation:{id_suffix}");
-    let morph_id = format!("ak:morph:{id_suffix}");
+    let strand_id = alice.default_strand_id(&realm_id)?;
+    // These negative authorization probes do not create the target objects;
+    // keep independent frozen Event-derived coordinates instead of retyping
+    // the Realm token into unrelated object kinds.
+    let relation_id = "ak:relation:AU2FuIl7Kq70taw5RT2eOqgjJZDbJIZs_nCtuwEaOLTH";
+    let morph_id = "ak:morph:AeoIMm0SoT07OMMZlyYNG7b9bvXo9Dj-aK28dRBThbn7";
     let negative_checks = [
         (
             "ak.message.create",

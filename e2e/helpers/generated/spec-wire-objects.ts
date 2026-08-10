@@ -469,7 +469,7 @@ export type InviteDeliveryRequestBody = {
           "created_at": string;
           "domain"?: string;
           "audience"?: string | string[];
-          "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+          "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "governance_authorization";
           "jws": string;
         };
       }>;
@@ -519,7 +519,7 @@ export type InviteDeliveryRequestBody = {
         "created_at": string;
         "domain"?: string;
         "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "governance_authorization";
         "jws": string;
       }>;
       [key: string]: unknown;
@@ -548,7 +548,7 @@ export type InviteDeliveryRequestBody = {
         "created_at": string;
         "domain"?: string;
         "audience"?: string | string[];
-        "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+        "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "governance_authorization";
         "jws": string;
       }>;
       "claim_digest"?: string;
@@ -853,7 +853,7 @@ export type EventFederationSubmission = {
       "created_at": string;
       "domain"?: string;
       "audience"?: string | string[];
-      "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "governance_authorization";
       "jws": string;
     }>;
   };

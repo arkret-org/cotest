@@ -161,6 +161,7 @@ pub async fn two_ordinary_events_under_one_key_epoch_run() -> Result<()> {
     )
     .await?;
     let realm_id = alice.create_realm("DID-P1-C02 ordinary Events").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
 
     let (_, delta) = metrics
         .expect_no_additional_authority_calls(
@@ -168,10 +169,10 @@ pub async fn two_ordinary_events_under_one_key_epoch_run() -> Result<()> {
             "two ordinary DataEvents under one key epoch",
             || async {
                 alice
-                    .send_message(&realm_id, "t", "first ordinary Event")
+                    .send_message(&realm_id, &strand_id, "first ordinary Event")
                     .await?;
                 alice
-                    .send_message(&realm_id, "t", "second ordinary Event")
+                    .send_message(&realm_id, &strand_id, "second ordinary Event")
                     .await?;
                 Ok(())
             },
@@ -215,18 +216,19 @@ pub async fn a_reused_binding_still_rejects_a_bad_signature_run() -> Result<()> 
     )
     .await?;
     let realm_id = alice.create_realm("DID-P1-C02 bad signature").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
 
     // Establish the binding with a genuine Event first, so the forged one below
     // differs from an accepted submission in exactly one respect.
     alice
-        .send_message(&realm_id, "t", "establishes the binding")
+        .send_message(&realm_id, &strand_id, "establishes the binding")
         .await?;
 
     let mut forged = alice
         .author_event(
             &realm_id,
             "ak.message.create",
-            crate::harness::message_create_text_payload(&realm_id, "corrupted signature")?,
+            crate::harness::message_create_text_payload(&strand_id, "corrupted signature")?,
         )
         .await?;
     corrupt_detached_jws(&mut forged)?;
@@ -304,6 +306,7 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
     )
     .await?;
     let realm_id = alice.create_realm("DID-P1-C02 unknown issuer").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
 
     let foreign = "did:web:never-admitted.example";
     let foreign_method = crate::fixture_did_url(format!("{foreign}#cotest"));
@@ -311,7 +314,7 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
         foreign,
         &realm_id,
         "ak.message.create",
-        crate::harness::message_create_text_payload(&realm_id, "from an unknown issuer")?,
+        crate::harness::message_create_text_payload(&strand_id, "from an unknown issuer")?,
         arkret::signatures::development_signing_key_seed(&foreign_method),
         &foreign_method,
     );
@@ -371,6 +374,7 @@ pub async fn repeated_requests_under_one_binding_run() -> Result<()> {
     )
     .await?;
     let realm_id = alice.create_realm("DID-P1-C02 repeated requests").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
 
     const REQUESTS: u64 = 5;
     let (_, delta) = metrics
@@ -380,7 +384,7 @@ pub async fn repeated_requests_under_one_binding_run() -> Result<()> {
             || async {
                 for index in 0..REQUESTS {
                     alice
-                        .send_message(&realm_id, "t", &format!("ordinary request {index}"))
+                        .send_message(&realm_id, &strand_id, &format!("ordinary request {index}"))
                         .await?;
                 }
                 Ok(())

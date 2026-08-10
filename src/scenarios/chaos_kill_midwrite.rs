@@ -145,7 +145,11 @@ fn chaos_message_event() -> arkret_wire::Event {
         ACTOR_DID,
         REALM_ID,
         "ak.message.create",
-        message_create_text_payload(REALM_ID, "doomed").expect("valid chaos message payload"),
+        message_create_text_payload(
+            "ak:strand:AU2FuZ5Cmuwsb0J0xuJwH47SCEL34D7oJWb4JivTH934",
+            "doomed",
+        )
+        .expect("valid chaos message payload"),
     )
 }
 

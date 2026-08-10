@@ -80,6 +80,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     .await?;
 
     let realm_id = alice.create_realm("Interaction Model Realm").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
     for member in [&bob, &carol, &dave] {
         alice.add_member(&realm_id, member).await?;
     }
@@ -91,7 +92,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .await?;
 
     let sent = alice
-        .send_message(&realm_id, "ak:thread:interaction", "hello interaction")
+        .send_message(&realm_id, &strand_id, "hello interaction")
         .await?;
 
     expect_status(
@@ -115,7 +116,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let delayed_followup = async {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         alice
-            .send_message(&realm_id, "ak:thread:interaction", "hello live stream")
+            .send_message(&realm_id, &strand_id, "hello live stream")
             .await
     };
     let (subscribe_response, followup) = tokio::join!(live_subscribe, delayed_followup);
@@ -133,7 +134,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .to_owned();
 
     let catchup_target = alice
-        .send_message(&realm_id, "ak:thread:interaction", "hello catchup")
+        .send_message(&realm_id, &strand_id, "hello catchup")
         .await?;
     let catchup_response = expect_response(
         alice.get(&format!(
@@ -181,7 +182,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     assert_eq!(removed_reaction["status"], "accepted");
 
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
-    // thread's root *message* (`ak:message:<uuidv7>`), not an opaque
+    // thread's root *message* (`ak:message:<event-token>`), not an opaque
     // `ak:thread:` string. Derive it from the root message's event id.
     let thread_root_event_id = sent["event_id"]
         .as_str()

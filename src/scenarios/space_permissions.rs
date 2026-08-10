@@ -114,6 +114,10 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         .as_str()
         .ok_or_else(|| anyhow!("create_realm response missing string realm_id: {created}"))?
         .to_owned();
+    let strand_id = created["default_strand_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("create_realm response missing default_strand_id: {created}"))?
+        .to_owned();
 
     let anonymous_search = expect_json(
         server
@@ -135,7 +139,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         .author_event(
             &realm_id,
             "ak.message.create",
-            message_create_text_payload(&realm_id, "not a member")?,
+            message_create_text_payload(&strand_id, "not a member")?,
         )
         .await?;
     rebind_authored_event(&mut non_member_event, &bob.actor)?;
@@ -169,7 +173,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     bob.submit_event(
         &realm_id,
         "ak.message.create",
-        message_create_text_payload(&realm_id, "member can send")?,
+        message_create_text_payload(&strand_id, "member can send")?,
     )
     .await?;
 
@@ -186,7 +190,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
         .author_event(
             &realm_id,
             "ak.message.create",
-            message_create_text_payload(&realm_id, "after delete")?,
+            message_create_text_payload(&strand_id, "after delete")?,
         )
         .await?;
     expect_api_error(

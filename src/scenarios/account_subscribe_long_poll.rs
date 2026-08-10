@@ -42,12 +42,13 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
         )
         .await?;
     let realm_id = alice.create_realm("Wait-For Barrier Realm").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
 
     let stream_baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
     let stream_cursor = cursor_from_sync(&stream_baseline)?;
 
     let submitted = alice
-        .send_message(&realm_id, "ak:thread:wait-for", "barrier target")
+        .send_message(&realm_id, &strand_id, "barrier target")
         .await?;
     let event_id = submitted_event_id(&submitted)
         .ok_or_else(|| anyhow!("send response missing event id: {submitted}"))?
@@ -127,8 +128,9 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
         )
         .await?;
     let realm_id = alice.create_realm("Quiet Incremental Realm").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
     alice
-        .send_message(&realm_id, "ak:thread:quiet-realm", "baseline message")
+        .send_message(&realm_id, &strand_id, "baseline message")
         .await?;
 
     let baseline = fetch_account_subscribe(&alice, "catchup=true").await?;
@@ -190,8 +192,9 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
         )
         .await?;
     let realm_id = alice.create_realm("Long-Poll Recovery Realm").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
     alice
-        .send_message(&realm_id, "ak:thread:long-poll", "baseline message")
+        .send_message(&realm_id, &strand_id, "baseline message")
         .await?;
 
     // Full sync establishes the baseline + a cursor the rest of the
@@ -213,10 +216,11 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
     //     well inside the deadline with the new realm baseline + event.
     let alice_for_wake = alice.clone();
     let realm_id_for_wake = realm_id.clone();
+    let strand_id_for_wake = strand_id.clone();
     let waker = tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(200)).await;
         alice_for_wake
-            .send_message(&realm_id_for_wake, "ak:thread:long-poll", "wake the poll")
+            .send_message(&realm_id_for_wake, &strand_id_for_wake, "wake the poll")
             .await
     });
 
@@ -281,13 +285,13 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
         .as_str()
         .ok_or_else(|| anyhow!("create realm response missing realm_id: {created}"))?
         .to_owned();
+    let strand_id = created["default_strand_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("create realm response missing default_strand_id: {created}"))?
+        .to_owned();
 
     let pre_join = alice
-        .send_message(
-            &realm_id,
-            "ak:thread:joined-history",
-            "alice before bob joined",
-        )
+        .send_message(&realm_id, &strand_id, "alice before bob joined")
         .await?;
     let pre_join_event_id = submitted_event_id(&pre_join)
         .ok_or_else(|| anyhow!("pre-join send response missing event_id: {pre_join}"))?
@@ -379,13 +383,8 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     .await?;
     let bob_cursor = cursor_from_sync(&bob_baseline)?;
 
-    let alice_after_join = send_message_now(
-        &alice,
-        &realm_id,
-        "ak:thread:joined-history",
-        "alice after bob joined",
-    )
-    .await?;
+    let alice_after_join =
+        send_message_now(&alice, &realm_id, &strand_id, "alice after bob joined").await?;
     let alice_after_join_event_id = submitted_event_id(&alice_after_join)
         .ok_or_else(|| {
             anyhow!("post-join Alice send response missing event_id: {alice_after_join}")
@@ -420,13 +419,8 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     .await?;
     let alice_cursor = cursor_from_sync(&alice.sync().await?)?;
 
-    let bob_after_join = send_message_now(
-        bob_client,
-        &realm_id,
-        "ak:thread:joined-history",
-        "bob after joining",
-    )
-    .await?;
+    let bob_after_join =
+        send_message_now(bob_client, &realm_id, &strand_id, "bob after joining").await?;
     let bob_after_join_event_id = submitted_event_id(&bob_after_join)
         .ok_or_else(|| anyhow!("post-join Bob send response missing event_id: {bob_after_join}"))?
         .to_owned();
@@ -618,7 +612,7 @@ fn timeline_events<'a>(sync: &'a Value, realm_id: &str) -> Result<&'a Vec<Value>
 async fn send_message_now(
     actor: &crate::harness::TestActorClient,
     realm_id: &str,
-    _thread_id: &str,
+    strand_id: &str,
     body: &str,
 ) -> Result<Value> {
     submit_event_now(
@@ -626,7 +620,7 @@ async fn send_message_now(
         actor,
         realm_id,
         "ak.message.create",
-        message_create_text_payload(realm_id, body)?,
+        message_create_text_payload(strand_id, body)?,
     )
     .await
 }

@@ -65,7 +65,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
             let move_id = required_str(mv, "move_id")?;
             if !move_id.starts_with("ak:event:") {
                 bail!(
-                    "vector {name} move_id {move_id} must use typed ak:event:<uuidv7> form (C19 wire-break)"
+                    "vector {name} move_id {move_id} must use the full ak:event:<event-token> form (C19 wire-break)"
                 );
             }
             let outcome = expected_outcome(mv, name)?;

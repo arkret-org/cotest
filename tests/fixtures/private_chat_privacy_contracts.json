@@ -240,7 +240,7 @@
     "derived_strand_selection": {
       "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
       "binding_main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
-      "default_strand_id_for_realm": "ak:strand:AQVrrRvV5VUaU3io4x4YwielG5St6X8BLRf3Vi7Vh3Li",
+      "accepted_realm_default_strand_id": "ak:strand:AQVrrRvV5VUaU3io4x4YwielG5St6X8BLRf3Vi7Vh3Li",
       "selected_main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3"
     },
     "pending_contact_negative": {

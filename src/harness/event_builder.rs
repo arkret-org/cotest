@@ -181,11 +181,8 @@ pub async fn create_realm(
     actor: &str,
     title: &str,
 ) -> Result<String> {
-    let realm_id = next_typed_id("realm");
     let draft = realm_create_payload(
-        actor,
         server.service_id(),
-        &realm_id,
         &json!({
             "title": title,
             "summary": title,
@@ -218,11 +215,8 @@ pub async fn create_realm_with_signing_seed(
     title: &str,
     signing_seed: [u8; 32],
 ) -> Result<String> {
-    let realm_id = next_typed_id("realm");
     let draft = realm_create_payload(
-        actor,
         server.service_id(),
-        &realm_id,
         &json!({
             "title": title,
             "summary": title,
@@ -487,10 +481,10 @@ pub async fn send_message(
     token: &str,
     actor: &str,
     realm_id: &str,
-    _thread_id: &str,
+    strand_id: &str,
     body: &str,
 ) -> Result<Value> {
-    let payload = message_create_text_payload(realm_id, body)?;
+    let payload = message_create_text_payload(strand_id, body)?;
     submit_event(
         server,
         token,
@@ -882,7 +876,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     let actor_seq = actor_seq.unwrap_or(unique_seq);
     let hlc_logical = unique_seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{unique_seq:012x}");
-    normalize_message_payload(kind, realm_id, &mut payload);
+    normalize_message_payload(kind, &mut payload);
     // A static timestamp cannot stay behind a causal predecessor: the Realm
     // bootstrap the SDK submits is stamped with the real clock, so any harness
     // Event pinned to a fixed past date lands before the Event it names in
@@ -968,22 +962,13 @@ pub(crate) fn event_envelope_with_chain(
     )
 }
 
-fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
+fn normalize_message_payload(kind: &str, payload: &mut Value) {
     let Some(object) = payload.as_object_mut() else {
         return;
     };
 
     match kind {
         "ak.message.create" => {
-            let strand_id = realm_id
-                .strip_prefix("ak:realm:")
-                .map(|suffix| format!("ak:strand:{suffix}"))
-                .unwrap_or_else(|| {
-                    "ak:strand:AR3ud0srmtpodQ47XfsVC4uD75mQDAGaKLEww6VGMZZC".to_owned()
-                });
-            object
-                .entry("strand_id".to_owned())
-                .or_insert_with(|| Value::String(strand_id));
             object
                 .entry("track_name".to_owned())
                 .or_insert_with(|| Value::String("discussion".to_owned()));
@@ -1014,10 +999,10 @@ fn normalize_message_payload(kind: &str, realm_id: &str, payload: &mut Value) {
                             "target_event_id".to_owned(),
                             Value::String(target_ref.to_owned()),
                         );
-                    } else if let Some(suffix) = target_ref.strip_prefix("ak:message:") {
+                    } else if let Ok(message_id) = MessageId::new(target_ref.to_owned()) {
                         object.insert(
                             "target_event_id".to_owned(),
-                            Value::String(format!("ak:event:{suffix}")),
+                            Value::String(message_id.event_id().to_string()),
                         );
                     }
                 }
@@ -1073,15 +1058,15 @@ fn normalize_message_content(object: &mut serde_json::Map<String, Value>) {
 
 fn message_ref_from_event_ref(value: Value) -> Value {
     if let Some(event_id) = value.as_str()
-        && let Some(suffix) = event_id.strip_prefix("ak:event:")
+        && let Ok(event_id) = EventId::new(event_id.to_owned())
     {
-        return Value::String(format!("ak:message:{suffix}"));
+        return Value::String(MessageId::from_event_id(&event_id).to_string());
     }
     value
 }
 
-pub(crate) fn message_create_text_payload(realm_id: &str, body: &str) -> Result<Value> {
-    message_create_text_payload_for_strand(strand_id_for_realm(realm_id)?, body)
+pub(crate) fn message_create_text_payload(strand_id: &str, body: &str) -> Result<Value> {
+    message_create_text_payload_for_strand(parse_strand_id(strand_id)?, body)
 }
 
 pub(crate) fn message_create_text_payload_for_strand(
@@ -1215,20 +1200,10 @@ fn member_payload(
     .map_err(|err| anyhow!("member state payload serialize: {err}"))
 }
 
-fn strand_id_for_realm(realm_id: &str) -> Result<StrandId> {
-    let suffix = realm_id
-        .strip_prefix("ak:realm:")
-        .ok_or_else(|| anyhow!("realm_id must start with ak:realm:"))?;
-    StrandId::new(format!("ak:strand:{suffix}"))
-        .map_err(|err| anyhow!("invalid derived strand_id: {err}"))
-}
-
 fn message_id_from_event_id(event_id: &str) -> Result<MessageId> {
-    let message_id = event_id
-        .strip_prefix("ak:event:")
-        .map(|suffix| format!("ak:message:{suffix}"))
-        .unwrap_or_else(|| event_id.to_owned());
-    MessageId::new(message_id).map_err(|err| anyhow!("invalid message_id: {err}"))
+    let event_id = EventId::new(event_id.to_owned())
+        .map_err(|err| anyhow!("invalid message target event_id: {err}"))?;
+    Ok(MessageId::from_event_id(&event_id))
 }
 
 fn serialize_payload<T: Serialize>(payload: &T, context: &str) -> Result<Value> {
@@ -1300,7 +1275,7 @@ mod realm_bootstrap_tests {
             .as_object_mut()
             .expect("fixture object")
             .extend(extra.as_object().expect("extra object").clone());
-        realm_create_payload(ACTOR, SERVICE, "", &input).expect("valid Realm bootstrap draft")
+        realm_create_payload(SERVICE, &input).expect("valid Realm bootstrap draft")
     }
 
     fn build(draft: RealmBootstrapDraft) -> (String, Vec<Event>) {

@@ -393,13 +393,18 @@ async function submitExporterAeadMessage(
   epoch: number,
   plaintext: string,
 ): Promise<{ eventId: string; ciphertext: string }> {
-  const eventId = typedId("event");
   const ciphertext = base64url(`exporter-aead-${epoch}-${randomUUID()}`);
+  const aad = {
+    realm_id: group.realmId,
+    event_kind: "ak.message.create",
+    scope_digest: sha256Hash(
+      `ak.aad-scope-v1\0${canonicalJson(group.effectiveScope)}\0${group.realmId}`,
+    ),
+  };
   const envelope = signedEventEnvelope({
     actorDid: author.did,
     realmId: group.realmId,
     kind: "ak.message.create",
-    eventId,
     payload: {
       encrypted_content: {
         envelope: {
@@ -409,22 +414,22 @@ async function submitExporterAeadMessage(
           epoch,
           content_type: "application/json",
           ciphertext,
-          aad_visibility_event_id: "routing_digest",
-          aad: {
-            realm_id: group.realmId,
-            event_kind: "ak.message.create",
-            event_ref_digest: sha256Hash(`${eventId}:${group.realmId}`),
-          },
+          aad_visibility_event_id: "hidden",
+          aad,
           key_ref: {
             algorithm: "MLS-EXPORTER-AEAD",
             group_state_ref: group.frontierRef,
           },
           payload_digest: sha256Hash(ciphertext),
-          aad_digest: sha256Hash(`aad:${eventId}`),
+          aad_digest: sha256Hash(canonicalJson(aad)),
         },
       },
     },
   });
+  const eventId = envelope.event_id;
+  if (typeof eventId !== "string") {
+    throw new Error("exporter AEAD Event is missing its derived event_id");
+  }
   const postData = JSON.stringify(envelope);
   expect(postData).toContain(CONTENT_SCHEME_EXPORTER_AEAD);
   expect(postData).not.toContain(plaintext);

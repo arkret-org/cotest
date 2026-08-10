@@ -124,13 +124,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
     }
   });
 
-  // The inkson chat view synthesizes a default discussion channel from the
-  // realm id (views/chat/model/strands.rs default_discussion_strand_id /
-  // default_discussion_channel) even when soland has not marked any Strand
-  // is_default, so the message-list renders without an explicit
-  // ak.realm.set_default_strand. The submitted message addresses the same
-  // derived ak:strand:<uuid> the channel selects, so it lands on the rendered
-  // strand.
+  // Inkson consumes the accepted default-Strand projection. The Realm token
+  // is never retyped into a Strand token; this smoke test resolves the exact
+  // projected coordinate before submitting the message.
   test("creates a public realm and renders a soland message in inkson", async ({
     jointRealm,
   }) => {
@@ -468,7 +464,6 @@ async function submitSignedEvent(
   payload: Record<string, unknown>,
 ): Promise<string> {
   const url = `${serverUrl}/_arkret/self/events`;
-  const eventId = `ak:event:${uuidV7()}`;
   const frontier = await readRealmActorFrontier(
     request,
     session,
@@ -479,7 +474,6 @@ async function submitSignedEvent(
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
-    eventId,
     kind,
     actorSeq: frontier.nextActorSeq,
     prevRefs: frontier.frontierEventIds,
@@ -494,6 +488,10 @@ async function submitSignedEvent(
     [200, 201],
     `submit ${kind} returned ${response.status()}: ${text}`,
   ).toContain(response.status());
+  const eventId = envelope.event_id;
+  if (typeof eventId !== "string") {
+    throw new Error(`derived ${kind} Event is missing event_id`);
+  }
   return eventId;
 }
 
@@ -587,7 +585,7 @@ async function listInvitesForDpop(
 }
 
 // COT-06-004: discover the default Strand via projection rather than deriving it
-// from the Realm UUID. This joint harness submits against an explicit serverUrl
+// from the Realm identity token. This joint harness submits against an explicit serverUrl
 // (true soland process), so it cannot reuse the shared solandBaseUrl-bound
 // helper; the discovery logic mirrors it: authoritative Realm `default_strand_id`
 // first, Strand projection `is_default` marker as fallback.
@@ -631,15 +629,9 @@ async function resolveDefaultStrandId(
   if (def?.strand_id) {
     return def.strand_id;
   }
-  // The inkson UI realm-create flow does not emit an explicit
-  // ak.realm.set_default_strand, so soland never marks a strand is_default for
-  // it. inkson addresses the default strand by the deterministic
-  // default_strand_id_for_realm convention (ak:realm:<uuid> -> ak:strand:<uuid>);
-  // derive the same id so the message lands on the strand inkson renders.
-  const suffix = realmId.startsWith("ak:realm:")
-    ? realmId.slice("ak:realm:".length)
-    : realmId;
-  return `ak:strand:${suffix}`;
+  throw new Error(
+    `resolveDefaultStrandId: accepted projections for ${realmId} expose no default Strand`,
+  );
 }
 
 function uuidV7(): string {

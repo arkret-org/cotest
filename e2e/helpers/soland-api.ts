@@ -137,7 +137,56 @@ export function authHeaders(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
 }
 
+// Frozen full-token coordinates for negative/mock cases that have no accepted
+// create Event to consume. They are intentionally finite: callers must not
+// fall back to UUID minting or reuse an identity after the pool is exhausted.
+const EVENT_DERIVED_FIXTURE_TOKEN_BODIES = [
+  "Aa90z7xF10veB5kq69MWxtT48QQlzCdhmmbskzElVa5p",
+  "AaaV5G8rACWz0A_AfDNtAvW_ConNcll4oFZ_LaD4uJgJ",
+  "AaBHX3lRc1CFrtax_a7-AMM-ykNvbGptE-rF2rMhJHpk",
+  "AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
+  "AafiSe5-0DLIzxypKeEYStsz0tPrLS0bvyfdfmJHrGtZ",
+  "AaFkuSVtHcmpSTwun3O77ySLPpa7WleqRUq8Stzi_0WZ",
+  "AagGd6PB1SqZp__DzubMh3BTpUU-oWosY3NoR_k38pxq",
+  "AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
+  "AaJxiT8EaaLu-lpzPZYBhPCfcKggB0wZGeXncuADY8UV",
+  "AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
+  "AamYARiCCubbYQ3GoHbppXPhsNkI0kDOZQi17eTRhQ94",
+  "AaT867J_6iZXViVxSlPnsRXFVJ3T8aNB8AB93oRyOx5J",
+  "Aau0Y6KyQiOs0dkWoG9aKzqocxoClsKqFs3t1Yt3-snC",
+  "Aay8a3LT8Kuk87okmFQYB95EV3mcCNn7hip788Ke0rZs",
+  "Ab_ETJ_SYwARfEbvgIqRR8Q-l8kS3rwWRFVQd2C6aHE_",
+  "Ab1ksa-umr9kNJE_n2EEj6AVhUsqM_Xml_hJgWyMpwq8",
+  "Ab1wW6h5QnGMlhhFi-yxg6txnBC4jwSBbzmiKBpMOfTO",
+  "Ab2pkzspV8u_ui9GZc5DlrHR35Zu9b0zIqAMaJOju1hx",
+  "Ab8fF-_JIKTb1BX6GXVZLOEoeeVFftSuQTq3Y8wtAvJT",
+  "Ab9hGz5-hIWYOFjFTtAHrFUC3voDLMSPQRaQvtRQEO3-",
+  "AbAWvgHwDMsvHp-83ayUI2TKbLu45n6bfQhAgod9_Q_P",
+  "AbFb45zjGe7948bxdQ_XQkZemaqYwlxOtGBoKt9Sd2cW",
+  "AbhlmtxK_Ztvb71Puy1rF1R7yQqMvSbBLqxVlKPuP49y",
+  "AbLdslMbLh-jujIabWk8ckX47W1Lu1IEgMvZ3Ahiz1dm",
+  "AbLUaNO9m_tRCJn4qAM03Ym0bFcN-oRmeEHjTinQpPUu",
+  "AbmZo_Q7CHRfJYVqari3NAaEZm6tfSbZppTL7IsJJ7Gl",
+  "AboOf819TDn4X36iZWtVada6Ett2u_Oy_8F9XJDxA0gm",
+  "AbTJRA159xoBFUoYTOIMDQve32eQFpWkEb-dThX1wCmA",
+  "AbvcNWSd5e4klWqpBg898thvN1RK57j6lqpZDeC83zBZ",
+  "AbyX-ijAQZ4DkcySKE3VusrcCoBFT8DGS4fx8tpo-PNm",
+  "Ac0RSITUWs2Ftqgb902qaA5SlygUXgX0yAce_06OOjek",
+  "Ac7Jx0nM91NkaWFhRqF0fyU9p6cslo0kWgavyrWTViZS",
+] as const;
+let eventDerivedFixtureCursor = 0;
+
 export function typedId(kind: string): string {
+  if (["event", "realm", "circle", "strand"].includes(kind)) {
+    const token = EVENT_DERIVED_FIXTURE_TOKEN_BODIES[eventDerivedFixtureCursor];
+    if (!token) {
+      throw new Error(
+        `event-derived fixture token pool exhausted at ${eventDerivedFixtureCursor}`,
+      );
+    }
+    eventDerivedFixtureCursor += 1;
+    return `ak:${kind}:${token}`;
+  }
   return `ak:${kind}:${uuidV7()}`;
 }
 
@@ -3440,11 +3489,9 @@ export async function alignSignedEventToActorFrontierApi(
   await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
 }
 
-// COT-06-004: discover a Realm's default discussion Strand via the projection face
-// instead of deriving it from the Realm UUID. `ak:realm:<uuid>` and
-// `ak:strand:<uuid>` are independent id kinds (registry/id-kind-registry.json)
-// that do not derive from each other; the previous `strandIdFromRealmId` helper
-// hard-coded soland's internal minting rule. The spec-faithful source of truth
+// COT-06-004: discover a Realm's default discussion Strand via the projection face.
+// Realm and Strand identities are independent Event-derived tokens; neither can
+// be retyped from the other's token. The spec-faithful source of truth
 // is the Realm projection's authoritative `default_strand_id` (nullable), with the
 // Strand projection's derived `is_default` marker as a fallback discovery path.
 export async function resolveDefaultStrandId(
@@ -3490,22 +3537,9 @@ export async function resolveDefaultStrandId(
   if (def?.strand_id) {
     return def.strand_id;
   }
-  // Final fallback: the inkson UI realm-create flow does not emit an explicit
-  // ak.realm.set_default_strand, so soland never marks a strand is_default for
-  // those realms. inkson itself addresses the default strand by a deterministic
-  // convention (default_strand_id_for_realm in inkson/src/local_state): the
-  // realm UUID suffix under the ak:strand: prefix. Derive the same id so events
-  // submitted here land on the strand inkson renders.
-  return deriveDefaultStrandId(realmId);
-}
-
-/// Mirror inkson's `default_strand_id_for_realm` convention: `ak:realm:<uuid>`
-/// maps to `ak:strand:<uuid>`.
-export function deriveDefaultStrandId(realmId: string): string {
-  const suffix = realmId.startsWith("ak:realm:")
-    ? realmId.slice("ak:realm:".length)
-    : realmId;
-  return `ak:strand:${suffix}`;
+  throw new Error(
+    `resolveDefaultStrandId: accepted projections for ${realmId} expose no default Strand`,
+  );
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {

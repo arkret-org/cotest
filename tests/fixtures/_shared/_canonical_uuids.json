@@ -1,7 +1,7 @@
 {
   "profile": "ak.profile.canonical_uuids.v1",
   "version": "2026-05-10",
-  "comment": "Round 28 Q2 — shared canonical typed-UUID baseline. Several fixtures reference the same demo Space / event / Move / Anchor IDs to keep cross-fixture audit trails coherent. Fixtures that use these UUIDs SHOULD declare `inherits: [\"_shared/_canonical_uuids.json\"]` for discoverability. The UUIDs are valid UUIDv7 layouts (timestamp prefix + random tail) that match the spec's `ak:<kind>:<uuidv7>` typed wire format.",
+  "comment": "Compatibility-named shared identity baseline. Event-derived Realm and Event references are full suite-tagged digest tokens; producer-allocated families retain their registered UUID forms. Fixtures SHOULD keep the existing inherits path for discoverability.",
   "demo_space": {
     "id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
     "alias": "demo_space_v1",
@@ -16,6 +16,6 @@
   "event_id_prefix": {
     "value": "ak:event:Ab8fF-_JIKTb1BX6GXVZLOEoeeVFftSuQTq3Y8wtAvJT",
     "alias": "demo_event_id_prefix_v1",
-    "comment": "state_resolution_quarantine_fixture uses this prefix and increments the trailing 3 hex digits per vector."
+    "comment": "Frozen full Event identity retained as a shared fixture reference; consumers must not truncate or increment its token bytes."
   }
 }

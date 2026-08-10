@@ -231,12 +231,7 @@ pub struct RealmBootstrapDraft {
         arkret_models_collaboration::events_payloads::realm::RealmDeliveryBindingPolicyPayload,
 }
 
-pub fn realm_create_payload(
-    _actor: &str,
-    service_id: &str,
-    _realm_id: &str,
-    input: &Value,
-) -> Result<RealmBootstrapDraft> {
+pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBootstrapDraft> {
     let title = input
         .get("title")
         .and_then(Value::as_str)

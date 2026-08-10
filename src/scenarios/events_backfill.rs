@@ -26,17 +26,18 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     let bob_client = bob.client();
 
     let realm_id = alice.create_realm("Backfill Recovery Realm").await?;
+    let strand_id = alice.default_strand_id(&realm_id)?;
     alice.add_member(&realm_id, bob_client).await?;
 
     let sent = [
         alice
-            .send_message(&realm_id, "ak:thread:backfill", "first event before gap")
+            .send_message(&realm_id, &strand_id, "first event before gap")
             .await?,
         alice
-            .send_message(&realm_id, "ak:thread:backfill", "second event inside gap")
+            .send_message(&realm_id, &strand_id, "second event inside gap")
             .await?,
         alice
-            .send_message(&realm_id, "ak:thread:backfill", "third event after gap")
+            .send_message(&realm_id, &strand_id, "third event after gap")
             .await?,
     ];
     let expected_message_ids = sent

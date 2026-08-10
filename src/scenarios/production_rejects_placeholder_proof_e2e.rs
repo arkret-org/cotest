@@ -116,7 +116,10 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
         actor,
         realm_id,
         "ak.message.create",
-        crate::harness::message_create_text_payload(realm_id, "hi")?,
+        crate::harness::message_create_text_payload(
+            "ak:strand:AU2FuZ5Cmuwsb0J0xuJwH47SCEL34D7oJWb4JivTH934",
+            "hi",
+        )?,
     );
     event.proofs[0].jws = "a..b".to_owned();
     let submission = crate::publication::initial_submission(event, "")?;

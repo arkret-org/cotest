@@ -851,13 +851,11 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
 /// submitted.
 fn realm_bootstrap_batch(
     ctx: &TemplateContext,
-    realm_id: &str,
+    _realm_id: &str,
     title: &str,
 ) -> Result<(String, Value)> {
     let draft = cotest::harness::realm_create_payload(
-        &ctx.alice_did,
         &ctx.service_id,
-        realm_id,
         &json!({
             "title": title,
             "summary": "created by T-P0-04 parity baseline",

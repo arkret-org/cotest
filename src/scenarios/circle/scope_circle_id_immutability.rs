@@ -31,8 +31,8 @@ fn realm_id() -> Result<RealmId> {
 
 fn strand_id() -> Result<StrandId> {
     // `Strand::new` now takes a typed `StrandId` (was a raw String). The id MUST be
-    // a strict `ak:strand:<uuid7>` literal; all four prev/next states below share
-    // the same entity id so the scope-rebind helper compares the same Strand.
+    // a strict full event-derived `ak:strand:<event-token>` literal; all four prev/next states
+    // below share the same entity id so the scope-rebind helper compares the same Strand.
     StrandId::new("ak:strand:AUPBmq7QR4lk0rsMlC7RbEozfyVLQip3G8_BtBgsac5q".to_owned())
         .map_err(|e| anyhow!("strand id: {e}"))
 }

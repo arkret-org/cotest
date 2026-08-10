@@ -683,6 +683,9 @@ impl ArkretServer {
             controlled_realms: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::BTreeSet::new(),
             )),
+            default_strands: std::sync::Arc::new(std::sync::Mutex::new(
+                std::collections::BTreeMap::new(),
+            )),
             held_grants: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::BTreeMap::new(),
             )),

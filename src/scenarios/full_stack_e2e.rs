@@ -595,7 +595,10 @@ async fn live_stack_probe() -> Result<()> {
             ALICE_DID,
             TARGET_REALM_ID,
             "ak.message.create",
-            crate::harness::message_create_text_payload(TARGET_REALM_ID, "hi")?,
+            crate::harness::message_create_text_payload(
+                "ak:strand:AU2FuZ5Cmuwsb0J0xuJwH47SCEL34D7oJWb4JivTH934",
+                "hi",
+            )?,
         );
         placeholder_event.proofs[0].jws = "a..b".to_owned();
         let placeholder_submission = crate::publication::initial_submission(placeholder_event, "")?;

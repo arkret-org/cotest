@@ -79,7 +79,7 @@ struct DirectConversationVectors {
 struct DerivedStrandSelection {
     realm_id: String,
     binding_main_strand_id: String,
-    default_strand_id_for_realm: String,
+    accepted_realm_default_strand_id: String,
     selected_main_strand_id: String,
 }
 
@@ -618,7 +618,7 @@ fn validate_resolver_uses_binding_main_strand(vectors: &DirectConversationVector
     let selection = &vectors.derived_strand_selection;
     validate_realm_id(&selection.realm_id)?;
     validate_strand_id(&selection.binding_main_strand_id)?;
-    validate_strand_id(&selection.default_strand_id_for_realm)?;
+    validate_strand_id(&selection.accepted_realm_default_strand_id)?;
     validate_strand_id(&selection.selected_main_strand_id)?;
     if selection.realm_id != response_realm_id {
         bail!("derived strand selection realm_id must match resolver response");
@@ -629,8 +629,10 @@ fn validate_resolver_uses_binding_main_strand(vectors: &DirectConversationVector
     if selection.selected_main_strand_id != selection.binding_main_strand_id {
         bail!("direct conversation selection must use binding_main_strand_id");
     }
-    if selection.selected_main_strand_id == selection.default_strand_id_for_realm {
-        bail!("direct conversation selection must not fall back to default_strand_id_for_realm");
+    if selection.selected_main_strand_id == selection.accepted_realm_default_strand_id {
+        bail!(
+            "direct conversation selection must not fall back to the accepted Realm default Strand"
+        );
     }
     Ok(())
 }
