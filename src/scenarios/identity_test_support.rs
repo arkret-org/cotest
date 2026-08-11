@@ -29,7 +29,8 @@ use arkret_signatures::http_signature::{
 };
 use arkret_signatures::webvh::{
     PreparedPrincipalInception, PrincipalInceptionInput, prepare_principal_inception,
-    sign_identity_creation_control_proof, validate_principal_inception_operation,
+    sign_identity_creation_control_proof, sign_registration_did_evidence_draft,
+    validate_principal_inception_operation,
 };
 use arkret_wire::{Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString};
 use base64::Engine;
@@ -510,6 +511,9 @@ async fn bootstrap_test_device_authorization(
         &account_subject_preimage,
     ))?;
     let issued_at = chrono::Utc::now();
+    let registration_did_evidence =
+        sign_registration_did_evidence_draft(&prepared.submit_body, issued_at, &root_seed)?
+            .accept(issued_at)?;
     let control_proof =
         UnsignedIdentityCreationControlProof::new(UnsignedIdentityCreationControlProofBody {
             challenge_id: format!("cotest-pcr-genesis-{local_id}"),
@@ -552,6 +556,8 @@ async fn bootstrap_test_device_authorization(
         did_version_id: validated_inception.did_version_id,
         log_head_digest: validated_inception.log_head_digest,
         control_key_digest: validated_inception.control_key_digest,
+        registration_did_operation: prepared.submit_body.clone(),
+        registration_did_evidence,
         identity_creation_control_proof: control_proof,
         genesis_unit: unit,
     };
