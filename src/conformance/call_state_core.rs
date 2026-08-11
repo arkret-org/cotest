@@ -131,8 +131,14 @@ fn issuer_key() -> SigningKey {
 }
 
 fn anchors_with_issuer_key(key: &SigningKey) -> MediaServiceAnchors {
-    MediaServiceAnchors::new([full_did("media")])
-        .with_keys([(ISSUER_KID.to_owned(), key.verifying_key())])
+    let full = full_did("media");
+    MediaServiceAnchors::new([(
+        arkret_wire::project_full_id_to_core_id(&full).unwrap(),
+        full,
+    )])
+    .unwrap()
+    .with_keys([(ISSUER_KID.to_owned(), key.verifying_key())])
+    .unwrap()
 }
 
 fn token_request() -> CallMediaTokenExchangeRequestBody {
