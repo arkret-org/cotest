@@ -305,17 +305,15 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
 
-    let notary_full_id = arkret_identifiers::DidFullId::new(service_id.to_owned())?;
+    let notary_actor_id = arkret_identifiers::DidCoreId::new(service_id.to_owned())?;
     let notary = arkret_wire::notary::NotaryValue::single_did_with_org(
-        notary_full_id,
+        notary_actor_id,
         vec![arkret_identifiers::DidCoreId::new(
-            "did:webvh:z6mkfixture:recovery.soland.local",
+            "ak:did_core:web:recovery.soland.local",
         )?],
-        arkret_identifiers::DidCoreId::new(
-            "did:webvh:z6mkfixture:organization.primary.soland.local",
-        )?,
+        arkret_identifiers::DidCoreId::new("ak:did_core:web:organization.primary.soland.local")?,
         vec![arkret_identifiers::DidCoreId::new(
-            "did:webvh:z6mkfixture:organization.recovery.soland.local",
+            "ak:did_core:web:organization.recovery.soland.local",
         )?],
     );
     let genesis_salt = input
@@ -399,7 +397,16 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
         .get("alias")
         .and_then(Value::as_str)
         .map(|value| {
-            let authority = arkret_models_collaboration::objects::realm_alias::RealmAlias::authority_domain_for_service(service_id)?;
+            let authority_service_full_id = input
+                .get("alias_authority_service_full_id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    arkret_wire::Error::Protocol(
+                        "cotest Realm bootstrap alias requires alias_authority_service_full_id"
+                            .to_owned(),
+                    )
+                })?;
+            let authority = arkret_models_collaboration::objects::realm_alias::RealmAlias::authority_domain_for_service(authority_service_full_id)?;
             let alias = arkret_models_collaboration::objects::realm_alias::RealmAlias::prepare_under_authority(value, &authority)?;
             Ok::<_, arkret_wire::Error>(
                 arkret_models_collaboration::governance::realm_governance::RealmAliasPayload::declaration(alias),

@@ -241,7 +241,7 @@ mod tests {
             "kind": "ak.message.create",
             "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA"},
-            "actor_id": "did:web:alice.example",
+            "actor_id": "ak:did_core:web:alice.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -284,7 +284,7 @@ mod tests {
         let mut envelope = json!({
             "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA"},
-            "sender_actor_id": "did:web:alice.example",
+            "sender_actor_id": "ak:did_core:web:alice.example",
             "sender_device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
             "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),
             "signal_class": "session",

@@ -34,7 +34,7 @@ fn realm_id() -> Result<RealmId> {
 }
 
 fn actor() -> Result<DidCoreId> {
-    "did:web:alice.example"
+    "ak:did_core:web:alice.example"
         .parse()
         .map_err(|e| anyhow!("actor did: {e}"))
 }

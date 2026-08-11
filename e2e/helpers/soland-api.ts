@@ -270,14 +270,34 @@ export function wireErrReason(body: unknown): string | undefined {
   );
 }
 
-export function singleDidNotary(did: string): RealmObject["notary"] {
+function projectFullDidToCoreId(fullDid: string): string {
+  if (fullDid.startsWith("did:webvh:")) {
+    const [scid] = fullDid.slice("did:webvh:".length).split(":", 1);
+    if (!scid) {
+      throw new Error(`invalid did:webvh notary DID: ${fullDid}`);
+    }
+    return `ak:did_core:webvh:${scid}`;
+  }
+  if (fullDid.startsWith("did:web:")) {
+    return `ak:did_core:web:${fullDid.slice("did:web:".length)}`;
+  }
+  if (fullDid.startsWith("did:key:")) {
+    return `ak:did_core:key:${fullDid.slice("did:key:".length)}`;
+  }
+  throw new Error(`unsupported notary DID method: ${fullDid}`);
+}
+
+export function singleDidNotaryFromFullDid(
+  fullDid: string,
+): RealmObject["notary"] {
   return {
     kind: "single_did",
-    did,
-    recovery_members: ["did:web:recovery.soland.local"],
-    controller_organization: "did:web:organization.primary.soland.local",
+    actor_id: projectFullDidToCoreId(fullDid),
+    recovery_members: ["ak:did_core:web:recovery.soland.local"],
+    controller_organization:
+      "ak:did_core:web:organization.primary.soland.local",
     recovery_controller_organizations: [
-      "did:web:organization.recovery.soland.local",
+      "ak:did_core:web:organization.recovery.soland.local",
     ],
   };
 }
@@ -397,7 +417,7 @@ export async function createRealmApi(
     // This helper creates Principal-Server-hosted collaboration Realms. The
     // service owns the notary key and materializes Event Seals; the principal
     // remains the Realm creator and root authority-cell controller.
-    notary: singleDidNotary(solandServiceId(opts.server)),
+    notary: singleDidNotaryFromFullDid(solandServiceId(opts.server)),
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator
     // effective `ak.realm.owner`. v1 issues no genesis self-grant.

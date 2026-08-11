@@ -153,7 +153,7 @@ fn coverage_fixture_drops_legacy_organization_ref_shape() {
 /// Resolver fixtures selected by the vector's `resolver` field. Mirrors the
 /// shapes verify_realm_organization_statement distinguishes.
 fn org_did() -> DidCoreId {
-    DidCoreId::new("did:webvh:example.test:orgs:01J0000000000000000000000A").unwrap()
+    DidCoreId::new("ak:did_core:web:example.test:orgs:01J0000000000000000000000A").unwrap()
 }
 
 struct FixedResolver(Option<RealmOrganizationDelegation>);

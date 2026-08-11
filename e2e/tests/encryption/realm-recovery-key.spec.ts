@@ -33,7 +33,7 @@ import {
   refreshEventEnvelopeProof,
   sdkCapabilityActionRegistryDigest,
   signedEventEnvelope,
-  singleDidNotary,
+  singleDidNotaryFromFullDid,
   submitSignedEventApi,
   typedId,
   wireErrCode,
@@ -122,7 +122,7 @@ function realmCreateEnvelope(args: {
     federation_policy: "restricted",
     notary_profile: "single_did",
     digest_algorithm: "sha256",
-    notary: singleDidNotary(args.ownerDid),
+    notary: singleDidNotaryFromFullDid(args.ownerDid),
     // Create-locked genesis basis for the Realm authority-root cell
     // (realm-and-space.md section 2.5).
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),

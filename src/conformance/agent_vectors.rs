@@ -341,7 +341,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             })
         })
         .ok_or_else(|| anyhow!("runtime-key-binding vector case missing"))?;
-    let agent_id = DidCoreId::new("did:webvh:z6mkagent:agent.example")?;
+    let agent_id = DidCoreId::new("ak:did_core:web:agent.example")?;
     let public_key = case
         .get("source_public_key")
         .ok_or_else(|| anyhow!("runtime-key-binding source_public_key missing"))?;
@@ -614,8 +614,8 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
 }
 
 pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
-    let agent = "did:webvh:z6mkagent:agent.example";
-    let controller = "did:webvh:z6mkcontroller:controller.example";
+    let agent = "ak:did_core:web:agent.example";
+    let controller = "ak:did_core:web:controller.example";
     let agent_pcr = "ak:realm:AQc8B431O3SQubQ_5nFtF3-v2Z0sQi6h0P2tfGx0TPKE";
     let controller_pcr = "ak:realm:AR0PtbTxYB1FcA3wCiXkmkluv8VEeXQN_TrYLsL2RNVE";
     if agent_pcr == controller_pcr {
@@ -623,13 +623,13 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     }
     let genesis = serde_json::json!({
         "created_by": agent,
-        "notary": {"kind": "single_did", "did": agent},
+        "notary": {"kind": "single_did", "actor_id": agent},
         "purpose": "managed_agent_control",
         "encryption_profile": "e2ee_required",
         "event_encryption_floor": "e2ee_required"
     });
     if genesis["created_by"] != agent
-        || genesis["notary"]["did"] != agent
+        || genesis["notary"]["actor_id"] != agent
         || genesis["purpose"] != "managed_agent_control"
         || genesis["encryption_profile"] != "e2ee_required"
         || genesis["event_encryption_floor"] != "e2ee_required"

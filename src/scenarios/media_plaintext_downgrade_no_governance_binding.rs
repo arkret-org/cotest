@@ -89,7 +89,7 @@ pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
     }))?;
     let leaves: Vec<MlsSecurityFrontierLeaf> = serde_json::from_value(json!([{
         "leaf_index": 0,
-        "principal_id": "did:webvh:zfixture:alice.example",
+        "principal_id": "ak:did_core:web:alice.example",
         "credential_ref": "did:webvh:zfixture:alice.example#device-1"
     }]))?;
     let policy_cell = realm_cell(CellFamilyId::REALM_POLICY_BUNDLE_V1)?;
@@ -131,7 +131,7 @@ pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
     state.insert(
         services_cell,
         CellState::Value(json!([{
-            "service_id": "did:web:sfu.example",
+            "service_id": "ak:did_core:web:sfu.example",
             "data_classes": ["media_plaintext"]
         }])),
     );

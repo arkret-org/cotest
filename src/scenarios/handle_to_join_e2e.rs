@@ -234,7 +234,7 @@ fn negative_case_verified_false() -> Result<()> {
 /// that reuse a candidate across handle reassignments.
 fn negative_case_subject_mismatch() -> Result<()> {
     let candidate = sample_candidate()?;
-    let mallory = DidCoreId::new("did:web:mallory.example")?;
+    let mallory = DidCoreId::new("ak:did_core:web:mallory.example")?;
     let ctx =
         CandidateValidationContext::new(TARGET_REALM_ID.to_owned()).with_expected_subject(mallory);
 

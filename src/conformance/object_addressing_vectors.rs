@@ -80,7 +80,7 @@ const R: &str = "AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1";
 const F: &str = "ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM";
 const F2: &str = "AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq";
 const M: &str = "AS-ORd5zGMm1S5O6yi-p0U6TY6n0gvX_I-ZaEoNxW5LO";
-const VIA: &str = "did:web:relay.example";
+const VIA: &str = "ak:did_core:web:relay.example";
 const LANDING: &str = "https://share.arkret.example";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -515,7 +515,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
         "join_candidates": [
             {
                 "realm_id": format!("ak:realm:{R}"),
-                "service_id": "did:web:relay.example",
+                "service_id": "ak:did_core:web:relay.example",
                 "service_kind": "principal_server",
                 "role": "primary",
                 "operations": ["ak.self.events.command.submit"],
@@ -531,7 +531,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
             },
             {
                 "realm_id": format!("ak:realm:{R}"),
-                "service_id": "did:web:teabay.example",
+                "service_id": "ak:did_core:web:teabay.example",
                 "service_kind": "principal_server",
                 "role": "mirror",
                 "operations": ["ak.self.events.command.submit"],
@@ -571,7 +571,12 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
         .iter()
         .map(|candidate| candidate.service_id.as_str())
         .collect();
-    if candidate_services != vec!["did:web:relay.example", "did:web:teabay.example"] {
+    if candidate_services
+        != vec![
+            "ak:did_core:web:relay.example",
+            "ak:did_core:web:teabay.example",
+        ]
+    {
         bail!("join_candidates common field MUST round-trip in order");
     }
     // A strand target carries object_preview (opaque), not realm_preview.

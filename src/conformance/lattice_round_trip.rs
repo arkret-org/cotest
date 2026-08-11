@@ -1246,7 +1246,7 @@ fn notary_cell_single_did_profile_resolves_to_value() -> Result<()> {
     let cref = notary_cell("01");
     let value = json!({
         "kind": "single_did",
-        "did": "did:web:hub.example",
+        "actor_id": "ak:did_core:web:hub.example",
     });
     let ops = vec![SealedOp::new(issuer_digest("a1"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
@@ -1263,9 +1263,9 @@ fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
         "kind": "threshold",
         "threshold": 2,
         "members": [
-            "did:web:notary1.example",
-            "did:web:notary2.example",
-            "did:web:notary3.example"
+            "ak:did_core:web:notary1.example",
+            "ak:did_core:web:notary2.example",
+            "ak:did_core:web:notary3.example"
         ],
         "forensic_attribution": "quorum_intersection",
     });
@@ -1283,8 +1283,8 @@ fn notary_cell_open_set_profile_resolves_to_value() -> Result<()> {
     let value = json!({
         "kind": "open_set",
         "members": [
-            "did:web:peer1.example",
-            "did:web:peer2.example"
+            "ak:did_core:web:peer1.example",
+            "ak:did_core:web:peer2.example"
         ],
     });
     let ops = vec![SealedOp::new(issuer_digest("a3"), op_set(value))];
@@ -1300,10 +1300,10 @@ fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
     let cref = notary_cell("04");
     let value = json!({
         "kind": "mixed",
-        "did": "did:web:hub.example",
+        "actor_id": "ak:did_core:web:hub.example",
         "recovery_members": [
-            "did:web:recovery1.example",
-            "did:web:recovery2.example"
+            "ak:did_core:web:recovery1.example",
+            "ak:did_core:web:recovery2.example"
         ],
     });
     let ops = vec![SealedOp::new(issuer_digest("a4"), op_set(value))];
@@ -1325,14 +1325,14 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
             issuer_digest("a5"),
             op_set(json!({
                 "kind": "single_did",
-                "did": "did:web:hub-a.example",
+                "actor_id": "ak:did_core:web:hub-a.example",
             })),
         ),
         SealedOp::new(
             issuer_digest("a6"),
             op_set(json!({
                 "kind": "single_did",
-                "did": "did:web:hub-b.example",
+                "actor_id": "ak:did_core:web:hub-b.example",
             })),
         ),
     ];

@@ -238,7 +238,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
                 call_id: call_id(),
                 focus_id: "fra-1".to_owned(),
                 recording_id,
-                media_service_id: DidCoreId::new("did:web:recorder.example").unwrap(),
+                media_service_id: DidCoreId::new("ak:did_core:web:recorder.example").unwrap(),
                 recording_start_event_id: start_event_id(),
             },
             ciphertext_digest: hash('b'),
@@ -252,7 +252,7 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
             audit_lock: Some(false),
             consent_confirmed: Some(true),
         },
-        produced_by: DidCoreId::new("did:web:recorder.example").unwrap(),
+        produced_by: DidCoreId::new("ak:did_core:web:recorder.example").unwrap(),
         recording_initiator_capability_ref: GrantId::new(
             "ak:grant:AY8a0-KhSVbHOk2IStjbvFlEdGofW0ZyqMsOoZu6_Cqv",
         )

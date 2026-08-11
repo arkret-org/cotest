@@ -2,7 +2,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::{DeviceId, DidFullId, Hash, SessionGrantId};
+use arkret_identifiers::{DeviceId, DidCoreId, Hash, SessionGrantId};
 use arkret_models_collaboration::session_grant_bodies::{
     SessionGrantOutcome, SessionGrantRequestBody,
 };
@@ -153,8 +153,8 @@ fn parse_time(value: &str) -> Result<DateTime<Utc>> {
     Ok(canonical::parse_timestamp_canonical(value)?)
 }
 
-fn did(value: &str) -> Result<DidFullId> {
-    DidFullId::new(value.to_owned()).map_err(Into::into)
+fn did(value: &str) -> Result<DidCoreId> {
+    DidCoreId::new(value.to_owned()).map_err(Into::into)
 }
 
 fn device(value: &str) -> Result<DeviceId> {

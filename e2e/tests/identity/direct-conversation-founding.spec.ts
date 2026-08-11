@@ -19,7 +19,7 @@ import {
   sha256CanonicalJson,
   signedEventEnvelope,
   signedRealmGenesisEnvelope,
-  singleDidNotary,
+  singleDidNotaryFromFullDid,
   typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -279,7 +279,7 @@ function foundingEvents(args: {
         security_class: "standard",
         notary_profile: "single_did",
         digest_algorithm: "sha256",
-        notary: singleDidNotary(solandServiceId()),
+        notary: singleDidNotaryFromFullDid(solandServiceId()),
         capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
       },
     },

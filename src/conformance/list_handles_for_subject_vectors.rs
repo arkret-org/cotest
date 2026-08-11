@@ -46,11 +46,11 @@ pub const ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS: &[&str] = &[
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-const ACME_ISSUER: &str = "did:web:coauth.acme.example";
-const OTHER_ISSUER: &str = "did:web:coauth.other.example";
+const ACME_ISSUER: &str = "ak:did_core:web:coauth.acme.example";
+const OTHER_ISSUER: &str = "ak:did_core:web:coauth.other.example";
 
 fn subject() -> Result<DidCoreId> {
-    DidCoreId::new("did:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
+    DidCoreId::new("ak:did_core:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
@@ -129,7 +129,7 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
 
 pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
     let s = subject()?;
-    let other = DidCoreId::new("did:web:mallory.principal.example")?;
+    let other = DidCoreId::new("ak:did_core:web:mallory.principal.example")?;
     // A claim whose subject != response.subject MUST fail closed.
     let res = DirectorySubjectHandleList {
         subject: s.clone(),

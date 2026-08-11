@@ -409,16 +409,16 @@ fn notary_authorities(notary: &Value) -> Option<BTreeSet<String>> {
     match notary.get("kind").and_then(Value::as_str)? {
         "single_did" => Some(
             notary
-                .get("did")
+                .get("actor_id")
                 .and_then(Value::as_str)
-                .map(|did| BTreeSet::from([did.to_owned()]))
+                .map(|actor_id| BTreeSet::from([actor_id.to_owned()]))
                 .unwrap_or_default(),
         ),
         "open_set" | "threshold" => Some(string_set(notary.get("members"))),
         "mixed" => {
             let mut members = string_set(notary.get("recovery_members"));
-            if let Some(did) = notary.get("did").and_then(Value::as_str) {
-                members.insert(did.to_owned());
+            if let Some(actor_id) = notary.get("actor_id").and_then(Value::as_str) {
+                members.insert(actor_id.to_owned());
             }
             Some(members)
         }

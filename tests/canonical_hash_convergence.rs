@@ -300,7 +300,7 @@ fn pinned_r3_2_inputs() -> (
     };
 
     let realm = RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K").unwrap();
-    let actor = DidCoreId::new("did:web:alice.acme.example".to_owned()).unwrap();
+    let actor = DidCoreId::new("ak:did_core:web:alice.acme.example".to_owned()).unwrap();
     let events = vec![
         EffectiveIdentityEntry {
             event_id: EventId::new("ak:event:AaaV5G8rACWz0A_AfDNtAvW_ConNcll4oFZ_LaD4uJgJ")

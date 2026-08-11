@@ -96,7 +96,7 @@ proptest! {
         let claim = HandleClaim {
             binding_state: Some(HandleBindingState::Verified),
             handle: Some(Handle::parse(&handle).unwrap()),
-            issuer: Some(DidCoreId::new("did:web:issuer.example").unwrap()),
+            issuer: Some(DidCoreId::new("ak:did_core:web:issuer.example").unwrap()),
             expires_at: with_expiry.then(|| Utc::now() + Duration::minutes(5)),
             verified_at: with_verified_at.then(Utc::now),
             ..Default::default()
@@ -130,7 +130,7 @@ fn member_delivery_binding() -> DeliveryBindingHint {
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     DeliveryBindingHint {
-        recipient_service_id: DidCoreId::new("did:web:rs.example").unwrap(),
+        recipient_service_id: DidCoreId::new("ak:did_core:web:rs.example").unwrap(),
         recipient_service_kind: RecipientServiceKind::PrincipalServer,
         binding_source: HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: modes,

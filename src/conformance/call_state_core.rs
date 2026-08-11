@@ -118,7 +118,8 @@ fn fixture_now() -> DateTime<Utc> {
 }
 
 fn did(label: &str) -> DidCoreId {
-    DidCoreId::new(format!("did:web:{label}.example")).expect("fixture DID should be valid")
+    DidCoreId::new(format!("ak:did_core:web:{label}.example"))
+        .expect("fixture Core DID should be valid")
 }
 
 fn full_did(label: &str) -> DidFullId {

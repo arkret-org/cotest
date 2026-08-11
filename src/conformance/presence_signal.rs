@@ -234,7 +234,7 @@ pub fn run_multi_device_aggregation_vector() -> Result<()> {
 // ─── helpers ───────────────────────────────────────────────────────────────
 
 fn actor() -> Result<DidCoreId> {
-    Ok(DidCoreId::new("did:webvh:z6mkfixture:alice.example")?)
+    Ok(DidCoreId::new("ak:did_core:web:alice.example")?)
 }
 
 fn realm() -> Result<RealmId> {

@@ -57,11 +57,11 @@ pub const ALL_MEMBER_ROSTER_VECTOR_IDS: &[&str] = &[
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
 fn alice() -> Result<DidCoreId> {
-    DidCoreId::new("did:web:alice.acme.example").map_err(|e| anyhow!("alice did: {e}"))
+    DidCoreId::new("ak:did_core:web:alice.acme.example").map_err(|e| anyhow!("alice did: {e}"))
 }
 
 fn alice_subject() -> Result<DidCoreId> {
-    DidCoreId::new("did:web:alice.principal.example")
+    DidCoreId::new("ak:did_core:web:alice.principal.example")
         .map_err(|e| anyhow!("alice principal did: {e}"))
 }
 
@@ -94,7 +94,7 @@ fn verified_claim_for_subject(handle: &str, subject: &DidCoreId) -> Result<Handl
     Ok(HandleClaim {
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
         subject: Some(subject.clone()),
-        issuer: Some(DidCoreId::new("did:web:coauth.acme.example")?),
+        issuer: Some(DidCoreId::new("ak:did_core:web:coauth.acme.example")?),
         binding_state: Some(HandleBindingState::Verified),
         created_at: Some(
             Utc.with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
@@ -188,7 +188,7 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
         "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
         "members": [
             {
-                "actor_id": "did:web:alice.acme.example",
+                "actor_id": "ak:did_core:web:alice.acme.example",
                 "membership": "join",
                 "identity_event_ids": [
                     "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ"
@@ -237,9 +237,9 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
 /// disclosure-gated and require `subject_id`.
 pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
     let inline = json!({
-        "actor_id": "did:web:alice.acme.example",
+        "actor_id": "ak:did_core:web:alice.acme.example",
         "membership": "join",
-        "subject_id": "did:web:alice.principal.example",
+        "subject_id": "ak:did_core:web:alice.principal.example",
         "identity_event_ids": [
             "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
             "ak:event:AY2Hn6IY76TnIeYqiTmQfD0I9bOBlvFOr6qVQbYcUaIz"
@@ -251,10 +251,10 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
                 "event_id": "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
                 "kind": "ak.member.identity.update",
                 "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
-                "actor_id": "did:web:alice.acme.example",
+                "actor_id": "ak:did_core:web:alice.acme.example",
                 "payload": {
                     "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
-                    "actor_id": "did:web:alice.acme.example",
+                    "actor_id": "ak:did_core:web:alice.acme.example",
                     "segment": "member_identity",
                     "identity_payload": {"member_identity": {"placeholder": "v1"}}
                 }
@@ -263,10 +263,10 @@ pub fn run_member_roster_with_inline_identity_events_vector() -> Result<()> {
                 "event_id": "ak:event:AY2Hn6IY76TnIeYqiTmQfD0I9bOBlvFOr6qVQbYcUaIz",
                 "kind": "ak.member.identity.update",
                 "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
-                "actor_id": "did:web:alice.acme.example",
+                "actor_id": "ak:did_core:web:alice.acme.example",
                 "payload": {
                     "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
-                    "actor_id": "did:web:alice.acme.example",
+                    "actor_id": "ak:did_core:web:alice.acme.example",
                     "segment": "member_identity",
                     "replaces": [{
                         "event_id": "ak:event:AaeZ8deENFbCUflsuaJ26bhcritF3A0DEiAgV3VXl2oZ",
@@ -402,7 +402,7 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
         .map_err(|e| anyhow!("VECT-COT-4b: aligned subject MUST validate: {e}"))?;
 
     // Mismatched claim subject MUST fail closed.
-    let other_subject = DidCoreId::new("did:web:mallory.principal.example")?;
+    let other_subject = DidCoreId::new("ak:did_core:web:mallory.principal.example")?;
     let mismatched = MemberRosterEntry {
         handle_claims: Some(vec![verified_claim_for_subject(
             "mallory:acme.example",

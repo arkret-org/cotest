@@ -653,8 +653,8 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
     let realm = RealmId::new("ak:realm:AQfJRAZvIVyNOdrjtAPw9Q2gKR0o_3Ud-xQZQB8gx_r9")
         .map_err(|e| anyhow!("realm: {e}"))?;
-    let alice = DidCoreId::new("did:web:alice.acme.example")?;
-    let subject = DidCoreId::new("did:web:alice.principal.example")?;
+    let alice = DidCoreId::new("ak:did_core:web:alice.acme.example")?;
+    let subject = DidCoreId::new("ak:did_core:web:alice.principal.example")?;
 
     // R3.2: MemberIdentity discloses subject_id + display_profile only;
     // handle lifecycle (the retired `primary_handle` / `handles[]`) has
@@ -788,8 +788,8 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         );
     }
 
-    let principal = DidCoreId::new("did:web:principal.acme.example")?;
-    let subject = DidCoreId::new("did:web:alice.acme.example")?;
+    let principal = DidCoreId::new("ak:did_core:web:principal.acme.example")?;
+    let subject = DidCoreId::new("ak:did_core:web:alice.acme.example")?;
     let principal_authority_instance = PrincipalAuthorityInstance::new(
         subject.clone(),
         principal.clone(),

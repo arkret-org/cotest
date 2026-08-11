@@ -19,7 +19,7 @@
 //! field tamper MUST fail verification.
 
 use arkret_canonical::base64url::base64url_decode;
-use arkret_identifiers::{DidCoreId, RealmId};
+use arkret_identifiers::{DidCoreId, DidFullId, RealmId, project_full_id_to_core_id};
 use arkret_models_collaboration::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
@@ -30,10 +30,9 @@ use arkret_wire::{DidUrl, NonEmptyString};
 use chrono::{DateTime, TimeZone, Utc};
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 
-const ORG_DID: &str = "did:webvh:example.test:orgs:01J0000000000000000000000A";
+const ORG_DID: &str = "ak:did_core:webvh:z6mkfixtureorg";
 /// Verification method = the organization's own genesis key in its DID document.
-const ORG_VERIFICATION_METHOD: &str =
-    "did:webvh:example.test:orgs:01J0000000000000000000000A#did-key-1";
+const ORG_VERIFICATION_METHOD: &str = "did:webvh:z6mkfixtureorg:org.example#did-key-1";
 
 fn now() -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 6, 25, 12, 0, 0).unwrap()
@@ -66,7 +65,7 @@ fn active_statement() -> RealmOrganizationPayload {
         organization_policy_ref: None,
         authorization: RealmOrganizationAuthorization {
             issuer: DidCoreId::new(ORG_DID).unwrap(),
-            issuer_role: RealmOrganizationIssuerRole::OrganizationDid,
+            issuer_role: RealmOrganizationIssuerRole::OrganizationPrincipalId,
             verification_method: DidUrl::new(ORG_VERIFICATION_METHOD).unwrap(),
             delegation_ref: None,
             executed_by: None,
@@ -106,15 +105,18 @@ fn organization_signed_statement_verifies_through_soland_shape() {
     let statement = active_statement();
 
     // Anchor: the verification method is controlled by organization_id.
-    let vm_did = statement
-        .authorization
-        .verification_method
-        .split('#')
-        .next()
-        .unwrap();
+    let vm_full_id = DidFullId::new(
+        statement
+            .authorization
+            .verification_method
+            .split('#')
+            .next()
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(
-        vm_did,
-        statement.organization_id.as_str(),
+        project_full_id_to_core_id(&vm_full_id).unwrap(),
+        statement.organization_id,
         "verification-method DID must equal organization_id (security anchor)"
     );
 

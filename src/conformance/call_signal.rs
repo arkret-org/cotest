@@ -148,7 +148,7 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     let key = CallSignalSeqKey {
         realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
         call_id: CallId::new("ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz")?,
-        actor_id: DidCoreId::new("did:web:alice.example.com")?,
+        actor_id: DidCoreId::new("ak:did_core:web:alice.example.com")?,
         device_id: DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?,
     };
 
@@ -337,7 +337,7 @@ fn signed_call_signal_envelope(
     signing_key: &SigningKey,
 ) -> Result<SignalEnvelope> {
     let realm_id = RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
-    let actor_id = DidCoreId::new("did:web:alice.example.com")?;
+    let actor_id = DidCoreId::new("ak:did_core:web:alice.example.com")?;
     let device_id = DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?;
     let mut envelope = SignalEnvelope {
         realm_id: realm_id.clone(),

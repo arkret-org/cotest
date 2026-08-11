@@ -72,8 +72,8 @@ pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
 const STABLE_REALM_ID: &str = "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K";
-const ALICE_ACTOR_DID: &str = "did:web:alice.acme.example";
-const ALICE_SUBJECT_DID: &str = "did:web:alice.principal.example";
+const ALICE_ACTOR_DID: &str = "ak:did_core:web:alice.acme.example";
+const ALICE_SUBJECT_DID: &str = "ak:did_core:web:alice.principal.example";
 
 fn fake_realm() -> Result<RealmId> {
     RealmId::new(STABLE_REALM_ID).map_err(|e| anyhow!("invalid stable realm id: {e}"))
@@ -540,7 +540,7 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
             .map_err(|e| anyhow!("bogus digest as Hash: {e}"))?;
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: DidCoreId::new("did:web:bob.acme.example")?,
+        actor_id: DidCoreId::new("ak:did_core:web:bob.acme.example")?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![MemberIdentityReplacementRef {
             event_id: cross_subject_event,

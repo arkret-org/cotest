@@ -301,7 +301,7 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
         );
     }
     let removal = PendingSidecarAccessReconciliationItem {
-        agent_id: DidCoreId::new("did:webvh:z6mkfixture:assistant.agents.example")?,
+        agent_id: DidCoreId::new("ak:did_core:web:assistant.agents.example")?,
         provisioning_phase: PendingSidecarAccessReconciliationStage::MlsRemove,
         reason: NonEmptyString::new("mls_remove_obligation_pending").map_err(anyhow::Error::msg)?,
         membership_frontier: Some(vec![EventId::new(
@@ -1295,7 +1295,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     {
         bail!("Sidecar ensure operation/profile registry drifted");
     }
-    let controller = DidCoreId::new("did:webvh:z6mksidecar:controller.example")?;
+    let controller = DidCoreId::new("ak:did_core:web:controller.example")?;
     let prepare_request = fixed_prepare_request(&controller, "cotest-sidecar-prepare-new", false)?;
     let mut model =
         SidecarExecutableModel::new(controller.clone(), true, AgentLifecycleStatus::Active);
@@ -1671,7 +1671,7 @@ impl SidecarAccessProjection {
 
 pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     let _fixture_case = sidecar_fixture_case(VECTOR_ID_SIDECAR_ELIGIBILITY_STATES)?;
-    let controller = DidCoreId::new("did:webvh:z6mksidecar:eligibility.example")?;
+    let controller = DidCoreId::new("ak:did_core:web:eligibility.example")?;
     let request = fixed_prepare_request(&controller, "cotest-sidecar-eligibility", false)?;
     let mut active =
         SidecarExecutableModel::new(controller.clone(), true, AgentLifecycleStatus::Active);
@@ -1717,7 +1717,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
 
 pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
     let _fixture_case = sidecar_fixture_case(VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY)?;
-    let controller = DidCoreId::new("did:webvh:z6mksidecar:privacy.example")?;
+    let controller = DidCoreId::new("ak:did_core:web:privacy.example")?;
     let request = fixed_prepare_request(&controller, "cotest-sidecar-privacy", false)?;
     let mut absent =
         SidecarExecutableModel::new(controller.clone(), false, AgentLifecycleStatus::Active);
@@ -1776,11 +1776,11 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     let request_id = EventId::new("ak:event:AU7uNevwc0Cp8J79qQnR0XFIA6sS-Ey-sAx6QesaglRs")?;
     let native_id = EventId::new("ak:event:AZjT-hpiUOSks1wjNlYAqMixCtZTrdsCsZzB-uVQC4hr")?;
     let response_id = EventId::new("ak:event:AYc-4BlSOVqQFbwNPwG_8grd4XMcbaWyErQiaMg6uDIK")?;
-    let addressed_agent = DidCoreId::new("did:webvh:z6mkfixture:assistant.agents.example")?;
+    let addressed_agent = DidCoreId::new("ak:did_core:web:assistant.agents.example")?;
     let terminal_id = EventId::new("ak:event:AcQOShj1JyHhaaSQwjV-D2nyDc1M1yK4DTq0JtH4nPIx")?;
     let projection = AgentSidecarExchangeProjection {
         schema: AgentSidecarExchangeProjectionSchema::V1,
-        controller_id: DidCoreId::new("did:webvh:z6mkfixture:example.com:users:alice")?,
+        controller_id: DidCoreId::new("ak:did_core:web:alice.example.com")?,
         sidecar_id: sidecar,
         exchange_id: AgentSidecarExchangeId::new("Abcdefghijklmnopqrstuv")?,
         origin: AgentSidecarExchangeOrigin::SourceTrackRouted,
@@ -1916,21 +1916,15 @@ fn exchange_hlc(counter: u32) -> Result<Hlc> {
 }
 
 fn exchange_controller() -> Result<DidCoreId> {
-    Ok(DidCoreId::new(
-        "did:webvh:z6mkfixture:example.com:users:alice",
-    )?)
+    Ok(DidCoreId::new("ak:did_core:web:alice.example.com")?)
 }
 
 fn exchange_agent_s() -> Result<DidCoreId> {
-    Ok(DidCoreId::new(
-        "did:webvh:z6mkfixture:assistant.agents.example",
-    )?)
+    Ok(DidCoreId::new("ak:did_core:web:assistant.agents.example")?)
 }
 
 fn exchange_agent_t() -> Result<DidCoreId> {
-    Ok(DidCoreId::new(
-        "did:webvh:z6mkfixture:reviewer.agents.example",
-    )?)
+    Ok(DidCoreId::new("ak:did_core:web:reviewer.agents.example")?)
 }
 
 fn exchange_scope() -> Result<SidecarExchangeFoldScope> {
@@ -2118,7 +2112,7 @@ pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
     missing_causal_ref.refs_after = Vec::new();
     let mut unaddressed_actor = valid_response.clone();
     unaddressed_actor.event_id = exchange_event_id(0x53)?;
-    unaddressed_actor.actor_id = DidCoreId::new("did:webvh:z6mkfixture:stranger.agents.example")?;
+    unaddressed_actor.actor_id = DidCoreId::new("ak:did_core:web:stranger.agents.example")?;
     let mut controller_response = valid_response.clone();
     controller_response.event_id = exchange_event_id(0x54)?;
     controller_response.actor_id = exchange_controller()?;
@@ -2773,7 +2767,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     let unauthorized_attach = arkret_wire::test_support::raw_event_at(
         EventKind::SidecarContextAttach.as_str(),
         attach_event.scope_ref.clone(),
-        DidCoreId::new("did:webvh:z6mkfixture:mallory.example")?,
+        DidCoreId::new("ak:did_core:web:mallory.example")?,
         21,
         exchange_hlc(0x82)?,
         serde_json::to_value(&attach_event.payload)?,

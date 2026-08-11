@@ -63,11 +63,11 @@ pub const ALL_PRIMARY_HANDLE_VECTOR_IDS: &[&str] = &[
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-const ACME_ISSUER: &str = "did:web:coauth.acme.example";
-const OTHER_ISSUER: &str = "did:web:coauth.other.example";
+const ACME_ISSUER: &str = "ak:did_core:web:coauth.acme.example";
+const OTHER_ISSUER: &str = "ak:did_core:web:coauth.other.example";
 
 fn subject() -> Result<DidCoreId> {
-    DidCoreId::new("did:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
+    DidCoreId::new("ak:did_core:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {

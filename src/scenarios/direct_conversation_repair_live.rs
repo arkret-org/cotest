@@ -69,7 +69,6 @@ fn canonical_now() -> DateTime<Utc> {
 
 fn fixture_events(
     trust_domain: arkret_wire::TypedTrustDomainId,
-    requester_full: &DidFullId,
     requester: &DidCoreId,
     recipient: &DidCoreId,
 ) -> Result<FixtureEvents> {
@@ -85,7 +84,7 @@ fn fixture_events(
         GenesisSalt::generate()?,
         trust_domain,
         NotaryProfile::SingleDid,
-        NotaryValue::single_did(requester_full.clone()),
+        NotaryValue::single_did(requester.clone()),
         arkret::current_capability_action_registry_digest()?,
         created_at,
     )?;
@@ -541,12 +540,7 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
     .await?;
     let (source_service_id, source_record) = current_service_record(source).await?;
     let (target_service_id, target_record) = current_service_record(target).await?;
-    let fixture = fixture_events(
-        source.trust_domain().clone(),
-        &requester_full,
-        &requester,
-        &recipient,
-    )?;
+    let fixture = fixture_events(source.trust_domain().clone(), &requester, &recipient)?;
     let target_binding = accepted_local_binding(
         &recipient_full,
         &recipient,

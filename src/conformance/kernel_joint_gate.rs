@@ -646,16 +646,16 @@ fn parse_notary(value: Option<&Value>) -> std::result::Result<NotaryValue, Kerne
 
 fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
     match notary {
-        NotaryValue::SingleDid { did, .. } => BTreeSet::from([did.as_str().to_owned()]),
+        NotaryValue::SingleDid { actor_id, .. } => BTreeSet::from([actor_id.as_str().to_owned()]),
         NotaryValue::Threshold { members, .. } | NotaryValue::OpenSet { members } => members
             .iter()
             .map(|member| member.as_str().to_owned())
             .collect(),
         NotaryValue::Mixed {
-            did,
+            actor_id,
             recovery_members,
         } => {
-            let mut members = BTreeSet::from([did.as_str().to_owned()]);
+            let mut members = BTreeSet::from([actor_id.as_str().to_owned()]);
             members.extend(
                 recovery_members
                     .iter()
@@ -792,7 +792,7 @@ fn sample_lease(
             SealId::new(format!("ak:seal:{}", repeated_hash(0x62).as_str()))
                 .expect("fixed Seal id is valid"),
         ),
-        actor_id: DidCoreId::new("did:webvh:z6mkfixture:alice.example")
+        actor_id: DidCoreId::new("ak:did_core:web:alice.example")
             .expect("fixed actor DID is valid"),
         device_id: DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
             .expect("fixed device id is valid"),

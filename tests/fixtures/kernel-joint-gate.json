@@ -8,10 +8,10 @@
         "kind": "ak.realm.create",
         "payload": {
           "object": {
-            "created_by": "did:webvh:z6mkfixture:alice.example",
+            "created_by": "ak:did_core:web:alice.example",
             "notary": {
               "kind": "single_did",
-              "did": "did:webvh:z6mkfixture:notary.example"
+              "actor_id": "ak:did_core:web:notary.example"
             }
           }
         },
@@ -32,7 +32,7 @@
           ],
           "seal": {
             "signers": [
-              "did:webvh:z6mkfixture:notary.example"
+              "ak:did_core:web:notary.example"
             ]
           }
         },
@@ -42,7 +42,7 @@
         "outcome": "projection",
         "value": {
           "authority": [
-            "did:webvh:z6mkfixture:notary.example"
+            "ak:did_core:web:notary.example"
           ],
           "status": "sealed"
         }
@@ -56,7 +56,7 @@
         "payload": {
           "notary": {
             "kind": "single_did",
-            "did": "did:webvh:z6mkfixture:notary.example"
+            "actor_id": "ak:did_core:web:notary.example"
           }
         },
         "basis": {
@@ -71,7 +71,7 @@
         "outcome": "projection",
         "value": {
           "members": [
-            "did:webvh:z6mkfixture:notary.example"
+            "ak:did_core:web:notary.example"
           ],
           "profile": "single_chain"
         }
@@ -86,8 +86,8 @@
           "notary": {
             "kind": "open_set",
             "members": [
-              "did:webvh:z6mkfixture:notary-a.example",
-              "did:webvh:z6mkfixture:notary-b.example"
+              "ak:did_core:web:notary-a.example",
+              "ak:did_core:web:notary-b.example"
             ]
           }
         },
@@ -103,8 +103,8 @@
         "outcome": "projection",
         "value": {
           "members": [
-            "did:webvh:z6mkfixture:notary-a.example",
-            "did:webvh:z6mkfixture:notary-b.example"
+            "ak:did_core:web:notary-a.example",
+            "ak:did_core:web:notary-b.example"
           ],
           "profile": "open_set"
         }
@@ -118,7 +118,7 @@
         "payload": {
           "membership": {
             "state": "join",
-            "actor_id": "did:webvh:z6mkfixture:bob.example"
+            "actor_id": "ak:did_core:web:bob.example"
           },
           "genesis": {
             "mls_group_id": "ak:mls_group:abc",
@@ -127,7 +127,7 @@
               "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1"
             },
             "epoch": 0,
-            "creator_principal_id": "did:webvh:z6mkfixture:alice.example",
+            "creator_principal_id": "ak:did_core:web:alice.example",
             "creator_device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
             "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
             "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
@@ -153,7 +153,7 @@
             "group_id": "ak:mls_group:abc",
             "expected_prev_epoch": 0,
             "next_epoch": 1,
-            "leader_actor_id": "did:webvh:z6mkfixture:alice.example",
+            "leader_actor_id": "ak:did_core:web:alice.example",
             "commit_bytes_b64": "b3BhcXVlLWNvbW1pdA",
             "governance_binding": {
               "binding_version": 1,
@@ -198,7 +198,7 @@
         "payload": {
           "offline_writes": [
             {
-              "actor_id": "did:webvh:z6mkfixture:alice.example",
+              "actor_id": "ak:did_core:web:alice.example",
               "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
               "event_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
               "value": {
@@ -206,7 +206,7 @@
               }
             },
             {
-              "actor_id": "did:webvh:z6mkfixture:alice.example",
+              "actor_id": "ak:did_core:web:alice.example",
               "device_id": "ak:device:0196419b-0000-7000-8000-000000000002",
               "event_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
               "value": {
@@ -240,13 +240,13 @@
             {
               "tag": "grant-b",
               "value": {
-                "subject": "did:webvh:z6mkfixture:bob.example"
+                "subject": "ak:did_core:web:bob.example"
               }
             },
             {
               "tag": "grant-a",
               "value": {
-                "subject": "did:webvh:z6mkfixture:alice.example"
+                "subject": "ak:did_core:web:alice.example"
               }
             }
           ]
@@ -266,13 +266,13 @@
             {
               "tag": "grant-a",
               "value": {
-                "subject": "did:webvh:z6mkfixture:alice.example"
+                "subject": "ak:did_core:web:alice.example"
               }
             },
             {
               "tag": "grant-b",
               "value": {
-                "subject": "did:webvh:z6mkfixture:bob.example"
+                "subject": "ak:did_core:web:bob.example"
               }
             }
           ]
@@ -327,10 +327,10 @@
           "authority": {
             "threshold": 2,
             "members": [
-              "did:webvh:z6mkfixture:notary-a.example",
-              "did:webvh:z6mkfixture:notary-b.example",
-              "did:webvh:z6mkfixture:notary-c.example",
-              "did:webvh:z6mkfixture:notary-d.example"
+              "ak:did_core:web:notary-a.example",
+              "ak:did_core:web:notary-b.example",
+              "ak:did_core:web:notary-c.example",
+              "ak:did_core:web:notary-d.example"
             ],
             "forensic_attribution": "waived"
           }
@@ -530,12 +530,12 @@
         "kind": "ak.notary.fault.equivocation",
         "payload": {
           "seal_a": {
-            "signer_id": "did:webvh:z6mkfixture:notary.example",
+            "signer_id": "ak:did_core:web:notary.example",
             "notary_seq": 42,
             "canonical_body_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
           "seal_b": {
-            "signer_id": "did:webvh:z6mkfixture:notary.example",
+            "signer_id": "ak:did_core:web:notary.example",
             "notary_seq": 42,
             "canonical_body_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           }

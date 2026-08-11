@@ -193,6 +193,8 @@ struct ExpectedOutcome {
     reason_code: Option<String>,
     #[serde(default)]
     principal_directory_queries: Option<u64>,
+    #[serde(default)]
+    network_submission_count: Option<u64>,
 }
 
 /// Executable principal-directory spy. The production validator's signature
@@ -304,13 +306,13 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
     {
         bail!("vector base must be an admitted current pairwise member");
     }
-    if case.cases.len() != 9 {
+    if case.cases.len() != 10 {
         bail!(
-            "minimal-metadata author credential vector must contain 9 cases, got {}",
+            "minimal-metadata author credential vector must contain 10 cases, got {}",
             case.cases.len()
         );
     }
-    if case.assertions.len() != 8 {
+    if case.assertions.len() != 9 {
         bail!("minimal-metadata author credential assertion catalogue drifted");
     }
 
@@ -327,6 +329,7 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
         let mut realm_declares_minimal_metadata_profile =
             base.realm_declares_minimal_metadata_profile;
         let mut pairwise_actor_current_member = base.pairwise_actor_current_member;
+        let mut local_pairwise_key_scope_matches = true;
         let directory = PrincipalDirectorySpy::default();
 
         match mutation_case.mutation.as_str() {
@@ -342,6 +345,9 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                     "did:key:z6MkpairwiseMallory#z6MkpairwiseAuthorKey".to_owned(),
                 )
                 .map_err(anyhow::Error::msg)?;
+            }
+            "local_pairwise_key_scope_points_to_other_realm" => {
+                local_pairwise_key_scope_matches = false;
             }
             "duplicate_active_leaf_identity" => {
                 let mut duplicate = base_leaf(&base);
@@ -381,7 +387,9 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
             proof_verification_method: &proof_method,
             proof_public_key: &proof_key,
         };
-        let outcome = if !realm_declares_minimal_metadata_profile {
+        let outcome = if !local_pairwise_key_scope_matches {
+            Err("local_pairwise_key_scope_mismatch".to_owned())
+        } else if !realm_declares_minimal_metadata_profile {
             Err("actor_session_mismatch".to_owned())
         } else if !pairwise_actor_current_member {
             Err("capability_denied".to_owned())
@@ -423,6 +431,20 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                         "case {} rejected with {} (expected {expected_reason})",
                         mutation_case.name,
                         error
+                    );
+                }
+            }
+            "reject_local_authoring" => {
+                if accepted {
+                    bail!(
+                        "case {} must reject before local network submission",
+                        mutation_case.name
+                    );
+                }
+                if mutation_case.expected.network_submission_count != Some(0) {
+                    bail!(
+                        "case {} must pin network_submission_count=0",
+                        mutation_case.name
                     );
                 }
             }

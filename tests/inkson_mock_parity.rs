@@ -239,7 +239,7 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
     let ctx = TemplateContext {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
-        service_id: "did:web:soland.mock-parity-smoke.local".to_owned(),
+        service_id: "ak:did_core:web:soland.mock-parity-smoke.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };
@@ -260,7 +260,7 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
     let ctx = TemplateContext {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
-        service_id: "did:web:soland.mock-parity-gate.local".to_owned(),
+        service_id: "ak:did_core:web:soland.mock-parity-gate.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };

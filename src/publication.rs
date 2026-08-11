@@ -275,7 +275,7 @@ pub fn ingress_receipt_for(event: &Event, lease: &AuthorizationLease) -> Result<
             .context("Event digest is a valid Hash")?,
         authorization_lease_id: lease.authorization_lease_id.clone(),
         received_at,
-        service_id: arkret_identifiers::DidCoreId::new("did:webvh:z6mkfixture:ingress.example")
+        service_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:ingress.example")
             .context("static harness ingress DID is typed")?,
         authority_set_ref: harness_authority_set("ak.authority_set.realm_ingress.v1"),
         proofs: Vec::new(),

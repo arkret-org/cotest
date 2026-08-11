@@ -155,7 +155,7 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
         namespace: "ak.example".to_owned(),
         protocol_layer_kind: ProtocolLayerKind::Extension,
         manifest_digest: Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
-        publisher_id: DidCoreId::new("did:web:publisher.example").unwrap(),
+        publisher_id: DidCoreId::new("ak:did_core:web:publisher.example").unwrap(),
         published_at: created_at(),
         dependency_refs: Vec::new(),
         payload_schema_refs: vec![schema_ref.clone()],

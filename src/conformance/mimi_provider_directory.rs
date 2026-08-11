@@ -69,12 +69,17 @@ fn validate_directory(
     }) {
         bail!("an unknown extension attempted to shadow routing or capabilities");
     }
-    let expected_controller = format!("{}#", directory.service_id.as_str());
+    let proof_controller = proof
+        .verification_method
+        .as_str()
+        .split_once('#')
+        .map(|(controller, _)| controller)
+        .ok_or_else(|| anyhow!("MIMI proof verification method has no fragment"))?;
+    let proof_controller = DidFullId::new(proof_controller.to_owned())?;
+    let proof_controller =
+        arkret_wire::DidCoreId::from(arkret_wire::project_full_id_to_core_id(&proof_controller)?);
     if proof.kind != "detached_jws"
-        || !proof
-            .verification_method
-            .as_str()
-            .starts_with(&expected_controller)
+        || proof_controller != directory.service_id
         || now - proof.created_at > Duration::minutes(5)
         || proof.created_at > now + Duration::seconds(60)
     {

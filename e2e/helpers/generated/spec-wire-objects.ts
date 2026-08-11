@@ -95,7 +95,7 @@ export type RealmObject = {
   };
   "digest_algorithm"?: "sha256" | "blake3";
   "notary": {
-    "did"?: string;
+    "actor_id"?: string;
     "members"?: string[];
     "threshold"?: number;
     "forensic_attribution"?: "quorum_intersection" | "waived";

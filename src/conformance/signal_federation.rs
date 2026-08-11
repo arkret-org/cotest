@@ -24,7 +24,7 @@ fn envelope() -> Result<SignalEnvelope> {
         scope_ref: ScopeRef::Realm {
             realm_id: realm_id.clone(),
         },
-        sender_actor_id: DidCoreId::new("did:webvh:z6mkfixture:alice.example")?,
+        sender_actor_id: DidCoreId::new("ak:did_core:web:alice.example")?,
         sender_device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb")?,
         seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
         signal_class: SignalClass::Session,

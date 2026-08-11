@@ -49,10 +49,10 @@ pub const ALL_MENTION_RENDERING_VECTOR_IDS: &[&str] = &[
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-const ISSUER: &str = "did:web:coauth.acme.example";
+const ISSUER: &str = "ak:did_core:web:coauth.acme.example";
 
 fn subject() -> Result<DidCoreId> {
-    DidCoreId::new("did:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
+    DidCoreId::new("ak:did_core:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
@@ -101,7 +101,7 @@ fn empty_selection<'a>(
 pub fn run_new_shape_accepted_vector() -> Result<()> {
     let value = json!({
         "kind": "mention",
-        "subject_id": "did:web:alice.principal.example",
+        "subject_id": "ak:did_core:web:alice.principal.example",
         "handle_at_time": "alice:acme.example",
         "display_name_at_time": "Alice Zhang",
         "mention_text_original": "@alice:acme.example",
@@ -109,7 +109,7 @@ pub fn run_new_shape_accepted_vector() -> Result<()> {
     });
     let mention: Mention =
         serde_json::from_value(value).map_err(|e| anyhow!("new mention shape MUST parse: {e}"))?;
-    if mention.subject_id.as_str() != "did:web:alice.principal.example" {
+    if mention.subject_id.as_str() != "ak:did_core:web:alice.principal.example" {
         bail!("subject_id drifted under parse");
     }
     if mention.handle_at_time.as_ref().map(Handle::canonical) != Some("alice:acme.example") {
@@ -118,7 +118,7 @@ pub fn run_new_shape_accepted_vector() -> Result<()> {
     // Minimal shape (kind + subject_id) MUST also accept; audit metadata omitted.
     let minimal: Mention = serde_json::from_value(json!({
         "kind": "mention",
-        "subject_id": "did:web:bob.principal.example"
+        "subject_id": "ak:did_core:web:bob.principal.example"
     }))
     .map_err(|e| anyhow!("minimal mention MUST parse: {e}"))?;
     let wire = serde_json::to_value(&minimal).map_err(|e| anyhow!("serialise: {e}"))?;

@@ -153,7 +153,11 @@ fn validate_founding_transcript_vector(vector: &FoundingTranscriptVector) -> Res
         &receipt_without_proof,
     )?;
     if independent_receipt != vector.expected_receipt_transcript_digest {
-        bail!("Cotest founding-receipt transcript digest drifted");
+        bail!(
+            "Cotest founding-receipt transcript digest drifted: expected {}, got {}",
+            vector.expected_receipt_transcript_digest,
+            independent_receipt
+        );
     }
 
     let event_ids = vector
@@ -269,9 +273,9 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
         DirectConversationFounderBasis, direct_conversation_founder, direct_conversation_may_found,
     };
 
-    let alice = arkret_identifiers::DidCoreId::new("did:webvh:z6mkcotest:alice.example")?;
-    let bob = arkret_identifiers::DidCoreId::new("did:webvh:z6mkcotest:bob.example")?;
-    let carol = arkret_identifiers::DidCoreId::new("did:webvh:z6mkcotest:carol.example")?;
+    let alice = arkret_identifiers::DidCoreId::new("ak:did_core:web:alice.example")?;
+    let bob = arkret_identifiers::DidCoreId::new("ak:did_core:web:bob.example")?;
+    let carol = arkret_identifiers::DidCoreId::new("ak:did_core:web:carol.example")?;
 
     // A requests, B accepts -> B founds.
     let normal = DirectConversationFounderBasis::Normal {

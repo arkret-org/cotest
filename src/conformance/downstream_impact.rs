@@ -31,9 +31,9 @@ pub fn run_account_status_authority_binding_vector() -> Result<()> {
         "status": "deactivated",
         "effective_at": "2026-08-01T00:00:00.000Z"
     }))?;
-    let service = DidCoreId::new("did:web:coauth.example")?;
-    let holder = DidCoreId::new("did:web:holder.example")?;
-    let third_party = DidCoreId::new("did:web:third-party.example")?;
+    let service = DidCoreId::new("ak:did_core:web:coauth.example")?;
+    let holder = DidCoreId::new("ak:did_core:web:holder.example")?;
+    let third_party = DidCoreId::new("ak:did_core:web:third-party.example")?;
     let service_full = DidFullId::new(service.as_str())?;
     let third_party_full = DidFullId::new(third_party.as_str())?;
 

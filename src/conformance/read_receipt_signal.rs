@@ -34,7 +34,7 @@ pub const ALL_READ_RECEIPT_SIGNAL_VECTOR_IDS: &[&str] = &[
 ];
 
 fn actor() -> Result<DidCoreId> {
-    Ok(DidCoreId::new("did:web:alice.example")?)
+    Ok(DidCoreId::new("ak:did_core:web:alice.example")?)
 }
 
 fn event_id() -> Result<EventId> {

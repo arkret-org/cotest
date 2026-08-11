@@ -10,7 +10,7 @@ use garth::{
 use serde_json::{Value, json};
 
 fn actor() -> DidCoreId {
-    DidCoreId::new("did:webvh:z6mkfixture:alice.example").unwrap()
+    DidCoreId::new("ak:did_core:web:alice.example").unwrap()
 }
 
 fn device() -> DeviceId {

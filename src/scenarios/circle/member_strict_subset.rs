@@ -14,7 +14,7 @@ use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::governance::circle::{Circle, CircleScopeError};
 
 fn did(local: &str) -> Result<DidCoreId> {
-    format!("did:web:{local}.example")
+    format!("ak:did_core:web:{local}.example")
         .parse()
         .map_err(|e| anyhow!("did {local}: {e}"))
 }

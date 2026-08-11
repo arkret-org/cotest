@@ -17,7 +17,7 @@
     "expected_founding_unit_digest": "sha256:dc604271ea8bbefce03b4ef6916f12a01af81722e44b2f3640adc61d3a9e31dd",
     "receipt": {
       "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
-      "founder_id": "did:webvh:z6mkfixture:bob.example",
+      "founder_id": "ak:did_core:web:bob.example",
       "realm_id": "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
       "main_strand_id": "ak:strand:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS",
       "founding_unit_digest": "sha256:dc604271ea8bbefce03b4ef6916f12a01af81722e44b2f3640adc61d3a9e31dd",
@@ -28,7 +28,7 @@
         "accepted_contact_evidence_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
       "slot_committed": true,
-      "issuer_service_id": "did:web:ps.example",
+      "issuer_service_id": "ak:did_core:web:ps.example",
       "issuer_service_binding_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "accepted_at": "2026-08-08T00:00:00.000Z",
       "proof": {
@@ -57,7 +57,7 @@
         "pinned": true,
         "verified_title_at_save": "Engineering",
         "verified_owning_organizations_at_save": [
-          "did:web:acme.example"
+          "ak:did_core:web:acme.example"
         ],
         "saved_at": "2026-06-06T00:00:00.000Z",
         "updated_at": "2026-06-06T00:00:00.000Z"
@@ -80,7 +80,7 @@
         "pinned": true,
         "verified_title_at_save": "Engineering",
         "verified_owning_organizations_at_save": [
-          "did:web:acme.example"
+          "ak:did_core:web:acme.example"
         ],
         "saved_at": "2026-06-06T00:00:00.000Z",
         "updated_at": "2026-06-06T00:00:00.000Z"
@@ -176,7 +176,7 @@
     "resolve_request": {
       "peer": {
         "kind": "human",
-        "principal_id": "did:web:bob.example"
+        "principal_id": "ak:did_core:web:bob.example"
       }
     },
     "resolve_creation_required_response": {
@@ -189,8 +189,8 @@
           "controller_binding_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         },
         "source_service_binding": {
-          "principal_id": "did:webvh:z6mkfixture:alice.example",
-          "service_id": "did:webvh:z6mkfixture:principal.example",
+          "principal_id": "ak:did_core:web:alice.example",
+          "service_id": "ak:did_core:web:principal.example",
           "trust_domain": "ak:trust_domain:example.test",
           "service_kind": "principal_server",
           "service_verification_method": {
@@ -240,8 +240,8 @@
     "binding_payload": {
       "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
       "participants_unordered": [
-        "did:webvh:z6mkfixture:alice.example",
-        "did:webvh:z6mkfixture:bob.example"
+        "ak:did_core:web:alice.example",
+        "ak:did_core:web:bob.example"
       ],
       "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
       "main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
@@ -257,7 +257,7 @@
       "initial_exact_pair_generation_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
     },
     "contact_list_row": {
-      "peer": "did:web:bob.example",
+      "peer": "ak:did_core:web:bob.example",
       "state": "accepted",
       "request_event_ref": "ak:event:AZbAR-UJKJB9XAMVWWroEIv43WmrHqCfW6GJV3MnzF9J",
       "response_event_ref": "ak:event:AVEntuNDJE3nOVqGBDAuKT6laYevDi6AJvAiMxML4uy3",
@@ -289,7 +289,7 @@
     "pending_contact_negative": {
       "name": "pending_incoming_contact_must_not_create_dm_realm",
       "contact_row": {
-        "peer": "did:web:chrid.example",
+        "peer": "ak:did_core:web:chrid.example",
         "state": "pending_incoming",
         "request_event_ref": "ak:event:AUvBHgN7bd-kwN9HoAO2mZ8V5vtNsq41biC5ss2DqiAO",
         "granted_by_me": [],
@@ -301,7 +301,7 @@
       "resolve_request": {
         "peer": {
           "kind": "human",
-          "principal_id": "did:web:chrid.example"
+          "principal_id": "ak:did_core:web:chrid.example"
         }
       },
       "expected_error": {
