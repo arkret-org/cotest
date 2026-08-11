@@ -282,13 +282,13 @@ fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
         {
             "event_id": policy_id,
             "kind": "ak.policy.action",
-            "actor_id": "did:web:policy-bot.example.com",
+            "actor_id": "ak:did_core:web:policy-bot.example.com",
             "payload": {"target_id": message_id, "policy_scope": "public", "decision": "quarantine"},
         },
         {
             "event_id": redaction_id,
             "kind": "ak.redaction",
-            "actor_id": "did:web:policy-admin.example",
+            "actor_id": "ak:did_core:web:policy-admin.example",
             "payload": {"redacts": message_id, "reason_code": "policy_recall"},
         },
     ]);
@@ -432,7 +432,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let mut receipt = json!({
         "schema": "ak.schema.erasure_receipt.v1",
         "receipt_id": receipt_id,
-        "issuer": "did:web:erasure.example.com",
+        "issuer": "ak:did_core:web:erasure.example.com",
         "subject": {"kind": "event", "subject_ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "outcome": "completed",
@@ -598,7 +598,7 @@ fn sample_event_with_id(event_id: &str) -> Value {
     json!({
         "event_id": event_id,
         "created_at": "2026-04-29T00:00:00.000Z",
-        "actor_id": "did:web:alice.example",
+        "actor_id": "ak:did_core:web:alice.example",
         "kind": "ak.message.create",
         "content": {"kind": "ak.content.text", "body": "secret"},
         "proofs": [{"fixture_marker": "not_covered"}]

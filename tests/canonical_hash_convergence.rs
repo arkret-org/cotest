@@ -47,13 +47,13 @@ fn vectors() -> Vec<CanonicalVector> {
             // changes because both the field name and the value bytes change.
             payload: json!({
                 "type": "ak.handle.claim",
-                "subject_id": "did:web:alice.example",
+                "subject_id": "ak:did_core:web:alice.example",
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
-                "issuer_service_id": "did:web:coauth.example",
+                "issuer_service_id": "ak:did_core:web:coauth.example",
                 "audience": "https://soland.example/_arkret",
                 "member_delivery_binding": {
-                    "recipient_service_id": "did:web:soland.example",
+                    "recipient_service_id": "ak:did_core:web:soland.example",
                     "recipient_service_kind": "principal_server",
                     "binding_source": "organization_policy",
                     "delivery_modes": ["events"],
@@ -69,7 +69,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // re-introduced a hand-rolled canonical encoder. To regenerate:
             // `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:e2781d4bb3e018406edd85299e6099811468492a78336c5f42f6f85e045e6f94",
+            expected_digest: "sha256:5a9445c4c7f6c00b2228a6521ae2ec061e3a2133edf5ad970734ab76b4b5274d",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.soland_event_envelope.v1",
@@ -77,7 +77,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // The shape soland hashes inside `validate_event_proofs` after
             // stripping `proofs` / `unsigned` from the on-wire envelope.
             payload: json!({
-                "actor_id": "did:web:alice.example",
+                "actor_id": "ak:did_core:web:alice.example",
                 "event_id": "ak:event:AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
                 "realm_id": "ak:realm:AQptIWDEF2d4jlsnzTQVXGqZs6h-vPkYXuYqwewKqIjr",
                 "kind": "ak.message.create",
@@ -95,7 +95,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // Regenerated after the Realm id in this payload moved to its
             // Event-derived complete digest token: the Realm id sits inside
             // this Event's preimage, so editing it necessarily moves the digest.
-            expected_digest: "sha256:29cc90d1d29daf5b64ea3df5e42c503b156b0069b393d0d2eec24a8c5c20d6db",
+            expected_digest: "sha256:55d6eae483299a0a39625377a63f7d4416374d9544c9974632a007d725f8454c",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.starid_webvh_update.v1",
@@ -131,13 +131,13 @@ fn vectors() -> Vec<CanonicalVector> {
             // fixed deterministic test constant (NOT a live anchored value).
             payload: json!({
                 "type": "ak.handle.claim",
-                "subject_id": "did:webvh:zcotesthandleclaimscid000000000000:alice.example",
+                "subject_id": "ak:did_core:webvh:zcotesthandleclaimscid000000000000",
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
-                "issuer_service_id": "did:webvh:zcotestcoauthscid0000000000000000:coauth.example",
+                "issuer_service_id": "ak:did_core:webvh:zcotestcoauthscid0000000000000000",
                 "audience": "https://soland.example/_arkret",
                 "member_delivery_binding": {
-                    "recipient_service_id": "did:webvh:zcotestsolandscid0000000000000000:soland.example",
+                    "recipient_service_id": "ak:did_core:webvh:zcotestsolandscid0000000000000000",
                     "recipient_service_kind": "principal_server",
                     "binding_source": "organization_policy",
                     "delivery_modes": ["events"],
@@ -147,7 +147,7 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:3d352911e07b9b9bc035084579763b20cefd205032f542e77f518fa37bd4754a",
+            expected_digest: "sha256:887138e86fc6d58cae727cc0577f3609c24d3d12f5c6800dab2161dff78d31c6",
         },
     ]
 }

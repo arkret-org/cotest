@@ -59,14 +59,14 @@ const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-handle2joinaa";
 
 /// Stable principal-server DID that appears as both the issuer and the
 /// recipient on the candidate. T3.4's allow-list test uses the same shape.
-const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
+const PRINCIPAL_ID: &str = "ak:did_core:web:principal.acme.example";
 
 /// Alternate principal-server DID — used by the `service_not_allowed`
-/// negative to model a Realm whose policy only lists `PRINCIPAL_DID`.
-const OTHER_PRINCIPAL_DID: &str = "did:web:rogue.example";
+/// negative to model a Realm whose policy only lists `PRINCIPAL_ID`.
+const OTHER_PRINCIPAL_ID: &str = "ak:did_core:web:rogue.example";
 
 /// Subject DID for the happy path actor.
-const ALICE_DID: &str = "did:web:alice.acme.example";
+const ALICE_ID: &str = "ak:did_core:web:alice.acme.example";
 
 /// Canonical handle for Alice — R3.1 wire form `<localpart>:<domain>`. The
 /// acct: alias appears in `handle_aliases[]` as the interop form, mirroring
@@ -122,7 +122,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
 fn happy_path_via_sdk_candidate() -> Result<()> {
     let candidate = sample_candidate()?;
     let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned())
-        .with_expected_subject(DidCoreId::new(ALICE_DID)?);
+        .with_expected_subject(DidCoreId::new(ALICE_ID)?);
 
     candidate.validate(&ctx).map_err(|e| {
         anyhow!(
@@ -173,7 +173,7 @@ fn happy_path_via_sdk_candidate() -> Result<()> {
         .member_delivery_binding
         .recipient_service_id
         .as_str()
-        != PRINCIPAL_DID
+        != PRINCIPAL_ID
     {
         bail!(
             "T3.5 happy path: member_delivery_binding.recipient_service_id \
@@ -297,7 +297,7 @@ fn negative_case_audience_mismatch() -> Result<()> {
 /// rely on.
 fn negative_case_service_not_allowed() -> Result<()> {
     let mut candidate = sample_candidate()?;
-    candidate.member_delivery_binding.recipient_service_id = DidCoreId::new(OTHER_PRINCIPAL_DID)?;
+    candidate.member_delivery_binding.recipient_service_id = DidCoreId::new(OTHER_PRINCIPAL_ID)?;
     if candidate
         .validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))
         .is_ok()
@@ -305,7 +305,7 @@ fn negative_case_service_not_allowed() -> Result<()> {
         bail!("T3.5 service_not_allowed: recipient substitution escaped authority binding");
     }
 
-    let allowed = [PRINCIPAL_DID];
+    let allowed = [PRINCIPAL_ID];
     if allowed.contains(
         &candidate
             .member_delivery_binding
@@ -467,7 +467,7 @@ async fn live_stack_probe() -> Result<()> {
         >(json!({
             "handle": ALICE_HANDLE,
             "intent": "member_add",
-            "requester": PRINCIPAL_DID,
+            "requester": PRINCIPAL_ID,
             "audience": TARGET_REALM_ID,
             "realm_id": TARGET_REALM_ID,
         }))?)
@@ -525,8 +525,8 @@ async fn live_stack_probe() -> Result<()> {
 /// `resolve_handle` response. `audience = TARGET_REALM_ID` so the candidate
 /// validates against the same Realm the SDK builder is asked to join.
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
-    let subject = DidCoreId::new(ALICE_DID)?;
-    let principal = DidCoreId::new(PRINCIPAL_DID)?;
+    let subject = DidCoreId::new(ALICE_ID)?;
+    let principal = DidCoreId::new(PRINCIPAL_ID)?;
     let principal_authority_instance = PrincipalAuthorityInstance::new(
         subject.clone(),
         principal.clone(),

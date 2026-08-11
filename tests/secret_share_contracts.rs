@@ -18,7 +18,7 @@ use hpke_rs_crypto::types::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
 use hpke_rs_rust_crypto::HpkeRustCrypto;
 use serde_json::{Value, json};
 
-const ACCOUNT_DID: &str = "did:web:alice.example";
+const ACCOUNT_ID: &str = "ak:did_core:web:alice.example";
 const OLD_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000a";
 const NEW_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000b";
 const OTHER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000c";
@@ -79,7 +79,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     assert!(request_value.get("event").is_none());
 
     let parsed_request: SecretShareRequestContent = serde_json::from_value(
-        request_value["messages"][ACCOUNT_DID][OLD_DEVICE]["content"].clone(),
+        request_value["messages"][ACCOUNT_ID][OLD_DEVICE]["content"].clone(),
     )?;
     assert_eq!(parsed_request.request_id, REQUEST_ID);
     assert_eq!(parsed_request.secret_id, SECRET_ID);
@@ -94,7 +94,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     };
     let send_body = device_message_body(device_id(NEW_DEVICE)?, send_target)?;
     let send_value = serde_json::to_value(&send_body)?;
-    let content = &send_value["messages"][ACCOUNT_DID][NEW_DEVICE]["content"];
+    let content = &send_value["messages"][ACCOUNT_ID][NEW_DEVICE]["content"];
 
     assert_eq!(content["scheme"], HPKE_SUITE_X25519_CHACHA20POLY1305_V1);
     assert_eq!(content["request_id"], REQUEST_ID);
@@ -114,7 +114,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     );
 
     let mut keys = BTreeSet::new();
-    for key in send_value["messages"][ACCOUNT_DID][NEW_DEVICE]
+    for key in send_value["messages"][ACCOUNT_ID][NEW_DEVICE]
         .as_object()
         .ok_or_else(|| anyhow!("secret send target is not an object"))?
         .keys()
@@ -315,9 +315,9 @@ fn send_aad(
     arkret_canonical::validate_timestamp_canonical(expires_at)?;
     Ok(canonical_json_bytes(&json!({
         "kind": SECRET_SEND_KIND,
-        "sender_principal_id": ACCOUNT_DID,
+        "sender_principal_id": ACCOUNT_ID,
         "sender_device_id": sender_device_id,
-        "recipient_principal_id": ACCOUNT_DID,
+        "recipient_principal_id": ACCOUNT_ID,
         "recipient_device_id": recipient_device_id,
         "expires_at": expires_at,
     }))?)
@@ -330,7 +330,7 @@ fn device_message_body(
     let mut by_device = BTreeMap::new();
     by_device.insert(recipient_device_id, target);
     let mut messages = BTreeMap::new();
-    messages.insert(DidCoreId::new(ACCOUNT_DID.to_owned())?, by_device);
+    messages.insert(DidCoreId::new(ACCOUNT_ID.to_owned())?, by_device);
     Ok(DeviceMessagesSendRequestBody { messages })
 }
 
@@ -338,9 +338,9 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
     Ok(DeviceMessageEnvelope {
         message_id: DeviceMessageId::new("ak:device_message:0196419b-0000-7000-8000-000000000099")?,
         kind: ProtocolKind::new(SECRET_SEND_KIND).map_err(anyhow::Error::msg)?,
-        sender_principal_id: DidCoreId::new(ACCOUNT_DID.to_owned())?,
+        sender_principal_id: DidCoreId::new(ACCOUNT_ID.to_owned())?,
         sender_device_id: device_id(OLD_DEVICE)?,
-        recipient_principal_id: DidCoreId::new(ACCOUNT_DID.to_owned())?,
+        recipient_principal_id: DidCoreId::new(ACCOUNT_ID.to_owned())?,
         recipient_device_id: device_id(NEW_DEVICE)?,
         sent_at: parse_utc("2026-06-10T00:00:00.000Z")?,
         expires_at: parse_utc(expires_at)?,

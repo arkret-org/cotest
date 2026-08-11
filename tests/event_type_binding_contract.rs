@@ -11,7 +11,8 @@ use arkret_wire::{
 use chrono::{TimeZone as _, Utc};
 
 const REALM_ID: &str = "ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir";
-const ACTOR_ID: &str = "did:webvh:z6mkfixture:alice.example";
+const ACTOR_FULL_ID: &str = "did:webvh:z6mkfixture:alice.example";
+const ACTOR_ID: &str = "ak:did_core:webvh:z6mkfixture";
 const STRAND_ID: &str = "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9";
 const HLC: &str = "01970e589d21-0001-a13f9c2e";
 
@@ -22,9 +23,10 @@ fn scope() -> ScopeRef {
 }
 
 fn actor() -> DidCoreId {
-    DidCoreId::from(
-        arkret_wire::project_full_id_to_core_id(&DidFullId::new(ACTOR_ID).unwrap()).unwrap(),
-    )
+    let projected =
+        arkret_wire::project_full_id_to_core_id(&DidFullId::new(ACTOR_FULL_ID).unwrap()).unwrap();
+    assert_eq!(projected.as_str(), ACTOR_ID);
+    DidCoreId::from(projected)
 }
 
 fn created_at() -> chrono::DateTime<Utc> {
@@ -63,19 +65,19 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
     let policy_bytes = canonical_json_bytes(&policy.digest_payload().unwrap()).unwrap();
     assert_eq!(
         message_bytes,
-        br#"{"actor_id":"did:webvh:z6mkfixture:alice.example","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         policy_bytes,
-        br#"{"actor_id":"did:webvh:z6mkfixture:alice.example","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.realm.policy","payload":{"state":"active"},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.realm.policy","payload":{"state":"active"},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         message.event_id.as_str(),
-        "ak:event:ATRHIR3Zbd_cstdPaSPalrg3i3foiSMnL7rAdQIIJ03t"
+        "ak:event:AboEjFxGbk80AYwRXubbZIbtnvadyiYxMWxZUpYaNNjB"
     );
     assert_eq!(
         policy.event_id.as_str(),
-        "ak:event:AWCvFM-55vp9grhQmjQH__yUkDxWn3QtaOQh27alVoPG"
+        "ak:event:AQbJiOWb_QHpkWURyLzjU1g9-qGEyezWMEcPtLp1-raM"
     );
     assert_ne!(message_bytes, policy_bytes);
 }
@@ -110,7 +112,7 @@ fn typed_authored_event_round_trips_at_the_wire_boundary() {
 fn realm_key_share_one_of_rejects_cross_carried_wire_fields() {
     let baseline = serde_json::json!({
         "share_kind": "member_device",
-        "recipient_principal_id": "did:webvh:z6mkfixture:bob.example",
+        "recipient_principal_id": "ak:did_core:web:bob.example",
         "recipient_device_id": "ak:device:019f9000-0000-7000-8000-000000000003",
         "sender_device_id": "ak:device:019f9000-0000-7000-8000-000000000004",
         "source_authorization_ref":

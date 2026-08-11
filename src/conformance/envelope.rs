@@ -1131,7 +1131,7 @@ fn sample_envelope_event(
         "event_id": "ak:event:AbmZo_Q7CHRfJYVqari3NAaEZm6tfSbZppTL7IsJJ7Gl",
         "kind": kind,
         "realm_id": "ak:realm:AXvhSdy6b-PYcJNuFcYsp-gKHjg-PECuUtuV08YJYwhK",
-        "actor_id": "did:web:alice.example",
+        "actor_id": "ak:did_core:web:alice.example",
         "actor_seq": actor_seq,
         "created_at": created_at,
         "hlc": hlc,

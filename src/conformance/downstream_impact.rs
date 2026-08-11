@@ -27,15 +27,15 @@ pub fn run_downstream_impact_contract_suite() -> Result<()> {
 pub fn run_account_status_authority_binding_vector() -> Result<()> {
     let payload: AccountStatusPayload = serde_json::from_value(json!({
         "account_id": "account-cotest-1",
-        "principal_id": "did:web:holder.example",
+        "principal_id": "ak:did_core:web:holder.example",
         "status": "deactivated",
         "effective_at": "2026-08-01T00:00:00.000Z"
     }))?;
     let service = DidCoreId::new("ak:did_core:web:coauth.example")?;
     let holder = DidCoreId::new("ak:did_core:web:holder.example")?;
     let third_party = DidCoreId::new("ak:did_core:web:third-party.example")?;
-    let service_full = DidFullId::new(service.as_str())?;
-    let third_party_full = DidFullId::new(third_party.as_str())?;
+    let service_full = DidFullId::new("did:web:coauth.example")?;
+    let third_party_full = DidFullId::new("did:web:third-party.example")?;
 
     let binding = |actor, proof_controller, signature_controller, account, principal| {
         AccountStatusServiceBinding {
@@ -114,7 +114,7 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
         "title": "Quarterly plan",
         "query": {"realm_ids": []},
         "collection": {},
-        "created_by": "did:web:holder.example",
+        "created_by": "ak:did_core:web:holder.example",
         "created_at": "2026-08-01T00:00:00.000Z"
     });
     let view: View = serde_json::from_value(value.clone())?;
@@ -158,7 +158,7 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
             // here or the dot is unresolvable and the decision is rejected.
             "event_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
             "decision_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
-            "issuer": "did:web:moderator.example",
+            "issuer": "ak:did_core:web:moderator.example",
             "target_ref": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC",
             "decision": "dismiss",
             "request_canonical_digest": format!("sha256:{}", "1".repeat(64))
@@ -182,7 +182,7 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
             json!({
                 "event_id": decision_event_id,
                 "decision_id": decision_event_id,
-                "issuer": format!("did:web:moderator-{index}.example"),
+                "issuer": format!("ak:did_core:web:moderator-{index}.example"),
                 "target_ref": target,
                 "decision": decision,
                 "request_canonical_digest": format!("sha256:{index:064x}")
@@ -212,10 +212,10 @@ pub fn run_policy_transcript_tamper_vector() -> Result<()> {
         "decision": "hard_deny",
         "bound_to": {
             "realm_id": "ak:realm:AeizpTttgA_DDran5rmKMGep4EOHjx10JTeYxZ6aopwg",
-            "actor_id": "did:web:holder.example",
+            "actor_id": "ak:did_core:web:holder.example",
             "action": "ak.message.create",
             "request_canonical_digest": format!("sha256:{}", "1".repeat(64)),
-            "policy_server_id": "did:web:policy.example"
+            "policy_server_id": "ak:did_core:web:policy.example"
         },
         "reason_code": "policy_denied",
         "freshness_state": "fresh",

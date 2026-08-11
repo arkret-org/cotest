@@ -165,8 +165,8 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
              response carries no errcode. body: {body}"
         );
     }
-    // LIMITATION (see arkret-work/review/code-open/cotest/02_security.md #3): this request
-    // uses a deliberately-bogus bearer, so production soland's auth wall almost
+    // LIMITATION: this request uses a deliberately-bogus bearer, so production
+    // soland's auth wall almost
     // always fires *before* the proof-guard, returning `unauthenticated`. That
     // path only proves the auth wall exists — it does NOT independently
     // exercise the `dev_proof_in_production` proof-guard. Only the

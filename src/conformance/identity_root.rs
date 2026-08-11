@@ -329,7 +329,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
 
 fn validate_reanchor_helpers() -> Result<()> {
     let value = json!({
-        "principal_id": "did:webvh:z6mkfixture:alice.example",
+        "principal_id": "ak:did_core:webvh:z6mkfixture",
         "did_version_id": "2-QmCurrent",
         "previous_device_generation": "1-QmPrevious",
         "new_device_generation": "2-QmCurrent",

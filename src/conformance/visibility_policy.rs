@@ -316,7 +316,7 @@ fn circle_member_full_projection() -> Projection {
                 }
             },
             "member_count": 17,
-            "created_by": "did:web:alice.example",
+            "created_by": "ak:did_core:web:alice.example",
             "join_rule": "invite"
         }),
         timing_bucket: "circle_member_full_v1",

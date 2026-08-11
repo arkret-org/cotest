@@ -385,11 +385,35 @@ export async function removeCircleMemberArkret(
   token: string,
   circleId: string,
   actorId: string,
-  opts: { server?: SolandKey } = {},
+  args: {
+    actorDid: string;
+    realmId: string;
+    server?: SolandKey;
+  },
 ): Promise<CircleMembershipOutcome> {
   const response = await request.delete(
-    `${solandBaseUrl(opts.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
-    { headers: authHeaders(token) },
+    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
+    {
+      headers: authHeaders(token),
+      data: {
+        member_event: {
+          event: signedEventEnvelope({
+            actorDid: args.actorDid,
+            realmId: args.realmId,
+            kind: "ak.circle.member.state",
+            payload: {
+              circle_id: circleId,
+              actor_id: actorId,
+              membership: "leave",
+              // The member list only contains active members, so DELETE signs
+              // the exact joined head it observed instead of issuing an
+              // unconditional transition.
+              expected_membership: "join",
+            },
+          }),
+        },
+      },
+    },
   );
   return await expectJsonOk<CircleMembershipOutcome>(
     response,

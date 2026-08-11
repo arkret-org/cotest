@@ -32,6 +32,7 @@ import {
   getCircleArkret,
   grantCircleManageCapability,
   grantCircleMemberManageCapability,
+  removeCircleMemberArkret,
   restoreCircleArkret,
 } from "../../helpers/circle-api";
 
@@ -118,6 +119,27 @@ test.describe("circle membership (same principal server)", () => {
       circle.circle_id,
     );
     expect(fetched.members).toContain(bob.did);
+
+    // The DELETE is itself a caller-signed membership Move. Its payload binds
+    // both path ids and carries the observed joined head as the CAS guard.
+    const removed = await removeCircleMemberArkret(
+      request,
+      aliceToken,
+      circle.circle_id,
+      bob.did,
+      { actorDid: alice.did, realmId },
+    );
+    expect(removed).toEqual({
+      circle_id: circle.circle_id,
+      actor_id: bob.did,
+      membership: "leave",
+    });
+    const afterRemoval = await getCircleArkret(
+      request,
+      aliceToken,
+      circle.circle_id,
+    );
+    expect(afterRemoval.members).not.toContain(bob.did);
   });
 
   test("S8 lifecycle archive then restore returns Circle to active", async ({

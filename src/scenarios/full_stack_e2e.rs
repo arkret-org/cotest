@@ -68,12 +68,14 @@ use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_
 
 // ── Fixture knobs ──────────────────────────────────────────────────────────
 
-const ALICE_DID: &str = "did:web:alice.acme.example";
-const BOB_DID: &str = "did:web:bob.acme.example";
+const ALICE_ID: &str = "ak:did_core:web:alice.acme.example";
+const ALICE_FULL_ID: &str = "did:web:alice.acme.example";
+const BOB_ID: &str = "ak:did_core:web:bob.acme.example";
+const BOB_FULL_ID: &str = "did:web:bob.acme.example";
 /// R3.1 canonical handle `<localpart>:<domain>` (arkret-spec @ 7157ee8).
 const ALICE_HANDLE: &str = "alice:acme.example";
-const PRINCIPAL_DID: &str = "did:web:principal.acme.example";
-const REBOUND_PRINCIPAL_DID: &str = "did:web:principal2.acme.example";
+const PRINCIPAL_ID: &str = "ak:did_core:web:principal.acme.example";
+const REBOUND_PRINCIPAL_ID: &str = "ak:did_core:web:principal2.acme.example";
 const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-fullstacke2e1";
 const STABLE_STRAND_ID: &str = "ak:strand:0196419b-0000-8000-8000-fullstackflow";
 const STABLE_EVENT_ID: &str = "ak:event:AYj6JMkunCLeeu9ILKnSICoqU8huDFX5orzGYBdH_ESu";
@@ -134,7 +136,7 @@ pub async fn full_stack_e2e_run() -> Result<()> {
 /// is wired, the live-stack probe below additionally verifies the resolver's
 /// `/health` is up.
 fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
-    let _alice = DidFullId::new(ALICE_DID.to_owned())
+    let _alice = DidFullId::new(ALICE_FULL_ID.to_owned())
         .context("starid MUST mint a parseable did:web for Alice")?;
     // Build the rest of the candidate as if `ak.find.directory.read.resolve_handle`
     // returned it (T3.5 pattern).
@@ -189,7 +191,7 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
         .member_delivery_binding
         .recipient_service_id
         .as_str()
-        != PRINCIPAL_DID
+        != PRINCIPAL_ID
     {
         bail!("T8.1 step 2: member_delivery_binding.recipient_service_id drifted");
     }
@@ -233,7 +235,7 @@ fn step_3_teabay_resolve_handle(candidate: &MemberDeliveryBindingCandidate) -> R
 /// before persisting the new binding. We exercise the happy path here.
 fn step_4_soland_member_add(candidate: &MemberDeliveryBindingCandidate) -> Result<()> {
     let ctx = CandidateValidationContext::new(TARGET_REALM_ID.to_owned())
-        .with_expected_subject(DidCoreId::new(ALICE_DID)?);
+        .with_expected_subject(DidCoreId::new(ALICE_ID)?);
     candidate.validate(&ctx).map_err(|e| {
         anyhow!(
             "T8.1 step 4: soland's member_add MUST accept a freshly minted \
@@ -254,7 +256,7 @@ fn step_5_inkson_mock_send_message() -> Result<Value> {
     let envelope = json!({
         "event_id": STABLE_EVENT_ID,
         "kind": "ak.message.create",
-        "actor_id": BOB_DID,
+        "actor_id": BOB_ID,
         "actor_seq": 1,
         "realm_id": TARGET_REALM_ID,
         "strand_id": STABLE_STRAND_ID,
@@ -265,7 +267,7 @@ fn step_5_inkson_mock_send_message() -> Result<Value> {
         "payload": {"body": "hello alice"},
         "proofs": [{
             "kind": "detached_jws",
-            "verification_method": format!("{BOB_DID}#inkson"),
+            "verification_method": format!("{BOB_FULL_ID}#inkson"),
             "event_digest":
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
@@ -385,7 +387,7 @@ fn step_7_chime_receive_blind_wakeup(blind: &Value) -> Result<()> {
 /// step models the reducer allow-list instead of an SDK outer/inner mismatch.
 fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<()> {
     let mut handover = original.clone();
-    handover.member_delivery_binding.recipient_service_id = DidCoreId::new(REBOUND_PRINCIPAL_DID)?;
+    handover.member_delivery_binding.recipient_service_id = DidCoreId::new(REBOUND_PRINCIPAL_ID)?;
     if handover
         .validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))
         .is_ok()
@@ -393,7 +395,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
         bail!("T8.1 step 8: recipient substitution escaped exact authority-instance binding");
     }
 
-    let allowed = [PRINCIPAL_DID];
+    let allowed = [PRINCIPAL_ID];
     if allowed.contains(
         &handover
             .member_delivery_binding
@@ -572,7 +574,7 @@ async fn live_stack_probe() -> Result<()> {
         >(json!({
             "handle": ALICE_HANDLE,
             "intent": "member_add",
-            "requester": PRINCIPAL_DID,
+            "requester": PRINCIPAL_ID,
             "audience": TARGET_REALM_ID,
             "realm_id": TARGET_REALM_ID,
         }))?)
@@ -597,7 +599,7 @@ async fn live_stack_probe() -> Result<()> {
             .context("T8.1 live probe: spawn production-mode soland")?
     {
         let mut placeholder_event = crate::harness::event_envelope(
-            ALICE_DID,
+            ALICE_FULL_ID,
             TARGET_REALM_ID,
             "ak.message.create",
             crate::harness::message_create_text_payload(
@@ -637,8 +639,8 @@ async fn live_stack_probe() -> Result<()> {
 /// Mirrors the T3.5 happy-path candidate. Centralised here so the
 /// negative-case mutations stay one diff away from the happy shape.
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
-    let subject = DidCoreId::new(ALICE_DID)?;
-    let principal = DidCoreId::new(PRINCIPAL_DID)?;
+    let subject = DidCoreId::new(ALICE_ID)?;
+    let principal = DidCoreId::new(PRINCIPAL_ID)?;
     let principal_authority_instance = PrincipalAuthorityInstance::new(
         subject.clone(),
         principal.clone(),

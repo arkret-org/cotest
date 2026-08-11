@@ -118,7 +118,9 @@ proptest! {
     ) {
         let claim = HandleClaim {
             handle: Some(Handle::parse(&handle).unwrap()),
-            issuer: Some(DidCoreId::new(format!("did:web:{issuer}.example")).unwrap()),
+            issuer: Some(
+                DidCoreId::new(format!("ak:did_core:web:{issuer}.example")).unwrap(),
+            ),
             ..Default::default()
         };
         // No binding_state, no recipient — should validate trivially.

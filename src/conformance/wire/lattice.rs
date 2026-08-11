@@ -307,7 +307,8 @@ fn validate_actor_private_contracts(
         bail!("shared and actor-private cell registries overlap");
     }
     for event_kind in &actual_events {
-        let event = json!({"kind": event_kind, "actor_id": "did:web:fixture", "payload": {}});
+        let event =
+            json!({"kind": event_kind, "actor_id": "ak:did_core:web:fixture", "payload": {}});
         private
             .validate_private_event_shape(&event)
             .map_err(|error| anyhow!("{event_kind} private shape rejected: {error}"))?;
