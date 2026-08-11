@@ -531,11 +531,13 @@
         "payload": {
           "seal_a": {
             "signer_id": "ak:did_core:web:notary.example",
+            "verification_method": "did:web:notary.example#key-1",
             "notary_seq": 42,
             "canonical_body_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
           },
           "seal_b": {
             "signer_id": "ak:did_core:web:notary.example",
+            "verification_method": "did:web:notary.example#key-1",
             "notary_seq": 42,
             "canonical_body_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
           }

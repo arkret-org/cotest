@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::agent_operations::agent_requested_scope_digest;
 use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
@@ -341,7 +341,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             })
         })
         .ok_or_else(|| anyhow!("runtime-key-binding vector case missing"))?;
-    let agent_id = DidCoreId::new("ak:did_core:web:agent.example")?;
+    let agent_id = DidCoreId::new("ak:did_core:webvh:z6mkagent")?;
     let public_key = case
         .get("source_public_key")
         .ok_or_else(|| anyhow!("runtime-key-binding source_public_key missing"))?;
@@ -568,7 +568,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
             serde_json::json!({
                 "kind": "agent_runtime_approval",
                 "approval_request_id": "agent_runtime_approval:01964137-0000-7000-8000-000000000000",
-                "agent_id": "did:webvh:z6mkagent:agent.example",
+                "agent_id": "ak:did_core:webvh:z6mkagent",
                 "requested_at": "2026-07-13T10:00:00.000Z",
                 "expires_at": "2026-07-13T10:15:00.000Z"
             })
@@ -758,12 +758,12 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
     // `agent_key_authorize_payload.expires_at` is optional on wire: absent
     // means non-expiring, revocation-governed (key-management.md §3.6.1).
     let payload = serde_json::json!({
-        "agent_id": "did:web:agent.example",
+        "agent_id": "ak:did_core:web:agent.example",
         "key_id": "ak:agent_key:0199000000007000800000000000aa01",
         "verification_method": "did:web:agent.example#runtime-key-1",
         "public_key_digest": format!("sha256:{}", "1".repeat(64)),
         "signing_key_binding_digest": format!("sha256:{}", "2".repeat(64)),
-        "accountable_principal_id": "did:web:alice.example",
+        "accountable_principal_id": "ak:did_core:web:alice.example",
         "agent_key_scope": {
             "actions": ["ak.event.read"],
             "resources": [{"kind": "realm", "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}]
@@ -789,8 +789,8 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
     // `accountability_grant.expires_at` is optional the same way.
     let grant = serde_json::json!({
         "schema": "ak.schema.accountability_grant.v1",
-        "issuer": "did:web:alice.example",
-        "subject": "did:web:agent.example",
+        "issuer": "ak:did_core:web:alice.example",
+        "subject": "ak:did_core:web:agent.example",
         "accountability_scope": "agent_operator",
         "not_before": "2026-07-12T00:00:00.000Z",
         "grant_status": "active",
@@ -1463,16 +1463,16 @@ pub fn run_agent_vector_suite() -> Result<()> {
             ALL_AGENT_VECTOR_IDS.len()
         );
     }
-    run_agent_provision_vector()?;
-    run_agent_pairing_expiry_vector()?;
-    run_agent_runtime_key_binding_vector()?;
-    run_agent_managed_pcr_separation_vector()?;
-    run_agent_repairing_supersede_vector()?;
-    run_agent_longevity_no_expiry_vector()?;
-    run_agent_controller_lifecycle_vector()?;
-    run_agent_act_on_behalf_vector()?;
-    run_agent_session_grant_replay_vector()?;
-    run_agent_human_approval_required_vector()?;
+    run_agent_provision_vector().context("agent provision vector")?;
+    run_agent_pairing_expiry_vector().context("agent pairing expiry vector")?;
+    run_agent_runtime_key_binding_vector().context("agent runtime key binding vector")?;
+    run_agent_managed_pcr_separation_vector().context("managed Agent PCR separation vector")?;
+    run_agent_repairing_supersede_vector().context("agent repairing supersede vector")?;
+    run_agent_longevity_no_expiry_vector().context("agent longevity vector")?;
+    run_agent_controller_lifecycle_vector().context("agent controller lifecycle vector")?;
+    run_agent_act_on_behalf_vector().context("agent act-on-behalf vector")?;
+    run_agent_session_grant_replay_vector().context("agent session grant replay vector")?;
+    run_agent_human_approval_required_vector().context("agent human approval vector")?;
     Ok(())
 }
 

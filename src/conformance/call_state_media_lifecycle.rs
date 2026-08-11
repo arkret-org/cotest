@@ -470,7 +470,7 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
     let start_value = json!({
         "call_id": call_id().to_string(),
         "recording_id": "transcript-019a7360-0000-7000-8000-000000000002",
-        "recording_agent": "did:web:recorder.example",
+        "recording_agent": "ak:did_core:web:recorder.example",
         "capture_kind": "transcript",
         "mode": "audio",
         "visible_notice": true,

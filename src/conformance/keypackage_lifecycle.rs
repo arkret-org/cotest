@@ -6,12 +6,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_identifiers::{DeviceId, DidFullId, Hash, RealmId};
+use arkret_identifiers::{DeviceId, DidCoreId, DidFullId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::{
     MlsKeypackagePayload, MlsWelcomePayload, validate_mls_welcome_claim_envelope,
 };
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
-use arkret_wire::ProfileId;
+use arkret_wire::{DidUrl, ProfileId};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
@@ -163,8 +163,16 @@ fn require_root_generation_ref<'a>(value: &'a Value, field: &str) -> Result<&'a 
     Ok(generation_ref)
 }
 
-fn did(value: &str) -> Result<DidFullId> {
+fn core_did(value: &str) -> Result<DidCoreId> {
+    DidCoreId::new(value.to_owned()).map_err(Into::into)
+}
+
+fn full_did(value: &str) -> Result<DidFullId> {
     DidFullId::new(value.to_owned()).map_err(Into::into)
+}
+
+fn verification_method(value: &str) -> Result<DidUrl> {
+    DidUrl::new(value.to_owned()).map_err(|error| anyhow!(error))
 }
 
 fn device(value: &str) -> Result<DeviceId> {
@@ -193,11 +201,14 @@ fn claim_record_value(
     claim_id: &str,
     keypackage_ref: &str,
     keypackage_digest: &str,
-    principal_id: &DidFullId,
+    principal_id: &DidCoreId,
+    verification_method: &DidUrl,
     device_id: &DeviceId,
     last_resort: bool,
     expires_at: DateTime<Utc>,
 ) -> Value {
+    let target_device_signing_key_evidence =
+        fixture_device_signing_key_evidence(principal_id, verification_method, device_id);
     let mut value = json!({
         "claim_id": claim_id,
         "keypackage_ref": keypackage_ref,
@@ -208,9 +219,10 @@ fn claim_record_value(
         "capabilities": ["ak.mls.profile.full"],
         "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+        "target_device_signing_key_evidence": target_device_signing_key_evidence,
         "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
         "device_signature": {
-            "kid": format!("{}#{}", principal_id.as_str(), device_id.as_str()),
+            "kid": verification_method.as_str(),
             "signature_algorithm": "Ed25519",
             "sig": "c2ln"
         },
@@ -222,9 +234,308 @@ fn claim_record_value(
     value
 }
 
-fn claim_outcome_value(record: Value, available_count: u64) -> Value {
+fn fixture_device_signing_key_evidence(
+    principal_id: &DidCoreId,
+    verification_method: &DidUrl,
+    device_id: &DeviceId,
+) -> Value {
+    let realm_id = "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19";
+    let service_id = "ak:did_core:web:ps.example";
+    let create_id = "ak:event:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD";
+    let authorize_id = "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM";
+    let range_id = "ak:event:AZ3o4tgwfOQyVzd-Kvz9PwDDaaBQiOD2pvcGGRfK6WDx";
+    let full_id = verification_method
+        .as_str()
+        .rsplit_once('#')
+        .map(|(controller, _)| controller)
+        .expect("fixture verification method has a controller");
+    let history_head = format!("sha256:{}", "1".repeat(64));
+    let hash_a = format!("sha256:{}", "a".repeat(64));
+    let hash_b = format!("sha256:{}", "b".repeat(64));
+    let hash_c = format!("sha256:{}", "c".repeat(64));
+    let hash_d = format!("sha256:{}", "d".repeat(64));
+    let hash_e = format!("sha256:{}", "e".repeat(64));
+    let event = |event_id: &str,
+                 kind: &str,
+                 actor_seq: u64,
+                 payload: Value,
+                 verification_method: &str,
+                 event_digest: &str| {
+        let mut value = json!({
+            "event_id": event_id,
+            "kind": kind,
+            "realm_id": realm_id,
+            "scope_ref": if kind == "ak.realm.create" {
+                json!({"kind": "realm_genesis"})
+            } else {
+                json!({"kind": "realm", "realm_id": realm_id})
+            },
+            "actor_id": principal_id.as_str(),
+            "actor_seq": actor_seq,
+            "created_at": "2026-01-01T00:00:00.000Z",
+            "prev_refs": [],
+            "refs": [],
+            "payload": payload,
+            "proofs": [{
+                "kind": "detached_jws",
+                "verification_method": verification_method,
+                "event_digest": event_digest,
+                "created_at": "2026-01-01T00:00:00.000Z",
+                "jws": "a..b"
+            }]
+        });
+        if kind == "ak.realm.create" {
+            value
+                .as_object_mut()
+                .expect("fixture Event is an object")
+                .remove("realm_id");
+        }
+        value
+    };
+    let create_payload = serde_json::to_value(
+        crate::harness::realm_create_payload(
+            service_id,
+            &json!({
+                "title": "Evidence fixture",
+                "genesis_salt": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "plaintext_visible_services": []
+            }),
+        )
+        .expect("fixture Realm bootstrap draft")
+        .create,
+    )
+    .expect("fixture Realm create payload serializes");
+    let create = event(
+        create_id,
+        "ak.realm.create",
+        0,
+        create_payload,
+        "did:key:z6MkhFixtureRoot#root-1",
+        &hash_a,
+    );
+    let authorize = event(
+        authorize_id,
+        "ak.device.authorize",
+        1,
+        json!({
+            "principal_id": principal_id.as_str(),
+            "device_id": device_id.as_str(),
+            "device_public_key": "did:key:z6MkhFixtureDeviceKey",
+            "hpke_key": "fixture-hpke-key",
+            "algorithms": ["Ed25519"],
+            "device_key_algorithm": "Ed25519",
+            "authorized_by": principal_id.as_str(),
+            "authorization_binding_kind": "registration_anchor",
+            "not_before": "2026-01-01T00:00:00.000Z",
+            "device_signature": {"signature": "c2ln"}
+        }),
+        verification_method.as_str(),
+        &hash_b,
+    );
+    let range = event(
+        range_id,
+        "ak.attestation.range_completeness",
+        2,
+        json!({
+            "attestation_id": "ak:attestation:01964137-0000-7000-8000-000000000001",
+            "schema": "ak.schema.range_completeness_attestation.v1",
+            "issuer": principal_id.as_str(),
+            "issuer_role": "events_api",
+            "realm_id": realm_id,
+            "event_range": {
+                "from_frontier": {"realm_frontier": [create_id]},
+                "to_frontier": {"realm_frontier": [authorize_id]},
+                "actor_seq_ranges": [{
+                    "actor_id": principal_id.as_str(),
+                    "from_seq_exclusive": -1,
+                    "to_seq_inclusive": 1
+                }]
+            },
+            "root": hash_c,
+            "count": 2,
+            "observed_at": "2026-01-01T00:00:00.000Z",
+            "witness_attestation": {
+                "kind": "single_source",
+                "witnesses": [{
+                    "issuer": principal_id.as_str(),
+                    "verification_method": verification_method.as_str(),
+                    "controlling_organization": principal_id.as_str(),
+                    "attested_at": "2026-01-01T00:00:00.000Z"
+                }]
+            },
+            "proofs": [{
+                "kind": "detached_jws",
+                "verification_method": verification_method.as_str(),
+                "payload_digest": hash_d,
+                "created_at": "2026-01-01T00:00:00.000Z",
+                "jws": "a..b"
+            }]
+        }),
+        verification_method.as_str(),
+        &hash_c,
+    );
+    let method_proofs = if full_id.starts_with("did:webvh:") {
+        json!([{
+            "kind": "webvh_log",
+            "history_head": history_head,
+            "witnesses": [],
+            "witness_proofs_digest": hash_d
+        }])
+    } else {
+        json!([])
+    };
     json!({
-        "claims": [record],
+        "actor_id": principal_id.as_str(),
+        "device_id": device_id.as_str(),
+        "verification_method": verification_method.as_str(),
+        "device_signing_key": "did:key:z6MkhFixtureDeviceKey",
+        "authorization_accepted_at": "2026-01-01T00:00:00.000Z",
+        "authority_instance": {
+            "principal_id": principal_id.as_str(),
+            "principal_server_id": service_id,
+            "pcr_realm_id": realm_id,
+            "principal_genesis_receipt_digest": hash_a,
+            "authority_instance_digest": hash_b
+        },
+        "registration_did_evidence": {
+            "principal_id": principal_id.as_str(),
+            "full_id": full_id,
+            "adapter_version": "fixture-v1",
+            "accepted_at": "2026-01-01T00:00:00.000Z",
+            "method_history_head": history_head,
+            "version_id": "1-fixture",
+            "control_key_digest": hash_c,
+            "method_evidence": {
+                "kind": "ak.did.binding_evidence.v1",
+                "method": if full_id.starts_with("did:webvh:") { "webvh" } else { "web" },
+                "document_digest": hash_d,
+                "method_proofs": method_proofs
+            },
+            "control_proof": {
+                "verification_method": format!("{full_id}#root-1"),
+                "created_at": "2026-01-01T00:00:00.000Z",
+                "jws": "a"
+            }
+        },
+        "principal_genesis_receipt": {
+            "schema": "ak.schema.event_batch_receipt.v1",
+            "receipt_id": "ak:receipt:01964137-0000-7000-8000-000000000001",
+            "issuer": service_id,
+            "scope": {
+                "kind": "pcr_genesis_unit",
+                "principal_id": principal_id.as_str(),
+                "realm_id": realm_id,
+                "did_version_id": "1-fixture",
+                "log_head_digest": history_head,
+                "control_key_digest": hash_c,
+                "create_digest": hash_a,
+                "founding_authorize_digest": hash_b,
+                "accepted_device_id": device_id.as_str(),
+                "device_key_digest": hash_d,
+                "hpke_key_digest": hash_e,
+                "accepted_at": "2026-01-01T00:00:00.000Z",
+                "audience": service_id
+            },
+            "frontier": {"actor_seq": 1, "event_id": authorize_id, "event_digest": hash_b},
+            "events": [
+                {"event_id": create_id, "event_digest": hash_a, "kind": "ak.realm.create"},
+                {"event_id": authorize_id, "event_digest": hash_b, "kind": "ak.device.authorize"}
+            ],
+            "created_at": "2026-01-01T00:00:00.000Z",
+            "proofs": [{
+                "kind": "detached_jws",
+                "verification_method": "did:web:ps.example#key-1",
+                "payload_digest": hash_e,
+                "created_at": "2026-01-01T00:00:00.000Z",
+                "jws": "a..b"
+            }]
+        },
+        "authorization_chain": [create, authorize],
+        "accepted_seal": {
+            "id": format!("ak:seal:sha256:{}", "f".repeat(64)),
+            "realm_id": realm_id,
+            "predecessor_refs": [],
+            "delta": [hash_a, hash_b],
+            "control_event_set_root": hash_c,
+            "state_root": hash_d,
+            "completeness_root": hash_e,
+            "notary_seq": 1,
+            "notary_signature": {
+                "verification_method": "did:web:ps.example#key-1",
+                "payload_digest": hash_e,
+                "created_at": "2026-01-01T00:00:00.000Z",
+                "jws": "a..b"
+            },
+            "sealed_at": "2026-01-01T00:00:00.000Z",
+            "hlc": "000000000001-0000-00000001"
+        },
+        "current_device_projection": {
+            "principal_id": principal_id.as_str(),
+            "device_id": device_id.as_str(),
+            "device_record": {
+                "algorithms": {},
+                "device_signing_key": "did:key:z6MkhFixtureDeviceKey",
+                "hpke_key": "fixture-hpke-key",
+                "trust_algorithms": ["Ed25519"],
+                "device_status": "active",
+                "device_authorize_event_id": authorize_id,
+                "authorized_generation_ref": "1-fixture"
+            },
+            "generation_state": {
+                "current_device_generation_ref": "1-fixture",
+                "device_generation_status": "active"
+            }
+        },
+        "range_completeness_evidence": [range]
+    })
+}
+
+fn claim_receipt_value(claims: &[Value]) -> Value {
+    let request = json!({
+        "target_principal_id": "ak:did_core:webvh:z6mkfixture",
+        "intended_realm_id": "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
+        "requester": "ak:did_core:webvh:z6mkfixture",
+        "required_capabilities": ["ak.mls.profile.full"],
+        "claim_nonce": "AAAAAAAAAAAAAAAAAAAAAA",
+        "expires_at": "2026-01-01T00:05:00.000Z",
+        "holder_acceptance_proof": {
+            "kind": "detached_jws",
+            "verification_method": "did:webvh:z6mkfixture:alice.example#key-1",
+            "payload_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "created_at": "2025-12-31T23:59:00.000Z",
+            "audience": "ak:did_core:webvh:z6mkfixtureservice",
+            "proof_purpose": "holder_acceptance",
+            "jws": "a..b"
+        }
+    });
+    let request_digest = arkret_canonical::canonical_sha256(&request)
+        .expect("fixture claim request must be canonicalizable");
+    let claims_digest = arkret_canonical::canonical_sha256(&claims)
+        .expect("fixture claim records must be canonicalizable");
+    json!({
+        "operation_id": "ak.self.keys.keypackages.command.claim",
+        "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
+        "request_digest": request_digest,
+        "claims_digest": claims_digest,
+        "source_service_id": "ak:did_core:webvh:z6mkfixtureservice",
+        "destination_service_id": "ak:did_core:webvh:z6mkfixtureservice",
+        "request": request,
+        "claimed_at": "2026-01-01T00:00:00.000Z",
+        "expires_at": "2026-01-01T00:05:00.000Z",
+        "signature": {
+            "kid": "did:webvh:z6mkfixtureservice:service.example#key-1",
+            "signature_algorithm": "Ed25519",
+            "sig": "c2ln"
+        }
+    })
+}
+
+fn claim_outcome_value(record: Value, available_count: u64) -> Value {
+    let claims = vec![record];
+    let claim_receipt = claim_receipt_value(&claims);
+    json!({
+        "claims": claims,
+        "claim_receipt": claim_receipt,
         "available_count": available_count
     })
 }
@@ -240,8 +551,11 @@ fn failure_value(keypackage_ref: Option<&str>, reason_code: &str) -> Value {
 }
 
 fn claim_failure_outcome_value(reason_code: &str, available_count: Option<u64>) -> Value {
+    let claims = Vec::<Value>::new();
+    let claim_receipt = claim_receipt_value(&claims);
     let mut value = json!({
-        "claims": [],
+        "claims": claims,
+        "claim_receipt": claim_receipt,
         "failures": [failure_value(None, reason_code)]
     });
     if let Some(available_count) = available_count {
@@ -295,7 +609,8 @@ struct LastResortAuditRecord {
 struct MiniKeypackage {
     keypackage_ref: String,
     keypackage_digest: String,
-    principal_id: DidFullId,
+    principal_id: DidCoreId,
+    verification_method: DidUrl,
     device_id: DeviceId,
     intended_realm_id: RealmId,
     last_resort: bool,
@@ -310,7 +625,8 @@ impl MiniKeypackage {
     fn new_normal(
         keypackage_ref: impl Into<String>,
         keypackage_digest: impl Into<String>,
-        principal_id: DidFullId,
+        principal_id: DidCoreId,
+        verification_method: DidUrl,
         device_id: DeviceId,
         intended_realm_id: RealmId,
         expires_at: DateTime<Utc>,
@@ -319,6 +635,7 @@ impl MiniKeypackage {
             keypackage_ref: keypackage_ref.into(),
             keypackage_digest: keypackage_digest.into(),
             principal_id,
+            verification_method,
             device_id,
             intended_realm_id,
             last_resort: false,
@@ -333,7 +650,8 @@ impl MiniKeypackage {
     fn new_last_resort(
         keypackage_ref: impl Into<String>,
         keypackage_digest: impl Into<String>,
-        principal_id: DidFullId,
+        principal_id: DidCoreId,
+        verification_method: DidUrl,
         device_id: DeviceId,
         intended_realm_id: RealmId,
         expires_at: DateTime<Utc>,
@@ -342,6 +660,7 @@ impl MiniKeypackage {
             keypackage_ref,
             keypackage_digest,
             principal_id,
+            verification_method,
             device_id,
             intended_realm_id,
             expires_at,
@@ -360,6 +679,7 @@ impl MiniKeypackage {
             &self.keypackage_ref,
             &self.keypackage_digest,
             &self.principal_id,
+            &self.verification_method,
             &self.device_id,
             self.last_resort,
             self.expires_at,
@@ -476,6 +796,7 @@ fn rotate_last_resort(
         new_ref,
         "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
         old.principal_id.clone(),
+        old.verification_method.clone(),
         old.device_id.clone(),
         old.intended_realm_id.clone(),
         old.expires_at,
@@ -537,7 +858,10 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         bail!("rate-limit external failure semantics drifted");
     }
 
-    let principal = did(required_str(vector, "target_principal_id")?)?;
+    let principal = core_did(required_str(vector, "target_principal_id")?)?;
+    let signer = verification_method(
+        "did:webvh:z6mkfixture:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+    )?;
     let device = device(required_str(vector, "device_id")?)?;
     let realm = realm(required_str(vector, "intended_realm_id")?)?;
     let expired = vector
@@ -547,6 +871,7 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         required_str(expired, "keypackage_ref")?,
         "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
         principal,
+        signer,
         device,
         realm.clone(),
         parse_time(required_str(expired, "expires_at")?)?,
@@ -620,7 +945,10 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
     if required_str(vector, "feature")? != LAST_RESORT_FEATURE {
         bail!("last-resort feature id drifted");
     }
-    let principal = did(required_str(vector, "target_principal_id")?)?;
+    let principal = core_did(required_str(vector, "target_principal_id")?)?;
+    let signer = verification_method(
+        "did:webvh:z6mkfixture:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+    )?;
     let device = device(required_str(vector, "device_id")?)?;
     let realm = realm(required_str(vector, "intended_realm_id")?)?;
     let expires_at = parse_time("2100-01-01T00:00:00.000Z")?;
@@ -629,6 +957,7 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
             required_str(vector, "normal_keypackage_ref")?,
             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             principal.clone(),
+            signer.clone(),
             device.clone(),
             realm.clone(),
             expires_at,
@@ -637,6 +966,7 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
             required_str(vector, "last_resort_keypackage_ref")?,
             "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             principal,
+            signer,
             device,
             realm.clone(),
             expires_at,
@@ -718,7 +1048,10 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
     if required_str(vector, "feature")? != LAST_RESORT_FEATURE {
         bail!("last-resort feature id drifted");
     }
-    let principal = did("did:web:alice.example")?;
+    let principal = core_did("ak:did_core:web:alice.example")?;
+    let signer = verification_method(
+        "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+    )?;
     let device = device(required_str(vector, "device_id")?)?;
     let realm = realm("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
     let expires_at = parse_time("2100-01-01T00:00:00.000Z")?;
@@ -726,6 +1059,7 @@ pub fn run_keypackage_last_resort_forced_rotation_vector() -> Result<()> {
         required_str(vector, "old_last_resort_keypackage_ref")?,
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         principal,
+        signer,
         device,
         realm.clone(),
         expires_at,
@@ -801,7 +1135,10 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
     if required_str(vector, "feature")? != LAST_RESORT_FEATURE {
         bail!("last-resort feature id drifted");
     }
-    let principal = did("did:web:alice.example")?;
+    let principal = core_did("ak:did_core:web:alice.example")?;
+    let signer = verification_method(
+        "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+    )?;
     let device = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
     let r1 = realm(required_str(vector, "realm_r1")?)?;
     let r2 = realm(required_str(vector, "realm_r2")?)?;
@@ -810,6 +1147,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         required_str(vector, "last_resort_keypackage_ref")?,
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         principal.clone(),
+        signer.clone(),
         device.clone(),
         r1.clone(),
         expires_at,
@@ -845,6 +1183,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         required_str(vector, "last_resort_keypackage_ref")?,
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         principal,
+        signer,
         device,
         r1,
         expires_at,
@@ -878,7 +1217,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
 fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Value {
     json!({
         "keypackage_id": "kp-1",
-        "principal_id": "did:web:alice.example",
+        "principal_id": "ak:did_core:web:alice.example",
         "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "keypackage_ref": keypackage_ref,
         "keypackage_digest": keypackage_digest,
@@ -906,7 +1245,9 @@ struct WelcomePayloadFixture<'a> {
     device_authorize_event_id: &'a str,
     requester_device_id: &'a str,
     intended_realm_id: &'a str,
-    requester_did: &'a str,
+    requester_actor_id: &'a str,
+    requester_verification_method: &'a str,
+    self_claim_receipt: &'a Value,
     claim_nonce: &'a str,
     welcome_digest: &'a str,
 }
@@ -915,7 +1256,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
     json!({
         "mls_group_id": "mls-group-a",
         "epoch": 1,
-        "recipient_principal_id": "did:web:alice.example",
+        "recipient_principal_id": "ak:did_core:web:alice.example",
         "recipient_device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "keypackage_ref": fixture.keypackage_ref,
         "keypackage_digest": fixture.top_digest,
@@ -932,18 +1273,19 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "keypackage_digest": fixture.envelope_digest,
             "intended_realm_id": fixture.intended_realm_id,
             "claim_id": fixture.claim_id,
-            "requester_did": fixture.requester_did,
+            "requester_actor_id": fixture.requester_actor_id,
             "requester_device_id": fixture.requester_device_id,
             "requester_device_authorize_event_id": fixture.device_authorize_event_id,
             "nonce": fixture.claim_nonce,
             "welcome_digest": fixture.welcome_digest,
             "created_at": "2026-05-25T00:00:00.000Z",
             "signature": {
-                "kid": "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+                "kid": fixture.requester_verification_method,
                 "signature_algorithm": "Ed25519",
                 "sig": "c2ln"
             }
         },
+        "self_claim_receipt": fixture.self_claim_receipt,
         "commit_ref": "ak:event:AR8j96rkirO3GDtvwgRddZScc5YX1AgFEOGO5Bs1wrgC",
         "governance_binding": {
             "binding_version": 1,
@@ -975,6 +1317,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let claim_id = required_str(vector, "claim_id")?;
     let intended_realm_id = required_str(vector, "intended_realm_id")?;
     let requester_did = required_str(vector, "requester_did")?;
+    let requester_verification_method = required_str(vector, "requester_verification_method")?;
     let claim_nonce = required_str(vector, "claim_nonce")?;
     let welcome_digest = required_str(vector, "welcome_digest")?;
     let device_authorize_event_id = required_str(vector, "device_authorization_event_id")?;
@@ -983,20 +1326,35 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     device(requester_device_id)?;
     require_root_generation_ref(vector, "model_generation_ref")?;
     let intended_realm_id = realm(intended_realm_id)?;
-    let requester_did = did(requester_did)?;
+    let requester_did = full_did(requester_did)?;
     let requester_core_id = arkret_identifiers::project_full_id_to_core_id(&requester_did)?;
+    let requester_verification_method = verification_method(requester_verification_method)?;
+    let (requester_method_controller, requester_method_fragment) = requester_verification_method
+        .as_str()
+        .rsplit_once('#')
+        .ok_or_else(|| anyhow!("requester verification method omits fragment"))?;
+    if requester_method_controller != requester_did.as_str()
+        || requester_method_fragment != requester_device_id
+    {
+        bail!("requester verification method does not bind requester DID and device");
+    }
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 
     let claim_record = claim_record_value(
         claim_id,
         keypackage_ref,
         digest,
-        &did("did:web:alice.example")?,
+        &core_did("ak:did_core:web:alice.example")?,
+        &verification_method(
+            "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+        )?,
         &device("ak:device:0196419b-0000-7000-8000-000000000001")?,
         false,
         parse_time("2100-01-01T00:00:00.000Z")?,
     );
-    let claim = parse_claim_outcome(claim_outcome_value(claim_record, 1))?
+    let claim_outcome = parse_claim_outcome(claim_outcome_value(claim_record, 1))?;
+    let self_claim_receipt = serde_json::to_value(&claim_outcome.claim_receipt)?;
+    let claim = claim_outcome
         .claims
         .into_iter()
         .next()
@@ -1015,7 +1373,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         device_authorize_event_id,
         requester_device_id,
         intended_realm_id: intended_realm_id.as_str(),
-        requester_did: requester_did.as_str(),
+        requester_actor_id: requester_core_id.as_str(),
+        requester_verification_method: requester_verification_method.as_str(),
+        self_claim_receipt: &self_claim_receipt,
         claim_nonce,
         welcome_digest: welcome_digest.as_str(),
     };
@@ -1200,10 +1560,19 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         &fixture,
         VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
     )?;
-    let requester = required_str(&vector["proof_free_request"], "requester")?;
     let requester_device_id = required_str(vector, "requester_device_id")?;
     let device_authorization_event_id = required_str(vector, "device_authorization_event_id")?;
-    let expected_verification_method = format!("{requester}#{requester_device_id}");
+    let expected_verification_method =
+        required_str(vector, "requester_verification_method")?.to_owned();
+    let expected_verification_method_typed = verification_method(&expected_verification_method)?;
+    if expected_verification_method_typed
+        .as_str()
+        .rsplit_once('#')
+        .map(|(_, fragment)| fragment)
+        != Some(requester_device_id)
+    {
+        bail!("self-claim verification method does not name requester_device_id");
+    }
     device(requester_device_id)?;
     arkret_wire::EventId::new(device_authorization_event_id.to_owned())?;
     require_root_generation_ref(vector, "model_generation_ref")?;
@@ -1273,7 +1642,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         bail!("exact retry did not return the byte-identical terminal outcome");
     }
     let mut conflict = request;
-    conflict["target_principal_id"] = json!("did:webvh:z6mkfixture:mallory.example");
+    conflict["target_principal_id"] = json!("ak:did_core:webvh:z6mkfixturemalloryexample");
     let conflict: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(conflict)?;
     if conflict.payload_digest()?.as_str() == replay.0 {

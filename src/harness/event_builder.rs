@@ -1296,6 +1296,7 @@ mod realm_bootstrap_tests {
     use super::*;
 
     const ACTOR: &str = "did:webvh:z6mkfixture:alice.soland.local";
+    const ACTOR_CORE: &str = "ak:did_core:webvh:z6mkfixture";
     const SERVICE: &str = "ak:did_core:web:service.soland.local";
     const SERVICE_FULL: &str = "did:web:service.soland.local";
     const SALT: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -1327,7 +1328,7 @@ mod realm_bootstrap_tests {
     #[test]
     fn ordinary_bootstrap_uses_the_registered_order_and_explicit_creator_member() {
         let (_, events) = build(draft(json!({
-            "alias": "general:soland.local",
+            "alias": "general:service.soland.local",
             "alias_authority_service_full_id": SERVICE_FULL
         })));
         let kinds: Vec<_> = events.iter().map(|event| event.kind.as_str()).collect();
@@ -1349,7 +1350,7 @@ mod realm_bootstrap_tests {
             events
                 .last()
                 .and_then(|event| event.payload.get("actor_id")),
-            Some(&json!(ACTOR))
+            Some(&json!(ACTOR_CORE))
         );
     }
 

@@ -1331,11 +1331,12 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         bail!("Sidecar prepare idempotency conflict changed staged or durable state");
     }
 
+    let controller_full_id = DidFullId::new("did:web:controller.example")?;
     let verification_method =
-        DidUrl::new(format!("{controller}#device-sidecar")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{controller_full_id}#device-sidecar")).map_err(anyhow::Error::msg)?;
     let signer = Ed25519PayloadSigner::from_did_key_seed(
         [73_u8; 32],
-        DidFullId::new(controller.as_str()).map_err(anyhow::Error::msg)?,
+        controller_full_id,
         verification_method.clone(),
     );
     let create_event = sign_prepared_draft(create_event_draft, &signer, &verification_method)

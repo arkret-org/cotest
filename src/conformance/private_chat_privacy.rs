@@ -66,7 +66,7 @@ struct PrivacyPayloadVector {
 struct DirectConversationVectors {
     trust_domain: String,
     resolve_request: Value,
-    resolve_creation_required_response: Value,
+    resolve_unavailable_response: Value,
     resolve_response: Value,
     binding_event_ref: String,
     binding_payload: Value,
@@ -506,7 +506,7 @@ fn validate_privacy_payload_vectors(vectors: &[PrivacyPayloadVector]) -> Result<
 
 fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> Result<()> {
     validate_resolve_request_shape(&vectors.resolve_request)?;
-    validate_resolve_response_shape(&vectors.resolve_creation_required_response)?;
+    validate_resolve_response_shape(&vectors.resolve_unavailable_response)?;
     validate_resolve_response_shape(&vectors.resolve_response)?;
     validate_binding_payload(
         &vectors.trust_domain,
@@ -522,7 +522,7 @@ fn validate_direct_conversation_vectors(vectors: &DirectConversationVectors) -> 
         "private_chat_privacy.direct_conversation_vectors",
         &json!({
             "request": &vectors.resolve_request,
-            "creation_required_response": &vectors.resolve_creation_required_response,
+            "unavailable_response": &vectors.resolve_unavailable_response,
             "response": &vectors.resolve_response,
             "binding_event_ref": &vectors.binding_event_ref,
         }),

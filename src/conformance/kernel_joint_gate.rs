@@ -18,8 +18,9 @@ use arkret_wire::offline_publication::{
     AuthorizationLease, LeaseBasisRef, RiskTier,
 };
 use arkret_wire::{
-    CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, DidUrl, LatticeOp,
-    LatticeOpType, NotarySig, NotaryValue, PayloadSignature, SchemaId, ScopeRef, Seal, SealKind,
+    CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, DidFullId, DidUrl,
+    LatticeOp, LatticeOpType, NotarySig, NotaryValue, PayloadSignature, SchemaId, ScopeRef, Seal,
+    SealKind,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
@@ -584,6 +585,14 @@ fn kernel_equivocation(input: &KernelGateInput) -> KernelGateOutcome {
         .payload
         .pointer("/seal_b/signer_id")
         .and_then(Value::as_str);
+    let verification_method_a = input
+        .payload
+        .pointer("/seal_a/verification_method")
+        .and_then(Value::as_str);
+    let verification_method_b = input
+        .payload
+        .pointer("/seal_b/verification_method")
+        .and_then(Value::as_str);
     let seq_a = input
         .payload
         .pointer("/seal_a/notary_seq")
@@ -592,8 +601,21 @@ fn kernel_equivocation(input: &KernelGateInput) -> KernelGateOutcome {
         .payload
         .pointer("/seal_b/notary_seq")
         .and_then(Value::as_u64);
-    let (Some(signer_a), Some(signer_b), Some(seq_a), Some(seq_b)) =
-        (signer_a, signer_b, seq_a, seq_b)
+    let (
+        Some(signer_a),
+        Some(signer_b),
+        Some(verification_method_a),
+        Some(verification_method_b),
+        Some(seq_a),
+        Some(seq_b),
+    ) = (
+        signer_a,
+        signer_b,
+        verification_method_a,
+        verification_method_b,
+        seq_a,
+        seq_b,
+    )
     else {
         return error("schema_violation", "notary_fault_evidence_invalid");
     };
@@ -613,16 +635,21 @@ fn kernel_equivocation(input: &KernelGateInput) -> KernelGateOutcome {
     else {
         return error("schema_violation", "notary_fault_evidence_invalid");
     };
-    let seal_a = sample_seal(
-        seq_a,
-        delta_a,
-        &crate::fixture_did_url(format!("{signer_a}#key-1")),
-    );
-    let seal_b = sample_seal(
-        seq_b,
-        delta_b,
-        &crate::fixture_did_url(format!("{signer_b}#key-1")),
-    );
+    let parse_verification_method = |value: &str, signer: &str| {
+        let method = DidUrl::new(value.to_owned()).ok()?;
+        let (controller, _) = value.rsplit_once('#')?;
+        let controller = DidFullId::new(controller.to_owned()).ok()?;
+        let projected = arkret_wire::project_full_id_to_core_id(&controller).ok()?;
+        (projected.as_str() == signer).then_some(method)
+    };
+    let (Some(verification_method_a), Some(verification_method_b)) = (
+        parse_verification_method(verification_method_a, signer_a),
+        parse_verification_method(verification_method_b, signer_b),
+    ) else {
+        return error("schema_violation", "notary_fault_evidence_invalid");
+    };
+    let seal_a = sample_seal(seq_a, delta_a, &verification_method_a);
+    let seal_b = sample_seal(seq_b, delta_b, &verification_method_b);
     let equivocation = signer_a == signer_b
         && seq_a == seq_b
         && seal_a.canonical_bytes_for_id().ok() != seal_b.canonical_bytes_for_id().ok();

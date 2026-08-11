@@ -16,15 +16,15 @@
     ],
     "expected_founding_unit_digest": "sha256:dc604271ea8bbefce03b4ef6916f12a01af81722e44b2f3640adc61d3a9e31dd",
     "receipt": {
-      "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
+      "pair_key": "sha256:3d22d109393a4fea67b26165e9a766269af1cefe49520b84ed09132178e3df9b",
       "founder_id": "ak:did_core:web:bob.example",
       "realm_id": "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
       "main_strand_id": "ak:strand:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS",
       "founding_unit_digest": "sha256:dc604271ea8bbefce03b4ef6916f12a01af81722e44b2f3640adc61d3a9e31dd",
       "authorization_core": {
         "kind": "human",
-        "current_contact_basis_id": "01J8Z5Q6R7S8T9V0W1X2Y3Z4A5",
-        "founder_basis_id": "01J8Z5Q6R7S8T9V0W1X2Y3Z4A5",
+        "current_contact_basis_id": "sha256:c81d66dd288ed62349579d189e5fc7a0d5dfb120f19137c1f92da2f30863eb0b",
+        "founder_basis_id": "sha256:c81d66dd288ed62349579d189e5fc7a0d5dfb120f19137c1f92da2f30863eb0b",
         "accepted_contact_evidence_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
       "slot_committed": true,
@@ -37,7 +37,7 @@
         "jws": "eyJhbGciOiJFZERTQSJ9"
       }
     },
-    "expected_receipt_transcript_digest": "sha256:539b598278bee323b9c1479560f90eb224a6f704ebeaa449833e64fa365a2c14",
+    "expected_receipt_transcript_digest": "sha256:2cc9beb00c922efb9ac5db904e380814e72f596e1ae2c2457f4368bbe307176b",
     "expected_peer_verdict": "accept"
   },
   "account_data_cases": {
@@ -179,66 +179,25 @@
         "principal_id": "ak:did_core:web:bob.example"
       }
     },
-    "resolve_creation_required_response": {
-      "state": "creation_required",
-      "next_founding_input": {
-        "founder_basis_evidence": {
-          "kind": "controller_agent",
-          "agent_provision_ref": "ak:event:AWAIb405aEEenVBHYRG-ZfDs-f9_j3E67tWGI36uYxFJ",
-          "agent_provision_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "controller_binding_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-        },
-        "source_service_binding": {
-          "principal_id": "ak:did_core:web:alice.example",
-          "service_id": "ak:did_core:web:principal.example",
-          "trust_domain": "ak:trust_domain:example.test",
-          "service_kind": "principal_server",
-          "service_verification_method": {
-            "id": "did:webvh:z6mkfixture:principal.example#key-1",
-            "controller": "did:webvh:z6mkfixture:principal.example",
-            "type": "Multikey",
-            "public_key_multibase": "z6MkhFixtureKey"
-          },
-          "endpoint_origins": [
-            "https://principal.example"
-          ],
-          "document_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "authority_evidence": {
-            "kind": "ak.did.binding_evidence.v1",
-            "method": "webvh",
-            "document_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "method_proofs": []
-          },
-          "not_before": "2026-08-01T00:00:00.000Z",
-          "accepted_at": "2026-08-01T00:00:00.000Z",
-          "binding_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-          "service_acceptance_proof": {
-            "verification_method": "did:webvh:z6mkfixture:principal.example#key-1",
-            "created_at": "2026-08-01T00:00:00.000Z",
-            "jws": "a"
-          },
-          "principal_authorization_proof": {
-            "verification_method": "did:webvh:z6mkfixture:alice.example#key-1",
-            "created_at": "2026-08-01T00:00:00.000Z",
-            "jws": "a"
-          }
-        }
-      }
+    "resolve_unavailable_response": {
+      "state": "temporarily_unavailable",
+      "retry_after_ms": 1000
     },
     "resolve_response": {
       "state": "found",
       "coordinates": {
-        "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
+        "pair_key": "sha256:3d22d109393a4fea67b26165e9a766269af1cefe49520b84ed09132178e3df9b",
         "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
         "main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
         "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
       },
       "send_blockers": [],
-      "active_mls_generation_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs"
+      "active_mls_generation_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
+      "active_mls_generation_value_digest": "sha256:abababababababababababababababababababababababababababababababab"
     },
     "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
     "binding_payload": {
-      "pair_key": "sha256:e8c24c1badc48eefa472a1700e87a6597a95aedfab8cbe3173f1622b9ad427b5",
+      "pair_key": "sha256:3d22d109393a4fea67b26165e9a766269af1cefe49520b84ed09132178e3df9b",
       "participants_unordered": [
         "ak:did_core:web:alice.example",
         "ak:did_core:web:bob.example"

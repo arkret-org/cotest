@@ -8,7 +8,7 @@ use arkret_identifiers::{DidCoreId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode};
 use arkret_models_collaboration::governance::agent_participation::{
     AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome, ParticipationBits,
-    ParticipationScope, effective_participation, fold_ceiling_chain,
+    ParticipationNextReplaceInput, ParticipationScope, effective_participation, fold_ceiling_chain,
     validate_agent_participation_tightens,
 };
 use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
@@ -383,6 +383,9 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         scope: scope.clone(),
         selection,
         version,
+        next_replace_input: ParticipationNextReplaceInput {
+            expected_version: version,
+        },
     };
     let outcome = AgentParticipationOutcome {
         ok: true,
@@ -416,6 +419,14 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         .remove("target_scope");
     if validator.is_valid(&malformed) {
         bail!("agent participation entry without target_scope passed schema validation");
+    }
+    let mut missing_echo = value.clone();
+    missing_echo
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("serialized participation entry was not an object"))?
+        .remove("next_replace_input");
+    if validator.is_valid(&missing_echo) {
+        bail!("agent participation entry without next_replace_input passed schema validation");
     }
 
     let no_grant_runtime = "failed_precondition";
