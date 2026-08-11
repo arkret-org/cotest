@@ -762,7 +762,7 @@ impl TestActorClient {
                 actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                     self.actor.clone(),
                 )?)?),
-                key_id: format!("{}#cotest", self.actor),
+                key_id: "cotest".to_owned(),
                 key_epoch: 0,
                 credential_epoch: None,
             });
@@ -871,7 +871,7 @@ impl TestActorClient {
                     actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                         self.actor.clone(),
                     )?)?),
-                    key_id: format!("{}#cotest", self.actor),
+                    key_id: "cotest".to_owned(),
                     key_epoch: 0,
                     credential_epoch: None,
                 });

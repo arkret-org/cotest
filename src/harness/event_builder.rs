@@ -18,6 +18,9 @@ use arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTa
 use arkret_models_collaboration::governance::membership_invite::{
     InviteCreatePayload, MembershipInviteRef, MembershipPayload, MembershipPayloadState,
 };
+use arkret_models_collaboration::governance::moderation::{
+    ModerationReportAcceptedTargetBasis, ModerationReportRequestBody,
+};
 use arkret_models_identity::delivery_binding::{DeliveryStatus, MemberDeliveryBinding};
 use arkret_wire::{AuthContext, DidUrl, Event, ScopeRef};
 use chrono::{DateTime, Utc};
@@ -26,6 +29,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use super::assertions::expect_json;
+use super::client::TestActorClient;
 use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
@@ -217,6 +221,52 @@ pub async fn create_realm(
     )
     .await?;
     Ok(realm_id)
+}
+
+/// Author the exact signed DataEvent carried by the self moderation-report
+/// operation. The reporter is always the actor's core DID while Event proof
+/// verification methods remain full DID URLs through `TestActorClient`.
+pub async fn moderation_report_request(
+    actor: &TestActorClient,
+    realm_id: &str,
+    target_ref: &str,
+    effective_scope: ScopeRef,
+) -> Result<ModerationReportRequestBody> {
+    if effective_scope.realm_id_opt().map(RealmId::as_str) != Some(realm_id) {
+        return Err(anyhow!(
+            "moderation target scope does not belong to the requested Realm"
+        ));
+    }
+    let reporter = project_full_id_to_core_id(&DidFullId::new(actor.actor.clone())?)?;
+    let mut payload = json!({
+        "realm_id": realm_id,
+        "target_ref": target_ref,
+        "report_reason_code": "spam",
+        "reporter": reporter,
+        "provenance": "self"
+    });
+    if matches!(effective_scope, ScopeRef::Circle { .. }) {
+        payload["effective_scope"] = serde_json::to_value(&effective_scope)?;
+    }
+    let request = ModerationReportRequestBody {
+        report_event: arkret_wire::EventInitialSubmission::online(
+            actor
+                .author_event(
+                    realm_id,
+                    arkret_wire::event_kind_str::SELF_MODERATION_REPORT,
+                    payload,
+                )
+                .await?,
+        ),
+    };
+    request.validate_authoring_context(
+        &reporter,
+        &ModerationReportAcceptedTargetBasis {
+            target_ref: target_ref.to_owned(),
+            effective_scope,
+        },
+    )?;
+    Ok(request)
 }
 
 pub async fn create_realm_with_signing_seed(

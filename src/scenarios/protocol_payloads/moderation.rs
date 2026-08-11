@@ -1,33 +1,31 @@
 //! Phase 10 — `/_arkret/self/moderation/report` submission.
 
 use anyhow::Result;
+use arkret_wire::ScopeRef;
 use reqwest::StatusCode;
-use serde_json::json;
 
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::{ArkretServer, TestActorClient, expect_json, moderation_report_request};
 
 pub async fn run(
     server: &ArkretServer,
-    token: &str,
-    actor_id: &str,
+    actor: &TestActorClient,
     target_realm_id: &str,
     target_event_id: &str,
 ) -> Result<()> {
+    let realm_id = arkret_identifiers::RealmId::new(target_realm_id.to_owned())?;
+    let request = moderation_report_request(
+        actor,
+        target_realm_id,
+        target_event_id,
+        ScopeRef::Realm { realm_id },
+    )
+    .await?;
     let report = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
-            .bearer_auth(token)
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
-            >(json!({
-                // soland validates that the reported target exists; point at the
-                // adapter message Event authored in the events/keys setup phase.
-                "realm_id": target_realm_id,
-                "target_ref": target_event_id,
-                "report_reason_code": "spam",
-                "reporter": actor_id
-            }))?),
+            .bearer_auth(&actor.token)
+            .json(&request),
         StatusCode::OK,
     )
     .await?;

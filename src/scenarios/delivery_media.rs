@@ -477,6 +477,31 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         "ak:device:01904100-0000-7000-8000-0000000000b0",
     )
     .await?;
+    let alice_client = server.client_with_token(
+        "did:web:alice.example",
+        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        alice.clone(),
+    )?;
+    let moderation_realm_create = alice_client
+        .create_realm_with(json!({
+            "title": "Moderation edge fixture",
+            "public": false,
+            "plaintext_visible_services": [alice_client.service_id()]
+        }))
+        .await?;
+    let moderation_realm = moderation_realm_create["realm_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("moderation fixture Realm create has no realm_id"))?
+        .to_owned();
+    let moderation_request = crate::harness::moderation_report_request(
+        &alice_client,
+        &moderation_realm,
+        &moderation_realm,
+        arkret_wire::ScopeRef::Realm {
+            realm_id: arkret_identifiers::RealmId::new(moderation_realm.clone())?,
+        },
+    )
+    .await?;
 
     expect_api_error(
         server
@@ -546,31 +571,21 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
-            >(json!({
-                "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-                "target_ref": "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-",
-                "report_reason_code": "spam",
-                "reporter": "did:web:alice.example"
-            }))?),
+            .json(&moderation_request),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
     .await?;
+    let wrong_reporter = crate::harness::wire_negative_from_sdk(&moderation_request, |body| {
+        body["report_event"]["event"]["payload"]["reporter"] =
+            json!("ak:did_core:web:bob-delivery.example");
+    })?;
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&alice)
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
-            >(json!({
-                "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-                "target_ref": "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-",
-                "report_reason_code": "spam",
-                "reporter": "did:web:bob-delivery.example"
-            }))?),
+            .json(&wrong_reporter),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -580,14 +595,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&bob)
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
-            >(json!({
-                "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-                "target_ref": "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-",
-                "report_reason_code": "spam",
-                "reporter": "did:web:bob-delivery.example"
-            }))?),
+            .json(&moderation_request),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )

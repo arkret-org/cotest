@@ -26,6 +26,7 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     CanonicalJsonBody, TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
+    moderation_report_request,
 };
 use crate::transcripts::record_vector_event;
 
@@ -274,16 +275,18 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let report_operation = "ak.self.moderation.command.report";
     if let Ok(report_effect) = declared_effect(&registry, report_operation) {
         let before = realm_event_kinds(&alice, &realm_id).await?;
+        let report_request = moderation_report_request(
+            &alice,
+            &realm_id,
+            &realm_id,
+            arkret_wire::ScopeRef::Realm {
+                realm_id: arkret_identifiers::RealmId::new(realm_id.clone())?,
+            },
+        )
+        .await?;
         let response = alice
             .post("/_arkret/self/moderation/report")
-            .canonical_json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::moderation::ModerationReportRequestBody,
-            >(json!({
-                "realm_id": realm_id,
-                "target_ref": realm_id,
-                "reporter": alice.actor,
-                "report_reason_code": "spam",
-            }))?)?
+            .canonical_json(&report_request)?
             .send()
             .await?;
         let report_status = response.status();

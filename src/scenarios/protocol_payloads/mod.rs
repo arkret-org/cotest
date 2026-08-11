@@ -56,7 +56,7 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     )
     .await?;
 
-    let (adapter_realm_id, adapter_message_event_id) =
+    let (actor, adapter_realm_id, adapter_message_event_id) =
         events_keys_setup::run(&server, &token, &actor_id).await?;
     device_messages::run(&server, &token, &actor_id).await?;
     key_backups::run(&server, &token, &actor_id).await?;
@@ -65,8 +65,7 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     push::run(&server, &token).await?;
     moderation::run(
         &server,
-        &token,
-        &actor_id,
+        &actor,
         &adapter_realm_id,
         &adapter_message_event_id,
     )

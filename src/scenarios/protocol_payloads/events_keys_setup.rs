@@ -10,7 +10,8 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ArkretServer, expect_json, message_create_text_payload_for_strand, parse_strand_id,
+    ArkretServer, TestActorClient, expect_json, message_create_text_payload_for_strand,
+    parse_strand_id,
 };
 use crate::scenarios::identity_test_support::{
     authorize_device_public_key, signed_keys_upload_body,
@@ -18,23 +19,27 @@ use crate::scenarios::identity_test_support::{
 
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
-pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(String, String)> {
+pub async fn run(
+    server: &ArkretServer,
+    token: &str,
+    actor_id: &str,
+) -> Result<(TestActorClient, String, String)> {
     // keys/upload verifies its typed request signature against the accepted
     // device projection. Publish the principal device directory before
     // authorizing the device; the adapter realm/message then continue at actor
     // sequence 3/4.
     let device_key = SigningKey::from_bytes(&[0x7a; 32]);
     authorize_device_public_key(server, token, actor_id, KEYS_DEVICE_ID, &device_key).await?;
-    let (realm_id, message_event_id) = submit_adapter_event(server, token, actor_id).await?;
+    let (actor, realm_id, message_event_id) = submit_adapter_event(server, token, actor_id).await?;
     upload_and_inspect_keys(server, token, actor_id, &device_key).await?;
-    Ok((realm_id, message_event_id))
+    Ok((actor, realm_id, message_event_id))
 }
 
 async fn submit_adapter_event(
     server: &ArkretServer,
     token: &str,
     actor_id: &str,
-) -> Result<(String, String)> {
+) -> Result<(TestActorClient, String, String)> {
     let actor = server.client_with_token(actor_id, KEYS_DEVICE_ID, token.to_owned())?;
     let realm_id = actor
         .create_realm_with(json!({
@@ -62,7 +67,7 @@ async fn submit_adapter_event(
         .as_str()
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow::anyhow!("accepted adapter message lacks event_id: {submit}"))?;
-    Ok((realm_id, event_id))
+    Ok((actor, realm_id, event_id))
 }
 
 async fn upload_and_inspect_keys(
