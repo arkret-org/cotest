@@ -78,23 +78,141 @@ function hardCheck(value) {
 
 function validateScenario(scenario) {
   if (scenario.schema_version !== "v1") throw new Error("scenario schema_version must be v1");
-  if (!scenario.id) throw new Error("scenario id is required");
+  if (typeof scenario.id !== "string" || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(scenario.id)) {
+    throw new Error("scenario id must be a lowercase kebab-case string");
+  }
+  if (typeof scenario.title !== "string" || scenario.title.trim() === "") {
+    throw new Error("scenario title is required");
+  }
+  if (typeof scenario.intent !== "string" || scenario.intent.trim() === "") {
+    throw new Error("scenario intent is required");
+  }
   if (!["single", "federated"].includes(scenario.required_topology)) {
     throw new Error("scenario required_topology must be single or federated");
   }
+  if (!Array.isArray(scenario.source_flows) || scenario.source_flows.length === 0) {
+    throw new Error("scenario source_flows are required");
+  }
+  const sourceFlows = new Set();
+  for (const sourceFlow of scenario.source_flows) {
+    if (
+      typeof sourceFlow !== "string" ||
+      !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(sourceFlow) ||
+      sourceFlows.has(sourceFlow)
+    ) {
+      throw new Error(`duplicate or invalid source flow: ${sourceFlow}`);
+    }
+    sourceFlows.add(sourceFlow);
+  }
   if (!Array.isArray(scenario.actors) || scenario.actors.length === 0) {
     throw new Error("scenario actors are required");
+  }
+  const actorIds = new Set();
+  for (const actor of scenario.actors) {
+    if (!actor || typeof actor !== "object" || Array.isArray(actor)) {
+      throw new Error("scenario actors must be objects");
+    }
+    if (typeof actor.id !== "string" || actor.id.trim() === "" || actorIds.has(actor.id)) {
+      throw new Error(`duplicate or missing actor id: ${actor.id}`);
+    }
+    if (typeof actor.site !== "string" || actor.site.trim() === "") {
+      throw new Error(`actor ${actor.id} site is required`);
+    }
+    if (typeof actor.role !== "string" || actor.role.trim() === "") {
+      throw new Error(`actor ${actor.id} role is required`);
+    }
+    if (scenario.required_topology === "single" && actor.site !== "alpha") {
+      throw new Error(`single-topology actor ${actor.id} must use site alpha`);
+    }
+    if (scenario.required_topology === "federated" && !["alpha", "beta"].includes(actor.site)) {
+      throw new Error(`federated actor ${actor.id} site must be alpha or beta`);
+    }
+    actorIds.add(actor.id);
+  }
+  const constraints = scenario.agent_constraints;
+  if (!constraints || constraints.mutation_surface !== "visible-ui-only") {
+    throw new Error("scenario mutation_surface must be visible-ui-only");
+  }
+  if (!Number.isInteger(constraints.max_attempts_per_checkpoint) || constraints.max_attempts_per_checkpoint < 1) {
+    throw new Error("scenario max_attempts_per_checkpoint must be a positive integer");
+  }
+  for (const key of [
+    "read_only_oracles_allowed",
+    "allow_testid_locators",
+    "allow_dom_eval_for_actions",
+    "require_semantic_snapshot_before_action",
+  ]) {
+    if (typeof constraints[key] !== "boolean") {
+      throw new Error(`scenario agent constraint ${key} must be boolean`);
+    }
   }
   if (!Array.isArray(scenario.checkpoints) || scenario.checkpoints.length === 0) {
     throw new Error("scenario checkpoints are required");
   }
   const ids = new Set();
   for (const checkpoint of scenario.checkpoints) {
-    if (!checkpoint.id || ids.has(checkpoint.id)) {
+    if (!checkpoint || typeof checkpoint !== "object" || Array.isArray(checkpoint)) {
+      throw new Error("scenario checkpoints must be objects");
+    }
+    if (
+      typeof checkpoint.id !== "string" ||
+      checkpoint.id.trim() === "" ||
+      ids.has(checkpoint.id)
+    ) {
       throw new Error(`duplicate or missing checkpoint id: ${checkpoint.id}`);
     }
     ids.add(checkpoint.id);
+    if (checkpoint.actor !== "harness" && !actorIds.has(checkpoint.actor)) {
+      throw new Error(`checkpoint ${checkpoint.id} uses unknown actor: ${checkpoint.actor}`);
+    }
+    if (typeof checkpoint.phase !== "string" || checkpoint.phase.trim() === "") {
+      throw new Error(`checkpoint ${checkpoint.id} phase is required`);
+    }
+    if (typeof checkpoint.goal !== "string" || checkpoint.goal.trim() === "") {
+      throw new Error(`checkpoint ${checkpoint.id} goal is required`);
+    }
+    if (typeof checkpoint.required !== "boolean") {
+      throw new Error(`checkpoint ${checkpoint.id} required must be boolean`);
+    }
+    if (!Array.isArray(checkpoint.hard_checks) || checkpoint.hard_checks.length === 0) {
+      throw new Error(`checkpoint ${checkpoint.id} hard_checks are required`);
+    }
+    const hardChecks = new Set();
+    for (const check of checkpoint.hard_checks) {
+      if (typeof check !== "string" || check.trim() === "" || hardChecks.has(check)) {
+        throw new Error(`checkpoint ${checkpoint.id} has duplicate or invalid hard check: ${check}`);
+      }
+      hardChecks.add(check);
+    }
   }
+}
+
+function commandValidateScenarios(args) {
+  const scenarioDir = path.resolve(required(args, "scenario-dir"));
+  const files = fs
+    .readdirSync(scenarioDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+    .map((entry) => entry.name)
+    .sort();
+  if (files.length === 0) throw new Error(`no scenarios found in ${scenarioDir}`);
+  const ids = new Set();
+  const scenarios = [];
+  for (const file of files) {
+    const scenario = readJson(path.join(scenarioDir, file));
+    validateScenario(scenario);
+    if (ids.has(scenario.id)) throw new Error(`duplicate scenario id: ${scenario.id}`);
+    if (file !== `${scenario.id}.json`) {
+      throw new Error(`scenario filename ${file} must match id ${scenario.id}`);
+    }
+    ids.add(scenario.id);
+    scenarios.push({
+      id: scenario.id,
+      topology: scenario.required_topology,
+      checkpoints: scenario.checkpoints.length,
+      source_flows: scenario.source_flows,
+    });
+  }
+  printJson({ count: scenarios.length, scenarios });
 }
 
 function commandInit(args) {
@@ -346,6 +464,9 @@ try {
       break;
     case "validate":
       commandValidate(args);
+      break;
+    case "validate-scenarios":
+      commandValidateScenarios(args);
       break;
     default:
       throw new Error(`unknown command: ${command ?? "<missing>"}`);

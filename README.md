@@ -105,10 +105,10 @@ Recommended entrypoints:
   `artifacts/runs/joint-e2e/`, then publishes eligible stable mirrors under
   `artifacts/latest/`.
 - `.\scripts\run-hygiene.ps1` is the local hygiene gate for dependency
-  advisories/licensing (`cargo deny check`), spelling drift (`typos`), and
-  RustSec vulnerabilities (`cargo audit`). It writes `raw.log`, `summary.json`,
-  `summary.md`, and per-tool stdout/stderr logs to
-  `artifacts/hygiene/<timestamp>/`.
+  advisories/licensing (`cargo deny check`), spelling drift (`typos`), RustSec
+  vulnerabilities (`cargo audit`), e2e wire/type drift, and the Agent Journey
+  scenario contract. It writes `raw.log`, `summary.json`, `summary.md`, and
+  per-tool stdout/stderr logs to `artifacts/hygiene/<timestamp>/`.
 - `.\scripts\demote-test.ps1` is the inverse of `promote-fixme.ps1`: it
   temporarily converts a concrete Playwright `test(...)` line into
   `test.fixme(...)` and inserts the reason comment required by the local
@@ -174,6 +174,12 @@ joint runner's real service lifecycle, but an agent operates Inkson through
 isolated agent-browser sessions instead of replaying a predefined locator
 sequence. Required checkpoints retain screenshots, hard checks, action
 transcripts, and explicit product/agent/harness failure classification.
+
+The catalog contains focused single-site journeys for first-Realm continuity
+and device recovery, focused federated journeys for invitation/history and
+Direct Conversation repair, plus the broader federated incident story. Run
+`node --test .\agent-journeys\scripts\journey.tests.mjs` to validate every
+scenario without starting the service stack.
 
 The federated topology starts two isolated principal servers on one physical
 machine with distinct service identities, ports, state/object roots, and

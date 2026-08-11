@@ -5,7 +5,8 @@ param(
     [switch]$SkipTypos,
     [switch]$SkipCargoAudit,
     [switch]$SkipE2eTypecheck,
-    [switch]$SkipE2eWireTypes
+    [switch]$SkipE2eWireTypes,
+    [switch]$SkipAgentJourneyTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -148,6 +149,11 @@ if (-not $SkipE2eWireTypes) {
         Add-Content -Path $rawLog -Value "=== e2e-wire-types (skipped) ==="
         Add-Content -Path $rawLog -Value "generator not found at $generator"
     }
+}
+if (-not $SkipAgentJourneyTests) {
+    $nodePath = Resolve-CommandPath "node"
+    $journeyTests = Join-Path $repoRoot "agent-journeys\scripts\journey.tests.mjs"
+    $results.Add((Invoke-HygieneCommand -Label "agent-journey-tests" -FilePath $nodePath -Arguments @("--test", $journeyTests) -RunDir $runDir -RawLog $rawLog))
 }
 if ($results.Count -eq 0) {
     throw "No hygiene checks were selected"

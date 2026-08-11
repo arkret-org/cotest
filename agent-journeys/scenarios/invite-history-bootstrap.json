@@ -1,0 +1,194 @@
+{
+  "schema_version": "v1",
+  "id": "invite-history-bootstrap",
+  "title": "A late federated member joins and receives only authorized history",
+  "required_topology": "federated",
+  "intent": "Exercise private cross-server invitation, member delivery binding, MLS admission, joined-history enforcement, catch-up after interruption, and non-member privacy entirely through the visible product.",
+  "source_flows": [
+    "ordinary-realm-creation",
+    "realm-invitation-history-bootstrap",
+    "message-authoring-seal-sync",
+    "realm-event-server-fanout",
+    "service-route-authentication-and-relocation",
+    "service-route-discovery-handover-and-repair"
+  ],
+  "actors": [
+    {
+      "id": "alice",
+      "site": "alpha",
+      "role": "Realm owner and inviter"
+    },
+    {
+      "id": "bob",
+      "site": "beta",
+      "role": "late federated member"
+    },
+    {
+      "id": "david",
+      "site": "beta",
+      "role": "uninvited privacy probe"
+    }
+  ],
+  "agent_constraints": {
+    "mutation_surface": "visible-ui-only",
+    "read_only_oracles_allowed": true,
+    "max_attempts_per_checkpoint": 3,
+    "allow_testid_locators": false,
+    "allow_dom_eval_for_actions": false,
+    "require_semantic_snapshot_before_action": true
+  },
+  "checkpoints": [
+    {
+      "id": "IHB01",
+      "actor": "harness",
+      "phase": "topology",
+      "goal": "Verify alpha and beta use distinct principal-server identities, state roots, object roots, and browser origins with an explicit federation link.",
+      "required": true,
+      "hard_checks": [
+        "alpha-beta-service-id-distinct",
+        "alpha-beta-state-root-distinct",
+        "alpha-beta-object-root-distinct",
+        "alpha-beta-browser-origin-distinct",
+        "explicit-peer-link-present"
+      ]
+    },
+    {
+      "id": "IHB02",
+      "actor": "alice",
+      "phase": "realm-bootstrap",
+      "goal": "Create a private encrypted Realm with joined history, publish two uniquely tagged pre-invite messages, and keep the Realm visible in normal navigation.",
+      "required": true,
+      "hard_checks": [
+        "joined-history-realm-created",
+        "two-pre-invite-messages-visible-to-alice",
+        "realm-private",
+        "realm-navigation-entry-visible"
+      ]
+    },
+    {
+      "id": "IHB03",
+      "actor": "alice",
+      "phase": "invite",
+      "goal": "Invite Bob using visible member controls and verify that the target identity and remote-server context are understandable before sending.",
+      "required": true,
+      "hard_checks": [
+        "bob-target-selected",
+        "invite-sent-once",
+        "remote-context-visible",
+        "no-bare-url-input-required"
+      ]
+    },
+    {
+      "id": "IHB04",
+      "actor": "bob",
+      "phase": "invite-acceptance",
+      "goal": "Discover the invitation from beta without a direct URL, inspect its Realm and inviter context, accept it once, and reach the Realm through normal navigation.",
+      "required": true,
+      "hard_checks": [
+        "invite-discovered-without-direct-url",
+        "inviter-and-realm-context-visible",
+        "invite-accepted-once",
+        "bob-membership-visible"
+      ]
+    },
+    {
+      "id": "IHB05",
+      "actor": "bob",
+      "phase": "history-boundary",
+      "goal": "Wait for encrypted membership readiness and verify that the two pre-invite messages are not rendered or leaked while the post-join discussion is usable.",
+      "required": true,
+      "hard_checks": [
+        "encrypted-membership-ready",
+        "pre-invite-message-one-not-visible",
+        "pre-invite-message-two-not-visible",
+        "composer-usable-after-readiness"
+      ]
+    },
+    {
+      "id": "IHB06",
+      "actor": "alice",
+      "phase": "post-join-message",
+      "goal": "Publish two uniquely tagged post-join messages after Bob is a ready member.",
+      "required": true,
+      "hard_checks": [
+        "two-post-join-messages-visible-to-alice",
+        "messages-authored-after-bob-join"
+      ]
+    },
+    {
+      "id": "IHB07",
+      "actor": "bob",
+      "phase": "federated-history",
+      "goal": "Observe both post-join messages on beta, reply to the second one, reload, and verify the authorized timeline persists without exposing pre-invite history.",
+      "required": true,
+      "hard_checks": [
+        "both-post-join-messages-visible-to-bob",
+        "bob-reply-visible",
+        "authorized-history-persists-after-reload",
+        "pre-invite-history-still-hidden"
+      ]
+    },
+    {
+      "id": "IHB08",
+      "actor": "bob",
+      "phase": "offline-gap",
+      "goal": "Take Bob's browser offline and verify the product exposes an offline state without discarding the authorized timeline.",
+      "required": true,
+      "hard_checks": [
+        "offline-state-observable",
+        "authorized-timeline-retained-while-offline"
+      ]
+    },
+    {
+      "id": "IHB09",
+      "actor": "alice",
+      "phase": "offline-gap",
+      "goal": "While Bob remains offline, publish two more uniquely tagged messages from alpha and verify they are each visible once to Alice.",
+      "required": true,
+      "hard_checks": [
+        "two-gap-messages-visible-to-alice",
+        "gap-messages-authored-while-bob-offline",
+        "gap-messages-not-duplicated-on-alpha"
+      ]
+    },
+    {
+      "id": "IHB10",
+      "actor": "bob",
+      "phase": "catch-up",
+      "goal": "Restore connectivity and allow the product to finish catch-up before judging timeline completeness.",
+      "required": true,
+      "hard_checks": [
+        "catch-up-state-observable",
+        "both-gap-messages-visible-after-recovery",
+        "no-gap-message-duplicates"
+      ]
+    },
+    {
+      "id": "IHB11",
+      "actor": "david",
+      "phase": "privacy",
+      "goal": "Sign in on beta and attempt to find the private Realm, its invite, and its messages without membership or a direct URL.",
+      "required": true,
+      "hard_checks": [
+        "private-realm-not-discoverable",
+        "invite-not-visible-to-david",
+        "message-content-not-readable",
+        "realm-existence-not-leaked-beyond-spec"
+      ]
+    },
+    {
+      "id": "IHB12",
+      "actor": "harness",
+      "phase": "read-only-oracle",
+      "goal": "Confirm through read-only evidence that Bob's accepted membership and delivery binding are federated, the history cutoff matches the join frontier, and each tagged post-join Event exists exactly once.",
+      "required": true,
+      "hard_checks": [
+        "bob-membership-converged-on-alpha",
+        "bob-membership-converged-on-beta",
+        "recipient-service-binding-target-authenticated",
+        "history-cutoff-matches-join-frontier",
+        "tagged-event-counts-match"
+      ]
+    }
+  ]
+}

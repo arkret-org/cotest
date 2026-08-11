@@ -1,0 +1,197 @@
+{
+  "schema_version": "v1",
+  "id": "device-pairing-revocation-recovery",
+  "title": "One account pairs, revokes, and recovers devices",
+  "required_topology": "single",
+  "intent": "Exercise first-device readiness, short-link pairing with human verification, same-account history recovery, device revocation, old-device denial, and root-anchored recovery from a fresh browser profile.",
+  "source_flows": [
+    "registration-pcr-genesis",
+    "device-pairing-and-recovery",
+    "message-authoring-seal-sync"
+  ],
+  "actors": [
+    {
+      "id": "alice-primary",
+      "site": "alpha",
+      "role": "Alice's founding accepted device"
+    },
+    {
+      "id": "alice-secondary",
+      "site": "alpha",
+      "role": "Alice's newly paired device"
+    },
+    {
+      "id": "alice-recovery",
+      "site": "alpha",
+      "role": "Alice's fresh recovery device"
+    }
+  ],
+  "agent_constraints": {
+    "mutation_surface": "visible-ui-only",
+    "read_only_oracles_allowed": true,
+    "max_attempts_per_checkpoint": 3,
+    "allow_testid_locators": false,
+    "allow_dom_eval_for_actions": false,
+    "require_semantic_snapshot_before_action": true
+  },
+  "checkpoints": [
+    {
+      "id": "DPR01",
+      "actor": "harness",
+      "phase": "topology",
+      "goal": "Verify all three actors have isolated persistent browser profiles attached to the same single-site stack.",
+      "required": true,
+      "hard_checks": [
+        "single-principal-server-present",
+        "three-browser-profiles-isolated",
+        "profiles-persist-for-run"
+      ]
+    },
+    {
+      "id": "DPR02",
+      "actor": "alice-primary",
+      "phase": "registration",
+      "goal": "Register Alice, confirm the Recovery Key using sensitive input handling, create a private encrypted Realm, and publish a uniquely tagged baseline message.",
+      "required": true,
+      "hard_checks": [
+        "alice-ready-on-primary",
+        "recovery-confirmation-completed",
+        "baseline-realm-created",
+        "baseline-message-visible",
+        "no-secret-in-evidence"
+      ]
+    },
+    {
+      "id": "DPR03",
+      "actor": "alice-secondary",
+      "phase": "pairing-request",
+      "goal": "Start the visible add-device flow, generate local device material, and display a short-lived pairing code or QR transcript without becoming authenticated yet.",
+      "required": true,
+      "hard_checks": [
+        "pairing-request-created",
+        "pairing-code-visible",
+        "secondary-not-yet-authorized",
+        "no-secret-in-evidence"
+      ]
+    },
+    {
+      "id": "DPR04",
+      "actor": "alice-primary",
+      "phase": "pairing-approval",
+      "goal": "Open the visible device approval surface, compare the pairing code and device details, approve once, and wait for the new device to appear as active.",
+      "required": true,
+      "hard_checks": [
+        "pairing-codes-match",
+        "device-details-visible-before-approval",
+        "secondary-approved-once",
+        "secondary-active-in-device-list"
+      ]
+    },
+    {
+      "id": "DPR05",
+      "actor": "alice-secondary",
+      "phase": "paired-session",
+      "goal": "Complete the paired-device session, find Alice's existing Realm without a direct URL, restore encrypted history, and publish a uniquely tagged secondary-device message.",
+      "required": true,
+      "hard_checks": [
+        "same-alice-principal-visible",
+        "existing-realm-found-through-navigation",
+        "baseline-message-decrypted",
+        "secondary-message-visible"
+      ]
+    },
+    {
+      "id": "DPR06",
+      "actor": "alice-primary",
+      "phase": "cross-device-sync",
+      "goal": "Observe the secondary-device message, reload, and verify both active devices remain listed without duplicating the paired device.",
+      "required": true,
+      "hard_checks": [
+        "secondary-message-visible-on-primary",
+        "two-active-devices-visible",
+        "paired-device-not-duplicated",
+        "state-persists-after-reload"
+      ]
+    },
+    {
+      "id": "DPR07",
+      "actor": "alice-primary",
+      "phase": "revocation",
+      "goal": "Revoke the secondary device through visible security settings, confirm the destructive prompt, and wait until it is shown as revoked rather than active.",
+      "required": true,
+      "hard_checks": [
+        "secondary-target-confirmed",
+        "revocation-confirmed-once",
+        "secondary-shown-revoked",
+        "primary-remains-active"
+      ]
+    },
+    {
+      "id": "DPR08",
+      "actor": "alice-secondary",
+      "phase": "revoked-device-denial",
+      "goal": "Refresh the revoked profile and attempt to publish a uniquely tagged message or obtain current encrypted state.",
+      "required": true,
+      "hard_checks": [
+        "revoked-session-stops-authoring",
+        "revoked-message-not-accepted",
+        "revocation-guidance-visible",
+        "current-key-access-not-granted"
+      ]
+    },
+    {
+      "id": "DPR09",
+      "actor": "alice-recovery",
+      "phase": "root-recovery",
+      "goal": "Start account recovery from a fresh profile, enter Alice's previously saved Recovery Key through sensitive input handling, create replacement device keys, and complete the visible recovery flow.",
+      "required": true,
+      "hard_checks": [
+        "existing-recovery-key-accepted",
+        "replacement-device-created",
+        "standard-session-restored",
+        "same-alice-principal-visible",
+        "no-secret-in-evidence"
+      ]
+    },
+    {
+      "id": "DPR10",
+      "actor": "alice-recovery",
+      "phase": "content-recovery",
+      "goal": "Find the existing Realm, restore encrypted history, verify both accepted messages, and publish a uniquely tagged post-recovery message.",
+      "required": true,
+      "hard_checks": [
+        "existing-realm-found-through-navigation",
+        "baseline-message-decrypted",
+        "secondary-message-decrypted",
+        "post-recovery-message-visible"
+      ]
+    },
+    {
+      "id": "DPR11",
+      "actor": "alice-primary",
+      "phase": "generation-fence",
+      "goal": "Refresh the old primary profile after recovery and verify that it cannot author as an active current-generation device unless the product explicitly pairs it again.",
+      "required": true,
+      "hard_checks": [
+        "old-primary-session-fenced",
+        "old-primary-message-not-accepted",
+        "repair-or-pairing-guidance-visible",
+        "post-recovery-message-not-forgeable-by-old-device"
+      ]
+    },
+    {
+      "id": "DPR12",
+      "actor": "harness",
+      "phase": "read-only-oracle",
+      "goal": "Confirm one principal and PCR, one accepted pairing authorization, the secondary revocation, a later recovery generation, and no accepted messages from revoked or fenced devices.",
+      "required": true,
+      "hard_checks": [
+        "one-principal-and-pcr-observed",
+        "pairing-authorization-accepted-once",
+        "secondary-revocation-accepted",
+        "device-generation-advanced",
+        "revoked-and-fenced-message-count-zero"
+      ]
+    }
+  ]
+}

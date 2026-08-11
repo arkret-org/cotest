@@ -4,6 +4,15 @@
   "title": "A distributed team onboards, collaborates, and resolves an incident",
   "required_topology": "federated",
   "intent": "Prove that people attached to two isolated principal servers can discover each other, collaborate through the visible product, survive interruption, and preserve authorization boundaries without the agent relying on hidden mutation APIs.",
+  "source_flows": [
+    "registration-pcr-genesis",
+    "ordinary-realm-creation",
+    "realm-invitation-history-bootstrap",
+    "message-authoring-seal-sync",
+    "realm-event-server-fanout",
+    "service-route-authentication-and-relocation",
+    "service-route-discovery-handover-and-repair"
+  ],
   "actors": [
     {
       "id": "alice",
@@ -178,4 +187,3 @@
     }
   ]
 }
-
