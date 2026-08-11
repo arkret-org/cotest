@@ -1312,29 +1312,20 @@ async fn fetch_service_identity(
         .with_context(|| format!("fetch service describe from {url}"))?
         .error_for_status()
         .with_context(|| format!("service describe failed at {url}"))?;
-    let body: Value = response.json().await?;
-    let service_id = body
-        .get("service_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("service describe at {url} omitted service_id"))?;
-    let service_id = DidCoreId::new(service_id.to_owned())
-        .with_context(|| format!("service describe at {url} returned invalid service_id"))?;
-    let service_full_id = body
-        .get("full_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("service describe at {url} omitted full_id"))?;
-    let service_full_id = DidFullId::new(service_full_id.to_owned())
-        .with_context(|| format!("service describe at {url} returned invalid full_id"))?;
+    let description: arkret::ServiceDescribe = response
+        .json()
+        .await
+        .with_context(|| format!("service describe at {url} returned an invalid response"))?;
+    description
+        .validate()
+        .with_context(|| format!("service describe at {url} failed validation"))?;
+    let service_id = description.service_id;
+    let service_full_id = description.service_resolution.full_id;
     anyhow::ensure!(
         arkret::project_full_id_to_core_id(&service_full_id)? == service_id,
         "service describe at {url} returned a mismatched service_id/full_id"
     );
-    let trust_domain = body
-        .get("trust_domain")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("service describe at {url} omitted trust_domain"))?;
-    let trust_domain = TypedTrustDomainId::new(trust_domain.to_owned())
-        .with_context(|| format!("service describe at {url} returned invalid trust_domain"))?;
+    let trust_domain = description.trust_domain;
     Ok((service_id, service_full_id, trust_domain))
 }
 

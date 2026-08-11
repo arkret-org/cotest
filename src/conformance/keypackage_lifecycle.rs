@@ -384,6 +384,29 @@ fn fixture_device_signing_key_evidence(
     } else {
         json!([])
     };
+    let registration_did_evidence = json!({
+        "principal_id": principal_id.as_str(),
+        "full_id": full_id,
+        "adapter_version": "fixture-v1",
+        "accepted_at": "2026-01-01T00:00:00.000Z",
+        "method_history_head": history_head,
+        "version_id": "1-fixture",
+        "control_key_digest": hash_c,
+        "method_evidence": {
+            "kind": "ak.did.binding_evidence.v1",
+            "method": if full_id.starts_with("did:webvh:") { "webvh" } else { "web" },
+            "document_digest": hash_d,
+            "method_proofs": method_proofs
+        },
+        "control_proof": {
+            "verification_method": format!("{full_id}#root-1"),
+            "created_at": "2026-01-01T00:00:00.000Z",
+            "jws": "a"
+        }
+    });
+    let registration_evidence_digest =
+        arkret_canonical::canonical_sha256(&registration_did_evidence)
+            .expect("fixture registration DID evidence must be canonicalizable");
     json!({
         "actor_id": principal_id.as_str(),
         "device_id": device_id.as_str(),
@@ -397,26 +420,7 @@ fn fixture_device_signing_key_evidence(
             "principal_genesis_receipt_digest": hash_a,
             "authority_instance_digest": hash_b
         },
-        "registration_did_evidence": {
-            "principal_id": principal_id.as_str(),
-            "full_id": full_id,
-            "adapter_version": "fixture-v1",
-            "accepted_at": "2026-01-01T00:00:00.000Z",
-            "method_history_head": history_head,
-            "version_id": "1-fixture",
-            "control_key_digest": hash_c,
-            "method_evidence": {
-                "kind": "ak.did.binding_evidence.v1",
-                "method": if full_id.starts_with("did:webvh:") { "webvh" } else { "web" },
-                "document_digest": hash_d,
-                "method_proofs": method_proofs
-            },
-            "control_proof": {
-                "verification_method": format!("{full_id}#root-1"),
-                "created_at": "2026-01-01T00:00:00.000Z",
-                "jws": "a"
-            }
-        },
+        "registration_did_evidence": registration_did_evidence,
         "principal_genesis_receipt": {
             "schema": "ak.schema.event_batch_receipt.v1",
             "receipt_id": "ak:receipt:01964137-0000-7000-8000-000000000001",
@@ -428,6 +432,7 @@ fn fixture_device_signing_key_evidence(
                 "did_version_id": "1-fixture",
                 "log_head_digest": history_head,
                 "control_key_digest": hash_c,
+                "registration_evidence_digest": registration_evidence_digest,
                 "create_digest": hash_a,
                 "founding_authorize_digest": hash_b,
                 "accepted_device_id": device_id.as_str(),

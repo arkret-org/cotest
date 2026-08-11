@@ -135,12 +135,13 @@ pub async fn register_account_with_localpart(
 
 pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> Result<String> {
     let device_id = canonical_device_id(device_id);
+    let actor_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
     let login = expect_json(
         server
             .http()
             .post(server.url("/_soland/gate/auth/dev-login"))
             .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "actor": actor,
+                "actor": actor_id,
                 "device_id": device_id,
                 "display_name": device_id
             }))),

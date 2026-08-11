@@ -860,14 +860,23 @@ fn development_event_signing_key(verification_method: &str) -> SigningKey {
 mod tests {
     use super::*;
 
+    fn actor_ids(value: &str) -> (DidFullId, DidCoreId) {
+        let full_id = DidFullId::new(value.to_owned()).unwrap();
+        let core_id = DidCoreId::from(project_full_id_to_core_id(&full_id).unwrap());
+        (full_id, core_id)
+    }
+
     #[test]
     fn event_digest_uses_producer_envelope_canonical_bytes() {
+        let (_, actor_id) = actor_ids(
+            "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+        );
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.member.state",
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
-            "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+            "actor_id": actor_id,
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -880,7 +889,7 @@ mod tests {
             },
             "payload": {
                 "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
-                "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+                "actor_id": actor_id,
                 "membership": "join",
                 "reason": "invite_accept"
             },
@@ -905,12 +914,15 @@ mod tests {
 
     #[test]
     fn event_digest_materializes_sdk_ref_defaults() {
+        let (_, actor_id) = actor_ids(
+            "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+        );
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.morph.schema_migrate",
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
-            "actor_id": "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
+            "actor_id": actor_id,
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -968,8 +980,8 @@ mod tests {
 
     #[test]
     fn event_proof_with_registered_seed_verifies_through_sdk() {
-        let actor = DidFullId::new("did:webvh:z6mkfixture:alice.example".to_owned()).unwrap();
-        let verification_method = format!("{actor}#principal-signing-key");
+        let (actor_full_id, actor_id) = actor_ids("did:webvh:z6mkfixture:alice.example");
+        let verification_method = format!("{actor_full_id}#principal-signing-key");
         let seed = [42u8; 32];
         let signing_key = SigningKey::from_bytes(&seed);
         let event = json!({
@@ -977,7 +989,7 @@ mod tests {
             "kind": "ak.member.state",
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
-            "actor_id": actor,
+            "actor_id": actor_id,
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -991,13 +1003,13 @@ mod tests {
             "payload": {
                 "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
                 "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
-                "actor_id": actor,
+                "actor_id": actor_id,
                 "membership": "join"
             }
         });
         let proof_value = event_proof(
             json!({
-                "actor_did": actor,
+                "actor_did": actor_full_id,
                 "verification_method": verification_method,
                 "created_at": "2026-07-07T05:45:49.000Z",
                 "event": event,
@@ -1022,7 +1034,7 @@ mod tests {
         arkret_signatures::proof::verify_ed25519_detached_jws_proof(
             &proof,
             &canonical_bytes,
-            &arkret_wire::DidCoreId::from(arkret_wire::project_full_id_to_core_id(&actor).unwrap()),
+            &actor_id,
             &public_key,
         )
         .unwrap();
