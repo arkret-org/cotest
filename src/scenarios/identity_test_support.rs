@@ -399,7 +399,7 @@ async fn bootstrap_test_device_authorization(
         scopes: None,
         not_before: created_at,
         expires_at: None,
-        authorization_binding_kind: DeviceAuthorizationBindingKind::RootAnchored,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::RegistrationAnchor,
         device_signature: SignatureMaterial::NonEmptyString(
             NonEmptyString::new("pending").map_err(anyhow::Error::msg)?,
         ),
@@ -440,6 +440,11 @@ async fn bootstrap_test_device_authorization(
         SelfPrincipalPcrCreateInput {
             principal_id: principal_actor_id.clone(),
             principal_full_id: principal.clone(),
+            initial_resolution: arkret_models_identity::ResolutionCommitment {
+                full_id: principal.clone(),
+                method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,
+                version_id: prepared.version_id.clone(),
+            },
             genesis_salt: arkret_wire::GenesisSalt::generate()?,
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),

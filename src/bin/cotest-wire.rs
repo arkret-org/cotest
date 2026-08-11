@@ -210,6 +210,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             genesis_salt.clone(),
             &input.trust_domain,
             &draft.version_id,
+            &arkret_canonical::canonical_sha256(&draft.log_entry)?,
             &draft.root_public_key_multibase,
             &draft.root_verification_method,
             &key_material.root_seed,
@@ -298,6 +299,7 @@ fn build_pcr_genesis_unit(
     genesis_salt: arkret::GenesisSalt,
     trust_domain: &str,
     version_id: &str,
+    method_history_head: &str,
     root_public_key_multibase: &str,
     root_verification_method: &str,
     root_seed: &[u8; 32],
@@ -338,7 +340,7 @@ fn build_pcr_genesis_unit(
             scopes: None,
             not_before: created_at,
             expires_at: None,
-            authorization_binding_kind: arkret_models_collaboration::events_payloads::DeviceAuthorizationBindingKind::RootAnchored,
+            authorization_binding_kind: arkret_models_collaboration::events_payloads::DeviceAuthorizationBindingKind::RegistrationAnchor,
             device_signature: arkret_models_collaboration::events_payloads::SignatureMaterial::NonEmptyString(
                 non_empty("pending")?,
             ),
@@ -381,6 +383,11 @@ fn build_pcr_genesis_unit(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id,
             principal_full_id: principal.clone(),
+            initial_resolution: arkret_models_identity::ResolutionCommitment {
+                full_id: principal.clone(),
+                method_history_head: method_history_head.to_owned(),
+                version_id: version_id.to_owned(),
+            },
             genesis_salt,
             trust_domain: arkret::TypedTrustDomainId::new(trust_domain.to_owned())
                 .context("parse trust domain")?,

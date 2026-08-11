@@ -229,7 +229,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         scopes: None,
         not_before: created_at,
         expires_at: None,
-        authorization_binding_kind: DeviceAuthorizationBindingKind::RootAnchored,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::RegistrationAnchor,
         device_signature: SignatureMaterial::NonEmptyString(non_empty("pending")?),
         recovery_session_id: None,
     };
@@ -263,7 +263,12 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
-            principal_full_id,
+            principal_full_id: principal_full_id.clone(),
+            initial_resolution: arkret_models_identity::ResolutionCommitment {
+                full_id: principal_full_id,
+                method_history_head: format!("sha256:{}", "1".repeat(64)),
+                version_id: "1-Qmfixture".to_owned(),
+            },
             genesis_salt: arkret_wire::GenesisSalt::generate()?,
             trust_domain: TypedTrustDomainId::new("ak:trust_domain:example.net")?,
             did_inception_ref: EventRef::new(
