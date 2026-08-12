@@ -4,7 +4,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, expect_api_error, expect_json, expect_status, submit_event,
+    ArkretServer, TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status,
+    submit_event,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, authorize_device_public_key,
@@ -27,6 +28,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
+    let bob_core_id = actor_core_id(&bob.actor)?;
     let realm_id = alice.create_realm("Grant Lifecycle Realm").await?;
 
     let denied_before_grant = expect_json(
@@ -34,7 +36,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
             >(json!({
-                "actor_id": bob.actor,
+                "actor_id": bob_core_id,
                 "action": "ak.realm.admin",
                 "resource": {
                     "kind": "realm",
@@ -84,7 +86,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let effective_grants = expect_json(
         alice.get("/_arkret/self/authz/effective-grants").query(&[
-            ("subject", bob.actor.as_str()),
+            ("subject", bob_core_id.as_str()),
             ("realm_id", realm_id.as_str()),
         ]),
         StatusCode::OK,
@@ -108,7 +110,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
             >(json!({
-                "actor_id": bob.actor,
+                "actor_id": bob_core_id,
                 "action": "ak.realm.admin",
                 "resource": {
                     "kind": "realm",
@@ -193,7 +195,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         ),
     ];
     for (action, resource, reason_code) in negative_checks {
-        expect_authz_check_hard_deny(&bob, &bob.actor, action, resource, reason_code).await?;
+        expect_authz_check_hard_deny(&bob, &bob_core_id, action, resource, reason_code).await?;
     }
 
     let revoked_manage = submit_event(
@@ -213,7 +215,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
             >(json!({
-                "actor_id": bob.actor,
+                "actor_id": bob_core_id,
                 "action": "ak.realm.admin",
                 "resource": {
                     "kind": "realm",
@@ -279,6 +281,7 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
         &alice_device_key,
     )
     .await?;
+    let alice_core_id = actor_core_id(&alice.actor)?;
 
     // client-sync.md: the account subscribe surface is read-only — there is no
     // `set_presence` subscribe parameter, and the stream carries no presence at
@@ -359,9 +362,9 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ak.message.create",
-                "actor_id": alice.actor.as_str(),
+                "actor_id": alice_core_id,
                 "source": {
-                    "service_id": "did:web:soland.cotest.local",
+                    "service_id": server.service_id(),
                     "service_kind": "principal_server",
                     "signed_transport": true
                 }
@@ -390,9 +393,9 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
                 "realm_id": policy_realm_id,
                 "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
                 "action": "ak.realm.destroy",
-                "actor_id": alice.actor.as_str(),
+                "actor_id": alice_core_id,
                 "source": {
-                    "service_id": "did:web:soland.cotest.local",
+                    "service_id": server.service_id(),
                     "service_kind": "principal_server",
                     "signed_transport": true
                 }
@@ -411,9 +414,9 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
         "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
         "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
         "action": "ak.message.create",
-        "actor_id": alice.actor.as_str(),
+        "actor_id": alice_core_id,
         "source": {
-            "service_id": "did:web:soland.cotest.local",
+            "service_id": server.service_id(),
             "service_kind": "principal_server",
             "signed_transport": true
         }
@@ -438,14 +441,14 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
             >(json!({
                 "realm_id": policy_realm_id,
                 "call_id": "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it",
-                "actor_id": alice.actor.as_str(),
+                "actor_id": alice_core_id,
                 "device_id": alice.device_id.as_str(),
                 "mode": "p2p"
             }))?),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(ice["actor_id"], alice.actor);
+    assert_eq!(ice["actor_id"], alice_core_id);
     assert!(ice["ice_servers"].is_array());
     assert!(ice["signature"].is_object());
 
