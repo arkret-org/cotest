@@ -26,7 +26,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    CanonicalJsonBody, TestActorClient, TestServerGroup, event_envelope_with_chain,
+    CanonicalJsonBody, TestActorClient, TestServerGroup, actor_core_id, event_envelope_with_chain,
     events_frontier_request_body, events_query_for_realm, eventually, expect_json,
     refresh_typed_event_proof,
 };
@@ -251,6 +251,8 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
             "ak:device:01904100-0000-7000-8000-0000000000b1",
         )
         .await?;
+    let bob_core_id = actor_core_id(&bob.actor)?;
+    let mallory_core_id = actor_core_id("did:web:mallory-invite-frozen.example")?;
     let realm_id = alice.create_realm("Invite Frozen Pre-State").await?;
 
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
@@ -271,7 +273,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     let invite_id = arkret_identifiers::InviteId::from_event_id(&create_event_id).to_string();
 
     // Predicate 1 — a directed cancel with NO `payload.invitee`.
-    let before = observe(&alice, &realm_id, bob.actor.as_str()).await?;
+    let before = observe(&alice, &realm_id, &bob_core_id).await?;
     let (missing_status, missing_body) = submit_invite_move(
         &alice,
         &realm_id,
@@ -288,7 +290,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         StatusCode::OK,
         "cancel without payload.invitee must be refused: {missing_body}"
     );
-    let after_missing = observe(&alice, &realm_id, bob.actor.as_str()).await?;
+    let after_missing = observe(&alice, &realm_id, &bob_core_id).await?;
     assert_eq!(
         before, after_missing,
         "a refused cancel must accept zero Events and change zero cells"
@@ -301,7 +303,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         "ak.invite.cancel",
         json!({
             "invite_id": invite_id,
-            "invitee": "did:web:mallory-invite-frozen.example",
+            "invitee": mallory_core_id,
             "target_state": "revoked",
             "reason": "invitee mismatch negative",
         }),
@@ -312,7 +314,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         StatusCode::OK,
         "cancel with a mismatched invitee must be refused: {mismatch_body}"
     );
-    let after_mismatch = observe(&alice, &realm_id, bob.actor.as_str()).await?;
+    let after_mismatch = observe(&alice, &realm_id, &bob_core_id).await?;
     assert_eq!(
         before, after_mismatch,
         "a refused cancel must accept zero Events and change zero cells"
@@ -324,7 +326,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         &realm_id,
         &alice.actor,
         &invite_id,
-        bob.actor.as_str(),
+        &bob_core_id,
         "revoked",
         Some("inkson_producer_cancel"),
     )
@@ -334,7 +336,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     let inkson_payload = serde_json::to_value(&inkson_cancel.payload)?;
     assert_eq!(
         inkson_payload["invitee"].as_str(),
-        Some(bob.actor.as_str()),
+        Some(bob_core_id.as_str()),
         "the Inkson direct-cancel producer must carry the frozen invitee: {inkson_payload}"
     );
     assert_eq!(
@@ -355,7 +357,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         StatusCode::OK,
         "Inkson-produced cancel must be accepted: {accepted_body}"
     );
-    let after_accept = observe(&alice, &realm_id, bob.actor.as_str()).await?;
+    let after_accept = observe(&alice, &realm_id, &bob_core_id).await?;
     assert_ne!(
         before.event_ids.len(),
         after_accept.event_ids.len(),
@@ -384,7 +386,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         .await?;
     let replay_status = response.status();
     let replay_body = response.json::<Value>().await.unwrap_or(Value::Null);
-    let after_replay = observe(&alice, &realm_id, bob.actor.as_str()).await?;
+    let after_replay = observe(&alice, &realm_id, &bob_core_id).await?;
     assert_eq!(
         after_accept.invite_states, after_replay.invite_states,
         "replaying the cancel must not drive a second lifecycle transition \
