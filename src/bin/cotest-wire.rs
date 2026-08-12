@@ -187,6 +187,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     .context("derive principal recovery key material")?;
     let draft =
         arkret::webvh::prepare_principal_inception(&arkret::webvh::PrincipalInceptionInput {
+            provider_endpoint: &endpoint,
             principal_endpoint: &endpoint,
             local_id: &input
                 .handoff_request_id
@@ -196,6 +197,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             version_time: created_at,
             root_seed: &key_material.root_seed,
             next_root_public_key_multibase: &key_material.next_root_public_key_multikey,
+            witness_policy: None,
         })
         .context("prepare principal inception")?;
     let principal = DidFullId::new(draft.did.clone()).context("parse prepared principal DID")?;

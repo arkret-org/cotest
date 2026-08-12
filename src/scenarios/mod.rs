@@ -29,6 +29,7 @@ pub mod four_service_smoke;
 pub mod full_stack_e2e;
 pub mod handle_to_join_e2e;
 pub mod high_assurance_realm_policy;
+pub mod identity_deployment_smoke;
 pub mod identity_directory;
 pub mod identity_test_support;
 pub mod interaction_models;

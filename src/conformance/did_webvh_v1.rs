@@ -219,12 +219,14 @@ fn principal_inception() -> Result<PreparedPrincipalInception> {
     let endpoint = Url::parse("https://starid.local/")?;
     let next_root = public_multikey([2_u8; 32]);
     Ok(prepare_principal_inception(&PrincipalInceptionInput {
+        provider_endpoint: &endpoint,
         principal_endpoint: &endpoint,
         local_id: "alice",
         also_known_as: &[],
         version_time: timestamp("2026-07-15T00:00:00.000Z")?,
         root_seed: &[1_u8; 32],
         next_root_public_key_multibase: &next_root,
+        witness_policy: None,
     })?)
 }
 

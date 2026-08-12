@@ -199,6 +199,7 @@ impl PreparedCoauth {
     pub async fn spawn_for_principal_server(
         self,
         principal_server_endpoint: &str,
+        principal_server_service_id: &str,
         session_grant_introspection_bearer: &str,
         embedded_webvh_registration_bearer: &str,
     ) -> Result<SpawnedCoauth> {
@@ -212,6 +213,7 @@ impl PreparedCoauth {
         patch_principal_server_config(
             &mut bundle,
             principal_server_endpoint,
+            principal_server_service_id,
             session_grant_introspection_bearer,
             embedded_webvh_registration_bearer,
         )?;
@@ -266,6 +268,7 @@ pub fn prepare_coauth_with_db_required() -> Result<PreparedCoauth> {
 fn patch_principal_server_config(
     bundle: &mut CoauthConfigBundle,
     endpoint: &str,
+    service_id: &str,
     session_grant_introspection_bearer: &str,
     embedded_webvh_registration_bearer: &str,
 ) -> Result<()> {
@@ -291,6 +294,7 @@ fn patch_principal_server_config(
         serde_yaml_ng::to_value(vec![serde_json::json!({
             "name": "cotest-soland",
             "endpoint": endpoint,
+            "service_id": service_id,
             "session_grant_introspection_bearer": session_grant_introspection_bearer,
             "embedded_webvh_registration_bearer": embedded_webvh_registration_bearer,
         })])?,

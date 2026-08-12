@@ -11,6 +11,7 @@ use cotest::scenarios::_helpers::coauth_bootstrap::{
 };
 use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
 use cotest::scenarios::four_service_smoke::four_service_smoke_run;
+use cotest::scenarios::identity_deployment_smoke::identity_deployment_smoke_run;
 
 /// Gating: manual debug helper — needs a built coauth binary at the
 /// hard-coded sibling path. Not for CI.
@@ -121,4 +122,13 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
 #[ignore]
 async fn four_service_joint_smoke() -> Result<()> {
     four_service_smoke_run().await
+}
+
+/// Production Starid + Soland + Coauth identity deployment contract. This is
+/// ignored only outside the explicit live lane; once selected it has no
+/// missing-dependency or assertion soft-skip path.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn identity_deployment_smoke() -> Result<()> {
+    identity_deployment_smoke_run().await
 }

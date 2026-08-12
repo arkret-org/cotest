@@ -6,9 +6,9 @@
 //!   2. Optionally spawns `coauth` via [`coauth_bootstrap::spawn_coauth_with_db`] (docker-postgres
 //!      + generated config). Wires soland -> coauth session-grant introspection via
 //!      `SOLAND_SESSION_GRANT_INTROSPECTION_URL`.
-//!   3. Optionally spawns `starid` via the [`external_binary::STARID_SPEC`] (no external deps in
-//!      development mode). Wires soland → starid via `SOLAND_STARID_WEBVH_RESOLVER_URL` +
-//!      `SOLAND_DID_RESOLVER_ALLOW_METHODS`.
+//!   3. Optionally spawns `starid` via the [`external_binary::STARID_SPEC`] in production proof
+//!      posture. Wires soland → starid through the standard external WebVH Provider discovery and
+//!      authenticated service-registration settings.
 //!   4. Optionally spawns `teabay` via [`external_binary::TEABAY_SPEC`] — requires `DATABASE_URL`
 //!      in the caller's env (see `TEABAY_SPEC.required_env_vars`).
 //!
@@ -32,8 +32,10 @@ use crate::scenarios::_helpers::coauth_bootstrap::{
 };
 use crate::scenarios::_helpers::external_binary::{
     SOLAND_SPEC, STARID_SPEC, SpawnedExternalProcess, TEABAY_SPEC, locate_external_binary,
-    skip_reason, try_spawn,
+    skip_reason, try_spawn, try_spawn_with_extra_env,
 };
+
+const STARID_PRODUCTION_SIGNING_KEY: &str = "z3u2YxoQbWg6RHwGCdrwTU82VG7sR9c2g1bPj7TFiQ8AB";
 
 /// Per-service env wiring used when spinning up the four-service stack.
 /// All fields default to development-friendly values; callers can override
@@ -49,6 +51,10 @@ pub struct FourServiceConfig {
     /// Bearer token soland presents when registering a did:webvh document
     /// against the embedded provider. Mirrors run-joint-e2e.ps1.
     pub embedded_webvh_registration_bearer: String,
+    /// Bearer token used for Soland's standard external Provider service-
+    /// identity registration. The same value is installed as Starid's admin
+    /// token; it is never emitted in smoke evidence.
+    pub external_webvh_registration_bearer: String,
     /// When `true`, attempt to wire teabay's discovery ingest at the soland
     /// announce stream. Implemented by exporting the soland public base URL
     /// to teabay via `TEABAY_SOLAND_ANNOUNCE_URL` — teabay's optional
@@ -66,6 +72,7 @@ impl FourServiceConfig {
             name: name.into(),
             session_grant_introspection_bearer: "cotest-session-grant-introspection".to_owned(),
             embedded_webvh_registration_bearer: "cotest-webvh-registration".to_owned(),
+            external_webvh_registration_bearer: "cotest-external-webvh-registration-v1".to_owned(),
             wire_directory_ingest: true,
             soland_database_url: std::env::var("COTEST_SOLAND_DATABASE_URL").ok(),
         }
@@ -185,10 +192,33 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
             None
         };
 
-    // 2. starid — env-driven, no external deps. Soft-skip if the binary can't be located.
+    // 2. Starid runs with production proof verification enabled. Its service
+    // identity uses stable test custody, while identity rows remain ephemeral
+    // unless the caller provides a dedicated deployment database outside this
+    // shared smoke helper.
     let starid = match skip_reason(&STARID_SPEC) {
         Some(_) => None,
-        None => try_spawn(&STARID_SPEC).await?,
+        None => {
+            try_spawn_with_extra_env(
+                &STARID_SPEC,
+                &[
+                    ("STARID_DEVELOPMENT_MODE", "false"),
+                    ("STARID_FIRST_PROVISIONING", "1"),
+                    // The first accepted host is Starid's service WebVH
+                    // authority. Keep the loopback IP first: unlike bare
+                    // `localhost`, it satisfies the SDK's dotted-authority
+                    // requirement and still maps back to this test process.
+                    ("STARID_PUBLIC_HOSTS", "127.0.0.1,localhost"),
+                    ("STARID_TRUST_DOMAIN", JOINT_TRUST_DOMAIN),
+                    ("STARID_SIGNING_KEY", STARID_PRODUCTION_SIGNING_KEY),
+                    (
+                        "STARID_ADMIN_TOKEN",
+                        config.external_webvh_registration_bearer.as_str(),
+                    ),
+                ],
+            )
+            .await?
+        }
     };
 
     // 3. teabay — requires DATABASE_URL. Soft-skip otherwise.
@@ -234,8 +264,20 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
             "did:webvh,did:key".to_owned(),
         ));
         soland_env.push((
-            "SOLAND_STARID_WEBVH_RESOLVER_URL".to_owned(),
+            "SOLAND_EXTERNAL_WEBVH_PROVIDER_URL".to_owned(),
             starid.base_url.clone(),
+        ));
+        soland_env.push((
+            "SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER".to_owned(),
+            config.external_webvh_registration_bearer.clone(),
+        ));
+        soland_env.push((
+            "SOLAND_EXTERNAL_WEBVH_PROVIDER_TRUST_DOMAIN".to_owned(),
+            JOINT_TRUST_DOMAIN.to_owned(),
+        ));
+        soland_env.push((
+            "SOLAND_DEFAULT_WEBVH_PROVIDER_ID".to_owned(),
+            "external.webvh".to_owned(),
         ));
     }
     if let Some(teabay) = &teabay
@@ -281,6 +323,7 @@ pub async fn try_bootstrap(config: FourServiceConfig) -> Result<FourServiceStack
             prepared
                 .spawn_for_principal_server(
                     soland.base_url().as_str(),
+                    soland.service_id().as_str(),
                     &config.session_grant_introspection_bearer,
                     &config.embedded_webvh_registration_bearer,
                 )
@@ -317,6 +360,27 @@ pub async fn bootstrap_required(config: FourServiceConfig) -> Result<FourService
     if !missing.is_empty() {
         return Err(anyhow!(
             "four-service bootstrap incomplete: {}",
+            missing.join("; ")
+        ));
+    }
+    Ok(stack)
+}
+
+/// Strict identity-deployment wrapper. Teabay is intentionally outside this
+/// contract; Starid, Soland, and Coauth are all mandatory and no missing
+/// binary or database dependency is converted into a successful skip.
+pub async fn identity_deployment_required(config: FourServiceConfig) -> Result<FourServiceStack> {
+    let stack = try_bootstrap(config).await?;
+    let mut missing: Vec<&str> = Vec::new();
+    if stack.coauth.is_none() {
+        missing.push("coauth (need docker + COAUTH_BIN or sibling checkout)");
+    }
+    if stack.starid.is_none() {
+        missing.push("starid (need STARID_BIN or sibling checkout)");
+    }
+    if !missing.is_empty() {
+        return Err(anyhow!(
+            "identity deployment bootstrap incomplete: {}",
             missing.join("; ")
         ));
     }

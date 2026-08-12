@@ -768,6 +768,7 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
     let next_root_multibase =
         ed25519_pubkey_to_did_key_multibase(&next_root.verifying_key().to_bytes());
     prepare_principal_inception(&PrincipalInceptionInput {
+        provider_endpoint: &endpoint,
         principal_endpoint: &endpoint,
         local_id,
         also_known_as: &[],
@@ -775,6 +776,7 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
             .with_timezone(&chrono::Utc),
         root_seed: &root_seed,
         next_root_public_key_multibase: &next_root_multibase,
+        witness_policy: None,
     })
     .with_context(|| {
         format!(

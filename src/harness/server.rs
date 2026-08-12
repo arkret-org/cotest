@@ -178,7 +178,12 @@ impl ArkretServer {
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
-        if extra_env.iter().any(|(key, _)| *key == "DATABASE_URL") {
+        if extra_env.iter().any(|(key, _)| {
+            matches!(
+                *key,
+                "DATABASE_URL" | "SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
+            )
+        }) {
             command
                 .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
                 .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
@@ -534,11 +539,12 @@ impl ArkretServer {
             .env("SOLAND_BLOB_ROOT", blob_root)
             .stdout(stdout)
             .stderr(stderr);
-        if config
-            .extra_env
-            .iter()
-            .any(|(key, _)| key == "DATABASE_URL")
-        {
+        if config.extra_env.iter().any(|(key, _)| {
+            matches!(
+                key.as_str(),
+                "DATABASE_URL" | "SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
+            )
+        }) {
             command
                 .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
                 .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))

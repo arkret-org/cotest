@@ -87,6 +87,8 @@ param(
     [string]$SolandKeyStoreMasterKey = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
+    [string]$StaridRegistrationBearer = "joint-e2e-starid-registration-v1",
+    [string]$StaridSigningKey = "z3u2YxoQbWg6RHwGCdrwTU82VG7sR9c2g1bPj7TFiQ8AB",
     # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
     # for resolver and harness witness-health checks; production clamps any
     # value back to the protocol ceiling, so this can only tighten the window.
@@ -2898,9 +2900,9 @@ try {
         }
     }
 
-    # CT-6: starid (DID resolver) - no external deps. Spawned
-    # before soland so soland's SOLAND_STARID_WEBVH_RESOLVER_URL points at a
-    # live listener from the first request onwards.
+    # CT-6: Starid external WebVH Provider. It runs in production proof
+    # posture and is started before Soland so discovery and authenticated
+    # service-identity registration are available during Soland bootstrap.
     if ($StartStarid) {
         if (-not $staridPort) {
             $staridUri = [System.Uri]$StaridBaseUrl
@@ -2909,7 +2911,12 @@ try {
         $staridBinary = Resolve-StaridBinary -ExplicitPath $StaridBin -WorkspaceRoot $workspaceRoot
         $staridConfigPath = Join-Path $jointDir "starid.env"
         Write-DotEnvFile -Path $staridConfigPath -Values ([ordered]@{
-                STARID_DEVELOPMENT_MODE = "true"
+                STARID_DEVELOPMENT_MODE = "false"
+                STARID_FIRST_PROVISIONING = "true"
+                STARID_PUBLIC_HOSTS = "127.0.0.1,localhost,host.docker.internal"
+                STARID_TRUST_DOMAIN = "ak:trust_domain:local.host"
+                STARID_SIGNING_KEY = $StaridSigningKey
+                STARID_ADMIN_TOKEN = $StaridRegistrationBearer
             })
         $staridCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
             (Quote-PsLiteral $staridBinary),
@@ -3027,7 +3034,10 @@ try {
         }
         if ($StaridBaseUrl) {
             $map.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:webvh,did:key"
-            $map.SOLAND_STARID_WEBVH_RESOLVER_URL = Convert-ToContainerReachableUrl $StaridBaseUrl
+            $map.SOLAND_EXTERNAL_WEBVH_PROVIDER_URL = Convert-ToContainerReachableUrl $StaridBaseUrl
+            $map.SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER = $StaridRegistrationBearer
+            $map.SOLAND_EXTERNAL_WEBVH_PROVIDER_TRUST_DOMAIN = "ak:trust_domain:local.host"
+            $map.SOLAND_DEFAULT_WEBVH_PROVIDER_ID = "external.webvh"
         }
         if ($TeabayBaseUrl) {
             $teabayContainer = (Convert-ToContainerReachableUrl $TeabayBaseUrl).TrimEnd("/")
@@ -3094,7 +3104,10 @@ try {
         }
         if ($StaridBaseUrl) {
             $values.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:webvh,did:key"
-            $values.SOLAND_STARID_WEBVH_RESOLVER_URL = $StaridBaseUrl
+            $values.SOLAND_EXTERNAL_WEBVH_PROVIDER_URL = $StaridBaseUrl
+            $values.SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER = $StaridRegistrationBearer
+            $values.SOLAND_EXTERNAL_WEBVH_PROVIDER_TRUST_DOMAIN = "ak:trust_domain:local.host"
+            $values.SOLAND_DEFAULT_WEBVH_PROVIDER_ID = "external.webvh"
         }
         if ($TeabayBaseUrl) {
             $values.SOLAND_DIRECTORY_ANNOUNCE_URL = "$($TeabayBaseUrl.TrimEnd('/'))/_arkret/find/directory/announce"
