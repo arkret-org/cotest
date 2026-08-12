@@ -274,23 +274,31 @@ fn assert_event_is_redacted_tombstone(
         .iter()
         .find(|event| event["event_id"].as_str() == Some(event_id))
         .ok_or_else(|| anyhow!("projected event {event_id} missing: {listed}"))?;
-    let payload = event
-        .get("payload")
-        .or_else(|| event.get("content"))
-        .ok_or_else(|| anyhow!("projected event {event_id} missing payload/content: {event}"))?;
     assert_eq!(
-        payload["redacted"],
-        json!(true),
-        "projected event {event_id} must be marked redacted: {event}"
+        event["view_kind"],
+        json!("redacted_event_view"),
+        "projected event {event_id} must use the RedactedEventView contract: {event}"
     );
     assert_eq!(
-        payload["state"],
+        event["redaction_reason"],
         json!("redacted"),
-        "projected event {event_id} must be a redaction tombstone: {event}"
+        "projected event {event_id} must identify an explicit redaction: {event}"
     );
-    assert_ne!(
-        payload["content"]["body"], leaked_body,
-        "projected event {event_id} leaked the redacted body: {event}"
+    assert_eq!(
+        event["reducer_input"],
+        json!(false),
+        "a RedactedEventView must never be usable as reducer input: {event}"
+    );
+    let hidden_fields = event["hidden_fields"]
+        .as_array()
+        .ok_or_else(|| anyhow!("projected event {event_id} missing hidden_fields: {event}"))?;
+    assert!(
+        hidden_fields.iter().any(|field| field == "payload"),
+        "projected event {event_id} must declare its payload hidden: {event}"
+    );
+    assert!(
+        event.get("payload").is_none() && event.get("content").is_none(),
+        "projected event {event_id} retained payload/content outside the redacted view: {event}"
     );
     assert!(
         !serde_json::to_string(event)?.contains(leaked_body),
