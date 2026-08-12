@@ -26,18 +26,32 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     authorize_test_client_device(&server, &alice, &SigningKey::from_bytes(&[0xa1; 32])).await?;
     let bob_did = actor_did_for_service_full_id(server.service_full_id(), "collab-bob")?;
     let bob = server
-        .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b0")
+        .register_client_with_localpart(
+            &bob_did,
+            BOB_HANDLE,
+            BOB_HANDLE.trim_start_matches('@'),
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
+        )
         .await?;
     authorize_test_client_device(&server, &bob, &SigningKey::from_bytes(&[0xb0; 32])).await?;
 
+    let alice_core_id = crate::harness::actor_core_id(&alice.actor)?;
+    let bob_full_id = arkret_identifiers::DidFullId::new(bob.actor.clone())?;
+    let bob_core_id = arkret_identifiers::project_full_id_to_core_id(&bob_full_id)?;
     let bob_second_device = expect_json(
-        server
-            .account_registration_request()
-            .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "principal_id": bob.actor,
-                "display_name": BOB_HANDLE.trim_start_matches('@'),
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000b2"
-            }))),
+        server.account_registration_request().json(
+            &arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
+                principal_id: bob_core_id.clone(),
+                full_id: bob_full_id,
+                display_name: Some(BOB_HANDLE.trim_start_matches('@').to_owned()),
+                device_id: Some(arkret_identifiers::DeviceId::new(
+                    "ak:device:01904100-0000-7000-8000-0000000000b2",
+                )?),
+                proof: None,
+                identity_creation: None,
+                policy_evidence: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -66,7 +80,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert!(
         !hidden_results
             .iter()
-            .any(|result| result["did"].as_str() == Some(bob.actor.as_str()))
+            .any(|result| result["principal_id"].as_str() == Some(bob_core_id.as_str()))
     );
 
     let me = expect_json(
@@ -77,16 +91,16 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(me["principal_id"], bob.actor);
+    assert_eq!(me["principal_id"], bob_core_id.as_str());
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
     assert_eq!(
         request_receipt.core.holder.contact_actor_id().as_str(),
-        alice.actor
+        alice_core_id
     );
     assert_eq!(
         request_receipt.core.peer.contact_actor_id().as_str(),
-        bob.actor
+        bob_core_id.as_str()
     );
     seal_current_principal_control_frontier(&alice, &SigningKey::from_bytes(&[0xa1; 32])).await?;
     bob.accept_contact(request_receipt).await?;
@@ -108,7 +122,8 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .expect("search-users response users")
             .iter()
-            .any(|result| result["did"].as_str() == Some(bob.actor.as_str()))
+            .any(|result| result["principal_id"].as_str() == Some(bob_core_id.as_str())),
+        "accepted contact did not expose Bob in search-users: {visible_bob}"
     );
 
     let realm_id = create_collaboration_realm(&alice).await?;
@@ -118,7 +133,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(created_space["owner"], alice.actor);
+    assert_eq!(created_space["owner"], alice_core_id);
 
     expect_status(
         server
@@ -149,7 +164,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|member| member == &bob.actor)
+            .any(|member| member.as_str() == Some(bob_core_id.as_str()))
     );
 
     let sent = alice
@@ -238,7 +253,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|member| member == &bob.actor)
+            .any(|member| member.as_str() == Some(bob_core_id.as_str()))
     );
 
     let lifecycle = expect_json(
