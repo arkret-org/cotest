@@ -1,5 +1,3 @@
-use std::sync::LazyLock;
-
 use anyhow::{Result, anyhow};
 use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
@@ -13,17 +11,15 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 use serial_test::serial;
 
-const DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000f101";
-const SIGNING_SEED: [u8; 32] = [21_u8; 32];
-static ACTOR: LazyLock<String> = LazyLock::new(|| {
-    let key = ed25519_dalek::SigningKey::from_bytes(&SIGNING_SEED);
-    format!(
-        "did:key:{}",
-        arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase(
-            key.verifying_key().as_bytes()
-        )
-    )
-});
+const ACTOR: &str = "did:web:frontier-alice.example";
+
+fn signing_seed() -> [u8; 32] {
+    arkret::signatures::development_signing_key_seed(&default_event_verification_method(ACTOR))
+}
+
+fn actor_core_id() -> Result<String> {
+    cotest::harness::actor_core_id(ACTOR)
+}
 
 async fn frontier(
     server: &ArkretServer,
@@ -34,10 +30,7 @@ async fn frontier(
         server
             .http()
             .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(
-                Some(ACTOR.as_str()),
-                Some(realm_id),
-            )?)
+            .json(&events_frontier_request_body(Some(ACTOR), Some(realm_id))?)
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -82,10 +75,11 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
     event.auth_context = Some(arkret_wire::AuthContext {
         actor_id: arkret_identifiers::DidCoreId::from(
             arkret_identifiers::project_full_id_to_core_id(
-                &arkret_identifiers::DidFullId::new(ACTOR.clone()).map_err(anyhow::Error::msg)?,
+                &arkret_identifiers::DidFullId::new(ACTOR.to_owned())
+                    .map_err(anyhow::Error::msg)?,
             )?,
         ),
-        key_id: default_event_verification_method(ACTOR.as_str()).to_string(),
+        key_id: default_event_verification_method(ACTOR).to_string(),
         key_epoch: 0,
         credential_epoch: None,
     });
@@ -93,7 +87,7 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
         arkret_wire::AuthorizationRef::new(arkret_wire::REALM_AUTHORITY_ROOT_CELL)
             .map_err(anyhow::Error::msg)?,
     );
-    cotest::harness::refresh_typed_event_proof_with_signing_seed(event, SIGNING_SEED)
+    cotest::harness::refresh_typed_event_proof_with_signing_seed(event, signing_seed())
 }
 
 /// A Strand create whose only per-sibling difference is its title.
@@ -101,17 +95,17 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
 /// The object id is not authored: a Strand id is `retype(event_id)` of this
 /// create, so `suffix` exists solely to keep concurrent siblings distinct in
 /// the digest preimage.
-fn strand_payload(realm_id: &str, suffix: &str) -> Value {
-    json!({
+fn strand_payload(realm_id: &str, suffix: &str) -> Result<Value> {
+    Ok(json!({
         "object": {
             "schema": "ak.schema.strand.v1",
             "realm_id": realm_id,
             "tracks": {"discussion": {"enabled": true, "is_primary": true}},
-            "created_by": ACTOR.as_str(),
+            "created_by": actor_core_id()?,
             "created_at": "2026-05-02T00:00:00.000Z",
             "metadata": {"title": format!("Frontier {suffix}")}
         }
-    })
+    }))
 }
 
 async fn submit_bytes(
@@ -148,23 +142,18 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         }
         Err(_) => ArkretServer::spawn("realm-actor-frontier-e2e-memory").await?,
     };
-    let token = register_account(&server, ACTOR.as_str(), "@frontier-alice", DEVICE).await?;
-    let realm_a = create_realm_with_signing_seed(
-        &server,
-        &token,
-        ACTOR.as_str(),
-        "Frontier Realm A",
-        SIGNING_SEED,
-    )
-    .await?;
-    let realm_b = create_realm_with_signing_seed(
-        &server,
-        &token,
-        ACTOR.as_str(),
-        "Frontier Realm B",
-        SIGNING_SEED,
-    )
-    .await?;
+    let verification_method = default_event_verification_method(ACTOR).to_string();
+    let device_id = verification_method
+        .split_once('#')
+        .map(|(_, fragment)| fragment)
+        .ok_or_else(|| anyhow!("default Event verification method has no device fragment"))?;
+    let token = register_account(&server, ACTOR, "@frontier-alice", device_id).await?;
+    let realm_a =
+        create_realm_with_signing_seed(&server, &token, ACTOR, "Frontier Realm A", signing_seed())
+            .await?;
+    let realm_b =
+        create_realm_with_signing_seed(&server, &token, ACTOR, "Frontier Realm B", signing_seed())
+            .await?;
 
     let basis_a = frontier(&server, &token, &realm_a).await?;
     let basis_b = frontier(&server, &token, &realm_b).await?;
@@ -173,22 +162,22 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
 
     let current_seal_basis = seal_basis(&server, &token, &realm_a).await?;
     let mut sibling_a = event_envelope_at_frontier_with_signing_seed(
-        ACTOR.as_str(),
+        ACTOR,
         &realm_a,
         "ak.strand.create",
-        strand_payload(&realm_a, "00000000f111"),
+        strand_payload(&realm_a, "00000000f111")?,
         basis_a.next_actor_seq,
         basis_a.frontier_event_ids.clone(),
-        SIGNING_SEED,
+        signing_seed(),
     );
     let mut sibling_b = event_envelope_at_frontier_with_signing_seed(
-        ACTOR.as_str(),
+        ACTOR,
         &realm_a,
         "ak.strand.create",
-        strand_payload(&realm_a, "00000000f112"),
+        strand_payload(&realm_a, "00000000f112")?,
         basis_a.next_actor_seq,
         basis_a.frontier_event_ids.clone(),
-        SIGNING_SEED,
+        signing_seed(),
     );
     bind_seal_ref(&mut sibling_a, &current_seal_basis)?;
     bind_seal_ref(&mut sibling_b, &current_seal_basis)?;
@@ -210,13 +199,13 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     assert_eq!(frontier(&server, &token, &realm_b).await?, basis_b);
 
     let mut merge = event_envelope_at_frontier_with_signing_seed(
-        ACTOR.as_str(),
+        ACTOR,
         &realm_a,
         "ak.strand.create",
-        strand_payload(&realm_a, "00000000f113"),
+        strand_payload(&realm_a, "00000000f113")?,
         siblings.next_actor_seq,
         siblings.frontier_event_ids.clone(),
-        SIGNING_SEED,
+        signing_seed(),
     );
     bind_seal_ref(&mut merge, &seal_basis(&server, &token, &realm_a).await?)?;
     let exact_body = submission_bytes(&merge)?;
@@ -237,20 +226,20 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     )
     .await?;
     assert_eq!(stored_merge["event"]["realm_id"], realm_a);
-    assert_eq!(stored_merge["event"]["actor_id"], ACTOR.as_str());
+    assert_eq!(stored_merge["event"]["actor_id"], actor_core_id()?);
     assert_eq!(
         stored_merge["event"]["actor_seq"],
         current_sequence(&merge)?
     );
 
     let mut stale = event_envelope_at_frontier_with_signing_seed(
-        ACTOR.as_str(),
+        ACTOR,
         &realm_a,
         "ak.strand.create",
-        strand_payload(&realm_a, "00000000f114"),
+        strand_payload(&realm_a, "00000000f114")?,
         basis_a.next_actor_seq,
         basis_a.frontier_event_ids,
-        SIGNING_SEED,
+        signing_seed(),
     );
     bind_seal_ref(&mut stale, &seal_basis(&server, &token, &realm_a).await?)?;
     let stale_response = submit_bytes(&server, &token, submission_bytes(&stale)?).await?;
@@ -269,13 +258,13 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
 
     let current = frontier(&server, &token, &realm_a).await?;
     let mut replacement = event_envelope_at_frontier_with_signing_seed(
-        ACTOR.as_str(),
+        ACTOR,
         &realm_a,
         "ak.strand.create",
-        strand_payload(&realm_a, "00000000f114"),
+        strand_payload(&realm_a, "00000000f114")?,
         current.next_actor_seq,
         current.frontier_event_ids,
-        SIGNING_SEED,
+        signing_seed(),
     );
     bind_seal_ref(
         &mut replacement,

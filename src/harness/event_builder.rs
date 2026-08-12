@@ -105,11 +105,7 @@ pub(crate) fn registered_event_signing_seed(
 }
 
 fn verification_method_for_actor(actor: &str) -> DidUrl {
-    let value = actor.strip_prefix("did:key:").map_or_else(
-        || default_event_verification_method(actor).to_string(),
-        |multibase| format!("{actor}#{multibase}"),
-    );
-    DidUrl::new(value).expect("cotest actor verification method is a DID URL")
+    default_event_verification_method(actor)
 }
 
 pub async fn register_account(

@@ -2,7 +2,7 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ArkretServer, expect_api_error, expect_json};
+use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json};
 
 pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let server = ArkretServer::spawn("rtc-media").await?;
@@ -22,6 +22,8 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
 
     let realm_id = alice.create_realm("RTC Media Realm").await?;
     let call_id = "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it";
+    let alice_core = actor_core_id(&alice.actor)?;
+    let carol_core = actor_core_id(&carol.actor)?;
 
     expect_api_error(
         carol
@@ -31,7 +33,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             >(json!({
                 "realm_id": realm_id,
                 "call_id": call_id,
-                "actor_id": carol.actor.as_str(),
+                "actor_id": carol_core,
                 "device_id": carol.device_id.as_str(),
                 "mode": "p2p"
             }))?),
@@ -43,15 +45,13 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     expect_api_error(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
-            >(json!({
+            .json(&crate::harness::NonProtocolTestBody::new(json!({
                 "realm_id": realm_id,
                 "call_id": "not-a-call-id",
-                "actor_id": alice.actor.as_str(),
+                "actor_id": alice_core,
                 "device_id": alice.device_id.as_str(),
                 "mode": "p2p"
-            }))?),
+            }))),
         StatusCode::BAD_REQUEST,
         "invalid_param",
     )
@@ -65,7 +65,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             >(json!({
                 "realm_id": realm_id,
                 "call_id": call_id,
-                "actor_id": carol.actor.as_str(),
+                "actor_id": carol_core,
                 "device_id": alice.device_id.as_str(),
                 "mode": "p2p"
             }))?),
@@ -82,7 +82,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             >(json!({
                 "realm_id": realm_id,
                 "call_id": call_id,
-                "actor_id": alice.actor.as_str(),
+                "actor_id": alice_core,
                 "device_id": alice.device_id.as_str(),
                 "mode": "p2p"
             }))?),
@@ -91,7 +91,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     .await?;
     assert_eq!(ice["realm_id"], realm_id);
     assert_eq!(ice["call_id"], call_id);
-    assert_eq!(ice["actor_id"], alice.actor);
+    assert_eq!(ice["actor_id"], alice_core);
     assert_eq!(ice["device_id"], alice.device_id);
     assert_eq!(ice["ttl_seconds"], 300);
     assert_eq!(ice["refresh_lead_seconds"], 75);
@@ -149,7 +149,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             >(json!({
                 "realm_id": realm_id,
                 "call_id": "ak:call:AYVFZWhohYwHaEnPNmKhgMBK35WYy2igGfoeZIIOtwAy",
-                "actor_id": alice.actor.as_str(),
+                "actor_id": alice_core,
                 "device_id": alice.device_id.as_str(),
                 "mode": "turn"
             }))?),

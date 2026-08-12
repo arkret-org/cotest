@@ -33,7 +33,7 @@ use crate::transcripts::record_vector_event;
 /// signed Event and nothing else.
 fn declaration_payload(host: &str) -> Value {
     json!({
-        "policy_server_did": format!("did:web:{host}"),
+        "policy_server_service_id": format!("ak:did_core:web:{host}"),
         "policy_server_url": format!("https://{host}/_arkret/self/policy/check"),
         "cache_ttl_seconds": 60,
         "timeout_ms": 1500,
@@ -230,7 +230,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     let declared = policy_server_events(&alice, &org_realm).await?;
     assert_eq!(declared.len(), 1, "declaration events: {declared:?}");
     assert_eq!(
-        declared[0]["payload"]["policy_server_did"], "did:web:org-policy.example",
+        declared[0]["payload"]["policy_server_service_id"], "ak:did_core:web:org-policy.example",
         "declaration event payload: {declared:?}"
     );
     let seal_after_put = accepted_seal_id(&alice, &org_realm).await?;
@@ -242,7 +242,10 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     // The child resolves the org binding through the governed_by walk.
     let (status, inherited) = get_policy_server(&alice, &child_realm).await?;
     assert_eq!(status, StatusCode::OK, "inherited GET: {inherited}");
-    assert_eq!(inherited["policy_server_did"], "did:web:org-policy.example");
+    assert_eq!(
+        inherited["policy_server_service_id"],
+        "ak:did_core:web:org-policy.example"
+    );
     assert_eq!(inherited["from_org_fallback"], true);
 
     // An inherited binding is not a direct declaration: DELETE answers
@@ -286,7 +289,10 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
         StatusCode::OK,
         "fallback after DELETE: {fallback}"
     );
-    assert_eq!(fallback["policy_server_did"], "did:web:org-policy.example");
+    assert_eq!(
+        fallback["policy_server_service_id"],
+        "ak:did_core:web:org-policy.example"
+    );
     assert_eq!(fallback["from_org_fallback"], true);
     // A settled tombstone answers empty-success without admitting the Event, so
     // the repeat needs no guard of its own.

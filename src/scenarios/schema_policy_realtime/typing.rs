@@ -2,6 +2,7 @@ use anyhow::Result;
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
+use crate::harness::actor_core_id;
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, authorize_device_public_key,
     spawn_with_harness_account_authority,
@@ -35,6 +36,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
 
     let realm_id = alice.create_realm("Typing And Push Realm").await?;
     alice.add_member(&realm_id, &bob).await?;
+    let bob_core = actor_core_id(&bob.actor)?;
 
     // Typing is a Signal, not a sync frame: `zh/sync/signal.md` §1 keeps the
     // exact payload type and its Strand target inside `encrypted_payload`, so
@@ -58,7 +60,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let push_rules_carrier = serde_json::to_value(
         arkret::account_data_crypto::seal_account_data_value_with_nonce(
             &[7u8; 32],
-            bob.actor.as_str(),
+            &arkret_identifiers::DidCoreId::new(bob_core.clone())?,
             "ak.push_rules",
             &json!({"rules": [], "muted_realms": []}),
             [9u8; 24],
@@ -70,7 +72,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak.account_data.set",
             json!({
                 "key": "ak.push_rules",
-                "owner": bob.actor.as_str(),
+                "owner": bob_core,
                 "expected_revision": 0,
                 "body": push_rules_carrier.clone(),
                 "updated_at": "2026-05-02T00:00:00.000Z"
@@ -93,7 +95,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak.account_data.set",
             json!({
                 "key": "ak.push_rules",
-                "owner": bob.actor.as_str(),
+                "owner": bob_core,
                 "expected_revision": 1,
                 "tombstone": true,
                 "updated_at": "2026-05-02T00:00:01.000Z"

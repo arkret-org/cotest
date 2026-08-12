@@ -2,7 +2,7 @@ use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ArkretServer, expect_api_error, expect_json};
+use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json};
 
 const REQUEST_HASH: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
@@ -24,6 +24,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
 
     let realm_id = alice.create_realm("Policy Document Realm").await?;
     alice.add_member(&realm_id, &bob).await?;
+    let alice_core = actor_core_id(&alice.actor)?;
+    let bob_core = actor_core_id(&bob.actor)?;
 
     let initial = expect_json(alice.get("/_soland/self/policies"), StatusCode::OK).await?;
     assert!(initial["policies"].as_array().unwrap().is_empty());
@@ -47,7 +49,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     .await?;
     let policy_id = policy["policy_id"].as_str().unwrap().to_owned();
     assert!(policy_id.starts_with("ak:policy:"));
-    assert_eq!(policy["owner"], alice.actor);
+    assert_eq!(policy["owner"], alice_core);
 
     // Negative vector: the legacy `deny` decision is no longer a valid wire
     // effect (v1 enum is allow/soft_deny/hard_deny/quarantine/require_review).
@@ -97,10 +99,10 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_id": "ak:request:policy-deny",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ak.message.create",
-                "actor_id": bob.actor,
+                "actor_id": bob_core,
                 "realm_id": realm_id,
                 "source": {
-                    "service_id": "did:web:soland.cotest.local",
+                    "service_id": alice.service_id(),
                     "service_kind": "principal_server",
                     "signed_transport": true
                 }
@@ -151,10 +153,10 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "request_id": "ak:request:policy-allow",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ak.message.create",
-                "actor_id": bob.actor,
+                "actor_id": bob_core,
                 "realm_id": realm_id,
                 "source": {
-                    "service_id": "did:web:soland.cotest.local",
+                    "service_id": alice.service_id(),
                     "service_kind": "principal_server",
                     "signed_transport": true
                 }
