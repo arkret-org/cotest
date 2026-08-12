@@ -5,8 +5,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    events_query_for_realm, expect_json, expect_response, expect_status, message_redact_payload,
-    message_revise_text_payload, next_typed_id,
+    actor_core_id, events_query_for_realm, expect_json, expect_response, expect_status,
+    message_redact_payload, message_revise_text_payload, next_typed_id,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, authorize_device_public_key,
@@ -191,6 +191,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let thread_root_ref =
         MessageId::from_event_id(&EventId::new(thread_root_event_id)?).to_string();
     let read_cursor_id = ReadCursorId::new(next_typed_id("read_cursor"))?;
+    let dave_core_id = actor_core_id(&dave.actor)?;
     let marker = dave
         .submit_event(
             &realm_id,
@@ -198,7 +199,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             json!({
                 "id": read_cursor_id,
                 "schema": "ak.schema.read_cursor.v1",
-                "actor_id": dave.actor,
+                "actor_id": dave_core_id,
                 "device_id": dave.device_id,
                 "realm_id": realm_id,
                 "read_scope": {
