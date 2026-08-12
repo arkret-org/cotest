@@ -19,6 +19,7 @@ import {
   authHeaders,
   addRealmMemberApi,
   buildCapabilityGrantEnvelope,
+  canonicalDidCoreId,
   canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
@@ -28,9 +29,8 @@ import {
   type CapabilityGrantEventArgs,
 } from "../../helpers/soland-api";
 import {
-  ensureRegistered,
-  issueDevSession,
-  uniqueUser,
+  assertJointStackNotRequired,
+  createDpopUserSession,
 } from "../../helpers/users";
 
 function plusSeconds(deltaSec: number): string {
@@ -68,23 +68,21 @@ async function authzCheck(
   token: string,
   args: { actorDid: string; action: string; realmId: string },
 ): Promise<{ decision: string; reasonCode?: string }> {
-  const response = await request.post(
-    `${solandBaseUrl()}/_arkret/self/authz/check`,
-    {
-      headers: {
-        ...authHeaders(token),
-        "content-type": "application/json",
-      },
-      // Non-streaming JSON operation bodies are admitted as RFC 8785 canonical
-      // bytes, so the request has to be canonicalised rather than handed to
-      // Playwright's own JSON serialiser.
-      data: canonicalJson({
-        actor_id: args.actorDid,
-        action: args.action,
-        resource: { kind: "realm", realm_id: args.realmId },
-      }),
+  const url = `${solandBaseUrl()}/_arkret/self/authz/check`;
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    // Non-streaming JSON operation bodies are admitted as RFC 8785 canonical
+    // bytes, so the request has to be canonicalised rather than handed to
+    // Playwright's own JSON serialiser.
+    data: canonicalJson({
+      actor_id: canonicalDidCoreId(args.actorDid),
+      action: args.action,
+      resource: { kind: "realm", realm_id: args.realmId },
+    }),
+  });
   const text = await response.text();
   expect(response.status(), `authz/check: ${text}`).toBe(200);
   const body = JSON.parse(text) as { decision: string; reason_code?: string };
@@ -97,10 +95,10 @@ async function effectiveGrantIds(
   subjectDid: string,
   realmId: string,
 ): Promise<string[]> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(subjectDid)}&realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(ownerToken) },
-  );
+  const url = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(canonicalDidCoreId(subjectDid))}&realm_id=${encodeURIComponent(realmId)}`;
+  const response = await request.get(url, {
+    headers: authHeaders(ownerToken, "GET", url),
+  });
   const text = await response.text();
   expect(response.status(), `effective grants: ${text}`).toBe(200);
   return (
@@ -116,13 +114,11 @@ async function submitGrantRaw(
   args: CapabilityGrantEventArgs,
 ): Promise<{ status: number; text: string; body: unknown; grantId: string }> {
   const { envelope, grantId } = buildCapabilityGrantEnvelope(args);
-  const response = await request.post(
-    `${solandBaseUrl()}/_arkret/self/events`,
-    {
-      headers: authHeaders(token),
-      data: envelope,
-    },
-  );
+  const url = `${solandBaseUrl()}/_arkret/self/events`;
+  const response = await request.post(url, {
+    headers: authHeaders(token, "POST", url),
+    data: envelope,
+  });
   const text = await response.text();
   let body: unknown;
   try {
@@ -152,19 +148,21 @@ function expectGrantRejected(
 }
 
 async function setupOwnerRealm(request: APIRequestContext, label: string) {
-  const alice = uniqueUser(`cap-${label}-alice`);
-  const bob = uniqueUser(`cap-${label}-bob`);
-  const carol = uniqueUser(`cap-${label}-carol`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-    ensureRegistered(request, carol),
+  const [aliceSession, bobSession, carolSession] = await Promise.all([
+    createDpopUserSession(request, `cap-${label}-alice`),
+    createDpopUserSession(request, `cap-${label}-bob`),
+    createDpopUserSession(request, `cap-${label}-carol`),
   ]);
-  const aliceToken = await issueDevSession(request, alice);
-  const [bobToken, carolToken] = await Promise.all([
-    issueDevSession(request, bob),
-    issueDevSession(request, carol),
-  ]);
+  if (!aliceSession || !bobSession || !carolSession) {
+    assertJointStackNotRequired(`capability chain ${label}`);
+    throw new Error("capability chain requires live Coauth DPoP sessions");
+  }
+  const alice = aliceSession.user;
+  const bob = bobSession.user;
+  const carol = carolSession.user;
+  const aliceToken = aliceSession.grantJwt;
+  const bobToken = bobSession.grantJwt;
+  const carolToken = carolSession.grantJwt;
   const realmId = await createRealmApi(request, aliceToken, {
     title: `cap ${label} ${Date.now()}`,
     discoverability: "listed",
@@ -207,10 +205,10 @@ test.describe("capability chain (event wire)", () => {
 
     // GET /_arkret/self/authz/effective-grants — realm owner may query a
     // subject's direct grants (GrantList).
-    const grantsResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(bob.did)}&realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken) },
-    );
+    const grantsUrl = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(canonicalDidCoreId(bob.did))}&realm_id=${encodeURIComponent(realmId)}`;
+    const grantsResp = await request.get(grantsUrl, {
+      headers: authHeaders(aliceToken, "GET", grantsUrl),
+    });
     const grantsText = await grantsResp.text();
     expect(grantsResp.status(), grantsText).toBe(200);
     const grants =

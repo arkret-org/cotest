@@ -15,7 +15,12 @@ import {
   type APIResponse,
 } from "@playwright/test";
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
-import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
+import {
+  type SolandKey,
+  solandBaseUrl,
+  solandServiceFullId,
+  solandServiceId,
+} from "./env";
 import { base64url } from "./encoding";
 import type {
   CapabilityGrantObject,
@@ -60,6 +65,10 @@ type RegisteredEventSigner = {
 };
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
+const registeredRequestAuth = new Map<
+  string,
+  (method: string, url: string) => Record<string, string>
+>();
 const localControlProposalAuthorityAcks = new Map<
   string,
   Record<string, unknown>
@@ -87,11 +96,13 @@ export function registerEventSigner(args: {
   verificationMethod?: string;
   signingSeedB64url: string;
 }): void {
-  registeredEventSigners.set(args.actorDid, {
+  const signer = {
     verificationMethod:
       args.verificationMethod ?? `${args.actorDid}#${args.deviceId}`,
     signingSeedB64url: args.signingSeedB64url,
-  });
+  };
+  registeredEventSigners.set(args.actorDid, signer);
+  registeredEventSigners.set(projectFullDidToCoreId(args.actorDid), signer);
 }
 
 function eventSignerFor(
@@ -133,7 +144,27 @@ export function signWithRegisteredEventSigner(
   );
 }
 
-export function authHeaders(token: string): Record<string, string> {
+export function registerRequestAuth(
+  token: string,
+  buildHeaders: (method: string, url: string) => Record<string, string>,
+): void {
+  registeredRequestAuth.set(token, buildHeaders);
+}
+
+export function authHeaders(
+  token: string,
+  method?: string,
+  url?: string,
+): Record<string, string> {
+  const buildHeaders = registeredRequestAuth.get(token);
+  if (buildHeaders) {
+    if (!method || !url) {
+      throw new Error(
+        "DPoP-bound session grant requires the exact request method and URL",
+      );
+    }
+    return buildHeaders(method, url);
+  }
   return { authorization: `Bearer ${token}` };
 }
 
@@ -190,24 +221,35 @@ export function typedId(kind: string): string {
   return `ak:${kind}:${uuidV7()}`;
 }
 
+function retypeEventDerivedId(eventId: string, kind: string): string {
+  if (!eventId.startsWith("ak:event:")) {
+    throw new Error(`cannot retype non-Event id ${eventId}`);
+  }
+  return `ak:${kind}:${eventId.slice("ak:event:".length)}`;
+}
+
 const acceptedPrincipalControlRealms = new Map<string, string>();
 
 export function registerPrincipalControlRealm(
   did: string,
   realmId: string,
 ): void {
-  const previous = acceptedPrincipalControlRealms.get(did);
+  const principalId = canonicalDidCoreId(did);
+  const previous = acceptedPrincipalControlRealms.get(principalId);
   if (previous && previous !== realmId) {
-    throw new Error(`principal ${did} was bound to two different PCR ids`);
+    throw new Error(
+      `principal ${principalId} was bound to two different PCR ids`,
+    );
   }
-  acceptedPrincipalControlRealms.set(did, realmId);
+  acceptedPrincipalControlRealms.set(principalId, realmId);
 }
 
 export function principalControlRealmForDid(did: string): string {
-  const realmId = acceptedPrincipalControlRealms.get(did);
+  const principalId = canonicalDidCoreId(did);
+  const realmId = acceptedPrincipalControlRealms.get(principalId);
   if (!realmId) {
     throw new Error(
-      `event-derived PCR id for ${did} is unavailable; register its accepted create Event first`,
+      `event-derived PCR id for ${principalId} is unavailable; register its accepted create Event first`,
     );
   }
   return realmId;
@@ -270,7 +312,7 @@ export function wireErrReason(body: unknown): string | undefined {
   );
 }
 
-function projectFullDidToCoreId(fullDid: string): string {
+export function projectFullDidToCoreId(fullDid: string): string {
   if (fullDid.startsWith("did:webvh:")) {
     const [scid] = fullDid.slice("did:webvh:".length).split(":", 1);
     if (!scid) {
@@ -287,12 +329,16 @@ function projectFullDidToCoreId(fullDid: string): string {
   throw new Error(`unsupported notary DID method: ${fullDid}`);
 }
 
+export function canonicalDidCoreId(did: string): string {
+  return did.startsWith("ak:did_core:") ? did : projectFullDidToCoreId(did);
+}
+
 export function singleDidNotaryFromFullDid(
   fullDid: string,
 ): RealmObject["notary"] {
   return {
     kind: "single_did",
-    actor_id: projectFullDidToCoreId(fullDid),
+    actor_id: canonicalDidCoreId(fullDid),
     recovery_members: ["ak:did_core:web:recovery.soland.local"],
     controller_organization:
       "ak:did_core:web:organization.primary.soland.local",
@@ -318,7 +364,7 @@ export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
   return Array.from(
     new Set(serviceIds.map((service) => service.trim()).filter(Boolean)),
   ).map((serviceId) => ({
-    service_id: serviceId,
+    service_id: canonicalDidCoreId(serviceId),
     service_kind: "principal_server",
     data_classes: [
       "message_content",
@@ -417,7 +463,7 @@ export async function createRealmApi(
     // This helper creates Principal-Server-hosted collaboration Realms. The
     // service owns the notary key and materializes Event Seals; the principal
     // remains the Realm creator and root authority-cell controller.
-    notary: singleDidNotaryFromFullDid(solandServiceId(opts.server)),
+    notary: singleDidNotaryFromFullDid(solandServiceFullId(opts.server)),
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator
     // effective `ak.realm.owner`. v1 issues no genesis self-grant.
@@ -571,7 +617,7 @@ export async function createRealmApi(
     `ak:cell:ak.component.member.state.v1:${ownerDid}`,
     {
       realm_id: realmId,
-      actor_id: ownerDid,
+      actor_id: canonicalDidCoreId(ownerDid),
       membership: "join",
       delivery_status: creatorDeliveryBinding ? "routable" : "unroutable",
       ...(creatorDeliveryBinding
@@ -669,7 +715,7 @@ export async function addRealmMemberApi(
         // mode; include it so the membership op validates regardless of the
         // active proof profile.
         realm_id: realmId,
-        actor_id: memberDid,
+        actor_id: canonicalDidCoreId(memberDid),
         membership: "join",
         delivery_status: "unroutable",
       },
@@ -801,7 +847,6 @@ export async function grantRealmReviewCapabilityApi(
     server?: SolandKey;
   },
 ): Promise<string> {
-  const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
   const previousFrontier = await readRealmSealFrontier(
     request,
@@ -812,12 +857,11 @@ export async function grantRealmReviewCapabilityApi(
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "proofs"> = {
-    id: grantId,
+  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: args.ownerDid,
-    subject: args.subjectDid,
+    issuer: canonicalDidCoreId(args.ownerDid),
+    subject: canonicalDidCoreId(args.subjectDid),
     actions: ["ak.realm.join.review"],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -838,7 +882,6 @@ export async function grantRealmReviewCapabilityApi(
     kind: "ak.capability.grant",
     createdAt: issuedAt,
     payload: {
-      grant_id: grantId,
       // `capability_grant_payload`: the grant body is closed and carries no
       // inner proof — the Event envelope proof is the sole durable issuer
       // signature, and it already covers actor, scope, authority refs, payload
@@ -850,6 +893,7 @@ export async function grantRealmReviewCapabilityApi(
     server: args.server,
     context: `grant ak.realm.join.review to ${args.subjectDid}`,
   });
+  const grantId = retypeEventDerivedId(String(grantEvent.event_id), "grant");
   const proposalDigest = Array.isArray(grantEvent.proofs)
     ? stringValue(
         (grantEvent.proofs[0] as Record<string, unknown> | undefined)
@@ -900,7 +944,6 @@ export async function grantServiceCapabilityApi(
     server?: SolandKey;
   },
 ): Promise<string> {
-  const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
   // `ak.realm.delivery_binding_policy` is an Event kind, not a capability
   // action. Use a core collaboration action advertised by both federation
@@ -910,12 +953,11 @@ export async function grantServiceCapabilityApi(
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "proofs"> = {
-    id: grantId,
+  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: args.ownerDid,
-    subject: args.subjectServiceId,
+    issuer: canonicalDidCoreId(args.ownerDid),
+    subject: canonicalDidCoreId(args.subjectServiceId),
     actions: [action],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -930,26 +972,27 @@ export async function grantServiceCapabilityApi(
       },
     ],
   };
+  const grantEvent = signedEventEnvelope({
+    actorDid: args.ownerDid,
+    realmId: args.realmId,
+    kind: "ak.capability.grant",
+    createdAt: issuedAt,
+    payload: {
+      // The grant body is closed and carries no inner proof; the Event
+      // envelope proof is the sole durable issuer signature.
+      grant: unsignedGrant,
+    },
+  });
   await submitSignedEventApi(
     request,
     ownerToken,
-    signedEventEnvelope({
-      actorDid: args.ownerDid,
-      realmId: args.realmId,
-      kind: "ak.capability.grant",
-      createdAt: issuedAt,
-      payload: {
-        grant_id: grantId,
-        // The grant body is closed and carries no inner proof; the Event
-        // envelope proof is the sole durable issuer signature.
-        grant: unsignedGrant,
-      },
-    }),
+    grantEvent,
     {
       server: args.server,
       context: `grant ${action} service capability to ${args.subjectServiceId}`,
     },
   );
+  const grantId = retypeEventDerivedId(String(grantEvent.event_id), "grant");
   return grantId;
 }
 
@@ -987,17 +1030,15 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   grantId: string;
   eventId: string;
 } {
-  const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "proofs"> = {
-    id: grantId,
+  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: args.ownerDid,
-    subject: args.subjectDid,
+    issuer: canonicalDidCoreId(args.ownerDid),
+    subject: canonicalDidCoreId(args.subjectDid),
     actions: args.actions,
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -1022,7 +1063,6 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     // capability_grant_payload (event-payload.schema.json) is closed; typed
     // issuer-authority refs travel inside the grant object.
     payload: {
-      grant_id: grantId,
       // The grant body is closed and carries no inner proof; the Event
       // envelope proof is the sole durable issuer signature.
       grant: unsignedGrant,
@@ -1030,7 +1070,12 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   });
   // The grant Event's id is derived from the envelope, so it can only be read
   // back once the envelope exists.
-  return { envelope, grantId, eventId: envelope.event_id as string };
+  const eventId = envelope.event_id as string;
+  return {
+    envelope,
+    grantId: retypeEventDerivedId(eventId, "grant"),
+    eventId,
+  };
 }
 
 export async function grantCapabilityEventApi(
@@ -1038,7 +1083,7 @@ export async function grantCapabilityEventApi(
   ownerToken: string,
   args: CapabilityGrantEventArgs,
 ): Promise<{ grantId: string; eventId: string }> {
-  const { envelope, grantId, eventId } = buildCapabilityGrantEnvelope(args);
+  const { envelope } = buildCapabilityGrantEnvelope(args);
   await submitSignedEventApi(request, ownerToken, envelope, {
     server: args.server,
     context: `grant [${args.actions.join(", ")}] to ${args.subjectDid}`,
@@ -1050,7 +1095,8 @@ export async function grantCapabilityEventApi(
   await waitForRealmControlIdleApi(request, ownerToken, args.realmId, {
     server: args.server,
   });
-  return { grantId, eventId };
+  const eventId = String(envelope.event_id);
+  return { grantId: retypeEventDerivedId(eventId, "grant"), eventId };
 }
 
 // Revoke a previously granted capability by grant_id.
@@ -1142,7 +1188,7 @@ function joinReceiptProof(args: {
     realm_id: args.realmId,
     application_ref: args.applicationRef,
     application_revision_digest: args.applicationRevisionDigest,
-    actor_id: args.actorDid,
+    actor_id: canonicalDidCoreId(args.actorDid),
     verification_method: verificationMethod,
     created_at: args.createdAt,
   });
@@ -1185,7 +1231,7 @@ export async function submitKnockApi(
     createdAt: opts.createdAt,
     payload: {
       realm_id: realmId,
-      actor_id: actorDid,
+      actor_id: canonicalDidCoreId(actorDid),
       membership: "knock",
     },
   });
@@ -1443,7 +1489,7 @@ export async function submitJoinWithProofsApi(
     createdAt: opts.createdAt,
     payload: {
       realm_id: realmId,
-      actor_id: actorDid,
+      actor_id: canonicalDidCoreId(actorDid),
       membership: "join",
       delivery_status: "unroutable",
       gate_proofs: gateProofs,
@@ -1477,7 +1523,7 @@ export async function submitLeaveApi(
     createdAt: opts.createdAt,
     payload: {
       realm_id: realmId,
-      actor_id: actorDid,
+      actor_id: canonicalDidCoreId(actorDid),
       membership: "leave",
     },
   });
@@ -1770,17 +1816,15 @@ export async function queryRealmEventsApi(
   realmId: string,
   opts: { server?: SolandKey; limit?: number } = {},
 ) {
-  const response = await request.fetch(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-    {
-      method: "QUERY",
-      data: canonicalJson({ realms: [realmId], limit: opts.limit ?? 100 }),
-      headers: {
-        ...authHeaders(token),
-        "content-type": "application/json",
-      },
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const response = await request.fetch(url, {
+    method: "QUERY",
+    data: canonicalJson({ realms: [realmId], limit: opts.limit ?? 100 }),
+    headers: {
+      ...authHeaders(token, "QUERY", url),
+      "content-type": "application/json",
     },
-  );
+  });
   return await expectJsonOk<Record<string, unknown>>(
     response,
     `query events for ${realmId}`,
@@ -2087,12 +2131,10 @@ export async function currentActorDidApi(
   token: string,
   opts: { server?: SolandKey } = {},
 ): Promise<string> {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`,
-    {
-      headers: authHeaders(token),
-    },
-  );
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`;
+  const response = await request.get(url, {
+    headers: authHeaders(token, "GET", url),
+  });
   const body = await expectJsonOk<{ principal_id?: string; did?: string }>(
     response,
     "read current actor",
@@ -2123,7 +2165,7 @@ export function signedEventEnvelope(
       (isRealmGenesis
         ? { kind: "realm_genesis" }
         : { kind: "realm", realm_id: args.realmId }),
-    actor_id: args.actorDid,
+    actor_id: canonicalDidCoreId(args.actorDid),
     authorization_ref: args.authorizationRef,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
@@ -2239,7 +2281,8 @@ export function eventProof(args: {
   }
 
   return sdkEventProof({
-    actorDid: args.actorDid,
+    actorDid:
+      registeredSigner?.verificationMethod.split("#", 1)[0] ?? args.actorDid,
     event: args.event,
     verificationMethod,
     createdAt,
@@ -2273,7 +2316,8 @@ function eventEnvelopeProof(args: {
   }
 
   return sdkEventEnvelopeProof({
-    actorDid: args.actorDid,
+    actorDid:
+      registeredSigner?.verificationMethod.split("#", 1)[0] ?? args.actorDid,
     event: args.event,
     verificationMethod,
     createdAt,
@@ -2341,22 +2385,20 @@ export async function submitSignedEventApi(
         ? (await readRealmSealFrontier(request, token, realmId, opts.server))
             .control_event_set_root
         : undefined;
-    const response = await request.post(
-      `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-      {
-        headers: {
-          ...authHeaders(token),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({
-          event: envelope,
-          authorization_lease: authorizationLease,
-          ...(controlControlProposalAck
-            ? { control_proposal_ack: controlControlProposalAck }
-            : {}),
-        }),
+    const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+    const response = await request.post(eventsUrl, {
+      headers: {
+        ...authHeaders(token, "POST", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson({
+        event: envelope,
+        authorization_lease: authorizationLease,
+        ...(controlControlProposalAck
+          ? { control_proposal_ack: controlControlProposalAck }
+          : {}),
+      }),
+    });
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
@@ -2413,12 +2455,7 @@ export async function prepareSignedEventSubmissionApi(
   // admit, so it cannot rely on the ordinary submit path's retry after an
   // actor-frontier rejection. Bind the envelope to the current frontier
   // before issuing its authorization lease.
-  await advanceEnvelopeToActorFrontier(
-    request,
-    token,
-    envelope,
-    opts.server,
-  );
+  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const leaseResponse = await issueAuthorizationLeasesApi(
       request,
@@ -2545,18 +2582,16 @@ export async function submitSignedEventBatchApi(
           : {}),
       });
     }
-    const response = await request.post(
-      `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-      {
-        headers: {
-          ...authHeaders(token),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({
-          events: submissions,
-        }),
+    const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+    const response = await request.post(eventsUrl, {
+      headers: {
+        ...authHeaders(token, "POST", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson({
+        events: submissions,
+      }),
+    });
     const text = await response.text();
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
@@ -2660,22 +2695,20 @@ export async function rawSubmitSignedEventApi(
       opts.server,
       `submit ${String(envelope.kind)}`,
     );
-    const response = await request.post(
-      `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-      {
-        headers: {
-          ...authHeaders(token),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({
-          event: envelope,
-          authorization_lease: authorizationLease,
-          ...(controlControlProposalAck
-            ? { control_proposal_ack: controlControlProposalAck }
-            : {}),
-        }),
+    const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+    const response = await request.post(eventsUrl, {
+      headers: {
+        ...authHeaders(token, "POST", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson({
+        event: envelope,
+        authorization_lease: authorizationLease,
+        ...(controlControlProposalAck
+          ? { control_proposal_ack: controlControlProposalAck }
+          : {}),
+      }),
+    });
     const responseText = await response.text();
     const responseBody = parseJsonOrRaw(responseText);
     if (
@@ -2714,19 +2747,17 @@ async function issueControlProposalAckApi(
   if (localAck) {
     return localAck;
   }
-  const response = await request.post(
-    `${solandBaseUrl(server)}/_arkret/self/control-proposal-acks`,
-    {
-      headers: {
-        ...authHeaders(token),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({
-        event,
-        authorization_lease: authorizationLease,
-      }),
+  const url = `${solandBaseUrl(server)}/_arkret/self/control-proposal-acks`;
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson({
+      event,
+      authorization_lease: authorizationLease,
+    }),
+  });
   const text = await response.text();
   expect(
     [200, 201],
@@ -2788,7 +2819,7 @@ export function localPrincipalControlProposalAck(
   const proposalDigest = `sha256:${sha256CanonicalJson(proposalPayload)}`;
   const authoritySetRef = `sha256:${sha256CanonicalJson({
     kind: "single_did",
-    did: actorDid,
+    actor_id: actorDid,
   })}`;
   const cacheKey = `${proposalDigest}\0${authoritySetRef}\0${verificationMethod}`;
   let member = localControlProposalAuthorityAcks.get(cacheKey);
@@ -2859,17 +2890,15 @@ async function issueAuthorizationLeasesApi(
 ): Promise<APIResponse> {
   const requestBody = { events };
   const requestDigest = sha256CanonicalJson(requestBody);
-  return await request.post(
-    `${solandBaseUrl(server)}/_arkret/self/authorization-leases`,
-    {
-      headers: {
-        ...authHeaders(token),
-        "content-type": "application/json",
-        "idempotency-key": `cotest-lease-${requestDigest}`,
-      },
-      data: canonicalJson(requestBody),
+  const url = `${solandBaseUrl(server)}/_arkret/self/authorization-leases`;
+  return await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+      "idempotency-key": `cotest-lease-${requestDigest}`,
     },
-  );
+    data: canonicalJson(requestBody),
+  });
 }
 
 function authorizationLeasesFromIssueOutcome(
@@ -3006,14 +3035,12 @@ export async function advanceEnvelopeToActorFrontier(
       "Event envelope realm_id is required to refresh its frontier",
     );
   }
-  const response = await request.fetch(
-    `${solandBaseUrl(server)}/_arkret/self/events/frontier`,
-    {
-      method: "QUERY",
-      data: { actor_id: actorDid, realm_id: realmId },
-      headers: authHeaders(token),
-    },
-  );
+  const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/events/frontier`;
+  const response = await request.fetch(frontierUrl, {
+    method: "QUERY",
+    data: { actor_id: actorDid, realm_id: realmId },
+    headers: authHeaders(token, "QUERY", frontierUrl),
+  });
   if (allowInvisibleRealmGenesis && response.status() === 404) {
     const proofVerificationMethod = Array.isArray(envelope.proofs)
       ? stringValue(
@@ -3099,14 +3126,12 @@ async function readRealmSealFrontier(
   realmId: string,
   server?: SolandKey,
 ): Promise<RealmSealFrontier> {
-  const response = await request.fetch(
-    `${solandBaseUrl(server)}/_arkret/self/events/frontier`,
-    {
-      method: "QUERY",
-      data: { realm_id: realmId },
-      headers: authHeaders(token),
-    },
-  );
+  const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/events/frontier`;
+  const response = await request.fetch(frontierUrl, {
+    method: "QUERY",
+    data: { realm_id: realmId },
+    headers: authHeaders(token, "QUERY", frontierUrl),
+  });
   // The endpoint answers 200 with an absent frontier before the genesis Seal
   // lands, so every member is treated as possibly missing and re-checked at
   // runtime below.
@@ -3970,7 +3995,6 @@ const E2E_FIXTURES_ROOT = resolve(
   "fixtures",
 );
 
-
 // federation.md §4.1: membership_frontier / delivery_binding_frontier are the
 // sender's causal frontiers (`id[]`). The harness acts as the origin peer of a
 // fabricated realm whose entire causal history is the submitted batch, so the
@@ -4207,7 +4231,7 @@ type CotestWireCommand =
   | "principal-control-realm-id"
   | "account-handoff-request"
   | "principal-registration-fixture"
-  | "principal-service-binding"
+  | "principal-service-binding-proof"
   | "identity-creation-register-request"
   | "principal-bootstrap-seal"
   | "principal-successor-seal";
@@ -4380,61 +4404,6 @@ export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
       `cotest-wire ${command} returned non-JSON output: ${result.stdout}`,
     );
   }
-}
-
-export function sdkAcceptedAtServiceBinding(args: {
-  principalId: string;
-  deviceId: string;
-  principalSigningSeedB64url: string;
-  registrationCheckpoint: Record<string, unknown>;
-  trustDomain: string;
-  acceptedAt: string;
-  server?: SolandKey;
-}): Record<string, unknown> {
-  const checkpoint = args.registrationCheckpoint;
-  const didDocument = checkpoint.did_document;
-  const historyHead = stringValue(checkpoint.history_head);
-  const versionId = stringValue(checkpoint.version_id);
-  const notBefore = stringValue(checkpoint.genesis_created_at);
-  const expectedDocumentDigest = stringValue(checkpoint.document_digest);
-  if (
-    !didDocument ||
-    !historyHead ||
-    !versionId ||
-    !notBefore ||
-    !expectedDocumentDigest
-  ) {
-    throw new Error(
-      "principal registration checkpoint omitted DID binding evidence",
-    );
-  }
-  const serviceId = solandServiceId(args.server);
-  const routeOrigin = new URL(solandBaseUrl(args.server)).origin;
-  const endpointOrigin = routeOrigin.replace(/^http:/, "https:");
-  const binding = cotestWire<Record<string, unknown>>(
-    "principal-service-binding",
-    {
-      principal_id: args.principalId,
-      device_id: args.deviceId,
-      principal_signing_seed_b64url: args.principalSigningSeedB64url,
-      service_id: serviceId,
-      service_signing_seed_b64url:
-        serviceSigningSeed(serviceId).toString("base64url"),
-      trust_domain: args.trustDomain,
-      endpoint_origin: endpointOrigin,
-      did_document: didDocument,
-      history_head: historyHead,
-      version_id: versionId,
-      not_before: notBefore,
-      accepted_at: args.acceptedAt,
-    },
-  );
-  if (binding.document_digest !== expectedDocumentDigest) {
-    throw new Error(
-      "principal-service binding document digest disagrees with registration checkpoint",
-    );
-  }
-  return binding;
 }
 
 function assertJsonTransportable(value: unknown, path: string): void {

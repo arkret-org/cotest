@@ -23,7 +23,12 @@ import {
   type DpopBoundGrant,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
-import { canonicalJson, cotestWire, typedId } from "./soland-api";
+import {
+  canonicalJson,
+  cotestWire,
+  projectFullDidToCoreId,
+  typedId,
+} from "./soland-api";
 
 export const COAUTH_DEV_EMAIL_CODE = "123456";
 
@@ -516,7 +521,7 @@ export async function registerCoauthPasswordAccount(
   const receipt = objectRecord(registered.binding_receipt);
   const pcrGenesisReceipt = objectRecord(registered.pcr_genesis_receipt);
   const sessionOutcome = objectRecord(registered.session_grant_outcome);
-  const principalId = stringValue(registered.principal_id);
+  const registeredPrincipalId = stringValue(registered.principal_id);
   const grantId = stringValue(sessionOutcome?.grant_id);
   const grantJwt = stringValue(sessionOutcome?.session_grant);
   const grantAudience = stringValue(sessionOutcome?.audience);
@@ -524,8 +529,10 @@ export async function registerCoauthPasswordAccount(
   const deviceSigningSeed = stringValue(
     fixture.checkpoint.device_signing_seed_b64url,
   );
+  const principalId = projectFullDidToCoreId(fullDid);
   if (
-    !principalId ||
+    !registeredPrincipalId ||
+    registeredPrincipalId !== principalId ||
     !receipt ||
     receipt.binding_state !== "bound" ||
     receipt.principal_id !== principalId ||
@@ -538,9 +545,7 @@ export async function registerCoauthPasswordAccount(
     !expiresAt ||
     !deviceSigningSeed
   ) {
-    throw new Error(
-      `canonical account binding failed: ${JSON.stringify(registered)}`,
-    );
+    throw new Error("canonical account binding returned an incomplete outcome");
   }
   const eventSigningKey = dpopDeviceKeyFromSeedB64url(deviceSigningSeed);
   const initialGrant: DpopBoundGrant = {

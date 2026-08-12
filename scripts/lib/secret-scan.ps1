@@ -40,6 +40,10 @@
 $script:JsonSecretFieldNames = "authorization|access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
 $script:QuerySecretFieldNames = "access_token|token|push_key|invite_token|signed_link|jws|sig|password|secret|secret_b64u|private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|credential|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
 $script:RecoveryPrivateMaterialFieldNames = "private_key|seed|mnemonic|recovery_key|recovery_phrase|recovery_secret|root_seed|root_private_key|hkdf_prk|prk|plaintext_keybag|keybag_secret|mls_secret|epoch_secret|application_secret|confirmation_key|membership_key|init_secret|joiner_secret|welcome_secret|private_state"
+# Closed shapes emitted by Arkret sanitizers. The delimiter/end checks at each
+# use site are intentional: `[redacted]secret` is still a credential, while an
+# exact marker is already-safe evidence and must not fail a second scan.
+$script:RedactedValuePattern = '(?:\[redacted(?:[-_:][a-z0-9_]+)?\]|<redacted>)'
 # Candidate shape only: a quoted string containing a run of 12+ short words.
 # Surrounding prose and punctuation are allowed because logs commonly embed a
 # mnemonic after text such as "recovery phrase:". Detection additionally
@@ -136,10 +140,10 @@ function ConvertTo-RedactedLine {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Line)
 
     $preview = $Line
-    $preview = $preview -replace '(?i)((?:^|\s)authorization\s*:\s*bearer\s+)(?!\[redacted\])\S+', '$1[redacted]'
-    $preview = $preview -replace "(?i)(`"($script:JsonSecretFieldNames)`"\s*:\s*`")(?!\[redacted\])([^`"]+)(`")", '$1[redacted]$4'
-    $preview = $preview -replace "(?i)((?:^|[?&\s])($script:QuerySecretFieldNames)=)(?!\[redacted\]|%5[Bb]redacted%5[Dd])([^&\s]+)", '$1[redacted]'
-    $preview = $preview -replace "(?i)(\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*)(?!\[redacted\])(?:'[^']*'|`"[^`"]*`"|\S+)", '$1[redacted]'
+    $preview = $preview -replace "(?i)((?:^|\s)authorization\s*:\s*bearer\s+)(?!$($script:RedactedValuePattern)(?:\s|$))\S+", '$1[redacted]'
+    $preview = $preview -replace "(?i)(`"($script:JsonSecretFieldNames)`"\s*:\s*`")(?!$($script:RedactedValuePattern)`")([^`"]+)(`")", '$1[redacted]$4'
+    $preview = $preview -replace "(?i)((?:^|[?&\s])($script:QuerySecretFieldNames)=)(?!$($script:RedactedValuePattern)(?:&|\s|$)|%5[Bb]redacted%5[Dd](?:&|\s|$))([^&\s]+)", '$1[redacted]'
+    $preview = $preview -replace "(?i)(\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*)(?!$($script:RedactedValuePattern)(?:\s|;|$))(?:'[^']*'|`"[^`"]*`"|\S+)", '$1[redacted]'
     # Over-redacts non-mnemonic candidates on purpose: a preview may lose
     # harmless words but must never keep a real mnemonic.
     $preview = $preview -replace $script:Bip39SequencePattern, '"[redacted-mnemonic]"'
@@ -168,14 +172,14 @@ function ConvertTo-SecretPreview {
 
 function Get-SecretLeakPatterns {
     @(
-        [pscustomobject]@{ name = "authorization_header"; category = $script:SecretCategoryCredential; pattern = '(?i)(?:^|\s)authorization\s*:\s*bearer\s+(?!\[redacted\])\S+'; validate = $null },
-        [pscustomobject]@{ name = "recovery_private_material_field"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)`"($script:RecoveryPrivateMaterialFieldNames)`"\s*:\s*`"(?!\[redacted\])[^`"]+`""; validate = $null },
-        [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!\[redacted\])(?:'[^']+'|`"[^`"]+`"|[A-Za-z0-9_-]{16,})"; validate = $null },
+        [pscustomobject]@{ name = "authorization_header"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|\s)authorization\s*:\s*bearer\s+(?!$($script:RedactedValuePattern)(?:\s|$))\S+"; validate = $null },
+        [pscustomobject]@{ name = "recovery_private_material_field"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)`"($script:RecoveryPrivateMaterialFieldNames)`"\s*:\s*`"(?!$($script:RedactedValuePattern)`")[^`"]+`""; validate = $null },
+        [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!$($script:RedactedValuePattern)(?:\s|;|$))(?:'[^']+'|`"[^`"]+`"|[A-Za-z0-9_-]{16,})"; validate = $null },
         [pscustomobject]@{ name = "jwk_private_member"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:JwkPrivateMemberPattern; validate = $null },
         [pscustomobject]@{ name = "plaintext_keybag_object"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:PlaintextKeybagPattern; validate = $null },
         [pscustomobject]@{ name = "sql_private_material_column"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:SqlPrivateMaterialColumnPattern; validate = $null },
-        [pscustomobject]@{ name = "json_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)`"($script:JsonSecretFieldNames)`"\s*:\s*`"(?!\[redacted\])[^`"]+`""; validate = $null },
-        [pscustomobject]@{ name = "query_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|[?&\s])($script:QuerySecretFieldNames)=(?!\[redacted\]|%5[Bb]redacted%5[Dd])[^&\s]+"; validate = $null },
+        [pscustomobject]@{ name = "json_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)`"($script:JsonSecretFieldNames)`"\s*:\s*`"(?!$($script:RedactedValuePattern)`")[^`"]+`""; validate = $null },
+        [pscustomobject]@{ name = "query_secret_field"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|[?&\s])($script:QuerySecretFieldNames)=(?!$($script:RedactedValuePattern)(?:&|\s|$)|%5[Bb]redacted%5[Dd](?:&|\s|$))[^&\s]+"; validate = $null },
         [pscustomobject]@{ name = "bip39_mnemonic_sequence"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:Bip39SequencePattern; validate = { param($line) Test-Bip39MnemonicCandidate -Line $line } },
         [pscustomobject]@{ name = "did_in_token_field"; category = $script:SecretCategoryCredential; pattern = '(?i)"(token|push_key|credential)"\s*:\s*"(did:[^"]+)"'; validate = $null },
         [pscustomobject]@{ name = "private_key_block"; category = $script:SecretCategoryPrivateMaterial; pattern = '-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----'; validate = $null }

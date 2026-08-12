@@ -61,6 +61,7 @@ try {
         [pscustomobject]@{ name = "punctuated-mnemonic-string.log"; line = "{`"message`":`"recovery phrase: $mnemonic`"}"; pattern = "bip39_mnemonic_sequence" },
         [pscustomobject]@{ name = "did-in-credential-field.log"; line = "{`"credential`":`"$didValue`"}"; pattern = "did_in_token_field" },
         [pscustomobject]@{ name = "authorization-bearer.log"; line = "authorization: bearer $bearer"; pattern = "authorization_header" },
+        [pscustomobject]@{ name = "redaction-prefix-is-not-marker.log"; line = "{`"jws`":`"[redacted]$bearer`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "pem-private-key.log"; line = "-----BEGIN PRIVATE KEY-----$hexSecret-----END PRIVATE KEY-----"; pattern = "private_key_block" },
         [pscustomobject]@{ name = "pem-encrypted-private-key-header.log"; line = "-----BEGIN ENCRYPTED PRIVATE KEY-----"; pattern = "private_key_block" },
         # Structural vectors: private material travelling under a short generic
@@ -100,6 +101,8 @@ try {
         # runtime values. The bare assignment branch must require a secret-like
         # base64url/hex token rather than treating `Buffer.from(...)` as a seed.
         'const seed = Buffer.from(registered.signingSeedB64url, "base64url");',
+        '{"jws":"[redacted:detached_jws]"}',
+        '{"credential":"<redacted>"}',
         '"the server logs show that retry loops kept firing until the queue drained fully"',
         '"our nightly release gate runs every suite twice before the deploy window opens for all teams"'
     )
