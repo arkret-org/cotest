@@ -182,13 +182,23 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let before = realm_event_kinds(&alice, &realm_id).await?;
     // The declaration is what the caller signs; the request body carries that
     // Event and nothing else.
-    let declaration = json!({
-        "policy_server_did": "did:web:spotcheck-policy.example",
-        "policy_server_url": "https://spotcheck-policy.example/_arkret/self/policy/check",
-        "cache_ttl_seconds": 60,
-        "timeout_ms": 1500,
-        "on_timeout": "fail_closed",
-    });
+    let declaration = arkret_models_collaboration::governance::realm_governance::RealmPolicyServerDeclarationPayload {
+        policy_server_service_id: arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:spotcheck-policy.example".to_owned(),
+        )?,
+        policy_server_url: "https://spotcheck-policy.example/_arkret/self/policy/check".to_owned(),
+        public_keys: Vec::new(),
+        applies_to: Vec::new(),
+        policy_sources: Vec::new(),
+        abuse_profile_ref: None,
+        fail_mode: None,
+        cache_ttl_seconds: Some(60),
+        timeout_ms: Some(1500),
+        on_timeout: Some(
+            arkret_models_collaboration::governance::realm_governance::RealmPolicyServerOnTimeout::FailClosed,
+        ),
+    };
+    let declaration = serde_json::to_value(declaration)?;
     let response = alice
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
         .canonical_json(
