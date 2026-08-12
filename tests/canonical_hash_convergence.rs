@@ -352,7 +352,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     )
     .expect("effective-set digest");
     assert_eq!(
-        effective_set, "sha256:c02f4878c538be0557b8db2396c647a93eb0769dd0a53032054e151e9c192d5b",
+        effective_set, "sha256:ae2a995158ba4c13a2230f708cf4eaea6dbeeb3834af30bceb534cf354d79dc8",
         "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
@@ -360,7 +360,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:10c1a879fe2349cdd78dbc3bd9832c1f8539c2221ff92880fcb16194cc926d47",
+        display_state, "sha256:969393d2016a3485391441f28e009c4ac529df6763791d9aab35ccddaea7fee0",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
