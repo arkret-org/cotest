@@ -54,7 +54,12 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "historical_wrong_destination_receipt_rejected",
     "historical_inactive_gate_at_receipt_time_rejected",
     "account_gate_never_discloses_local_identity",
-    "agent_genesis_active_requires_provision_ref",
+    "producer_fetches_controller_gate_from_account_authority",
+    "controller_gate_exact_request_replay_is_byte_identical",
+    "controller_gate_request_id_conflict_is_zero_issuance",
+    "controller_gate_wrong_source_and_unknown_principal_are_indistinguishable",
+    "controller_gate_inactive_status_is_signed_not_forged_by_producer",
+    "agent_genesis_active_requires_accepted_provision_declaration",
     "organization_pcr_cannot_materialize_agent_active",
     "state_witness_uses_canonical_event_dot",
     "bare_event_id_state_tag_rejected",
@@ -150,7 +155,7 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
     for case in cases {
         let name = case["name"].as_str().context("case name missing")?;
         let expected = expected_class(case["expected"].as_str().context("expected missing")?)?;
-        let observed = execute_case(name)?;
+        let observed = execute_case(name, case)?;
         if observed != expected {
             bail!("Agent signer-evidence case {name} expected {expected:?}, observed {observed:?}");
         }
@@ -160,7 +165,7 @@ pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
 
 fn expected_class(expected: &str) -> Result<OutcomeClass> {
     match expected {
-        "verified" | "verified_by_minimal_metadata_only" => Ok(OutcomeClass::Verified),
+        "issued" | "verified" | "verified_by_minimal_metadata_only" => Ok(OutcomeClass::Verified),
         "unresolved" => Ok(OutcomeClass::Unresolved),
         "rejected" => Ok(OutcomeClass::Rejected),
         other => bail!("open Agent signer-evidence outcome {other}"),
@@ -172,7 +177,7 @@ fn service_id(value: &str) -> Result<DidCoreId> {
     Ok(DidCoreId::from(project_full_id_to_core_id(&full_id)?))
 }
 
-fn execute_case(name: &str) -> Result<OutcomeClass> {
+fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
     match name {
         "current_exact_request_and_three_active_gates_verified" => {
             current_outcome(&build_evidence(EvidenceConfig::default())?, None)
@@ -265,7 +270,14 @@ fn execute_case(name: &str) -> Result<OutcomeClass> {
             }
             current_outcome(&fixture, None)
         }
-        "agent_genesis_active_requires_provision_ref" => {
+        "producer_fetches_controller_gate_from_account_authority"
+        | "controller_gate_exact_request_replay_is_byte_identical"
+        | "controller_gate_request_id_conflict_is_zero_issuance"
+        | "controller_gate_wrong_source_and_unknown_principal_are_indistinguishable"
+        | "controller_gate_inactive_status_is_signed_not_forged_by_producer" => {
+            execute_controller_gate_case(name, case)
+        }
+        "agent_genesis_active_requires_accepted_provision_declaration" => {
             let fixture = build_evidence(EvidenceConfig::default())?;
             let admission = admission(&fixture.current);
             let provenance = &admission
@@ -356,6 +368,109 @@ fn execute_case(name: &str) -> Result<OutcomeClass> {
 enum CurrentOverride {
     Verifier(DidCoreId),
     RequestDigest(Hash),
+}
+
+fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass> {
+    let bool_field = |field: &str| {
+        case.get(field)
+            .and_then(Value::as_bool)
+            .ok_or_else(|| anyhow!("controller gate case {name} is missing boolean {field}"))
+    };
+    let zero_field = |field: &str| {
+        case.get(field)
+            .and_then(Value::as_u64)
+            .is_some_and(|value| value == 0)
+    };
+    match name {
+        "producer_fetches_controller_gate_from_account_authority" => {
+            let required_true = [
+                "current_signed_service_resolution_record_verified",
+                "method_history_evidence_verified",
+                "normalized_document_digest_verified",
+                "rfc9421_covers_method_path_digest_source_destination_operation_request",
+                "verification_key_from_active_service_resolution",
+                "authenticated_source_matches_agent_authority_service_id",
+                "current_principal_service_binding_matches_source",
+            ];
+            let all_required = required_true.iter().try_fold(true, |all, field| {
+                Ok::<_, anyhow::Error>(all && bool_field(field)?)
+            })?;
+            if case.get("operation_id").and_then(Value::as_str)
+                != Some("ak.gate.account.command.issue_controller_gate_attestation")
+                || !all_required
+                || bool_field("bearer_used_as_signature_substitute")?
+                || case
+                    .get("account_authority_projection_status")
+                    .and_then(Value::as_str)
+                    != Some("active")
+                || case.get("issued_eligibility").and_then(Value::as_str) != Some("active")
+                || case.get("attestation_ttl_seconds").and_then(Value::as_u64) != Some(300)
+            {
+                bail!("controller gate producer verification contract drifted");
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        "controller_gate_exact_request_replay_is_byte_identical" => {
+            if !bool_field("same_request_id")?
+                || !bool_field("same_canonical_intent")?
+                || !bool_field("first_outcome_bytes_equal_replay")?
+                || !zero_field("additional_attestations_issued")
+            {
+                bail!("controller gate exact replay is not byte-stable and zero-issuance");
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        "controller_gate_request_id_conflict_is_zero_issuance" => {
+            if !bool_field("same_request_id")?
+                || bool_field("same_canonical_intent")?
+                || !zero_field("additional_attestations_issued")
+                || case.get("reason").and_then(Value::as_str) != Some("duplicate_conflict")
+            {
+                bail!("controller gate request-id conflict contract drifted");
+            }
+            Ok(OutcomeClass::Rejected)
+        }
+        "controller_gate_wrong_source_and_unknown_principal_are_indistinguishable" => {
+            let scenarios = case
+                .get("scenarios")
+                .and_then(Value::as_array)
+                .context("controller gate indistinguishability scenarios missing")?
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<std::collections::BTreeSet<_>>();
+            let expected = [
+                "missing_current_principal_service_binding",
+                "source_service_mismatch",
+                "unauthorized_service",
+                "unknown_principal",
+            ]
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+            if scenarios != expected
+                || !bool_field("same_error_envelope")?
+                || bool_field("account_status_disclosed")?
+                || case.get("reason").and_then(Value::as_str) != Some("not_found")
+            {
+                bail!("controller gate not-found indistinguishability contract drifted");
+            }
+            Ok(OutcomeClass::Rejected)
+        }
+        "controller_gate_inactive_status_is_signed_not_forged_by_producer" => {
+            if case
+                .get("account_authority_projection_status")
+                .and_then(Value::as_str)
+                != Some("deactivated")
+                || case.get("issued_eligibility").and_then(Value::as_str) != Some("inactive")
+                || bool_field("producer_overrode_eligibility")?
+                || bool_field("portable_outcome_contains_account_id")?
+                || bool_field("portable_outcome_contains_raw_account_cell")?
+            {
+                bail!("controller gate inactive signed outcome contract drifted");
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        _ => bail!("unknown controller gate case {name}"),
+    }
 }
 
 fn current_outcome(

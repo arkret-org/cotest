@@ -42,7 +42,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
-use crate::harness::{TestServerGroup, canonical_device_id, expect_json};
+use crate::harness::{NonProtocolTestBody, TestServerGroup, canonical_device_id, expect_json};
 use crate::scenarios::identity_test_support::{
     HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_full_id,
     authorize_device_public_key_with_event_id, harness_account_authority_id,
@@ -300,11 +300,14 @@ async fn install_device(
         &key.verifying_key().to_bytes(),
     );
     expect_json(
-        server.http().post(server.url(DEVICE_PATH)).json(&json!({
-            "actor_id": actor,
-            "device_id": device,
-            "public_key_multibase": multibase,
-        })),
+        server
+            .http()
+            .post(server.url(DEVICE_PATH))
+            .json(&NonProtocolTestBody::new(json!({
+                "actor_id": actor,
+                "device_id": device,
+                "public_key_multibase": multibase,
+            }))),
         StatusCode::OK,
     )
     .await?;
@@ -418,7 +421,7 @@ async fn observed_messages(
         server
             .http()
             .post(server.url(MESSAGES_PATH))
-            .json(&json!({"recipient": recipient})),
+            .json(&NonProtocolTestBody::new(json!({"recipient": recipient}))),
         StatusCode::OK,
     )
     .await?;

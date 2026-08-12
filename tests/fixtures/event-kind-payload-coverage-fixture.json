@@ -71,18 +71,18 @@
       "cell_family": "ak.component.realm.organization.v1",
       "lattice": "cas_register",
       "bottom": "reject",
-      "comment": "SDK-ORG-01 — active RealmOrganizationPayload relationship statement. organization_did issuer carries no delegation_ref; control_scopes endorse official_badge + realm_admin. Field order mirrors event-payload.schema.json #/$defs/realm_organization_payload properties.",
+      "comment": "SDK-ORG-01 — active RealmOrganizationPayload relationship statement. organization_principal_id issuer carries no delegation_ref; control_scopes endorse official_badge + realm_admin. Field order mirrors event-payload.schema.json #/$defs/realm_organization_payload properties.",
       "payload_shape": {
         "statement_id": "org-stmt-active-1",
         "realm_id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
-        "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+        "organization_id": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
         "relationship": "owner",
         "status": "active",
         "control_scopes": ["official_badge", "realm_admin"],
         "issued_at": "2026-06-25T00:00:00.000Z",
         "authorization": {
-          "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
-          "issuer_role": "organization_did",
+          "issuer": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
+          "issuer_role": "organization_principal_id",
           "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
           "signed_at": "2026-06-25T00:00:00.000Z",
           "proof": "c2ln"
@@ -99,15 +99,15 @@
       "payload_shape": {
         "statement_id": "org-stmt-revoke-1",
         "realm_id": "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG",
-        "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+        "organization_id": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
         "relationship": "owner",
         "status": "revoked",
         "control_scopes": ["official_badge", "realm_admin"],
         "issued_at": "2026-06-25T00:00:00.000Z",
         "revokes_statement_id": "org-stmt-active-1",
         "authorization": {
-          "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
-          "issuer_role": "organization_did",
+          "issuer": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
+          "issuer_role": "organization_principal_id",
           "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
           "signed_at": "2026-06-25T00:00:00.000Z",
           "proof": "c2ln"

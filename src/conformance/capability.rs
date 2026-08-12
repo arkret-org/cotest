@@ -589,7 +589,7 @@ fn evaluate_authority_chain_fixture(fixture: &Value) -> Result<()> {
     }
     let without_middle: Vec<AuthorityGrant> = grants
         .into_iter()
-        .filter(|grant| grant.subject != "did:webvh:z6mkfixture:ops.example.com")
+        .filter(|grant| grant.subject != "ak:did_core:webvh:z6mkfixtureopsexamplecom")
         .collect();
     if evaluate_chain(base, &without_middle, &query).authorized {
         bail!("authority_chain: skipping the middle grant still authorized");

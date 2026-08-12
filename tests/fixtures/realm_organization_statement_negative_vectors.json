@@ -8,14 +8,14 @@
   "base_active_statement": {
     "statement_id": "org-stmt-1",
     "realm_id": "ak:realm:AaucqKYsYtNwus16IgXDBl88-LWNZZVtRpZ-CqgnPQoi",
-    "organization_id": "did:webvh:example.test:orgs:01J0000000000000000000000A",
+    "organization_id": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
     "relationship": "owner",
     "status": "active",
     "control_scopes": ["official_badge", "realm_admin"],
     "issued_at": "2026-06-25T00:00:00.000Z",
     "authorization": {
-      "issuer": "did:webvh:example.test:orgs:01J0000000000000000000000A",
-      "issuer_role": "organization_did",
+      "issuer": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
+      "issuer_role": "organization_principal_id",
       "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
       "signed_at": "2026-06-25T00:00:00.000Z",
       "proof": "c2ln"
@@ -63,7 +63,7 @@
     {
       "name": "non_delegated_role_with_delegation_ref",
       "surface": "verifier",
-      "comment": "organization_did is NOT a delegated role; carrying a delegation_ref is invalid coupling ⇒ schema_violation.",
+      "comment": "organization_principal_id is NOT a delegated role; carrying a delegation_ref is invalid coupling ⇒ schema_violation.",
       "mutation": { "set": { "authorization.delegation_ref": "ak:grant:AfUeGRE3CFApB-5spxARHjovex9S5j5RWL8mAUSkpOMS" } },
       "resolver": "no_delegation",
       "expected": { "outcome": "reject", "reason_code": "schema_violation" }
@@ -191,7 +191,7 @@
     }
   ],
   "positive_control": {
-    "name": "active_organization_did_statement",
+    "name": "active_organization_principal_id_statement",
     "comment": "Sanity control: the unmutated base statement MUST pass both the strong schema and the verifier under the no_delegation resolver.",
     "surface": "both",
     "resolver": "no_delegation",

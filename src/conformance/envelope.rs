@@ -507,7 +507,7 @@ fn validate_synthetic_event_envelope_negatives(
 
     let mut revoked_context = EventEnvelopeContext::default_for_durable_history();
     revoked_context.revoked_at_by_actor.insert(
-        "did:web:alice.example".to_owned(),
+        "ak:did_core:web:alice.example".to_owned(),
         "2026-05-02T00:05:00.000Z".to_owned(),
     );
     let backdated = sample_envelope_event(

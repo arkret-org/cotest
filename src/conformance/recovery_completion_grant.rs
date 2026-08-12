@@ -13,9 +13,9 @@ use arkret_models_identity::{
     CanonicalSessionPublicJwk, InitialSessionGrantRequest,
 };
 use arkret_wire::{
-    IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
+    DidFullId, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
     RecoveryModelGenerationRef, UnsignedRecoveryCompletionAttestation,
-    UnsignedRecoveryCompletionAttestationBody,
+    UnsignedRecoveryCompletionAttestationBody, project_full_id_to_core_id,
 };
 use base64::Engine as _;
 use chrono::{Duration, TimeZone as _, Utc};
@@ -48,7 +48,8 @@ pub fn run_recovery_completion_grant_suite() -> Result<()> {
 }
 
 fn completion_vector() -> Result<CompletionVector> {
-    let principal_id = "did:webvh:z6mkfixture:alice.example";
+    let principal_id = "ak:did_core:webvh:z6mkfixture";
+    let principal_full_id = "did:webvh:z6mkfixture:alice.example";
     let device_id = "ak:device:019a8400-0000-7000-8000-000000000001";
     let transaction_id = "ak:transaction:019a8400-0000-7000-8000-000000000002";
     let transaction_request_digest = hash('1');
@@ -68,8 +69,9 @@ fn completion_vector() -> Result<CompletionVector> {
     let coordinator_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
         coordinator_key.verifying_key().as_bytes(),
     );
-    let audience = format!("did:key:{coordinator_multibase}");
-    let verification_method = format!("{audience}#{coordinator_multibase}");
+    let coordinator_full_id = DidFullId::new(format!("did:key:{coordinator_multibase}"))?;
+    let audience = project_full_id_to_core_id(&coordinator_full_id)?.to_string();
+    let verification_method = format!("{coordinator_full_id}#{coordinator_multibase}");
 
     let receipt = UnsignedRecoveryReceipt::new(
         UnsignedRecoveryReceiptBody {
@@ -223,7 +225,11 @@ fn completion_vector() -> Result<CompletionVector> {
         "account_handoff_grant": "g".repeat(32),
         "expires_at": completed_at + Duration::minutes(5),
         "allowed_operations": ACCOUNT_HANDOFF_ALLOWED_OPERATIONS,
-        "binding": { "state": "bound", "principal_id": principal_id }
+        "binding": {
+            "state": "bound",
+            "principal_id": principal_id,
+            "full_id": principal_full_id
+        }
     }))?;
 
     Ok(CompletionVector {

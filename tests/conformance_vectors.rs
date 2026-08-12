@@ -61,7 +61,7 @@ fn domain_wire_constraint_vectors_reject_drift() {
 
     let consent = json!({
         "consent_id": "ak:consent:01904100-0000-7000-8000-000000000001",
-        "peer": "did:webvh:z6mkfixture:bob.example",
+        "peer": "ak:did_core:webvh:z6mkfixture",
         "consent_scope": "direct_message"
     });
     serde_json::from_value::<arkret::ConsentGrantPayload>(consent.clone())
@@ -257,7 +257,7 @@ fn agent_vector_suite_runs_clean() {
 fn agent_signer_evidence_vector_suite_runs_clean() {
     run_agent_signer_evidence_vector_suite()
         .expect("Agent signer-evidence vectors must execute and pass");
-    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 21);
+    assert_eq!(ALL_AGENT_SIGNER_EVIDENCE_CASES.len(), 26);
 }
 
 // ─── P0 / VECT-SC-1..18 — sidecar vectors ──────────────────────────────────

@@ -9,6 +9,8 @@
       "surfaces": [
         "service_discovery",
         "identity_registry",
+        "identity_resolution",
+        "principal_service_binding",
         "security_transactions",
         "account_auth"
       ],
@@ -23,6 +25,24 @@
           "operation_id": "ak.root.identity.read.resolve",
           "surfaces": [
             "identity_registry"
+          ]
+        },
+        {
+          "operation_id": "ak.open.identity.read.resolution",
+          "surfaces": [
+            "identity_resolution"
+          ]
+        },
+        {
+          "operation_id": "ak.self.principal_service_binding.command.prepare",
+          "surfaces": [
+            "principal_service_binding"
+          ]
+        },
+        {
+          "operation_id": "ak.self.principal_service_binding.command.commit",
+          "surfaces": [
+            "principal_service_binding"
           ]
         },
         {
@@ -79,6 +99,22 @@
         },
         {
           "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/system/principal_resolution.rs",
+          "markers": [
+            "ak.open.identity.read.resolution",
+            "principals/{principal_id}/resolution"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/identity/account/principal_service_binding.rs",
+          "markers": [
+            "ak.self.principal_service_binding.command.prepare",
+            "ak.self.principal_service_binding.command.commit"
+          ]
+        },
+        {
+          "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/recovery/policy.rs",
           "markers": [
             "/_arkret/root/identity/recovery-policy"
@@ -94,9 +130,10 @@
         },
         {
           "kind": "joint_e2e",
-          "path": "src/scenarios/key_backup_recovery_account_state.rs",
+          "path": "e2e/tests/identity/recovery.spec.ts",
           "markers": [
-            "/_arkret/root/identity/recovery-policy"
+            "/_arkret/root/identity/recovery-policy",
+            "recovery-policy GET must be routed"
           ]
         },
         {

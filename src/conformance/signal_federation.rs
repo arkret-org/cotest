@@ -1,8 +1,9 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_wire::{
-    DeviceId, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES, MAX_SIGNAL_RELAY_ITEMS,
-    ProfileId, RealmId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
-    SignalKeyRef, SignalProof, SignalRelayOutcome, SignalRelayRequest,
+    DeviceId, DidCoreId, DidFullId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
+    MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmId, ScopeRef, SealId, SignalClass,
+    SignalEncryptedPayload, SignalEnvelope, SignalKeyRef, SignalProof, SignalRelayOutcome,
+    SignalRelayRequest, project_full_id_to_core_id,
 };
 use chrono::{Duration, TimeZone, Utc};
 use serde_json::Value;
@@ -47,8 +48,7 @@ fn envelope() -> Result<SignalEnvelope> {
             kind: "DataIntegrityProof".to_owned(),
             verification_method: crate::fixture_did_url(format!(
                 "{}#{}",
-                "did:webvh:z6mkfixture:alice.example",
-                "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb"
+                "did:web:alice.example", "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb"
             )),
             envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
             created_at: sent_at,
@@ -70,12 +70,18 @@ fn device_authorization_gate(
     scope_authorized_at_seal: bool,
     signal_class_action_authorized: bool,
 ) -> bool {
-    let expected_method = format!(
-        "{}#{}",
-        signal.sender_actor_id.as_str(),
-        signal.sender_device_id.as_str()
-    );
-    signal.proof.verification_method.as_str() == expected_method
+    let (controller, fragment) = signal
+        .proof
+        .verification_method
+        .as_str()
+        .rsplit_once('#')
+        .unwrap_or_default();
+    let controller_matches = DidFullId::new(controller.to_owned())
+        .ok()
+        .and_then(|full_id| project_full_id_to_core_id(&full_id).ok())
+        .is_some_and(|core_id| core_id == signal.sender_actor_id);
+    controller_matches
+        && fragment == signal.sender_device_id.as_str()
         && current_active
         && directory_key_present
         && trust_anchor_present
@@ -127,7 +133,7 @@ pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
     }
     let mut wrong_method = signal.clone();
     wrong_method.proof.verification_method =
-        crate::fixture_did_url("did:webvh:z6mkfixture:alice.example#device-looking-fragment");
+        crate::fixture_did_url("did:web:alice.example#device-looking-fragment");
     if device_authorization_gate(&wrong_method, true, true, true, true, true)
         || wrong_method.validate_structural().is_ok()
     {

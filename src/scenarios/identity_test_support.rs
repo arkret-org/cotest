@@ -653,7 +653,10 @@ async fn submit_harness_pcr_genesis(
     ];
     let created = chrono::Utc::now().timestamp();
     let expires = created + 120;
-    let key_id = format!("{source_service_id}#federation-fanout-key");
+    let key_id = format!(
+        "{}#federation-fanout-key",
+        harness_account_authority_full_id()
+    );
     let signature_input = format!(
         "{};created={created};expires={expires};keyid=\"{key_id}\";alg=\"ed25519\"",
         format_signature_input_component_list("sig1", &components)?

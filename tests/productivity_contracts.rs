@@ -204,7 +204,7 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             arkret_wire::event_kind_str::REALM_SEARCH_POLICY,
             &json!({
                 "enabled_profile_refs": ["ak.profile.search.blind_index.v1"],
-                "allowed_service_ids": ["did:web:search.example"],
+                "allowed_service_ids": ["ak:did_core:web:search.example"],
                 "data_classes": ["encrypted_index", "blind_tokens"],
                 "index_retention_ms": 86400000,
                 "revocation_behavior": "fail_closed"

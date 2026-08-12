@@ -450,6 +450,8 @@ fn validate_durable_effects(
                 "event_kinds",
                 "event_kind_source",
                 "event_kind_sources",
+                "cross_service_effects",
+                "irreversibility_note",
             ],
             "actor_private_event" => &["kind", "event_kind"],
             _ => {
@@ -554,6 +556,30 @@ fn validate_durable_effects(
                             )),
                         }
                     }
+                }
+                if let Some(effects) = effect.get("cross_service_effects") {
+                    match effects.as_array() {
+                        Some(effects)
+                            if !effects.is_empty()
+                                && effects.iter().all(|value| {
+                                    value
+                                        .as_str()
+                                        .is_some_and(|value| !value.trim().is_empty())
+                                }) => {}
+                        _ => failures.push(format!(
+                            "{} cross_service_effects must be a non-empty array of non-empty strings",
+                            operation.operation_id
+                        )),
+                    }
+                }
+                if effect
+                    .get("irreversibility_note")
+                    .is_some_and(|value| value.as_str().is_none_or(|value| value.trim().is_empty()))
+                {
+                    failures.push(format!(
+                        "{} irreversibility_note must be a non-empty string",
+                        operation.operation_id
+                    ));
                 }
             }
             "actor_private_event" => {

@@ -46,7 +46,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     )
     .await?;
     assert_eq!(log["did"], "did:web:alice.example");
-    assert_eq!(log["method"], "did:web");
+    assert_eq!(log["method"], "web");
     assert_eq!(log["native_history"], false);
     assert!(log["entries"].as_array().is_some_and(Vec::is_empty));
     assert_eq!(log["has_more"], false);
@@ -92,7 +92,7 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
     )
     .await?;
     assert_eq!(log_after_submit["did"], actor_id);
-    assert_eq!(log_after_submit["method"], "did:webvh");
+    assert_eq!(log_after_submit["method"], "webvh");
     assert_eq!(log_after_submit["native_history"], true);
     assert_eq!(log_after_submit["entries"].as_array().unwrap().len(), 1);
     assert_eq!(log_after_submit["entries"][0], prepared.log_entry);

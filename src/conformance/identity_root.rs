@@ -23,7 +23,9 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
-use arkret_wire::{Audience, Event, EventRef, NonEmptyString, Proof};
+use arkret_wire::{
+    Audience, DidUrl, Event, EventRef, NonEmptyString, PrincipalAuthorityInstance, Proof, RealmId,
+};
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{Value, json};
@@ -182,7 +184,7 @@ pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
 /// fixture and verifies the remaining reducer cases stay explicitly declared.
 ///
 /// This is deliberately named a checkpoint suite: presence checks for the
-/// 58-case formal matrix are not reported as executed reducer coverage.
+/// 62-case formal matrix are not reported as executed reducer coverage.
 pub fn run_identity_root_anchor_checkpoint_suite() -> Result<()> {
     let fixture = load_fixture_value(ROOT_ANCHOR_FIXTURE)?;
     for vector in [
@@ -211,6 +213,8 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let principal = DidCoreId::from(project_full_id_to_core_id(&principal_full_id)?);
     let created_at = "2026-07-15T00:00:00.000Z".parse()?;
     let device_id = DeviceId::new("ak:device:01904100-0000-7000-8000-000000000001")?;
+    let device_verification_method =
+        DidUrl::new(format!("{principal_full_id}#{device_id}")).map_err(anyhow::Error::msg)?;
     let device_key = SigningKey::from_bytes(&[0x42; 32]);
     let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
         &device_key.verifying_key().to_bytes(),
@@ -299,10 +303,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     )?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
-    authorize = with_proof(
-        authorize,
-        &crate::fixture_did_url(format!("{principal}#{device_id}")),
-    )?;
+    authorize = with_proof(authorize, &device_verification_method)?;
     let unit = build_self_principal_pcr_genesis_unit(
         create.clone(),
         authorize.clone(),
@@ -333,11 +334,22 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
 }
 
 fn validate_reanchor_helpers() -> Result<()> {
+    let principal = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
+    let authority_instance = PrincipalAuthorityInstance::new(
+        principal.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
+        RealmId::new("ak:realm:AcbFC8Nil95DfV11kMMMvRtzRdEC3g-tFtBE8_VQQ74j")?,
+        Hash::new(format!("sha256:{}", "1".repeat(64)))?,
+    )?;
     let value = json!({
-        "principal_id": "ak:did_core:webvh:z6mkfixture",
-        "did_version_id": "2-QmCurrent",
-        "previous_device_generation": "1-QmPrevious",
-        "new_device_generation": "2-QmCurrent",
+        "principal_id": principal,
+        "authority_instance": authority_instance,
+        "recovery_authority_kind": "pcr_policy",
+        "recovery_policy_id": "ak:policy:01904100-0000-7000-8000-000000000001",
+        "recovery_policy_version": 1,
+        "recovery_session_id": "ak:recovery_session:01904100-0000-7000-8000-000000000002",
+        "previous_device_generation": 1,
+        "new_device_generation": 2,
         "pre_fence_basis": null,
         "replacement_authorize_payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     });
@@ -376,7 +388,7 @@ fn validate_reanchor_helpers() -> Result<()> {
     }
 
     let mut mismatched = value;
-    mismatched["new_device_generation"] = json!("3-QmOther");
+    mismatched["new_device_generation"] = json!(3);
     if serde_json::from_value::<DeviceReanchorPayload>(mismatched).is_ok() {
         bail!("device re-anchor accepted a DID/generation mismatch");
     }
@@ -430,9 +442,9 @@ fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
         .get("cases")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("{ROOT_ANCHOR_FIXTURE} missing cases[]"))?;
-    if cases.len() != 58 {
+    if cases.len() != 62 {
         bail!(
-            "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 58 cases, found {}",
+            "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 62 cases, found {}",
             cases.len()
         );
     }

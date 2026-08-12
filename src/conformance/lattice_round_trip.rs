@@ -954,11 +954,11 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     if entries.len() != 3 {
         bail!("OrderedLog must dedupe byte-identical appends and keep 3 entries, got {entries:?}");
     }
-    if entries[0].get("issuer").and_then(Value::as_str) != Some("did:web:alice.example")
+    if entries[0].get("issuer").and_then(Value::as_str) != Some("ak:did_core:web:alice.example")
         || entries[0].get("issuer_seq").and_then(Value::as_u64) != Some(0)
-        || entries[1].get("issuer").and_then(Value::as_str) != Some("did:web:alice.example")
+        || entries[1].get("issuer").and_then(Value::as_str) != Some("ak:did_core:web:alice.example")
         || entries[1].get("issuer_seq").and_then(Value::as_u64) != Some(1)
-        || entries[2].get("issuer").and_then(Value::as_str) != Some("did:web:bob.example")
+        || entries[2].get("issuer").and_then(Value::as_str) != Some("ak:did_core:web:bob.example")
         || entries[2].get("issuer_seq").and_then(Value::as_u64) != Some(0)
     {
         bail!("OrderedLog entries are not sorted by issuer then seq: {entries:?}");
@@ -1124,7 +1124,7 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
         );
     }
     let gap = &gap_report.pending_gaps[0];
-    if gap.issuer != "did:web:alice.example"
+    if gap.issuer != "ak:did_core:web:alice.example"
         || gap.missing_seq != 2
         || gap.pending_seq != 3
         || gap.reason != "dependency_missing"
