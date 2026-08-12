@@ -1227,11 +1227,8 @@ pub(crate) fn invite_create_payload(
 ) -> Result<Value> {
     let invitee_full_id = DidFullId::new(invitee.to_owned())
         .map_err(|err| anyhow!("invalid invitee full id: {err}"))?;
-    let recipient_full_id = DidFullId::new(recipient_service_id.to_owned())
-        .map_err(|err| anyhow!("invalid recipient service full id: {err}"))?;
-    let recipient_service_id = arkret_identifiers::DidCoreId::from(
-        arkret_identifiers::project_full_id_to_core_id(&recipient_full_id)?,
-    );
+    let recipient_service_id = arkret_identifiers::DidCoreId::new(recipient_service_id.to_owned())
+        .map_err(|err| anyhow!("invalid recipient service core id: {err}"))?;
     let current_record_url = format!(
         "https://cotest.invalid{}",
         arkret_models_identity::canonical_service_current_record_path(&recipient_service_id)
