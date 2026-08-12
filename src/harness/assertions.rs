@@ -258,7 +258,9 @@ fn append_transcript_entry_to(path: &PathBuf, entry: &Value) -> Result<()> {
         .open(path)?;
     file.lock_exclusive()?;
     use std::io::Write as _;
-    let write_result = writeln!(file, "{}", serde_json::to_string(entry)?);
+    let mut encoded = serde_json::to_vec(entry)?;
+    encoded.push(b'\n');
+    let write_result = file.write_all(&encoded).and_then(|()| file.flush());
     let unlock_result = file.unlock();
     write_result?;
     unlock_result?;
@@ -586,7 +588,11 @@ mod tests {
                     for sequence in 0..64 {
                         append_transcript_entry_to(
                             &path,
-                            &json!({"writer": writer, "sequence": sequence}),
+                            &json!({
+                                "writer": writer,
+                                "sequence": sequence,
+                                "payload": "x".repeat(4096),
+                            }),
                         )
                         .expect("append transcript entry");
                     }
