@@ -5,8 +5,9 @@ use arkret_models_collaboration::event_sync::{
     EventsFrontierAccountClientState, EventsFrontierView,
 };
 use cotest::harness::{
-    ArkretServer, create_realm_with_signing_seed, event_envelope_at_frontier_with_signing_seed,
-    events_frontier_request_body, expect_json, query_method, register_account,
+    ArkretServer, create_realm_with_signing_seed, default_event_verification_method,
+    event_envelope_at_frontier_with_signing_seed, events_frontier_request_body, expect_json,
+    query_method, register_account,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -84,7 +85,7 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
                 &arkret_identifiers::DidFullId::new(ACTOR.clone()).map_err(anyhow::Error::msg)?,
             )?,
         ),
-        key_id: format!("{}#cotest", ACTOR.as_str()),
+        key_id: default_event_verification_method(ACTOR.as_str()).to_string(),
         key_epoch: 0,
         credential_epoch: None,
     });

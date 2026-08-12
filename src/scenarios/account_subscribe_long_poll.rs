@@ -758,7 +758,7 @@ async fn submit_event_now(
                         &arkret_identifiers::DidFullId::new(actor.actor.clone())?,
                     )?,
                 ),
-                key_id: format!("{}#cotest", actor.actor),
+                key_id: crate::harness::default_event_verification_method(&actor.actor).to_string(),
                 key_epoch: 0,
                 credential_epoch: None,
             });

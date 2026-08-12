@@ -150,7 +150,10 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     let input: PrincipalRegistrationFixtureInput =
         serde_json::from_value(input).context("parse principal-registration fixture input")?;
     let initial_session = arkret::InitialSessionGrantRequest {
-        device_id: input.device_id.parse().context("parse founding device id")?,
+        device_id: input
+            .device_id
+            .parse()
+            .context("parse founding device id")?,
         session_public_key: input.initial_session.session_public_key,
         audience: input.initial_session.audience,
         requested_scope: arkret::STANDARD_INITIAL_SESSION_GRANT_OPERATIONS.to_vec(),
@@ -553,7 +556,9 @@ fn account_handoff_request(input: Value) -> Result<Value> {
 fn account_handoff_outcome(input: Value) -> Result<Value> {
     let outcome: arkret_models_identity::AccountHandoffOutcome =
         serde_json::from_value(input).context("parse typed account-handoff outcome")?;
-    outcome.validate().context("validate account-handoff outcome")?;
+    outcome
+        .validate()
+        .context("validate account-handoff outcome")?;
     serde_json::to_value(outcome).context("serialize validated account-handoff outcome")
 }
 

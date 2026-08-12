@@ -62,12 +62,16 @@ pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
         .get(actor)
         .cloned()
         .unwrap_or_else(|| {
-            let verification_method = DidUrl::new(format!("{actor}#cotest"))
-                .expect("cotest default Event signer verification method is a DID URL");
+            let verification_method = default_event_verification_method(actor);
             let signing_seed =
                 arkret::signatures::development_signing_key_seed(&verification_method);
             (signing_seed, verification_method)
         })
+}
+
+pub fn default_event_verification_method(actor: &str) -> DidUrl {
+    DidUrl::new(format!("{actor}#{}", canonical_device_id(actor)))
+        .expect("cotest default Event signer verification method is a canonical device DID URL")
 }
 
 pub(crate) fn registered_event_signing_seed(
@@ -84,7 +88,7 @@ pub(crate) fn registered_event_signing_seed(
 
 fn verification_method_for_actor(actor: &str) -> DidUrl {
     let value = actor.strip_prefix("did:key:").map_or_else(
-        || format!("{actor}#cotest"),
+        || default_event_verification_method(actor).to_string(),
         |multibase| format!("{actor}#{multibase}"),
     );
     DidUrl::new(value).expect("cotest actor verification method is a DID URL")
@@ -602,7 +606,7 @@ pub async fn submit_event_with_signing_seed(
         payload,
         status,
         signing_seed,
-        &crate::fixture_did_url(format!("{actor}#cotest")),
+        &default_event_verification_method(actor),
     )
     .await
 }

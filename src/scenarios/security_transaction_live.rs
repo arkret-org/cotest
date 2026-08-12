@@ -191,7 +191,7 @@ fn event_submission(principal: &DidFullId, kind: &str) -> Result<EventInitialSub
         // `zh/identity/did-usage-and-verification.md` §2.2: a
         // `verification_method` is a DID URL, never a bare DID. This fixture
         // used `principal` itself, which no receiver could resolve to a key.
-        verification_method: crate::fixture_did_url(format!("{principal}#cotest")),
+        verification_method: crate::harness::default_event_verification_method(principal.as_str()),
         event_digest,
         created_at: now,
         domain: None,

@@ -309,7 +309,7 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
     let strand_id = alice.default_strand_id(&realm_id)?;
 
     let foreign = "did:web:never-admitted.example";
-    let foreign_method = crate::fixture_did_url(format!("{foreign}#cotest"));
+    let foreign_method = crate::harness::default_event_verification_method(foreign);
     let event = crate::harness::event_envelope_with_signing_seed_and_verification_method(
         foreign,
         &realm_id,
