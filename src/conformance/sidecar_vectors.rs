@@ -184,16 +184,9 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
             .ok_or_else(|| anyhow!("fixture controller_id is missing"))?
             .to_owned(),
     )?;
-    let owned_agent_ids = transcript["owned_agent_ids"]
+    let desired_agent_ids = transcript["desired_agent_ids"]
         .as_array()
-        .ok_or_else(|| anyhow!("fixture owned_agent_ids are missing"))?
-        .iter()
-        .filter_map(Value::as_str)
-        .map(|principal_id| DidCoreId::new(principal_id.to_owned()))
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    let effective_agent_ids = transcript["effective_agent_ids"]
-        .as_array()
-        .ok_or_else(|| anyhow!("fixture effective_agent_ids are missing"))?
+        .ok_or_else(|| anyhow!("fixture desired_agent_ids are missing"))?
         .iter()
         .filter_map(Value::as_str)
         .map(|principal_id| DidCoreId::new(principal_id.to_owned()))
@@ -202,8 +195,7 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
         sidecar_id.clone(),
         realm_id.clone(),
         controller_id,
-        &owned_agent_ids,
-        &effective_agent_ids,
+        &desired_agent_ids,
     )?;
 
     let sidecar_binding = SidecarMlsBinding {
@@ -2699,7 +2691,6 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         realm_id.clone(),
         controller_id.clone(),
         &[],
-        &[],
     )?;
     let created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
     let view = AgentSidecarView {
@@ -2714,7 +2705,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
             created_at,
             updated_at: None,
         },
-        owned_agent_ids: Vec::new(),
+        desired_agent_ids: Vec::new(),
         effective_agent_ids: Vec::new(),
         mls_context: AgentSidecarMlsContext {
             participant_authority_digest,
