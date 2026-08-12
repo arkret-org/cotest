@@ -69,6 +69,24 @@ pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
         })
 }
 
+pub(crate) fn event_signing_identity_for_device(
+    actor: &str,
+    device_id: &str,
+) -> ([u8; 32], DidUrl) {
+    REGISTERED_EVENT_SIGNERS
+        .lock()
+        .expect("registered Event signer lock")
+        .get(actor)
+        .cloned()
+        .unwrap_or_else(|| {
+            let verification_method = DidUrl::new(format!("{actor}#{device_id}"))
+                .expect("cotest client Event signer verification method is a DID URL");
+            let signing_seed =
+                arkret::signatures::development_signing_key_seed(&verification_method);
+            (signing_seed, verification_method)
+        })
+}
+
 pub fn default_event_verification_method(actor: &str) -> DidUrl {
     DidUrl::new(format!("{actor}#{}", canonical_device_id(actor)))
         .expect("cotest default Event signer verification method is a canonical device DID URL")
@@ -317,6 +335,15 @@ pub fn realm_bootstrap_event_batch(
     draft: RealmBootstrapDraft,
 ) -> Result<(String, Vec<arkret_wire::Event>)> {
     let (signing_seed, verification_method) = event_signing_identity(actor);
+    realm_bootstrap_event_batch_with_signing_seed(actor, draft, signing_seed, &verification_method)
+}
+
+pub(crate) fn realm_bootstrap_event_batch_for_device(
+    actor: &str,
+    device_id: &str,
+    draft: RealmBootstrapDraft,
+) -> Result<(String, Vec<arkret_wire::Event>)> {
+    let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
     realm_bootstrap_event_batch_with_signing_seed(actor, draft, signing_seed, &verification_method)
 }
 
@@ -1034,6 +1061,31 @@ pub(crate) fn event_envelope_with_chain(
     )
 }
 
+pub(crate) fn event_envelope_with_chain_for_device(
+    actor: &str,
+    device_id: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    actor_seq: u64,
+    prev_event_id: Option<&str>,
+) -> Event {
+    let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
+    event_envelope_with_chain_and_signing_identity(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        Some(actor_seq),
+        prev_event_id
+            .map(|value| EventId::new(value.to_owned()).expect("accepted actor frontier Event id"))
+            .into_iter()
+            .collect(),
+        signing_seed,
+        &verification_method,
+    )
+}
+
 fn normalize_message_payload(kind: &str, payload: &mut Value) {
     let Some(object) = payload.as_object_mut() else {
         return;
@@ -1331,6 +1383,31 @@ pub(crate) fn event_envelope_with_causal_refs(
     causal_refs: Vec<String>,
 ) -> Event {
     let (signing_seed, verification_method) = event_signing_identity(actor);
+    event_envelope_with_chain_and_signing_identity_and_causal_refs(
+        actor,
+        realm_id,
+        kind,
+        payload,
+        actor_seq,
+        prev_event_ids,
+        signing_seed,
+        &verification_method,
+        causal_refs,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn event_envelope_with_causal_refs_for_device(
+    actor: &str,
+    device_id: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    actor_seq: Option<u64>,
+    prev_event_ids: Vec<EventId>,
+    causal_refs: Vec<String>,
+) -> Event {
+    let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
     event_envelope_with_chain_and_signing_identity_and_causal_refs(
         actor,
         realm_id,

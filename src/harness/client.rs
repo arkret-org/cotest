@@ -20,12 +20,13 @@ use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
 use super::event_builder::{
-    ensure_submit_event_id, event_envelope_with_causal_refs, event_envelope_with_chain,
-    event_signing_identity, realm_bootstrap_event_batch,
+    ensure_submit_event_id, event_envelope_with_causal_refs_for_device,
+    event_envelope_with_chain_for_device, event_signing_identity_for_device,
+    realm_bootstrap_event_batch_for_device,
 };
 use super::{
     events_frontier_request_body, member_join_payload, message_create_text_payload, next_typed_id,
-    query_method, realm_create_payload, refresh_typed_event_proof,
+    query_method, realm_create_payload, refresh_typed_event_proof_with_signing_seed,
 };
 
 #[derive(Clone)]
@@ -226,7 +227,8 @@ impl TestActorClient {
     ) -> Result<arkret_wire::Event> {
         let mut event = draft.unsigned_event()?;
         let created_at = event.created_at;
-        let (signing_seed, verification_method) = event_signing_identity(&self.actor);
+        let (signing_seed, verification_method) =
+            event_signing_identity_for_device(&self.actor, &self.device_id);
         let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
             signing_seed,
             DidFullId::new(self.actor.clone())?,
@@ -434,7 +436,8 @@ impl TestActorClient {
 
     pub async fn create_realm_with(&self, body: Value) -> Result<Value> {
         let draft = realm_create_payload(&self.service_id, &body)?;
-        let (realm_id, events) = realm_bootstrap_event_batch(&self.actor, draft)?;
+        let (realm_id, events) =
+            realm_bootstrap_event_batch_for_device(&self.actor, &self.device_id, draft)?;
         self.controlled_realms
             .lock()
             .expect("cotest controlled-Realm set is not poisoned")
@@ -720,8 +723,9 @@ impl TestActorClient {
                 "combined selector returned the wrong frontier variant"
             ));
         };
-        let mut event = event_envelope_with_causal_refs(
+        let mut event = event_envelope_with_causal_refs_for_device(
             &self.actor,
+            &self.device_id,
             realm_id,
             kind,
             payload,
@@ -784,7 +788,8 @@ impl TestActorClient {
                         .expect("calendar schema profile is registered"),
                 ];
             }
-            refresh_typed_event_proof(&mut event)?;
+            let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
+            refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
         }
         Ok(event)
     }
@@ -833,8 +838,9 @@ impl TestActorClient {
         if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
             return Err(anyhow!("combined selector returned the wrong actor scope"));
         }
-        let mut event = event_envelope_with_chain(
+        let mut event = event_envelope_with_chain_for_device(
             &self.actor,
+            &self.device_id,
             realm_id,
             kind,
             payload,
@@ -884,7 +890,8 @@ impl TestActorClient {
                 self.stamp_authority(&mut event, realm_id, kind, is_data_event);
             }
         }
-        refresh_typed_event_proof(&mut event)?;
+        let (signing_seed, _) = event_signing_identity_for_device(&self.actor, &self.device_id);
+        refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
         Ok(event)
     }
 
