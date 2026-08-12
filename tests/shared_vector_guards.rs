@@ -35,9 +35,12 @@ fn reducer_profile_registry_and_sdk_support_set_agree() -> Result<()> {
                 .ok_or_else(|| anyhow!("active reducer profile lacks profile_id"))
         })
         .collect::<Result<Vec<_>>>()?;
+    let sdk_ids = arkret_wire::ReducerProfileId::ALL
+        .iter()
+        .map(|id| id.as_str())
+        .collect::<Vec<_>>();
     assert_eq!(
-        active_ids,
-        arkret_policy::generated::profiles::REDUCER_PROFILE_IDS,
+        active_ids, sdk_ids,
         "Spec registry and generated SDK reducer profile ids must agree"
     );
     assert_eq!(active_ids, [arkret_wire::CORE_REDUCER_PROFILE]);

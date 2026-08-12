@@ -302,7 +302,7 @@ pub fn assert_sdk_matches_artifact() -> Result<()> {
     let table = ProfileRoleTable::load()?;
     let mut diffs = Vec::new();
     for (profile_id, expected) in &table.roles {
-        match arkret_policy::generated::profiles::profile_role(profile_id) {
+        match arkret_wire::ProfileId::from_wire(profile_id).map(arkret_wire::ProfileId::role) {
             Some(sdk_role) => {
                 if sdk_role.as_str() != expected.as_str() {
                     diffs.push(format!(
