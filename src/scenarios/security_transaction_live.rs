@@ -134,9 +134,10 @@ fn rotation_plan(
         BackupRotationKind::SecretStorage => "secret_storage",
         BackupRotationKind::MlsHistory => "mls_history",
     };
+    let principal_id = arkret_wire::project_full_id_to_core_id(principal)?;
     let material = CanonicalPublicMaterial::canonical_json(json!({
         "backups": [{
-            "actor_id": principal,
+            "actor_id": principal_id,
             "backup_id": binding.new_backups[0].backup_id,
             "backup_kind": backup_kind,
             "ciphertext_digest": binding.new_backups[0].ciphertext_digest,
