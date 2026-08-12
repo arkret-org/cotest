@@ -22,7 +22,7 @@ use anyhow::{Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, TestActorClient, eventually, expect_json};
+use crate::harness::{ArkretServer, TestActorClient, actor_core_id, eventually, expect_json};
 
 const ALICE_DID: &str = "did:web:cotest-rsvp-alice.example";
 const BOB_DID: &str = "did:web:cotest-rsvp-bob.example";
@@ -40,8 +40,8 @@ fn created_strand_id(submitted: &Value) -> Result<String> {
     Ok(arkret_identifiers::StrandId::from_event_id(&event_id).to_string())
 }
 
-fn calendar_subtree() -> Value {
-    json!({
+fn calendar_subtree() -> Result<Value> {
+    Ok(json!({
         "start": "2026-06-22T09:00:00",
         "end": "2026-06-22T10:00:00",
         "timezone": "America/Los_Angeles",
@@ -50,10 +50,10 @@ fn calendar_subtree() -> Value {
         "status": "confirmed",
         "recurrence": {"frequency": "weekly", "count": 10},
         "attendees": [
-            {"actor_id": ALICE_DID, "role": "organizer"},
-            {"actor_id": BOB_DID, "role": "required"}
+            {"actor_id": actor_core_id(ALICE_DID)?, "role": "organizer"},
+            {"actor_id": actor_core_id(BOB_DID)?, "role": "required"}
         ]
-    })
+    }))
 }
 
 fn inkson_rsvp_payload(
@@ -63,7 +63,7 @@ fn inkson_rsvp_payload(
     status: &str,
     basis: &[String],
 ) -> Result<Value> {
-    let calendar_fields = serde_json::from_value(calendar_subtree())?;
+    let calendar_fields = serde_json::from_value(calendar_subtree()?)?;
     let basis = basis
         .iter()
         .cloned()
@@ -201,6 +201,39 @@ async fn wait_for_next_seal(
     .await
 }
 
+async fn wait_for_projected_grant(
+    client: &TestActorClient,
+    realm_id: &str,
+    subject: &str,
+    grant_id: &str,
+) -> Result<()> {
+    eventually(
+        "capability grant projection",
+        Duration::from_secs(30),
+        Duration::from_millis(100),
+        || async {
+            let effective = expect_json(
+                client
+                    .get("/_arkret/self/authz/effective-grants")
+                    .query(&[("subject", subject), ("realm_id", realm_id)]),
+                StatusCode::OK,
+            )
+            .await?;
+            if effective["grants"].as_array().is_some_and(|grants| {
+                grants.iter().any(|grant| {
+                    grant["id"].as_str() == Some(grant_id)
+                        || grant["grant_id"].as_str() == Some(grant_id)
+                })
+            }) {
+                Ok(())
+            } else {
+                Err(anyhow!("capability grant {grant_id} is not projected yet"))
+            }
+        },
+    )
+    .await
+}
+
 async fn current_seal(client: &TestActorClient, realm_id: &str) -> Result<String> {
     let frontier = client.realm_seal_frontier(realm_id).await?;
     frontier["frontier"]["seal_id"]
@@ -220,6 +253,8 @@ async fn grant_calendar_actions(
             &["ak.strand.create", "ak.strand.update", "ak.rsvp.set"],
         )
         .await?;
+    let subject = actor_core_id(&client.actor)?;
+    wait_for_projected_grant(client, realm_id, &subject, &calendar_grant_id).await?;
     wait_for_next_seal(client, realm_id, bootstrap_seal).await?;
     Ok(vec![calendar_grant_id])
 }
@@ -233,6 +268,8 @@ async fn grant_calendar_rsvp_to(
     let (grant_id, _) = issuer
         .grant_realm_actions_to(realm_id, actor, &["ak.rsvp.set"])
         .await?;
+    let subject = actor_core_id(actor)?;
+    wait_for_projected_grant(issuer, realm_id, &subject, &grant_id).await?;
     wait_for_next_seal(issuer, realm_id, predecessor_seal).await?;
     Ok(vec![grant_id])
 }
@@ -256,6 +293,8 @@ async fn submit_prepared_event(
 }
 
 pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()> {
+    let alice_core_id = actor_core_id(ALICE_DID)?;
+    let bob_core_id = actor_core_id(BOB_DID)?;
     let server = ArkretServer::spawn("calendar-rsvp-convergence").await?;
     let alice = server
         .register_client(
@@ -314,10 +353,10 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Weekly sync",
-                        "fields": {"calendar": calendar_subtree()}
+                        "fields": {"calendar": calendar_subtree()?}
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": ALICE_DID,
+                    "created_by": alice_core_id,
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
@@ -359,8 +398,8 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                             "recurrence": {"frequency": "weekly", "count": 10},
                             "location": {"title": "Room 2"},
                             "attendees": [
-                                {"actor_id": ALICE_DID, "role": "organizer"},
-                                {"actor_id": BOB_DID, "role": "required"}
+                                {"actor_id": alice_core_id, "role": "organizer"},
+                                {"actor_id": bob_core_id, "role": "required"}
                             ]
                         }
                     }
@@ -380,7 +419,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         bob_grant_refs,
     )
     .await?;
-    let bob_heads = heads_for(&read_strand(&bob, &strand_id).await?, BOB_DID);
+    let bob_heads = heads_for(&read_strand(&bob, &strand_id).await?, &bob_core_id);
     if head_statuses(&bob_heads) != vec!["accepted".to_owned()] {
         return Err(anyhow!(
             "Bob's RSVP did not materialize through the real reducer"
@@ -411,7 +450,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let second_digest = submit_prepared_event(&alice_second_device, &second_event).await?;
 
     let strand = read_strand(&alice, &strand_id).await?;
-    let heads = heads_for(&strand, ALICE_DID);
+    let heads = heads_for(&strand, &alice_core_id);
     if heads.len() != 2 {
         return Err(anyhow!(
             "concurrent responses must expose two heads, got {}; the server may not choose \
@@ -444,7 +483,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let resolved_digest = submitted_digest(&resolved)?;
 
     let strand = read_strand(&alice, &strand_id).await?;
-    let heads = heads_for(&strand, ALICE_DID);
+    let heads = heads_for(&strand, &alice_core_id);
     if heads.len() != 1 {
         return Err(anyhow!(
             "a response observing both heads must dominate them, got {} heads",
@@ -485,7 +524,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     submit_prepared_event(&alice_second_device, &reverse_first).await?;
     let heads = heads_for(
         &read_strand(&alice_second_device, &strand_id).await?,
-        ALICE_DID,
+        &alice_core_id,
     );
     if heads.len() != 2
         || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
@@ -507,7 +546,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             calendar_grant_refs,
         )
         .await?;
-    let final_heads = heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID);
+    let final_heads = heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id);
     if final_heads.len() != 1 || head_statuses(&final_heads) != vec!["tentative".to_owned()] {
         return Err(anyhow!(
             "reversed arrival order must converge to the same causal successor"
@@ -522,6 +561,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 /// available; environments without either Postgres source report an explicit
 /// live-row skip while the always-on in-memory convergence scenario still runs.
 pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
+    let alice_core_id = actor_core_id(ALICE_DID)?;
     let configured_database = std::env::var("COTEST_SOLAND_DATABASE_URL")
         .ok()
         .filter(|url| !url.trim().is_empty());
@@ -571,7 +611,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         )
         .await?;
     let created = alice
-        .create_realm_with(json!({
+        .create_realm_bootstrap_with(json!({
             "title": "RSVP restart",
             "summary": "RSVP restart",
             "public": false,
@@ -596,10 +636,10 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Durable weekly sync",
-                        "fields": {"calendar": calendar_subtree()}
+                        "fields": {"calendar": calendar_subtree()?}
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": ALICE_DID,
+                    "created_by": alice_core_id,
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
@@ -629,7 +669,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .await?;
     let accepted_digest = submit_prepared_event(&alice, &accepted).await?;
     let declined_digest = submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID).len() != 2 {
+    if heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id).len() != 2 {
         return Err(anyhow!(
             "pre-restart Calendar cell did not expose two heads"
         ));
@@ -646,7 +686,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .demo_client(ALICE_DID, "ak:device:01904100-0000-7000-8000-0000000000d2")
         .await?;
     let restarted_strand = read_strand(&alice, &strand_id).await?;
-    let heads = heads_for(&restarted_strand, ALICE_DID);
+    let heads = heads_for(&restarted_strand, &alice_core_id);
     if heads.len() != 2
         || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
     {
@@ -656,7 +696,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     }
     submit_prepared_event(&alice, &accepted).await?;
     submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID).len() != 2 {
+    if heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id).len() != 2 {
         return Err(anyhow!("post-restart exact replay duplicated RSVP heads"));
     }
 
@@ -680,7 +720,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice = server
         .demo_client(ALICE_DID, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
-    let heads = heads_for(&read_strand(&alice, &strand_id).await?, ALICE_DID);
+    let heads = heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id);
     if heads.len() != 1 || head_statuses(&heads) != vec!["tentative".to_owned()] {
         return Err(anyhow!(
             "resolved RSVP cell did not survive the second restart"
@@ -698,6 +738,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
 /// reached `ak.component.calendar.rsvp.v1` and the response silently did not
 /// converge.
 pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
+    let alice_core_id = actor_core_id(ALICE_DID)?;
     let server = ArkretServer::spawn("calendar-rsvp-effectless").await?;
     let alice = server
         .register_client(
@@ -732,10 +773,10 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Weekly sync",
-                        "fields": {"calendar": calendar_subtree()}
+                        "fields": {"calendar": calendar_subtree()?}
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": ALICE_DID,
+                    "created_by": alice_core_id,
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),

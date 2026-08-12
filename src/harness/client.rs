@@ -442,24 +442,14 @@ impl TestActorClient {
     }
 
     pub async fn create_realm_with(&self, body: Value) -> Result<Value> {
-        let draft = realm_create_payload(&self.service_id, &body)?;
-        let (realm_id, events) =
-            realm_bootstrap_event_batch_for_device(&self.actor, &self.device_id, draft)?;
-        self.controlled_realms
-            .lock()
-            .expect("cotest controlled-Realm set is not poisoned")
-            .insert(realm_id.clone());
-        let events = events
-            .into_iter()
-            .map(arkret_wire::EventInitialSubmission::online)
-            .collect();
-        let request = arkret_wire::EventsSubmitBatchRequestBody { events };
-        let event_response = expect_json(
-            self.post("/_arkret/self/events").json(&request),
-            StatusCode::OK,
-        )
-        .await?;
-        let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
+        let bootstrap = self.create_realm_bootstrap_with(body).await?;
+        let realm_id = arkret_identifiers::RealmId::new(
+            bootstrap["realm_id"]
+                .as_str()
+                .ok_or_else(|| anyhow!("Realm bootstrap response missing realm_id: {bootstrap}"))?
+                .to_owned(),
+        )?;
+        let event_response = bootstrap["event_response"].clone();
         let actor_full_id = arkret_identifiers::DidFullId::new(self.actor.clone())?;
         let actor_id = arkret_identifiers::DidCoreId::from(
             arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?,
@@ -507,6 +497,37 @@ impl TestActorClient {
         Ok(json!({
             "realm_id": realm_id,
             "default_strand_id": strand_id,
+            "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
+            "event_response": event_response,
+        }))
+    }
+
+    /// Submit only the Realm bootstrap control batch.
+    ///
+    /// Durable convergence scenarios use this entry point so they can wait
+    /// for the bootstrap Seal before authoring their first DataEvent, without
+    /// racing the convenience helper's default Discussion Strand.
+    pub async fn create_realm_bootstrap_with(&self, body: Value) -> Result<Value> {
+        let draft = realm_create_payload(&self.service_id, &body)?;
+        let (realm_id, events) =
+            realm_bootstrap_event_batch_for_device(&self.actor, &self.device_id, draft)?;
+        self.controlled_realms
+            .lock()
+            .expect("cotest controlled-Realm set is not poisoned")
+            .insert(realm_id.clone());
+        let events = events
+            .into_iter()
+            .map(arkret_wire::EventInitialSubmission::online)
+            .collect();
+        let request = arkret_wire::EventsSubmitBatchRequestBody { events };
+        let event_response = expect_json(
+            self.post("/_arkret/self/events").json(&request),
+            StatusCode::OK,
+        )
+        .await?;
+        let realm_id = arkret_identifiers::RealmId::new(realm_id.clone())?;
+        Ok(json!({
+            "realm_id": realm_id,
             "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
             "event_response": event_response,
         }))
