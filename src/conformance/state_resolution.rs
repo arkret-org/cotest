@@ -71,12 +71,6 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 require_str_eq(vector, "/expected/event_state", "data_local", name)?;
                 require_bool_eq(vector, "/expected/fanout_allowed", true, name)?;
                 require_bool_eq(vector, "/expected/seal_required_for_accept", false, name)?;
-                require_str_eq(
-                    vector,
-                    "/expected/query_grade_before_observation",
-                    "local",
-                    name,
-                )?;
                 seen_data_local = true;
                 record_vector_event(
                     "state_resolution.cba.data_event_accepts_without_seal_finality",
@@ -102,7 +96,6 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     name,
                 )?;
                 require_str_eq(vector, "/expected/data_event_state", "data_observed", name)?;
-                require_str_eq(vector, "/expected/query_grade", "observed", name)?;
                 require_bool_eq(vector, "/expected/must_not_report_sealed", true, name)?;
                 seen_observation = true;
                 record_vector_event(
@@ -110,12 +103,10 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     &json!({"vector": vector.clone()}),
                     &json!({
                         "data_event_state": "data_observed",
-                        "query_grade": "observed",
                         "must_not_report_sealed": true,
                     }),
                     &json!({
                         "data_event_state": pointer_str(vector, "/expected/data_event_state"),
-                        "query_grade": pointer_str(vector, "/expected/query_grade"),
                         "must_not_report_sealed": pointer_bool(vector, "/expected/must_not_report_sealed"),
                     }),
                 );
@@ -137,17 +128,10 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     "control_pending",
                     name,
                 )?;
-                require_str_eq(vector, "/expected_before_seal/query_grade", "seen", name)?;
                 require_str_eq(
                     vector,
                     "/expected_after_valid_seal/event_state",
                     "control_sealed",
-                    name,
-                )?;
-                require_str_eq(
-                    vector,
-                    "/expected_after_valid_seal/query_grade",
-                    "sealed",
                     name,
                 )?;
                 seen_control_seal = true;
@@ -407,12 +391,12 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     &json!({
                         "fault_move_result": "accept",
                         "later_seal_from_signer": "reject",
-                        "branch_grade": "forked",
+                        "branch_disposition": "fork_quarantine",
                     }),
                     &json!({
                         "fault_move_result": pointer_str(vector, "/expected/fault_move_result"),
                         "later_seal_from_signer": pointer_str(vector, "/expected/later_seal_from_signer"),
-                        "branch_grade": pointer_str(vector, "/expected/affected_branch_query_grade"),
+                        "branch_disposition": pointer_str(vector, "/expected/affected_branch_disposition"),
                     }),
                 );
             }
@@ -1364,13 +1348,21 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
                 require_str_eq(case, "/expected/result", "reject_or_hide", vector_name)?;
                 require_str_eq(case, "/expected/reason", "stale_seal_ref", vector_name)?;
             }
-            "revoked_key_within_freshness_window" => {
+            "revoked_key_within_freshness_window" | "revoked_key_at_freshness_window_boundary" => {
                 let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
                 if distance > window {
                     bail!("vector {vector_name} within-window case exceeds freshness window");
                 }
-                require_str_eq(case, "/expected/result", "accept_temporarily", vector_name)?;
-                require_str_eq(case, "/expected/query_grade", "stale", vector_name)?;
+                if case_name == "revoked_key_at_freshness_window_boundary" && distance != window {
+                    bail!("vector {vector_name} boundary case must equal freshness window");
+                }
+                require_str_eq(case, "/expected/result", "accept", vector_name)?;
+                require_bool_eq(
+                    case,
+                    "/expected/included_in_data_cell_join",
+                    true,
+                    vector_name,
+                )?;
             }
             "rejecting_revoked_key_within_freshness_window_is_nonconformant" => {
                 let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
@@ -1379,13 +1371,13 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
                 }
                 require_str_eq(case, "/implementation_result", "reject", vector_name)?;
                 require_str_eq(case, "/expected/conformance", "fail", vector_name)?;
-                require_str_eq(
+                require_str_eq(case, "/expected/required_result", "accept", vector_name)?;
+                require_bool_eq(
                     case,
-                    "/expected/required_result",
-                    "accept_temporarily",
+                    "/expected/required_included_in_data_cell_join",
+                    true,
                     vector_name,
                 )?;
-                require_str_eq(case, "/expected/required_query_grade", "stale", vector_name)?;
             }
             "epoch_not_valid_at_seal_ref" => {
                 require_bool_eq(
@@ -1411,6 +1403,7 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
         &[
             "revoked_key_old_seal_ref_outside_window",
             "revoked_key_within_freshness_window",
+            "revoked_key_at_freshness_window_boundary",
             "rejecting_revoked_key_within_freshness_window_is_nonconformant",
             "epoch_not_valid_at_seal_ref",
         ],
@@ -1683,8 +1676,8 @@ fn validate_notary_fault_equivocation_quarantine(vector: &Value, vector_name: &s
     )?;
     require_str_eq(
         vector,
-        "/expected/affected_branch_query_grade",
-        "forked",
+        "/expected/affected_branch_disposition",
+        "fork_quarantine",
         vector_name,
     )?;
     require_str_eq(
