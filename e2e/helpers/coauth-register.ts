@@ -389,24 +389,20 @@ export async function createCanonicalAccountHandoff(
     }),
     "canonical account handoff",
   );
-  const allowedOperations = outcome.allowed_operations;
-  const canonicalAllowlist = [
-    "ak.gate.account.command.issue_identity_binding_challenge",
-    "ak.gate.account.command.register",
-    "ak.gate.account.command.issue_session_grant",
-    "ak.gate.account.command.issue_recovery_completion_grant",
-  ];
-  if (
-    outcome.request_id !== requestId ||
-    JSON.stringify(allowedOperations) !== JSON.stringify(canonicalAllowlist)
-  ) {
+  const validatedOutcome = cotestWire<Record<string, unknown>>(
+    "account-handoff-outcome",
+    outcome,
+  );
+  if (validatedOutcome.request_id !== requestId) {
     throw new Error(
-      `invalid account handoff outcome: ${JSON.stringify(outcome)}`,
+      `invalid account handoff outcome: ${JSON.stringify(validatedOutcome)}`,
     );
   }
-  const accountHandoffGrant = stringValue(outcome.account_handoff_grant);
-  const expiresAt = stringValue(outcome.expires_at);
-  const binding = objectRecord(outcome.binding);
+  const accountHandoffGrant = stringValue(
+    validatedOutcome.account_handoff_grant,
+  );
+  const expiresAt = stringValue(validatedOutcome.expires_at);
+  const binding = objectRecord(validatedOutcome.binding);
   if (!accountHandoffGrant || !expiresAt || !binding) {
     throw new Error(
       `incomplete account handoff outcome: ${JSON.stringify(outcome)}`,
@@ -471,18 +467,13 @@ export async function registerCoauthPasswordAccount(
       device_id: genesisDeviceId,
       trust_domain: trustDomain,
       initial_session: {
-        device_id: genesisDeviceId,
         session_public_key: canonicalJson(handoff.deviceKey.publicJwk),
         audience,
-        requested_scope: [
-          "urn:arkret:principal-server:session.bind",
-          `urn:arkret:client:device:${genesisDeviceId}`,
-        ],
       },
     },
   );
-  const did = stringValue(fixture.checkpoint.did);
-  if (!did || fixture.recovery_key.split(/\s+/).length !== 24) {
+  const fullDid = stringValue(fixture.checkpoint.did);
+  if (!fullDid || fixture.recovery_key.split(/\s+/).length !== 24) {
     throw new Error("cotest principal registration fixture is incomplete");
   }
   const challengeUrl = `${coauthBase}/_arkret/gate/account/identity-binding-challenges`;
@@ -525,6 +516,7 @@ export async function registerCoauthPasswordAccount(
   const receipt = objectRecord(registered.binding_receipt);
   const pcrGenesisReceipt = objectRecord(registered.pcr_genesis_receipt);
   const sessionOutcome = objectRecord(registered.session_grant_outcome);
+  const principalId = stringValue(registered.principal_id);
   const grantId = stringValue(sessionOutcome?.grant_id);
   const grantJwt = stringValue(sessionOutcome?.session_grant);
   const grantAudience = stringValue(sessionOutcome?.audience);
@@ -533,9 +525,11 @@ export async function registerCoauthPasswordAccount(
     fixture.checkpoint.device_signing_seed_b64url,
   );
   if (
-    registered.principal_id !== did ||
+    !principalId ||
     !receipt ||
     receipt.binding_state !== "bound" ||
+    receipt.principal_id !== principalId ||
+    receipt.full_id !== fullDid ||
     !pcrGenesisReceipt ||
     !sessionOutcome ||
     !grantId ||
@@ -560,7 +554,7 @@ export async function registerCoauthPasswordAccount(
         )
       : [],
     expiresAt,
-    principalDid: did,
+    principalDid: principalId,
     eventSigningKey,
   };
   return {
@@ -568,8 +562,8 @@ export async function registerCoauthPasswordAccount(
     email,
     password,
     displayName,
-    did,
-    principalId: did,
+    did: principalId,
+    principalId,
     genesisDeviceId,
     recoveryKey: fixture.recovery_key,
     initialGrant,

@@ -11,6 +11,7 @@ use arkret_models_crypto::{
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffOutcome,
     CanonicalSessionPublicJwk, InitialSessionGrantRequest,
+    STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use arkret_wire::{
     DidFullId, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
@@ -21,8 +22,6 @@ use base64::Engine as _;
 use chrono::{Duration, TimeZone as _, Utc};
 use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _};
 use serde_json::{Value, json};
-
-const SESSION_BIND_SCOPE: &str = "urn:arkret:principal-server:session.bind";
 
 #[derive(Clone)]
 struct CompletionContext {
@@ -169,10 +168,7 @@ fn completion_vector() -> Result<CompletionVector> {
         device_id: device_id.parse()?,
         session_public_key: session_public_key.clone(),
         audience: audience.parse()?,
-        requested_scope: vec![
-            format!("urn:arkret:client:device:{device_id}"),
-            SESSION_BIND_SCOPE.to_owned(),
-        ],
+        requested_scope: STANDARD_INITIAL_SESSION_GRANT_OPERATIONS.to_vec(),
     };
     initial_session.validate()?;
 
@@ -195,7 +191,7 @@ fn completion_vector() -> Result<CompletionVector> {
         "proof_kind": "did_bound_signature",
         "cnf": { "jkt": holder_jkt },
         "aud": audience,
-        "scope": initial_session.requested_scope
+        "scope": initial_session.requested_scope_strings()
     });
     let jwt = format!(
         "{}.{}.fixture-signature",
@@ -210,7 +206,7 @@ fn completion_vector() -> Result<CompletionVector> {
         grant_id: "ak:session_grant:ATLC-gY-xpE0kN3QXVYxo0Kh32EoNCTBQTSFuu_P57e6".parse()?,
         session_public_key,
         audience: audience.parse()?,
-        granted_scope: initial_session.requested_scope.clone(),
+        granted_scope: initial_session.requested_scope_strings(),
         scope_details: None,
     };
     let outcome = IssueRecoveryCompletionGrantOutcome {
@@ -275,7 +271,6 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
     let initial: InitialSessionGrantRequest =
         serde_json::from_value(vector.request.initial_session.clone())?;
     initial.validate()?;
-    let device_scope = format!("urn:arkret:client:device:{}", initial.device_id);
     let receipt_generation = serde_json::to_value(&receipt.result_model_generation_ref)?;
     let attestation_generation = serde_json::to_value(&attestation.result_model_generation_ref)?;
     let request_generation = serde_json::to_value(&vector.request.result_model_generation_ref)?;
@@ -292,14 +287,6 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         || attestation.coordinator_service_id.as_str() != vector.context.audience
         || initial.audience.as_str() != vector.context.audience
         || initial.session_public_key.thumbprint_sha256()? != vector.context.holder_jkt
-        || !initial
-            .requested_scope
-            .iter()
-            .any(|scope| scope == &device_scope)
-        || initial
-            .requested_scope
-            .iter()
-            .any(|scope| scope != SESSION_BIND_SCOPE && scope != &device_scope)
     {
         bail!("recovery completion evidence is not closed over receipt/device/session bindings");
     }
@@ -411,11 +398,7 @@ fn validate_mutation_matrix(vector: &CompletionVector) -> Result<()> {
 
     let mut scope = vector.clone();
     scope.request.initial_session["requested_scope"] = json!([
-        SESSION_BIND_SCOPE,
-        format!(
-            "urn:arkret:client:device:{}",
-            scope.request.completion_attestation.replacement_device_id
-        ),
+        "ak.self.account.read.describe",
         "ak.self.events.command.submit"
     ]);
     scope.request.canonical_request_digest = scope.request.expected_canonical_request_digest()?;

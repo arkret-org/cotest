@@ -18,9 +18,10 @@ test.describe("account handoff and PCR genesis @fully-implemented", () => {
     );
     expect(account.initialGrant.principalDid).toBe(account.did);
     expect(account.initialGrant.audience).toBe(solandServiceId());
-    expect(account.initialGrant.scopes).toContain(
-      `urn:arkret:client:device:${account.genesisDeviceId}`,
-    );
+    expect(account.initialGrant.scopes).toEqual([
+      "ak.self.account.read.describe",
+      "ak.self.events.read.scan",
+    ]);
 
     const jwtPayload = JSON.parse(
       Buffer.from(
@@ -29,6 +30,10 @@ test.describe("account handoff and PCR genesis @fully-implemented", () => {
       ).toString("utf8"),
     ) as Record<string, unknown>;
     expect(jwtPayload.credential_class).toBe("standard");
+    expect(jwtPayload.holder_binding).toEqual({
+      kind: "human_device",
+      device_binding: account.genesisDeviceId,
+    });
     expect(jwtPayload).not.toHaveProperty("bootstrap_binding");
   });
 

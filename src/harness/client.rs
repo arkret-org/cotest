@@ -593,7 +593,7 @@ impl TestActorClient {
                 self.actor.clone(),
             )?)?),
             subject:
-                arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Did(
+                arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::CoreDid(
                     DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                         subject.to_owned(),
                     )?)?),

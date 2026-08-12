@@ -56,13 +56,19 @@ struct PrincipalRegistrationFixtureInput {
     identity_creation_lease: Value,
     device_id: String,
     trust_domain: String,
-    initial_session: Value,
+    initial_session: InitialSessionFixtureInput,
+}
+
+#[derive(Debug, Deserialize)]
+struct InitialSessionFixtureInput {
+    session_public_key: arkret::CanonicalSessionPublicJwk,
+    audience: DidCoreId,
 }
 
 #[derive(Debug, Deserialize)]
 struct AccountHandoffRequestFixtureInput {
     request_id: String,
-    audience: String,
+    audience: DidCoreId,
     issuer: String,
     client_id: String,
     redirect_uri: String,
@@ -78,7 +84,7 @@ struct IdentityCreationRegisterFixtureInput {
     challenge: Value,
     did_operation: Value,
     pcr_genesis_unit: Value,
-    initial_session: Value,
+    initial_session: arkret::InitialSessionGrantRequest,
     recovery_key: String,
     display_name: Option<String>,
 }
@@ -109,6 +115,7 @@ fn main() -> Result<()> {
         "event-derived-id" => event_derived_id(input)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
+        "account-handoff-outcome" => account_handoff_outcome(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
         "principal-service-binding" => principal_service_binding(input)?,
@@ -135,6 +142,13 @@ fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
 fn principal_registration_fixture(input: Value) -> Result<Value> {
     let input: PrincipalRegistrationFixtureInput =
         serde_json::from_value(input).context("parse principal-registration fixture input")?;
+    let initial_session = arkret::InitialSessionGrantRequest {
+        device_id: input.device_id.parse().context("parse founding device id")?,
+        session_public_key: input.initial_session.session_public_key,
+        audience: input.initial_session.audience,
+        requested_scope: arkret::STANDARD_INITIAL_SESSION_GRANT_OPERATIONS.to_vec(),
+    };
+    initial_session.validate()?;
     let endpoint =
         url::Url::parse(&input.principal_server_url).context("parse principal server URL")?;
     let created_at = Utc::now().with_nanosecond(0).unwrap_or_else(Utc::now);
@@ -229,7 +243,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             genesis_create_event.clone(),
             founding_authorize_event.clone(),
         )?,
-        &serde_json::from_value(input.initial_session.clone())?,
+        &initial_session,
     )
     .context("build identity-binding challenge request")?;
     let checkpoint = json!({
@@ -263,7 +277,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         "pcr_genesis_unit": {
             "events": [genesis_create_event, founding_authorize_event],
         },
-        "initial_session": input.initial_session,
+        "initial_session": initial_session,
         "device_signing_seed_b64url": device_signing_seed,
         "genesis_created_at": arkret_canonical::format_timestamp_canonical(created_at),
         "genesis_hlc": bootstrap_hlc,
@@ -482,16 +496,11 @@ fn account_handoff_request(input: Value) -> Result<Value> {
     let input: AccountHandoffRequestFixtureInput =
         serde_json::from_value(input).context("parse account-handoff request input")?;
     let signing_key = signing_key_from_seed(&input.dpop_seed_b64url)?;
-    let audience_full_id = DidFullId::new(input.audience).context("parse handoff audience")?;
-    let audience = DidCoreId::from(
-        project_full_id_to_core_id(&audience_full_id)
-            .context("project handoff audience to its service core id")?,
-    );
     let request = garth::oidc_account_handoff_request(
         garth::OidcAccountHandoffInput {
             request_id: arkret::RequestId::new(input.request_id)
                 .context("parse account-handoff request id")?,
-            audience,
+            audience: input.audience,
             issuer: input.issuer,
             client_id: input.client_id,
             redirect_uri: input.redirect_uri,
@@ -507,6 +516,13 @@ fn account_handoff_request(input: Value) -> Result<Value> {
     )
     .context("build account-handoff request")?;
     serde_json::to_value(request).context("serialize account-handoff request")
+}
+
+fn account_handoff_outcome(input: Value) -> Result<Value> {
+    let outcome: arkret_models_identity::AccountHandoffOutcome =
+        serde_json::from_value(input).context("parse typed account-handoff outcome")?;
+    outcome.validate().context("validate account-handoff outcome")?;
+    serde_json::to_value(outcome).context("serialize validated account-handoff outcome")
 }
 
 fn identity_creation_register_request(input: Value) -> Result<Value> {
@@ -528,7 +544,7 @@ fn identity_creation_register_request(input: Value) -> Result<Value> {
         &expected_account_subject,
         did_operation,
         serde_json::from_value(input.pcr_genesis_unit).context("parse PCR genesis unit")?,
-        serde_json::from_value(input.initial_session).context("parse initial session request")?,
+        input.initial_session,
         &key_material.root_seed,
         input.display_name,
     )
