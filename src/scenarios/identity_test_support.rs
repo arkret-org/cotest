@@ -174,6 +174,25 @@ pub async fn authorize_device_public_key(
     Ok(())
 }
 
+pub async fn authorize_test_client_device(
+    server: &ArkretServer,
+    client: &TestActorClient,
+    device_signing_key: &SigningKey,
+) -> Result<()> {
+    let prepared = install_test_principal_control_document(server, &client.actor).await?;
+    let bootstrap = bootstrap_test_device_authorization(
+        server,
+        &client.token,
+        &client.actor,
+        &client.device_id,
+        device_signing_key,
+        &prepared,
+    )
+    .await?;
+    client.track_controlled_realm(&bootstrap.pcr_realm_id);
+    Ok(())
+}
+
 pub async fn authorize_device_public_key_with_event_id(
     server: &ArkretServer,
     token: &str,
@@ -182,7 +201,7 @@ pub async fn authorize_device_public_key_with_event_id(
     device_signing_key: &SigningKey,
 ) -> Result<arkret_identifiers::EventId> {
     let prepared = install_test_principal_control_document(server, actor).await?;
-    bootstrap_test_device_authorization(
+    Ok(bootstrap_test_device_authorization(
         server,
         token,
         actor,
@@ -190,7 +209,8 @@ pub async fn authorize_device_public_key_with_event_id(
         device_signing_key,
         &prepared,
     )
-    .await
+    .await?
+    .authorize_event_id)
 }
 
 /// Publish the current device-signed successor Seal for every accepted Event
@@ -355,6 +375,11 @@ fn signed_algorithm_key_records(
         .collect()
 }
 
+struct TestDeviceAuthorizationBootstrap {
+    authorize_event_id: arkret_identifiers::EventId,
+    pcr_realm_id: RealmId,
+}
+
 async fn bootstrap_test_device_authorization(
     server: &ArkretServer,
     token: &str,
@@ -362,7 +387,7 @@ async fn bootstrap_test_device_authorization(
     device_id: &str,
     device_signing_key: &SigningKey,
     prepared: &PreparedPrincipalInception,
-) -> Result<arkret_identifiers::EventId> {
+) -> Result<TestDeviceAuthorizationBootstrap> {
     let (_, remainder) = actor
         .strip_prefix("did:webvh:")
         .and_then(|remainder| remainder.split_once(':'))
@@ -601,7 +626,10 @@ async fn bootstrap_test_device_authorization(
         device_method.as_str().to_owned(),
     );
 
-    Ok(authorize_event_id)
+    Ok(TestDeviceAuthorizationBootstrap {
+        authorize_event_id,
+        pcr_realm_id: request.pcr_realm_id,
+    })
 }
 
 async fn submit_harness_pcr_genesis(

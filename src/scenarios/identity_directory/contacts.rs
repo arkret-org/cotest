@@ -9,7 +9,7 @@ use crate::harness::{
     expect_status, invite_create_payload,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key,
+    actor_did_for_service_full_id, authorize_test_client_device,
     seal_current_principal_control_frontier, spawn_with_harness_account_authority,
 };
 
@@ -20,14 +20,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
-    authorize_device_public_key(
-        &server,
-        &alice.token,
-        &alice.actor,
-        &alice.device_id,
-        &alice_device_key,
-    )
-    .await?;
+    authorize_test_client_device(&server, &alice, &alice_device_key).await?;
     let bob_did = actor_did_for_service_full_id(server.service_full_id(), "directory-bob")?;
     let bob = server
         .register_client(
@@ -37,14 +30,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         )
         .await?;
     let bob_device_key = SigningKey::from_bytes(&[0xb0; 32]);
-    authorize_device_public_key(
-        &server,
-        &bob.token,
-        &bob.actor,
-        &bob.device_id,
-        &bob_device_key,
-    )
-    .await?;
+    authorize_test_client_device(&server, &bob, &bob_device_key).await?;
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
     seal_current_principal_control_frontier(&alice, &alice_device_key).await?;

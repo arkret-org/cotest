@@ -665,10 +665,11 @@ impl ArkretServer {
     }
 
     pub(crate) fn account_localpart_request(&self, did: &str) -> Result<reqwest::RequestBuilder> {
+        let account_id = arkret::project_full_id_to_core_id(&DidFullId::new(did.to_owned())?)?;
         let mut url = self.base_url();
         url.path_segments_mut()
             .map_err(|_| anyhow!("SUT base URL cannot carry path segments"))?
-            .extend(["_soland", "accounts", did, "localparts"]);
+            .extend(["_soland", "accounts", account_id.as_str(), "localparts"]);
         Ok(self
             .http()
             .post(url)

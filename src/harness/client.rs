@@ -7,7 +7,7 @@ use arkret::contact_operations::{
 };
 use arkret::{ContactIntroductionEvidence, IdempotencyKey, ProtocolOperationId};
 use arkret_http_client::Client as SdkClient;
-use arkret_identifiers::{DidCoreId, DidFullId, Hash, Hlc, project_full_id_to_core_id};
+use arkret_identifiers::{DidCoreId, DidFullId, Hash, Hlc, RealmId, project_full_id_to_core_id};
 use arkret_models_collaboration::events_payloads::{
     RealmSetDefaultStrandPayload, StrandCreatePayload,
 };
@@ -375,6 +375,13 @@ impl TestActorClient {
             .iter()
             .cloned()
             .collect()
+    }
+
+    pub(crate) fn track_controlled_realm(&self, realm_id: &RealmId) {
+        self.controlled_realms
+            .lock()
+            .expect("cotest controlled-Realm set is not poisoned")
+            .insert(realm_id.to_string());
     }
 
     pub fn default_strand_id(&self, realm_id: &str) -> Result<String> {

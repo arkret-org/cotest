@@ -11,7 +11,7 @@ use crate::harness::{
     member_transition_payload,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key,
+    actor_did_for_service_full_id, authorize_test_client_device,
     seal_current_principal_control_frontier, spawn_with_harness_account_authority,
 };
 
@@ -23,26 +23,12 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    authorize_device_public_key(
-        &server,
-        &alice.token,
-        &alice.actor,
-        &alice.device_id,
-        &SigningKey::from_bytes(&[0xa1; 32]),
-    )
-    .await?;
+    authorize_test_client_device(&server, &alice, &SigningKey::from_bytes(&[0xa1; 32])).await?;
     let bob_did = actor_did_for_service_full_id(server.service_full_id(), "collab-bob")?;
     let bob = server
         .demo_client(&bob_did, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;
-    authorize_device_public_key(
-        &server,
-        &bob.token,
-        &bob.actor,
-        &bob.device_id,
-        &SigningKey::from_bytes(&[0xb0; 32]),
-    )
-    .await?;
+    authorize_test_client_device(&server, &bob, &SigningKey::from_bytes(&[0xb0; 32])).await?;
 
     let bob_second_device = expect_json(
         server
