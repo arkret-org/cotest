@@ -4,7 +4,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::fixtures::TestScaffold;
-use crate::harness::{ArkretServer, expect_api_error, expect_json, expect_status};
+use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json, expect_status};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, authorize_device_public_key,
     spawn_with_harness_account_authority,
@@ -44,6 +44,9 @@ pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<
 
 pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("account-auth").await?;
+    let account_full_id =
+        arkret_identifiers::DidFullId::new("did:web:alice-auth.example".to_owned())?;
+    let account_core_id = arkret_identifiers::project_full_id_to_core_id(&account_full_id)?;
 
     expect_api_error(
         server
@@ -55,26 +58,38 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     .await?;
 
     let registered = expect_json(
-        server
-            .account_registration_request()
-            .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "principal_id": "did:web:alice-auth.example",
-                "display_name": "alice-auth",
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"
-            }))),
+        server.account_registration_request().json(
+            &arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
+                principal_id: account_core_id.clone(),
+                full_id: account_full_id.clone(),
+                display_name: Some("alice-auth".to_owned()),
+                device_id: Some(arkret_identifiers::DeviceId::new(
+                    "ak:device:01904100-0000-7000-8000-0000000000a1".to_owned(),
+                )?),
+                proof: None,
+                identity_creation: None,
+                policy_evidence: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(registered["principal_id"], "did:web:alice-auth.example");
+    assert_eq!(registered["principal_id"], account_core_id.as_str());
 
     let second_device = expect_json(
-        server
-            .account_registration_request()
-            .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "principal_id": "did:web:alice-auth.example",
-                "display_name": "alice-auth",
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a2"
-            }))),
+        server.account_registration_request().json(
+            &arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
+                principal_id: account_core_id.clone(),
+                full_id: account_full_id,
+                display_name: Some("alice-auth".to_owned()),
+                device_id: Some(arkret_identifiers::DeviceId::new(
+                    "ak:device:01904100-0000-7000-8000-0000000000a2".to_owned(),
+                )?),
+                proof: None,
+                identity_creation: None,
+                policy_evidence: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -88,7 +103,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_soland/gate/auth/dev-login"))
             .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "actor": "did:web:alice-auth.example",
+                "actor": account_core_id,
                 "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "display_name": "Alice"
             }))),
@@ -105,7 +120,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(me["principal_id"], "did:web:alice-auth.example");
+    assert_eq!(me["principal_id"], account_core_id.as_str());
 
     expect_api_error(
         server
@@ -186,22 +201,25 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     // resolution and delivery are a later phase, so an offline or currently
     // unresolvable peer is not rejected while authoring that local fact.
     let missing_target = "did:web:missing-contact.example";
+    let missing_target_core_id = actor_core_id(missing_target)?;
+    let alice_core_id = actor_core_id(&alice.actor)?;
+    let bob_core_id = actor_core_id(&bob.actor)?;
     let missing_receipt = alice.request_contact(missing_target).await?;
     assert_eq!(
         missing_receipt.core.holder.contact_actor_id().as_str(),
-        alice.actor
+        alice_core_id
     );
     assert_eq!(
         missing_receipt.core.peer.contact_actor_id().as_str(),
-        missing_target
+        missing_target_core_id
     );
 
     // Alice's first accepted Contact Event is intentionally still awaiting a
     // device-signed successor Seal. Exercise the independent valid-target
     // branch from Bob's fresh PCR rather than bypassing that finality fence.
     let receipt = bob.request_contact(&alice.actor).await?;
-    assert_eq!(receipt.core.holder.contact_actor_id().as_str(), bob.actor);
-    assert_eq!(receipt.core.peer.contact_actor_id().as_str(), alice.actor);
+    assert_eq!(receipt.core.holder.contact_actor_id().as_str(), bob_core_id);
+    assert_eq!(receipt.core.peer.contact_actor_id().as_str(), alice_core_id);
 
     Ok(())
 }
