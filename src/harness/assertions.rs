@@ -8,6 +8,7 @@ use anyhow::{Context, Result, anyhow};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
+use fs2::FileExt as _;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Request, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
@@ -237,12 +238,24 @@ fn append_transcript_entry(entry: &Value) -> Result<()> {
     let Some(path) = transcript_path() else {
         return Ok(());
     };
+    append_transcript_entry_to(&path, entry)
+}
+
+fn append_transcript_entry_to(path: &PathBuf, entry: &Value) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    let mut file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .append(true)
+        .open(path)?;
+    file.lock_exclusive()?;
     use std::io::Write as _;
-    writeln!(file, "{}", serde_json::to_string(entry)?)?;
+    let write_result = writeln!(file, "{}", serde_json::to_string(entry)?);
+    let unlock_result = file.unlock();
+    write_result?;
+    unlock_result?;
     Ok(())
 }
 
@@ -511,9 +524,11 @@ fn normalize_transient_fields(value: Value) -> Value {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use std::sync::Arc;
 
-    use super::{is_secret_field, sanitize_json_value};
+    use serde_json::{Value, json};
+
+    use super::{append_transcript_entry_to, is_secret_field, sanitize_json_value, sanitize_url};
 
     #[test]
     fn transcript_sanitizer_redacts_credential_material() {
@@ -538,5 +553,50 @@ mod tests {
         assert_eq!(sanitized["ice"]["credential"], "[redacted]");
         assert_eq!(sanitized["ice"]["username"], "public-routing-user");
         assert_eq!(sanitized["recovery_key"], "[redacted]");
+    }
+
+    #[test]
+    fn transcript_sanitizer_redacts_query_credentials() {
+        let url = "https://example.test/blob?blob_ref=ak%3Ablob%3Asha256%3Aabc&access_token=live-session-grant&purpose=message.attachment"
+            .parse()
+            .expect("valid test URL");
+
+        let sanitized = sanitize_url(&url);
+
+        assert!(!sanitized.contains("live-session-grant"));
+        assert!(sanitized.contains("access_token=%5Bredacted%5D"));
+        assert!(sanitized.contains("blob_ref=ak%3Ablob%3Asha256%3Aabc"));
+        assert!(sanitized.contains("purpose=message.attachment"));
+    }
+
+    #[test]
+    fn concurrent_transcript_appends_remain_valid_ndjson() {
+        let directory = tempfile::tempdir().expect("create transcript test directory");
+        let path = Arc::new(directory.path().join("transcript.ndjson"));
+        let writers: Vec<_> = (0..32)
+            .map(|writer| {
+                let path = Arc::clone(&path);
+                std::thread::spawn(move || {
+                    for sequence in 0..64 {
+                        append_transcript_entry_to(
+                            &path,
+                            &json!({"writer": writer, "sequence": sequence}),
+                        )
+                        .expect("append transcript entry");
+                    }
+                })
+            })
+            .collect();
+
+        for writer in writers {
+            writer.join().expect("transcript writer thread");
+        }
+
+        let transcript = std::fs::read_to_string(path.as_ref()).expect("read transcript");
+        let lines: Vec<_> = transcript.lines().collect();
+        assert_eq!(lines.len(), 32 * 64);
+        for line in lines {
+            serde_json::from_str::<Value>(line).expect("each transcript line must be valid JSON");
+        }
     }
 }
