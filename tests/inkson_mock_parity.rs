@@ -109,6 +109,7 @@ struct CaseResult {
 
 struct TemplateContext {
     alice_did: String,
+    alice_core_id: String,
     alice_token: String,
     service_id: String,
     realm_id: String,
@@ -146,6 +147,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
     )
     .await?;
     let mut ctx = TemplateContext {
+        alice_core_id: cotest::harness::actor_core_id(&alice_did)?.to_string(),
         alice_did,
         alice_token,
         service_id: server.service_id().to_string(),
@@ -238,6 +240,7 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
     let fixture = load_fixture(&root)?;
     let ctx = TemplateContext {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
+        alice_core_id: "ak:did_core:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
         service_id: "ak:did_core:web:soland.mock-parity-smoke.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
@@ -259,6 +262,7 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
     let fixture = load_fixture(&root)?;
     let ctx = TemplateContext {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
+        alice_core_id: "ak:did_core:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
         service_id: "ak:did_core:web:soland.mock-parity-gate.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
@@ -774,7 +778,7 @@ fn render_body(
             let mut envelope = json!({
                 "realm_id": ctx.realm_id,
                 "scope_ref": {"kind": "realm", "realm_id": ctx.realm_id},
-                "sender_actor_id": ctx.alice_did,
+                "sender_actor_id": ctx.alice_core_id,
                 "sender_device_id": MOCK_PARITY_ALICE_DEVICE_ID,
                 "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),
                 "signal_class": "session",
@@ -903,6 +907,7 @@ fn call_mock_contract(
         "headers": case.headers,
         "account": {
             "did": ctx.alice_did,
+            "core_id": ctx.alice_core_id,
             "handle": "@alice-mock-parity",
             "display_name": "alice-mock-parity",
             "device_id": MOCK_PARITY_ALICE_DEVICE_ID
