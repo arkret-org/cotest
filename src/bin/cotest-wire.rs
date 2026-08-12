@@ -96,6 +96,13 @@ struct PrincipalSuccessorSealInput {
     device_signing_seed_b64url: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct PrincipalServiceBindingProofInput {
+    binding_draft: Value,
+    verification_method: DidUrl,
+    principal_signing_seed_b64url: String,
+}
+
 fn main() -> Result<()> {
     let command = std::env::args().nth(1).context("missing command")?;
     let input = read_stdin_json()?;
@@ -111,7 +118,7 @@ fn main() -> Result<()> {
         "principal-control-realm-id" => principal_control_realm(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
-        "principal-service-binding" => principal_service_binding(input)?,
+        "principal-service-binding-proof" => principal_service_binding_proof(input)?,
         "identity-creation-register-request" => identity_creation_register_request(input)?,
         "principal-bootstrap-seal" => principal_bootstrap_seal(input)?,
         "principal-successor-seal" => principal_successor_seal(input)?,
@@ -279,10 +286,35 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     }))
 }
 
-fn principal_service_binding(_input: Value) -> Result<Value> {
-    bail!(
-        "principal-service binding fixture is fail-closed: frozen registration DID evidence and exact PrincipalAuthorityInstance are required"
-    )
+fn principal_service_binding_proof(input: Value) -> Result<Value> {
+    use arkret_models_collaboration::direct_conversation_ops::{
+        AcceptedAtServiceBindingCore, PrincipalServiceBindingProofPurpose,
+    };
+
+    let input: PrincipalServiceBindingProofInput =
+        serde_json::from_value(input).context("parse principal service binding proof input")?;
+    let draft: AcceptedAtServiceBindingCore = serde_json::from_value(input.binding_draft)
+        .context("parse principal service binding draft")?;
+    draft
+        .validate_shape()
+        .context("validate principal service binding draft")?;
+    let signing_key = signing_key_from_seed(&input.principal_signing_seed_b64url)?;
+    let input_bytes = draft
+        .proof_signing_input_bytes(
+            PrincipalServiceBindingProofPurpose::PrincipalAuthorization,
+            &input.verification_method,
+        )
+        .context("build principal service binding signing input")?;
+    let signature = signing_key.sign(&input_bytes);
+    serde_json::to_value(arkret_wire::ProtocolSignature {
+        verification_method: input.verification_method,
+        created_at: draft.accepted_at,
+        jws: arkret_wire::Base64UrlString::new(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+        )
+        .map_err(anyhow::Error::msg)?,
+    })
+    .context("serialize principal service binding proof")
 }
 
 /// The founding Principal Control Realm genesis Event, signed by the identity
@@ -482,11 +514,7 @@ fn account_handoff_request(input: Value) -> Result<Value> {
     let input: AccountHandoffRequestFixtureInput =
         serde_json::from_value(input).context("parse account-handoff request input")?;
     let signing_key = signing_key_from_seed(&input.dpop_seed_b64url)?;
-    let audience_full_id = DidFullId::new(input.audience).context("parse handoff audience")?;
-    let audience = DidCoreId::from(
-        project_full_id_to_core_id(&audience_full_id)
-            .context("project handoff audience to its service core id")?,
-    );
+    let audience = DidCoreId::new(input.audience).context("parse handoff audience")?;
     let request = garth::oidc_account_handoff_request(
         garth::OidcAccountHandoffInput {
             request_id: arkret::RequestId::new(input.request_id)

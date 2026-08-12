@@ -3,17 +3,22 @@
 // candidate is deliberately smaller by both salt and Realm id, so accepting
 // the first candidate cannot be explained by a hidden min-id tie-breaker.
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import {
+  solandBaseUrl,
+  solandServiceFullId,
+  solandServiceId,
+} from "../../helpers/env";
 import {
   base64url,
+  canonicalDidCoreId,
   canonicalJson,
   canonicalTimestamp,
   cotestWire,
   expectJsonOk,
+  localPrincipalControlProposalAck,
   refreshEventEnvelopeProof,
-  sdkAcceptedAtServiceBinding,
   sdkCapabilityActionRegistryDigest,
   sdkEventDerivedObjectId,
   sha256CanonicalJson,
@@ -40,8 +45,8 @@ async function sealPrincipalControlEvent(
   session: DpopUserSession,
   event: JsonObject,
 ): Promise<void> {
-  const realmId = session.principalControlEvents[0]?.realm_id;
-  if (typeof realmId !== "string") {
+  const realmId = session.principalControlRealmId;
+  if (!realmId) {
     throw new Error("session omitted its accepted event-derived PCR create");
   }
   expect(realmId, "principal control Realm id").toBeTruthy();
@@ -112,6 +117,8 @@ async function prepareAndCommitContactEvent(
   ) as JsonObject;
   refreshEventEnvelopeProof(event);
   expect(event.event_id).toBe(draft.event_id);
+  const controlProposalAck = localPrincipalControlProposalAck(event);
+  expect(controlProposalAck, "Contact Control Proposal Ack").toBeTruthy();
 
   const commitResponse = await request.post(
     url,
@@ -126,6 +133,7 @@ async function prepareAndCommitContactEvent(
         idempotency_key: prepareBody.idempotency_key,
         reservation_handle: prepared.reservation_handle,
         signed_event: event,
+        control_proposal_ack: controlProposalAck,
       }),
     },
   );
@@ -154,7 +162,10 @@ async function acceptedDirectMessageEvidence(
       phase: "prepare",
       operation_id: typedId("operation"),
       idempotency_key: typedId("contact-request"),
-      peer: { kind: "human", principal_id: bob.user.did },
+      peer: {
+        kind: "human",
+        principal_id: canonicalDidCoreId(bob.user.did),
+      },
       granted_to_peer_scopes: ["direct_message"],
       introduction_evidence: { kind: "explicit_address" },
     },
@@ -191,7 +202,10 @@ async function acceptedDirectMessageEvidence(
       phase: "prepare",
       operation_id: typedId("operation"),
       idempotency_key: typedId("contact-scope"),
-      peer: { kind: "human", principal_id: bob.user.did },
+      peer: {
+        kind: "human",
+        principal_id: canonicalDidCoreId(bob.user.did),
+      },
       basis_id: responseReceipt.basis_id,
       version: 2,
       predecessor_event_ref: requestReceipt.core.request_event_ref,
@@ -199,7 +213,10 @@ async function acceptedDirectMessageEvidence(
     },
   );
   const aliceCurrentProof = aliceScopeOutcome.current_proof as JsonObject;
-  const pair = [alice.user.did, bob.user.did].sort();
+  const pair = [
+    canonicalDidCoreId(alice.user.did),
+    canonicalDidCoreId(bob.user.did),
+  ].sort();
   const basis = {
     kind: "normal",
     sorted_pair_members: pair,
@@ -209,7 +226,10 @@ async function acceptedDirectMessageEvidence(
     )}`,
   };
   expect(
-    `sha256:${sha256CanonicalJson({ ...basis, domain: "ak.contact.basis.v1" })}`,
+    `sha256:${createHash("sha256")
+      .update("ak.contact.basis.v1\n", "utf8")
+      .update(canonicalJson(basis), "utf8")
+      .digest("hex")}`,
   ).toBe(responseReceipt.basis_id);
   return {
     kind: "human",
@@ -279,7 +299,7 @@ function foundingEvents(args: {
         security_class: "standard",
         notary_profile: "single_did",
         digest_algorithm: "sha256",
-        notary: singleDidNotaryFromFullDid(solandServiceId()),
+        notary: singleDidNotaryFromFullDid(solandServiceFullId()),
         capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
       },
     },
@@ -377,9 +397,11 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     const createdAt = canonicalTimestamp();
     const hlcMillis = Date.now().toString(16).padStart(12, "0").slice(-12);
     const acceptedSalt = base64url(randomBytes(32));
+    const bobCoreId = canonicalDidCoreId(bob.did);
+    const aliceCoreId = canonicalDidCoreId(alice.did);
     const accepted = foundingEvents({
-      founderDid: bob.did,
-      peerDid: alice.did,
+      founderDid: bobCoreId,
+      peerDid: aliceCoreId,
       basisRef,
       salt: acceptedSalt,
       createdAt,
@@ -387,8 +409,8 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     });
     const { candidate: losing, salt: losingSalt } = smallerFoundingCandidate({
       accepted,
-      founderDid: bob.did,
-      peerDid: alice.did,
+      founderDid: bobCoreId,
+      peerDid: aliceCoreId,
       basisRef,
       acceptedSalt,
       createdAt,
@@ -405,14 +427,43 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       "Direct Conversation source service describe",
     );
     expect(describe.service_id).toBe(solandServiceId());
-    const sourceServiceBinding = sdkAcceptedAtServiceBinding({
-      principalId: bob.did,
-      deviceId: bob.deviceId,
-      principalSigningSeedB64url: bobSession.eventSigningSeedB64url,
-      registrationCheckpoint: bobSession.account.principalRegistrationCheckpoint,
-      trustDomain: describe.trust_domain,
-      acceptedAt: canonicalTimestamp(),
-    });
+    const bindingPrepareUrl = `${solandBaseUrl()}/_arkret/self/principal-service-bindings/prepare`;
+    const bindingRequestId = base64url(randomBytes(24));
+    const bindingPrepared = await expectJsonOk<JsonObject>(
+      await request.post(bindingPrepareUrl, {
+        headers: {
+          ...selfPathHeadersForDpopSession(bobSession, "POST", bindingPrepareUrl),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({ request_id: bindingRequestId }),
+      }),
+      "prepare principal service binding",
+    );
+    const principalAuthorizationProof = cotestWire<JsonObject>(
+      "principal-service-binding-proof",
+      {
+        binding_draft: bindingPrepared.binding_draft,
+        verification_method: `${bob.did}#${bob.deviceId}`,
+        principal_signing_seed_b64url: bobSession.eventSigningSeedB64url,
+      },
+    );
+    const bindingCommitUrl = `${solandBaseUrl()}/_arkret/self/principal-service-bindings/commit`;
+    const bindingCommitted = await expectJsonOk<JsonObject>(
+      await request.post(bindingCommitUrl, {
+        headers: {
+          ...selfPathHeadersForDpopSession(bobSession, "POST", bindingCommitUrl),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
+          request_id: bindingRequestId,
+          challenge_id: bindingPrepared.challenge_id,
+          binding_digest: bindingPrepared.binding_draft.binding_digest,
+          principal_authorization_proof: principalAuthorizationProof,
+        }),
+      }),
+      "commit principal service binding",
+    );
+    const sourceServiceBinding = bindingCommitted.binding as JsonObject;
 
     const acceptedBody = {
       unit_kind: "direct_conversation_founding",
@@ -443,7 +494,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       status: "accepted",
       event_ids: accepted.events.map((event) => event.event_id),
       receipt: {
-        founder_id: bob.did,
+        founder_id: bobCoreId,
         realm_id: accepted.realmId,
         main_strand_id: accepted.mainStrandId,
         slot_committed: true,

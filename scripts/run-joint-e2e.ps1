@@ -187,7 +187,9 @@ Set-StrictMode -Version Latest
 
 $StaridServiceId = $null
 $SolandServiceId = $null
+$SolandServiceFullId = $null
 $SolandBetaServiceId = $null
+$SolandBetaServiceFullId = $null
 $CoauthServiceId = $null
 $CoauthEnrollmentAuthorityDid = "did:key:z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
 
@@ -1329,6 +1331,42 @@ function Invoke-CoauthConfigSync {
     }
 }
 
+function Set-CoauthPrincipalServerServiceIds {
+    param(
+        [Parameter(Mandatory = $true)][string]$ConfigPath,
+        [Parameter(Mandatory = $true)][string]$SolandServiceId,
+        [string]$SolandBetaServiceId
+    )
+
+    $config = Get-Content -LiteralPath $ConfigPath -Raw
+    $pins = [ordered]@{ soland = $SolandServiceId }
+    if (-not [string]::IsNullOrWhiteSpace($SolandBetaServiceId)) {
+        $pins["soland-beta"] = $SolandBetaServiceId
+    }
+    foreach ($entry in $pins.GetEnumerator()) {
+        if (-not $entry.Value.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
+            throw "Coauth principal server '$($entry.Key)' received an invalid service_id pin"
+        }
+        $name = [regex]::Escape([string]$entry.Key)
+        $pattern = "(?m)(^  - name: $name\r?`n)"
+        $replacement = "`${1}    service_id: $($entry.Value)`n"
+        $patched = [regex]::Replace($config, $pattern, $replacement, 1)
+        if ($patched -eq $config) {
+            throw "Could not locate Coauth principal server '$($entry.Key)' in $ConfigPath"
+        }
+        $config = $patched
+    }
+    # Windows PowerShell 5's `Set-Content -Encoding UTF8` prepends a BOM,
+    # while PowerShell 7 does not. Coauth's YAML loader treats that rewritten
+    # file as a second document boundary, so keep the runner byte-identical
+    # across both hosts and write explicit UTF-8 without BOM.
+    [System.IO.File]::WriteAllText(
+        $ConfigPath,
+        $config,
+        [System.Text.UTF8Encoding]::new($false)
+    )
+}
+
 function Wait-HttpReady {
     param(
         [Parameter(Mandatory = $true)][string]$Url,
@@ -1366,7 +1404,7 @@ function Get-DescribedServiceId {
         try {
             $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop
             $serviceId = [string]$describe.service_id
-            if (-not [string]::IsNullOrWhiteSpace($serviceId) -and $serviceId.StartsWith("did:")) {
+            if (-not [string]::IsNullOrWhiteSpace($serviceId) -and $serviceId.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
                 return $serviceId
             }
             $lastError = "response did not contain a valid service_id"
@@ -1376,6 +1414,32 @@ function Get-DescribedServiceId {
         Start-Sleep -Milliseconds 500
     }
     throw "Timed out waiting for $ServiceName describe at $url. Last error: $lastError"
+}
+
+function Get-DescribedServiceFullId {
+    param(
+        [Parameter(Mandatory = $true)][string]$BaseUrl,
+        [Parameter(Mandatory = $true)][string]$ServiceName,
+        [int]$TimeoutSeconds = 60
+    )
+
+    $url = "$($BaseUrl.TrimEnd('/'))/_arkret/describe"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastError = $null
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop
+            $fullId = [string]$describe.service_resolution.full_id
+            if (-not [string]::IsNullOrWhiteSpace($fullId) -and $fullId.StartsWith("did:", [System.StringComparison]::Ordinal)) {
+                return $fullId
+            }
+            $lastError = "response did not contain a valid service_resolution.full_id"
+        } catch {
+            $lastError = $_.Exception.Message
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "Timed out waiting for $ServiceName full service identity at $url. Last error: $lastError"
 }
 
 function Assert-CoauthDpopGrantSeamReady {
@@ -2808,7 +2872,6 @@ try {
                 Set-Content -LiteralPath $coauthSecondaryConfigPath -Encoding UTF8
         }
         Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir -TimeoutSeconds $StartupTimeoutSeconds
-        Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
         # Enable the cotest-only debug seam (`/api/v1/test/debug/issue-dpop-grant`)
         # so the joint harness can mint real DPoP-bound ak.session.grants instead
         # of dev-login bearers (see helpers/session-grant-dpop.ts mintDpopBoundGrant).
@@ -3119,6 +3182,7 @@ try {
     }
     Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     $SolandServiceId = Get-DescribedServiceId -BaseUrl $SolandBaseUrl -ServiceName "soland"
+    $SolandServiceFullId = Get-DescribedServiceFullId -BaseUrl $SolandBaseUrl -ServiceName "soland"
 
     if ($DualSoland) {
         $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
@@ -3160,6 +3224,21 @@ try {
         }
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
         $SolandBetaServiceId = Get-DescribedServiceId -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
+        $SolandBetaServiceFullId = Get-DescribedServiceFullId -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
+    }
+
+    if ($StartCoauth) {
+        Set-CoauthPrincipalServerServiceIds `
+            -ConfigPath $coauthConfigPath `
+            -SolandServiceId $SolandServiceId `
+            -SolandBetaServiceId $SolandBetaServiceId
+        if ($DualCoauth) {
+            Set-CoauthPrincipalServerServiceIds `
+                -ConfigPath $coauthSecondaryConfigPath `
+                -SolandServiceId $SolandServiceId `
+                -SolandBetaServiceId $SolandBetaServiceId
+        }
+        Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
     }
 
     if ($CoauthCommand) {
@@ -3270,6 +3349,7 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
+    $env:COTEST_SOLAND_SERVICE_FULL_ID = $SolandServiceFullId
     if ($SkipInkson) {
         $env:COTEST_SKIP_INKSON = "1"
     } else {
@@ -3310,8 +3390,10 @@ try {
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
         $env:COTEST_SOLAND_ALPHA_SERVICE_ID = $SolandServiceId
+        $env:COTEST_SOLAND_ALPHA_SERVICE_FULL_ID = $SolandServiceFullId
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_ID = $SolandBetaServiceId
+        $env:COTEST_SOLAND_BETA_SERVICE_FULL_ID = $SolandBetaServiceFullId
         if ($SolandBetaNotarySigningKey) {
             $env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY = $SolandBetaNotarySigningKey
         } else {
@@ -4234,7 +4316,20 @@ if (Test-Path -LiteralPath $serviceLogDir) {
 }
 foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue) {
     if ($directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|crash|checkpoint|telemetry)') {
-        $secretScanRoots.Add($directory.FullName)
+        if ($directory.Name -ieq "soland-state") {
+            # The service identity bundle is a durable restore store whose
+            # signed registration receipts and WebVH operations necessarily
+            # contain JWS evidence. Classify it separately; scanning the whole
+            # parent as telemetry would count and then destroy valid protocol
+            # state. Every sibling and top-level state file remains strict.
+            foreach ($child in Get-ChildItem -LiteralPath $directory.FullName -ErrorAction SilentlyContinue) {
+                if ($child.Name -ne "identity-bundle") {
+                    $secretScanRoots.Add($child.FullName)
+                }
+            }
+        } else {
+            $secretScanRoots.Add($directory.FullName)
+        }
     }
 }
 foreach ($file in Get-ChildItem -LiteralPath $jointDir -File -ErrorAction SilentlyContinue) {
@@ -4246,14 +4341,22 @@ $secretScanSelfTest = Join-Path $PSScriptRoot "tests\secret-scan.tests.ps1"
 $psHostExe = (Get-Process -Id $PID).Path
 & $psHostExe -NoProfile -ExecutionPolicy Bypass -File $secretScanSelfTest | Out-Null
 $secretScanSelfTestStatus = if ($LASTEXITCODE -eq 0) { "passed" } else { "failed" }
-# Everything the joint runner collects here is log / telemetry / crash
-# material, where a credential is as much a leak as a seed. Nothing in this set
-# is a durable protocol store, so all roots take the strict class.
+# Logs, diagnostics, and ordinary runtime state take the strict class.
 $secretScanRootDescriptors = @(
     $secretScanRoots.ToArray() | ForEach-Object {
         [pscustomobject]@{ path = $_; artifact_class = "log_or_telemetry" }
     }
 )
+# The verified service-identity bundle is durable protocol state: its JWS
+# receipt chain is required for restart/restore, while private recovery
+# material remains forbidden by the category/class verdict matrix.
+$identityBundleDir = Join-Path $jointDir "soland-state\identity-bundle"
+if (Test-Path -LiteralPath $identityBundleDir) {
+    $secretScanRootDescriptors += [pscustomobject]@{
+        path           = $identityBundleDir
+        artifact_class = "durable_protocol_store"
+    }
+}
 # The exported database is a durable protocol store, not telemetry: the spec
 # requires the server to persist signed authorization evidence there, so
 # `credential_exposure` findings are expected and allowed. Recovery private

@@ -23,7 +23,12 @@ import {
   type DpopBoundGrant,
   type DpopDeviceKey,
 } from "./session-grant-dpop";
-import { canonicalJson, cotestWire, typedId } from "./soland-api";
+import {
+  canonicalJson,
+  cotestWire,
+  projectFullDidToCoreId,
+  typedId,
+} from "./soland-api";
 
 export const COAUTH_DEV_EMAIL_CODE = "123456";
 
@@ -392,6 +397,9 @@ export async function createCanonicalAccountHandoff(
   const allowedOperations = outcome.allowed_operations;
   const canonicalAllowlist = [
     "ak.gate.account.command.issue_identity_binding_challenge",
+    "ak.gate.account.command.issue_did_binding_challenge",
+    "ak.gate.account.command.issue_identity_abandonment_challenge",
+    "ak.gate.account.command.abandon_identity_creation",
     "ak.gate.account.command.register",
     "ak.gate.account.command.issue_session_grant",
     "ak.gate.account.command.issue_recovery_completion_grant",
@@ -475,8 +483,8 @@ export async function registerCoauthPasswordAccount(
         session_public_key: canonicalJson(handoff.deviceKey.publicJwk),
         audience,
         requested_scope: [
-          "urn:arkret:principal-server:session.bind",
-          `urn:arkret:client:device:${genesisDeviceId}`,
+          "ak.self.account.read.describe",
+          "ak.self.events.read.scan",
         ],
       },
     },
@@ -532,8 +540,9 @@ export async function registerCoauthPasswordAccount(
   const deviceSigningSeed = stringValue(
     fixture.checkpoint.device_signing_seed_b64url,
   );
+  const principalId = projectFullDidToCoreId(did);
   if (
-    registered.principal_id !== did ||
+    registered.principal_id !== principalId ||
     !receipt ||
     receipt.binding_state !== "bound" ||
     !pcrGenesisReceipt ||
@@ -544,9 +553,7 @@ export async function registerCoauthPasswordAccount(
     !expiresAt ||
     !deviceSigningSeed
   ) {
-    throw new Error(
-      `canonical account binding failed: ${JSON.stringify(registered)}`,
-    );
+    throw new Error("canonical account binding returned an incomplete outcome");
   }
   const eventSigningKey = dpopDeviceKeyFromSeedB64url(deviceSigningSeed);
   const initialGrant: DpopBoundGrant = {
@@ -569,7 +576,7 @@ export async function registerCoauthPasswordAccount(
     password,
     displayName,
     did,
-    principalId: did,
+    principalId,
     genesisDeviceId,
     recoveryKey: fixture.recovery_key,
     initialGrant,

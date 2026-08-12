@@ -42,17 +42,36 @@ export function solandServiceId(key: SolandKey = "default"): string {
   if (key === "alpha") {
     return (
       optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_ID") ??
-      "did:webvh:z6mkfixture:soland-alpha.joint-e2e.local"
+      "ak:did_core:webvh:z6mkfixture"
     );
   }
   if (key === "beta") {
     return (
       optionalEnv("COTEST_SOLAND_BETA_SERVICE_ID") ??
-      "did:webvh:z6mkfixture:soland-beta.joint-e2e.local"
+      "ak:did_core:webvh:z6mkfixture"
     );
   }
   return (
     optionalEnv("COTEST_SOLAND_SERVICE_ID") ??
+    "ak:did_core:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
+  );
+}
+
+export function solandServiceFullId(key: SolandKey = "default"): string {
+  if (key === "alpha") {
+    return (
+      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_FULL_ID") ??
+      "did:webvh:z6mkfixture:soland-alpha.joint-e2e.local"
+    );
+  }
+  if (key === "beta") {
+    return (
+      optionalEnv("COTEST_SOLAND_BETA_SERVICE_FULL_ID") ??
+      "did:webvh:z6mkfixture:soland-beta.joint-e2e.local"
+    );
+  }
+  return (
+    optionalEnv("COTEST_SOLAND_SERVICE_FULL_ID") ??
     "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
   );
 }

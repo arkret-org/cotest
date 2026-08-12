@@ -18,6 +18,7 @@ import {
   inksonBaseUrl,
   type SolandKey,
   solandBaseUrl,
+  solandServiceFullId,
   solandServiceId,
 } from "./env";
 import { selectDxcOption } from "./dxc-select";
@@ -35,8 +36,10 @@ import {
   authHeaders,
   canonicalJson,
   cotestWire,
+  projectFullDidToCoreId,
   registerEventSigner,
   registerPrincipalControlRealm,
+  registerRequestAuth,
   typedId,
 } from "./soland-api";
 
@@ -115,6 +118,7 @@ export type DpopUserSession = {
   eventSigningSeedB64url: string;
   deviceKey: DpopDeviceKey;
   recoveryKey?: string;
+  principalControlRealmId: string;
   principalControlEvents: Array<Record<string, unknown>>;
 };
 
@@ -1139,7 +1143,7 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
     if (!server) {
       return `did:webvh:z6mkfixture:${slug}.example`;
     }
-    const serviceDid = solandServiceId(server);
+    const serviceDid = solandServiceFullId(server);
     const webvh = /^did:webvh:[^:]+:([^:]+)(?::.*)?$/.exec(serviceDid);
     if (webvh?.[1]) {
       return `did:webvh:z6mkfixture:${webvh[1]}:webvh:${slug}`;
@@ -1177,7 +1181,8 @@ export async function ensureRegistered(
   // the DID. Success is 200 (200|409 here for idempotent setup).
   const url = `${solandBaseUrl(opts.server)}/_arkret/gate/account/register`;
   const data = {
-    principal_id: user.did,
+    principal_id: projectFullDidToCoreId(user.did),
+    full_id: user.did,
     display_name: user.displayName,
     device_id: user.deviceId,
   };
@@ -1214,7 +1219,7 @@ export async function issueDevSession(
 ): Promise<string> {
   const url = `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`;
   const data = {
-    actor: user.did,
+    actor: projectFullDidToCoreId(user.did),
     // Same actor (DID) can hold multiple device sessions: pass `deviceId` to
     // override the default per-user device. soland's dev-login registers each
     // distinct device_id in the device inventory, which is what drives the
@@ -1315,8 +1320,10 @@ export async function createDpopUserSessionForAccount(
   }
   expect(grant.audience).toBe(audience);
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
-  expect(Array.isArray(grant.scopes)).toBeTruthy();
-  expect(grant.scopes).toContain(`urn:arkret:client:device:${seed.deviceId}`);
+  expect(grant.scopes).toEqual([
+    "ak.self.account.read.describe",
+    "ak.self.events.read.scan",
+  ]);
   // Consume only the verified DID returned by the atomic registration result.
   expect(
     grant.principalDid,
@@ -1346,22 +1353,48 @@ export async function createDpopUserSessionForAccount(
     eventSigningSeedB64url,
     deviceKey,
     recoveryKey: claimsPrincipalGenesis ? account.recoveryKey : undefined,
+    principalControlRealmId: "",
     principalControlEvents: [] as Array<Record<string, unknown>>,
   };
+  registerRequestAuth(session.grantJwt, (method, url) =>
+    selfPathGrantHeaders({
+      deviceKey: session.deviceKey,
+      grantJwt: session.grantJwt,
+      method,
+      url,
+    }),
+  );
   const checkpoint = account.principalRegistrationCheckpoint;
   const pcrGenesisUnit = checkpoint.pcr_genesis_unit as {
     events?: Array<Record<string, unknown>>;
   };
-  if (!Array.isArray(pcrGenesisUnit.events) || pcrGenesisUnit.events.length !== 2) {
-    throw new Error("principal registration checkpoint omitted its closed PCR genesis unit");
+  if (
+    !Array.isArray(pcrGenesisUnit.events) ||
+    pcrGenesisUnit.events.length !== 2
+  ) {
+    throw new Error(
+      "principal registration checkpoint omitted its closed PCR genesis unit",
+    );
   }
-  session.principalControlEvents = pcrGenesisUnit.events.map((event) =>
-    JSON.parse(canonicalJson(event)) as Record<string, unknown>,
+  session.principalControlEvents = pcrGenesisUnit.events.map(
+    (event) => JSON.parse(canonicalJson(event)) as Record<string, unknown>,
   );
-  const principalControlRealmId = session.principalControlEvents[0]?.realm_id;
-  if (typeof principalControlRealmId !== "string") {
-    throw new Error("principal registration checkpoint PCR create omitted realm_id");
+  const createEvent = session.principalControlEvents[0];
+  const createEventId = createEvent?.event_id;
+  if (
+    createEvent?.kind !== "ak.realm.create" ||
+    typeof createEventId !== "string" ||
+    !createEventId.startsWith("ak:event:")
+  ) {
+    throw new Error(
+      "principal registration checkpoint omitted its canonical PCR create",
+    );
   }
+  const principalControlRealmId = createEventId.replace(
+    /^ak:event:/,
+    "ak:realm:",
+  );
+  session.principalControlRealmId = principalControlRealmId;
   registerPrincipalControlRealm(user.did, principalControlRealmId);
   const bootstrapSeal = cotestWire<Record<string, unknown>>(
     "principal-bootstrap-seal",
