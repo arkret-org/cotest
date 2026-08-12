@@ -103,6 +103,9 @@ try {
         'const seed = Buffer.from(registered.signingSeedB64url, "base64url");',
         '{"jws":"[redacted:detached_jws]"}',
         '{"credential":"<redacted>"}',
+        '{"request":{"url":"https://example.test/blob?access_token=%5Bredacted%5D"},"status":401}',
+        '{"request":{"url":"https://example.test/blob?access_token=[redacted]"},"status":401}',
+        'url="https://example.test/blob?access_token=%5Bredacted%5D" status=401',
         '"the server logs show that retry loops kept firing until the queue drained fully"',
         '"our nightly release gate runs every suite twice before the deploy window opens for all teams"'
     )
