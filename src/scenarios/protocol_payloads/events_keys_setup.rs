@@ -115,7 +115,8 @@ async fn upload_and_inspect_keys(
     // Query returns the accepted device directory projection and authorization
     // link. The upload request signature authorizes the mutation; it is not a
     // prekey algorithm entry and therefore is not echoed under `algorithms`.
-    let queried_device = &query_keys["device_keys"][actor_id][KEYS_DEVICE_ID];
+    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
+    let queried_device = &query_keys["device_keys"][&actor_core_id][KEYS_DEVICE_ID];
     assert_eq!(queried_device["device_status"], "active");
     assert!(
         queried_device["device_signing_key"]

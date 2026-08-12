@@ -18,7 +18,8 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow};
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_identifiers::{
-    BackupId, BackupSeriesId, DeviceId, DidCoreId, EventId, Hash, RecoverySessionId,
+    BackupId, BackupSeriesId, DeviceId, DidCoreId, DidFullId, EventId, Hash, RecoverySessionId,
+    project_full_id_to_core_id,
 };
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupContentItem,
@@ -308,7 +309,9 @@ fn ts(value: &str) -> Result<DateTime<Utc>> {
 }
 
 fn did(value: &str) -> Result<DidCoreId> {
-    Ok(DidCoreId::new(value.to_owned())?)
+    Ok(project_full_id_to_core_id(&DidFullId::new(
+        value.to_owned(),
+    )?)?)
 }
 
 fn device_id(value: &str) -> Result<DeviceId> {

@@ -877,7 +877,12 @@ impl TestActorClient {
                     credential_epoch: None,
                 });
             }
-            self.stamp_authority(&mut event, realm_id, kind, is_data_event);
+            // Self moderation reports use their holder proof as the complete
+            // admission regime. The self endpoint forbids Realm authority or
+            // grant attribution on the signed Event.
+            if kind != arkret_wire::event_kind_str::SELF_MODERATION_REPORT {
+                self.stamp_authority(&mut event, realm_id, kind, is_data_event);
+            }
         }
         refresh_typed_event_proof(&mut event)?;
         Ok(event)

@@ -587,8 +587,8 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .post(server.url("/_arkret/self/moderation/report"))
             .bearer_auth(&alice)
             .json(&wrong_reporter),
-        StatusCode::FORBIDDEN,
-        "capability_denied",
+        StatusCode::BAD_REQUEST,
+        "invalid_param",
     )
     .await?;
     expect_api_error(

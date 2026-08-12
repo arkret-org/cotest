@@ -4,7 +4,8 @@
 //! single-use challenge, and the client signs the canonical delete-intent
 //! transcript with a principal control key, a device quorum or a trusted
 //! recovery service. There is no development ownership string any more, so the
-//! scenario drives the real two-call flow.
+//! scenario drives the real two-call flow and verifies that a synthetic key
+//! which is not an exact principal authority instance fails closed.
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::canonical::canonical_json_bytes;
@@ -71,16 +72,33 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
         proof: KeyBackupDeleteProof::PrincipalSigning { proof },
         reason: Some(reason),
     };
-    let backup_delete = expect_json(
+    let denied = expect_json(
         server
             .http()
             .delete(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-payloads-key-backup-delete")
             .json(&body),
+        StatusCode::FORBIDDEN,
+    )
+    .await?;
+    assert_eq!(denied["error"]["code"], "capability_denied");
+
+    let backup_list = expect_json(
+        server
+            .http()
+            .get(server.url("/_arkret/self/keys/backups"))
+            .bearer_auth(token),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(backup_delete["deleted"], true);
+    assert!(
+        backup_list["backups"]
+            .as_array()
+            .is_some_and(|backups| backups
+                .iter()
+                .any(|backup| backup["backup_id"] == BACKUP_ID)),
+        "denied delete must leave the backup intact: {backup_list}"
+    );
     Ok(())
 }
