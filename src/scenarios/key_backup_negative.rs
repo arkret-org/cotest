@@ -1,5 +1,7 @@
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_identifiers::{BackupId, BackupSeriesId, DeviceId, DidCoreId, EventId};
+use arkret_identifiers::{
+    BackupId, BackupSeriesId, DeviceId, DidFullId, EventId, project_full_id_to_core_id,
+};
 use arkret_models_crypto::{
     BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupContentItem,
     KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
@@ -196,9 +198,10 @@ async fn reject_digest_mismatch_on_put(
 
 fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBackup> {
     let created_at = ts("2026-05-18T00:00:00.000Z")?;
+    let actor_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
     let backup = KeyBackup {
         backup_id: BackupId::new(backup_id.to_owned())?,
-        actor_id: DidCoreId::new(actor.to_owned())?,
+        actor_id: actor_id.clone(),
         device_id: Some(DeviceId::new(device_id.to_owned())?),
         backup_kind: BackupKind::MlsHistory,
         mixed_secret_storage: false,
@@ -229,7 +232,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
             subdomain: "test".to_owned(),
             aead_aad: KeyBackupDomainSeparationAad {
                 schema: "ak.schema.key_backup.v1".to_owned(),
-                actor_id: DidCoreId::new(actor.to_owned())?,
+                actor_id,
                 device_id: Some(device_id.to_owned()),
                 backup_kind: BackupKind::MlsHistory,
                 backup_version: "kb_1".to_owned(),
