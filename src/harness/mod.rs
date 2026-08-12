@@ -78,6 +78,11 @@ pub fn query_method() -> reqwest::Method {
     reqwest::Method::from_bytes(b"QUERY").expect("QUERY is a valid HTTP method")
 }
 
+pub fn actor_core_id(actor: &str) -> Result<String> {
+    let full_id = arkret_identifiers::DidFullId::new(actor.to_owned())?;
+    Ok(arkret_identifiers::project_full_id_to_core_id(&full_id)?.to_string())
+}
+
 pub fn events_frontier_request_body(
     actor_id: Option<&str>,
     realm_id: Option<&str>,

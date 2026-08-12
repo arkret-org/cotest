@@ -192,8 +192,9 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         StatusCode::OK,
     )
     .await?;
+    let alice_core_id = crate::harness::actor_core_id("did:web:alice.example")?;
     assert_eq!(
-        send["delivered"]["did:web:alice.example"][0],
+        send["delivered"][alice_core_id][0],
         "ak:device:01904100-0000-7000-8000-0000000000a1"
     );
 

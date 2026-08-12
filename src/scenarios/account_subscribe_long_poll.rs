@@ -17,9 +17,9 @@ use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    TestServerGroup, account_subscribe_delta_from_text, events_frontier_request_body, eventually,
-    expect_account_subscribe_delta, expect_account_subscribe_realm_delta, invite_create_payload,
-    message_create_text_payload,
+    TestServerGroup, account_subscribe_delta_from_text, actor_core_id,
+    events_frontier_request_body, eventually, expect_account_subscribe_delta,
+    expect_account_subscribe_realm_delta, invite_create_payload, message_create_text_payload,
 };
 
 const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
@@ -540,11 +540,6 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     .await?;
 
     Ok(())
-}
-
-fn actor_core_id(actor: &str) -> Result<String> {
-    let full_id = arkret_identifiers::DidFullId::new(actor.to_owned())?;
-    Ok(arkret_identifiers::project_full_id_to_core_id(&full_id)?.to_string())
 }
 
 fn submitted_event_id(response: &Value) -> Option<&str> {

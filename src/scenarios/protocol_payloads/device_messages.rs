@@ -65,8 +65,9 @@ async fn duplicate_send_is_idempotent(
     )
     .await?;
     assert_eq!(duplicate_send["ok"], true);
+    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
     assert_eq!(
-        duplicate_send["delivered"][actor_id][0],
+        duplicate_send["delivered"][actor_core_id][0],
         "ak:device:01904100-0000-7000-8000-0000000000a1"
     );
     Ok(())

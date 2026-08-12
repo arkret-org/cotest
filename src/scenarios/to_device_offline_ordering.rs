@@ -248,7 +248,8 @@ async fn send_to_device(
     )
     .await?;
     if expect_delivery {
-        let delivered = response["delivered"][recipient]
+        let recipient_core_id = crate::harness::actor_core_id(recipient)?;
+        let delivered = response["delivered"][&recipient_core_id]
             .as_array()
             .cloned()
             .unwrap_or_default();
