@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::future::Future;
 use std::path::PathBuf;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
@@ -16,6 +17,7 @@ use url::Url;
 
 const ACCOUNT_SUBSCRIBE_FRAME_DEADLINE: Duration = Duration::from_secs(40);
 const HTTP_REQUEST_DEADLINE: Duration = Duration::from_secs(45);
+static TRANSCRIPT_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
 pub struct RecordedResponse {
     pub status: StatusCode,
@@ -242,6 +244,10 @@ fn append_transcript_entry(entry: &Value) -> Result<()> {
 }
 
 fn append_transcript_entry_to(path: &PathBuf, entry: &Value) -> Result<()> {
+    let _process_guard = TRANSCRIPT_WRITE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|error| anyhow!("transcript write lock poisoned: {error}"))?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
