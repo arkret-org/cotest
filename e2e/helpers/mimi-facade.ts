@@ -39,14 +39,6 @@ async function jsonBody(response: Awaited<ReturnType<APIRequestContext["get"]>>)
   return (await response.json()) as Record<string, unknown>;
 }
 
-export function mockMimiFacadeBaseUrlRequired(): string {
-  const baseUrl = mockMimiFacadeBaseUrl();
-  if (!baseUrl) {
-    throw new Error("COTEST_MOCK_MIMI_FACADE_BASE_URL is required");
-  }
-  return baseUrl;
-}
-
 export function createMimiFacadeClient(request: APIRequestContext): MimiFacadeClient | undefined {
   const baseUrl = mockMimiFacadeBaseUrl();
   if (!baseUrl) return undefined;

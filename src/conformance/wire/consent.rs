@@ -291,8 +291,6 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
             bail!("composite state subject fixture missing coverage for {kind}");
         }
     }
-    validate_deprecated_wire_vectors(&fixture, "composite_state_subject.deprecated")?;
-
     let negatives = fixture
         .get("negative_vectors")
         .and_then(Value::as_array)
@@ -357,7 +355,6 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
             bail!("active composite state key vector {name} still uses removed kind {kind}");
         }
     }
-    validate_deprecated_wire_vectors(&fixture, "composite_state_key_encoding.deprecated")?;
 
     // Ordering-negative: the wrong-order array MUST hash to a different subject.
     let ordering = fixture
@@ -436,27 +433,6 @@ pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
         );
     }
 
-    Ok(())
-}
-
-fn validate_deprecated_wire_vectors(fixture: &Value, transcript_kind: &str) -> Result<()> {
-    let Some(vectors) = fixture
-        .get("deprecated_wire_vectors")
-        .and_then(Value::as_array)
-    else {
-        return Ok(());
-    };
-    for vector in vectors {
-        let name = required_str(vector, "name")?;
-        let kind = required_str(vector, "kind")?;
-        if !kind.starts_with("cx.") {
-            bail!("deprecated wire vector {name} must carry a removed cx.* kind, got {kind}");
-        }
-        if expected_outcome(vector, name)? != "historical_only" {
-            bail!("deprecated wire vector {name} must expect historical_only");
-        }
-        validate_encoded_vector(vector, transcript_kind)?;
-    }
     Ok(())
 }
 

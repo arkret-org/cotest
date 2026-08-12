@@ -2,7 +2,7 @@
   "profile": "ak.profile.composite_state_subject_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). Active vectors only use current v1 kinds; removed ak.strand.track.* examples are isolated under deprecated_wire_vectors with historical_only expectations.",
+  "comment": "B4 composite state subject encoding round-trip vectors. Per spec/v1/zh/conformance/encoding.md §9.5: state_subject = base64url_nopad(sha256(canonical_json(components_array))). The pipe-separated form (`a|b|c`) is informational only; canonical wire form, signature input, state map index MUST use the hash form. components_array order is fixed per kind (§9.5.2). Every vector — positive and negative — carries a current v1 `ak.*` kind; there are no historical encodings to pin because the project ships no released wire format.",
   "encoder": {
     "canonical_json": "RFC 8785 / spec encoding.md §1: sorted object keys, no whitespace, exact JSON string representation",
     "digest": "SHA-256",
@@ -27,60 +27,20 @@
       "comment": "device.authorized and device.revoked share a cell via component_slot_alias_of; their cell-subject hash is identical — revoke supersedes grant (cf. consent.grant/revoke + capability.grant/revoke patterns)."
     }
   ],
-  "deprecated_wire_vectors": [
-    {
-      "name": "strand_track_member_alice",
-      "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main", "did:web:alice.example"],
-      "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "3XHyRXUhfSgDjRFD858U6e8muuUSo5Eh1I_rEOgwjbQ",
-      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
-    },
-    {
-      "name": "strand_track_member_bob_distinct_subject",
-      "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main", "did:web:bob.example"],
-      "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\",\"did:web:bob.example\"]",
-      "expected_state_subject": "I1lX1vggzE5NtrsTfqxGaY0oqrnTxjwuqCzOUwvtnf0",
-      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
-      "comment": "Same strand + track but a different actor — historical encoding fixture only; current v1 producers must not emit ak.strand.track.member."
-    },
-    {
-      "name": "strand_track_history_visibility",
-      "kind": "cx.strand.track.history_visibility",
-      "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main"],
-      "components_order_source": "[strand_id, track]",
-      "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\"]",
-      "expected_state_subject": "zy1FlA4tLa4Q6Guu2UVDk8-3sAXOOi9t7LadhQ-tfNE",
-      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
-    },
-    {
-      "name": "strand_track_policy_bundle_same_subject_as_history_visibility",
-      "kind": "cx.strand.track.policy_bundle",
-      "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main"],
-      "components_order_source": "[strand_id, track]",
-      "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\"]",
-      "expected_state_subject": "zy1FlA4tLa4Q6Guu2UVDk8-3sAXOOi9t7LadhQ-tfNE",
-      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
-      "comment": "Two removed kinds shared the same components_array shape; retained only to pin historical hash encoding."
-    }
-  ],
   "negative_vectors": [
     {
       "name": "wrong_component_order_collides_into_different_subject",
-      "kind": "cx.strand.track.member",
-      "components_array": ["main", "ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "did:web:alice.example"],
-      "comment": "If a buggy implementation reorders components_array (e.g. track before strand_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical strand_track_member_alice subject.",
-      "must_differ_from": "3XHyRXUhfSgDjRFD858U6e8muuUSo5Eh1I_rEOgwjbQ"
+      "kind": "ak.device.authorize",
+      "components_array": ["dev_alice_01", "did:web:alice.example"],
+      "comment": "If a buggy implementation reorders components_array (e.g. device_id before principal_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical device_authorized_alice subject.",
+      "must_differ_from": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
     },
     {
       "name": "pipe_form_must_not_be_used_as_canonical",
-      "kind": "cx.strand.track.member",
-      "pipe_form": "ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN|main|did:web:alice.example",
+      "kind": "ak.device.authorize",
+      "pipe_form": "did:web:alice.example|dev_alice_01",
       "comment": "The pipe-separated form is informational only. Cotest verifies that hashing the pipe string would not produce the canonical state_subject — implementations that use it would diverge.",
-      "must_differ_from": "3XHyRXUhfSgDjRFD858U6e8muuUSo5Eh1I_rEOgwjbQ"
+      "must_differ_from": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
     }
   ]
 }

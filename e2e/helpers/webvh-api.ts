@@ -23,24 +23,6 @@ export type WebvhKey = {
   multibase: string;
 };
 
-export type PrincipalGenesisInput = {
-  baseUrl: string;
-  localId: string;
-  rootKey: WebvhKey;
-  nextRootKey: WebvhKey;
-  alsoKnownAs?: string[];
-  serviceEndpoint?: string;
-  versionTime?: string;
-};
-
-export type BuiltPrincipalGenesis = {
-  did: string;
-  scid: string;
-  versionId: string;
-  entry: Record<string, unknown>;
-  didDocument: Record<string, unknown>;
-};
-
 export type WebvhGenesisInput = {
   baseUrl: string;
   localId: string;
@@ -126,37 +108,6 @@ function formatWebvhDid(
   localId: string,
 ): string {
   return `did:webvh:${scid}:${methodAuthority}:webvh:${localId}`;
-}
-
-function principalDocument(
-  did: string,
-  input: PrincipalGenesisInput,
-): Record<string, unknown> {
-  const principalServerService = {
-    id: `${did}#soland`,
-    type: "ArkretPrincipalServer",
-    serviceEndpoint: input.serviceEndpoint ?? input.baseUrl.replace(/\/$/, ""),
-  };
-  return {
-    "@context": ["https://www.w3.org/ns/did/v1"],
-    id: did,
-    alsoKnownAs: input.alsoKnownAs ?? [],
-    service: [principalServerService],
-  };
-}
-
-export function buildPrincipalGenesisEntry(
-  input: PrincipalGenesisInput,
-): BuiltPrincipalGenesis {
-  const built = buildWebvhGenesisEntry({
-    baseUrl: input.baseUrl,
-    localId: input.localId,
-    rootKey: input.rootKey,
-    nextRootKey: input.nextRootKey,
-    document: (did) => principalDocument(did, input),
-    versionTime: input.versionTime,
-  });
-  return built;
 }
 
 export function buildWebvhGenesisEntry(

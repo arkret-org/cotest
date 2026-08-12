@@ -474,17 +474,6 @@ impl ArkretServer {
         HttpClient::new()
     }
 
-    /// Returns the captured service log when artifact capture is enabled.
-    pub fn service_log_contents(&self) -> Result<Option<String>> {
-        self.log_path
-            .as_ref()
-            .map(|path| {
-                fs::read_to_string(path)
-                    .with_context(|| format!("read service log {}", path.display()))
-            })
-            .transpose()
-    }
-
     /// Build an authenticated request for the harness-only embedded WebVH
     /// registration gate. Keeping the credential here prevents direct fixture
     /// requests from silently bypassing the bootstrap authentication contract.
@@ -739,31 +728,6 @@ impl TestServerGroup {
             servers: vec![ArkretServer::spawn(name).await?],
             docker_network: None,
         })
-    }
-
-    /// fast path that spawns `count` pre-built soland binaries via
-    /// the [`external_binary`] helper. Returns `Ok(None)` when the binary
-    /// cannot be located or required env vars are missing — scenarios use
-    /// this to silently skip federation tests on CI runners that have no
-    /// `soland.exe` built and no `SOLAND_BIN=...` set, while still running
-    /// the full multi-node strand on developer machines that do.
-    ///
-    /// Falls back to the slow `cargo run` `multi` path if `SOLAND_BIN` is
-    /// unset *and* the sibling binary is also unavailable — callers that
-    /// want strict skip semantics should prefer this constructor; callers
-    /// that want best-effort spin-up via cargo can keep using `multi`.
-    pub async fn try_multi_external(name: &str, count: usize) -> Result<Option<Self>> {
-        use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
-
-        let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) else {
-            return Ok(None);
-        };
-
-        let servers = Self::spawn_external_federated(name, count, &bin_path).await?;
-        Ok(Some(Self {
-            servers,
-            docker_network: None,
-        }))
     }
 
     /// Spawn a mutually wired pre-built Soland mesh while giving every node

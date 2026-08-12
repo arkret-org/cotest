@@ -89,17 +89,6 @@ export function diffDidHostCounts(
   return delta;
 }
 
-export function mockDidHostBaseUrlRequired(): string {
-  const baseUrl = mockDidHostBaseUrl();
-  if (!baseUrl) {
-    throw new Error(
-      "COTEST_MOCK_DID_HOST_BASE_URL is required — start the stack with " +
-        "scripts/run-joint-e2e.ps1 -StartMockDidHost (or -StartMocks)",
-    );
-  }
-  return baseUrl;
-}
-
 export type DidHostClient = {
   baseUrl: string;
   authority?: string;

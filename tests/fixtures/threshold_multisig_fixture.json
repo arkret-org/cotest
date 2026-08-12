@@ -1,12 +1,15 @@
 {
   "profile": "ak.profile.threshold_multisig_vectors.v1",
-  "version": "2026-05-09",
+  "version": "2026-08-13",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "Round 22 — threshold k-of-n Anchor signing vectors per spec authz/event-auth-state-resolution.md §6 (anchorer cell threshold profile) and arkret-rust-sdk crates/core/src/signer.rs::ThresholdAggregator. Validates the partial-signature collection state machine: (a) collecting >=k verified partials produces an aggregated MultiSignature whose signatures[].len() == k; (b) collecting k-1 partials and calling aggregate() rejects with `threshold_below_quorum`; (c) PartialSignature whose signer_did is not in the anchorer cell's `members[]` rejected at admission; (d) duplicate signer_did partials deduped (second add_partial returns `duplicate_signer`); (e) aggregated signature verifies iff each partial individually verifies (one-call-per-partial). Each vector pins a normative input shape + outcome; no real signing is exercised — that lives in SDK signature crate unit tests. The validator is structural.",
+  "comment": "Threshold k-of-n anchor signing vectors per spec authz/event-auth-state-resolution.md §6 (anchorer cell threshold profile) and the live SDK aggregator arkret-rust-sdk/crates/wire/src/signer.rs::ThresholdAggregator. Validates the partial-signature collection state machine: (a) collecting >=k verified partials produces an aggregated MultiSignature whose signatures[].len() equals the number of collected partials; (b) collecting k-1 partials and calling aggregate() rejects (cotest reason: threshold_below_quorum); (c) a PartialSignature whose signer_did is not in the anchorer cell's `members[]` is rejected at admission, before the aggregator can count it toward the threshold; (d) duplicate signer_did partials are rejected by add_partial (cotest reason: duplicate_signer); (e) aggregate() runs the per-partial verifier exactly once per collected partial. Cotest drives the real ThresholdAggregator for every vector — the fixture pins the inputs and expected outcomes, the SDK produces the results.",
   "encoder": {
     "anchorer_cell_kind": "threshold",
     "scheme": "ed25519-multi",
-    "wire_form": "AnchorerSig::Multi(MultiSignature{kind: MultiSig, signatures[]})"
+    "aggregator": "arkret_wire::ThresholdAggregator",
+    "wire_form": "NotarySig::Multi(MultiSignature{kind: MultiSig, signatures: [PayloadSignature]})",
+    "canonical_body": "{\"body\":\"threshold-anchor-move\"}",
+    "canonical_body_sha256": "sha256:15be7882eb1efc20ab2e32756cd5f19fbb26a09c283b555684cdaf568a5834f3"
   },
   "vectors": [
     {
@@ -33,7 +36,7 @@
       "expected": {
         "outcome": "aggregate_ok",
         "aggregated_signatures_len": 2,
-        "rationale": "Exactly k=2 verified partials from distinct anchorer-cell members ⇒ aggregate() returns MultiSignature{kind=MultiSig, signatures.len()==2}. Each MoveSignature carries the partial's verification_method id."
+        "rationale": "Exactly k=2 verified partials from distinct anchorer-cell members ⇒ aggregate() returns MultiSignature{kind=MultiSig, signatures.len()==2}. Each PayloadSignature carries the partial's verification_method id and the shared payload_digest."
       }
     },
     {
@@ -65,7 +68,7 @@
       "expected": {
         "outcome": "aggregate_ok",
         "aggregated_signatures_len": 3,
-        "rationale": "k+1 partials still aggregate; ThresholdAggregator.aggregate() emits one MoveSignature per collected partial. Receivers re-verify each independently."
+        "rationale": "k+1 partials still aggregate; ThresholdAggregator.aggregate() emits one PayloadSignature per collected partial. Receivers re-verify each independently."
       }
     },
     {

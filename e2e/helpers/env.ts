@@ -117,17 +117,6 @@ export function coauthBaseUrl(): string | undefined {
   return optionalEnv("COTEST_COAUTH_BASE_URL")?.replace(/\/$/, "");
 }
 
-export function coauthServiceId(): string {
-  return (
-    optionalEnv("COTEST_COAUTH_SERVICE_ID") ??
-    "did:webvh:z6mkfixture:coauth.joint-e2e.local"
-  );
-}
-
-export function coauthSessionGrantIntrospectionBearer(): string | undefined {
-  return optionalEnv("COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER");
-}
-
 export function embeddedWebvhRegistrationBearer(): string | undefined {
   return optionalEnv("COTEST_EMBEDDED_WEBVH_REGISTRATION_BEARER");
 }
@@ -316,12 +305,5 @@ export function screenshotRoot(): string {
   return (
     optionalEnv("COTEST_UI_SCREENSHOT_DIR") ??
     path.join(jointRunDir(), "screenshots")
-  );
-}
-
-export function visualBaselineRoot(): string {
-  return (
-    optionalEnv("COTEST_UI_VISUAL_BASELINE_DIR") ??
-    path.join(jointRunDir(), "visual-baselines")
   );
 }

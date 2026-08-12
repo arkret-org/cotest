@@ -117,23 +117,6 @@ pub fn events_query_for_realm(
     )
 }
 
-pub fn events_query_for_actor(
-    actor_id: &str,
-    limit: u32,
-) -> Result<arkret_models_collaboration::event_query::EventsQueryPostRequestBody> {
-    Ok(
-        arkret_models_collaboration::event_query::EventsQueryPostRequestBody {
-            actors: vec![arkret_identifiers::DidCoreId::from(
-                arkret_identifiers::project_full_id_to_core_id(
-                    &arkret_identifiers::DidFullId::new(actor_id.to_owned())?,
-                )?,
-            )],
-            limit: Some(limit),
-            ..Default::default()
-        },
-    )
-}
-
 pub(crate) fn canonical_device_id(input: &str) -> String {
     if input.starts_with("ak:device:") {
         return input.to_owned();

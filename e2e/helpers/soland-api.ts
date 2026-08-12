@@ -281,37 +281,6 @@ export function wireErrCode(body: unknown): string | undefined {
   );
 }
 
-export function wireErrReason(body: unknown): string | undefined {
-  if (!body || typeof body !== "object") {
-    return undefined;
-  }
-  const record = body as Record<string, unknown>;
-  const nested =
-    record.error && typeof record.error === "object"
-      ? (record.error as Record<string, unknown>)
-      : undefined;
-  const details =
-    record.details && typeof record.details === "object"
-      ? (record.details as Record<string, unknown>)
-      : undefined;
-  const nestedDetails =
-    nested?.details && typeof nested.details === "object"
-      ? (nested.details as Record<string, unknown>)
-      : undefined;
-  return (
-    stringValue(record.reason) ??
-    stringValue(record.reason_code) ??
-    stringValue(record.error_reason) ??
-    stringValue(details?.reason) ??
-    stringValue(details?.reason_code) ??
-    stringValue(nested?.reason) ??
-    stringValue(nested?.reason_code) ??
-    stringValue(nested?.error_reason) ??
-    stringValue(nestedDetails?.reason) ??
-    stringValue(nestedDetails?.reason_code)
-  );
-}
-
 export function projectFullDidToCoreId(fullDid: string): string {
   if (fullDid.startsWith("did:webvh:")) {
     const [scid] = fullDid.slice("did:webvh:".length).split(":", 1);
@@ -1415,56 +1384,6 @@ export async function submitApplicationReviewApi(
   return outcome.receipt_ref ?? reviewReceiptDigest;
 }
 
-// join-policy.md §7.1.1 / §7.4 — signed profile-private cancellation receipt.
-export async function submitApplicationCancelApi(
-  request: APIRequestContext,
-  token: string,
-  actorDid: string,
-  realmId: string,
-  applicationRef: string,
-  opts: { server?: SolandKey; createdAt?: string; reasonText?: string } = {},
-): Promise<string> {
-  const cancelledAt = canonicalTimestamp(
-    opts.createdAt === undefined ? undefined : new Date(opts.createdAt),
-  );
-  const unsignedReceipt = stripUndefined({
-    candidate_kind: "member.application.cancel",
-    realm_id: realmId,
-    application_ref: applicationRef,
-    cancelled_by: actorDid,
-    cancelled_at: cancelledAt,
-    reason_text: opts.reasonText,
-  }) as Record<string, unknown>;
-  const cancelReceiptDigest = `sha256:${sha256CanonicalJson(unsignedReceipt)}`;
-  const receipt = {
-    ...unsignedReceipt,
-    cancel_receipt_digest: cancelReceiptDigest,
-    proof: joinReceiptProof({
-      actorDid,
-      realmId,
-      receiptDigest: cancelReceiptDigest,
-      createdAt: cancelledAt,
-      context: "ak.join-application-cancel-receipt-proof-v1",
-      applicationRef,
-    }),
-  };
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/join-applications/${encodeURIComponent(applicationRef)}/cancel`,
-    {
-      headers: {
-        ...authHeaders(token),
-        "Idempotency-Key": `cancel:${cancelReceiptDigest}`,
-      },
-      data: { receipt },
-    },
-  );
-  const outcome = await expectJsonOk<{ receipt_ref?: string }>(
-    response,
-    `cancel join application ${applicationRef}`,
-  );
-  return outcome.receipt_ref ?? cancelReceiptDigest;
-}
-
 // join-policy.md §5 — auto-resolve join: `ak.member.state{membership=join}`
 // carrying `gate_proofs[]`. The reducer validates the gates inline.
 export async function submitJoinWithProofsApi(
@@ -2005,39 +1924,6 @@ export function accountDataSetSubmission(args: {
   };
 }
 
-/// Tombstone one account-data key through the holder-signed DELETE body.
-///
-/// `expected_revision` lives in the signed payload; it used to be a query
-/// parameter, which no signature could cover.
-export async function deleteAccountDataApi(
-  request: APIRequestContext,
-  token: string,
-  actorDid: string,
-  key: string,
-  expectedRevision: number,
-  opts: { server?: SolandKey; context?: string } = {},
-) {
-  const response = await request.delete(
-    `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
-    {
-      headers: authHeaders(token),
-      data: {
-        set_event: accountDataSetSubmission({
-          actorDid,
-          key,
-          expectedRevision,
-        }),
-      },
-    },
-  );
-  const text = await response.text();
-  expect(
-    response.status(),
-    `${opts.context ?? `delete account_data ${key}`} returned ${response.status()}: ${text}`,
-  ).toBe(200);
-  return parseJsonOrRaw(text) as Record<string, unknown>;
-}
-
 export async function replaceAccountDataApi(
   request: APIRequestContext,
   token: string,
@@ -2253,41 +2139,6 @@ export function refreshEventEnvelopeProof(
       verificationMethod: proofVerificationMethod,
     }),
   ];
-}
-
-export function eventProof(args: {
-  actorDid: string;
-  event: Record<string, unknown>;
-  verificationMethod?: string;
-}): Record<string, unknown> {
-  const mode = eventProofMode();
-  const registeredSigner = eventSignerFor(
-    args.actorDid,
-    args.verificationMethod,
-  );
-  const verificationMethod =
-    args.verificationMethod ??
-    registeredSigner?.verificationMethod ??
-    `${args.actorDid}#device`;
-  const eventDigest = `sha256:${sha256CanonicalJson(args.event)}`;
-  const createdAt = canonicalEventTimestamp();
-
-  if (mode === "dev-proof") {
-    return {
-      type: "dev-proof",
-      verification_method: verificationMethod,
-      event_digest: eventDigest,
-    };
-  }
-
-  return sdkEventProof({
-    actorDid:
-      registeredSigner?.verificationMethod.split("#", 1)[0] ?? args.actorDid,
-    event: args.event,
-    verificationMethod,
-    createdAt,
-    signingSeedB64url: registeredSigner?.signingSeedB64url,
-  });
 }
 
 function eventEnvelopeProof(args: {
@@ -4290,23 +4141,6 @@ export function base64urlJsonCanonical(value: unknown): string {
 /// the exact bytes the signer emitted in field-declaration order.
 export function base64urlJsonRaw(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
-}
-
-function sdkEventProof(args: {
-  actorDid: string;
-  event: Record<string, unknown>;
-  verificationMethod: string;
-  createdAt: string;
-  signingSeedB64url?: string;
-}): Record<string, unknown> {
-  assertJsonTransportable(args.event, "$.event");
-  return cotestWire<Record<string, unknown>>("event-proof", {
-    actor_did: args.actorDid,
-    event: args.event,
-    verification_method: args.verificationMethod,
-    created_at: args.createdAt,
-    signing_seed_b64url: args.signingSeedB64url,
-  });
 }
 
 function sdkEventEnvelopeProof(args: {

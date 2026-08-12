@@ -62,10 +62,7 @@ arkret-state = {workspace = true}
 arkret-crypto = {workspace = true,features = ["blob-aead", "secret-share"]}
 arkret-event-draft = {workspace = true,features = ["test-support"]}
 arkret-http-client = {workspace = true}
-# The joint recovery / principal-bootstrap harness drives Inkson's product
-# paths directly, so it negotiates that test API by name rather than relying on
-# a profile's `debug_assertions` posture.
-inkson = {workspace = true,features = ["joint-test-api"]}
+inkson = {workspace = true}
 arkret-models-collaboration = {workspace = true}
 arkret-models-crypto = {workspace = true}
 arkret-models-discovery = {workspace = true}

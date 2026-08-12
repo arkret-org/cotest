@@ -1,37 +1,27 @@
 {
   "profile": "ak.profile.production_signing_vectors.v1",
-  "version": "2026-05-09",
-  "comment": "Round 22 — AnchorerWorker production signing path (Ed25519MoveSigner) per soland/src/routing/anchor_admin.rs::service_admin_signer + arkret-rust-sdk/crates/signatures/src/signer.rs. Validates the deterministic-vs-ephemeral seed contract: (a) configured-seed signer is byte-deterministic (same seed + same canonical body ⇒ same JWS signature segment) so anchor signatures replay across restart; (b) ephemeral-seed signer is non-deterministic across runs because the seed is fresh randomness; (c) different seeds produce different signatures even for the same canonical body (key-binding); (d) signature verifies via verify_ed25519_move_signature using the signer's derived verifying key (round-trip closure). Each vector pins a normative input (seed source + canonical-body hash) and the outcome shape; no real ed25519 ops run here — covered by SDK signature crate unit tests. The validator is structural.",
+  "version": "2026-08-13",
+  "comment": "Notary/anchor payload-signing vectors anchored on the live SDK signer: arkret-rust-sdk/crates/signatures/src/signer.rs::Ed25519PayloadSigner + verify_ed25519_payload_signature. Validates the deterministic-vs-ephemeral seed contract: (a) a configured 32-byte seed is byte-deterministic (same seed + same canonical body => same detached-JWS signature segment) so anchor signatures replay across restart; (b) an ephemeral seed is non-deterministic because the seed is fresh randomness; (c) different seeds produce different signatures for the same canonical body (key binding); (d) the signature round-trips through verify_ed25519_payload_signature with the signer-derived verifying key; (e) PayloadSignature.payload_digest equals sha256 of the canonical body bytes. Unlike the earlier structural-only revision, cotest now runs real ed25519 operations against the SDK types for every vector, so the suite fails loudly if the SDK signer contract moves.",
   "encoder": {
-    "signer": "Ed25519MoveSigner",
+    "signer": "arkret_signatures::Ed25519PayloadSigner",
+    "verifier": "arkret_signatures::signer::verify_ed25519_payload_signature",
     "signature_algorithm": "Ed25519",
-    "wire_form": "MoveSignature{jws: <header>..<sig>, payload_digest: sha256:<hex>}",
-    "seed_source_kinds": ["configured", "ephemeral", "service_id_derived"]
+    "wire_form": "PayloadSignature{jws: <protected-header>..<sig>, payload_digest: sha256:<hex>}",
+    "seed_source_kinds": ["configured", "ephemeral"]
   },
   "vectors": [
     {
       "name": "configured_seed_produces_deterministic_signature",
       "seed_source": "configured",
       "seed_kind": "fixed_32_byte",
+      "seed_hex": "0101010101010101010101010101010101010101010101010101010101010101",
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#anchor-key",
-      "canonical_body_sha256": "sha256:0101010101010101010101010101010101010101010101010101010101010101",
+      "canonical_body": "{\"body\":\"anchor-move-configured-seed\"}",
+      "canonical_body_sha256": "sha256:b3b24bd881306ad99649f15b7683626f6c46f0007f4b582ab9496af0de671ec0",
       "expected": {
         "outcome": "deterministic_signature",
-        "rationale": "Configured 32-byte seed + same canonical body bytes ⇒ identical Ed25519 signature on every invocation. JWS payload-hash and signature segment are byte-stable. AnchorerWorker uses this path for restart-replay safety."
-      }
-    },
-    {
-      "name": "service_id_derived_seed_is_deterministic_per_did",
-      "seed_source": "service_id_derived",
-      "seed_kind": "sha256_of_service_id",
-      "did": "did:web:hub.example",
-      "kid": "did:web:hub.example#admin-key",
-      "service_id": "did:web:hub.example",
-      "canonical_body_sha256": "sha256:0202020202020202020202020202020202020202020202020202020202020202",
-      "expected": {
-        "outcome": "deterministic_signature",
-        "rationale": "soland's service_admin_signer derives seed = sha256('soland:service-signer:' + service_id). Pure function of service_id ⇒ same admin Move signature every boot for the same service identity (dev-mode replay safety; production swaps for HSM)."
+        "rationale": "Configured 32-byte seed + same canonical body bytes => identical Ed25519 signature on every invocation. The detached-JWS signature segment and payload_digest are byte-stable, which is what lets a notary replay its own anchor signatures across a restart. Cotest constructs two signers from the same seed and asserts the two PayloadSignature.jws strings are equal."
       }
     },
     {
@@ -40,48 +30,57 @@
       "seed_kind": "fresh_random_per_run",
       "did": "did:web:peer.example",
       "kid": "did:web:peer.example#ephemeral-key",
-      "canonical_body_sha256": "sha256:0303030303030303030303030303030303030303030303030303030303030303",
+      "canonical_body": "{\"body\":\"anchor-move-ephemeral-seed\"}",
+      "canonical_body_sha256": "sha256:6df5998f51e4e5b78dabe08cd1bb53f915a9500522a82afe1846c5e0de654ca0",
       "expected": {
         "outcome": "non_deterministic_signature",
-        "rationale": "Ephemeral seed = fresh CSPRNG bytes per signer construction ⇒ different signing key each run. Even with identical canonical body the JWS signature segment differs across processes. Used for one-shot test fixtures and ephemeral peer scenarios; MUST NOT be used for AnchorerWorker production path (would break restart-replay)."
+        "rationale": "An ephemeral seed is fresh CSPRNG bytes per signer construction, so each run holds a different signing key. Even with identical canonical body bytes the JWS signature segment differs. Suitable for one-shot fixtures and ephemeral peers; MUST NOT back a notary that needs restart-replay. Cotest draws two independent random seeds and asserts the signatures differ."
       }
     },
     {
       "name": "different_seeds_produce_different_signatures_for_same_body",
       "seed_source": "configured",
       "seed_kind": "two_distinct_fixed_32_byte_seeds",
+      "seeds_hex": [
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "0404040404040404040404040404040404040404040404040404040404040404"
+      ],
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#anchor-key",
-      "canonical_body_sha256": "sha256:0404040404040404040404040404040404040404040404040404040404040404",
-      "seeds": ["seed_a_all_zeros", "seed_b_all_ones"],
+      "canonical_body": "{\"body\":\"anchor-move-key-binding\"}",
+      "canonical_body_sha256": "sha256:06b781a6b61e003d107a08c1df3e9e8c71b0c323c37920d7a0d296e1501b05ab",
       "expected": {
         "outcome": "different_signatures",
-        "rationale": "Key-binding: signature s = sign(sk, m). Same m, distinct sk ⇒ distinct s. Confirms Ed25519MoveSigner is not silently reusing a global key; each MoveSigner instance carries its own SigningKey from its own seed."
+        "rationale": "Key binding: s = sign(sk, m). Same m, distinct sk => distinct s. Confirms Ed25519PayloadSigner is not silently reusing a process-global key; each signer carries its own SigningKey derived from its own seed. payload_digest, by contrast, MUST be identical across the two signers because it commits only to the canonical body."
       }
     },
     {
       "name": "signature_verifies_with_signer_derived_verifying_key",
       "seed_source": "configured",
       "seed_kind": "fixed_32_byte",
+      "seed_hex": "0505050505050505050505050505050505050505050505050505050505050505",
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#anchor-key",
-      "canonical_body_sha256": "sha256:0505050505050505050505050505050505050505050505050505050505050505",
+      "canonical_body": "{\"body\":\"anchor-move-round-trip-verify\"}",
+      "canonical_body_sha256": "sha256:c8aa6ea8e485a420edeb0d119afb456f3d4b079834436b6d9b9f95de28fcdbd3",
       "expected": {
         "outcome": "verify_ok",
-        "verify_via": "verify_ed25519_move_signature",
-        "rationale": "Round-trip: signer.sign_payload(m) ⇒ MoveSignature; verify_ed25519_move_signature(m, sig, signer.verifying_key()) returns Ok(()). The verifying key is derived from the same SigningKey ⇒ closes the loop without DID-resolver dependency."
+        "verify_via": "verify_ed25519_payload_signature",
+        "rationale": "Round trip: signer.sign_payload(m) => PayloadSignature; verify_ed25519_payload_signature(m, sig, signer.verifying_key()) returns Ok(()). The verifying key comes from the same SigningKey, so the loop closes without a DID-resolver dependency."
       }
     },
     {
       "name": "signature_payload_digest_matches_sha256_of_canonical_body",
       "seed_source": "configured",
       "seed_kind": "fixed_32_byte",
+      "seed_hex": "0606060606060606060606060606060606060606060606060606060606060606",
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#anchor-key",
-      "canonical_body_sha256": "sha256:0606060606060606060606060606060606060606060606060606060606060606",
+      "canonical_body": "{\"body\":\"anchor-move-payload-digest\"}",
+      "canonical_body_sha256": "sha256:b47e4789a93067eccf8cc2bff95e6f26e14a529b5d55be8ecf84c3bdc46f7be1",
       "expected": {
         "outcome": "payload_digest_matches",
-        "rationale": "MoveSignature.payload_digest = sha256:<hex of canonical body>. The receiver re-derives the canonical body bytes and recomputes sha256; must equal the declared payload_digest before verifying the JWS sig segment. Wire-form invariant for detached JWS (RFC 7515 §3.2)."
+        "rationale": "PayloadSignature.payload_digest = sha256:<hex of canonical body>. A receiver re-derives the canonical body bytes and recomputes sha256; it must equal the declared payload_digest before the JWS signature segment is verified. Wire-form invariant for detached JWS (RFC 7515 section 3.2). Cotest asserts the SDK-produced digest equals the fixture-pinned digest, so the fixture pin and the SDK cannot drift apart silently."
       }
     }
   ],
@@ -89,33 +88,39 @@
     {
       "name": "wrong_verifying_key_rejects_signature",
       "seed_source": "configured",
+      "seed_hex": "0707070707070707070707070707070707070707070707070707070707070707",
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#anchor-key",
-      "canonical_body_sha256": "sha256:0707070707070707070707070707070707070707070707070707070707070707",
+      "canonical_body": "{\"body\":\"anchor-move-wrong-verifying-key\"}",
+      "canonical_body_sha256": "sha256:7cbc48f2d8ce4acf97d11abd82f48b75061b9bbf92b3809db1a3836d5d8791d5",
       "drift": {
         "kind": "wrong_verifying_key",
-        "verify_with_seed": "different_seed"
+        "verify_with_seed_hex": "1717171717171717171717171717171717171717171717171717171717171717"
       },
       "expected": {
         "outcome": "reject",
         "reason_code": "signature_verification_failed",
-        "rationale": "Verifying with a key derived from a different seed ⇒ signature does not validate. Ed25519 has no malleability; verifier MUST reject."
+        "rationale": "Verifying with a key derived from a different seed => the signature does not validate. Ed25519 is non-malleable; the verifier MUST reject. Cotest signs with the vector seed and calls verify_ed25519_payload_signature with the drift seed's verifying key, asserting Err."
       }
     },
     {
       "name": "tampered_canonical_body_rejects_signature",
       "seed_source": "configured",
+      "seed_hex": "0808080808080808080808080808080808080808080808080808080808080808",
       "did": "did:web:hub.example",
       "kid": "did:web:hub.example#anchor-key",
-      "canonical_body_sha256": "sha256:0808080808080808080808080808080808080808080808080808080808080808",
+      "canonical_body": "{\"body\":\"anchor-move-tampered\"}",
+      "canonical_body_sha256": "sha256:31a49d932fed2d8327d0b9548c5689ea2c5c4064c90bea8437b02453c39ccbf4",
       "drift": {
         "kind": "tampered_canonical_body",
-        "tamper_at": "verify_time"
+        "tamper_at": "verify_time",
+        "tampered_body": "{\"body\":\"anchor-move-tampered-mutated\"}",
+        "tampered_body_sha256": "sha256:6a760218f2da4a6ba5f2707698679619dbe6c7b4c7a8454fbdb40db3b8813349"
       },
       "expected": {
         "outcome": "reject",
         "reason_code": "payload_digest_mismatch",
-        "rationale": "After signing, an attacker mutates the canonical body bytes. payload_digest declared in MoveSignature no longer matches sha256(tampered_body). verify_ed25519_move_signature MUST reject before invoking the JWS-segment ed25519 verify."
+        "rationale": "After signing, an attacker mutates the canonical body bytes. The payload_digest carried in PayloadSignature no longer matches sha256(tampered_body), so verify_ed25519_payload_signature MUST reject on the digest comparison before it ever touches the JWS signature segment."
       }
     }
   ]

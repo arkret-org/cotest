@@ -494,21 +494,6 @@ export async function restoreCircleArkret(
   );
 }
 
-export async function tombstoneCircleArkret(
-  request: APIRequestContext,
-  token: string,
-  circleId: string,
-  args: CircleLifecycleArgs,
-): Promise<CircleOutcome> {
-  return await submitCircleLifecycleArkret(
-    request,
-    token,
-    circleId,
-    "tombstone",
-    args,
-  );
-}
-
 // Read the canonical wire `code` off a soland error envelope. soland renders
 // errors as `{ ok:false, error:{ code, message }, request_id }`
 // (arkret_sdk::ErrorEnvelope), so the canonical code lives at `error.code`.

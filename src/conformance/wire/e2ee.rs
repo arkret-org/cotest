@@ -2,6 +2,7 @@
 //! the device-message negative cases.
 
 use anyhow::{Result, anyhow, bail};
+use base64::Engine as _;
 use serde_json::{Value, json};
 
 use super::{emit_vector, expected_outcome, expected_reason, load_local_fixture};
@@ -326,6 +327,22 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
                 // 32-byte zero seed since the fixture only carries indices.
                 let seed = [0u8; 32];
                 let info = b"ak.megolm.ratchet.v1";
+                // The fixture pins the HKDF `info` label as base64 so a
+                // namespace drift between the fixture and this validator is a
+                // loud failure rather than a silently-ignored field.
+                let declared_info_b64 = required_str(v, "kdf_info_b64")?;
+                let declared_info = base64::engine::general_purpose::URL_SAFE_NO_PAD
+                    .decode(declared_info_b64)
+                    .map_err(|e| {
+                        anyhow!("vector {name} kdf_info_b64 is not base64url-no-pad: {e}")
+                    })?;
+                if declared_info.as_slice() != info.as_slice() {
+                    bail!(
+                        "vector {name} kdf_info_b64 decodes to {:?}, expected {:?}",
+                        String::from_utf8_lossy(&declared_info),
+                        String::from_utf8_lossy(info),
+                    );
+                }
                 let kdf = Hkdf::<KdfSha256>::new(None, &seed);
                 let mut next = [0u8; 32];
                 kdf.expand(info, &mut next)

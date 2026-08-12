@@ -437,21 +437,24 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-22 — Threshold k-of-n Anchor signing vectors (ThresholdAggregator):
-    /// k partials accept, k-1 partials reject (`threshold_below_quorum`),
-    /// signer-not-in-anchorer-set rejected, duplicate signer deduped, aggregated
-    /// signature has one MoveSignature per partial (each individually checking).
+    /// Threshold k-of-n anchor signing vectors driven through the live SDK
+    /// `arkret_wire::ThresholdAggregator`: k partials accept, k-1 partials
+    /// reject (`threshold_below_quorum`), signer-not-in-anchorer-set rejected at
+    /// admission, duplicate signer refused by `add_partial`, and the aggregate
+    /// carries one `PayloadSignature` per partial (each individually verified).
     threshold_multisig_fixture_suite_matches_reference_semantics,
     "threshold_multisig_fixture",
     cotest::conformance::run_threshold_multisig_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-22 — AnchorerWorker production signing path (Ed25519MoveSigner):
-    /// configured/service ID-derived seed produces deterministic JWS, ephemeral
-    /// seed produces non-deterministic, different seeds produce different
-    /// signatures, signature verifies via verify_ed25519_move_signature with the
-    /// signer-derived verifying key.
+    /// Notary/anchor payload-signing path driven through the live SDK
+    /// `arkret_signatures::Ed25519PayloadSigner`: a configured seed produces a
+    /// byte-deterministic detached JWS, an ephemeral seed does not, distinct
+    /// seeds produce distinct signatures over identical bytes, the signature
+    /// round-trips through `verify_ed25519_payload_signature` with the
+    /// signer-derived verifying key, and `payload_digest` equals sha256 of the
+    /// canonical body.
     production_signing_fixture_suite_matches_reference_semantics,
     "production_signing_fixture",
     cotest::conformance::run_production_signing_fixture_suite,

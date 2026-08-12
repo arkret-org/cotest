@@ -2,7 +2,7 @@
   "profile": "ak.profile.composite_state_key_encoding_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "B3 Round 24 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. Active vectors use current v1 kinds and UUIDv7 typed ids; removed ak.strand.track.* examples are isolated under deprecated_wire_vectors with historical_only expectations. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
+  "comment": "B3 Round 24 — composite (cell, subject) state-key encoding determinism + reserved-name collision rejection. Spec authority: data-structures/cell-and-state-key.md (canonical state_key form) + encoding.md §9.5 (state_subject = base64url_nopad(sha256(canonical_json(components_array)))). The state_subject hash is canonical and kind-independent. Every vector — positive and negative — uses current v1 `ak.*` kinds and typed ids; there are no historical encodings to pin because the project ships no released wire format. The reserved cell-family names `__bottom__` (lattice-bottom diagnostic surface) and `__compaction__` (compaction marker surface) MUST NOT be reusable as user-supplied subject components — encoders MUST reject any components_array containing those literals.",
   "encoder": {
     "canonical_json": "RFC 8785 / encoding.md §1: arrays preserve order, object keys sorted, no whitespace",
     "digest": "SHA-256",
@@ -35,43 +35,20 @@
       "expected_state_subject": "Bglo4pGVpqIifh7FDA-5gOZZ7zznjiPWKdUaXq4zDG0"
     }
   ],
-  "deprecated_wire_vectors": [
-    {
-      "name": "strand_track_member_alice",
-      "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main", "did:web:alice.example"],
-      "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\",\"did:web:alice.example\"]",
-      "expected_state_subject": "3XHyRXUhfSgDjRFD858U6e8muuUSo5Eh1I_rEOgwjbQ",
-      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
-    },
-    {
-      "name": "strand_track_history_visibility_main",
-      "kind": "cx.strand.track.history_visibility",
-      "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "main"],
-      "components_order_source": "[strand_id, track]",
-      "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"main\"]",
-      "expected_state_subject": "zy1FlA4tLa4Q6Guu2UVDk8-3sAXOOi9t7LadhQ-tfNE",
-      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" }
-    },
-    {
-      "name": "strand_track_member_alice_distinct_track",
-      "kind": "cx.strand.track.member",
-      "components_array": ["ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "feature-x", "did:web:alice.example"],
-      "components_order_source": "[strand_id, track, actor_id]",
-      "expected_canonical_json": "[\"ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN\",\"feature-x\",\"did:web:alice.example\"]",
-      "expected_state_subject": "-bzUQyY2Nv2Xzz2QWJSwcYst-IEIypmEEi8rfLnRaR4",
-      "expected": { "outcome": "historical_only", "reason_code": "removed_event_kind" },
-      "comment": "Same strand_id + actor_id as strand_track_member_alice but different track segment — must produce a distinct state_subject."
-    }
-  ],
   "ordering_negative_vectors": [
     {
       "name": "wrong_component_order_must_differ",
-      "kind": "cx.strand.track.member",
-      "components_array": ["main", "ak:strand:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN", "did:web:alice.example"],
-      "comment": "Component reordering (track before strand_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge.",
-      "must_differ_from": "3XHyRXUhfSgDjRFD858U6e8muuUSo5Eh1I_rEOgwjbQ"
+      "kind": "ak.realm.member",
+      "components_array": ["did:web:carol.example", "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG"],
+      "comment": "Component reordering (actor_id before realm_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge from realm_member_carol.",
+      "must_differ_from": "Bglo4pGVpqIifh7FDA-5gOZZ7zznjiPWKdUaXq4zDG0"
+    },
+    {
+      "name": "wrong_component_order_must_differ_realm_policy",
+      "kind": "ak.realm.policy",
+      "components_array": ["default", "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG"],
+      "comment": "Second ordering negative on a different kind: policy_name before realm_id MUST NOT collide with realm_policy_default's canonical subject.",
+      "must_differ_from": "lg6PHAc3ue-WsHPT_NvGrMC_fgLfnYW9Lgn-9rlFiC4"
     }
   ],
   "reserved_name_negatives": [

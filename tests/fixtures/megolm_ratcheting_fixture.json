@@ -36,7 +36,7 @@
       "prior_index": 4,
       "advance_index": 5,
       "kdf": "HKDF-SHA256",
-      "kdf_info_b64": "Y3gubWVnb2xtLnJhdGNoZXQudjE",
+      "kdf_info_b64": "YWsubWVnb2xtLnJhdGNoZXQudjE",
       "expected": {
         "outcome": "accept",
         "advanced_by": 1,

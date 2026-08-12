@@ -717,16 +717,6 @@ export async function captureSubmittedSignalEnvelope(
   );
 }
 
-export async function expectCallSignalError(
-  response: APIResponse,
-  status: number,
-  code: string,
-) {
-  expect(response.status()).toBe(status);
-  const body = await response.json();
-  expect(wireErrCode(body), JSON.stringify(body)).toBe(code);
-}
-
 export { authHeaders };
 
 // ── Media-service binding (AKP-0010) — token exchange helpers ────────────────
