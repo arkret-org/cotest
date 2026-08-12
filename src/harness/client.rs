@@ -829,7 +829,8 @@ impl TestActorClient {
             ));
         };
         frontier.validate()?;
-        if frontier.realm_id.as_str() != realm_id || frontier.actor_id.as_str() != self.actor {
+        let expected_actor_id = project_full_id_to_core_id(&DidFullId::new(self.actor.clone())?)?;
+        if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
             return Err(anyhow!("combined selector returned the wrong actor scope"));
         }
         let mut event = event_envelope_with_chain(

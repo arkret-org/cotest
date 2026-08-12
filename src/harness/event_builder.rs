@@ -642,7 +642,8 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         ));
     };
     frontier.validate()?;
-    if frontier.realm_id.as_str() != realm_id || frontier.actor_id.as_str() != actor {
+    let expected_actor_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
+    if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
         return Err(anyhow!("combined selector returned the wrong actor scope"));
     }
     let mut event = event_envelope_with_chain_and_signing_identity(
