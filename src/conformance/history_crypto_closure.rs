@@ -268,7 +268,7 @@ fn evaluate_disappearing_anonymous_aggregate(case: &Value) -> Result<Value> {
     for field in [
         "source_event_id",
         "trigger",
-        "anchor_hlc",
+        "expiry_start_hlc",
         "expires_at",
         "aggregate_status",
     ] {
@@ -306,7 +306,7 @@ fn run_disappearing_read_trigger_idempotent_replay_case(case: &Value) -> Result<
 fn evaluate_disappearing_idempotent_replay(case: &Value) -> Result<Value> {
     let message_id = required_str(case, "message_id")?;
     let send_seal_hlc = required_str(case, "send_seal_hlc")?;
-    let accepted_anchor = required_str(case, "accepted_anchor_hlc")?;
+    let accepted_anchor = required_str(case, "accepted_expiry_start_hlc")?;
     let mut principals = BTreeSet::new();
     let mut duplicate_result = "none";
     let mut cross_message_replay_decision = "accept";
@@ -335,7 +335,7 @@ fn evaluate_disappearing_idempotent_replay(case: &Value) -> Result<Value> {
 
     Ok(json!({
         "principal_contribution_count": principals.len(),
-        "anchor_hlc": accepted_anchor,
+        "expiry_start_hlc": accepted_anchor,
         "duplicate_result": duplicate_result,
         "invalid_before_send_decision": invalid_before_send_decision,
         "cross_message_replay_decision": cross_message_replay_decision,

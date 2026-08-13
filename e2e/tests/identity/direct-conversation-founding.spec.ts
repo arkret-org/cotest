@@ -191,9 +191,9 @@ async function acceptedDirectMessageEvidence(
   const bobCurrentProof = responseOutcome.current_proof as JsonObject;
 
   // The accepted response creates Bob's current proof. Advancing Alice's
-  // lineage under the same basis produces the other current proof required by
+  // lineage under the same contact_round produces the other current proof required by
   // the portable founder evidence bundle, without changing the pair or root
-  // founder basis.
+  // founder contact_round.
   const aliceScopeOutcome = await prepareAndCommitContactEvent(
     request,
     alice,
@@ -206,7 +206,7 @@ async function acceptedDirectMessageEvidence(
         kind: "human",
         principal_id: canonicalDidCoreId(bob.user.did),
       },
-      basis_id: responseReceipt.basis_id,
+      contact_round_id: responseReceipt.contact_round_id,
       version: 2,
       predecessor_event_ref: requestReceipt.core.request_event_ref,
       granted_to_peer_scopes: ["direct_message"],
@@ -217,7 +217,7 @@ async function acceptedDirectMessageEvidence(
     canonicalDidCoreId(alice.user.did),
     canonicalDidCoreId(bob.user.did),
   ].sort();
-  const basis = {
+  const contact_round = {
     kind: "normal",
     sorted_pair_members: pair,
     request_event_ref: requestReceipt.core.request_event_ref,
@@ -227,15 +227,15 @@ async function acceptedDirectMessageEvidence(
   };
   expect(
     `sha256:${createHash("sha256")
-      .update("ak.contact.basis.v1\n", "utf8")
-      .update(canonicalJson(basis), "utf8")
+      .update("ak.contact.contact_round.v1\n", "utf8")
+      .update(canonicalJson(contact_round), "utf8")
       .digest("hex")}`,
-  ).toBe(responseReceipt.basis_id);
+  ).toBe(responseReceipt.contact_round_id);
   return {
     kind: "human",
-    basis_evidence_bundle: {
-      basis_id: responseReceipt.basis_id,
-      basis,
+    contact_round_evidence_bundle: {
+      contact_round_id: responseReceipt.contact_round_id,
+      contact_round,
       request_receipts: [requestReceipt],
       normal_response_receipt: responseReceipt,
       current_proofs: [aliceCurrentProof, bobCurrentProof].sort((left, right) =>
@@ -384,15 +384,15 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     const alice = aliceSession.user;
     const bob = bobSession.user;
 
-    const founderBasisEvidence = await acceptedDirectMessageEvidence(
+    const founderContactRoundEvidence = await acceptedDirectMessageEvidence(
       request,
       aliceSession,
       bobSession,
     );
-    // Normal Contact basis fixes the responder (Bob), not the requester, as
+    // Normal Contact round fixes the responder (Bob), not the requester, as
     // the only founder.
     const basisRef = String(
-      founderBasisEvidence.basis_evidence_bundle.basis.request_event_ref,
+      founderContactRoundEvidence.contact_round_evidence_bundle.contact_round.request_event_ref,
     );
     const createdAt = canonicalTimestamp();
     const hlcMillis = Date.now().toString(16).padStart(12, "0").slice(-12);
@@ -469,7 +469,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       unit_kind: "direct_conversation_founding",
       idempotency_key: typedId("dc-founding"),
       events: accepted.events.map((event) => ({ event })),
-      founder_basis_evidence: founderBasisEvidence,
+      founder_contact_round_evidence: founderContactRoundEvidence,
       source_service_binding: sourceServiceBinding,
     };
     const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;

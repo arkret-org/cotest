@@ -69,7 +69,7 @@
     - 24 词 BIP-39 输入校验(非法词串本地拒绝)→ 派生 recovery private key → HPKE open `recovery_public_key` envelope
     - 解 ciphertext → 拿回 MLS backup key
 14. 客户端发布更高且 canonical 的 did:webvh entry，再构造 root-signed `ak.device.reanchor` + 新设备自签 PoP 的 replacement `ak.device.authorize` 原子 unit。
-15. root-anchored unit 绑定 live registry head、完整 `pre_fence_basis` CAS 与 recovery session;无 prior Seal 时 basis 必须显式为 null。任一拆批、错 authority/ref、旧/spent root 或 frontier 漂移均零副作用拒绝。
+15. root-anchored unit 绑定 live registry head、完整 `pre_fence_seal_frontier` CAS 与 recovery session;无 prior Seal 时 basis 必须显式为 null。任一拆批、错 authority/ref、旧/spent root 或 frontier 漂移均零副作用拒绝。
 16. 断言 typed receipt 同时绑定两个 Event;`GET /_arkret/self/account/viewer` 显示 device-2 active,当前 generation 等于新 DID version,所有未提交旧代 Event/Seal 被 `device_generation_fenced` 拒绝。
 17. 客户端以仍有效的 Bound AccountHandoff、terminal receipt、completion attestation、replacement authorize 与 `InitialSessionGrantRequest` 调用 recovery-completion issuance；Coauth 直接返回 DPoP-bound Standard grant。exact retry 返回逐字节相同 outcome；不存在临时 recovery grant、第二次 OIDC 或换发步骤。
 

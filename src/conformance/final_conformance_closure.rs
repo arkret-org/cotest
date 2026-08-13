@@ -7,8 +7,8 @@ use serde_json::{Map, Value, json};
 
 use crate::transcripts::record_vector_event;
 
-pub const VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR: &str =
-    "ak.vector.applet.transaction_source_signature_anchor.v1";
+pub const VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST: &str =
+    "ak.vector.applet.transaction_delivery_authentication_record_digest.v1";
 pub const VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY: &str =
     "ak.vector.calendar.rsvp_occurrence_key.v1";
 pub const VECTOR_ID_FEDERATION_TIMING_BUCKET: &str = "ak.vector.federation.timing_bucket.v1";
@@ -27,7 +27,7 @@ pub const VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY: &str =
     "ak.vector.sync.range_completeness_client_query.v1";
 
 pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
-    VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR,
+    VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST,
     VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY,
     VECTOR_ID_FEDERATION_TIMING_BUCKET,
     VECTOR_ID_MLS_SECURITY_FRONTIER,
@@ -54,14 +54,14 @@ struct AppletTransactionReplayIdentity {
 #[derive(Clone, Debug)]
 struct AppletTransactionReplayRecord {
     body_digest: String,
-    source_signature_anchor_digest: String,
+    delivery_authentication_record_digest_digest: String,
 }
 
 pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
     let fixture = final_conformance_closure_fixture()?;
-    run_applet_transaction_source_signature_anchor_case(case(
+    run_applet_transaction_delivery_authentication_record_digest_case(case(
         &fixture,
-        VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR,
+        VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST,
     )?)?;
     run_calendar_rsvp_occurrence_key_case(case(&fixture, VECTOR_ID_CALENDAR_RSVP_OCCURRENCE_KEY)?)?;
     run_federation_timing_bucket_case(case(&fixture, VECTOR_ID_FEDERATION_TIMING_BUCKET)?)?;
@@ -87,11 +87,11 @@ pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-pub fn run_applet_transaction_source_signature_anchor_vector() -> Result<()> {
+pub fn run_applet_transaction_delivery_authentication_record_digest_vector() -> Result<()> {
     let fixture = final_conformance_closure_fixture()?;
-    run_applet_transaction_source_signature_anchor_case(case(
+    run_applet_transaction_delivery_authentication_record_digest_case(case(
         &fixture,
-        VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR,
+        VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST,
     )?)
 }
 
@@ -209,7 +209,7 @@ fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
         .ok_or_else(|| anyhow!("final conformance closure fixture missing case {vector_id}"))
 }
 
-fn run_applet_transaction_source_signature_anchor_case(case: &Value) -> Result<()> {
+fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Value) -> Result<()> {
     let active_install = required_object(case, "active_install")?;
     let required_components = string_set(case, "required_components")?;
     assert_required_assertions(
@@ -223,7 +223,7 @@ fn run_applet_transaction_source_signature_anchor_case(case: &Value) -> Result<(
             "active_install_and_actor_namespace_required",
         ],
     )?;
-    let inferred_anchor_by_name = inferred_source_signature_anchors(case)?;
+    let inferred_anchor_by_name = inferred_delivery_authentication_record_digests(case)?;
     let mut cache = BTreeMap::new();
     let mut accepted_by_name = BTreeMap::new();
     let mut seen = BTreeSet::new();
@@ -241,7 +241,7 @@ fn run_applet_transaction_source_signature_anchor_case(case: &Value) -> Result<(
         )?;
         assert_expected_subset(name, expected(transaction)?, &observed)?;
         record_step(
-            VECTOR_ID_APPLET_TRANSACTION_SOURCE_SIGNATURE_ANCHOR,
+            VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST,
             name,
             transaction,
             &observed,
@@ -281,12 +281,13 @@ fn evaluate_applet_transaction(
             return Ok(json!({"decision": "reject", "reason": "duplicate_conflict"}));
         }
         let body_digest = required_str(transaction, "body_digest")?;
-        let source_signature_anchor_digest =
-            required_str(transaction, "source_signature_anchor_digest")?;
+        let delivery_authentication_record_digest_digest =
+            required_str(transaction, "delivery_authentication_record_digest_digest")?;
         return match cache.get(original_identity) {
             Some(record)
                 if record.body_digest == body_digest
-                    && record.source_signature_anchor_digest == source_signature_anchor_digest =>
+                    && record.delivery_authentication_record_digest_digest
+                        == delivery_authentication_record_digest_digest =>
             {
                 Ok(json!({
                     "decision": "accept_cached",
@@ -356,8 +357,11 @@ fn evaluate_applet_transaction(
 
     let idempotency_key = required_str(transaction, "idempotency_key")?;
     let body_digest = required_str(transaction, "body_digest")?;
-    let source_signature_anchor_digest =
-        source_signature_anchor_digest_for_transaction(transaction, inferred_anchor_by_name)?;
+    let delivery_authentication_record_digest_digest =
+        delivery_authentication_record_digest_digest_for_transaction(
+            transaction,
+            inferred_anchor_by_name,
+        )?;
     let replay_identity = applet_transaction_replay_identity(
         transaction,
         source_header,
@@ -366,7 +370,8 @@ fn evaluate_applet_transaction(
     )?;
     if let Some(record) = cache.get(&replay_identity) {
         if record.body_digest == body_digest
-            && record.source_signature_anchor_digest == source_signature_anchor_digest
+            && record.delivery_authentication_record_digest_digest
+                == delivery_authentication_record_digest_digest
         {
             return Ok(json!({
                 "decision": "accept_cached",
@@ -380,7 +385,8 @@ fn evaluate_applet_transaction(
         replay_identity.clone(),
         AppletTransactionReplayRecord {
             body_digest: body_digest.to_owned(),
-            source_signature_anchor_digest: source_signature_anchor_digest.to_owned(),
+            delivery_authentication_record_digest_digest:
+                delivery_authentication_record_digest_digest.to_owned(),
         },
     );
     accepted_by_name.insert(
@@ -390,7 +396,7 @@ fn evaluate_applet_transaction(
 
     Ok(json!({
         "decision": "accept",
-        "source_signature_anchor_persisted": true,
+        "delivery_authentication_record_digest_persisted": true,
         "side_effects_applied": true,
     }))
 }
@@ -405,7 +411,9 @@ fn assert_required_assertions(case: &Value, required: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn inferred_source_signature_anchors(case: &Value) -> Result<BTreeMap<String, String>> {
+fn inferred_delivery_authentication_record_digests(
+    case: &Value,
+) -> Result<BTreeMap<String, String>> {
     let mut anchors = BTreeMap::new();
     for transaction in required_array(case, "transactions")? {
         let Some(replay_of) = transaction.get("replay_of").and_then(Value::as_str) else {
@@ -418,7 +426,7 @@ fn inferred_source_signature_anchors(case: &Value) -> Result<BTreeMap<String, St
         {
             continue;
         }
-        let anchor = required_str(transaction, "source_signature_anchor_digest")?;
+        let anchor = required_str(transaction, "delivery_authentication_record_digest_digest")?;
         match anchors.insert(replay_of.to_owned(), anchor.to_owned()) {
             Some(previous) if previous != anchor => {
                 bail!("accepted replay anchor for {replay_of} drifted: {previous} != {anchor}")
@@ -429,12 +437,12 @@ fn inferred_source_signature_anchors(case: &Value) -> Result<BTreeMap<String, St
     Ok(anchors)
 }
 
-fn source_signature_anchor_digest_for_transaction<'a>(
+fn delivery_authentication_record_digest_digest_for_transaction<'a>(
     transaction: &'a Value,
     inferred_anchor_by_name: &'a BTreeMap<String, String>,
 ) -> Result<&'a str> {
     if let Some(anchor) = transaction
-        .get("source_signature_anchor_digest")
+        .get("delivery_authentication_record_digest_digest")
         .and_then(Value::as_str)
     {
         return Ok(anchor);
@@ -444,7 +452,9 @@ fn source_signature_anchor_digest_for_transaction<'a>(
         .get(name)
         .map(String::as_str)
         .ok_or_else(|| {
-            anyhow!("accepted transaction {name} missing source signature anchor digest")
+            anyhow!(
+                "accepted transaction {name} missing delivery authentication record digest"
+            )
         })
 }
 

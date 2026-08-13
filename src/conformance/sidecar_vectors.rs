@@ -1782,7 +1782,7 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
             strand_id: source_strand_id.clone(),
             track_name: "discussion".to_owned(),
         },
-        source_frontier_anchor: Some(anchor_id.clone()),
+        source_event_id: Some(anchor_id.clone()),
         source_hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         client_order_key: NonEmptyString::new("device-1-1").map_err(anyhow::Error::msg)?,
         addressed_agent_ids: vec![addressed_agent.clone()],
@@ -1943,7 +1943,7 @@ fn exchange_request_context() -> Result<AgentSidecarExchangeRequestContext> {
         addressed_agent_ids: vec![exchange_agent_s()?, exchange_agent_t()?],
         completion_policy: AgentSidecarExchangeCompletionPolicy::Coordinator,
         coordinator_agent_id: Some(exchange_agent_s()?),
-        source_frontier_anchor: None,
+        source_event_id: None,
     })
 }
 

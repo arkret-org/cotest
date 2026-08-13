@@ -350,7 +350,7 @@ fn validate_reanchor_helpers() -> Result<()> {
         "recovery_session_id": "ak:recovery_session:01904100-0000-7000-8000-000000000002",
         "previous_device_generation": 1,
         "new_device_generation": 2,
-        "pre_fence_basis": null,
+        "pre_fence_seal_frontier": null,
         "replacement_authorize_payload_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     });
     let payload: DeviceReanchorPayload = serde_json::from_value(value.clone())?;

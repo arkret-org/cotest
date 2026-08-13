@@ -209,10 +209,10 @@ pub use envelope::{
 pub use federation::run_federation_fixture_suite;
 pub use final_conformance_closure::{
     ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS,
-    run_applet_transaction_source_signature_anchor_vector, run_calendar_rsvp_occurrence_key_vector,
-    run_federation_timing_bucket_vector, run_final_conformance_closure_fixture_suite,
-    run_mls_governance_epoch_binding_vector, run_mls_security_frontier_vector,
-    run_moderation_appeal_atomicity_vector,
+    run_applet_transaction_delivery_authentication_record_digest_vector,
+    run_calendar_rsvp_occurrence_key_vector, run_federation_timing_bucket_vector,
+    run_final_conformance_closure_fixture_suite, run_mls_governance_epoch_binding_vector,
+    run_mls_security_frontier_vector, run_moderation_appeal_atomicity_vector,
     run_moderation_evidence_package_minimal_disclosure_vector,
     run_moderation_franking_roundtrip_vector,
     run_relation_reference_projection_indistinguishable_vector,

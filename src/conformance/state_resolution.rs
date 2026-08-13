@@ -1065,7 +1065,7 @@ fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result
                 require_str_eq(case, "/expected/result", "accept", vector_name)?;
                 require_str_eq(
                     case,
-                    "/expected/authoring_basis",
+                    "/expected/authoring_sequence",
                     "genesis_then_same_transaction",
                     vector_name,
                 )?;

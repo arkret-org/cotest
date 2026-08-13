@@ -264,13 +264,14 @@ fn validate_realm_remark_registry() -> Result<()> {
 /// checked as a conformance property rather than only in SDK unit tests.
 ///
 /// The normal branch resolves to the **responder**, not the request issuer. That is normative: the
-/// basis is lit up by the responder's acceptance receipt, which proves the responder was online
+/// authority is lit up by the responder's acceptance receipt, which proves the responder was online
 /// when it came into existence, while the requester may have gone offline days earlier. Base v1
 /// defines no fallback, so naming the possibly-absent party would leave the pair unable to ever
 /// create.
 fn validate_direct_conversation_founder_derivation() -> Result<()> {
     use arkret_models_collaboration::objects::direct_conversation::{
-        DirectConversationFounderBasis, direct_conversation_founder, direct_conversation_may_found,
+        DirectConversationFoundingAuthority, direct_conversation_founder,
+        direct_conversation_may_found,
     };
 
     let alice = arkret_identifiers::DidCoreId::new("ak:did_core:web:alice.example")?;
@@ -278,12 +279,12 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     let carol = arkret_identifiers::DidCoreId::new("ak:did_core:web:carol.example")?;
 
     // A requests, B accepts -> B founds.
-    let normal = DirectConversationFounderBasis::Normal {
+    let normal = DirectConversationFoundingAuthority::Normal {
         request_issuer: alice.clone(),
     };
     let founder = direct_conversation_founder([alice.clone(), bob.clone()], &normal)?;
     if founder != bob {
-        bail!("normal basis founder must be the responder, not the request issuer");
+        bail!("normal authority founder must be the responder, not the request issuer");
     }
     // Argument order must not matter: both sides compute the same answer independently.
     if direct_conversation_founder([bob.clone(), alice.clone()], &normal)? != bob {
@@ -295,16 +296,16 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     }
 
     // Glare: no responder exists, so the requests[0] issuer founds.
-    let glare = DirectConversationFounderBasis::Glare {
+    let glare = DirectConversationFoundingAuthority::Glare {
         first_request_issuer: alice.clone(),
     };
     if direct_conversation_founder([alice.clone(), bob.clone()], &glare)? != alice {
-        bail!("glare basis founder must be the requests[0] issuer");
+        bail!("glare authority founder must be the requests[0] issuer");
     }
 
     // controller-to-own-Agent is fixed to the controller regardless of DID ordering, so an Agent
     // runtime key never needs Direct Conversation founding scope.
-    let agent = DirectConversationFounderBasis::ControllerOwnedAgent {
+    let agent = DirectConversationFoundingAuthority::ControllerOwnedAgent {
         controller_id: alice.clone(),
     };
     if direct_conversation_founder([bob.clone(), alice.clone()], &agent)? != alice {
@@ -314,7 +315,7 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     // Malformed inputs fail closed instead of guessing the complement.
     if direct_conversation_founder(
         [alice.clone(), bob.clone()],
-        &DirectConversationFounderBasis::Normal {
+        &DirectConversationFoundingAuthority::Normal {
             request_issuer: carol,
         },
     )
@@ -324,7 +325,7 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     }
     if direct_conversation_founder(
         [alice.clone(), alice.clone()],
-        &DirectConversationFounderBasis::Normal {
+        &DirectConversationFoundingAuthority::Normal {
             request_issuer: alice,
         },
     )
