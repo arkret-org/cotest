@@ -116,7 +116,8 @@ async fn seeded_actor(server: &ArkretServer, actor: &str, device: &str) -> Resul
 fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
     let jws = event
         .proofs
-        .first()
+        .iter()
+        .find_map(arkret_wire::EventProof::as_producer)
         .map(|proof| proof.jws.as_str())
         .context("authored Event carries no proofs[0].jws")?
         .to_owned();
@@ -137,7 +138,11 @@ fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
     let corrupted = URL_SAFE_NO_PAD.encode(bytes);
     event
         .proofs
-        .first_mut()
+        .iter_mut()
+        .find_map(|proof| match proof {
+            arkret_wire::EventProof::Producer(proof) => Some(proof),
+            arkret_wire::EventProof::PrincipalServerAdmission(_) => None,
+        })
         .context("authored Event carries no proofs[0]")?
         .jws = format!("{header}.{corrupted}");
     Ok(())

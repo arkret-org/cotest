@@ -452,9 +452,7 @@ fn delivery_authentication_record_digest_digest_for_transaction<'a>(
         .get(name)
         .map(String::as_str)
         .ok_or_else(|| {
-            anyhow!(
-                "accepted transaction {name} missing delivery authentication record digest"
-            )
+            anyhow!("accepted transaction {name} missing delivery authentication record digest")
         })
 }
 

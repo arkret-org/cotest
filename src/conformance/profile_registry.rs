@@ -71,7 +71,7 @@ pub struct ProfileGateReport {
 }
 
 /// New vector profiles that cotest MUST gate. Membership is hardcoded so a
-/// future spec drift (the id silently disappearing from `vector_profiles[]`)
+/// future spec drift (the id silently vanishing from `vector_profiles[]`)
 /// is caught — but the suite list itself is loaded from the artifact at
 /// runtime, never hardcoded.
 const NEW_VECTOR_PROFILES: &[&str] = &[

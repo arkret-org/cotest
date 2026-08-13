@@ -47,8 +47,21 @@ fn account_profile_registry_and_schema_require_one_signed_create_or_update_event
         operation["notes"]
             .as_str()
             .is_some_and(|notes| notes.contains("holder-signed")
-                && notes.contains("exact PrincipalAuthorityInstance PCR selector")
                 && notes.contains("Direct holder proof is required"))
+    );
+
+    let event_schema: Value = serde_json::from_str(&read(
+        "arkret-spec/spec/v1/artifacts/schemas/event-envelope.schema.json",
+    ))
+    .expect("Event envelope schema is JSON");
+    let event_required = event_schema["required"]
+        .as_array()
+        .expect("Event required fields");
+    assert!(event_required.iter().any(|field| field == "actor_id"));
+    assert!(
+        event_required
+            .iter()
+            .any(|field| field == "principal_server_id")
     );
 
     let schema: Value = serde_json::from_str(&read(

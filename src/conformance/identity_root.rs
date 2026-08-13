@@ -24,7 +24,7 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_wire::{
-    Audience, DidUrl, Event, EventRef, NonEmptyString, PrincipalAuthorityInstance, Proof, RealmId,
+    Audience, DidUrl, Event, EventRef, NonEmptyString, PrincipalAuthorityKey, Proof,
 };
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -267,6 +267,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
+            principal_server_id: DidCoreId::new("ak:did_core:web:principal.example")?,
             principal_full_id: principal_full_id.clone(),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal_full_id,
@@ -297,6 +298,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         arkret_wire::ScopeRef::Realm { realm_id },
         principal.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         authorize_value,
@@ -335,15 +337,13 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
 
 fn validate_reanchor_helpers() -> Result<()> {
     let principal = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
-    let authority_instance = PrincipalAuthorityInstance::new(
+    let authority = PrincipalAuthorityKey::new(
         principal.clone(),
         DidCoreId::new("ak:did_core:web:principal.example")?,
-        RealmId::new("ak:realm:AcbFC8Nil95DfV11kMMMvRtzRdEC3g-tFtBE8_VQQ74j")?,
-        Hash::new(format!("sha256:{}", "1".repeat(64)))?,
-    )?;
+    );
     let value = json!({
         "principal_id": principal,
-        "authority_instance": authority_instance,
+        "authority": authority,
         "recovery_authority_kind": "pcr_policy",
         "recovery_policy_id": "ak:policy:01904100-0000-7000-8000-000000000001",
         "recovery_policy_version": 1,
@@ -491,16 +491,19 @@ fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
 fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Result<Event> {
     event.refresh_content_bound_identity()?;
     let digest = Hash::new(event.event_digest()?)?;
-    event.proofs = vec![Proof {
-        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        verification_method: verification_method.clone(),
-        event_digest: digest,
-        created_at: event.created_at,
-        domain: None,
-        audience: Some(Audience::Single(event.realm_id.to_string())),
-        proof_purpose: None,
-        jws: "c2ln".to_owned(),
-    }];
+    event.proofs = vec![
+        Proof {
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+            verification_method: verification_method.clone(),
+            event_digest: digest,
+            created_at: event.created_at,
+            domain: None,
+            audience: Some(Audience::Single(event.realm_id.to_string())),
+            proof_purpose: None,
+            jws: "c2ln".to_owned(),
+        }
+        .into(),
+    ];
     Ok(event)
 }
 

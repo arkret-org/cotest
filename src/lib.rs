@@ -9,7 +9,7 @@
 //! ```compile_fail
 //! use arkret_event_draft::TypedEventDraft;
 //! use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
-//! use arkret_wire::{DidFullId, RealmId, ScopeRef, StrandId, event_spec};
+//! use arkret_wire::{DidCoreId, RealmId, ScopeRef, StrandId, event_spec};
 //!
 //! let scope = ScopeRef::Realm {
 //!     realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
@@ -21,7 +21,8 @@
 //! );
 //! let _ = TypedEventDraft::<event_spec::RealmPolicy>::new(
 //!     scope,
-//!     DidFullId::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     DidCoreId::new("ak:did_core:webvh:z6mkfixture").unwrap(),
+//!     DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
 //!     payload,
 //! );
 //! ```
@@ -31,13 +32,14 @@
 //! ```compile_fail
 //! use arkret_event_draft::TypedEventDraft;
 //! use arkret_models_collaboration::events_payloads::StatePayload;
-//! use arkret_wire::{DidFullId, EventKind, RealmId, ScopeRef, event_spec};
+//! use arkret_wire::{DidCoreId, EventKind, RealmId, ScopeRef, event_spec};
 //!
 //! let draft = TypedEventDraft::<event_spec::RealmPolicy>::new(
 //!     ScopeRef::Realm {
 //!         realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
 //!     },
-//!     DidFullId::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     DidCoreId::new("ak:did_core:webvh:z6mkfixture").unwrap(),
+//!     DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
 //!     StatePayload { value: None, state: Some("active".to_owned()), reason: None },
 //! ).unwrap();
 //! let _ = draft.with_kind(EventKind::MessageCreate);

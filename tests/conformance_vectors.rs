@@ -771,14 +771,14 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     // live `#[ignore]` companion below.
     use std::collections::BTreeSet;
 
-    use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
+    use arkret_identifiers::{DidCoreId, EventId, Hash};
     use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
         CandidateIntent, MemberDeliveryBindingCandidate,
     };
     use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
     use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
     use arkret_models_identity::handle_claim::DeliveryBindingHint;
-    use arkret_wire::{Audience, PrincipalAuthorityInstance, Proof};
+    use arkret_wire::{Audience, PrincipalAuthorityKey, Proof};
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     if invite_handle.canonical() != "alice:acme.example" {
@@ -790,17 +790,12 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
 
     let principal = DidCoreId::new("ak:did_core:web:principal.acme.example")?;
     let subject = DidCoreId::new("ak:did_core:web:alice.acme.example")?;
-    let principal_authority_instance = PrincipalAuthorityInstance::new(
-        subject.clone(),
-        principal.clone(),
-        RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K")?,
-        Hash::new(format!("sha256:{}", "8".repeat(64)))?,
-    )?;
+    let principal_authority = PrincipalAuthorityKey::new(subject.clone(), principal.clone());
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     let candidate = MemberDeliveryBindingCandidate {
         subject_id: subject,
-        principal_authority_instance,
+        principal_authority,
         handle: invite_handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {

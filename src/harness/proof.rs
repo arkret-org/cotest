@@ -117,7 +117,8 @@ pub fn refresh_typed_event_proof_with_signing_seed(
 ) -> Result<()> {
     let verification_method = event
         .proofs
-        .first()
+        .iter()
+        .find_map(arkret_wire::EventProof::as_producer)
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
     let signer_did = controller_full_id(&verification_method)?;
@@ -141,7 +142,8 @@ pub fn refresh_typed_event_proof_with_signing_seed(
 pub fn refresh_typed_event_proof(event: &mut arkret_wire::Event) -> Result<()> {
     let verification_method = event
         .proofs
-        .first()
+        .iter()
+        .find_map(arkret_wire::EventProof::as_producer)
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
     let signer = event
@@ -242,6 +244,7 @@ mod tests {
             "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA"},
             "actor_id": "ak:did_core:web:alice.example",
+            "principal_server_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",

@@ -68,7 +68,6 @@ fn build_realm(
         content_scheme: None,
         durability_policy: None,
         federation_policy,
-        sync_endpoints: Vec::new(),
         digest_algorithm: arkret_canonical::DigestSuite::Sha256,
         retention_policy_id: None,
         avatar_blob_ref: None,

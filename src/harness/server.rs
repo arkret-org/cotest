@@ -22,7 +22,9 @@ use url::Url;
 use super::assertions::expect_json;
 use super::canonical_device_id;
 use super::client::TestActorClient;
-use super::event_builder::{dev_login, register_account, register_account_with_localpart};
+use super::event_builder::{
+    dev_login, register_account, register_account_with_localpart, register_event_signing_identity,
+};
 
 const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
 const DURABLE_TEST_KEYSTORE_MASTER_KEY: &str = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=";
@@ -621,8 +623,17 @@ impl ArkretServer {
     }
 
     pub async fn demo_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
-        let token = dev_login(self, actor, device_id).await?;
-        self.actor_client(actor, &canonical_device_id(device_id), token)
+        let device_id = canonical_device_id(device_id);
+        let token = dev_login(self, actor, &device_id).await?;
+        let verification_method =
+            arkret::DidUrl::new(format!("{actor}#{device_id}")).map_err(anyhow::Error::msg)?;
+        register_event_signing_identity(
+            actor,
+            arkret::signatures::development_signing_key_seed(&verification_method),
+            verification_method.as_str().to_owned(),
+            self.service_id.clone(),
+        );
+        self.actor_client(actor, &device_id, token)
     }
 
     pub async fn register_client(

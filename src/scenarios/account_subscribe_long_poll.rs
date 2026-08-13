@@ -806,35 +806,12 @@ async fn submit_event_now(
         );
     }
     if let Some(previous_seal_id) = previous_control_seal_id {
-        eventually(
-            "accepted Control Move advances the Realm Seal frontier",
-            Duration::from_secs(10),
-            Duration::from_millis(50),
-            || {
-                let previous_seal_id = previous_seal_id.clone();
-                async move {
-                    let frontier = seal_source.realm_seal_frontier(realm_id).await?;
-                    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
-                        serde_json::from_value(frontier)?;
-                    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
-                        frontier,
-                    ) = state.frontier
-                    else {
-                        return Err(anyhow::anyhow!(
-                            "Realm selector returned the wrong frontier variant"
-                        ));
-                    };
-                    if frontier.seal_id.to_string() == previous_seal_id {
-                        Err(anyhow::anyhow!(
-                            "Realm Seal frontier has not advanced from {previous_seal_id}"
-                        ))
-                    } else {
-                        Ok(())
-                    }
-                }
-            },
-        )
-        .await?;
+        let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
+            .as_str()
+            .ok_or_else(|| anyhow!("Control Move response omitted its proposal Ack: {response}"))?;
+        seal_source
+            .await_control_proposal_settled(realm_id, proposal_digest, &previous_seal_id)
+            .await?;
     }
     Ok(response)
 }

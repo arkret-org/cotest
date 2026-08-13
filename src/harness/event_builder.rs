@@ -37,7 +37,7 @@ use super::{
     member_join_payload, query_method, realm_create_payload,
 };
 
-type RegisteredEventSigner = ([u8; 32], DidUrl);
+type RegisteredEventSigner = ([u8; 32], DidUrl, DidCoreId);
 
 static REGISTERED_EVENT_SIGNERS: LazyLock<Mutex<HashMap<String, RegisteredEventSigner>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -46,13 +46,17 @@ pub fn register_event_signing_identity(
     actor: &str,
     signing_seed: [u8; 32],
     verification_method: impl Into<String>,
+    principal_server_id: DidCoreId,
 ) {
     let verification_method = DidUrl::new(verification_method)
         .expect("registered Event signer verification method is a DID URL");
     REGISTERED_EVENT_SIGNERS
         .lock()
         .expect("registered Event signer lock")
-        .insert(actor.to_owned(), (signing_seed, verification_method));
+        .insert(
+            actor.to_owned(),
+            (signing_seed, verification_method, principal_server_id),
+        );
 }
 
 pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
@@ -61,11 +65,24 @@ pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
         .expect("registered Event signer lock")
         .get(actor)
         .cloned()
+        .map(|(seed, method, _)| (seed, method))
         .unwrap_or_else(|| {
             let verification_method = default_event_verification_method(actor);
             let signing_seed =
                 arkret::signatures::development_signing_key_seed(&verification_method);
             (signing_seed, verification_method)
+        })
+}
+
+fn event_principal_server_id(actor: &str) -> DidCoreId {
+    REGISTERED_EVENT_SIGNERS
+        .lock()
+        .expect("registered Event signer lock")
+        .get(actor)
+        .map(|(_, _, principal_server_id)| principal_server_id.clone())
+        .unwrap_or_else(|| {
+            DidCoreId::new("ak:did_core:web:principal.example")
+                .expect("cotest default Principal Server id")
         })
 }
 
@@ -78,6 +95,7 @@ pub(crate) fn event_signing_identity_for_device(
         .expect("registered Event signer lock")
         .get(actor)
         .cloned()
+        .map(|(seed, method, _)| (seed, method))
         .unwrap_or_else(|| {
             let verification_method = DidUrl::new(format!("{actor}#{device_id}"))
                 .expect("cotest client Event signer verification method is a DID URL");
@@ -100,8 +118,8 @@ pub(crate) fn registered_event_signing_seed(
         .lock()
         .expect("registered Event signer lock")
         .get(signer)
-        .filter(|(_, registered_method)| registered_method == verification_method)
-        .map(|(seed, _)| *seed)
+        .filter(|(_, registered_method, _)| registered_method == verification_method)
+        .map(|(seed, ..)| *seed)
 }
 
 fn verification_method_for_actor(actor: &str) -> DidUrl {
@@ -131,7 +149,15 @@ pub async fn register_account(
     )
     .await?;
 
-    dev_login(server, did, &device_id).await
+    let token = dev_login(server, did, &device_id).await?;
+    let verification_method = default_event_verification_method(did);
+    register_event_signing_identity(
+        did,
+        arkret::signatures::development_signing_key_seed(&verification_method),
+        verification_method.as_str().to_owned(),
+        server.service_id().clone(),
+    );
+    Ok(token)
 }
 
 pub async fn register_account_with_localpart(
@@ -980,6 +1006,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         arkret_identifiers::project_full_id_to_core_id(&actor_full_id)
             .expect("cotest actor DID projects to a core id"),
     );
+    let principal_server_id = event_principal_server_id(actor);
     // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
     // `event_id` from the Event's own content, so the harness builds with the
     // derived constructor and callers read the id back off the built Event.
@@ -997,6 +1024,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
             }
         },
         actor_id.clone(),
+        principal_server_id,
         actor_seq,
         arkret_identifiers::Hlc::new(format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"))
             .expect("cotest HLC"),
@@ -1324,7 +1352,7 @@ fn member_payload(
                 &DidFullId::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
             )?,
         )),
-        principal_authority_instance: None,
+        principal_authority: None,
         delivery_status,
         delivery_binding,
         gate_proofs: Vec::new(),

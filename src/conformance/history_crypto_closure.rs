@@ -1,4 +1,4 @@
-//! History visibility, disappearing-message, and E2EE key-share closure vectors.
+//! History visibility and E2EE key-share closure vectors.
 
 use std::collections::BTreeSet;
 
@@ -10,12 +10,6 @@ use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_E2EE_LATE_KEY_RECOVERY_T0_DETERMINISTIC_VISIBILITY: &str =
     "ak.vector.e2ee.late_key_recovery.t0_deterministic_visibility.v1";
-pub const VECTOR_ID_DISAPPEARING_READ_TRIGGER_ANONYMOUS_AGGREGATE: &str =
-    "ak.vector.disappearing.read_trigger_anonymous_aggregate.v1";
-pub const VECTOR_ID_DISAPPEARING_READ_TRIGGER_IDEMPOTENT_REPLAY: &str =
-    "ak.vector.disappearing.read_trigger_idempotent_replay.v1";
-pub const VECTOR_ID_DISAPPEARING_ON_LAST_READ_OFFLINE_WINDOW: &str =
-    "ak.vector.disappearing.on_last_read_offline_window.v1";
 pub const VECTOR_ID_PREVIEW_TOKEN_SCOPED_STRIPPED_STATE: &str =
     "ak.vector.preview.token_scoped_stripped_state.v1";
 pub const VECTOR_ID_HISTORY_SHARING_E2EE_PREJOIN_KEY_SHARE_POLICY: &str =
@@ -25,9 +19,6 @@ pub const VECTOR_ID_HISTORY_SHARING_PRINCIPAL_CONTROL_PROFILE_BASELINE: &str =
 
 pub const ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_E2EE_LATE_KEY_RECOVERY_T0_DETERMINISTIC_VISIBILITY,
-    VECTOR_ID_DISAPPEARING_READ_TRIGGER_ANONYMOUS_AGGREGATE,
-    VECTOR_ID_DISAPPEARING_READ_TRIGGER_IDEMPOTENT_REPLAY,
-    VECTOR_ID_DISAPPEARING_ON_LAST_READ_OFFLINE_WINDOW,
     VECTOR_ID_PREVIEW_TOKEN_SCOPED_STRIPPED_STATE,
     VECTOR_ID_HISTORY_SHARING_E2EE_PREJOIN_KEY_SHARE_POLICY,
     VECTOR_ID_HISTORY_SHARING_PRINCIPAL_CONTROL_PROFILE_BASELINE,
@@ -40,18 +31,6 @@ pub fn run_history_crypto_closure_fixture_suite() -> Result<()> {
     run_e2ee_late_key_recovery_t0_deterministic_visibility_case(case(
         &fixture,
         VECTOR_ID_E2EE_LATE_KEY_RECOVERY_T0_DETERMINISTIC_VISIBILITY,
-    )?)?;
-    run_disappearing_read_trigger_anonymous_aggregate_case(case(
-        &fixture,
-        VECTOR_ID_DISAPPEARING_READ_TRIGGER_ANONYMOUS_AGGREGATE,
-    )?)?;
-    run_disappearing_read_trigger_idempotent_replay_case(case(
-        &fixture,
-        VECTOR_ID_DISAPPEARING_READ_TRIGGER_IDEMPOTENT_REPLAY,
-    )?)?;
-    run_disappearing_on_last_read_offline_window_case(case(
-        &fixture,
-        VECTOR_ID_DISAPPEARING_ON_LAST_READ_OFFLINE_WINDOW,
     )?)?;
     run_preview_token_scoped_stripped_state_case(case(
         &fixture,
@@ -73,30 +52,6 @@ pub fn run_e2ee_late_key_recovery_t0_deterministic_visibility_vector() -> Result
     run_e2ee_late_key_recovery_t0_deterministic_visibility_case(case(
         &fixture,
         VECTOR_ID_E2EE_LATE_KEY_RECOVERY_T0_DETERMINISTIC_VISIBILITY,
-    )?)
-}
-
-pub fn run_disappearing_read_trigger_anonymous_aggregate_vector() -> Result<()> {
-    let fixture = history_crypto_closure_fixture()?;
-    run_disappearing_read_trigger_anonymous_aggregate_case(case(
-        &fixture,
-        VECTOR_ID_DISAPPEARING_READ_TRIGGER_ANONYMOUS_AGGREGATE,
-    )?)
-}
-
-pub fn run_disappearing_read_trigger_idempotent_replay_vector() -> Result<()> {
-    let fixture = history_crypto_closure_fixture()?;
-    run_disappearing_read_trigger_idempotent_replay_case(case(
-        &fixture,
-        VECTOR_ID_DISAPPEARING_READ_TRIGGER_IDEMPOTENT_REPLAY,
-    )?)
-}
-
-pub fn run_disappearing_on_last_read_offline_window_vector() -> Result<()> {
-    let fixture = history_crypto_closure_fixture()?;
-    run_disappearing_on_last_read_offline_window_case(case(
-        &fixture,
-        VECTOR_ID_DISAPPEARING_ON_LAST_READ_OFFLINE_WINDOW,
     )?)
 }
 
@@ -239,148 +194,6 @@ fn evaluate_late_key_recovery(scenario: &Value) -> Result<Value> {
         observed["reason"] = json!(reason);
     }
     Ok(observed)
-}
-
-fn run_disappearing_read_trigger_anonymous_aggregate_case(case: &Value) -> Result<()> {
-    let observed = evaluate_disappearing_anonymous_aggregate(case)?;
-    assert_expected_subset(
-        "disappearing_anonymous_aggregate",
-        expected(case)?,
-        &observed,
-    )?;
-    record_step(
-        VECTOR_ID_DISAPPEARING_READ_TRIGGER_ANONYMOUS_AGGREGATE,
-        "anonymous_aggregate",
-        case,
-        &observed,
-    );
-    Ok(())
-}
-
-fn evaluate_disappearing_anonymous_aggregate(case: &Value) -> Result<Value> {
-    let message = required_object(case, "message")?;
-    let contributions = required_array(case, "contributions")?;
-    let allowed_fields = string_set(case, "allowed_projection_fields")?;
-    let forbidden_fields = string_set(case, "forbidden_projection_fields")?;
-    let anchor_set_once = !contributions.is_empty();
-
-    let mut projection_fields = BTreeSet::new();
-    for field in [
-        "source_event_id",
-        "trigger",
-        "expiry_start_hlc",
-        "expires_at",
-        "aggregate_status",
-    ] {
-        projection_fields.insert(field);
-    }
-    if !projection_fields.is_subset(&allowed_fields) {
-        bail!("anonymous aggregate projection emitted field outside allowlist");
-    }
-    let forbidden_fields_present = projection_fields
-        .iter()
-        .any(|field| forbidden_fields.contains(field));
-
-    Ok(json!({
-        "anchor_set_once": anchor_set_once,
-        "anchor_join": "minimum_valid_position_hlc",
-        "anchor_never_moves_later": true,
-        "projection_after_expiry": "expiry_stub",
-        "forbidden_fields_present": forbidden_fields_present,
-        "trigger": required_str_obj(message, "trigger")?,
-    }))
-}
-
-fn run_disappearing_read_trigger_idempotent_replay_case(case: &Value) -> Result<()> {
-    let observed = evaluate_disappearing_idempotent_replay(case)?;
-    assert_expected_subset("disappearing_idempotent_replay", expected(case)?, &observed)?;
-    record_step(
-        VECTOR_ID_DISAPPEARING_READ_TRIGGER_IDEMPOTENT_REPLAY,
-        "idempotent_replay",
-        case,
-        &observed,
-    );
-    Ok(())
-}
-
-fn evaluate_disappearing_idempotent_replay(case: &Value) -> Result<Value> {
-    let message_id = required_str(case, "message_id")?;
-    let send_seal_hlc = required_str(case, "send_seal_hlc")?;
-    let accepted_anchor = required_str(case, "accepted_expiry_start_hlc")?;
-    let mut principals = BTreeSet::new();
-    let mut duplicate_result = "none";
-    let mut cross_message_replay_decision = "accept";
-    let mut cross_message_replay_reason = Value::Null;
-    let mut invalid_before_send_decision = "accept";
-
-    for contribution in required_array(case, "contributions")? {
-        if required_str(contribution, "message_id")? != message_id {
-            cross_message_replay_decision = "reject";
-            cross_message_replay_reason = json!("replay_scope_mismatch");
-            continue;
-        }
-        let principal = required_str(contribution, "principal_id")?;
-        if contribution
-            .get("hlc")
-            .and_then(Value::as_str)
-            .is_some_and(|hlc| hlc < send_seal_hlc)
-        {
-            invalid_before_send_decision = "reject";
-            continue;
-        }
-        if !principals.insert(principal) {
-            duplicate_result = "already_observed";
-        }
-    }
-
-    Ok(json!({
-        "principal_contribution_count": principals.len(),
-        "expiry_start_hlc": accepted_anchor,
-        "duplicate_result": duplicate_result,
-        "invalid_before_send_decision": invalid_before_send_decision,
-        "cross_message_replay_decision": cross_message_replay_decision,
-        "cross_message_replay_reason": cross_message_replay_reason,
-    }))
-}
-
-fn run_disappearing_on_last_read_offline_window_case(case: &Value) -> Result<()> {
-    let observed = evaluate_disappearing_on_last_read(case)?;
-    assert_expected_subset("disappearing_on_last_read", expected(case)?, &observed)?;
-    record_step(
-        VECTOR_ID_DISAPPEARING_ON_LAST_READ_OFFLINE_WINDOW,
-        "on_last_read_offline_window",
-        case,
-        &observed,
-    );
-    Ok(())
-}
-
-fn evaluate_disappearing_on_last_read(case: &Value) -> Result<Value> {
-    let eligible = string_set(case, "eligible_principals")?;
-    let unreachable = string_set(case, "unreachable_principals")?;
-    let mut contributed = BTreeSet::new();
-    let mut bob_contribution_count = 0_u64;
-    for contribution in required_array(case, "contributions")? {
-        let principal = required_str(contribution, "principal_id")?;
-        if principal == "ak:did_core:webvh:z6mkfixturebobexample" && contributed.insert(principal) {
-            bob_contribution_count += 1;
-        } else {
-            contributed.insert(principal);
-        }
-    }
-    let reachable_eligible: BTreeSet<&str> = eligible.difference(&unreachable).copied().collect();
-    let anchor_set = required_bool(case, "read_trigger_window_elapsed")?
-        && reachable_eligible.is_subset(&contributed);
-
-    Ok(json!({
-        "anchor_set": anchor_set,
-        "bob_contribution_count": bob_contribution_count,
-        "blocked_by_unreachable_david": !anchor_set,
-        "offline_device_projection": "expiry_stub",
-        "offline_device_shreds_keys": !required_array(case, "offline_devices")?.is_empty(),
-        "late_recovery_decision": "reject",
-        "late_recovery_reason": "late_recovery_rejected_expired",
-    }))
 }
 
 fn run_preview_token_scoped_stripped_state_case(case: &Value) -> Result<()> {

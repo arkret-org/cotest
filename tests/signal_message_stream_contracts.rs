@@ -35,6 +35,7 @@ fn final_event() -> Event {
         "ak.message.create",
         ScopeRef::Realm { realm_id: realm() },
         actor(),
+        DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
         1,
         Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),
         payload.to_value().unwrap(),

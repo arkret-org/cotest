@@ -39,6 +39,7 @@ fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> 
             realm_id: realm_id.clone(),
         },
         actor_id,
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         1,
         hlc,
         payload,

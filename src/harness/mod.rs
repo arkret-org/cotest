@@ -349,9 +349,6 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
             .cloned()
             .unwrap_or_else(|| json!("restricted")),
     )?);
-    if let Some(sync_endpoints) = input.get("sync_endpoints").filter(|value| value.is_array()) {
-        policy_bundle.sync_endpoints = Some(serde_json::from_value(sync_endpoints.clone())?);
-    }
     policy_bundle.validate()?;
     let history_sharing_policy = input
         .get("history_sharing_policy")

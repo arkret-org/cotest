@@ -102,13 +102,6 @@ struct PrincipalSuccessorSealInput {
     device_signing_seed_b64url: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct PrincipalServiceBindingProofInput {
-    binding_draft: Value,
-    verification_method: DidUrl,
-    principal_signing_seed_b64url: String,
-}
-
 fn main() -> Result<()> {
     let command = std::env::args().nth(1).context("missing command")?;
     let input = read_stdin_json()?;
@@ -125,7 +118,6 @@ fn main() -> Result<()> {
         "account-handoff-outcome" => account_handoff_outcome(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
-        "principal-service-binding-proof" => principal_service_binding_proof(input)?,
         "identity-creation-register-request" => identity_creation_register_request(input)?,
         "principal-bootstrap-seal" => principal_bootstrap_seal(input)?,
         "principal-successor-seal" => principal_successor_seal(input)?,
@@ -233,6 +225,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     let (genesis_create_event, founding_authorize_event, device_signing_seed) =
         build_pcr_genesis_unit(
             &principal,
+            initial_session.audience.clone(),
             genesis_salt.clone(),
             &input.trust_domain,
             &draft.version_id,
@@ -305,37 +298,6 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     }))
 }
 
-fn principal_service_binding_proof(input: Value) -> Result<Value> {
-    use arkret_models_collaboration::direct_conversation_ops::{
-        AcceptedAtServiceBindingCore, PrincipalServiceBindingProofPurpose,
-    };
-
-    let input: PrincipalServiceBindingProofInput =
-        serde_json::from_value(input).context("parse principal service binding proof input")?;
-    let draft: AcceptedAtServiceBindingCore = serde_json::from_value(input.binding_draft)
-        .context("parse principal service binding draft")?;
-    draft
-        .validate_shape()
-        .context("validate principal service binding draft")?;
-    let signing_key = signing_key_from_seed(&input.principal_signing_seed_b64url)?;
-    let input_bytes = draft
-        .proof_signing_input_bytes(
-            PrincipalServiceBindingProofPurpose::PrincipalAuthorization,
-            &input.verification_method,
-        )
-        .context("build principal service binding signing input")?;
-    let signature = signing_key.sign(&input_bytes);
-    serde_json::to_value(arkret_wire::ProtocolSignature {
-        verification_method: input.verification_method,
-        created_at: draft.accepted_at,
-        jws: arkret_wire::Base64UrlString::new(
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
-        )
-        .map_err(anyhow::Error::msg)?,
-    })
-    .context("serialize principal service binding proof")
-}
-
 /// The founding Principal Control Realm genesis Event, signed by the identity
 /// root the 24 words derive.
 ///
@@ -347,6 +309,7 @@ fn principal_service_binding_proof(input: Value) -> Result<Value> {
 #[allow(clippy::too_many_arguments)]
 fn build_pcr_genesis_unit(
     principal: &DidFullId,
+    principal_server_id: DidCoreId,
     genesis_salt: arkret::GenesisSalt,
     trust_domain: &str,
     version_id: &str,
@@ -433,6 +396,7 @@ fn build_pcr_genesis_unit(
     let mut create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id,
+            principal_server_id,
             principal_full_id: principal.clone(),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal.clone(),
@@ -496,6 +460,7 @@ fn build_pcr_genesis_unit(
             project_full_id_to_core_id(principal)
                 .context("project principal DID for founding DeviceAuthorize")?,
         ),
+        create.principal_server_id.clone(),
         authorize_payload,
     )?
     .with_prev_refs(vec![create.event_id.clone()])
@@ -594,7 +559,8 @@ fn identity_creation_register_request(input: Value) -> Result<Value> {
 fn trusted_actor_signer_material(event: &Event) -> Result<(DidFullId, DidUrl)> {
     let verification_method = event
         .proofs
-        .first()
+        .iter()
+        .find_map(arkret_wire::EventProof::as_producer)
         .context("founding DeviceAuthorize lacks its signed proof")?
         .verification_method
         .clone();
@@ -939,6 +905,7 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
+            "principal_server_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -985,6 +952,7 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
+            "principal_server_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -1052,6 +1020,7 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
+            "principal_server_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",

@@ -961,6 +961,8 @@ fn fixed_unsigned_sidecar_event(
         realm_id,
         scope_ref,
         actor_id,
+        principal_server_id: DidCoreId::new("ak:did_core:web:principal.example")
+            .map_err(|_| SidecarModelError::ModelInvariant)?,
         executed_by: None,
         authorization_ref: None,
         applet_id: None,
@@ -1211,7 +1213,10 @@ fn sign_prepared_draft(
     let public_key = PublicKeyMaterial::Ed25519Raw {
         bytes: signer.verifying_key().to_bytes().to_vec(),
     };
-    verify_ed25519_detached_jws_proof(&event.proofs[0], &before, &event.actor_id, &public_key)
+    let proof = event.proofs[0]
+        .as_producer()
+        .ok_or(SidecarModelError::ProofMismatch)?;
+    verify_ed25519_detached_jws_proof(proof, &before, &event.actor_id, &public_key)
         .map_err(|_| SidecarModelError::ProofMismatch)?;
     Ok(event)
 }
@@ -1237,15 +1242,18 @@ fn validate_signed_draft(
             .event_digest()
             .map_err(|_| SidecarModelError::DraftMismatch)?
             != draft.event_digest.as_str()
-        || event.proofs.is_empty()
-        || event
-            .proofs
-            .iter()
-            .any(|proof| proof.event_digest != draft.event_digest)
+        || !matches!(
+            event.proofs.as_slice(),
+            [arkret_wire::EventProof::Producer(proof)] if proof.event_digest == draft.event_digest
+        )
     {
         return Err(SidecarModelError::DraftMismatch);
     }
-    for proof in &event.proofs {
+    for proof in event
+        .proofs
+        .iter()
+        .filter_map(arkret_wire::EventProof::as_producer)
+    {
         verify_ed25519_detached_jws_proof(proof, &actual_unsigned, &event.actor_id, public_key)
             .map_err(|_| SidecarModelError::ProofMismatch)?;
     }
@@ -2730,6 +2738,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         EventKind::SidecarContextAttach.as_str(),
         scope,
         controller_id.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         20,
         exchange_hlc(0x81)?,
         serde_json::to_value(SidecarContextAttachPayload {
@@ -2760,6 +2769,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
         EventKind::SidecarContextAttach.as_str(),
         attach_event.scope_ref.clone(),
         DidCoreId::new("ak:did_core:web:mallory.example")?,
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         21,
         exchange_hlc(0x82)?,
         serde_json::to_value(&attach_event.payload)?,
@@ -2852,6 +2862,7 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
                     realm_id: realm_id.clone(),
                 },
                 actor.clone(),
+                DidCoreId::new("ak:did_core:web:principal.example")?,
                 case["actor_seq"]
                     .as_u64()
                     .ok_or_else(|| anyhow!("digest sibling actor_seq is missing"))?,

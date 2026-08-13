@@ -25,7 +25,6 @@ import {
   hasDualSoland,
   solandBaseUrl,
   solandServiceId,
-  solandServiceResolution,
 } from "../../helpers/env";
 import {
   authHeaders,
@@ -475,24 +474,6 @@ test.describe("contact graph federation (α/β)", () => {
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
-        ],
-        sync_endpoints: [
-          {
-            service_id: solandServiceId("alpha"),
-            service_resolution: solandServiceResolution("alpha"),
-            role: "primary",
-            service_kind: "principal_server",
-            plaintext_visible: true,
-            visibility_scope: "plaintext_events",
-          },
-          {
-            service_id: solandServiceId("beta"),
-            service_resolution: solandServiceResolution("beta"),
-            role: "mirror",
-            service_kind: "principal_server",
-            plaintext_visible: true,
-            visibility_scope: "plaintext_events",
-          },
         ],
       },
       { server: "alpha" },

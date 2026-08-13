@@ -5,7 +5,7 @@
 //! transcript with a principal control key, a device quorum or a trusted
 //! recovery service. There is no development ownership string any more, so the
 //! scenario drives the real two-call flow and verifies that a synthetic key
-//! which is not an exact principal authority instance fails closed.
+//! outside the exact principal authority pair fails closed.
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::canonical::canonical_json_bytes;

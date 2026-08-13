@@ -247,15 +247,20 @@ async fn grant_calendar_actions(
     realm_id: &str,
     bootstrap_seal: &str,
 ) -> Result<Vec<String>> {
-    let (calendar_grant_id, _) = client
+    let (calendar_grant_id, response) = client
         .grant_self_realm_actions(
             realm_id,
             &["ak.strand.create", "ak.strand.update", "ak.rsvp.set"],
         )
         .await?;
+    let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
+        .as_str()
+        .ok_or_else(|| anyhow!("calendar grant response omitted its proposal digest"))?;
     let subject = actor_core_id(&client.actor)?;
     wait_for_projected_grant(client, realm_id, &subject, &calendar_grant_id).await?;
-    wait_for_next_seal(client, realm_id, bootstrap_seal).await?;
+    client
+        .await_control_proposal_settled(realm_id, proposal_digest, bootstrap_seal)
+        .await?;
     Ok(vec![calendar_grant_id])
 }
 
@@ -265,12 +270,17 @@ async fn grant_calendar_rsvp_to(
     actor: &str,
     predecessor_seal: &str,
 ) -> Result<Vec<String>> {
-    let (grant_id, _) = issuer
+    let (grant_id, response) = issuer
         .grant_realm_actions_to(realm_id, actor, &["ak.rsvp.set"])
         .await?;
+    let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
+        .as_str()
+        .ok_or_else(|| anyhow!("RSVP grant response omitted its proposal digest"))?;
     let subject = actor_core_id(actor)?;
     wait_for_projected_grant(issuer, realm_id, &subject, &grant_id).await?;
-    wait_for_next_seal(issuer, realm_id, predecessor_seal).await?;
+    issuer
+        .await_control_proposal_settled(realm_id, proposal_digest, predecessor_seal)
+        .await?;
     Ok(vec![grant_id])
 }
 
@@ -287,7 +297,8 @@ async fn submit_prepared_event(
     .await?;
     event
         .proofs
-        .first()
+        .iter()
+        .find_map(arkret_wire::EventProof::as_producer)
         .map(|proof| proof.event_digest.to_string())
         .ok_or_else(|| anyhow!("prepared Event carries no event digest"))
 }

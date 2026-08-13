@@ -140,7 +140,8 @@ fn authorization_lease_for_basis(
     } else {
         let verification_method = event
             .proofs
-            .first()
+            .iter()
+            .find_map(arkret_wire::EventProof::as_producer)
             .context("authorization lease Event has no full-id signing material")?
             .verification_method
             .as_str();

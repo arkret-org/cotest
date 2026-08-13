@@ -319,46 +319,70 @@ impl TestActorClient {
         subject: &TestActorClient,
         actions: &[&str],
     ) -> Result<String> {
-        let before = self.realm_seal_id(realm_id).await;
-        let (grant_id, _) = self
+        let before = self.realm_seal_id(realm_id).await?;
+        let (grant_id, response) = self
             .grant_realm_actions_to(realm_id, &subject.actor, actions)
             .await?;
-        self.await_seal_after(realm_id, before.as_deref()).await?;
+        let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
+            .as_str()
+            .ok_or_else(|| {
+                anyhow!("grant response omitted its Control Proposal Ack: {response}")
+            })?;
+        self.await_control_proposal_settled(realm_id, proposal_digest, &before)
+            .await?;
         subject.remember_grant(realm_id, &grant_id, actions);
         Ok(grant_id)
     }
 
-    /// Wait until the Seal frontier has advanced past `since_seal_id`.
+    /// Wait until one exact accepted Control proposal leaves the pending set.
     ///
-    /// A DataEvent resolves its authority at `seal_ref`, so naming a grant the
-    /// current Seal does not yet cover is rejected with "not projected at
-    /// seal_ref". Sealing belongs to the durable coordinator and is
-    /// asynchronous, so the issuer waits for the next Seal rather than racing
-    /// it.
-    async fn await_seal_after(&self, realm_id: &str, since_seal_id: Option<&str>) -> Result<()> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    /// A different pending proposal may advance the Realm frontier first, so a
+    /// bare `seal_id != previous` check is not a finality witness for the Event
+    /// just submitted. The proposal's signed Ack digest is the stable identity
+    /// exposed by governance health. The caller obtained that signed Ack from
+    /// the accepted submit response, which already proves the digest entered
+    /// pending; polling waits for the exact digest to leave the pending set
+    /// together with a successor Seal.
+    pub(crate) async fn await_control_proposal_settled(
+        &self,
+        realm_id: &str,
+        proposal_digest: &str,
+        previous_seal_id: &str,
+    ) -> Result<String> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
         loop {
-            if self.realm_seal_id(realm_id).await.as_deref() != since_seal_id {
-                return Ok(());
+            if let Ok(frontier) = self.realm_seal_frontier(realm_id).await {
+                let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                    serde_json::from_value(frontier)?;
+                if let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
+                    frontier,
+                ) = state.frontier
+                {
+                    let pending = frontier
+                        .governance_health
+                        .pending_proposals
+                        .iter()
+                        .any(|pending| pending.proposal_digest.as_str() == proposal_digest);
+                    if !pending && frontier.seal_id.as_str() != previous_seal_id {
+                        return Ok(frontier.seal_id.to_string());
+                    }
+                }
             }
             if std::time::Instant::now() >= deadline {
                 return Err(anyhow!(
-                    "{realm_id} published no Seal after {since_seal_id:?}"
+                    "Control proposal {proposal_digest} did not settle into a successor Seal for {realm_id}"
                 ));
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         }
     }
 
-    async fn realm_seal_id(&self, realm_id: &str) -> Option<String> {
-        self.realm_seal_frontier(realm_id)
-            .await
-            .ok()
-            .and_then(|frontier| {
-                frontier["frontier"]["seal_id"]
-                    .as_str()
-                    .map(ToOwned::to_owned)
-            })
+    async fn realm_seal_id(&self, realm_id: &str) -> Result<String> {
+        let frontier = self.realm_seal_frontier(realm_id).await?;
+        frontier["frontier"]["seal_id"]
+            .as_str()
+            .map(ToOwned::to_owned)
+            .ok_or_else(|| anyhow!("Realm frontier has no seal_id: {frontier}"))
     }
 
     pub fn controls_realm_authority_root(&self, realm_id: &str) -> bool {
@@ -629,7 +653,7 @@ impl TestActorClient {
                         subject.to_owned(),
                     )?)?),
                 ),
-            subject_authority_instance: None,
+            subject_principal_server_id: Some(DidCoreId::new(self.service_id.clone())?),
             actions: actions.iter().map(|action| (*action).to_owned()).collect(),
             resources: vec![serde_json::from_value(json!({
                 "kind": "realm",
@@ -718,7 +742,14 @@ impl TestActorClient {
         ensure_submit_event_id(&mut body, &event);
         // The digest is what a later response names to dominate this head, so
         // hand it back to the caller alongside the submit result.
-        body["cotest_event_digest"] = json!(event.proofs[0].event_digest);
+        body["cotest_event_digest"] = json!(
+            event
+                .proofs
+                .iter()
+                .find_map(arkret_wire::EventProof::as_producer)
+                .expect("authored Event has producer proof")
+                .event_digest
+        );
         Ok(body)
     }
 

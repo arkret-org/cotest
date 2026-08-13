@@ -127,6 +127,7 @@ async fn install_test_principal_control_document(
         actor,
         test_principal_root_key_seed(actor)?,
         prepared.root_verification_method.clone(),
+        server.service_id().clone(),
     );
     Ok(prepared)
 }
@@ -464,6 +465,7 @@ async fn bootstrap_test_device_authorization(
     let mut create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal_actor_id.clone(),
+            principal_server_id: server.service_id().clone(),
             principal_full_id: principal.clone(),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal.clone(),
@@ -503,6 +505,7 @@ async fn bootstrap_test_device_authorization(
             realm_id: realm_id.clone(),
         },
         principal_actor_id,
+        server.service_id().clone(),
         1,
         Hlc::new("01970e589d21-0001-a13f9c2e")?,
         payload_value,
@@ -624,6 +627,7 @@ async fn bootstrap_test_device_authorization(
         actor,
         device_signing_key.to_bytes(),
         device_method.as_str().to_owned(),
+        server.service_id().clone(),
     );
 
     Ok(TestDeviceAuthorizationBootstrap {

@@ -121,7 +121,10 @@ pub async fn production_rejects_placeholder_proof_e2e_run() -> Result<()> {
             "hi",
         )?,
     );
-    event.proofs[0].jws = "a..b".to_owned();
+    let arkret_wire::EventProof::Producer(proof) = &mut event.proofs[0] else {
+        unreachable!("freshly authored Event has producer proof")
+    };
+    proof.jws = "a..b".to_owned();
     let submission = crate::publication::initial_submission(event, "")?;
 
     let resp = client

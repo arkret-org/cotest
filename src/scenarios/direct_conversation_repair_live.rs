@@ -9,7 +9,6 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, ensure};
-use arkret_models_collaboration::direct_conversation_ops::AcceptedAtServiceBinding;
 use arkret_models_collaboration::direct_conversation_repair::{
     DirectConversationRepairAuthorization, DirectConversationRepairDispatchRequest,
     DirectConversationRepairEnqueueOutcome,
@@ -92,6 +91,7 @@ fn fixture_events(
         arkret_wire::EventKind::RealmCreate.as_str(),
         ScopeRef::RealmGenesis,
         requester_actor.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         10,
         Hlc::new(format!(
             "{:012x}-0000-d1ec7e57",
@@ -107,6 +107,7 @@ fn fixture_events(
             realm_id: realm_id.clone(),
         },
         requester_actor.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         11,
         Hlc::new(format!(
             "{:012x}-0001-d1ec7e57",
@@ -126,6 +127,7 @@ fn fixture_events(
             realm_id: realm_id.clone(),
         },
         requester_actor.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         12,
         Hlc::new(format!(
             "{:012x}-0002-d1ec7e57",
@@ -160,6 +162,7 @@ fn fixture_events(
             realm_id: realm_id.clone(),
         },
         requester_actor.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         13,
         Hlc::new(format!(
             "{:012x}-0003-d1ec7e57",
@@ -174,6 +177,7 @@ fn fixture_events(
             realm_id: realm_id.clone(),
         },
         requester_actor.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         14,
         Hlc::new(format!(
             "{:012x}-0004-d1ec7e57",
@@ -220,18 +224,6 @@ async fn current_service_record(
     Ok((service_id, record))
 }
 
-fn accepted_local_binding(
-    _principal_full: &DidFullId,
-    _principal: &DidCoreId,
-    _service_record: &ServiceResolutionRecord,
-    _trust_domain: &str,
-    _device_id: &DeviceId,
-) -> Result<AcceptedAtServiceBinding> {
-    anyhow::bail!(
-        "direct-repair live fixture is fail-closed: frozen registration DID evidence and exact PrincipalAuthorityInstance are unavailable"
-    )
-}
-
 async fn install_fixture(
     server: &crate::harness::ArkretServer,
     fixture: &FixtureEvents,
@@ -239,7 +231,6 @@ async fn install_fixture(
     recipient: &DidCoreId,
     peer_service_id: &DidCoreId,
     peer_record: &ServiceResolutionRecord,
-    local_binding: Option<&AcceptedAtServiceBinding>,
 ) -> Result<()> {
     let carrier = ServiceResolutionCarrier::Inline {
         inline: peer_record.clone(),
@@ -276,7 +267,6 @@ async fn install_fixture(
                 "peer_service_resolution": carrier,
             }
         ],
-        "local_principal_service_binding": local_binding,
     });
     let outcome = expect_json(
         server.http().post(server.url(INSTALL_PATH)).json(&body),
@@ -544,13 +534,6 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
     let (source_service_id, source_record) = current_service_record(source).await?;
     let (target_service_id, target_record) = current_service_record(target).await?;
     let fixture = fixture_events(source.trust_domain().clone(), &requester, &recipient)?;
-    let target_binding = accepted_local_binding(
-        &recipient_full,
-        &recipient,
-        &target_record,
-        target.trust_domain().as_str(),
-        &recipient_device_a,
-    )?;
     install_fixture(
         source,
         &fixture,
@@ -558,7 +541,6 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
         &recipient,
         &target_service_id,
         &target_record,
-        None,
     )
     .await?;
     install_fixture(
@@ -568,7 +550,6 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
         &recipient,
         &source_service_id,
         &source_record,
-        Some(&target_binding),
     )
     .await?;
     let keypackage_ref = upload_requester_keypackage(

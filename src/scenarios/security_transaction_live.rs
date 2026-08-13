@@ -178,6 +178,7 @@ fn event_submission(principal: &DidFullId, kind: &str) -> Result<EventInitialSub
         arkret_identifiers::DidCoreId::from(arkret_identifiers::project_full_id_to_core_id(
             principal,
         )?),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
         1,
         Hlc::new("01970e589d21-0004-c07e57aa".to_owned())?,
         json!({"fixture": true}),
@@ -187,19 +188,24 @@ fn event_submission(principal: &DidFullId, kind: &str) -> Result<EventInitialSub
         leaves: vec![SealId::new(format!("ak:seal:sha256:{}", "b".repeat(64)))?],
     });
     let event_digest = Hash::new(event.event_digest()?)?;
-    event.proofs.push(arkret_wire::Proof {
-        kind: "DataIntegrityProof".to_owned(),
-        // `zh/identity/did-usage-and-verification.md` §2.2: a
-        // `verification_method` is a DID URL, never a bare DID. This fixture
-        // used `principal` itself, which no receiver could resolve to a key.
-        verification_method: crate::harness::default_event_verification_method(principal.as_str()),
-        event_digest,
-        created_at: now,
-        domain: None,
-        audience: None,
-        proof_purpose: None,
-        jws: "eyJhbGciOiJFZDI1NTE5In0..c2lnbmF0dXJl".to_owned(),
-    });
+    event.proofs.push(
+        arkret_wire::Proof {
+            kind: "DataIntegrityProof".to_owned(),
+            // `zh/identity/did-usage-and-verification.md` §2.2: a
+            // `verification_method` is a DID URL, never a bare DID. This fixture
+            // used `principal` itself, which no receiver could resolve to a key.
+            verification_method: crate::harness::default_event_verification_method(
+                principal.as_str(),
+            ),
+            event_digest,
+            created_at: now,
+            domain: None,
+            audience: None,
+            proof_purpose: None,
+            jws: "eyJhbGciOiJFZDI1NTE5In0..c2lnbmF0dXJl".to_owned(),
+        }
+        .into(),
+    );
     let authorization_lease =
         crate::publication::authorization_lease_for(&event, "ak.realm.admin", RiskTier::High)?;
     let mut submission = crate::publication::initial_submission(event, "ak.realm.admin")?;

@@ -36,14 +36,14 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
+use arkret_identifiers::{DidCoreId, EventId, Hash};
 use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
     CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
 use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
 use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
 use arkret_models_identity::handle_claim::DeliveryBindingHint;
-use arkret_wire::{Audience, PrincipalAuthorityInstance, Proof};
+use arkret_wire::{Audience, PrincipalAuthorityKey, Proof};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -95,7 +95,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_audience_mismatch().context("T3.5 negative — audience != target Realm")?;
     negative_case_service_not_allowed()
         .context("T3.5 negative — recipient_service_id not in Realm allow-list")?;
-    negative_case_same_core_different_authority_instance()
+    negative_case_same_principal_different_server()
         .context("T3.5 negative — same principal core with substituted PCR authority")?;
     negative_case_acct_canonical_rejected().context("T3.5 negative — acct: as canonical handle")?;
     negative_case_did_document_fallback_rejected()
@@ -317,31 +317,16 @@ fn negative_case_service_not_allowed() -> Result<()> {
     Ok(())
 }
 
-/// A stable principal core does not authorize a different PCR generation.
-/// The authority-instance digest is the downstream cache/admission key.
-fn negative_case_same_core_different_authority_instance() -> Result<()> {
+/// A stable principal id at another Principal Server is a different authority.
+fn negative_case_same_principal_different_server() -> Result<()> {
     let accepted = sample_candidate()?;
     let mut substituted = accepted.clone();
-    substituted.principal_authority_instance = PrincipalAuthorityInstance::new(
+    substituted.principal_authority = PrincipalAuthorityKey::new(
         accepted.subject_id.clone(),
-        accepted
-            .member_delivery_binding
-            .recipient_service_id
-            .clone(),
-        RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
-        Hash::new(format!("sha256:{}", "6".repeat(64)))?,
-    )?;
-    if substituted
-        .principal_authority_instance
-        .authority_instance_digest
-        == accepted
-            .principal_authority_instance
-            .authority_instance_digest
-    {
-        bail!("different PCR lineage produced the same authority-instance digest");
-    }
+        DidCoreId::new("ak:did_core:web:other-principal.example")?,
+    );
     if substituted == accepted {
-        bail!("same-core authority substitution was erased by candidate equality");
+        bail!("different Principal Server was erased by candidate equality");
     }
     Ok(())
 }
@@ -527,12 +512,7 @@ async fn live_stack_probe() -> Result<()> {
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = DidCoreId::new(ALICE_ID)?;
     let principal = DidCoreId::new(PRINCIPAL_ID)?;
-    let principal_authority_instance = PrincipalAuthorityInstance::new(
-        subject.clone(),
-        principal.clone(),
-        RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K")?,
-        Hash::new(format!("sha256:{}", "5".repeat(64)))?,
-    )?;
+    let principal_authority = PrincipalAuthorityKey::new(subject.clone(), principal.clone());
     let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
@@ -540,7 +520,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
-        principal_authority_instance,
+        principal_authority,
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {

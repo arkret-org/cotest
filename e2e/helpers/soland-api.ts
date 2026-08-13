@@ -406,9 +406,6 @@ export async function createRealmApi(
      */
     creator_service_id?: string;
     plaintext_visible_services?: string[];
-    // Hand-written mirror replaced by the generated one: the role /
-    // service_kind / visibility_scope enums live in `realm.schema.json`.
-    sync_endpoints?: RealmObject["sync_endpoints"];
     public?: boolean;
     federation_policy?: RealmObject["federation_policy"];
     schema_refs?: RealmObject["schema_refs"];
@@ -535,7 +532,6 @@ export async function createRealmApi(
           ? "e2ee_required"
           : "allow_plaintext",
       ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
-      ...(data.sync_endpoints ? { sync_endpoints: data.sync_endpoints } : {}),
     },
   );
   pushBootstrapEvent(

@@ -8,7 +8,6 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   solandBaseUrl,
   solandServiceFullId,
-  solandServiceId,
 } from "../../helpers/env";
 import {
   base64url,
@@ -419,58 +418,11 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     expect(losingSalt < acceptedSalt).toBe(true);
     expect(losing.realmId < accepted.realmId).toBe(true);
 
-    const describe = await expectJsonOk<{
-      service_id: string;
-      trust_domain: string;
-    }>(
-      await request.get(`${solandBaseUrl()}/_arkret/describe`),
-      "Direct Conversation source service describe",
-    );
-    expect(describe.service_id).toBe(solandServiceId());
-    const bindingPrepareUrl = `${solandBaseUrl()}/_arkret/self/principal-service-bindings/prepare`;
-    const bindingRequestId = base64url(randomBytes(24));
-    const bindingPrepared = await expectJsonOk<JsonObject>(
-      await request.post(bindingPrepareUrl, {
-        headers: {
-          ...selfPathHeadersForDpopSession(bobSession, "POST", bindingPrepareUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({ request_id: bindingRequestId }),
-      }),
-      "prepare principal service binding",
-    );
-    const principalAuthorizationProof = cotestWire<JsonObject>(
-      "principal-service-binding-proof",
-      {
-        binding_draft: bindingPrepared.binding_draft,
-        verification_method: `${bob.did}#${bob.deviceId}`,
-        principal_signing_seed_b64url: bobSession.eventSigningSeedB64url,
-      },
-    );
-    const bindingCommitUrl = `${solandBaseUrl()}/_arkret/self/principal-service-bindings/commit`;
-    const bindingCommitted = await expectJsonOk<JsonObject>(
-      await request.post(bindingCommitUrl, {
-        headers: {
-          ...selfPathHeadersForDpopSession(bobSession, "POST", bindingCommitUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({
-          request_id: bindingRequestId,
-          challenge_id: bindingPrepared.challenge_id,
-          binding_digest: bindingPrepared.binding_draft.binding_digest,
-          principal_authorization_proof: principalAuthorizationProof,
-        }),
-      }),
-      "commit principal service binding",
-    );
-    const sourceServiceBinding = bindingCommitted.binding as JsonObject;
-
     const acceptedBody = {
       unit_kind: "direct_conversation_founding",
       idempotency_key: typedId("dc-founding"),
       events: accepted.events.map((event) => ({ event })),
       founder_contact_round_evidence: founderContactRoundEvidence,
-      source_service_binding: sourceServiceBinding,
     };
     const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
     const firstResponse = await request.post(

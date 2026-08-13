@@ -29,6 +29,10 @@ fn actor() -> DidCoreId {
     DidCoreId::from(projected)
 }
 
+fn principal_server() -> DidCoreId {
+    DidCoreId::new("ak:did_core:web:principal.example").unwrap()
+}
+
 fn created_at() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 8, 9, 1, 2, 3).single().unwrap()
 }
@@ -39,7 +43,7 @@ fn message_event() -> Event {
         "main",
         ContentBlock::text("typed authoring KAT"),
     );
-    TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), payload)
+    TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), principal_server(), payload)
         .unwrap()
         .author(7, Hlc::new(HLC).unwrap(), created_at())
         .unwrap()
@@ -51,6 +55,7 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
     let policy = TypedEventDraft::<event_spec::RealmPolicy>::new(
         scope(),
         actor(),
+        principal_server(),
         StatePayload {
             value: None,
             state: Some("active".to_owned()),
@@ -65,19 +70,19 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
     let policy_bytes = canonical_json_bytes(&policy.digest_payload().unwrap()).unwrap();
     assert_eq!(
         message_bytes,
-        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"prev_refs":[],"principal_server_id":"ak:did_core:web:principal.example","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         policy_bytes,
-        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.realm.policy","payload":{"state":"active"},"prev_refs":[],"realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.realm.policy","payload":{"state":"active"},"prev_refs":[],"principal_server_id":"ak:did_core:web:principal.example","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         message.event_id.as_str(),
-        "ak:event:AboEjFxGbk80AYwRXubbZIbtnvadyiYxMWxZUpYaNNjB"
+        "ak:event:AcBKdR9sldDdj1xmna9xcGIbbQx9pUCqKOptx0IeMXGD"
     );
     assert_eq!(
         policy.event_id.as_str(),
-        "ak:event:AQbJiOWb_QHpkWURyLzjU1g9-qGEyezWMEcPtLp1-raM"
+        "ak:event:ART2Dcr_wvitix1HGiC-e3VR5ByWLCwGRUmRknLtQO1k"
     );
     assert_ne!(message_bytes, policy_bytes);
 }
@@ -187,7 +192,14 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
     )
     .unwrap();
     let event = validated
-        .author(scope(), actor(), 7, Hlc::new(HLC).unwrap(), created_at())
+        .author(
+            scope(),
+            actor(),
+            principal_server(),
+            7,
+            Hlc::new(HLC).unwrap(),
+            created_at(),
+        )
         .unwrap();
     assert_eq!(event.kind, EventKind::Unknown("ak.example.note".to_owned()));
     assert_eq!(event.payload["provider_extension"]["x"], 1);

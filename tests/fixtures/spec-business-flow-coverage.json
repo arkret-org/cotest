@@ -10,7 +10,6 @@
         "service_discovery",
         "identity_registry",
         "identity_resolution",
-        "principal_service_binding",
         "security_transactions",
         "account_auth"
       ],
@@ -31,18 +30,6 @@
           "operation_id": "ak.open.identity.read.resolution",
           "surfaces": [
             "identity_resolution"
-          ]
-        },
-        {
-          "operation_id": "ak.self.principal_service_binding.command.prepare",
-          "surfaces": [
-            "principal_service_binding"
-          ]
-        },
-        {
-          "operation_id": "ak.self.principal_service_binding.command.commit",
-          "surfaces": [
-            "principal_service_binding"
           ]
         },
         {
@@ -103,14 +90,6 @@
           "markers": [
             "ak.open.identity.read.resolution",
             "principals/{principal_id}/resolution"
-          ]
-        },
-        {
-          "kind": "ordinary",
-          "path": "../soland/crates/http/src/routing/identity/account/principal_service_binding.rs",
-          "markers": [
-            "ak.self.principal_service_binding.command.prepare",
-            "ak.self.principal_service_binding.command.commit"
           ]
         },
         {

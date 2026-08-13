@@ -71,43 +71,6 @@ export type RealmObject = {
     };
   };
   "federation_policy"?: "open" | "restricted" | "closed" | "quarantine";
-  "sync_endpoints"?: Array<{
-    "service_id": string;
-    "service_resolution": {
-      "inline": {
-        "record": {
-          "service_id": string;
-          "service_kind": string;
-          "full_id": string;
-          "method_history_head": string;
-          "version_id": string;
-          "resolution_event_ref": string;
-          "record_sequence": number;
-          "previous_record_digest": string | null;
-          "current_record_url": string;
-          "base_url": string;
-          "describe_digest": string;
-          "issued_at": string;
-          "refresh_after": string;
-          "expires_at": string;
-        };
-        "proof": {
-          "verification_method": string;
-          "created_at": string;
-          "jws": string;
-        };
-      };
-    } | {
-      "current_record_url": string;
-      "pinned_record_digest"?: string;
-    };
-    "role": "primary" | "mirror" | "notary" | "sync" | "search_projection" | "federation_peer";
-    "service_kind": "principal_server" | "sync_node" | "notary" | "search_service" | "archive_node" | "key_recovery_service" | "recovery_service";
-    "plaintext_visible": boolean;
-    "visibility_scope"?: "metadata_only" | "encrypted_events" | "plaintext_events";
-    "policy_id"?: string;
-    "expires_at"?: string;
-  }>;
   "notary_profile": "single_did" | "threshold" | "open_set" | "mixed";
   "availability_policy"?: {
     "min_holders": number;
@@ -202,13 +165,6 @@ export type CapabilityGrantObject = {
     "kind": "condition";
     "required_claims": unknown[];
     [key: string]: unknown;
-  };
-  "subject_authority_instance"?: {
-    "principal_id": string;
-    "principal_server_id": string;
-    "pcr_realm_id": string;
-    "principal_genesis_receipt_digest": string;
-    "authority_instance_digest": string;
   };
   "actions": string[];
   "resources": Array<{
@@ -646,12 +602,9 @@ export type InviteDeliveryRequestBody = {
     };
     "member_delivery_binding_candidate"?: {
       "subject_id": string;
-      "principal_authority_instance": {
+      "principal_authority": {
         "principal_id": string;
         "principal_server_id": string;
-        "pcr_realm_id": string;
-        "principal_genesis_receipt_digest": string;
-        "authority_instance_digest": string;
       };
       "handle": string;
       "handle_aliases"?: string[];

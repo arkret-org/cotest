@@ -34,7 +34,7 @@ const HTTP_METHODS: &[&str] = &[
 /// QUERY is excluded on purpose. Source-text inference reads both a lowercase
 /// `.verb(` call and a bare uppercase token, and QUERY collides with ordinary
 /// code on both: `.query(&[..])` is `reqwest`'s query-string builder on a GET,
-/// and `AGENT_SIGNER_EVIDENCE_QUERY_PATH` is a path constant, not a verb. A
+/// and endpoint path constants are not verbs. A
 /// call site whose verb cannot be inferred is still matched against the
 /// registered path, so leaving QUERY out costs nothing and stops a GET from
 /// being relabelled into an operation that does not exist.

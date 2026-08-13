@@ -46,7 +46,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_identifiers::{DidCoreId, DidFullId, EventId, Hash, RealmId};
+use arkret_identifiers::{DidCoreId, DidFullId, EventId, Hash};
 use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
     CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
@@ -56,7 +56,7 @@ use arkret_models_identity::handle_claim::DeliveryBindingHint;
 use arkret_push_policy::blind_payload_sanitizer::{
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
-use arkret_wire::{Audience, PrincipalAuthorityInstance, Proof};
+use arkret_wire::{Audience, PrincipalAuthorityKey, Proof};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -392,7 +392,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
         .validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))
         .is_ok()
     {
-        bail!("T8.1 step 8: recipient substitution escaped exact authority-instance binding");
+        bail!("T8.1 step 8: recipient substitution escaped exact principal authority pair");
     }
 
     let allowed = [PRINCIPAL_ID];
@@ -607,7 +607,10 @@ async fn live_stack_probe() -> Result<()> {
                 "hi",
             )?,
         );
-        placeholder_event.proofs[0].jws = "a..b".to_owned();
+        let arkret_wire::EventProof::Producer(proof) = &mut placeholder_event.proofs[0] else {
+            unreachable!("freshly authored Event has producer proof")
+        };
+        proof.jws = "a..b".to_owned();
         let placeholder_submission = crate::publication::initial_submission(placeholder_event, "")?;
         let prod_resp = client
             .post(prod_soland.url("/_arkret/self/events"))
@@ -641,12 +644,7 @@ async fn live_stack_probe() -> Result<()> {
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = DidCoreId::new(ALICE_ID)?;
     let principal = DidCoreId::new(PRINCIPAL_ID)?;
-    let principal_authority_instance = PrincipalAuthorityInstance::new(
-        subject.clone(),
-        principal.clone(),
-        RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K")?,
-        Hash::new(format!("sha256:{}", "5".repeat(64)))?,
-    )?;
+    let principal_authority = PrincipalAuthorityKey::new(subject.clone(), principal.clone());
     let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
@@ -654,7 +652,7 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
-        principal_authority_instance,
+        principal_authority,
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {

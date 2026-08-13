@@ -38,7 +38,6 @@ fn productivity_registry_entries_are_present_and_exact() {
         arkret_wire::event_kind_str::PIN_ADD,
         arkret_wire::event_kind_str::PIN_REMOVE,
         arkret_wire::event_kind_str::PIN_REORDER,
-        arkret_wire::event_kind_str::REALM_DISAPPEARING_POLICY,
         arkret_wire::event_kind_str::REALM_SEARCH_POLICY,
     ] {
         assert!(
@@ -59,7 +58,6 @@ fn productivity_registry_entries_are_present_and_exact() {
         "ak.pin.add",
         "ak.pin.remove",
         "ak.pin.reorder",
-        "ak.realm.disappearing_policy",
         "ak.realm.search_policy",
     ] {
         assert!(
@@ -168,36 +166,6 @@ fn productivity_payload_validator_accepts_current_fields_and_rejects_drafts() {
             }),
         )
         .unwrap();
-
-    catalog
-        .validate_payload(
-            arkret_wire::event_kind_str::REALM_DISAPPEARING_POLICY,
-            &json!({
-                "enabled": true,
-                "max_ttl_ms": 3600000,
-                "allowed_triggers": ["on_send", "on_first_read"],
-                "default_grace_ms": 0,
-                "plaintext_realms_allowed": false
-            }),
-        )
-        .unwrap();
-    // `grace_ms` is a message-expiry field, not a realm disappearing-policy
-    // field. The payload is selected through a closed `oneOf`, so the unknown
-    // field prevents either branch from matching and must fail validation.
-    assert!(
-        catalog
-            .validate_payload(
-                arkret_wire::event_kind_str::REALM_DISAPPEARING_POLICY,
-                &json!({
-                    "enabled": true,
-                    "max_ttl_ms": 3600000,
-                    "allowed_triggers": ["on_send"],
-                    "grace_ms": 0
-                }),
-            )
-            .is_err(),
-        "grace_ms (a message-expiry field) must not validate as realm policy"
-    );
 
     catalog
         .validate_payload(

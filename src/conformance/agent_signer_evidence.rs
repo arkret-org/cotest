@@ -390,7 +390,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
                 "rfc9421_covers_method_path_digest_source_destination_operation_request",
                 "verification_key_from_active_service_resolution",
                 "authenticated_source_matches_agent_authority_service_id",
-                "current_principal_service_binding_matches_source",
+                "current_principal_server_matches_source",
             ];
             let all_required = required_true.iter().try_fold(true, |all, field| {
                 Ok::<_, anyhow::Error>(all && bool_field(field)?)
@@ -439,7 +439,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
                 .filter_map(Value::as_str)
                 .collect::<std::collections::BTreeSet<_>>();
             let expected = [
-                "missing_current_principal_service_binding",
+                "missing_current_principal_server",
                 "source_service_mismatch",
                 "unauthorized_service",
                 "unknown_principal",
@@ -793,6 +793,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
             realm_id: realm_id.clone(),
         },
         controller_id.clone(),
+        authority_service_id.clone(),
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         serde_json::json!({"agent_id": signer_id}),
