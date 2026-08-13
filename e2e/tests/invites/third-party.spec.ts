@@ -13,6 +13,7 @@ import {
   createRealmApi,
   expectJsonOk,
   prepareSignedEventCbaApi,
+  projectFullDidToCoreId,
   registerEventSigner,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -49,7 +50,8 @@ function didKeyUser(prefix: string, identity: DidKeyIdentity): JointUser {
   const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
   return {
     name: `${prefix}-${stamp}`.toLowerCase(),
-    did: identity.did,
+    did: projectFullDidToCoreId(identity.did),
+    fullDid: identity.did,
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${prefix}-${stamp}`.toLowerCase(),
     displayName: `${prefix} ${stamp}`,

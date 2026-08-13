@@ -10,8 +10,9 @@ import {
   addRealmMemberApi,
   authHeaders,
   canonicalJson,
+  canonicalTimestamp,
   createRealmApi,
-  resolveDefaultStrandId,
+  grantCapabilityEventApi,
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
@@ -151,12 +152,50 @@ async function setupEncryptedMessage(
   });
   await addRealmMemberApi(request, aliceToken, realmId, bob.did);
   await addRealmMemberApi(request, aliceToken, realmId, reporter.did);
+  await grantCapabilityEventApi(request, aliceToken, {
+    ownerDid: alice.did,
+    realmId,
+    subjectDid: bob.did,
+    actions: ["ak.message.create"],
+  });
+
+  const strandCreatedAt = canonicalTimestamp();
+  const strandEvent = signedEventEnvelope({
+    actorDid: alice.did,
+    realmId,
+    kind: "ak.strand.create",
+    createdAt: strandCreatedAt,
+    payload: {
+      object: {
+        schema: "ak.schema.strand.v1",
+        realm_id: realmId,
+        tracks: {
+          discussion: {
+            enabled: true,
+            is_primary: true,
+            profile: "discussion",
+          },
+        },
+        created_by: alice.did,
+        created_at: strandCreatedAt,
+      },
+    },
+  });
+  const strandId = String(strandEvent.event_id).replace(
+    /^ak:event:/,
+    "ak:strand:",
+  );
+  await submitSignedEventApi(
+    request,
+    aliceToken,
+    strandEvent,
+    { context: "create encrypted moderation Strand" },
+  );
 
   const plaintext = `moderation evidence must not leak ${Date.now()}`;
   const ciphertext = Buffer.from(`opaque-ciphertext-${label}-${Date.now()}`, "utf8").toString(
     "base64url",
   );
-  const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
   const encryptedContent = encryptedEnvelope(ciphertext, realmId);
   const message = signedEventEnvelope({
     actorDid: bob.did,
@@ -240,7 +279,14 @@ function encryptedEnvelope(
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
-  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
+  const scopeRef = { kind: "realm", realm_id: realmId };
+  const aad = {
+    realm_id: realmId,
+    event_kind: "ak.message.create",
+    scope_digest: sha256Digest(
+      `ak.aad-scope-v1\0${canonicalJson(scopeRef)}\0${realmId}`,
+    ),
+  };
   const payloadMetadata = {
     scheme: "mls_rfc9420",
     version: "1.0",

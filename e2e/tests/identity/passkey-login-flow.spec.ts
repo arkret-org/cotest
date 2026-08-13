@@ -72,6 +72,7 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
 
     const returningUser = uniqueUser("passkey-login");
     returningUser.did = account.did;
+    returningUser.fullDid = account.fullDid;
     const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
     const context = page.context();

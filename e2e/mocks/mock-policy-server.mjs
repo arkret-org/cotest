@@ -51,7 +51,7 @@ const audienceDefault = process.env.MOCK_POLICY_SERVER_AUDIENCE ?? "soland";
 // across runs that share a persistent backing store).
 const serviceId =
   process.env.MOCK_POLICY_SERVER_DID ??
-  `did:web:policy-server.joint-e2e.local#${randomUUID().slice(0, 8)}`;
+  `did:web:policy-server-${randomUUID().slice(0, 8)}.joint-e2e.local`;
 
 const { privateKey, publicKey, jwks } = createEd25519KeyPair("mock-policy-server-key-1");
 const publicJwk = publicKey.export({ format: "jwk" });

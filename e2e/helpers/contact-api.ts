@@ -17,7 +17,12 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
+import {
+  type SolandKey,
+  solandBaseUrl,
+  solandServiceId,
+  solandServiceResolution,
+} from "./env";
 import {
   alignSignedEventToActorFrontierApi,
   acceptInviteApi,
@@ -552,6 +557,7 @@ export async function deliverInviteWithConsentGrant(
     invite_address: {
       subject_id: args.inviteeDid,
       recipient_service_id: recipientServiceId,
+      service_resolution: solandServiceResolution(args.recipientServer),
       recipient_service_kind: "principal_server",
     },
     introduction_evidence: evidence,
@@ -610,6 +616,7 @@ export async function deliverInviteExplicitAddress(
     invite_address: {
       subject_id: args.inviteeDid,
       recipient_service_id: recipientServiceId,
+      service_resolution: solandServiceResolution(args.recipientServer),
       recipient_service_kind: "principal_server",
     },
     introduction_evidence: evidence,

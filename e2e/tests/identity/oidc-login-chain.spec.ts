@@ -123,6 +123,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
       ...seed,
       name: account.handle,
       did: account.did,
+      fullDid: account.fullDid,
       handle: `@${account.handle}`,
       displayName: account.displayName,
     };

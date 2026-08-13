@@ -42,10 +42,14 @@ import {
   registerRequestAuth,
   typedId,
 } from "./soland-api";
+import { base58btcEncode } from "./encoding";
 
 export type JointUser = {
   name: string;
+  /// Stable business identity projected through the active DID method adapter.
   did: string;
+  /// Resolvable DID retained only for registration and proof-method boundaries.
+  fullDid: string;
   deviceId: string;
   handle: string;
   displayName: string;
@@ -1139,14 +1143,17 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   const stamp = randomUUID();
   const slug = `${prefix}-${stamp}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
-  const principalDid = (() => {
+  const scid = base58btcEncode(
+    Buffer.concat([Buffer.from([0x12, 0x20]), randomBytes(32)]),
+  );
+  const principalFullDid = (() => {
     if (!server) {
-      return `did:webvh:z6mkfixture:${slug}.example`;
+      return `did:webvh:${scid}:${slug}.example`;
     }
     const serviceDid = solandServiceFullId(server);
     const webvh = /^did:webvh:[^:]+:([^:]+)(?::.*)?$/.exec(serviceDid);
     if (webvh?.[1]) {
-      return `did:webvh:z6mkfixture:${webvh[1]}:webvh:${slug}`;
+      return `did:webvh:${scid}:${webvh[1]}:webvh:${slug}`;
     }
     const web = /^did:web:([^:]+)(?::.*)?$/.exec(serviceDid);
     if (web?.[1]) {
@@ -1156,12 +1163,8 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   })();
   return {
     name: slug,
-    // did:webvh is the v1 core default principal method (identity-did.md).
-    // Dev-login principals use the fixture SCID form from the spec
-    // conformance vectors (`did:webvh:z6mkfixture:<host>`). Cross-server
-    // fixtures bind the principal authority to their home Principal Server;
-    // unscoped single-server fixtures retain the compact historical form.
-    did: principalDid,
+    did: projectFullDidToCoreId(principalFullDid),
+    fullDid: principalFullDid,
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${slug}`,
     displayName: `${prefix} ${stamp}`,
@@ -1181,8 +1184,8 @@ export async function ensureRegistered(
   // the DID. Success is 200 (200|409 here for idempotent setup).
   const url = `${solandBaseUrl(opts.server)}/_arkret/gate/account/register`;
   const data = {
-    principal_id: projectFullDidToCoreId(user.did),
-    full_id: user.did,
+    principal_id: user.did,
+    full_id: user.fullDid,
     display_name: user.displayName,
     device_id: user.deviceId,
   };
@@ -1193,6 +1196,11 @@ export async function ensureRegistered(
   if (registrationBearer) {
     headers.authorization = `Bearer ${registrationBearer}`;
   }
+  registerEventSigner({
+    actorDid: user.did,
+    deviceId: user.deviceId,
+    verificationMethod: `${user.fullDid}#${user.deviceId}`,
+  });
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
   for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
     const response = await request.post(url, {
@@ -1219,7 +1227,7 @@ export async function issueDevSession(
 ): Promise<string> {
   const url = `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`;
   const data = {
-    actor: projectFullDidToCoreId(user.did),
+    actor: user.did,
     // Same actor (DID) can hold multiple device sessions: pass `deviceId` to
     // override the default per-user device. soland's dev-login registers each
     // distinct device_id in the device inventory, which is what drives the
@@ -1227,6 +1235,11 @@ export async function issueDevSession(
     device_id: opts.deviceId ?? user.deviceId,
     display_name: user.displayName,
   };
+  registerEventSigner({
+    actorDid: user.did,
+    deviceId: opts.deviceId ?? user.deviceId,
+    verificationMethod: `${user.fullDid}#${opts.deviceId ?? user.deviceId}`,
+  });
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
   for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
     const response = await request.post(url, {
@@ -1333,6 +1346,7 @@ export async function createDpopUserSessionForAccount(
     ...seed,
     name: account.handle,
     did: grant.principalDid,
+    fullDid: account.fullDid,
     handle: `@${account.handle}`,
     displayName: account.displayName,
   };
@@ -1341,6 +1355,7 @@ export async function createDpopUserSessionForAccount(
   registerEventSigner({
     actorDid: user.did,
     deviceId: user.deviceId,
+    verificationMethod: `${user.fullDid}#${user.deviceId}`,
     signingSeedB64url: eventSigningSeedB64url,
   });
   const session = {
@@ -1537,7 +1552,7 @@ export async function openUser(
       value: JSON.stringify({
         server_url: serverUrl,
         principal_servers: [serverUrl],
-        account_did: opts.neutralLoginConfig ? "" : user.did,
+        account_did: opts.neutralLoginConfig ? "" : user.fullDid,
         device_id: opts.neutralLoginConfig ? "" : user.deviceId,
         session_credential: opts.neutralLoginConfig ? "" : sessionCredential,
       }),

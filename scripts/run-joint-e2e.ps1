@@ -4329,7 +4329,7 @@ if (Test-Path -LiteralPath $serviceLogDir) {
 }
 foreach ($directory in Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue) {
     if ($directory.Name -match '(?i)(state|objects|diagnostic|test-results|playwright-output|crash|checkpoint|telemetry)') {
-        if ($directory.Name -ieq "soland-state") {
+        if ($directory.Name -match '(?i)^soland(?:-[a-z0-9_-]+)?-state$') {
             # The service identity bundle is a durable restore store whose
             # signed registration receipts and WebVH operations necessarily
             # contain JWS evidence. Classify it separately; scanning the whole
@@ -4363,8 +4363,13 @@ $secretScanRootDescriptors = @(
 # The verified service-identity bundle is durable protocol state: its JWS
 # receipt chain is required for restart/restore, while private recovery
 # material remains forbidden by the category/class verdict matrix.
-$identityBundleDir = Join-Path $jointDir "soland-state\identity-bundle"
-if (Test-Path -LiteralPath $identityBundleDir) {
+$identityBundleDirs = @(
+    Get-ChildItem -LiteralPath $jointDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '(?i)^soland(?:-[a-z0-9_-]+)?-state$' } |
+        ForEach-Object { Join-Path $_.FullName "identity-bundle" } |
+        Where-Object { Test-Path -LiteralPath $_ }
+)
+foreach ($identityBundleDir in $identityBundleDirs) {
     $secretScanRootDescriptors += [pscustomobject]@{
         path           = $identityBundleDir
         artifact_class = "durable_protocol_store"

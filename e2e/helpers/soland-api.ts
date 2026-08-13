@@ -61,7 +61,7 @@ export type EventProofMode = "dev-proof" | "detached-jws";
 
 type RegisteredEventSigner = {
   verificationMethod: string;
-  signingSeedB64url: string;
+  signingSeedB64url?: string;
 };
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
@@ -94,15 +94,25 @@ export function registerEventSigner(args: {
   actorDid: string;
   deviceId: string;
   verificationMethod?: string;
-  signingSeedB64url: string;
+  signingSeedB64url?: string;
 }): void {
+  const actorId = canonicalDidCoreId(args.actorDid);
+  const verificationMethod =
+    args.verificationMethod ??
+    (args.actorDid.startsWith("did:")
+      ? `${args.actorDid}#${args.deviceId}`
+      : undefined);
+  if (!verificationMethod) {
+    throw new Error(
+      "registerEventSigner requires a full-DID verification method for a core actor id",
+    );
+  }
   const signer = {
-    verificationMethod:
-      args.verificationMethod ?? `${args.actorDid}#${args.deviceId}`,
+    verificationMethod,
     signingSeedB64url: args.signingSeedB64url,
   };
   registeredEventSigners.set(args.actorDid, signer);
-  registeredEventSigners.set(projectFullDidToCoreId(args.actorDid), signer);
+  registeredEventSigners.set(actorId, signer);
 }
 
 function eventSignerFor(
@@ -127,6 +137,9 @@ export function signWithRegisteredEventSigner(
 ): string | undefined {
   const registered = eventSignerFor(actorDid, verificationMethod);
   if (!registered) {
+    return undefined;
+  }
+  if (!registered.signingSeedB64url) {
     return undefined;
   }
   const seed = Buffer.from(registered.signingSeedB64url, "base64url");
@@ -246,13 +259,19 @@ export function registerPrincipalControlRealm(
 
 export function principalControlRealmForDid(did: string): string {
   const principalId = canonicalDidCoreId(did);
-  const realmId = acceptedPrincipalControlRealms.get(principalId);
+  const realmId = principalControlRealmForDidIfKnown(principalId);
   if (!realmId) {
     throw new Error(
       `event-derived PCR id for ${principalId} is unavailable; register its accepted create Event first`,
     );
   }
   return realmId;
+}
+
+export function principalControlRealmForDidIfKnown(
+  did: string,
+): string | undefined {
+  return acceptedPrincipalControlRealms.get(canonicalDidCoreId(did));
 }
 
 // Re-exported authoritative base64url encoder (single source: encoding.ts).
@@ -2228,11 +2247,13 @@ export async function submitSignedEventApi(
     );
     const realmId = stringValue(envelope.realm_id);
     const actorDid = stringValue(envelope.actor_id);
+    const actorControlRealm = actorDid
+      ? principalControlRealmForDidIfKnown(actorDid)
+      : undefined;
     const previousControlRoot =
       controlControlProposalAck &&
       realmId &&
-      actorDid &&
-      realmId !== principalControlRealmForDid(actorDid)
+      (!actorControlRealm || realmId !== actorControlRealm)
         ? (await readRealmSealFrontier(request, token, realmId, opts.server))
             .control_event_set_root
         : undefined;
@@ -2641,10 +2662,14 @@ export function localPrincipalControlProposalAck(
   const scopeRef = event.scope_ref as Record<string, unknown> | undefined;
   const realmId =
     stringValue(event.realm_id) ?? stringValue(scopeRef?.realm_id);
+  const actorControlRealm = actorDid
+    ? principalControlRealmForDidIfKnown(actorDid)
+    : undefined;
   if (
     !actorDid ||
     !realmId ||
-    realmId !== principalControlRealmForDid(actorDid)
+    !actorControlRealm ||
+    realmId !== actorControlRealm
   ) {
     return undefined;
   }
@@ -2889,8 +2914,11 @@ export async function advanceEnvelopeToActorFrontier(
   const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/events/frontier`;
   const response = await request.fetch(frontierUrl, {
     method: "QUERY",
-    data: { actor_id: actorDid, realm_id: realmId },
-    headers: authHeaders(token, "QUERY", frontierUrl),
+    data: canonicalJson({ actor_id: actorDid, realm_id: realmId }),
+    headers: {
+      ...authHeaders(token, "QUERY", frontierUrl),
+      "content-type": "application/json",
+    },
   });
   if (allowInvisibleRealmGenesis && response.status() === 404) {
     const proofVerificationMethod = Array.isArray(envelope.proofs)
@@ -2980,8 +3008,11 @@ async function readRealmSealFrontier(
   const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/events/frontier`;
   const response = await request.fetch(frontierUrl, {
     method: "QUERY",
-    data: { realm_id: realmId },
-    headers: authHeaders(token, "QUERY", frontierUrl),
+    data: canonicalJson({ realm_id: realmId }),
+    headers: {
+      ...authHeaders(token, "QUERY", frontierUrl),
+      "content-type": "application/json",
+    },
   });
   // The endpoint answers 200 with an absent frontier before the genesis Seal
   // lands, so every member is treated as possibly missing and re-checked at
@@ -3334,7 +3365,7 @@ function eventAuthContext(
 ): Record<string, unknown> {
   const fragmentIndex = verificationMethod.indexOf("#");
   return {
-    did: actorDid,
+    actor_id: actorDid,
     key_id:
       fragmentIndex >= 0
         ? verificationMethod.slice(fragmentIndex + 1)
@@ -4080,6 +4111,7 @@ type CotestWireCommand =
   | "event-derived-id"
   | "mimi-consent-proof"
   | "principal-control-realm-id"
+  | "account-handoff-outcome"
   | "account-handoff-request"
   | "principal-registration-fixture"
   | "principal-service-binding-proof"

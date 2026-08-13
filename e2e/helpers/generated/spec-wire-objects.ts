@@ -72,8 +72,35 @@ export type RealmObject = {
   };
   "federation_policy"?: "open" | "restricted" | "closed" | "quarantine";
   "sync_endpoints"?: Array<{
-    "did": string;
-    "endpoint": string;
+    "service_id": string;
+    "service_resolution": {
+      "inline": {
+        "record": {
+          "service_id": string;
+          "service_kind": string;
+          "full_id": string;
+          "method_history_head": string;
+          "version_id": string;
+          "resolution_event_ref": string;
+          "record_sequence": number;
+          "previous_record_digest": string | null;
+          "current_record_url": string;
+          "base_url": string;
+          "describe_digest": string;
+          "issued_at": string;
+          "refresh_after": string;
+          "expires_at": string;
+        };
+        "proof": {
+          "verification_method": string;
+          "created_at": string;
+          "jws": string;
+        };
+      };
+    } | {
+      "current_record_url": string;
+      "pinned_record_digest"?: string;
+    };
     "role": "primary" | "mirror" | "notary" | "sync" | "search_projection" | "federation_peer";
     "service_kind": "principal_server" | "sync_node" | "notary" | "search_service" | "archive_node" | "key_recovery_service" | "recovery_service";
     "plaintext_visible": boolean;
@@ -175,6 +202,13 @@ export type CapabilityGrantObject = {
     "kind": "condition";
     "required_claims": unknown[];
     [key: string]: unknown;
+  };
+  "subject_authority_instance"?: {
+    "principal_id": string;
+    "principal_server_id": string;
+    "pcr_realm_id": string;
+    "principal_genesis_receipt_digest": string;
+    "authority_instance_digest": string;
   };
   "actions": string[];
   "resources": Array<{
@@ -404,7 +438,7 @@ export type InviteDeliveryRequestBody = {
     }>;
     "seal_ref"?: string;
     "auth_context"?: {
-      "did": string;
+      "actor_id": string;
       "key_id": string;
       "key_epoch": number;
       "credential_epoch"?: number;
@@ -443,6 +477,35 @@ export type InviteDeliveryRequestBody = {
   "invite_address": {
     "subject_id": string;
     "recipient_service_id": string;
+    "service_resolution": {
+      "inline": {
+        "record": {
+          "service_id": string;
+          "service_kind": string;
+          "full_id": string;
+          "method_history_head": string;
+          "version_id": string;
+          "resolution_event_ref": string;
+          "record_sequence": number;
+          "previous_record_digest": string | null;
+          "current_record_url": string;
+          "base_url": string;
+          "describe_digest": string;
+          "issued_at": string;
+          "refresh_after": string;
+          "expires_at": string;
+        };
+        "proof": {
+          "verification_method": string;
+          "created_at": string;
+          "jws": string;
+        };
+      };
+    } | {
+      "current_record_url": string;
+      "pinned_record_digest"?: string;
+    };
+    "route_assistance"?: unknown;
     "recipient_service_kind"?: "principal_server";
   };
   "introduction_evidence": {
@@ -451,6 +514,35 @@ export type InviteDeliveryRequestBody = {
       "schema": "ak.schema.principal_locator.v1";
       "subject_id": string;
       "recipient_service_id": string;
+      "service_resolution": {
+        "inline": {
+          "record": {
+            "service_id": string;
+            "service_kind": string;
+            "full_id": string;
+            "method_history_head": string;
+            "version_id": string;
+            "resolution_event_ref": string;
+            "record_sequence": number;
+            "previous_record_digest": string | null;
+            "current_record_url": string;
+            "base_url": string;
+            "describe_digest": string;
+            "issued_at": string;
+            "refresh_after": string;
+            "expires_at": string;
+          };
+          "proof": {
+            "verification_method": string;
+            "created_at": string;
+            "jws": string;
+          };
+        };
+      } | {
+        "current_record_url": string;
+        "pinned_record_digest"?: string;
+      };
+      "route_assistance"?: unknown;
       "recipient_service_kind"?: "principal_server";
       "issued_at": string;
       "expires_at": string;
@@ -501,6 +593,34 @@ export type InviteDeliveryRequestBody = {
       "claim_scope"?: Record<string, unknown>;
       "member_delivery_binding"?: {
         "recipient_service_id": string;
+        "service_resolution": {
+          "inline": {
+            "record": {
+              "service_id": string;
+              "service_kind": string;
+              "full_id": string;
+              "method_history_head": string;
+              "version_id": string;
+              "resolution_event_ref": string;
+              "record_sequence": number;
+              "previous_record_digest": string | null;
+              "current_record_url": string;
+              "base_url": string;
+              "describe_digest": string;
+              "issued_at": string;
+              "refresh_after": string;
+              "expires_at": string;
+            };
+            "proof": {
+              "verification_method": string;
+              "created_at": string;
+              "jws": string;
+            };
+          };
+        } | {
+          "current_record_url": string;
+          "pinned_record_digest"?: string;
+        };
         "recipient_service_kind"?: "principal_server";
         "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
         "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "key_packages">;
@@ -526,10 +646,45 @@ export type InviteDeliveryRequestBody = {
     };
     "member_delivery_binding_candidate"?: {
       "subject_id": string;
+      "principal_authority_instance": {
+        "principal_id": string;
+        "principal_server_id": string;
+        "pcr_realm_id": string;
+        "principal_genesis_receipt_digest": string;
+        "authority_instance_digest": string;
+      };
       "handle": string;
       "handle_aliases"?: string[];
       "member_delivery_binding": {
         "recipient_service_id": string;
+        "service_resolution": {
+          "inline": {
+            "record": {
+              "service_id": string;
+              "service_kind": string;
+              "full_id": string;
+              "method_history_head": string;
+              "version_id": string;
+              "resolution_event_ref": string;
+              "record_sequence": number;
+              "previous_record_digest": string | null;
+              "current_record_url": string;
+              "base_url": string;
+              "describe_digest": string;
+              "issued_at": string;
+              "refresh_after": string;
+              "expires_at": string;
+            };
+            "proof": {
+              "verification_method": string;
+              "created_at": string;
+              "jws": string;
+            };
+          };
+        } | {
+          "current_record_url": string;
+          "pinned_record_digest"?: string;
+        };
         "recipient_service_kind"?: "principal_server";
         "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
         "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "key_packages">;
@@ -740,7 +895,7 @@ export type EventFederationSubmission = {
     }>;
     "seal_ref"?: string;
     "auth_context"?: {
-      "did": string;
+      "actor_id": string;
       "key_id": string;
       "key_epoch": number;
       "credential_epoch"?: number;

@@ -349,6 +349,7 @@ test.describe("key backup + restore", () => {
     const deviceAUser = uniqueUser("a3-oidc-mls-a");
     if (registeredAccount) {
       deviceAUser.did = registeredAccount.did;
+      deviceAUser.fullDid = registeredAccount.fullDid;
       deviceAUser.deviceId = registeredAccount.genesisDeviceId;
     }
     const deviceA = await openUserPage(browser, deviceAUser);

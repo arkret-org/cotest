@@ -80,6 +80,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     // from an unbound OAuth subject.
     const returningUser = uniqueUser("oidc-login");
     returningUser.did = account.did;
+    returningUser.fullDid = account.fullDid;
     const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
     try {
@@ -163,6 +164,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     const account = await registerCoauthPasswordAccount(request, coauth!);
     const returningUser = uniqueUser("forged-unknown");
     returningUser.did = account.did;
+    returningUser.fullDid = account.fullDid;
     const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
     try {

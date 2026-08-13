@@ -1,7 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import {
+  solandBaseUrl,
+  solandServiceId,
+  solandServiceResolution,
+} from "../../helpers/env";
 import type { InviteDeliveryRequestBodyBodyBody } from "../../helpers/soland-api";
 import {
   canonicalTimestamp,
@@ -73,6 +77,7 @@ test.describe("invite addressing", () => {
           inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
         invite_address: {
           subject_id: invitee,
+          service_resolution: solandServiceResolution(),
           ...inviteDeliveryTarget,
         },
         introduction_evidence: introductionEvidence,

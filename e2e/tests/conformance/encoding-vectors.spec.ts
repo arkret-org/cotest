@@ -146,7 +146,8 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/encode`,
       {
-        data: { vector_id: v.vector_id, input: v.input },
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({ vector_id: v.vector_id, input: v.input }),
       },
     );
     expect(resp.status()).toBe(200);
@@ -165,7 +166,8 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/encode`,
       {
-        data: { vector_id: v.vector_id, input: v.input },
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({ vector_id: v.vector_id, input: v.input }),
       },
     );
     expect(resp.status()).toBe(200);

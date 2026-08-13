@@ -51,10 +51,12 @@ import {
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
+  createDpopUserSession,
   ensureRegistered,
   issueInviteLocatorToken,
   issueDevSession,
   openDpopUserPage,
+  openDpopUserPageFromSession,
   openUserPage,
   selfPathHeadersForDpopSession,
   uniqueUser,
@@ -228,58 +230,54 @@ test.describe("cross-server federation", () => {
     expect(response.status()).toBeLessThan(500);
   });
 
-  test("alice on α and bob on β are independently registered + dev-logged-in against their own server", async ({
+  test("alice uses canonical DPoP browser auth on α while bob holds an independent dev API session on β", async ({
     browser,
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s2-alice-${stamp}`);
+    const aliceSession = await createDpopUserSession(
+      request,
+      `s2-alice-${stamp}`,
+      { server: "alpha" },
+    );
     const bob = uniqueUser(`s2-bob-${stamp}`);
-
-    await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, bob, { server: "beta" });
-    const aliceToken = await issueDevSession(request, alice, {
-      server: "alpha",
-    });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
+    expect(aliceSession, "alpha DPoP session").toBeTruthy();
 
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-      server: "alpha",
-    });
-    const bobPage = await openUserPage(browser, bob, {
-      sessionCredential: bobToken,
-      server: "beta",
-    });
+    const alicePageSession = await openDpopUserPageFromSession(
+      browser,
+      aliceSession,
+      { server: "alpha", prepareMlsDevice: false },
+    );
+    const alicePage = alicePageSession!.page;
 
     try {
       await alicePage.gotoHome();
       expect(alicePage.serverUrl).toBe(solandBaseUrl("alpha"));
-      await bobPage.gotoHome();
-      expect(bobPage.serverUrl).toBe(solandBaseUrl("beta"));
 
       // Each principal context binds to its own server.
-      const aliceMeResp = await request.get(
-        `${solandBaseUrl("alpha")}/_soland/self/account/me`,
-        {
-          headers: { authorization: `Bearer ${aliceToken}` },
-        },
-      );
+      const aliceMeUrl = `${solandBaseUrl("alpha")}/_soland/self/account/me`;
+      const aliceMeResp = await request.get(aliceMeUrl, {
+        headers: selfPathHeadersForDpopSession(
+          aliceSession!,
+          "GET",
+          aliceMeUrl,
+        ),
+      });
       expect(aliceMeResp.ok()).toBeTruthy();
       const aliceMe = await aliceMeResp.json();
-      expect(aliceMe.did).toBe(alice.did);
+      expect(aliceMe.did).toBe(aliceSession!.user.did);
 
-      const bobMeResp = await request.get(
-        `${solandBaseUrl("beta")}/_soland/self/account/me`,
-        {
-          headers: { authorization: `Bearer ${bobToken}` },
-        },
-      );
+      const bobMeUrl = `${solandBaseUrl("beta")}/_soland/self/account/me`;
+      const bobMeResp = await request.get(bobMeUrl, {
+        headers: { authorization: `Bearer ${bobToken}` },
+      });
       expect(bobMeResp.ok()).toBeTruthy();
       const bobMe = await bobMeResp.json();
       expect(bobMe.did).toBe(bob.did);
     } finally {
-      await Promise.allSettled([bobPage.close(), alicePage.close()]);
+      await alicePage.close();
     }
   });
 

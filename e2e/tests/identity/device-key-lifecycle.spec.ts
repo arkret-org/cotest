@@ -18,6 +18,7 @@ import {
   type JointUserPage,
 } from "../../helpers/users";
 import { encodeEd25519PubkeyMultibase } from "../../helpers/encoding";
+import { projectFullDidToCoreId } from "../../helpers/soland-api";
 
 type CapturedGrant = {
   jwt: string;
@@ -55,13 +56,15 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       handle: envHandle!,
       password: envPassword!,
     };
-    const principalDid = registeredAccount?.did ?? configuredDid;
+    const principalFullDid = registeredAccount?.fullDid ?? configuredDid;
     test.skip(
-      !principalDid,
+      !principalFullDid,
       "COTEST_REAL_OIDC_PRINCIPAL_DID is required with a preconfigured OIDC account",
     );
     const returningUser = uniqueUser("oidc-key-life");
-    returningUser.did = principalDid!;
+    returningUser.fullDid = principalFullDid!;
+    returningUser.did =
+      registeredAccount?.did ?? projectFullDidToCoreId(principalFullDid!);
     if (registeredAccount) {
       returningUser.deviceId = registeredAccount.genesisDeviceId;
     }

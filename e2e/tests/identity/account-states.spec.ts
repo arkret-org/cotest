@@ -60,6 +60,7 @@ test.describe("account states", () => {
       ...seed,
       name: account.handle,
       did: account.did,
+      fullDid: account.fullDid,
       handle: `@${account.handle}`,
       displayName: account.displayName,
     };

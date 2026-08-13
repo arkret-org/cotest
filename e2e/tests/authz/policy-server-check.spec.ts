@@ -14,7 +14,7 @@
 //   soland's outbound policy client (soland/crates/http/src/authz/policy_client.rs)
 //   requires a spec §3-conformant PolicyCheckOutcome — bound_to echo, three
 //   frontier digests matching soland's own runtime-computed values, and an
-//   Ed25519 signature whose kid resolves under the declared policy_server_did
+//   Ed25519 signature whose kid resolves under the declared policy_server_service_id
 //   via soland's DID resolver. The harness mock cannot satisfy that (it neither
 //   computes soland's internal membership/policy frontiers nor publishes a
 //   DID document soland trusts). Per spec §4 fail-closed default, soland
@@ -37,9 +37,12 @@ import {
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalDidCoreId,
+  canonicalJson,
   createRealmApi,
   currentActorDidApi,
   expectJsonOk,
+  prepareSignedEventSubmissionApi,
   rawSubmitSignedEventApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -51,6 +54,8 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
+const policyServerCellValues = new Map<string, Record<string, unknown>>();
+
 // Configure a realm's external policy server to point at the harness mock.
 async function declarePolicyServer(
   request: APIRequestContext,
@@ -59,24 +64,98 @@ async function declarePolicyServer(
   baseUrl: string,
   did: string,
   opts: { cacheTtlSeconds?: number; timeoutMs?: number } = {},
-): Promise<void> {
+): Promise<Record<string, unknown>> {
+  const actorDid = await currentActorDidApi(request, token);
+  const payload = {
+    policy_server_service_id: canonicalDidCoreId(did),
+    policy_server_url: `${baseUrl}/_arkret/self/policy/check`,
+    cache_ttl_seconds: opts.cacheTtlSeconds ?? 5,
+    timeout_ms: opts.timeoutMs ?? 1500,
+    on_timeout: "fail_closed",
+  };
+  const previousValue = policyServerCellValues.get(realmId);
+  const event = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.realm.policy_server",
+    preconditions: previousValue
+      ? [
+          {
+            cell: "ak:cell:ak.component.realm.policy_server.v1:null",
+            predicate: { op: "head_eq", value: previousValue },
+          },
+        ]
+      : undefined,
+    payload,
+  });
+  const submission = await prepareSignedEventSubmissionApi(
+    request,
+    token,
+    event,
+    { context: `prepare policy server declaration for ${realmId}` },
+  );
   const put = await request.put(
     `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
     {
-      headers: authHeaders(token),
-      data: {
-        policy_server_did: did,
-        // soland's reducer (realm_policy_server.rs::validate_policy_server_url)
-        // pins the path to exactly /_arkret/self/policy/check and forbids any
-        // query string, so the declared URL is always the bare check endpoint.
-        policy_server_url: `${baseUrl}/_arkret/self/policy/check`,
-        cache_ttl_seconds: opts.cacheTtlSeconds ?? 5,
-        timeout_ms: opts.timeoutMs ?? 1500,
-        on_timeout: "fail_closed",
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
       },
+      data: canonicalJson({
+        policy_server_event: submission,
+      }),
     },
   );
-  expect(put.status(), "declare realm policy server").toBe(200);
+  const projected = await expectJsonOk<Record<string, unknown>>(
+    put,
+    "declare realm policy server",
+  );
+  policyServerCellValues.set(realmId, payload);
+  return projected;
+}
+
+async function deletePolicyServer(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+) {
+  const actorDid = await currentActorDidApi(request, token);
+  const previousValue = policyServerCellValues.get(realmId);
+  const payload = { tombstone: true };
+  const event = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.realm.policy_server",
+    preconditions: previousValue
+      ? [
+          {
+            cell: "ak:cell:ak.component.realm.policy_server.v1:null",
+            predicate: { op: "head_eq", value: previousValue },
+          },
+        ]
+      : undefined,
+    payload,
+  });
+  const submission = await prepareSignedEventSubmissionApi(
+    request,
+    token,
+    event,
+    { context: `prepare policy server tombstone for ${realmId}` },
+  );
+  const response = await request.delete(
+    `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
+    {
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({ policy_server_event: submission }),
+    },
+  );
+  if (response.ok()) {
+    policyServerCellValues.set(realmId, payload);
+  }
+  return response;
 }
 
 // Submit a gated ak.message.create through the same canonical publication rail
@@ -143,8 +222,11 @@ async function policyServerEvents(
   const url = `${solandBaseUrl()}/_arkret/self/events`;
   const response = await request.fetch(url, {
     method: "QUERY",
-    data: { realms: [realmId], limit: 200 },
-    headers: authHeaders(token),
+    data: canonicalJson({ realms: [realmId], limit: 200 }),
+    headers: {
+      ...authHeaders(token),
+      "content-type": "application/json",
+    },
   });
   const body = await expectJsonOk<{ events?: PolicyServerEvent[] }>(
     response,
@@ -209,25 +291,17 @@ test.describe("policy server check", () => {
     const policyServerDid = "did:web:policy.example.com";
     const policyServerUrl = "https://policy.example.com/_arkret/self/policy/check";
 
-    const put = await request.put(
-      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
-      {
-        headers: authHeaders(aliceToken),
-        data: {
-          policy_server_did: policyServerDid,
-          policy_server_url: policyServerUrl,
-          cache_ttl_seconds: 5,
-          timeout_ms: 1500,
-          on_timeout: "fail_closed",
-        },
-      },
-    );
-    const projected = await expectJsonOk<Record<string, unknown>>(
-      put,
-      "put realm policy server",
+    const projected = await declarePolicyServer(
+      request,
+      aliceToken,
+      realmId,
+      "https://policy.example.com",
+      policyServerDid,
     );
     expect(projected.realm_id).toBe(realmId);
-    expect(projected.policy_server_did).toBe(policyServerDid);
+    expect(projected.policy_server_service_id).toBe(
+      canonicalDidCoreId(policyServerDid),
+    );
     expect(projected.policy_server_url).toBe(policyServerUrl);
     expect(projected.from_org_fallback).toBe(false);
 
@@ -246,15 +320,19 @@ test.describe("policy server check", () => {
     expect(declaration, "PUT must append a canonical policy-server Event").toBeTruthy();
     expect(declaration?.event_id).toMatch(/^ak:event:/);
     expect(declaration?.actor_id).toBe(alice.did);
-    expect(declaration?.executed_by).toMatch(/^did:/);
-    expect(declaration?.executed_by).not.toBe(alice.did);
+    expect(declaration?.executed_by).toBeUndefined();
     expect(declaration?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
     expect(declaration?.proofs?.length ?? 0).toBeGreaterThan(0);
 
-    const frontier = await request.get(
-      `${solandBaseUrl()}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken) },
-    );
+    const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+    const frontier = await request.fetch(frontierUrl, {
+      method: "QUERY",
+      headers: {
+        ...authHeaders(aliceToken, "QUERY", frontierUrl),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({ realm_id: realmId }),
+    });
     const frontierBody = await expectJsonOk<{
       frontier?: { kind?: string; seal_id?: string };
     }>(frontier, "read policy-server Seal frontier");
@@ -269,20 +347,25 @@ test.describe("policy server check", () => {
       get,
       "get realm policy server",
     );
-    expect(fetched.policy_server_did).toBe(policyServerDid);
+    expect(fetched.policy_server_service_id).toBe(
+      canonicalDidCoreId(policyServerDid),
+    );
     expect(fetched.policy_server_url).toBe(policyServerUrl);
 
-    const denied = await request.post(`${solandBaseUrl()}/_arkret/self/authz/check`, {
-      headers: authHeaders(bobToken),
-      data: {
+    const authzCheckUrl = `${solandBaseUrl()}/_arkret/self/authz/check`;
+    const denied = await request.post(authzCheckUrl, {
+      headers: {
+        ...authHeaders(bobToken),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
         actor_id: bob.did,
         action: "ak.message.create",
         resource: {
           kind: "realm",
-          id: realmId,
           realm_id: realmId,
         },
-      },
+      }),
     });
     const decision = await expectJsonOk<{
       decision: string;
@@ -334,7 +417,7 @@ test.describe("policy server check", () => {
     // Reset the mock to a clean, permissive baseline to make the point that the
     // deny is soland's fail-closed default (spec section 4), not the mock's
     // verdict: soland cannot verify the mock's simplified, unsigned response
-    // shape against the declared policy_server_did, so the gate denies.
+    // shape against the declared policy_server_service_id, so the gate denies.
     const reset = await request.delete(`${baseUrl}/scenarios`);
     expect(reset.status()).toBe(200);
     await request.post(`${baseUrl}/scenarios`, { data: { default: "allow" } });
@@ -475,12 +558,15 @@ test.describe("policy server check", () => {
       const link = await request.post(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/links`,
         {
-          headers: authHeaders(aliceToken),
-          data: {
+          headers: {
+            ...authHeaders(aliceToken),
+            "content-type": "application/json",
+          },
+          data: canonicalJson({
             target_realm_id: orgRealmId,
             link_kind: "governed_by",
             status: "active",
-          },
+          }),
         },
       );
       const linkBody = await expectJsonOk<Record<string, unknown>>(
@@ -501,15 +587,18 @@ test.describe("policy server check", () => {
         "read child policy_server through governed_by fallback",
       );
       expect(fallbackBody.realm_id).toBe(orgRealmId);
-      expect(fallbackBody.policy_server_did).toBe(orgDid);
+      expect(fallbackBody.policy_server_service_id).toBe(
+        canonicalDidCoreId(orgDid),
+      );
       expect(fallbackBody.policy_server_url).toBe(orgUrl);
       expect(fallbackBody.cache_ttl_seconds).toBe(17);
       expect(fallbackBody.timeout_ms).toBe(1200);
       expect(fallbackBody.from_org_fallback).toBe(true);
 
-      const inheritedOnlyDelete = await request.delete(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
-        { headers: authHeaders(aliceToken) },
+      const inheritedOnlyDelete = await deletePolicyServer(
+        request,
+        aliceToken,
+        childRealmId,
       );
       expect(
         inheritedOnlyDelete.status(),
@@ -533,15 +622,18 @@ test.describe("policy server check", () => {
         "read child direct policy_server overriding fallback",
       );
       expect(directBody.realm_id).toBe(childRealmId);
-      expect(directBody.policy_server_did).toBe(childDid);
+      expect(directBody.policy_server_service_id).toBe(
+        canonicalDidCoreId(childDid),
+      );
       expect(directBody.policy_server_url).toBe(childUrl);
       expect(directBody.cache_ttl_seconds).toBe(3);
       expect(directBody.timeout_ms).toBe(900);
       expect(directBody.from_org_fallback).toBe(false);
 
-      const deleted = await request.delete(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
-        { headers: authHeaders(aliceToken) },
+      const deleted = await deletePolicyServer(
+        request,
+        aliceToken,
+        childRealmId,
       );
       expect(deleted.status(), "tombstone direct child policy server").toBe(200);
 
@@ -554,7 +646,9 @@ test.describe("policy server check", () => {
         "read organization policy_server after child tombstone",
       );
       expect(restoredFallbackBody.realm_id).toBe(orgRealmId);
-      expect(restoredFallbackBody.policy_server_did).toBe(orgDid);
+      expect(restoredFallbackBody.policy_server_service_id).toBe(
+        canonicalDidCoreId(orgDid),
+      );
       expect(restoredFallbackBody.from_org_fallback).toBe(true);
 
       const childPolicyEvents = await policyServerEvents(
@@ -571,13 +665,14 @@ test.describe("policy server check", () => {
         "DELETE must append a canonical policy-server tombstone Event",
       ).toBeTruthy();
       expect(tombstone?.actor_id).toBe(alice.did);
-      expect(tombstone?.executed_by).toMatch(/^did:/);
+      expect(tombstone?.executed_by).toBeUndefined();
       expect(tombstone?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
       expect(tombstone?.proofs?.length ?? 0).toBeGreaterThan(0);
 
-      const repeatedDelete = await request.delete(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
-        { headers: authHeaders(aliceToken) },
+      const repeatedDelete = await deletePolicyServer(
+        request,
+        aliceToken,
+        childRealmId,
       );
       expect(repeatedDelete.status(), "repeat policy server tombstone").toBe(200);
     },

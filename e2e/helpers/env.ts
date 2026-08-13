@@ -76,6 +76,15 @@ export function solandServiceFullId(key: SolandKey = "default"): string {
   );
 }
 
+export function solandServiceResolution(
+  key: SolandKey = "default",
+): { current_record_url: string } {
+  const serviceId = solandServiceId(key);
+  return {
+    current_record_url: `${solandBaseUrl(key)}/_arkret/open/services/${encodeURIComponent(serviceId)}/resolution`,
+  };
+}
+
 // True when the dual-soland topology (used by S2 cross-server federation)
 // has been provisioned by the harness. Scenarios consult this to skip
 // rather than fail when running on the single-server profile.
