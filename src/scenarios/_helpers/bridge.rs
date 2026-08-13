@@ -28,6 +28,10 @@ impl EnvOverride {
             // SAFETY: EnvOverride serializes all writes performed through this
             // helper with a process-wide mutex and holds the guard until Drop
             // restores the previous values.
+            #[allow(
+                unsafe_code,
+                reason = "the test helper configures process environment while holding its global guard"
+            )]
             unsafe {
                 match value {
                     Some(value) => env::set_var(key, value),
@@ -47,6 +51,10 @@ impl Drop for EnvOverride {
         for (key, value) in &self.previous {
             // SAFETY: the EnvOverride guard is still held while restoring the
             // previous process environment values.
+            #[allow(
+                unsafe_code,
+                reason = "the test helper restores process environment while holding its global guard"
+            )]
             unsafe {
                 match value {
                     Some(value) => env::set_var(key, value),

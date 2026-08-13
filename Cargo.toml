@@ -5,6 +5,9 @@ edition = "2024"
 rust-version = "1.97"
 publish = false
 
+[lints]
+workspace = true
+
 [features]
 # C.8 — opt-in testcontainers-backed Postgres bring-up for Linux CI.
 # `coauth_bootstrap` historically shelled out to the docker CLI because
@@ -108,6 +111,15 @@ serial_test = {workspace = true}
 
 [workspace]
 resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+mem_forget = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 [workspace.dependencies]
 anyhow = "1.0.102"

@@ -337,6 +337,10 @@ mod tests {
         // are `unsafe` in Rust 2024 edition; we accept it because the test
         // is self-contained and runs serially with itself via `Once`.
         let prior = std::env::var_os("COTEST_TRANSCRIPT_PATH");
+        #[allow(
+            unsafe_code,
+            reason = "the test fixture mutates process environment under its serialization guard"
+        )]
         unsafe {
             std::env::set_var("COTEST_TRANSCRIPT_PATH", &transcript);
         }
@@ -358,6 +362,10 @@ mod tests {
         assert!(join_result.is_err(), "expected child thread to panic");
 
         // Restore prior env state.
+        #[allow(
+            unsafe_code,
+            reason = "the test fixture restores process environment under its serialization guard"
+        )]
         unsafe {
             match prior {
                 Some(value) => std::env::set_var("COTEST_TRANSCRIPT_PATH", value),
