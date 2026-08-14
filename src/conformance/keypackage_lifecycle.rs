@@ -40,9 +40,9 @@ pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
 
 const KEYPACKAGE_LIFECYCLE_FIXTURE_FILE: &str = "keypackage-lifecycle-fixture.json";
 const KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA: &str =
-    "schemas/keypackage-operations.schema.json#/$defs/key_packages_upload_outcome";
+    "schemas/keypackage-operations.schema.json#/$defs/keypackages_upload_outcome";
 const KEY_PACKAGES_CLAIM_OUTCOME_SCHEMA: &str =
-    "schemas/keypackage-operations.schema.json#/$defs/key_packages_claim_outcome";
+    "schemas/keypackage-operations.schema.json#/$defs/keypackages_claim_outcome";
 const MLS_WELCOME_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_welcome_payload";
 const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
@@ -146,21 +146,12 @@ fn parse_time(value: &str) -> Result<DateTime<Utc>> {
     Ok(arkret_canonical::parse_timestamp_canonical(value)?)
 }
 
-fn require_root_generation_ref<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    let generation_ref = required_str(value, field)?;
-    let (version, entry_hash) = generation_ref
-        .split_once('-')
-        .ok_or_else(|| anyhow!("{field} must be a did:webvh version id"))?;
-    if version
-        .parse::<u64>()
-        .ok()
-        .filter(|version| *version > 0)
-        .is_none()
-        || entry_hash.is_empty()
-    {
-        bail!("{field} must be a non-zero did:webvh version id");
-    }
-    Ok(generation_ref)
+fn require_model_generation_ref(value: &Value, field: &str) -> Result<u64> {
+    value
+        .get(field)
+        .and_then(Value::as_u64)
+        .filter(|generation| *generation > 0)
+        .ok_or_else(|| anyhow!("{field} must be a positive PCR-local generation"))
 }
 
 fn core_did(value: &str) -> Result<DidCoreId> {
@@ -213,7 +204,7 @@ fn claim_record_value(
         "keypackage_digest": keypackage_digest,
         "principal_id": principal_id.as_str(),
         "device_id": device_id.as_str(),
-        "key_package": "AQID",
+        "keypackage": "AQID",
         "capabilities": ["ak.mls.profile.full"],
         "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
@@ -564,7 +555,7 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
     let upload_value = json!({
         "accepted": 0,
         "available_count": available_count,
-        "key_package_refs": ["sha256:5555555555555555555555555555555555555555555555555555555555555555"]
+        "keypackage_refs": ["sha256:5555555555555555555555555555555555555555555555555555555555555555"]
     });
     schema_valid(KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA, &upload_value)?;
     let upload: KeyPackagesUploadOutcome = serde_json::from_value(upload_value)?;
@@ -1065,7 +1056,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let requester_device_id = required_str(vector, "requester_device_id")?;
     arkret_wire::EventId::new(device_authorize_event_id.to_owned())?;
     device(requester_device_id)?;
-    require_root_generation_ref(vector, "model_generation_ref")?;
+    require_model_generation_ref(vector, "model_generation_ref")?;
     let intended_realm_id = realm(intended_realm_id)?;
     let requester_did = full_did(requester_did)?;
     let requester_core_id = arkret_identifiers::project_full_id_to_core_id(&requester_did)?;
@@ -1316,7 +1307,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     }
     device(requester_device_id)?;
     arkret_wire::EventId::new(device_authorization_event_id.to_owned())?;
-    require_root_generation_ref(vector, "model_generation_ref")?;
+    require_model_generation_ref(vector, "model_generation_ref")?;
 
     let mut request = vector["proof_free_request"].clone();
     request["holder_acceptance_proof"] = json!({
