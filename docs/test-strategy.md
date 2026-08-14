@@ -265,7 +265,7 @@ The runner performs a preflight before starting services: Node/npm/npx,
 Playwright config/package/browser registry, default cargo/dx startup tools,
 Docker daemon/image availability when `-SolandRuntime docker` is used, and
 Docker/coauth/PostgreSQL image availability when `-StartCoauth` is used.
-Prebuilt Coauth, Starid, and Teabay binaries must be at least as new as the
+Prebuilt Coauth and Teabay binaries must be at least as new as the
 tracked Rust/build inputs in their repository and `arkret-rust-sdk` dependency;
 stale binaries fail before any service starts. `-PreflightOnly` runs these
 checks without starting the stack. `-RunnerSelfTest` exercises stale/fresh

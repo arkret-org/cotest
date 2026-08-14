@@ -49,6 +49,24 @@ struct PrincipalControlRealmInput {
 }
 
 #[derive(Debug, Deserialize)]
+struct WebvhPlaceholderDidInput {
+    base_url: String,
+    local_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WebvhGenesisInput {
+    base_url: String,
+    local_id: String,
+    root_seed_b64url: String,
+    next_root_public_key_multibase: String,
+    version_time: Option<String>,
+    /// The preliminary DID document, authored against the DID that
+    /// `webvh-placeholder-did` returns.
+    document: Value,
+}
+
+#[derive(Debug, Deserialize)]
 struct PrincipalRegistrationFixtureInput {
     principal_server_url: String,
     gate_account_base: String,
@@ -115,6 +133,8 @@ fn main() -> Result<()> {
         "event-derived-id" => event_derived_id(input)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
+        "webvh-placeholder-did" => webvh_placeholder_did_command(input)?,
+        "webvh-genesis" => webvh_genesis(input)?,
         "account-handoff-outcome" => account_handoff_outcome(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
@@ -492,6 +512,101 @@ fn build_pcr_genesis_unit(
         authorize,
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(device_seed),
     ))
+}
+
+/// The webvh method authority (`host` or `host%3Aport`) of a hosting endpoint.
+fn webvh_method_authority(base_url: &str) -> Result<String> {
+    let endpoint = url::Url::parse(base_url).context("parse webvh hosting endpoint")?;
+    let host = endpoint
+        .host_str()
+        .context("webvh hosting endpoint has no host")?;
+    if !host.contains('.') {
+        bail!("webvh hosting host must contain a dot: {host}");
+    }
+    Ok(arkret::webvh::skeleton::webvh_authority_pair(host, endpoint.port()).0)
+}
+
+/// The preliminary `did:webvh:{SCID}:…` a genesis DID document is authored
+/// against. Callers build their document from this DID and hand it back to
+/// `webvh-genesis`, which substitutes the derived SCID over the whole entry.
+fn webvh_placeholder_did_command(input: Value) -> Result<Value> {
+    let input: WebvhPlaceholderDidInput =
+        serde_json::from_value(input).context("parse webvh placeholder DID input")?;
+    let method_authority = webvh_method_authority(&input.base_url)?;
+    Ok(json!({
+        "method_authority": method_authority,
+        "did": arkret::webvh::skeleton::webvh_placeholder_did(&method_authority, &input.local_id),
+    }))
+}
+
+/// Build one signed `did:webvh` entry-0 through the SDK builders.
+///
+/// The conformance harness owns no webvh construction of its own: SCID
+/// derivation, the whole-entry `{SCID}` substitution (identity-did.md §3.4.4),
+/// the entry hash and the `eddsa-jcs-2022` proof all come from the SDK, so a
+/// harness-minted genesis is byte-identical to a client-minted one.
+fn webvh_genesis(input: Value) -> Result<Value> {
+    use arkret::webvh::skeleton::{
+        WebvhInceptionSkeletonInput, build_webvh_inception_skeleton, derive_webvh_scid,
+        finalize_webvh_scid_substitution, format_webvh_did, webvh_entry_hash_multibase,
+        webvh_next_key_hash_value,
+    };
+
+    let input: WebvhGenesisInput =
+        serde_json::from_value(input).context("parse webvh genesis input")?;
+    let method_authority = webvh_method_authority(&input.base_url)?;
+    let root_signing = signing_key_from_seed(&input.root_seed_b64url)?;
+    let root_public_key_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+        &root_signing.verifying_key().to_bytes(),
+    );
+    if root_public_key_multibase == input.next_root_public_key_multibase {
+        bail!("active and next WebVH root keys must be distinct");
+    }
+    let version_time = match input.version_time {
+        Some(version_time) => version_time,
+        None => arkret_canonical::format_timestamp_canonical(Utc::now()),
+    };
+    let next_root_key_hash = webvh_next_key_hash_value(&input.next_root_public_key_multibase);
+    let skeleton = build_webvh_inception_skeleton(&WebvhInceptionSkeletonInput {
+        version_time: &version_time,
+        update_keys: std::slice::from_ref(&root_public_key_multibase),
+        next_key_hashes: std::slice::from_ref(&next_root_key_hash),
+        portable: None,
+        witness: None,
+        state: &input.document,
+    });
+    let scid = derive_webvh_scid(&skeleton).context("derive webvh SCID")?;
+    let mut entry = finalize_webvh_scid_substitution(&skeleton, &scid)
+        .context("substitute the derived webvh SCID")?;
+    let version_id = format!(
+        "1-{}",
+        webvh_entry_hash_multibase(&entry, &scid).context("hash the webvh genesis entry")?
+    );
+    let did = format_webvh_did(&method_authority, &scid, &input.local_id);
+    let did_document = entry
+        .get("state")
+        .cloned()
+        .context("webvh genesis entry has no DID document state")?;
+    if let Value::Object(map) = &mut entry {
+        map.insert("versionId".to_owned(), Value::String(version_id.clone()));
+    }
+    let proof = arkret_signatures::build_eddsa_jcs_2022_proof(
+        &entry,
+        &root_signing,
+        &format!("did:key:{root_public_key_multibase}#{root_public_key_multibase}"),
+        arkret_signatures::DataIntegrityProofPurpose::AssertionMethod,
+    )
+    .map_err(|error| anyhow::anyhow!("sign webvh genesis entry: {error}"))?;
+    if let Value::Object(map) = &mut entry {
+        map.insert("proof".to_owned(), Value::Array(vec![proof]));
+    }
+    Ok(json!({
+        "did": did,
+        "scid": scid,
+        "versionId": version_id,
+        "entry": entry,
+        "didDocument": did_document,
+    }))
 }
 
 fn account_handoff_request(input: Value) -> Result<Value> {

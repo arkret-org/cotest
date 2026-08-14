@@ -3,7 +3,7 @@
 //! # Why metrics rather than a resolver spy
 //!
 //! The task's original shape was an in-process `DidResolver` spy. cotest has no
-//! Cargo dependency on soland / teabay / coauth / starid / floria — they are
+//! Cargo dependency on soland / teabay / coauth / floria — they are
 //! pre-built sibling binaries driven over HTTP ([`super::external_binary`]) —
 //! so a Rust trait spy cannot be injected. The network-layer alternative (the
 //! counting DID host in [`super::did_host`]) is implemented and self-tested but

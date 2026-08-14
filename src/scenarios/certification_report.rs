@@ -60,12 +60,6 @@ const SERVICE_SPECS: &[ServiceSpec] = &[
         default_path: "/_arkret/find/directory/describe",
     },
     ServiceSpec {
-        service: "starid",
-        exact_env: "COTEST_STARID_DESCRIBE_URL",
-        base_env: "COTEST_STARID_BASE_URL",
-        default_path: "/describe",
-    },
-    ServiceSpec {
         service: "coauth",
         exact_env: "COTEST_COAUTH_DESCRIBE_URL",
         base_env: "COTEST_COAUTH_BASE_URL",
@@ -76,7 +70,7 @@ const SERVICE_SPECS: &[ServiceSpec] = &[
 pub async fn live_stack_certification_report_from_env() -> Result<StackCertificationReport> {
     // Bound every probe so a describe endpoint that accepts the connection but
     // never responds can't hang the report (and the CI job) indefinitely —
-    // matches the 5s convention used by teabay_resolve_realm / starid_replay.
+    // matches the 5s convention used by teabay_resolve_realm.
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(5))

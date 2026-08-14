@@ -77,27 +77,6 @@
           }
         }
       }
-    },
-    {
-      "name": "starid_production_health_cannot_be_ok_with_ephemeral_receipt_key",
-      "expect": "reject",
-      "describe": {
-        "service": "starid",
-        "ok": true,
-        "development_mode": false,
-        "receipt_signing_key_stable": false
-      }
-    },
-    {
-      "name": "starid_production_unhealthy_with_ephemeral_receipt_key_is_allowed",
-      "expect": "pass",
-      "describe": {
-        "service": "starid",
-        "ok": false,
-        "development_mode": false,
-        "receipt_signing_key_stable": false,
-        "unhealthy_reason": "production_receipt_signing_key_not_configured"
-      }
     }
   ]
 }

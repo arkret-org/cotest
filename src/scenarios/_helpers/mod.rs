@@ -8,7 +8,7 @@ pub mod coauth_bootstrap;
 pub mod did_host;
 pub mod external_binary;
 pub mod floria_bootstrap;
-pub mod four_service_bootstrap;
 pub mod http;
+pub mod joint_service_bootstrap;
 pub mod mock_http;
 pub mod service_metrics;

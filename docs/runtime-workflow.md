@@ -232,7 +232,7 @@ For the full product topology, keep Inkson and coauth enabled:
   -RunProfile joint-smoke
 ```
 
-When soland runs in Docker and coauth/starid/teabay/mocks run on the host, the
+When soland runs in Docker and coauth/teabay/mocks run on the host, the
 runner rewrites soland's outbound localhost URLs to `host.docker.internal`
 inside the container. Public URLs exposed to Playwright stay as
 `http://127.0.0.1:<port>` so browser behavior remains identical to process

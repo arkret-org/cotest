@@ -164,12 +164,6 @@ fn configured_targets() -> Result<Vec<DescribeTarget>> {
             "/_arkret/find/directory/describe",
         ),
         (
-            "starid",
-            "COTEST_STARID_DESCRIBE_URL",
-            "COTEST_STARID_BASE_URL",
-            "/describe",
-        ),
-        (
             "coauth",
             "COTEST_COAUTH_DESCRIBE_URL",
             "COTEST_COAUTH_BASE_URL",

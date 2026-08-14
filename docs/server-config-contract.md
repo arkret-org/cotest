@@ -35,7 +35,7 @@ configuration into a run.
 
 ## Native formats
 
-- Soland, Starid, and Teabay accept dotenv-compatible env files. Keys are
+- Soland and Teabay accept dotenv-compatible env files. Keys are
   restricted to the server prefix plus `DATABASE_URL` and `RUST_LOG`.
 - Coauth keeps its typed YAML configuration and maps `COAUTH_*` variables using
   its existing double-underscore nesting convention.

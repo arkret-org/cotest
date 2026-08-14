@@ -4,7 +4,7 @@ name: integration
 # isolated in controlled.yml behind a protected GitHub environment.
 
 # Cross-project bring-up (P2F.5.2). Builds the upstream services
-# (soland / coauth / starid / floria) from sibling checkouts and runs the cotest
+# (soland / coauth / floria) from sibling checkouts and runs the cotest
 # harness against them.
 #
 # IMPORTANT (per `_todos_all.md` §0):
@@ -30,7 +30,6 @@ jobs:
     env:
       SOLAND_BIN: ${{ github.workspace }}/soland/target/release/soland
       COAUTH_BIN: ${{ github.workspace }}/coauth/target/release/coauth
-      STARID_BIN: ${{ github.workspace }}/starid/target/release/starid
       FLORIA_BIN: ${{ github.workspace }}/floria/target/release/floria
     steps:
       - uses: actions/checkout@v4
@@ -77,11 +76,6 @@ jobs:
           ref: ${{ env.SIBLING_REF }}
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/starid
-          path: starid
-          ref: ${{ env.SIBLING_REF }}
-      - uses: actions/checkout@v4
-        with:
           repository: ${{ github.repository_owner }}/floria
           path: floria
           ref: ${{ env.SIBLING_REF }}
@@ -94,7 +88,6 @@ jobs:
             cotest
             soland
             coauth
-            starid
             floria
       - uses: actions/setup-node@v4
         with:
@@ -116,7 +109,7 @@ jobs:
         # individual `cargo build` failures.
         run: |
           set -euo pipefail
-          for svc in soland coauth starid floria; do
+          for svc in soland coauth floria; do
             echo "::group::cargo build $svc"
             # coauth: password-bootstrap compiles in the password-login
             # session-grant path (runtime stays triple-gated by config flag +
@@ -352,15 +345,6 @@ jobs:
           cargo test --locked --features test-with-containers --test _bootstrap_smoke ephemeral_postgres_starts_and_stops -- --ignored
           cargo test --locked --features test-with-containers --test _bootstrap_smoke coauth_can_be_spawned_with_ephemeral_postgres -- --ignored
           cargo test --locked --features test-with-containers --test _bootstrap_smoke floria_can_be_spawned_with_rendered_config -- --ignored
-          cargo test --locked --features test-with-containers --test _bootstrap_smoke identity_deployment_smoke -- --ignored --exact
-          mkdir -p artifacts/runs/identity-deployment
-          jq -n \
-            --arg starid "$(git -C ../starid rev-parse HEAD)" \
-            --arg coauth "$(git -C ../coauth rev-parse HEAD)" \
-            --arg soland "$(git -C ../soland rev-parse HEAD)" \
-            --arg inkson "$(git -C ../inkson rev-parse HEAD)" \
-            '{schema:"cotest.identity-deployment-evidence.v1",result:"passed",shas:{starid:$starid,coauth:$coauth,soland:$soland,inkson:$inkson},secrets:"redacted"}' \
-            > artifacts/runs/identity-deployment/evidence.json
           cargo test --locked --features test-with-containers --test chaos_inject_smoke testcontainers_postgres_bringup_smoke -- --ignored
       - name: upload live harness artifacts
         uses: actions/upload-artifact@v4
@@ -370,4 +354,3 @@ jobs:
           path: |
             cotest/artifacts/runs/integration-playwright
             cotest/artifacts/runs/federation-security-hardening
-            cotest/artifacts/runs/identity-deployment

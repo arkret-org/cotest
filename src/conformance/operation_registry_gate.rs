@@ -343,9 +343,6 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
             OperationSourceRoot::new("coauth", workspace_root.join("coauth"))
                 .with_dir("crates/backend/src")
                 .with_dir("crates/frontend/src/api"),
-            OperationSourceRoot::new("starid", workspace_root.join("starid"))
-                .with_dir("crates/server/src")
-                .with_dir("crates/admin/src/api"),
             OperationSourceRoot::new("teabay", workspace_root.join("teabay"))
                 .with_dir("crates/server/src")
                 .with_dir("crates/admin/src"),

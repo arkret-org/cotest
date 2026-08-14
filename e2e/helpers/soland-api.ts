@@ -4399,6 +4399,8 @@ type CotestWireCommand =
   | "event-derived-id"
   | "mimi-consent-proof"
   | "principal-control-realm-id"
+  | "webvh-placeholder-did"
+  | "webvh-genesis"
   | "account-handoff-outcome"
   | "account-handoff-request"
   | "principal-registration-fixture"

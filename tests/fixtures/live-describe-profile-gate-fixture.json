@@ -87,24 +87,6 @@
       }
     },
     {
-      "name": "starid_production_health_cannot_be_ok_with_ephemeral_receipt_key",
-      "expect": "reject",
-      "source": {
-        "mode": "fixture",
-        "path": "/describe"
-      },
-      "describe": {
-        "service": "starid",
-        "ok": true,
-        "development_mode": false,
-        "receipt_signing_key_stable": false,
-        "profiles": [
-          "ak.identity.webvh.v1",
-          "ak.identity.registry.v1"
-        ]
-      }
-    },
-    {
       "name": "coauth_principal_claim_with_501_admin_surface_is_rejected",
       "expect": "reject",
       "source": {

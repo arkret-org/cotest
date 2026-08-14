@@ -5,7 +5,7 @@
 //! (no live server) so the suite can run inside `cargo test --workspace`
 //! without bootstrapping soland / coauth / floria. Cross-project joint
 //! exercises live under [`crate::scenarios::full_stack_e2e`] and
-//! [`crate::scenarios::four_service_smoke`] and will pick up the Circle
+//! [`crate::scenarios::joint_service_smoke`] and will pick up the Circle
 //! strands in phase P5.
 //!
 //! Scenarios (per `_cotest_todos.md` P2F.3.1):

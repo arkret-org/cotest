@@ -70,9 +70,6 @@ param(
     # harness skips the docker-backed ephemeral Postgres entirely (useful when
     # Docker Desktop is unavailable and a local PostgreSQL serves instead).
     [string]$CoauthPostgresUrl,
-    [switch]$StartStarid,
-    [string]$StaridBin,
-    [string]$StaridBaseUrl,
     [switch]$StartTeabay,
     [string]$TeabayBin,
     [string]$TeabayBaseUrl,
@@ -87,8 +84,6 @@ param(
     [string]$SolandKeyStoreMasterKey = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=",
     [string]$CoauthSessionGrantIntrospectionBearer = "joint-e2e-session-grant-introspection",
     [string]$CoauthEmbeddedWebvhRegistrationBearer = "joint-e2e-webvh-registration",
-    [string]$StaridRegistrationBearer = "joint-e2e-starid-registration-v1",
-    [string]$StaridSigningKey = "z3u2YxoQbWg6RHwGCdrwTU82VG7sR9c2g1bPj7TFiQ8AB",
     # did:webvh degraded_no_witness window (identity-did.md §4.2.1). Compressed
     # for resolver and harness witness-health checks; production clamps any
     # value back to the protocol ceiling, so this can only tighten the window.
@@ -187,7 +182,6 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
 . (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
 
-$StaridServiceId = $null
 $SolandServiceId = $null
 $SolandServiceFullId = $null
 $SolandBetaServiceId = $null
@@ -632,8 +626,6 @@ function Invoke-JointE2ePreflight {
         [Parameter(Mandatory = $true)][bool]$StartCoauth,
         [Parameter(Mandatory = $true)][string]$CoauthPostgresImage,
         [string]$CoauthBin,
-        [bool]$StartStarid = $false,
-        [string]$StaridBin,
         [bool]$StartTeabay = $false,
         [string]$TeabayBin,
         [string]$TeabayDatabaseUrl,
@@ -783,23 +775,6 @@ function Invoke-JointE2ePreflight {
             }
         } else {
             Add-PreflightResult $results "inkson web bundle" "fail" "cached bundle missing; rerun without -SkipBuild"
-        }
-    }
-
-    if ($StartStarid) {
-        try {
-            $staridBinary = Resolve-StaridBinary -ExplicitPath $StaridBin -WorkspaceRoot $WorkspaceRoot
-            Add-PreflightResult $results "starid binary" "pass" $staridBinary
-            Add-BinaryFreshnessPreflight `
-                -Results $results `
-                -Name "starid binary freshness" `
-                -BinaryPath $staridBinary `
-                -RepositoryRoots @(
-                    (Join-Path $WorkspaceRoot "starid"),
-                    (Join-Path $WorkspaceRoot "arkret-rust-sdk")
-                )
-        } catch {
-            Add-PreflightResult $results "starid binary" "fail" $_.Exception.Message
         }
     }
 
@@ -1095,26 +1070,6 @@ function Resolve-SolandBinary {
         }
     }
     throw "Unable to find soland binary. Build soland first or pass -SolandBin."
-}
-
-function Resolve-StaridBinary {
-    param(
-        [string]$ExplicitPath,
-        [Parameter(Mandatory = $true)][string]$WorkspaceRoot
-    )
-
-    $candidates = @()
-    if ($ExplicitPath) { $candidates += $ExplicitPath }
-    if ($env:STARID_BIN) { $candidates += $env:STARID_BIN }
-    $candidates += (Join-Path $WorkspaceRoot "starid\target\debug\starid.exe")
-    $candidates += (Join-Path $WorkspaceRoot "starid\target\release\starid.exe")
-
-    foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path $candidate)) {
-            return (Resolve-Path $candidate).Path
-        }
-    }
-    throw "Unable to find starid binary. Build starid first or pass -StaridBin."
 }
 
 function Resolve-TeabayBinary {
@@ -2207,15 +2162,10 @@ if ($DualCoauth) {
     $coauthSecondaryBaseUrl = "http://127.0.0.1:$coauthSecondaryPort"
 }
 
-# CT-6: starid + teabay joint participants. Mirror the -StartCoauth port
-# allocation pattern. Teabay additionally needs a DATABASE_URL because the
-# binary will refuse to boot without one (per TEABAY_SPEC.required_env_vars
-# in the cotest helper).
-$staridPort = $null
-if ($StartStarid -and -not $StaridBaseUrl) {
-    $staridPort = Get-FreeTcpPort
-    $StaridBaseUrl = "http://127.0.0.1:$staridPort"
-}
+# CT-6: teabay joint participant. Mirrors the -StartCoauth port allocation
+# pattern. Teabay additionally needs a DATABASE_URL because the binary will
+# refuse to boot without one (per TEABAY_SPEC.required_env_vars in the cotest
+# helper).
 $teabayPort = $null
 if ($StartTeabay) {
     if (-not $TeabayDatabaseUrl -and -not $env:DATABASE_URL) {
@@ -2517,29 +2467,6 @@ try {
         }
     }
 
-    if (-not $SkipBuild -and $StartStarid -and -not $StaridBin -and -not $env:STARID_BIN) {
-        $defaultStaridBinary = Join-Path $workspaceRoot "starid\target\debug\starid.exe"
-        $staridFreshness = Get-ArtifactFreshness `
-            -ArtifactPath $defaultStaridBinary `
-            -RepositoryRoots @(
-                (Join-Path $workspaceRoot "starid"),
-                (Join-Path $workspaceRoot "arkret-rust-sdk")
-            )
-        if (-not $staridFreshness.Fresh) {
-            Write-Host "Preparing starid binary: $($staridFreshness.Detail)"
-            $started = Get-Date
-            $staridManifest = Join-Path $workspaceRoot "starid\Cargo.toml"
-            $service = Start-ManagedCommand `
-                -Name "prepare-starid" `
-                -Command ("cargo build --manifest-path {0} --bin starid" -f (Quote-PsLiteral $staridManifest)) `
-                -WorkingDirectory (Split-Path -Parent $staridManifest) `
-                -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "starid"; Service = $service; Started = $started; Artifact = $defaultStaridBinary; AllowUnchangedArtifact = $true })
-        } else {
-            $preparationTimings.Add([pscustomobject]@{ name = "starid"; status = "cache-hit"; duration_seconds = 0; detail = $staridFreshness.Detail })
-        }
-    }
-
     if (-not $SkipBuild -and $StartSavfox -and -not $SavfoxBin -and -not $env:SAVFOX_BIN) {
         $defaultSavfoxBinary = Join-Path $SavfoxRoot "target\debug\savfox.exe"
         $savfoxFreshness = Get-ArtifactFreshness `
@@ -2657,8 +2584,6 @@ try {
             -StartCoauth ([bool]$StartCoauth) `
             -CoauthPostgresImage $CoauthPostgresImage `
             -CoauthBin $CoauthBin `
-            -StartStarid ([bool]$StartStarid) `
-            -StaridBin $StaridBin `
             -StartTeabay ([bool]$StartTeabay) `
             -TeabayBin $TeabayBin `
             -TeabayDatabaseUrl $TeabayDatabaseUrl `
@@ -2900,33 +2825,6 @@ try {
         }
     }
 
-    # CT-6: Starid external WebVH Provider. It runs in production proof
-    # posture and is started before Soland so discovery and authenticated
-    # service-identity registration are available during Soland bootstrap.
-    if ($StartStarid) {
-        if (-not $staridPort) {
-            $staridUri = [System.Uri]$StaridBaseUrl
-            $staridPort = $staridUri.Port
-        }
-        $staridBinary = Resolve-StaridBinary -ExplicitPath $StaridBin -WorkspaceRoot $workspaceRoot
-        $staridConfigPath = Join-Path $jointDir "starid.env"
-        Write-DotEnvFile -Path $staridConfigPath -Values ([ordered]@{
-                STARID_DEVELOPMENT_MODE = "false"
-                STARID_FIRST_PROVISIONING = "true"
-                STARID_PUBLIC_HOSTS = "127.0.0.1,localhost,host.docker.internal"
-                STARID_TRUST_DOMAIN = "ak:trust_domain:local.host"
-                STARID_SIGNING_KEY = $StaridSigningKey
-                STARID_ADMIN_TOKEN = $StaridRegistrationBearer
-            })
-        $staridCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
-            (Quote-PsLiteral $staridBinary),
-            (Quote-PsLiteral $staridConfigPath),
-            $staridPort
-        $managedServices.Add((Start-ManagedCommand -Name "starid" -Command $staridCmd -WorkingDirectory (Split-Path -Parent $staridBinary) -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$($StaridBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
-        $StaridServiceId = Get-DescribedServiceId -BaseUrl $StaridBaseUrl -ServiceName "starid"
-    }
-
     # CT-6: teabay (directory) - needs a Postgres DSN. The validation block
     # above already guaranteed $TeabayDatabaseUrl is set when -StartTeabay
     # is passed.
@@ -3032,13 +2930,6 @@ try {
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
-        if ($StaridBaseUrl) {
-            $map.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:webvh,did:key"
-            $map.SOLAND_EXTERNAL_WEBVH_PROVIDER_URL = Convert-ToContainerReachableUrl $StaridBaseUrl
-            $map.SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER = $StaridRegistrationBearer
-            $map.SOLAND_EXTERNAL_WEBVH_PROVIDER_TRUST_DOMAIN = "ak:trust_domain:local.host"
-            $map.SOLAND_DEFAULT_WEBVH_PROVIDER_ID = "external.webvh"
-        }
         if ($TeabayBaseUrl) {
             $teabayContainer = (Convert-ToContainerReachableUrl $TeabayBaseUrl).TrimEnd("/")
             $map.SOLAND_DIRECTORY_ANNOUNCE_URL = "$teabayContainer/_arkret/find/directory/announce"
@@ -3101,13 +2992,6 @@ try {
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
-        }
-        if ($StaridBaseUrl) {
-            $values.SOLAND_DID_RESOLVER_ALLOW_METHODS = "did:webvh,did:key"
-            $values.SOLAND_EXTERNAL_WEBVH_PROVIDER_URL = $StaridBaseUrl
-            $values.SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER = $StaridRegistrationBearer
-            $values.SOLAND_EXTERNAL_WEBVH_PROVIDER_TRUST_DOMAIN = "ak:trust_domain:local.host"
-            $values.SOLAND_DEFAULT_WEBVH_PROVIDER_ID = "external.webvh"
         }
         if ($TeabayBaseUrl) {
             $values.SOLAND_DIRECTORY_ANNOUNCE_URL = "$($TeabayBaseUrl.TrimEnd('/'))/_arkret/find/directory/announce"
@@ -3341,9 +3225,6 @@ try {
         }
     }
 
-    if ($StaridBaseUrl -and -not $StaridServiceId) {
-        $StaridServiceId = Get-DescribedServiceId -BaseUrl $StaridBaseUrl -ServiceName "starid"
-    }
     if ($CoauthBaseUrl -and -not $CoauthServiceId) {
         $CoauthServiceId = Get-DescribedServiceId -BaseUrl $CoauthBaseUrl -ServiceName "coauth"
     }
@@ -3467,13 +3348,6 @@ try {
         Remove-Item Env:COTEST_REQUIRE_JOINT_STACK -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_REAL_OIDC_LOGIN -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SECONDARY_BASE_URL -ErrorAction SilentlyContinue
-    }
-    if ($StaridBaseUrl) {
-        $env:COTEST_STARID_BASE_URL = $StaridBaseUrl.TrimEnd("/")
-        $env:COTEST_STARID_SERVICE_ID = $StaridServiceId
-    } else {
-        Remove-Item Env:COTEST_STARID_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_STARID_SERVICE_ID -ErrorAction SilentlyContinue
     }
     if ($TeabayBaseUrl) {
         $env:COTEST_TEABAY_BASE_URL = $TeabayBaseUrl.TrimEnd("/")
@@ -4498,8 +4372,6 @@ $summary = [pscustomobject]@{
     coauth_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
     coauth_config = $coauthConfigPath
     coauth_postgres_container = if ($ephemeralPostgres) { $ephemeralPostgres.ContainerName } else { $null }
-    starid_base_url = if ($StaridBaseUrl) { $StaridBaseUrl } else { $null }
-    starid_service_id = if ($StaridBaseUrl) { $StaridServiceId } else { $null }
     teabay_base_url = if ($TeabayBaseUrl) { $TeabayBaseUrl } else { $null }
     teabay_service_id = if ($TeabayBaseUrl) { $TeabayServiceId } else { $null }
     teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
@@ -4565,8 +4437,6 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - coauth_config: $($summary.coauth_config)
 - coauth_oauth_introspection_url: $($summary.coauth_oauth_introspection_url)
 - coauth_session_grant_introspection_url: $($summary.coauth_session_grant_introspection_url)
-- starid_base_url: $($summary.starid_base_url)
-- starid_service_id: $($summary.starid_service_id)
 - teabay_base_url: $($summary.teabay_base_url)
 - teabay_service_id: $($summary.teabay_service_id)
 - screenshots: $($summary.screenshots)
@@ -4654,9 +4524,6 @@ if ($CoauthBaseUrl) {
 }
 if ($coauthSecondaryBaseUrl) {
     Write-Host "  coauth-beta : $coauthSecondaryBaseUrl"
-}
-if ($StaridBaseUrl) {
-    Write-Host "  starid      : $StaridBaseUrl"
 }
 if ($TeabayBaseUrl) {
     Write-Host "  teabay      : $TeabayBaseUrl"

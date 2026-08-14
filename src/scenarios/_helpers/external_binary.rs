@@ -1,8 +1,8 @@
 //! C32.8 + C33.4 — shared spawn helper for sibling-checkout binaries
-//! (`starid`, `soland`, `coauth`, `floria`, ...) used by black-box scenarios.
+//! (`soland`, `coauth`, `teabay`, `floria`, ...) used by black-box scenarios.
 //!
 //! The helper:
-//!   1. Resolves the binary path from an explicit env var override (e.g. `STARID_BIN`) **first**,
+//!   1. Resolves the binary path from an explicit env var override (e.g. `SOLAND_BIN`) **first**,
 //!      then falls back to a sibling-checkout convention path
 //!      (`../<crate>/target/debug/<bin>[.exe]` relative to the cotest workspace root).
 //!   2. Optionally checks `required_env_vars` (e.g. `COAUTH_DATABASE_URI`) are present in the
@@ -10,7 +10,7 @@
 //!      treat the binary as unavailable (returns `Ok(None)` from `try_spawn`). This is how coauth /
 //!      floria gate themselves until a DB / config is wired into the test run.
 //!   3. Reserves a local port and exports it back to the caller via the configured bind env var
-//!      (e.g. `STARID_BIND`) and / or `--bind` CLI arg if `bind_arg` is set.
+//!      (e.g. `TEABAY_BIND`) and / or `--bind` CLI arg if `bind_arg` is set.
 //!   4. Spawns the child with `stdout` / `stderr` swallowed (Stdio::null) so cargo test output
 //!      stays readable; long-form troubleshooting can re-run with the binary directly.
 //!   5. Waits for `/health` (or any caller-supplied liveness path) to return 2xx, with a deadline;
@@ -35,16 +35,16 @@ use crate::harness::{ReservedPort, reserve_port};
 
 /// Configuration for spawning a sibling-checkout binary.
 pub struct ExternalBinarySpec {
-    /// Logical service name used in error messages (e.g. `"starid"`).
+    /// Logical service name used in error messages (e.g. `"soland"`).
     pub service: &'static str,
     /// Env var that, when set, overrides the binary path
-    /// (e.g. `"STARID_BIN"`).
+    /// (e.g. `"SOLAND_BIN"`).
     pub bin_env: &'static str,
     /// Sibling-checkout convention path segments under `arkret/`
-    /// (e.g. `&["starid", "target", "debug"]`). The binary file name is
+    /// (e.g. `&["soland", "target", "debug"]`). The binary file name is
     /// derived from `service` (`+ ".exe"` on Windows).
     pub sibling_path: &'static [&'static str],
-    /// Env var that controls the bind address (e.g. `"STARID_BIND"`).
+    /// Env var that controls the bind address (e.g. `"TEABAY_BIND"`).
     /// Set to `""` if the binary does not accept a bind env var (in that
     /// case `bind_arg` must be set so the helper still pins a free port).
     pub bind_env: &'static str,
@@ -53,7 +53,7 @@ pub struct ExternalBinarySpec {
     /// supplied solely via `bind_env`.
     pub bind_arg: Option<&'static str>,
     /// Extra environment variables to inject into the child process
-    /// (e.g. `&[("STARID_DEVELOPMENT_MODE", "true")]`).
+    /// (e.g. `&[("SOLAND_DEVELOPMENT_MODE", "1")]`).
     pub extra_env: &'static [(&'static str, &'static str)],
     /// Extra CLI args appended after `--bind <addr>` (rarely needed).
     pub extra_args: &'static [&'static str],
@@ -233,9 +233,6 @@ pub async fn try_spawn_with_extra_env(
     let base_url = format!("http://{bind}");
 
     let mut command = Command::new(&bin_path);
-    if spec.service == "starid" {
-        command.env_remove("DATABASE_URL");
-    }
     if !spec.bind_env.is_empty() {
         command.env(spec.bind_env, &bind);
     }
@@ -333,20 +330,6 @@ fn workspace_root() -> Option<PathBuf> {
 // Tests/scenarios should prefer to import these constants over rolling their
 // own — they encode the bind-flag / env-var / dependency-gate conventions of
 // each service in one place and keep the cross-project conventions auditable.
-
-/// `starid` (DID resolver) spec — env-driven bind, no external deps.
-pub const STARID_SPEC: ExternalBinarySpec = ExternalBinarySpec {
-    service: "starid",
-    bin_env: "STARID_BIN",
-    sibling_path: &["starid", "target", "debug"],
-    bind_env: "STARID_BIND",
-    bind_arg: None,
-    extra_env: &[("STARID_DEVELOPMENT_MODE", "true")],
-    extra_args: &[],
-    required_env_vars: &[],
-    health_path: "/health",
-    health_timeout: Duration::from_secs(20),
-};
 
 /// `soland` (principal server) spec — `--bind` CLI flag + a few env vars.
 /// No external deps in its development-mode default (in-memory persistence).

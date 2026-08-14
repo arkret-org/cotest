@@ -10,8 +10,7 @@ use cotest::scenarios::_helpers::coauth_bootstrap::{
     bootstrap_coauth_config, spawn_coauth_with_db, spawn_ephemeral_postgres,
 };
 use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
-use cotest::scenarios::four_service_smoke::four_service_smoke_run;
-use cotest::scenarios::identity_deployment_smoke::identity_deployment_smoke_run;
+use cotest::scenarios::joint_service_smoke::joint_service_smoke_run;
 
 /// Gating: manual debug helper — needs a built coauth binary at the
 /// hard-coded sibling path. Not for CI.
@@ -103,32 +102,23 @@ async fn floria_can_be_spawned_with_rendered_config() -> Result<()> {
     Ok(())
 }
 
-/// CT-6 — four-service joint bootstrap smoke (soland + coauth + starid + teabay).
+/// CT-6 — joint service bootstrap smoke (soland + coauth + teabay).
 ///
 /// Marked `#[ignore]` because the full stack needs docker (for coauth's
-/// ephemeral postgres), sibling `coauth.exe` / `starid.exe` / `teabay.exe`
-/// binaries, AND a `DATABASE_URL` for teabay. Run with:
+/// ephemeral postgres), sibling `coauth.exe` / `teabay.exe` binaries, AND a
+/// `DATABASE_URL` for teabay. Run with:
 ///
-///   cargo test --test _bootstrap_smoke four_service_joint_smoke -- --ignored
+///   cargo test --test _bootstrap_smoke joint_service_smoke -- --ignored
 ///
 /// When all prereqs are present the test boots the stack and asserts every
 /// service answers /health with 2xx; when any piece is missing it bails with
 /// a descriptive message naming the missing dependency.
 /// Gating: needs Docker (coauth ephemeral Postgres) plus sibling
-/// coauth/starid/teabay binaries and a `DATABASE_URL` for teabay.
-/// Issue: CT-6 (four-service joint bootstrap smoke)
+/// coauth/teabay binaries and a `DATABASE_URL` for teabay.
+/// Issue: CT-6 (joint service bootstrap smoke)
 /// Tier: live
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
-async fn four_service_joint_smoke() -> Result<()> {
-    four_service_smoke_run().await
-}
-
-/// Production Starid + Soland + Coauth identity deployment contract. This is
-/// ignored only outside the explicit live lane; once selected it has no
-/// missing-dependency or assertion soft-skip path.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore]
-async fn identity_deployment_smoke() -> Result<()> {
-    identity_deployment_smoke_run().await
+async fn joint_service_smoke() -> Result<()> {
+    joint_service_smoke_run().await
 }

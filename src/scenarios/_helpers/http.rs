@@ -4,9 +4,9 @@
 //! bridge-contract surfaces, etc.) MUST use a client with bounded connect /
 //! request timeouts, otherwise a service that accepts the connection but never
 //! responds hangs the scenario — and the CI job — indefinitely. This is the
-//! 5s convention already used by `certification_report` / `teabay_resolve_realm`
-//! / `starid_replay`; centralising it here keeps the timeout policy in one
-//! place instead of each call site re-deriving (or forgetting) it.
+//! 5s convention already used by `certification_report` / `teabay_resolve_realm`;
+//! centralising it here keeps the timeout policy in one place instead of each
+//! call site re-deriving (or forgetting) it.
 //!
 //! Scenarios that intentionally send malformed requests, or that need bespoke
 //! TLS / redirect / per-request timeout configuration, keep their own

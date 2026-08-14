@@ -1,12 +1,12 @@
 //! T5.3 (Round 22, 2026-05-20) — canonical-JSON convergence vectors.
 //!
-//! Every Arkret service (coauth / soland / starid / inkson / floria) now
+//! Every Arkret service (coauth / soland / inkson / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through
 //! the SDK's `arkret_canonical` module and the
 //! `arkret_signatures::EventProofBuilder` facade. This test pins a
 //! handful of fixture payloads representing the three shapes that
 //! matter on the wire — coauth `handle_claim`, soland event-envelope
-//! payload, starid did:webvh update — and asserts every entry point
+//! payload, did:webvh log update — and asserts every entry point
 //! produces the same `sha256:<hex>` digest as the SDK's
 //! `canonical_sha256`.
 //!
@@ -98,10 +98,10 @@ fn vectors() -> Vec<CanonicalVector> {
             expected_digest: "sha256:55d6eae483299a0a39625377a63f7d4416374d9544c9974632a007d725f8454c",
         },
         CanonicalVector {
-            vector_id: "ak.cotest_vector.canonical_hash.starid_webvh_update.v1",
-            label: "starid did:webvh update entry (proofless)",
-            // The shape starid feeds into `proof::canonical_bytes` after
-            // stripping `proof[]` from a webvh log entry.
+            vector_id: "ak.cotest_vector.canonical_hash.webvh_log_update.v1",
+            label: "did:webvh update entry (proofless)",
+            // The shape a did:webvh provider feeds into the canonical proof
+            // encoder after stripping `proof[]` from a webvh log entry.
             payload: json!({
                 "versionId": "1-abc",
                 "versionTime": "2026-05-06T00:00:00.000Z",
@@ -246,8 +246,8 @@ fn canonical_bytes_are_stable_across_key_permutations() {
 
 /// Every service ultimately goes through one of two SDK entry points:
 /// the low-level `arkret_canonical::canonical_sha256` (used by
-/// `coauth::handlers::arkret::canonical_json_sha256`, soland's
-/// `validate_event_proofs`, and starid's `proof::canonical_bytes`), or
+/// `coauth::handlers::arkret::canonical_json_sha256` and soland's
+/// `validate_event_proofs`), or
 /// the high-level `arkret_signatures::EventProofBuilder` (used by
 /// inkson / floria when emitting a fresh detached-JWS proof). Both
 /// must yield the same canonical bytes for the same input; this test

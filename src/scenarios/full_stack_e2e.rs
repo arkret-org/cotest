@@ -3,9 +3,8 @@
 //! Stitches the cross-project pieces shipped across T1–T7 into one black-box
 //! strand. The scenario covers:
 //!
-//!   1. **starid mint** — Alice's DID is resolvable against starid (live HTTP probe when STARID_BIN
-//!      is set; otherwise an SDK-level DidFullId::new gate so the canonical-form rejection still
-//!      runs).
+//!   1. **subject DID mint** — Alice's DID passes the SDK-level `DidFullId::new` canonical-form
+//!      gate before it is handed to any downstream service.
 //!   2. **coauth issues a handle_claim** — exercised through the `MemberDeliveryBindingCandidate`
 //!      builder (matching T3.5's pattern; coauth's wire surface needs a real DB so we drive the SDK
 //!      candidate that the live coauth would mint).
@@ -38,9 +37,9 @@
 //! ## Live-stack gating
 //!
 //! The live multi-service legs only run when **all** of `COAUTH_BIN`,
-//! `STARID_BIN`, `SOLAND_BIN`, `TEABAY_BIN`, and `FLORIA_BIN` are present
-//! (silent skip otherwise, matching the convention of every other
-//! `#[ignore]` scenario in cotest). The SDK contract surface always runs.
+//! `SOLAND_BIN`, `TEABAY_BIN`, and `FLORIA_BIN` are present (silent skip
+//! otherwise, matching the convention of every other `#[ignore]` scenario in
+//! cotest). The SDK contract surface always runs.
 
 use std::collections::BTreeSet;
 use std::time::Duration;
@@ -62,9 +61,9 @@ use serde_json::{Value, json};
 
 use crate::scenarios::_helpers::coauth_bootstrap::coauth_with_db_available;
 use crate::scenarios::_helpers::external_binary::{
-    FLORIA_SPEC, SOLAND_SPEC, STARID_SPEC, TEABAY_SPEC, skip_reason, try_spawn_with_extra_env,
+    FLORIA_SPEC, SOLAND_SPEC, TEABAY_SPEC, skip_reason, try_spawn_with_extra_env,
 };
-use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
+use crate::scenarios::_helpers::joint_service_bootstrap::{JointServiceConfig, try_bootstrap};
 
 // ── Fixture knobs ──────────────────────────────────────────────────────────
 
@@ -90,7 +89,7 @@ const PUSH_TARGET_ID: &str = "ak:pseudonym:push:fullstack-e2e-target-001";
 /// T8.1 — orchestrate the full multi-service E2E.
 pub async fn full_stack_e2e_run() -> Result<()> {
     // ── Step 1–4: handle → join SDK contract surface (always runs) ─────
-    let candidate = step_1_starid_mint_alice().context("T8.1 step 1: starid mint")?;
+    let candidate = step_1_mint_alice_did().context("T8.1 step 1: subject DID mint")?;
     step_2_coauth_issue_handle_claim(&candidate)
         .context("T8.1 step 2: coauth issue handle_claim")?;
     step_3_teabay_resolve_handle(&candidate)
@@ -122,22 +121,20 @@ pub async fn full_stack_e2e_run() -> Result<()> {
     if full_stack_available() {
         live_stack_probe()
             .await
-            .context("T8.1 live five-service stack probe")?;
+            .context("T8.1 live four-service stack probe")?;
     }
 
     Ok(())
 }
 
-// ── Step 1: starid mint Alice's DID ────────────────────────────────────────
+// ── Step 1: mint Alice's subject DID ───────────────────────────────────────
 
-/// Modelled on the starid resolver: any DID we hand off downstream MUST
-/// parse as a `DidFullId`, which catches the canonical-form gate (rejecting empty
-/// strings, non-`did:` prefixes, and DIDs without a method). When `STARID_BIN`
-/// is wired, the live-stack probe below additionally verifies the resolver's
-/// `/health` is up.
-fn step_1_starid_mint_alice() -> Result<MemberDeliveryBindingCandidate> {
+/// Any DID we hand off downstream MUST parse as a `DidFullId`, which catches
+/// the canonical-form gate (rejecting empty strings, non-`did:` prefixes, and
+/// DIDs without a method).
+fn step_1_mint_alice_did() -> Result<MemberDeliveryBindingCandidate> {
     let _alice = DidFullId::new(ALICE_FULL_ID.to_owned())
-        .context("starid MUST mint a parseable did:web for Alice")?;
+        .context("Alice's subject DID MUST be a parseable did:web")?;
     // Build the rest of the candidate as if `ak.find.directory.read.resolve_handle`
     // returned it (T3.5 pattern).
     sample_candidate()
@@ -533,25 +530,24 @@ fn negative_placeholder_proof_sdk_layer() -> Result<()> {
 
 // ── Live-stack probe (best-effort) ─────────────────────────────────────────
 
-/// Whether the entire five-binary stack is wired in the current
-/// environment. Mirrors `four_service_stack_available` in T3.5 but extends
+/// Whether the entire four-binary stack is wired in the current
+/// environment. Mirrors `joint_service_stack_available` in T3.5 but extends
 /// it to include floria.
 fn full_stack_available() -> bool {
     coauth_with_db_available()
-        && skip_reason(&STARID_SPEC).is_none()
         && skip_reason(&SOLAND_SPEC).is_none()
         && skip_reason(&TEABAY_SPEC).is_none()
         && skip_reason(&FLORIA_SPEC).is_none()
 }
 
-/// Best-effort live probe: when all five binaries (+ Docker for coauth's
+/// Best-effort live probe: when all four binaries (+ Docker for coauth's
 /// ephemeral Postgres, DATABASE_URL for teabay, and FLORIA_CONFIG) are present, bring the stack up
 /// and confirm every health endpoint answers. The detailed wire-level
 /// surfaces (resolve-handle, member_add, push notify) are covered by
 /// dedicated scenarios; T8.1's live leg is the cross-binary boot check.
 async fn live_stack_probe() -> Result<()> {
-    // 1. Bring up coauth + starid + soland + teabay.
-    let stack = try_bootstrap(FourServiceConfig::new("t8-1-full-stack-e2e")).await?;
+    // 1. Bring up coauth + soland + teabay.
+    let stack = try_bootstrap(JointServiceConfig::new("t8-1-full-stack-e2e")).await?;
     stack.assert_healthy().await?;
 
     // 2. Probe teabay's `resolve-handle` surface; same gating as T3.5 — we don't seed a real row,

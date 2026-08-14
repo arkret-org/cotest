@@ -1278,11 +1278,6 @@ function New-ReleaseGate {
                 -Tests $Tests `
                 -RequiredTests @("session_grant_presentation_uses_configured_coauth_introspection")))
     $checks.Add((New-ReleaseGateCheck `
-                -Id "did_resolver_starid_optional" `
-                -Description "soland advertises the optional starid did:webvh resolver profile through identity discovery." `
-                -Tests $Tests `
-                -RequiredTests @("starid_optional_resolver_profile_is_discoverable")))
-    $checks.Add((New-ReleaseGateCheck `
                 -Id "secret_redaction" `
                 -Description "Run logs, transcripts, and service logs do not contain unredacted secret-shaped fields." `
                 -Tests $Tests `

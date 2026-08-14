@@ -24,9 +24,9 @@
 //!      handles partial updates, not just first-write.
 //!
 //! ──────────────────────────────────────────────────────────────────────────
-//! Status: scenario body wired to CT-6's `FourServiceStack`. Test entrypoint
+//! Status: scenario body wired to CT-6's `JointServiceStack`. Test entrypoint
 //! is still `#[ignore]` because the full stack needs docker + sibling
-//! coauth/starid/teabay binaries + a `DATABASE_URL` for teabay's Postgres.
+//! coauth/teabay binaries + a `DATABASE_URL` for teabay's Postgres.
 //! When those prereqs are present the test boots the stack and runs the
 //! profile-update → directory-reindex assertion below.
 //!
@@ -38,13 +38,13 @@ use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
 use crate::harness::eventually;
-use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, bootstrap_required};
+use crate::scenarios::_helpers::joint_service_bootstrap::{JointServiceConfig, bootstrap_required};
 
-/// CT-8 scenario probe. Boots the 4-service stack, drives a profile update
+/// CT-8 scenario probe. Boots the joint service stack, drives a profile update
 /// on soland, and verifies teabay's directory search reflects the new
 /// fields within the publish-to-search latency budget (30s per spec).
 pub async fn soland_teabay_directory_sync_run() -> Result<()> {
-    let stack = bootstrap_required(FourServiceConfig::new("ct8-dir-sync")).await?;
+    let stack = bootstrap_required(JointServiceConfig::new("ct8-dir-sync")).await?;
     stack.assert_healthy().await?;
 
     let teabay = stack

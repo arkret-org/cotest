@@ -4,7 +4,7 @@
 // ----------------------------------------------------
 // The task DID-P1-C01 asks for a resolver spy that is resettable and can be
 // counted per DID / purpose. cotest has **no Cargo dependency** on soland /
-// teabay / coauth / starid / floria — they are launched as pre-built sibling
+// teabay / coauth / floria — they are launched as pre-built sibling
 // binaries and driven over HTTP (see
 // `src/scenarios/_helpers/external_binary.rs`). A Rust trait spy therefore
 // cannot be injected into those processes. The only place a cross-process
@@ -66,7 +66,7 @@
 // for "the bytes changed and are self-consistent" assertions. It is NOT
 // validated against the SDK's `verify_did_webvh_v1_chain_and_witness_bytes`,
 // so this mock is not a source of verification-grade did:webvh history —
-// build those with `e2e/helpers/webvh-api.ts` or a real starid instance.
+// build those with `e2e/helpers/webvh-api.ts` or a real did:webvh provider.
 //
 // ENV
 //   MOCK_DID_HOST_PORT        listen port (0 = ephemeral)

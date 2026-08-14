@@ -1,19 +1,31 @@
+//! soland's `did:webvh` provider discovery when an *external* provider is
+//! configured.
+//!
+//! Nothing here starts an external service: soland is spawned pointing at an
+//! unreachable provider URL, and the assertions are entirely about what
+//! soland's own `/_arkret/root/identity/describe` publishes — default provider
+//! id, provider entry, resolver policy, trust roots (including its local
+//! identity store's webvh proof-validation policy) and an empty `todos[]`.
+//!
+//! This coverage previously lived in a `starid`-named module and was almost
+//! lost when that service left the workspace. The provider URL below is a
+//! placeholder that is never dialled.
+
 use anyhow::Result;
 use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::harness::{ArkretServer, expect_json};
 
-pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
+const EXTERNAL_PROVIDER_URL: &str = "http://webvh-provider.cotest.local";
+
+pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
     let server = ArkretServer::spawn_with_env(
-        "starid-optional",
+        "external-webvh-provider",
         &[
             ("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,key,webvh"),
             ("SOLAND_EMBEDDED_WEBVH_PROVIDER_ENABLED", "0"),
-            (
-                "SOLAND_EXTERNAL_WEBVH_PROVIDER_URL",
-                "http://starid.cotest.local",
-            ),
+            ("SOLAND_EXTERNAL_WEBVH_PROVIDER_URL", EXTERNAL_PROVIDER_URL),
             ("SOLAND_DEFAULT_WEBVH_PROVIDER_ID", "external.webvh"),
         ],
     )
@@ -44,14 +56,14 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
         .find(|provider| provider["id"] == "external.webvh")
         .expect("external did:webvh provider");
     assert_eq!(external["kind"], "external");
-    assert_eq!(external["base_url"], "http://starid.cotest.local");
+    assert_eq!(external["base_url"], EXTERNAL_PROVIDER_URL);
     assert!(
         describe["resolver_policy"]["allow_methods"]
             .as_array()
             .unwrap()
             .iter()
             .any(|value| value.as_str() == Some("webvh")),
-        "did:webvh should be discoverable when the optional starid resolver is configured"
+        "did:webvh should be discoverable when an external provider is configured"
     );
     assert_eq!(
         describe["resolver_policy"]["freshness_receipts"]["endpoint_template"],
@@ -73,25 +85,21 @@ pub async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
     let external_root = trust_roots
         .iter()
         .find(|root| root["id"] == "external.webvh")
-        .expect("external starid trust root");
+        .expect("external webvh trust root");
     assert_eq!(external_root["kind"], "external");
     assert_eq!(external_root["profile"], "ak.identity.webvh.provider.v1");
-    assert_eq!(external_root["base_url"], "http://starid.cotest.local");
-    // STA-07-002: dropped the `freshness_probe == "/describe"` assertion — the
-    // legacy starid `/describe` liveness route has been removed, so probing it is
-    // no longer a contract; freshness now strands through the canonical
-    // identity/describe + receipts endpoints asserted above.
+    assert_eq!(external_root["base_url"], EXTERNAL_PROVIDER_URL);
     assert!(
         external_root["expected_trust_domain"]
             .as_str()
             .is_some_and(|trust_domain| trust_domain.starts_with("ak:trust_domain:")),
-        "external starid trust root must bind the expected trust domain: {external_root}"
+        "external webvh trust root must bind the expected trust domain: {external_root}"
     );
     assert!(
         describe["todos"]
             .as_array()
             .is_some_and(|todos| todos.is_empty()),
-        "soland resolver describe TODOs must be cleared once starid proof/trust-root validation lands: {describe}"
+        "soland resolver describe TODOs must be cleared: {describe}"
     );
 
     Ok(())

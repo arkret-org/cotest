@@ -20,12 +20,12 @@
 //! The protocol fans across three live services, but the rejection contract
 //! is single-sourced in the SDK candidate validator + soland reducer. Per
 //! cotest convention (see `soland_teabay_directory_sync.rs`, which gates on
-//! the full four-service stack and silently skips otherwise), this scenario:
+//! the full joint service stack and silently skips otherwise), this scenario:
 //!
-//!  - **Happy path** — boots `four_service_bootstrap` when COAUTH_BIN / SOLAND_BIN / TEABAY_BIN are
-//!    all available and exercises the live `/_arkret/find/directory/resolve-handle` surface. When
-//!    the stack is partial (the default cargo-test posture), the scenario falls back to the SDK
-//!    candidate builder, exercising the same `audience` / `expires_at` / `subject_id` /
+//!  - **Happy path** — boots `joint_service_bootstrap` when COAUTH_BIN / SOLAND_BIN / TEABAY_BIN
+//!    are all available and exercises the live `/_arkret/find/directory/resolve-handle` surface.
+//!    When the stack is partial (the default cargo-test posture), the scenario falls back to the
+//!    SDK candidate builder, exercising the same `audience` / `expires_at` / `subject_id` /
 //!    `binding_source` invariants that the live teabay row in T3.4 enforces.
 //!  - **Negative cases** — always run; each builds a malformed candidate and asserts the matching
 //!    `CandidateError` (or `Realm::member_add_with_candidate` rejection) fires. These guard the SDK
@@ -49,7 +49,7 @@ use serde_json::{Value, json};
 
 use crate::scenarios::_helpers::coauth_bootstrap::coauth_with_db_available;
 use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, TEABAY_SPEC, skip_reason};
-use crate::scenarios::_helpers::four_service_bootstrap::{FourServiceConfig, try_bootstrap};
+use crate::scenarios::_helpers::joint_service_bootstrap::{JointServiceConfig, try_bootstrap};
 
 // ── Test fixture knobs ─────────────────────────────────────────────────────
 
@@ -101,17 +101,17 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_did_document_fallback_rejected()
         .context("T3.5 negative — DID Document fallback masquerades as handle candidate")?;
 
-    // 3. Best-effort live-stack probe. If the full four-service stack happens to be available
+    // 3. Best-effort live-stack probe. If the full joint service stack happens to be available
     //    (COAUTH_BIN + SOLAND_BIN + TEABAY_BIN
     //    + DATABASE_URL + docker), drive a real HTTP `resolve-handle`
     //    against teabay and assert the surface responds with the
     //    `ak.find.directory.read.resolve_handle` envelope shape. Partial stacks
     //    silently skip this leg — the SDK assertions above are the
     //    cotest contract surface.
-    if four_service_stack_available() {
+    if joint_service_stack_available() {
         live_stack_probe()
             .await
-            .context("T3.5 live four-service stack probe")?;
+            .context("T3.5 live joint service stack probe")?;
     }
 
     Ok(())
@@ -414,18 +414,18 @@ fn negative_case_did_document_fallback_rejected() -> Result<()> {
 
 // ── Live-stack probe (best-effort) ─────────────────────────────────────────
 
-/// Whether the full four-service stack is wired in the current environment.
+/// Whether the full joint service stack is wired in the current environment.
 /// All three sibling binaries plus their actual runtime prerequisites MUST be present
 /// for the live leg to run. Anything else is a silent skip, matching the
 /// rest of the `_helpers` suite.
-fn four_service_stack_available() -> bool {
+fn joint_service_stack_available() -> bool {
     coauth_with_db_available()
         && skip_reason(&SOLAND_SPEC).is_none()
         && skip_reason(&TEABAY_SPEC).is_none()
 }
 
 async fn live_stack_probe() -> Result<()> {
-    let stack = try_bootstrap(FourServiceConfig::new("t3-5-handle-to-join")).await?;
+    let stack = try_bootstrap(JointServiceConfig::new("t3-5-handle-to-join")).await?;
     stack.assert_healthy().await?;
 
     // Live teabay surface check: `ak.find.directory.read.resolve_handle` accepts

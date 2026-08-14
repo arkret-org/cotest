@@ -106,7 +106,7 @@ fn run_gate_fixture(
     }
 
     if require_live_coverage {
-        for service in ["soland", "floria", "teabay", "starid", "coauth"] {
+        for service in ["soland", "floria", "teabay", "coauth"] {
             if !services.contains(service) {
                 bail!("{file_name} missing live describe sample for {service}");
             }
@@ -125,8 +125,6 @@ fn run_gate_fixture(
 }
 
 pub fn validate_scaffold_profile_gate(describe: &Value) -> Result<()> {
-    validate_starid_production_health(describe)?;
-
     if !claims_full_profile(describe) {
         return Ok(());
     }
@@ -187,26 +185,6 @@ fn collect_profile_array(value: Option<&Value>, claims: &mut BTreeSet<String>) {
             claims.insert(profile.to_owned());
         }
     }
-}
-
-fn validate_starid_production_health(describe: &Value) -> Result<()> {
-    if describe.get("service").and_then(Value::as_str) != Some("starid") {
-        return Ok(());
-    }
-    let production = describe
-        .get("development_mode")
-        .and_then(Value::as_bool)
-        .is_some_and(|development| !development);
-    let unstable_receipt_key = describe
-        .get("receipt_signing_key_stable")
-        .and_then(Value::as_bool)
-        == Some(false);
-    let claims_ok = describe.get("ok").and_then(Value::as_bool) == Some(true)
-        || describe.get("ready").and_then(Value::as_bool) == Some(true);
-    if production && unstable_receipt_key && claims_ok {
-        bail!("starid production health/readiness cannot be ok with an ephemeral receipt key");
-    }
-    Ok(())
 }
 
 #[derive(Default)]

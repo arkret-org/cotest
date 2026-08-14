@@ -7,16 +7,16 @@
 //!   (`principal_bridge_contracts_are_discoverable`).
 //! - [`session_grant`] — coauth-backed session-grant presentation support
 //!   (`session_grant_presentation_uses_configured_coauth_introspection`).
-//! - [`starid`] — optional `did:webvh` resolver profile discoverability
-//!   (`starid_optional_resolver_profile_is_discoverable`).
+//! - [`external_webvh_provider`] — soland's `did:webvh` provider discovery when an external
+//!   provider is configured (`external_webvh_provider_is_discoverable`).
 //!
 //! Helpers shared by 2+ scenarios live in
 //! [`crate::scenarios::_helpers::bridge`].
 
 pub mod discovery;
+pub mod external_webvh_provider;
 pub mod session_grant;
-pub mod starid;
 
 pub use discovery::principal_bridge_contracts_are_discoverable;
+pub use external_webvh_provider::external_webvh_provider_is_discoverable;
 pub use session_grant::session_grant_presentation_uses_configured_coauth_introspection;
-pub use starid::starid_optional_resolver_profile_is_discoverable;

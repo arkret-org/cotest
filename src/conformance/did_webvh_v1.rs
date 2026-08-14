@@ -216,7 +216,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
 }
 
 fn principal_inception() -> Result<PreparedPrincipalInception> {
-    let endpoint = Url::parse("https://starid.local/")?;
+    let endpoint = Url::parse("https://webvh-provider.local/")?;
     let next_root = public_multikey([2_u8; 32]);
     Ok(prepare_principal_inception(&PrincipalInceptionInput {
         provider_endpoint: &endpoint,

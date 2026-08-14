@@ -9,13 +9,13 @@ async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn starid_optional_resolver_profile_is_discoverable() -> Result<()> {
-    cotest::scenarios::bridge_contracts::starid_optional_resolver_profile_is_discoverable().await
+async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
+    cotest::scenarios::bridge_contracts::session_grant_presentation_uses_configured_coauth_introspection()
+        .await
 }
 
 #[tokio::test]
 #[serial]
-async fn session_grant_presentation_uses_configured_coauth_introspection() -> Result<()> {
-    cotest::scenarios::bridge_contracts::session_grant_presentation_uses_configured_coauth_introspection()
-        .await
+async fn external_webvh_provider_is_discoverable() -> Result<()> {
+    cotest::scenarios::bridge_contracts::external_webvh_provider_is_discoverable().await
 }

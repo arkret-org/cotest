@@ -77,11 +77,11 @@
         },
         {
           "target": "bridge_contracts",
-          "filter": "starid_optional_resolver_profile_is_discoverable"
+          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
         },
         {
           "target": "bridge_contracts",
-          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
+          "filter": "external_webvh_provider_is_discoverable"
         },
         {
           "target": "profile_claim_gate",
@@ -198,11 +198,11 @@
         },
         {
           "target": "bridge_contracts",
-          "filter": "starid_optional_resolver_profile_is_discoverable"
+          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
         },
         {
           "target": "bridge_contracts",
-          "filter": "session_grant_presentation_uses_configured_coauth_introspection"
+          "filter": "external_webvh_provider_is_discoverable"
         },
         {
           "target": "inkson_mock_parity",

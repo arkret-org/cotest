@@ -1,21 +1,22 @@
 // Principal did:webvh inception fixture construction.
 //
+// Every byte of the entry is built by the SDK through the `cotest-wire`
+// bridge: SCID derivation, the whole-entry `{SCID}` substitution
+// (identity-did.md §3.4.4), the entry hash and the `eddsa-jcs-2022` proof.
+// The harness deliberately owns no webvh construction of its own — a
+// second implementation here is exactly how a dialect drift starts.
+//
 // This helper only emits the current cold-root entry-0 shape. The root and
 // next root stay in method parameters. Device authorization is intentionally
 // absent: the DID is only the identity/root-rotation anchor.
 
-import {
-  createHash,
-  generateKeyPairSync,
-  type KeyObject,
-  sign,
-} from "node:crypto";
+import { generateKeyPairSync, type KeyObject } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
-import { canonicalBytes, canonicalJson, expectJsonOk } from "./soland-api";
-import { base58btcEncode, encodeEd25519PubkeyMultibase } from "./encoding";
-
-const WEBVH_SCID_PLACEHOLDER = "{SCID}";
-const WEBVH_METHOD_VERSION = "did:webvh:1.0";
+import { canonicalJson, cotestWire, expectJsonOk } from "./soland-api";
+import {
+  ed25519PrivateKeySeedB64url,
+  encodeEd25519PubkeyMultibase,
+} from "./encoding";
 
 export type WebvhKey = {
   publicKey: Buffer;
@@ -54,104 +55,27 @@ export function generateWebvhKey(): WebvhKey {
   };
 }
 
-function sha256MultihashBase58btc(bytes: Buffer): string {
-  const digest = createHash("sha256").update(bytes).digest();
-  return base58btcEncode(Buffer.concat([Buffer.from([0x12, 0x20]), digest]));
-}
-
-function entryHash(
-  entry: Record<string, unknown>,
-  previousAnchor: string,
-): string {
-  const preimage: Record<string, unknown> = {
-    ...entry,
-    versionId: previousAnchor,
-  };
-  delete preimage.proof;
-  return sha256MultihashBase58btc(canonicalBytes(preimage));
-}
-
-function buildEntryProof(
-  entry: Record<string, unknown>,
-  signer: WebvhKey,
-): Record<string, unknown> {
-  const proofConfig = {
-    type: "DataIntegrityProof",
-    cryptosuite: "eddsa-jcs-2022",
-    verificationMethod: `did:key:${signer.multibase}#${signer.multibase}`,
-    proofPurpose: "assertionMethod",
-  };
-  const document = { ...entry };
-  delete document.proof;
-  const signingInput = Buffer.concat([
-    createHash("sha256").update(canonicalBytes(proofConfig)).digest(),
-    createHash("sha256").update(canonicalBytes(document)).digest(),
-  ]);
-  const signature = sign(null, signingInput, signer.privateKey);
-  return {
-    ...proofConfig,
-    proofValue: `z${base58btcEncode(signature)}`,
-  };
-}
-
-function webvhMethodAuthority(baseUrl: string): string {
-  const url = new URL(baseUrl);
-  if (!url.hostname.includes(".")) {
-    throw new Error(`webvh host must contain a dot: ${url.hostname}`);
-  }
-  return url.port ? `${url.hostname}%3A${url.port}` : url.hostname;
-}
-
-function formatWebvhDid(
-  methodAuthority: string,
-  scid: string,
-  localId: string,
-): string {
-  return `did:webvh:${scid}:${methodAuthority}:webvh:${localId}`;
+/// The preliminary `did:webvh:{SCID}:…` a genesis DID document is authored
+/// against. The SDK owns the DID <-> hosting-authority mapping.
+export function webvhPlaceholderDid(baseUrl: string, localId: string): string {
+  return cotestWire<{ did: string; method_authority: string }>(
+    "webvh-placeholder-did",
+    { base_url: baseUrl, local_id: localId },
+  ).did;
 }
 
 export function buildWebvhGenesisEntry(
   input: WebvhGenesisInput,
 ): BuiltWebvhGenesis {
-  if (input.rootKey.multibase === input.nextRootKey.multibase) {
-    throw new Error("active and next WebVH root keys must be distinct");
-  }
-  const methodAuthority = webvhMethodAuthority(input.baseUrl);
-  const placeholderDid = formatWebvhDid(
-    methodAuthority,
-    WEBVH_SCID_PLACEHOLDER,
-    input.localId,
-  );
-  const entrySkeleton: Record<string, unknown> = {
-    versionId: WEBVH_SCID_PLACEHOLDER,
-    versionTime: input.versionTime ?? new Date().toISOString(),
-    parameters: {
-      scid: WEBVH_SCID_PLACEHOLDER,
-      method: WEBVH_METHOD_VERSION,
-      updateKeys: [input.rootKey.multibase],
-      nextKeyHashes: [
-        sha256MultihashBase58btc(
-          Buffer.from(input.nextRootKey.multibase, "utf8"),
-        ),
-      ],
-    },
-    state: input.document(placeholderDid),
-  };
-  const scid = sha256MultihashBase58btc(canonicalBytes(entrySkeleton));
-  const did = formatWebvhDid(methodAuthority, scid, input.localId);
-  const entry = JSON.parse(
-    JSON.stringify(entrySkeleton).split(WEBVH_SCID_PLACEHOLDER).join(scid),
-  ) as Record<string, unknown>;
-  const versionId = `1-${entryHash(entry, scid)}`;
-  entry.versionId = versionId;
-  entry.proof = [buildEntryProof(entry, input.rootKey)];
-  return {
-    did,
-    scid,
-    versionId,
-    entry,
-    didDocument: entry.state as Record<string, unknown>,
-  };
+  const placeholderDid = webvhPlaceholderDid(input.baseUrl, input.localId);
+  return cotestWire<BuiltWebvhGenesis>("webvh-genesis", {
+    base_url: input.baseUrl,
+    local_id: input.localId,
+    root_seed_b64url: ed25519PrivateKeySeedB64url(input.rootKey.privateKey),
+    next_root_public_key_multibase: input.nextRootKey.multibase,
+    version_time: input.versionTime,
+    document: input.document(placeholderDid),
+  });
 }
 
 export async function submitPrincipalGenesisEntry(
