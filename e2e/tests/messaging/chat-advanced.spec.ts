@@ -219,11 +219,7 @@ test.describe("chat advanced", () => {
             kind: "ak.content.text",
             body,
             mentions: [
-              {
-                type: "actor",
-                did: fixture.bob.did,
-                handle: fixture.bob.handle,
-              },
+              { kind: "mention", subject_id: fixture.bob.did },
             ],
           },
         },
@@ -243,9 +239,7 @@ test.describe("chat advanced", () => {
     );
     expect(mention?.payload).toMatchObject({
       content: {
-        mentions: [
-          { type: "actor", did: fixture.bob.did, handle: fixture.bob.handle },
-        ],
+        mentions: [{ kind: "mention", subject_id: fixture.bob.did }],
       },
     });
     expect(mention?.payload).not.toHaveProperty("mention_routing_hint");
@@ -272,7 +266,7 @@ test.describe("chat advanced", () => {
           kind: "ak.content.text",
           body,
           mentions: [
-            { type: "actor", did: fixture.bob.did, handle: fixture.bob.handle },
+            { kind: "mention", subject_id: fixture.bob.did },
           ],
         },
       },
@@ -342,7 +336,7 @@ test.describe("chat advanced", () => {
     expect(rootProjection).toMatchObject({
       payload: {
         content: {
-          mentions: [{ did: fixture.bob.did }],
+          mentions: [{ kind: "mention", subject_id: fixture.bob.did }],
         },
       },
     });

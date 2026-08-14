@@ -658,7 +658,7 @@ export async function createRealmApi(
       recipient_service_kind: "principal_server",
       binding_scope: "realm",
       binding_source: "did_document_default",
-      delivery_modes: ["events", "sync", "to_device", "push", "key_packages"],
+      delivery_modes: ["events", "sync", "to_device", "push", "keypackages"],
       service_endpoint: solandBaseUrl(opts.server),
       did_document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
       resolved_at: createdAt,
@@ -911,8 +911,13 @@ export async function grantRealmReviewCapabilityApi(
   );
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
-  // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
+  // instead of a reducer rejection. `proofs` is attached after signing, and
+  // `issuer_principal_server_id` is reducer-derived from the carrier Event —
+  // producers MUST NOT author it.
+  const unsignedGrant: Omit<
+    CapabilityGrantObject,
+    "id" | "proofs" | "issuer_principal_server_id"
+  > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
@@ -1007,8 +1012,13 @@ export async function grantServiceCapabilityApi(
   const action = args.action ?? "ak.message.create";
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
-  // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
+  // instead of a reducer rejection. `proofs` is attached after signing, and
+  // `issuer_principal_server_id` is reducer-derived from the carrier Event —
+  // producers MUST NOT author it.
+  const unsignedGrant: Omit<
+    CapabilityGrantObject,
+    "id" | "proofs" | "issuer_principal_server_id"
+  > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
@@ -1088,8 +1098,13 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   const issuedAt = canonicalTimestamp();
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
-  // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
+  // instead of a reducer rejection. `proofs` is attached after signing, and
+  // `issuer_principal_server_id` is reducer-derived from the carrier Event —
+  // producers MUST NOT author it.
+  const unsignedGrant: Omit<
+    CapabilityGrantObject,
+    "id" | "proofs" | "issuer_principal_server_id"
+  > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
