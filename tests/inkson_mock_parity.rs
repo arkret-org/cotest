@@ -1079,7 +1079,7 @@ async fn prepare_live_publication_body(
         .into_iter()
         .map(|submission| submission.event)
         .collect::<Vec<_>>();
-    let request = arkret_wire::AuthorizationLeaseIssueRequest {
+    let request = arkret_wire::AuthorizationLeaseIssueRequestBody {
         events: events.clone(),
         intents: Vec::new(),
     };

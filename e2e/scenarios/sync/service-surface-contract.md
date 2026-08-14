@@ -18,13 +18,13 @@
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.1 — 标准错误码与 `unsupported_feature` / `unsupported_event_kind` 区分
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5.2 — 未知路径 `404 unrecognized_endpoint` / 错误方法 `405 method_not_allowed`,MUST 使用统一错误响应
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §6 — 幂等(`Idempotency-Key` / `event_id` / `request_id`、`duplicate_conflict` 语义)
-- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ak:cursor:<base64url>`、`invalid_param` / `cursor_expired`、TTL 上限
+- `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7 — Cursor opaque token、`ak:cursor:<base64url>`、`param_invalid` / `cursor_expired`、TTL 上限
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §7.1 — 列表分页响应形状(`items` / `next_cursor` / `has_more`)
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §11 — 版本与 feature discovery
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2 — 统一约定 canonical `ServiceDescribe` shape 必填字段集
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ak.server.*` / `ak.events.*` / `ak.sync.*` 等)
 - `arkret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ak.schema.service_describe.v1` wire schema
-- `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `invalid_param` / `cursor_expired` canonical 定义
+- `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `param_invalid` / `cursor_expired` canonical 定义
 - 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/arkret.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)
 
 ## 拓扑
@@ -108,7 +108,7 @@
     - 三页 union 至少覆盖 step 12 播种的全部 ID(no gap)
     - 任意页的 cursor `base64url_decode(cursor.slice("ak:cursor:".length))` 不抛错,且 decoded 字节中**不含**任何 event_id / item id 的明文子串(opacity:客户端不得据此推断排序/权限)
 18. **Cursor expiry 子断言**:把 step 14 的 `next_cursor` 篡改一个字符(保持 base64url 合法),POST 给 list endpoint
-19. 断言:`error.code ∈ { "invalid_param", "cursor_expired" }` 且 HTTP 4xx;**不得** 静默从头返回 page 1
+19. 断言:`error.code ∈ { "param_invalid", "cursor_expired" }` 且 HTTP 4xx;**不得** 静默从头返回 page 1
 
 ### Phase D0 — Event ID replay(§6)
 
@@ -151,7 +151,7 @@
 
 - Phase A:两个 service 的 `/server/describe` 返回 spec §3 + §3.0 全部必填字段;`service_kind` 正确;`claim_kind === "self_claimed"`;dev mode `verified_profiles` 为空;coauth 不 claim identity registry
 - Phase B:未知路径 → 404 `unrecognized_endpoint`;错误 method → 405 `method_not_allowed`;两者都符合 §5 错误 envelope,不返回 HTML/栈信息
-- Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ak:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `invalid_param` / `cursor_expired`
+- Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ak:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `param_invalid` / `cursor_expired`
 - Phase D0:`event_id` 同 envelope 重放 → duplicate/no-op;同 `event_id` 不同 body → `duplicate_conflict` / 409;事件只投影一次
 - Phase D:同键同 body → 与首次等价;同键不同 body → `duplicate_conflict` / 409;副作用只发生一次
 - Phase E:`requirements.features[]` 引用未实现 feature → `unsupported_feature` / 4xx;event 未落库;不被泛 code 替代

@@ -99,7 +99,7 @@ fn validate_bad_signature(case: &Value) -> Result<SecurityDecision> {
     {
         let proof: Proof = match serde_json::from_value(proof.clone()) {
             Ok(proof) => proof,
-            Err(_) => return Ok(SecurityDecision::reject("invalid_signature")),
+            Err(_) => return Ok(SecurityDecision::reject("signature_invalid")),
         };
         if let Err(error_code) = verify_event_proof_signature(event, &proof, &public_key) {
             return Ok(SecurityDecision::reject(error_code));
@@ -120,10 +120,10 @@ fn verify_event_proof_signature(
 ) -> std::result::Result<(), &'static str> {
     let actor_id = required_str(event, "actor_id")
         .and_then(|value| DidCoreId::new(value).map_err(Into::into))
-        .map_err(|_| "invalid_signature")?;
-    let canonical_bytes = canonical_event_payload_bytes(event).map_err(|_| "invalid_signature")?;
+        .map_err(|_| "signature_invalid")?;
+    let canonical_bytes = canonical_event_payload_bytes(event).map_err(|_| "signature_invalid")?;
     verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &actor_id, public_key)
-        .map_err(|_| "invalid_signature")
+        .map_err(|_| "signature_invalid")
 }
 
 fn parse_public_key(hex: &str) -> Result<PublicKeyMaterial> {
@@ -430,7 +430,7 @@ mod tests {
         proof.jws = format!("{header_b64}..{forged_sig}");
         assert_eq!(
             verify_event_proof_signature(&event, &proof, &public_key(&signing_key)),
-            Err("invalid_signature"),
+            Err("signature_invalid"),
         );
     }
 
@@ -442,7 +442,7 @@ mod tests {
         let proof = signed_proof(&event, &signing_key);
         assert_eq!(
             verify_event_proof_signature(&event, &proof, &public_key(&other_key)),
-            Err("invalid_signature"),
+            Err("signature_invalid"),
         );
     }
 
@@ -456,7 +456,7 @@ mod tests {
                 .unwrap();
         assert_eq!(
             verify_event_proof_signature(&event, &proof, &public_key(&signing_key)),
-            Err("invalid_signature"),
+            Err("signature_invalid"),
         );
     }
 
@@ -469,7 +469,7 @@ mod tests {
         proof.jws = sign_ed25519_detached_jws(&signing_key, &canonical).unwrap();
         assert_eq!(
             verify_event_proof_signature(&event, &proof, &public_key(&signing_key)),
-            Err("invalid_signature"),
+            Err("signature_invalid"),
         );
     }
 }

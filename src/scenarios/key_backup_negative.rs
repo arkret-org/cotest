@@ -40,7 +40,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
             .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
 

@@ -261,7 +261,7 @@ fn evaluate_signal_step(advertised: &Map<String, Value>, step: &Value) -> Result
     else {
         return Ok(json!({
             "decision": "reject",
-            "reason": "signal_class_not_permitted",
+            "reason": "signal_class_denied",
             "durable_event_written": false,
         }));
     };
@@ -326,14 +326,14 @@ fn evaluate_projection_response(
     purpose: &str,
 ) -> Result<Value> {
     let Some(has_more) = response.get("has_more").and_then(Value::as_bool) else {
-        return Ok(json!({"decision": "reject", "reason": "invalid_response"}));
+        return Ok(json!({"decision": "reject", "reason": "response_invalid"}));
     };
     if has_more {
         let Some(cursor) = response.get("next_cursor").and_then(Value::as_str) else {
-            return Ok(json!({"decision": "reject", "reason": "invalid_response"}));
+            return Ok(json!({"decision": "reject", "reason": "response_invalid"}));
         };
         if !cursor.starts_with("ak:cursor:") {
-            return Ok(json!({"decision": "reject", "reason": "invalid_response"}));
+            return Ok(json!({"decision": "reject", "reason": "response_invalid"}));
         }
         let binding = required_object(response, "cursor_binding")?;
         if required_str_obj(binding, "caller")? != caller

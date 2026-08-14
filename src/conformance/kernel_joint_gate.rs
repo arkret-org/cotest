@@ -173,17 +173,17 @@ fn kernel_genesis(input: &KernelGateInput) -> KernelGateOutcome {
         Err(outcome) => return outcome,
     };
     if notary.validate().is_err() {
-        return error("invalid_genesis_seal", "founding_authority_invalid");
+        return error("genesis_seal_invalid", "founding_authority_invalid");
     }
     let required = string_set(input.basis.get("required_cells"));
     let covered = string_set(input.basis.get("covered_cells"));
     if required.is_empty() || !required.is_subset(&covered) {
-        return error("invalid_genesis_seal", "founding_unit_incomplete");
+        return error("genesis_seal_invalid", "founding_unit_incomplete");
     }
     let authorities = notary_members(&notary);
     let signers = string_set(input.basis.pointer("/seal/signers"));
     if authorities.is_disjoint(&signers) {
-        return error("invalid_genesis_seal", "founding_authority_not_bound");
+        return error("genesis_seal_invalid", "founding_authority_not_bound");
     }
     projection(json!({
         "authority": authorities.into_iter().collect::<Vec<_>>(),
@@ -665,7 +665,7 @@ fn kernel_equivocation(input: &KernelGateInput) -> KernelGateOutcome {
 
 fn parse_notary(value: Option<&Value>) -> std::result::Result<NotaryValue, KernelGateOutcome> {
     let Some(value) = value else {
-        return Err(error("invalid_genesis_seal", "founding_authority_missing"));
+        return Err(error("genesis_seal_invalid", "founding_authority_missing"));
     };
     serde_json::from_value(value.clone())
         .map_err(|_| error("schema_violation", "notary_profile_invalid"))

@@ -2,11 +2,11 @@
   "profile": "ak.profile.consent_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "Holder-private consent cell (or-set lattice) Move semantics. Spec: identity/consent-model.md + authz/event-auth-state-resolution.md (Move/Anchor/Lattice). Each consent grant Move adds a tag (peer, scope) to the holder-keyed or-set cell `ak:cell:ak.component.consent.grant.v1:<holder>`; each consent revoke Move issues a causal remove of one or more existing tags by their op_ids. Consent membership is the join (active set) of the cell after applying every Move; an invite Move's `require_consent` precondition reads that active set. C19.A wire-break (spec 2026-05-09): typed cell ids carry holder DIDs as the subject; previous fixtures used a synthetic `ak:consent:<ulid>` id that is no longer registered as a typed UUIDv7 id_kind.",
+  "comment": "Holder-private consent cell (or-set lattice) Move semantics. Spec: identity/consent-model.md + authz/event-auth-state-resolution.md (Move/Anchor/Lattice). Each consent grant Move adds a tag (peer, scope) to the holder-keyed or-set cell `ak:cell:ak.component.consent.grant.v1:<holder>`; each consent revoke Move issues a causal remove of one or more existing tags by their op_ids. Consent membership is the join (active set) of the cell after applying every Move; an invite Move's `consent_required` precondition reads that active set. C19.A wire-break (spec 2026-05-09): typed cell ids carry holder DIDs as the subject; previous fixtures used a synthetic `ak:consent:<ulid>` id that is no longer registered as a typed UUIDv7 id_kind.",
   "vectors": [
     {
       "name": "grant_then_invite_accepts",
-      "comment": "Holder grants consent for `invite` scope to peer; the or-set cell join contains (bob, invite). The subsequent invite Move's `require_consent` precondition resolves true and Move is accepted.",
+      "comment": "Holder grants consent for `invite` scope to peer; the or-set cell join contains (bob, invite). The subsequent invite Move's `consent_required` precondition resolves true and Move is accepted.",
       "moves": [
         {
           "move_id": "ak:event:AZC-U6IhvshOPx6I2sZcwUIipTolibFEKZrW4-KHFwXY",
@@ -158,7 +158,7 @@
     },
     {
       "name": "require_consent_profile_blocks_unconsented_invite",
-      "comment": "When the receiving Space pins the require_consent component, the invite Move's `consent_active` precondition fails closed because the holder's or-set has no matching tag. Move is rejected with consent_required.",
+      "comment": "When the receiving Space pins the consent_required component, the invite Move's `consent_active` precondition fails closed because the holder's or-set has no matching tag. Move is rejected with consent_required.",
       "moves": [
         {
           "move_id": "ak:event:AXmvES9hZnd6rMGeyyrheZ3OD3clq90EyCR8zNtL7b-q",

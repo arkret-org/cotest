@@ -97,7 +97,7 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
             .pointer("/error/code")
             .or_else(|| wrong_purpose_body.pointer("/error/errcode"))
             .and_then(Value::as_str),
-        Some("invalid_param")
+        Some("param_invalid")
     );
 
     let wrong_scope = crate::harness::expect_response(

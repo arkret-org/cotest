@@ -218,7 +218,7 @@ test.describe("conformance encoding vectors", () => {
     const body = await resp.json();
     const acceptedCodes = new Set([
       "schema_violation",
-      "bad_json",
+      "json_invalid",
       "invalid_canonical_json",
       "invalid_encoding",
     ]);
@@ -253,7 +253,7 @@ test.describe("conformance encoding vectors", () => {
     const body = await resp.json();
     const acceptedCodes = new Set([
       "schema_violation",
-      "bad_json",
+      "json_invalid",
       "invalid_canonical_json",
       "invalid_encoding",
     ]);

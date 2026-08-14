@@ -84,7 +84,7 @@ struct IdentityCreationRegisterFixtureInput {
     challenge: Value,
     did_operation: Value,
     pcr_genesis_unit: Value,
-    initial_session: arkret::InitialSessionGrantRequest,
+    initial_session: arkret::InitialSessionGrantIntent,
     recovery_key: String,
     display_name: Option<String>,
 }
@@ -141,7 +141,7 @@ fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
 fn principal_registration_fixture(input: Value) -> Result<Value> {
     let input: PrincipalRegistrationFixtureInput =
         serde_json::from_value(input).context("parse principal-registration fixture input")?;
-    let initial_session = arkret::InitialSessionGrantRequest {
+    let initial_session = arkret::InitialSessionGrantIntent {
         device_id: input
             .device_id
             .parse()

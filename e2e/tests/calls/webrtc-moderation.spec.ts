@@ -174,7 +174,7 @@ test.describe("call moderation (spec wire)", () => {
     const denied = await postCallSignalRaw(request, bobToken, moderation);
     expect(denied.status(), await denied.text()).toBe(403);
     expect(wireErrCode(await denied.json())).toBe(
-      "signal_class_not_permitted",
+      "signal_class_denied",
     );
 
     // Control: alice (owner) CAN relay a moderation frame — proving the gate is

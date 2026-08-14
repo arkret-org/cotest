@@ -310,7 +310,7 @@ fn valid_v1_patch_path(path: &str) -> bool {
 
 fn validate_decoded_canonical_size_matrix(case: &Value, generator: &Value) -> Result<()> {
     const EXPECTED_DIMENSIONS: &[(&str, u64, &str)] = &[
-        ("cursor_payload", 65_536, "invalid_param"),
+        ("cursor_payload", 65_536, "param_invalid"),
         ("resource_selector", 65_536, "selector_too_complex"),
         (
             "resource_selector.unknown_field_count",
@@ -459,7 +459,7 @@ fn validate_three_point_limit_matrix(case: &Value, generator: &Value) -> Result<
             "schema_violation",
         ),
         (
-            "chunk.chunk_proof",
+            "chunk.chunk_inclusion_proof",
             10,
             "over_error_code",
             "schema_violation",
@@ -578,7 +578,7 @@ fn validate_chunk_request_matrix(case: &Value, generator: &Value) -> Result<()> 
         {
             "chunk_index": "equal_to_manifest_chunk_count",
             "expected_bundle_digest": "matches_chunk_zero",
-            "expect": "invalid_param"
+            "expect": "param_invalid"
         }
     ]);
     if generator.get("cases") != Some(&expected_cases) {

@@ -1346,7 +1346,7 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
                     bail!("vector {vector_name} outside-window case must exceed freshness window");
                 }
                 require_str_eq(case, "/expected/result", "reject_or_hide", vector_name)?;
-                require_str_eq(case, "/expected/reason", "stale_seal_ref", vector_name)?;
+                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
             }
             "revoked_key_within_freshness_window" | "revoked_key_at_freshness_window_boundary" => {
                 let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
@@ -1790,7 +1790,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     "reject_or_hide",
                     vector_name,
                 )?;
-                require_str_eq(case, "/expected/reason", "stale_seal_ref", vector_name)?;
+                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
                 require_bool_eq(
                     case,
                     "/expected/freshness_window_applies",
@@ -1811,7 +1811,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     "fail_closed",
                     vector_name,
                 )?;
-                require_str_eq(case, "/expected/reason", "stale_seal_ref", vector_name)?;
+                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
                 require_bool_eq(
                     case,
                     "/expected/freshness_window_applies",
@@ -1890,7 +1890,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                     "reject_or_hide",
                     vector_name,
                 )?;
-                require_str_eq(revoked, "/expected/reason", "stale_seal_ref", vector_name)?;
+                require_str_eq(revoked, "/expected/reason", "seal_ref_stale", vector_name)?;
                 require_bool_eq(
                     revoked,
                     "/expected/data_cell_x_projection_retroactively_removed",
@@ -1928,7 +1928,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
                 require_str_eq(
                     case,
                     "/expected/final_reason",
-                    "stale_seal_ref",
+                    "seal_ref_stale",
                     vector_name,
                 )?;
                 require_str_eq(

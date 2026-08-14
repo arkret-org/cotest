@@ -866,13 +866,13 @@ fn validate_event_envelope(
         let proof_hash = proof.get("event_digest").and_then(Value::as_str);
         let Some(proof_hash) = proof_hash else {
             return Ok(EventEnvelopeDecision::reject(
-                "invalid_signature",
+                "signature_invalid",
                 "proof.event_digest missing",
             ));
         };
         if !looks_like_sha256_digest(proof_hash) {
             return Ok(EventEnvelopeDecision::reject(
-                "invalid_signature",
+                "signature_invalid",
                 "proof.event_digest must be sha256:<hex>",
             ));
         }
@@ -880,13 +880,13 @@ fn validate_event_envelope(
         // simulate tamper / mismatch without exercising real JWS crypto.
         if proof_hash == zero_digest {
             return Ok(EventEnvelopeDecision::reject(
-                "invalid_signature",
+                "signature_invalid",
                 "proof.event_digest is the zero sentinel — tampered envelope",
             ));
         }
         if proof_hash != computed_canonical.as_str() {
             return Ok(EventEnvelopeDecision::reject(
-                "invalid_signature",
+                "signature_invalid",
                 "proof.event_digest does not match canonical Event bytes without proofs",
             ));
         }

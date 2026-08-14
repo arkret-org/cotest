@@ -526,10 +526,10 @@ fn validate_reducer_profile_resolution_case(case: &super::NamedCase) -> Result<(
             if supported {
                 "accepted"
             } else {
-                "profile_unsupported"
+                "unsupported_profile"
             }
         }
-        "settled_reducer_profile_not_implemented" => "profile_unsupported",
+        "settled_reducer_profile_not_implemented" => "unsupported_profile",
         "upgrade_target_not_registered" => {
             let registry = super::load_artifact_json("registry/reducer-profile-registry.json")?;
             let source = input["source_reducer_profile"].as_str().unwrap_or_default();
@@ -544,7 +544,7 @@ fn validate_reducer_profile_resolution_case(case: &super::NamedCase) -> Result<(
             if registered {
                 "accepted"
             } else {
-                "profile_unsupported"
+                "unsupported_profile"
             }
         }
         _ => unreachable!(),

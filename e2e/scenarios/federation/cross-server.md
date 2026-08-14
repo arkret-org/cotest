@@ -140,7 +140,7 @@
 
 ## Edge cases / sub-tests
 
-- **E2.3 profile_unsupported**：让 Event 的 CBA 落在 β 未实现的 reducer profile；断言 Event 以 `profile_unsupported` 拒绝
+- **E2.3 unsupported_profile**：让 Event 的 CBA 落在 β 未实现的 reducer profile；断言 Event 以 `unsupported_profile` 拒绝
 - **E2.4 idempotent push**:α 把同一个 invite event 推两次,β 第二次也返回 `accepted`(幂等),不重复写入
 - **E2.5 signature 失败**:篡改 α 的 HTTP signature header,β 整批拒绝;断言 4xx 状态码 + 标准 JSON error envelope
 - **E2.6 dependency_missing**:α 发一个 `prev_refs` 指向 β 未见过的 event 的 message,β 把它放 `rejected[]` with `reason_code=dependency_missing`

@@ -21,6 +21,7 @@ pub fn run_downstream_impact_contract_suite() -> Result<()> {
     run_moderation_dismiss_and_concurrent_fold_vector()?;
     run_policy_transcript_tamper_vector()?;
     run_error_status_context_vector()?;
+    run_error_code_vocabulary_rename_vector()?;
     Ok(())
 }
 
@@ -270,5 +271,61 @@ pub fn run_error_status_context_vector() -> Result<()> {
     if ErrorCode::UpstreamUnavailable.http_status() != 503 {
         return Err(anyhow!("upstream_unavailable must map to HTTP 503"));
     }
+    Ok(())
+}
+
+fn run_error_code_vocabulary_rename_vector() -> Result<()> {
+    const RENAMES: &[(&str, &str)] = &[
+        ("bad_json", "json_invalid"),
+        ("bad_query", "query_invalid"),
+        ("device_not_authorized", "device_unauthorized"),
+        ("directory_not_authorized", "directory_unauthorized"),
+        (
+            "federation_actor_origin_rejected",
+            "federation_actor_origin_denied",
+        ),
+        ("invalid_avatar_blob_ref", "avatar_blob_ref_invalid"),
+        ("invalid_avatar_url", "avatar_url_invalid"),
+        ("invalid_genesis_seal", "genesis_seal_invalid"),
+        ("invalid_param", "param_invalid"),
+        ("invalid_response", "response_invalid"),
+        ("invalid_signature", "signature_invalid"),
+        ("missing_param", "param_missing"),
+        (
+            "organization_registration_scope_unsupported",
+            "unsupported_organization_registration_scope",
+        ),
+        ("profile_unsupported", "unsupported_profile"),
+        (
+            "recovery_policy_device_not_authorized",
+            "recovery_policy_device_unauthorized",
+        ),
+        (
+            "service_registration_rejected",
+            "service_registration_denied",
+        ),
+        ("signal_class_not_permitted", "signal_class_denied"),
+        ("stale_frontier", "frontier_stale"),
+        ("stale_peer", "peer_stale"),
+        (
+            "stale_peer_state_unavailable",
+            "peer_state_stale_unavailable",
+        ),
+        ("stale_seal_ref", "seal_ref_stale"),
+        ("unknown_did", "did_unknown"),
+        ("verifier_not_authorized", "verifier_unauthorized"),
+    ];
+
+    for &(legacy, current) in RENAMES {
+        if ErrorCode::from_wire(legacy).is_some() {
+            bail!("legacy error code `{legacy}` is still accepted by the SDK parser");
+        }
+        let parsed = ErrorCode::from_wire(current)
+            .ok_or_else(|| anyhow!("current error code `{current}` is not recognised"))?;
+        if parsed.as_str() != current {
+            bail!("current error code `{current}` did not round-trip exactly");
+        }
+    }
+
     Ok(())
 }

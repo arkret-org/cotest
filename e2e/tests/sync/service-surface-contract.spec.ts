@@ -149,7 +149,7 @@ async function startSharedDescribeBinding(
         JSON.stringify({
           ok: false,
           error: {
-            code: "invalid_param",
+            code: "param_invalid",
             message: serviceKind
               ? `service_kind ${JSON.stringify(serviceKind)} is not available on this binding`
               : "service_kind is required when multiple roles share this binding",
@@ -260,7 +260,7 @@ test.describe("describes soland surface @fully-implemented", () => {
       `${solandBaseUrl()}/_arkret/describe?service_kind=auth_server`,
     );
     expect(rejected.status()).toBe(400);
-    expect(wireErrCode(await rejected.json())).toBe("invalid_param");
+    expect(wireErrCode(await rejected.json())).toBe("param_invalid");
   });
 });
 
@@ -342,7 +342,7 @@ test.describe("describes coauth surface @fully-implemented", () => {
       `${baseUrl}/_arkret/describe?service_kind=principal_server`,
     );
     expect(rejected.status()).toBe(400);
-    expect(wireErrCode(await rejected.json())).toBe("invalid_param");
+    expect(wireErrCode(await rejected.json())).toBe("param_invalid");
   });
 });
 
@@ -374,13 +374,13 @@ test.describe("shared public describe binding @fully-implemented", () => {
     try {
       const missing = await request.get(`${shared.baseUrl}/_arkret/describe`);
       expect(missing.status()).toBe(400);
-      expect(wireErrCode(await missing.json())).toBe("invalid_param");
+      expect(wireErrCode(await missing.json())).toBe("param_invalid");
 
       const invalid = await request.get(
         `${shared.baseUrl}/_arkret/describe?service_kind=directory_service`,
       );
       expect(invalid.status()).toBe(400);
-      expect(wireErrCode(await invalid.json())).toBe("invalid_param");
+      expect(wireErrCode(await invalid.json())).toBe("param_invalid");
 
       const selectedPrincipal = await request.get(
         `${shared.baseUrl}/_arkret/describe?service_kind=principal_server`,
@@ -589,7 +589,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
     "Phase C: list endpoint pagination cursor is opaque, gap-free, and non-overlapping across pages",
     async ({ request }) => {
       // spec: api-conventions.md §7 (cursor opaque; wire form `ak:cursor:<base64url>`;
-      //         invalid → invalid_param; expired → cursor_expired),
+      //         invalid → param_invalid; expired → cursor_expired),
       //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
       //         client paginates by `has_more`, follows `next_cursor`).
       //
@@ -701,7 +701,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         }
       }
 
-      // Tampered cursor → 4xx invalid_param / cursor_expired (api-conventions §7).
+      // Tampered cursor → 4xx param_invalid / cursor_expired (api-conventions §7).
       const firstPage = await fetchPage();
       const validCursor = firstPage.next_cursor;
       expect(validCursor, "first page must carry a next_cursor to tamper").toMatch(cursorRe);
@@ -716,7 +716,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       expect(tamperResp.status(), "tampered cursor is rejected 4xx").toBeGreaterThanOrEqual(400);
       expect(tamperResp.status(), "tampered cursor is a client error").toBeLessThan(500);
       expect(
-        ["invalid_param", "cursor_expired", "invalid_cursor", "cursor_integrity_invalid"],
+        ["param_invalid", "cursor_expired", "invalid_cursor", "cursor_integrity_invalid"],
         "tampered cursor error code",
       ).toContain(wireErrCode(await tamperResp.json()));
     },

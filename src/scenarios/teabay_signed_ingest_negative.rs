@@ -47,7 +47,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             .send()
             .await?,
         StatusCode::UNAUTHORIZED,
-        "invalid_signature",
+        "signature_invalid",
         "missing content-digest",
     )
     .await?;
@@ -58,7 +58,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             .send()
             .await?,
         StatusCode::UNAUTHORIZED,
-        "invalid_signature",
+        "signature_invalid",
         "unknown key",
     )
     .await?;
@@ -75,7 +75,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             .send()
             .await?,
         StatusCode::UNAUTHORIZED,
-        "invalid_signature",
+        "signature_invalid",
         "forged signature bytes",
     )
     .await?;
@@ -86,7 +86,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             .send()
             .await?,
         StatusCode::UNAUTHORIZED,
-        "invalid_signature",
+        "signature_invalid",
         "expired signature",
     )
     .await?;
@@ -97,7 +97,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             .send()
             .await?,
         StatusCode::UNAUTHORIZED,
-        "invalid_signature",
+        "signature_invalid",
         "future signature",
     )
     .await?;

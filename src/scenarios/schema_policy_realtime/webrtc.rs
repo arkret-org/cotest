@@ -53,7 +53,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
                 "mode": "p2p"
             }))),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
 
@@ -70,7 +70,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
                 "mode": "p2p"
             }))?),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
 

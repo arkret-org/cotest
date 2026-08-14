@@ -66,7 +66,7 @@ test.describe("federation security hardening", () => {
     expect(response.status()).toBeGreaterThanOrEqual(400);
     expect(response.status()).toBeLessThan(500);
     const body = await response.json().catch(() => ({}));
-    expect(wireErrCode(body)).toMatch(/capability_denied|unauthenticated|invalid_signature/);
+    expect(wireErrCode(body)).toMatch(/capability_denied|unauthenticated|signature_invalid/);
   });
 
   test("denylisted peer is filtered from outbound fanout", async ({ request }) => {

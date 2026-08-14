@@ -65,7 +65,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "resource": {"kind": "realm", "realm_id": realm_id}
             }))),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
 

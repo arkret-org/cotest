@@ -130,7 +130,7 @@ fn notice_window_reason(
         || cutover_at >= grace_until
         || grace_until > expires_at
     {
-        return Some("invalid_param");
+        return Some("param_invalid");
     }
     if from_sequence != floor_sequence || from_digest != floor_digest {
         return Some("service_route_notice_basis_stale");

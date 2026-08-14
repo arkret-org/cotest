@@ -321,7 +321,7 @@ async fn send_recorded(builder: RequestBuilder) -> Result<RecordedResponse> {
 /// canonicalizer before bytes reach the wire.
 ///
 /// Invalid JSON is intentionally left untouched so malformed-body tests still
-/// exercise the receiver's `bad_json` path.  Schema-invalid but syntactically
+/// exercise the receiver's `json_invalid` path.  Schema-invalid but syntactically
 /// valid values are canonicalized: schema validity and wire encoding are
 /// independent protocol layers.
 fn canonicalize_protocol_json_body(builder: RequestBuilder) -> Result<RequestBuilder> {

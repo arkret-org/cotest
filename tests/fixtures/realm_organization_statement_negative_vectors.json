@@ -28,7 +28,7 @@
       "comment": "Active statement whose authorization.proof is blank must fail closed; an unproven statement cannot endorse the relationship.",
       "mutation": { "set": { "authorization.proof": "   " } },
       "resolver": "no_delegation",
-      "expected": { "outcome": "reject", "reason_code": "invalid_signature" }
+      "expected": { "outcome": "reject", "reason_code": "signature_invalid" }
     },
     {
       "name": "active_missing_proof_field_schema",

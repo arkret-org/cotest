@@ -10,7 +10,7 @@ use arkret_models_crypto::{
 };
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffOutcome,
-    CanonicalSessionPublicJwk, InitialSessionGrantRequest,
+    CanonicalSessionPublicJwk, InitialSessionGrantIntent,
     STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use arkret_wire::{
@@ -164,7 +164,7 @@ fn completion_vector() -> Result<CompletionVector> {
         r#"{{"crv":"Ed25519","kty":"OKP","x":"{holder_x}"}}"#
     ))?;
     let holder_jkt = session_public_key.thumbprint_sha256()?;
-    let initial_session = InitialSessionGrantRequest {
+    let initial_session = InitialSessionGrantIntent {
         device_id: device_id.parse()?,
         session_public_key: session_public_key.clone(),
         audience: audience.parse()?,
@@ -268,7 +268,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
     )?;
     let attestation = &vector.request.completion_attestation;
     let receipt_digest = arkret_canonical::canonical_sha256(&vector.request.terminal_receipt)?;
-    let initial: InitialSessionGrantRequest =
+    let initial: InitialSessionGrantIntent =
         serde_json::from_value(vector.request.initial_session.clone())?;
     initial.validate()?;
     let receipt_generation = serde_json::to_value(&receipt.result_model_generation_ref)?;

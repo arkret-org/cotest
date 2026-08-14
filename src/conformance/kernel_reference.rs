@@ -78,19 +78,19 @@ pub fn reduce(input: &KernelGateInput) -> KernelGateOutcome {
 
 fn reduce_genesis(input: &KernelGateInput) -> KernelGateOutcome {
     let Some(notary) = input.payload.pointer("/object/notary") else {
-        return KernelGateOutcome::error("invalid_genesis_seal", "founding_authority_missing");
+        return KernelGateOutcome::error("genesis_seal_invalid", "founding_authority_missing");
     };
     let Some(authorities) = notary_authorities(notary) else {
-        return KernelGateOutcome::error("invalid_genesis_seal", "founding_authority_invalid");
+        return KernelGateOutcome::error("genesis_seal_invalid", "founding_authority_invalid");
     };
     let required = string_set(input.basis.get("required_cells"));
     let covered = string_set(input.basis.get("covered_cells"));
     if required.is_empty() || !required.is_subset(&covered) {
-        return KernelGateOutcome::error("invalid_genesis_seal", "founding_unit_incomplete");
+        return KernelGateOutcome::error("genesis_seal_invalid", "founding_unit_incomplete");
     }
     let signers = string_set(input.basis.pointer("/seal/signers"));
     if authorities.is_disjoint(&signers) {
-        return KernelGateOutcome::error("invalid_genesis_seal", "founding_authority_not_bound");
+        return KernelGateOutcome::error("genesis_seal_invalid", "founding_authority_not_bound");
     }
     KernelGateOutcome::projection(json!({
         "authority": authorities.into_iter().collect::<Vec<_>>(),

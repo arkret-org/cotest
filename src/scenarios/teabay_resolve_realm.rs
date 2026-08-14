@@ -68,14 +68,14 @@ pub async fn teabay_resolve_realm_three_lookups_run() -> Result<()> {
     assert_resolved_or_blinded_not_found(by_invite, "invite_token").await?;
 
     // --- empty body --------------------------------------------------------
-    // Negative control: no lookup key supplied. Should 400 with missing_param.
+    // Negative control: no lookup key supplied. Should 400 with param_missing.
     let probe = json!({});
     let missing = client.post(&url).json(&probe).send().await?;
     let missing_status = missing.status();
     if missing_status.as_u16() != 400 {
         let body = missing.text().await.unwrap_or_default();
         bail!(
-            "resolve-realm with empty body should 400 with missing_param, got {missing_status}: \
+            "resolve-realm with empty body should 400 with param_missing, got {missing_status}: \
              {body}"
         );
     }
@@ -85,7 +85,7 @@ pub async fn teabay_resolve_realm_three_lookups_run() -> Result<()> {
 
 /// Accept either 200 (envelope) or 404 (blinded not-found). Reject 4xx
 /// responses that suggest the lookup-shape parameter itself was rejected
-/// (e.g. 400 missing_param when we DID supply a key).
+/// (e.g. 400 param_missing when we DID supply a key).
 async fn assert_resolved_or_blinded_not_found(
     resp: reqwest::Response,
     lookup_field: &str,
@@ -104,7 +104,7 @@ async fn assert_resolved_or_blinded_not_found(
     if status.as_u16() == 404 {
         // Blinded not_found is the expected outcome for an unknown key under
         // current impl — verify the errcode is `not_found` (not e.g.
-        // `missing_param`, which would mean the body shape was wrong).
+        // `param_missing`, which would mean the body shape was wrong).
         let body: Value = serde_json::from_str(&text)
             .with_context(|| format!("{lookup_field} 404 response is not JSON: {text}"))?;
         let errcode = body

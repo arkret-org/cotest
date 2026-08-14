@@ -168,7 +168,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
 
@@ -409,7 +409,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
         ))
         .header("range", "bytes=99-100"),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
     expect_api_error(
@@ -511,7 +511,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .header("content-type", "application/json")
             .body("{"),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
     // Blind-wakeup minimization: the push notification envelope is metadata-only
@@ -588,7 +588,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
             .bearer_auth(&alice)
             .json(&wrong_reporter),
         StatusCode::BAD_REQUEST,
-        "invalid_param",
+        "param_invalid",
     )
     .await?;
     expect_api_error(

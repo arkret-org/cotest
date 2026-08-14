@@ -80,17 +80,17 @@ fn account_stream_and_device_message_replay_vectors_converge() {
     let select_role = |requested: Option<&str>| -> Result<String, &'static str> {
         match requested {
             Some(role) if describe_roles.contains(&role) => Ok(role.to_owned()),
-            Some(_) => Err("invalid_param"),
+            Some(_) => Err("param_invalid"),
             None if describe_roles.len() == 1 => Ok(describe_roles[0].to_owned()),
-            None => Err("invalid_param"),
+            None => Err("param_invalid"),
         }
     };
     assert_eq!(
         select_role(Some("principal_server")),
         Ok("principal_server".to_owned())
     );
-    assert_eq!(select_role(None), Err("invalid_param"));
-    assert_eq!(select_role(Some("unknown")), Err("invalid_param"));
+    assert_eq!(select_role(None), Err("param_invalid"));
+    assert_eq!(select_role(Some("unknown")), Err("param_invalid"));
 
     let frame_kinds = ["delta", "catchup_complete", "heartbeat", "delta"];
     let mut catchup_seen = false;

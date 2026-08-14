@@ -257,7 +257,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
         && covered_idempotent_regrant)
     {
         bail!(
-            "consent fixture must cover grant_accept + revoke_block + scope_any + pseudonym + require_consent + idempotent_regrant (or-set Move semantics)"
+            "consent fixture must cover grant_accept + revoke_block + scope_any + pseudonym + consent_required + idempotent_regrant (or-set Move semantics)"
         );
     }
     Ok(())
