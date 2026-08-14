@@ -1433,36 +1433,6 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
     })
 }
 
-/// Builds a signed envelope that additionally carries semantic causal edges.
-///
-/// RSVP needs this: the entry's schedule basis MUST be a subset of
-/// `causal_refs`, and those same edges decide which earlier heads a response
-/// dominates. Two responses that omit each other's digest are concurrent by
-/// construction, which is exactly what the convergence scenario exercises.
-pub(crate) fn event_envelope_with_causal_refs(
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    actor_seq: Option<u64>,
-    prev_event_ids: Vec<EventId>,
-    causal_refs: Vec<String>,
-) -> Event {
-    let (signing_seed, verification_method) = event_signing_identity(actor);
-    event_envelope_with_chain_and_signing_identity_and_causal_refs(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        actor_seq,
-        prev_event_ids,
-        signing_seed,
-        &verification_method,
-        None,
-        causal_refs,
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn event_envelope_with_causal_refs_for_device(
     actor: &str,
