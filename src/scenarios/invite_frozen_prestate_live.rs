@@ -322,9 +322,10 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
 
     // The Inkson producer authors the accepted cancel: the builder is the
     // component that has to carry the correct frozen invitee onto the wire.
-    let inkson_cancel = inkson::operation::ak_ops::invite_cancel(
+    let inkson_cancel = inkson::operation::ak_ops::invite_cancel_for_principal_server(
         &realm_id,
         &alice.actor,
+        arkret_wire::DidCoreId::new(alice.service_id().to_owned())?,
         &invite_id,
         &bob_core_id,
         "revoked",

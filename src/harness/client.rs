@@ -533,8 +533,12 @@ impl TestActorClient {
     /// racing the convenience helper's default Discussion Strand.
     pub async fn create_realm_bootstrap_with(&self, body: Value) -> Result<Value> {
         let draft = realm_create_payload(&self.service_id, &body)?;
-        let (realm_id, events) =
-            realm_bootstrap_event_batch_for_device(&self.actor, &self.device_id, draft)?;
+        let (realm_id, events) = realm_bootstrap_event_batch_for_device(
+            &self.actor,
+            &self.device_id,
+            &DidCoreId::new(self.service_id.clone())?,
+            draft,
+        )?;
         self.controlled_realms
             .lock()
             .expect("cotest controlled-Realm set is not poisoned")
@@ -785,6 +789,7 @@ impl TestActorClient {
         let mut event = event_envelope_with_causal_refs_for_device(
             &self.actor,
             &self.device_id,
+            &DidCoreId::new(self.service_id.clone())?,
             realm_id,
             kind,
             payload,
@@ -900,6 +905,7 @@ impl TestActorClient {
         let mut event = event_envelope_with_chain_for_device(
             &self.actor,
             &self.device_id,
+            &DidCoreId::new(self.service_id.clone())?,
             realm_id,
             kind,
             payload,

@@ -54,7 +54,7 @@ struct AppletTransactionReplayIdentity {
 #[derive(Clone, Debug)]
 struct AppletTransactionReplayRecord {
     body_digest: String,
-    delivery_authentication_record_digest_digest: String,
+    delivery_authentication_record_digest: String,
 }
 
 pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
@@ -215,7 +215,9 @@ fn run_applet_transaction_delivery_authentication_record_digest_case(case: &Valu
     assert_required_assertions(
         case,
         &[
-            "valid_transaction_requires_http_signature_anchor",
+            "valid_transaction_requires_delivery_authentication_record",
+            "delivery_authentication_record_is_closed_and_receiver_derived",
+            "delivery_authentication_record_digest_is_domain_separated",
             "bearer_only_rejected",
             "source_destination_and_content_digest_bound",
             "idempotent_replay_returns_cached_outcome",
@@ -281,13 +283,13 @@ fn evaluate_applet_transaction(
             return Ok(json!({"decision": "reject", "reason": "duplicate_conflict"}));
         }
         let body_digest = required_str(transaction, "body_digest")?;
-        let delivery_authentication_record_digest_digest =
-            required_str(transaction, "delivery_authentication_record_digest_digest")?;
+        let delivery_authentication_record_digest =
+            required_str(transaction, "delivery_authentication_record_digest")?;
         return match cache.get(original_identity) {
             Some(record)
                 if record.body_digest == body_digest
-                    && record.delivery_authentication_record_digest_digest
-                        == delivery_authentication_record_digest_digest =>
+                    && record.delivery_authentication_record_digest
+                        == delivery_authentication_record_digest =>
             {
                 Ok(json!({
                     "decision": "accept_cached",
@@ -357,8 +359,8 @@ fn evaluate_applet_transaction(
 
     let idempotency_key = required_str(transaction, "idempotency_key")?;
     let body_digest = required_str(transaction, "body_digest")?;
-    let delivery_authentication_record_digest_digest =
-        delivery_authentication_record_digest_digest_for_transaction(
+    let delivery_authentication_record_digest =
+        delivery_authentication_record_digest_for_transaction(
             transaction,
             inferred_anchor_by_name,
         )?;
@@ -370,8 +372,7 @@ fn evaluate_applet_transaction(
     )?;
     if let Some(record) = cache.get(&replay_identity) {
         if record.body_digest == body_digest
-            && record.delivery_authentication_record_digest_digest
-                == delivery_authentication_record_digest_digest
+            && record.delivery_authentication_record_digest == delivery_authentication_record_digest
         {
             return Ok(json!({
                 "decision": "accept_cached",
@@ -385,8 +386,7 @@ fn evaluate_applet_transaction(
         replay_identity.clone(),
         AppletTransactionReplayRecord {
             body_digest: body_digest.to_owned(),
-            delivery_authentication_record_digest_digest:
-                delivery_authentication_record_digest_digest.to_owned(),
+            delivery_authentication_record_digest: delivery_authentication_record_digest.to_owned(),
         },
     );
     accepted_by_name.insert(
@@ -396,7 +396,8 @@ fn evaluate_applet_transaction(
 
     Ok(json!({
         "decision": "accept",
-        "delivery_authentication_record_digest_persisted": true,
+        "delivery_authentication_record_persisted": true,
+        "delivery_authentication_record_digest": delivery_authentication_record_digest,
         "side_effects_applied": true,
     }))
 }
@@ -426,7 +427,7 @@ fn inferred_delivery_authentication_record_digests(
         {
             continue;
         }
-        let anchor = required_str(transaction, "delivery_authentication_record_digest_digest")?;
+        let anchor = required_str(transaction, "delivery_authentication_record_digest")?;
         match anchors.insert(replay_of.to_owned(), anchor.to_owned()) {
             Some(previous) if previous != anchor => {
                 bail!("accepted replay anchor for {replay_of} drifted: {previous} != {anchor}")
@@ -437,12 +438,12 @@ fn inferred_delivery_authentication_record_digests(
     Ok(anchors)
 }
 
-fn delivery_authentication_record_digest_digest_for_transaction<'a>(
+fn delivery_authentication_record_digest_for_transaction<'a>(
     transaction: &'a Value,
     inferred_anchor_by_name: &'a BTreeMap<String, String>,
 ) -> Result<&'a str> {
     if let Some(anchor) = transaction
-        .get("delivery_authentication_record_digest_digest")
+        .get("delivery_authentication_record_digest")
         .and_then(Value::as_str)
     {
         return Ok(anchor);

@@ -76,6 +76,7 @@ async fn upload_and_inspect_keys(
     actor_id: &str,
     device_key: &SigningKey,
 ) -> Result<()> {
+    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
     let upload_keys = expect_json(
         server
             .http()
@@ -107,7 +108,7 @@ async fn upload_and_inspect_keys(
             .json(&serde_json::from_value::<
                 arkret_models_crypto::KeysQueryRequestBody,
             >(
-                json!({"device_keys": {(actor_id): [KEYS_DEVICE_ID]}})
+                json!({"device_keys": {(&actor_core_id): [KEYS_DEVICE_ID]}}),
             )?),
         StatusCode::OK,
     )
@@ -115,7 +116,6 @@ async fn upload_and_inspect_keys(
     // Query returns the accepted device directory projection and authorization
     // link. The upload request signature authorizes the mutation; it is not a
     // prekey algorithm entry and therefore is not echoed under `algorithms`.
-    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
     let queried_device = &query_keys["device_keys"][&actor_core_id][KEYS_DEVICE_ID];
     assert_eq!(queried_device["device_status"], "active");
     assert!(

@@ -26,7 +26,7 @@
 //! required) so the orchestrator can read top-to-bottom as a sequence of
 //! protocol phases.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::harness::dev_login;
 use crate::scenarios::identity_test_support::{
@@ -57,19 +57,32 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     .await?;
 
     let (actor, adapter_realm_id, adapter_message_event_id) =
-        events_keys_setup::run(&server, &token, &actor_id).await?;
-    device_messages::run(&server, &token, &actor_id).await?;
-    key_backups::run(&server, &token, &actor_id).await?;
-    backup_delete::run(&server, &token, &actor_id).await?;
-    blob::run(&server, &token).await?;
-    push::run(&server, &token).await?;
+        events_keys_setup::run(&server, &token, &actor_id)
+            .await
+            .context("protocol payload event/key setup")?;
+    device_messages::run(&server, &token, &actor_id)
+        .await
+        .context("protocol payload device messages")?;
+    key_backups::run(&server, &token, &actor_id)
+        .await
+        .context("protocol payload key backups")?;
+    backup_delete::run(&server, &token, &actor_id)
+        .await
+        .context("protocol payload backup deletion")?;
+    blob::run(&server, &token)
+        .await
+        .context("protocol payload blob")?;
+    push::run(&server, &token)
+        .await
+        .context("protocol payload push")?;
     moderation::run(
         &server,
         &actor,
         &adapter_realm_id,
         &adapter_message_event_id,
     )
-    .await?;
+    .await
+    .context("protocol payload moderation")?;
 
     Ok(())
 }

@@ -149,15 +149,7 @@ pub async fn register_account(
     )
     .await?;
 
-    let token = dev_login(server, did, &device_id).await?;
-    let verification_method = default_event_verification_method(did);
-    register_event_signing_identity(
-        did,
-        arkret::signatures::development_signing_key_seed(&verification_method),
-        verification_method.as_str().to_owned(),
-        server.service_id().clone(),
-    );
-    Ok(token)
+    dev_login(server, did, &device_id).await
 }
 
 pub async fn register_account_with_localpart(
@@ -196,10 +188,18 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
         StatusCode::OK,
     )
     .await?;
-    login["session_credential"]
+    let token = login["session_credential"]
         .as_str()
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("login response did not include session_credential: {login}"))
+        .ok_or_else(|| anyhow!("login response did not include session_credential: {login}"))?;
+    let verification_method = default_event_verification_method(actor);
+    register_event_signing_identity(
+        actor,
+        arkret::signatures::development_signing_key_seed(&verification_method),
+        verification_method.as_str().to_owned(),
+        server.service_id().clone(),
+    );
+    Ok(token)
 }
 
 pub fn device_message_send_request(
@@ -363,10 +363,17 @@ pub fn realm_bootstrap_event_batch(
 pub(crate) fn realm_bootstrap_event_batch_for_device(
     actor: &str,
     device_id: &str,
+    principal_server_id: &DidCoreId,
     draft: RealmBootstrapDraft,
 ) -> Result<(String, Vec<arkret_wire::Event>)> {
     let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
-    realm_bootstrap_event_batch_with_signing_seed(actor, draft, signing_seed, &verification_method)
+    realm_bootstrap_event_batch_with_signing_identity(
+        actor,
+        draft,
+        signing_seed,
+        &verification_method,
+        Some(principal_server_id),
+    )
 }
 
 /// The ordinary Realm genesis unit (`models/realm-and-space.md` section 2.5).
@@ -396,6 +403,7 @@ fn realm_bootstrap_followup_event(
     cell: &str,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
+    principal_server_id: Option<&DidCoreId>,
 ) -> Result<Event> {
     let mut event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
@@ -406,6 +414,7 @@ fn realm_bootstrap_followup_event(
         vec![predecessor],
         signing_seed,
         verification_method,
+        principal_server_id,
         Vec::new(),
         vec![head_eq_null_precondition(cell)?],
     );
@@ -434,6 +443,22 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
 ) -> Result<(String, Vec<arkret_wire::Event>)> {
+    realm_bootstrap_event_batch_with_signing_identity(
+        actor,
+        draft,
+        signing_seed,
+        verification_method,
+        None,
+    )
+}
+
+fn realm_bootstrap_event_batch_with_signing_identity(
+    actor: &str,
+    draft: RealmBootstrapDraft,
+    signing_seed: [u8; 32],
+    verification_method: &DidUrl,
+    principal_server_id: Option<&DidCoreId>,
+) -> Result<(String, Vec<arkret_wire::Event>)> {
     let RealmBootstrapDraft {
         create,
         profile,
@@ -457,6 +482,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         Vec::new(),
         signing_seed,
         verification_method,
+        principal_server_id,
         Vec::new(),
         vec![head_eq_null_precondition(
             "ak:cell:ak.component.realm.create.v1:null",
@@ -480,6 +506,7 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
             &cell,
             signing_seed,
             verification_method,
+            principal_server_id,
         )?);
         Ok(())
     };
@@ -538,10 +565,11 @@ pub fn realm_bootstrap_event_batch_with_signing_seed(
         delivery_binding_policy.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DELIVERY_BINDING_POLICY_V1),
     )?;
+    let creator_core_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
     push_followup(
         arkret_wire::event_kind_str::MEMBER_STATE,
         member_join_payload_value(&derived_realm_id, actor)?,
-        format!("ak:cell:ak.component.member.state.v1:{actor}"),
+        format!("ak:cell:ak.component.member.state.v1:{creator_core_id}"),
     )?;
     arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&events)
         .map_err(|error| anyhow!("Realm bootstrap validation failed: {error}"))?;
@@ -704,6 +732,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         frontier.frontier_event_ids,
         signing_seed,
         verification_method,
+        None,
     );
     let descriptor = arkret_wire::EventKind::from(kind).descriptor();
     let is_control_move = descriptor
@@ -822,6 +851,7 @@ pub fn event_envelope_with_preconditions(
         Vec::new(),
         signing_seed,
         &verification_method,
+        None,
         Vec::new(),
         preconditions,
     )
@@ -871,6 +901,7 @@ pub fn event_envelope_with_signing_seed_and_verification_method(
         Vec::new(),
         signing_seed,
         verification_method,
+        None,
     )
 }
 
@@ -893,6 +924,7 @@ pub fn event_envelope_at_frontier_with_signing_seed(
         frontier_event_ids,
         signing_seed,
         &verification_method_for_actor(actor),
+        None,
     )
 }
 
@@ -906,6 +938,7 @@ fn event_envelope_with_chain_and_signing_identity(
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
+    principal_server_id: Option<&DidCoreId>,
 ) -> Event {
     event_envelope_with_chain_and_signing_identity_and_causal_refs(
         actor,
@@ -916,6 +949,7 @@ fn event_envelope_with_chain_and_signing_identity(
         prev_event_ids,
         signing_seed,
         verification_method,
+        principal_server_id,
         Vec::new(),
     )
 }
@@ -930,6 +964,7 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
+    principal_server_id: Option<&DidCoreId>,
     causal_refs: Vec<String>,
 ) -> Event {
     event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
@@ -941,6 +976,7 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
         prev_event_ids,
         signing_seed,
         verification_method,
+        principal_server_id,
         causal_refs,
         Vec::new(),
     )
@@ -986,6 +1022,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
+    principal_server_id: Option<&DidCoreId>,
     causal_refs: Vec<String>,
     preconditions: Vec<arkret_wire::cba::Precondition>,
 ) -> Event {
@@ -1006,7 +1043,9 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         arkret_identifiers::project_full_id_to_core_id(&actor_full_id)
             .expect("cotest actor DID projects to a core id"),
     );
-    let principal_server_id = event_principal_server_id(actor);
+    let principal_server_id = principal_server_id
+        .cloned()
+        .unwrap_or_else(|| event_principal_server_id(actor));
     // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
     // `event_id` from the Event's own content, so the harness builds with the
     // derived constructor and callers read the id back off the built Event.
@@ -1082,12 +1121,14 @@ pub(crate) fn event_envelope_with_chain(
             .collect(),
         signing_seed,
         &verification_method,
+        None,
     )
 }
 
 pub(crate) fn event_envelope_with_chain_for_device(
     actor: &str,
     device_id: &str,
+    principal_server_id: &DidCoreId,
     realm_id: &str,
     kind: &str,
     payload: Value,
@@ -1107,6 +1148,7 @@ pub(crate) fn event_envelope_with_chain_for_device(
             .collect(),
         signing_seed,
         &verification_method,
+        Some(principal_server_id),
     )
 }
 
@@ -1416,6 +1458,7 @@ pub(crate) fn event_envelope_with_causal_refs(
         prev_event_ids,
         signing_seed,
         &verification_method,
+        None,
         causal_refs,
     )
 }
@@ -1424,6 +1467,7 @@ pub(crate) fn event_envelope_with_causal_refs(
 pub(crate) fn event_envelope_with_causal_refs_for_device(
     actor: &str,
     device_id: &str,
+    principal_server_id: &DidCoreId,
     realm_id: &str,
     kind: &str,
     payload: Value,
@@ -1441,6 +1485,7 @@ pub(crate) fn event_envelope_with_causal_refs_for_device(
         prev_event_ids,
         signing_seed,
         &verification_method,
+        Some(principal_server_id),
         causal_refs,
     )
 }
