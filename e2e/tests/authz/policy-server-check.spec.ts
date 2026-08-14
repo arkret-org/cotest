@@ -555,6 +555,21 @@ test.describe("policy server check", () => {
       );
       expect(noFallbackYet.status()).toBe(404);
 
+      const linkEvent = await prepareSignedEventSubmissionApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId: childRealmId,
+          kind: "ak.realm.link",
+          payload: {
+            target_realm_id: orgRealmId,
+            link_kind: "governed_by",
+            status: "active",
+          },
+        }),
+        { context: "prepare child governed_by policy fallback link" },
+      );
       const link = await request.post(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/links`,
         {
@@ -563,9 +578,7 @@ test.describe("policy server check", () => {
             "content-type": "application/json",
           },
           data: canonicalJson({
-            target_realm_id: orgRealmId,
-            link_kind: "governed_by",
-            status: "active",
+            link_event: linkEvent,
           }),
         },
       );

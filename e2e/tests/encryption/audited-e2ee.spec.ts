@@ -8,11 +8,14 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
+  advanceEnvelopeToActorFrontier,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   grantCapabilityEventApi,
+  readRealmSealBasis,
+  refreshEventEnvelopeProof,
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
@@ -67,9 +70,11 @@ test.describe("moderation reports and audited E2EE", () => {
     const localReportEvents = await queryActorAuditEvents(
       request,
       setup.reporterToken,
-      "moderation.report",
+      "ak.self.moderation.report",
     );
-    expect(JSON.stringify(localReportEvents)).toContain(report.report_id);
+    expect(JSON.stringify(localReportEvents)).toContain(
+      report.report_id.replace("ak:report:", "ak:event:"),
+    );
 
     for (const kind of [
       "org.arkret.soland.audit.report",
@@ -226,16 +231,52 @@ async function fileModerationReport(
   request: APIRequestContext,
   setup: EncryptedMessageSetup,
 ) {
-  const response = await request.post(`${solandBaseUrl()}/_arkret/self/moderation/report`, {
-    headers: authHeaders(setup.reporterToken),
-    data: {
+  const reportEvent = signedEventEnvelope({
+    actorDid: setup.reporterDid,
+    realmId: setup.realmId,
+    kind: "ak.self.moderation.report",
+    payload: {
       realm_id: setup.realmId,
       target_ref: setup.message.event_id,
       report_reason_code: "harassment",
       reporter: setup.reporterDid,
+      provenance: "self",
       description: "ordinary moderation report for scoped administrators",
       evidence_refs: [],
     },
+  });
+  await advanceEnvelopeToActorFrontier(
+    request,
+    setup.reporterToken,
+    reportEvent,
+  );
+  const sealBasis = await readRealmSealBasis(
+    request,
+    setup.reporterToken,
+    setup.realmId,
+  );
+  const sealLeaves = sealBasis.leaves;
+  if (!Array.isArray(sealLeaves) || typeof sealLeaves[0] !== "string") {
+    throw new Error("moderation report Realm has no accepted Seal reference");
+  }
+  reportEvent.seal_ref = sealLeaves[0];
+  const proof = Array.isArray(reportEvent.proofs)
+    ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
+    : undefined;
+  const verificationMethod = String(proof?.verification_method ?? "");
+  reportEvent.auth_context = {
+    actor_id: setup.reporterDid,
+    key_id: verificationMethod.split("#").at(-1) ?? verificationMethod,
+    key_epoch: 0,
+  };
+  refreshEventEnvelopeProof(reportEvent, verificationMethod);
+  const url = `${solandBaseUrl()}/_arkret/self/moderation/report`;
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(setup.reporterToken, "POST", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ report_event: { event: reportEvent } }),
   });
   const text = await response.text();
   expect(response.ok(), text).toBeTruthy();

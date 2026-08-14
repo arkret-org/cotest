@@ -3119,7 +3119,7 @@ try {
             $values.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
         }
         Write-DotEnvFile -Path $ConfigPath -Values $values
-        return "& {{ `$env:SOLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:SOLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
+        return "& {{ `$env:RUST_MIN_STACK='16777216'; `$env:SOLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:SOLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
             (Quote-PsLiteral $solandChaosControlFile),
             (Quote-PsLiteral $BinaryPath),
             (Quote-PsLiteral $ConfigPath),

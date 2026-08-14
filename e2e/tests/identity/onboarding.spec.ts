@@ -13,8 +13,12 @@ test.describe("first registration PCR genesis @fully-implemented", () => {
     const checkpoint = account.principalRegistrationCheckpoint;
     const unit = checkpoint.pcr_genesis_unit as Record<string, unknown>;
     expect(unit).toBeTruthy();
-    expect(unit).toHaveProperty("create");
-    expect(unit).toHaveProperty("authorize");
+    const events = unit.events as Array<Record<string, unknown>>;
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.kind)).toEqual([
+      "ak.realm.create",
+      "ak.device.authorize",
+    ]);
     expect(account.pcrGenesisReceipt).toBeTruthy();
     expect(account.initialGrant.eventSigningKey?.publicJwk.x).toBeTruthy();
   });

@@ -94,8 +94,10 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       const proof = env.proof as Record<string, unknown>;
       expect(proof, "relayed envelope carries proof verbatim").toBeTruthy();
       expect(proof.kind).toBe("detached_jws");
-      expect(proof.alg).toBe("Ed25519");
-      expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
+      expect(proof.alg).toBeUndefined();
+      expect(proof.verification_method).toBe(
+        `${alice.fullDid}#${alice.deviceId}`,
+      );
       expect(typeof proof.envelope_digest).toBe("string");
       expect(proof.envelope_digest as string).toMatch(
         /^sha256:[0-9a-f]{64}$/,

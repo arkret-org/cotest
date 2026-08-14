@@ -151,7 +151,11 @@ test.describe("tsp bootstrap", () => {
     await assertTspTransportIfExposed(request, alice.did, aliceToken);
 
     // Phase B — relationship bootstrap (VID verification → relationship + remote pubkey).
-    const bootstrap = await bootstrapRelationship(request, endpoint.base, alice.did);
+    const bootstrap = await bootstrapRelationship(
+      request,
+      endpoint.base,
+      alice.fullDid,
+    );
     expect(bootstrap.ok).toBe(true);
     expect(bootstrap.endpoint_vid).toBe(bobExternVid);
     expect(bootstrap.endpoint_public_jwk).toBeTruthy();

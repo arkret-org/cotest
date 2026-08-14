@@ -60,7 +60,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
 
     const signature = body.signature as Record<string, unknown>;
     expect(signature, "ICE config MUST be signed").toBeTruthy();
-    expect(signature.alg).toBe("Ed25519");
+    expect(signature.signature_algorithm).toBe("Ed25519");
     // The signing_input is prefixed by the spec domain label — distinct from
     // ak.media.participant_binding.v1 (media-service-binding.md §3.1).
     expect(signature.signature_input).toBe("ak.media.ice_config.v1");
@@ -127,6 +127,8 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     // Proof intact on the relayed renegotiate frame.
     const proof = received[1].proof as Record<string, unknown>;
     expect(proof.kind).toBe("detached_jws");
-    expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
+    expect(proof.verification_method).toBe(
+      `${alice.fullDid}#${alice.deviceId}`,
+    );
   });
 });

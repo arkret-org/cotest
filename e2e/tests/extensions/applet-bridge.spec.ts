@@ -24,13 +24,16 @@ import {
   advanceEnvelopeToActorFrontier,
   authHeaders,
   canonicalEventTimestamp,
+  canonicalDidCoreId,
   canonicalTimestamp,
   canonicalJson,
   sdkEventDerivedIds,
   createRealmApi,
   currentActorDidApi,
+  grantCapabilityEventApi,
   queryRealmEventsApi,
   readRealmSealBasis,
+  retypeEventDerivedId,
   resolveDefaultStrandId,
   sdkCapabilityActionRegistryDigest,
   signedEventEnvelope,
@@ -83,6 +86,22 @@ type AppletRegistration = {
   }>;
 };
 
+async function createAppletInstallRealm(
+  request: APIRequestContext,
+  token: string,
+  data: Parameters<typeof createRealmApi>[2],
+): Promise<string> {
+  const realmId = await createRealmApi(request, token, data);
+  const ownerDid = await currentActorDidApi(request, token);
+  await grantCapabilityEventApi(request, token, {
+    ownerDid,
+    realmId,
+    subjectDid: ownerDid,
+    actions: ["ak.realm.admin"],
+  });
+  return realmId;
+}
+
 function capabilityGrantRefForAction(
   registration: AppletRegistration,
   action: string,
@@ -128,7 +147,7 @@ test.describe("applet bridge", () => {
         "ak.profile.applet_bridge.v1",
         "ak.profile.applet_service.v1",
       ]);
-      const realmId = await createRealmApi(request, aliceToken, {
+      const realmId = await createAppletInstallRealm(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
         history_visibility: "joined",
@@ -146,7 +165,9 @@ test.describe("applet bridge", () => {
         `register-${stamp}`,
       );
       expect(registration.status).toBe("installed");
-      expect(registration.bot_actor_id).toMatch(/^did:web:bot-bridge-demo-/);
+      expect(registration.bot_actor_id).toMatch(
+        /^ak:did_core:web:bot-bridge-demo-/,
+      );
       expect(registration.portal_realm_id).toBe(realmId);
       const messageGrantRef = capabilityGrantRefForAction(
         registration,
@@ -194,7 +215,7 @@ test.describe("applet bridge", () => {
       expect(provision.status(), provisionText).toBe(200);
       const provisionBody = JSON.parse(provisionText);
       const ghostActorDid = String(provisionBody.ghost_actor_id);
-      expect(ghostActorDid).toMatch(/^did:web:ghost-/);
+      expect(ghostActorDid).toMatch(/^ak:did_core:web:ghost-/);
       await addRealmMemberApi(request, aliceToken, realmId, ghostActorDid);
       const portalStrandId = await resolveDefaultStrandId(
         request,
@@ -317,7 +338,7 @@ test.describe("applet bridge", () => {
     const aliceToken = await issueDevSession(request, alice);
     const namespace = `bridge.conflict.${stamp}`;
 
-    const realmId = await createRealmApi(request, aliceToken, {
+    const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet conflict ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -358,7 +379,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-revoke-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const realmId = await createRealmApi(request, aliceToken, {
+    const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet revoke ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -429,7 +450,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-idem-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const realmId = await createRealmApi(request, aliceToken, {
+    const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet idem ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -508,7 +529,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-tamper-body-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const realmId = await createRealmApi(request, aliceToken, {
+    const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet tamper body ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -548,7 +569,7 @@ test.describe("applet bridge", () => {
     const alice = uniqueUser(`applet-tamper-proof-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const realmId = await createRealmApi(request, aliceToken, {
+    const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet tamper proof ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -688,7 +709,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const alice = uniqueUser(`applet-inbound-ok-${stamp}`);
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const realmId = await createRealmApi(request, token, {
+    const realmId = await createAppletInstallRealm(request, token, {
       title: `applet inbound signed ${stamp}`,
       discoverability: "listed",
       history_visibility: "joined",
@@ -930,7 +951,7 @@ async function signPackage(
   const response = await request.post(`${registryBase}/sign-package`, {
     data: {
       ...data,
-      service_id: built.did,
+      service_id: canonicalDidCoreId(built.did),
       service_id_document: built.didDocument,
       service_id_method_version_evidence: {
         method: "did:webvh",
@@ -1024,23 +1045,25 @@ async function rawInstallApplet(
   let resolved = prepared;
   if (!resolved) {
     const effectiveScope = { kind: "realm", realm_id: realmId };
-    const preview = await request.post(
-      `${solandBaseUrl()}/_arkret/self/applets/install/preview`,
-      {
-        headers: authHeaders(token),
-        data: {
-          applet_package: signed.applet_package,
-          effective_scope: effectiveScope,
-          approval_request: {
-            approve_actions: signed.applet_package.requested_scopes,
-            ghost_actors_allowed: true,
-            delegated_native_actors_allowed: false,
-            e2ee_join_allowed: false,
-            widget_allowed: false,
-          },
-        },
+    const previewUrl = `${solandBaseUrl()}/_arkret/self/applets/install/preview`;
+    const preview = await request.fetch(previewUrl, {
+      method: "POST",
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson({
+        applet_package: signed.applet_package,
+        effective_scope: effectiveScope,
+        approval_request: {
+          approve_actions: signed.applet_package.requested_scopes,
+          ghost_actors_allowed: true,
+          delegated_native_actors_allowed: false,
+          e2ee_join_allowed: false,
+          widget_allowed: false,
+        },
+      }),
+    });
     if (!preview.ok()) {
       return {
         response: preview,
@@ -1057,16 +1080,16 @@ async function rawInstallApplet(
       plan,
     );
   }
-  const response = await request.post(
-    `${solandBaseUrl()}/_arkret/self/applets/install`,
-    {
-      headers: {
-        ...authHeaders(token),
-        "Idempotency-Key": idempotencyKey,
-      },
-      data: resolved.commitBody,
+  const installUrl = `${solandBaseUrl()}/_arkret/self/applets/install`;
+  const response = await request.fetch(installUrl, {
+    method: "POST",
+    headers: {
+      ...authHeaders(token),
+      "content-type": "application/json",
+      "Idempotency-Key": idempotencyKey,
     },
-  );
+    data: canonicalJson(resolved.commitBody),
+  });
   return {
     response,
     prepared: resolved,
@@ -1141,9 +1164,7 @@ async function prepareFormalAppletInstall(
   const capabilityGrantEvents: Array<Record<string, unknown>> = [];
   const grantActionsById = new Map<string, string[]>();
   for (const [offset, action] of approvedActions.entries()) {
-    const grantId = typedId("grant");
     const unsignedGrant: Record<string, unknown> = {
-      id: grantId,
       schema: "ak.schema.capability.v1",
       realm_id: realmId,
       issuer: actorDid,
@@ -1163,6 +1184,9 @@ async function prepareFormalAppletInstall(
         },
       ],
       issued_at: createdAt,
+      expires_at: canonicalTimestamp(
+        new Date(Date.parse(createdAt) + 24 * 60 * 60 * 1000),
+      ),
       issuer_authority_refs: [
         {
           kind: "realm_root",
@@ -1186,10 +1210,10 @@ async function prepareFormalAppletInstall(
       scopeRef: effectiveScope,
       sealBasis,
       payload: {
-        grant_id: grantId,
         grant,
       },
     });
+    const grantId = retypeEventDerivedId(String(event.event_id), "grant");
     previousEventId = String(event.event_id);
     capabilityGrantEvents.push(event);
     grantActionsById.set(grantId, [action]);
@@ -1284,7 +1308,6 @@ function appletEventProof(
   );
   return {
     kind: "detached_jws",
-    alg: "Ed25519",
     verification_method: verificationMethod,
     event_digest: eventDigest,
     created_at: createdAt,

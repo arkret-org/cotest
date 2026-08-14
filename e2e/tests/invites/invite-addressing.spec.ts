@@ -59,7 +59,6 @@ test.describe("invite addressing", () => {
       realmId: typedId("realm"),
       kind: "ak.invite.create",
       payload: {
-        invite_id: typedId("invite"),
         invitee,
         invite_delivery_target: inviteDeliveryTarget,
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(introductionEvidence)}`,

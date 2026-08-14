@@ -9,6 +9,7 @@ import { mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
@@ -129,7 +130,10 @@ async function submitSelfEvent(
   }
   const response = await request.post(
     `${solandBaseUrl()}/_arkret/self/events`,
-    { headers: authHeaders(token), data: envelope },
+    {
+      headers: { ...authHeaders(token), "content-type": "application/json" },
+      data: canonicalJson(envelope),
+    },
   );
   const text = await response.text();
   let body: Record<string, unknown> = {};
@@ -256,14 +260,14 @@ test.describe("third-party invite", () => {
   async function setupPendingInvite(
     request: APIRequestContext,
     opts: {
-      seed: string;
+      fixtureNonce: string;
       expiresInMs?: number;
       allowlistService?: boolean;
     },
   ) {
-    const alice = uniqueUser(`${opts.seed}-alice`);
+    const alice = uniqueUser(`${opts.fixtureNonce}-alice`);
     const bobIdentity = generateDidKeyIdentity();
-    const bob = didKeyUser(`${opts.seed}-bob`, bobIdentity);
+    const bob = didKeyUser(`${opts.fixtureNonce}-bob`, bobIdentity);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
     // dev-login auto-provisions the did:key account for bob.
@@ -275,13 +279,13 @@ test.describe("third-party invite", () => {
       signingSeedB64url: bobIdentity.signingSeedB64url,
     });
     const realmId = await createRealmApi(request, aliceToken, {
-      title: `3PID invite reducer ${opts.seed}`,
+      title: `3PID invite reducer ${opts.fixtureNonce}`,
       ownerDid: alice.did,
     });
 
     const verificationService = await createVerificationService(
       request,
-      opts.seed,
+      opts.fixtureNonce,
     );
     if (opts.allowlistService !== false) {
       await allowlistVerificationService(
@@ -301,7 +305,7 @@ test.describe("third-party invite", () => {
       realmId,
       inviter: alice.did,
       verificationService,
-      tokenCommitment: tokenCommitment(`${opts.seed}-${alice.did}`),
+      tokenCommitment: tokenCommitment(`${opts.fixtureNonce}-${alice.did}`),
       expiresAt,
       displayNameHint: "external invite",
     });
@@ -325,7 +329,7 @@ test.describe("third-party invite", () => {
     // third-party-invites.md §3.1 — the durable Event carries only the salted
     // token_commitment; the plaintext 3PID never enters the event chain.
     const ctx = await setupPendingInvite(request, {
-      seed: "s3-issue",
+      fixtureNonce: "s3-issue",
       allowlistService: false,
     });
     const outcome = await submitThirdPartyInvite(
@@ -423,7 +427,9 @@ test.describe("third-party invite", () => {
     // service signs the binding_proof; bob signs the subject_proof; the
     // reducer verifies both, flips pending -> claimed, and seeds an invite
     // membership proposal for bob.
-    const ctx = await setupPendingInvite(request, { seed: "s3-claim" });
+    const ctx = await setupPendingInvite(request, {
+      fixtureNonce: "s3-claim",
+    });
     const issued = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,
@@ -502,7 +508,7 @@ test.describe("third-party invite", () => {
     // third-party-invites.md §4.3 step 2 / §6.1 — an invite past expires_at
     // is force-expired and any claim is refused.
     const ctx = await setupPendingInvite(request, {
-      seed: "s3-expired",
+      fixtureNonce: "s3-expired",
       expiresInMs: 4_000,
     });
     const issued = await submitThirdPartyInvite(
@@ -563,7 +569,9 @@ test.describe("third-party invite", () => {
     // binding_proof names bob. mallory must submit subject_id == her own DID,
     // so binding_proof.subject_id (bob) no longer matches and the reducer
     // refuses to bind the token to the attacker DID.
-    const ctx = await setupPendingInvite(request, { seed: "s3-wrongdid" });
+    const ctx = await setupPendingInvite(request, {
+      fixtureNonce: "s3-wrongdid",
+    });
     const issued = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,
@@ -634,7 +642,9 @@ test.describe("third-party invite", () => {
   }) => {
     // third-party-invites.md §4.3 step 6 / §6.1 — once a token is claimed the
     // invite is `claimed`; a second claim is refused with duplicate_conflict.
-    const ctx = await setupPendingInvite(request, { seed: "s3-double" });
+    const ctx = await setupPendingInvite(request, {
+      fixtureNonce: "s3-double",
+    });
     const issued = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,

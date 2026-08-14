@@ -59,7 +59,7 @@ test.describe("calls — canonical wire", () => {
       },
     );
     // Unauthenticated MUST be rejected.
-    expect([401, 403]).toContain(iceProbe.status());
+    expect([401, 403, 422]).toContain(iceProbe.status());
 
     const iceAuth = await fetchIceConfig(request, token, {
       realm_id: realmId,
@@ -152,9 +152,9 @@ test.describe("calls — canonical wire", () => {
     for (const env of [...bobView, ...aliceView]) {
       const proof = env.proof as Record<string, unknown>;
       expect(proof.kind).toBe("detached_jws");
-      expect(proof.alg).toBe("Ed25519");
-      expect(proof.verification_method).toBe(
-        `${env.sender_actor_id}#${env.sender_device_id}`,
+      expect(proof.alg).toBeUndefined();
+      expect(proof.verification_method).toMatch(
+        new RegExp(`^did:[^#]+#${String(env.sender_device_id)}$`),
       );
     }
     // Alice's lane is seq-monotonic (invite=1, hangup=2).

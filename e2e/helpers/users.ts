@@ -39,6 +39,7 @@ import {
   projectFullDidToCoreId,
   registerEventSigner,
   registerPrincipalControlRealm,
+  registerPrincipalControlEvents,
   registerRequestAuth,
   typedId,
 } from "./soland-api";
@@ -108,6 +109,7 @@ export type OpenUserOpts = {
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
   recoveryKey?: string;
+  recoveryMaterialEvidence?: Record<string, unknown>;
 };
 
 export type DpopUserSession = {
@@ -124,6 +126,7 @@ export type DpopUserSession = {
   recoveryKey?: string;
   principalControlRealmId: string;
   principalControlEvents: Array<Record<string, unknown>>;
+  recoveryMaterialEvidence?: Record<string, unknown>;
 };
 
 export type DpopUserPageSession = {
@@ -791,12 +794,10 @@ export class JointUserPage {
     await expect(policyNext).toBeEnabled({ timeout: 30_000 });
     await this.clickCreateRealmControl(policyNext, promptHandling);
 
-    if (opts.seedMembers && opts.seedMembers.length > 0) {
-      await this.fillWithPassivePromptRetry(
-        strand.getByTestId("seed-members-input"),
-        opts.seedMembers.join("\n"),
-      );
-    }
+    // A bare principal did_core_id is not an InviteAddress: it carries neither
+    // the selected recipient service nor current service-resolution evidence.
+    // Create the canonical owner-only genesis first, then use the ordinary
+    // Realm admin invite path below with a closed InviteAddress for each seed.
     const createButton = strand.getByTestId("create-realm-button");
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
     await this.clickCreateRealmControl(createButton, promptHandling);
@@ -830,7 +831,14 @@ export class JointUserPage {
     expect(text, `realm bootstrap failed: ${text}`).not.toContain(" failed:");
     const match = text.match(/created (ak:realm:[A-Za-z0-9_-]{44})\b/);
     expect(match, `created realm id in: ${text}`).not.toBeNull();
-    return match![1];
+    const realmId = match![1];
+    if ((opts.seedMembers?.length ?? 0) > 0) {
+      await strand.getByRole("link", { name: "Open Realm" }).click();
+    }
+    for (const member of opts.seedMembers ?? []) {
+      await this.inviteFromAdmin(realmId, member);
+    }
+    return realmId;
   }
 
   // Drive the Realm admin invite modal to invite `targetDid` into realmId.
@@ -852,9 +860,23 @@ export class JointUserPage {
       );
       expect(describe.status(), await describe.text()).toBe(200);
       const service = (await describe.json()) as { service_id: string };
-      targetInput = `did=${targetDid} server=${service.service_id}`;
+      const resolutionUrl = `${this.serverUrl.replace(/\/$/, "")}/_arkret/open/services/${encodeURIComponent(service.service_id)}/resolution`;
+      targetInput = JSON.stringify({
+        subject_id: targetDid,
+        recipient_service_id: service.service_id,
+        service_resolution: {
+          current_record_url: resolutionUrl.replace(/^http:/, "https:"),
+        },
+      });
     }
-    await this.gotoRealmAdminSection(realmId, "members");
+    const membersNav = this.page
+      .getByRole("link", { name: "Members", exact: true })
+      .first();
+    if (await membersNav.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await membersNav.click();
+    } else {
+      await this.gotoRealmAdminSection(realmId, "members");
+    }
     const members = this.page.getByTestId("realm-members-panel");
     await expect(members).toBeVisible({ timeout: 120_000 });
     await members.getByTestId("open-invite-modal-button").click();
@@ -1370,6 +1392,7 @@ export async function createDpopUserSessionForAccount(
     recoveryKey: claimsPrincipalGenesis ? account.recoveryKey : undefined,
     principalControlRealmId: "",
     principalControlEvents: [] as Array<Record<string, unknown>>,
+    recoveryMaterialEvidence: undefined as Record<string, unknown> | undefined,
   };
   registerRequestAuth(session.grantJwt, (method, url) =>
     selfPathGrantHeaders({
@@ -1411,6 +1434,7 @@ export async function createDpopUserSessionForAccount(
   );
   session.principalControlRealmId = principalControlRealmId;
   registerPrincipalControlRealm(user.did, principalControlRealmId);
+  registerPrincipalControlEvents(user.did, session.principalControlEvents);
   const bootstrapSeal = cotestWire<Record<string, unknown>>(
     "principal-bootstrap-seal",
     {
@@ -1418,6 +1442,13 @@ export async function createDpopUserSessionForAccount(
       device_signing_seed_b64url: checkpoint.device_signing_seed_b64url,
     },
   );
+  session.recoveryMaterialEvidence = {
+    principal_id: user.fullDid,
+    device_id: user.deviceId,
+    principal_control_realm_id: principalControlRealmId,
+    pcr_genesis_unit: checkpoint.pcr_genesis_unit,
+    bootstrap_seal: bootstrapSeal,
+  };
   const viewerUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`;
   const viewerResponse = await request.get(viewerUrl, {
     headers: selfPathHeadersForDpopSession(session, "GET", viewerUrl),
@@ -1450,9 +1481,13 @@ export async function openDpopUserPage(
     server?: SolandKey;
     coauthBase?: string;
     prepareMlsDevice?: boolean;
+    allowExplicitInviteNotifications?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
   const session = await createDpopUserSession(request, prefix, opts);
+  if (session && opts.allowExplicitInviteNotifications !== false) {
+    await allowExplicitInviteNotifications(request, session, opts.server);
+  }
   return openDpopUserPageFromSession(browser, session, opts);
 }
 
@@ -1466,6 +1501,7 @@ export async function openDpopUserPageForAccount(
     coauthBase?: string;
     prepareMlsDevice?: boolean;
     autoCompleteRecoveryKeySetup?: boolean;
+    allowExplicitInviteNotifications?: boolean;
   } = {},
 ): Promise<DpopUserPageSession | undefined> {
   const session = await createDpopUserSessionForAccount(
@@ -1476,7 +1512,34 @@ export async function openDpopUserPageForAccount(
       ...opts,
     },
   );
+  if (session && opts.allowExplicitInviteNotifications !== false) {
+    await allowExplicitInviteNotifications(request, session, opts.server);
+  }
   return openDpopUserPageFromSession(browser, session, opts);
+}
+
+async function allowExplicitInviteNotifications(
+  request: APIRequestContext,
+  session: DpopUserSession,
+  server?: SolandKey,
+) {
+  const url = `${solandBaseUrl(server)}/_arkret/self/invite-receive-policy`;
+  const current = await request.get(url, {
+    headers: selfPathHeadersForDpopSession(session, "GET", url),
+  });
+  expect(current.status(), await current.text()).toBe(200);
+  const policy = (await current.json()) as Record<string, unknown>;
+  const updated = await request.put(url, {
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "PUT", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({
+      ...policy,
+      explicit_address_behavior: "notify",
+    }),
+  });
+  expect(updated.status(), await updated.text()).toBe(200);
 }
 
 export async function openDpopUserPageFromSession(
@@ -1499,6 +1562,7 @@ export async function openDpopUserPageFromSession(
     grantId: session.grantId,
     grantAudience: session.grantAudience,
     recoveryKey: session.recoveryKey,
+    recoveryMaterialEvidence: session.recoveryMaterialEvidence,
     autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
   });
   if (opts.prepareMlsDevice !== false) {
@@ -1539,6 +1603,10 @@ export async function openUser(
       ? {
           grant_jwt: opts.grantJwt,
           dpop_seed_b64url: opts.dpopSeedB64url,
+          principal_full_id: user.fullDid,
+          ...(opts.recoveryMaterialEvidence
+            ? { recovery_material_evidence: opts.recoveryMaterialEvidence }
+            : {}),
           ...(opts.eventSigningSeedB64url
             ? { event_signing_seed_b64url: opts.eventSigningSeedB64url }
             : {}),
@@ -1552,7 +1620,7 @@ export async function openUser(
       value: JSON.stringify({
         server_url: serverUrl,
         principal_servers: [serverUrl],
-        account_did: opts.neutralLoginConfig ? "" : user.fullDid,
+        account_did: opts.neutralLoginConfig ? "" : user.did,
         device_id: opts.neutralLoginConfig ? "" : user.deviceId,
         session_credential: opts.neutralLoginConfig ? "" : sessionCredential,
       }),

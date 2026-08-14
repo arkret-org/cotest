@@ -53,6 +53,7 @@ test.describe("notifications", () => {
       return;
     }
     const alicePage = aliceSession.page;
+    const alice = aliceSession.user;
     const bob = bobSession.user;
     const bobPage = bobSession.page;
 
@@ -65,8 +66,20 @@ test.describe("notifications", () => {
         seedMembers: [bob.did],
       });
       await bobPage.acceptInvite(realmId);
-      const bobToken = await issueDevSession(request, bob);
-      const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
+      const [aliceToken, bobToken] = await Promise.all([
+        issueDevSession(request, alice),
+        issueDevSession(request, bob),
+      ]);
+      // Membership alone grants Bob no baseline `ak.strand.create`
+      // capability. Let the Realm authority-root controller establish the
+      // discussion Strand after Bob has joined, then let Bob manage only his
+      // own watch state.
+      const strandId = await resolveDefaultStrandId(
+        request,
+        aliceToken,
+        realmId,
+        { authorityRootController: alice.did },
+      );
       await setStrandWatchLevelApi(
         request,
         bobToken,
@@ -141,6 +154,9 @@ test.describe("notifications", () => {
       });
       await bobPage.acceptInvite(realmId);
       const aliceToken = await issueDevSession(request, aliceSession.user);
+      await resolveDefaultStrandId(request, aliceToken, realmId, {
+        authorityRootController: aliceSession.user.did,
+      });
 
       await bobPage.page.goto("/notifications/settings", {
         waitUntil: "domcontentloaded",

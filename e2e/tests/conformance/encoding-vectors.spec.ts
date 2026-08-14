@@ -275,7 +275,8 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/encode`,
       {
-        data: { vector_id: v.vector_id, input: v.input },
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({ vector_id: v.vector_id, input: v.input }),
       },
     );
     expect(resp.status()).toBe(200);
@@ -299,7 +300,8 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/encode`,
       {
-        data: { vector_id: v.vector_id, input: v.input },
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({ vector_id: v.vector_id, input: v.input }),
       },
     );
     expect(resp.status()).toBe(200);
@@ -332,9 +334,12 @@ test.describe("conformance encoding vectors", () => {
     };
     const resp1 = await request.post(
       `${conformanceBaseUrl()}/sign`,
-      { data: body1 },
+      {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson(body1),
+      },
     );
-    expect(resp1.status()).toBe(200);
+    expect(resp1.status(), await resp1.text()).toBe(200);
     const result1 = await resp1.json();
     expect(result1.canonical_bytes).toBe(sigVector.canonical_event_payload);
     expect(result1.digest).toBe(sigVector.event_digest);
@@ -347,7 +352,10 @@ test.describe("conformance encoding vectors", () => {
     // derived from signing_key_ref so the key is also stable).
     const resp2 = await request.post(
       `${conformanceBaseUrl()}/sign`,
-      { data: body1 },
+      {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson(body1),
+      },
     );
     expect(resp2.status()).toBe(200);
     const result2 = await resp2.json();
@@ -399,7 +407,8 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/hlc-merge`,
       {
-        data: { vector_id: v.vector_id, clocks },
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({ vector_id: v.vector_id, clocks }),
       },
     );
     expect(resp.status()).toBe(200);

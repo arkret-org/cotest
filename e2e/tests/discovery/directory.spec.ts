@@ -12,6 +12,7 @@ import {
 import { stepShot } from "../../helpers/screenshots";
 import {
   assertJointStackNotRequired,
+  createDpopUserSession,
   ensureRegistered,
   issueDevSession,
   openDpopUserPage,
@@ -23,6 +24,14 @@ import {
   postCallSignalRaw,
   prepareSignalEnvelope,
 } from "../../helpers/webrtc";
+import {
+  canonicalJson,
+  prepareSignedEventSubmissionApi,
+  principalControlRealmForDid,
+  readRealmSealBasis,
+  signedEventEnvelope,
+  submitPrincipalSuccessorSealApi,
+} from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -70,6 +79,9 @@ test.describe("discovery", () => {
       const aliceContact = alicePage.page.getByTestId(
         "directory-contact-tools",
       );
+      const aliceContactStatus = aliceContact.getByTestId(
+        "contact-operation-status",
+      );
       await alicePage.fillWithPassivePromptRetry(
         aliceContact.getByTestId("contact-target-did-input"),
         bob.did,
@@ -77,17 +89,26 @@ test.describe("discovery", () => {
       await alicePage.clickWithPassivePromptRetry(
         aliceContact.getByTestId("request-contact-button"),
       );
-      await expect(aliceContact).toContainText(/pending/i, { timeout: 30_000 });
+      await expect(aliceContactStatus).toHaveText(/request pending/i, {
+        timeout: 30_000,
+      });
       await stepShot(alicePage.page, testInfo, "contact-pending");
 
       // bob accepts via directory contact tools.
       await bobPage.gotoDirectory();
       const bobContact = bobPage.page.getByTestId("directory-contact-tools");
+      const bobContactStatus = bobContact.getByTestId(
+        "contact-operation-status",
+      );
       await bobPage.clickWithPassivePromptRetry(
         bobContact.getByTestId("list-contacts-button"),
       );
-      await expect(bobContact).toContainText(alice.did, { timeout: 30_000 });
-      await expect(bobContact).toContainText(/pending/i, { timeout: 30_000 });
+      await expect(bobContactStatus).toContainText(alice.did, {
+        timeout: 30_000,
+      });
+      await expect(bobContactStatus).toContainText(/pending_incoming/i, {
+        timeout: 30_000,
+      });
       await bobPage.fillWithPassivePromptRetry(
         bobContact.getByTestId("contact-requester-did-input"),
         alice.did,
@@ -95,35 +116,44 @@ test.describe("discovery", () => {
       await bobPage.clickWithPassivePromptRetry(
         bobContact.getByTestId("accept-contact-button"),
       );
-      await expect(bobContact).toContainText(/accepted/i, { timeout: 30_000 });
+      await expect(bobContactStatus).toHaveText("respond accepted", {
+        timeout: 30_000,
+      });
 
       // bob lists; alice should appear with count 1.
       await bobPage.clickWithPassivePromptRetry(
         bobContact.getByTestId("list-contacts-button"),
       );
-      await expect(bobContact).toContainText(alice.did);
-      await expect(bobContact).toContainText(/contacts 1/i);
+      await expect(bobContactStatus).toContainText(alice.did);
+      await expect(bobContactStatus).toContainText(/contacts 1/i);
 
       // The accepted edge must project symmetrically before Directory uses
       // Alice's local contact index as the DID-disclosure basis.
       const aliceContactsUrl = `${solandBaseUrl()}/_arkret/self/contacts`;
-      const aliceContacts = await request.get(aliceContactsUrl, {
-        headers: selfPathHeadersForDpopSession(
-          aliceSession.session,
-          "GET",
-          aliceContactsUrl,
-        ),
-      });
-      const aliceContactsText = await aliceContacts.text();
-      expect(aliceContacts.status(), aliceContactsText).toBe(200);
-      const aliceContactsBody = JSON.parse(aliceContactsText) as {
-        contacts?: Array<{ peer?: string; state?: string }>;
-      };
-      expect(aliceContactsBody.contacts).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ peer: bob.did, state: "accepted" }),
-        ]),
-      );
+      await expect
+        .poll(
+          async () => {
+            const aliceContacts = await request.get(aliceContactsUrl, {
+              headers: selfPathHeadersForDpopSession(
+                aliceSession.session,
+                "GET",
+                aliceContactsUrl,
+              ),
+            });
+            if (aliceContacts.status() !== 200) return undefined;
+            const body = (await aliceContacts.json()) as {
+              contacts?: Array<{
+                peer?: { kind?: string; principal_id?: string };
+                state?: string;
+              }>;
+            };
+            return body.contacts?.find(
+              (row) => row.peer?.principal_id === bob.did,
+            )?.state;
+          },
+          { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
+        )
+        .toBe("accepted");
 
       const searchActorsUrl = `${solandBaseUrl()}/_arkret/find/directory/search-actors`;
       const searchActors = await request.post(searchActorsUrl, {
@@ -176,31 +206,77 @@ test.describe("discovery", () => {
     // account surface, while an unrelated actor must not gain visibility.
     const stamp = Date.now();
     const alice = uniqueUser(`s24-profile-alice-${stamp}`);
-    const bob = uniqueUser(`s24-profile-bob-${stamp}`);
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
+    const bobSession = await createDpopUserSession(
+      request,
+      `s24-profile-bob-${stamp}`,
+    );
+    if (!bobSession) {
+      assertJointStackNotRequired("account profile PCR bootstrap");
+      test.skip(true, "coauth principal bootstrap is unavailable");
+      return;
+    }
+    const bob = bobSession.user;
+    await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const bobToken = await issueDevSession(request, bob);
+    const bobToken = bobSession.grantJwt;
 
     const newDisplay = `Bob Renamed ${stamp}`;
     const newBio = `Engineer doing E2E work · ${stamp}`;
-
-    const update = await request.post(
-      `${solandBaseUrl()}/_arkret/self/account/profile`,
-      {
-        headers: { authorization: `Bearer ${bobToken}` },
-        data: {
-          patch: {
-            display_name: { $op: "set", value: newDisplay },
-            "profile_fields.bio": { $op: "set", value: newBio },
-          },
+    const bobRealmId = principalControlRealmForDid(bob.did);
+    const profileEvent = signedEventEnvelope({
+      kind: "ak.profile.create",
+      realmId: bobRealmId,
+      actorDid: bob.did,
+      sealBasis: await readRealmSealBasis(request, bobToken, bobRealmId),
+      payload: {
+        object: {
+          schema: "ak.schema.actor_profile.v1",
+          realm_id: bobRealmId,
+          principal_id: bob.did,
+          actor_kind: "user",
+          display_name: newDisplay,
+          profile_fields: { bio: newBio },
+          created_at: new Date().toISOString(),
         },
       },
+    });
+    const profileSubmission = await prepareSignedEventSubmissionApi(
+      request,
+      bobToken,
+      profileEvent,
+      { context: "prepare account profile create" },
     );
-    expect(update.status()).toBe(200);
-    const updateBody = await update.json();
+
+    const profileUrl = `${solandBaseUrl()}/_arkret/self/account/profile`;
+    const postProfile = () =>
+      request.post(profileUrl, {
+        headers: {
+          ...selfPathHeadersForDpopSession(bobSession, "POST", profileUrl),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
+          profile_event: profileSubmission,
+        }),
+      });
+    let update = await postProfile();
+    if (update.status() === 412) {
+      expect(await update.text()).toContain("frontier_unavailable");
+      await submitPrincipalSuccessorSealApi(
+        request,
+        bobToken,
+        bob.did,
+        profileEvent,
+      );
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        update = await postProfile();
+        if (update.status() !== 412) break;
+        expect(await update.text()).toContain("frontier_unavailable");
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+    const updateText = await update.text();
+    expect(update.status(), updateText).toBe(200);
+    const updateBody = JSON.parse(updateText);
     expect(updateBody.profile?.display_name).toBe(newDisplay);
     expect(updateBody.profile?.profile_fields?.bio).toBe(newBio);
 
@@ -221,12 +297,10 @@ test.describe("discovery", () => {
     expect(JSON.stringify(actors)).not.toContain(newBio);
 
     // /account/viewer reflects new fields on the canonical account surface.
-    const me = await request.get(
-      `${solandBaseUrl()}/_arkret/self/account/viewer`,
-      {
-        headers: { authorization: `Bearer ${bobToken}` },
-      },
-    );
+    const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+    const me = await request.get(viewerUrl, {
+      headers: selfPathHeadersForDpopSession(bobSession, "GET", viewerUrl),
+    });
     expect(me.ok()).toBeTruthy();
     const meBody = await me.json();
     expect(meBody.profile?.display_name).toBe(newDisplay);
@@ -367,11 +441,7 @@ test.describe("discovery", () => {
           ttl_ms: 25_000,
         },
       });
-      const online = await postCallSignalRaw(
-        request,
-        bobToken,
-        onlineEnvelope,
-      );
+      const online = await postCallSignalRaw(request, bobToken, onlineEnvelope);
       expect(online.status(), await online.text()).toBe(200);
 
       const bobPresenceRow = alicePage.page.locator(

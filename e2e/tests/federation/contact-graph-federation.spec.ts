@@ -41,6 +41,7 @@ import {
   acceptInviteArkret,
   contactRow,
   deliverInviteWithConsentGrant,
+  grantInviteConsentArkret,
   listAuthzInvitesArkret,
   requestContactArkret,
   resolvePrincipalLocator,
@@ -127,9 +128,7 @@ test.describe("contact graph federation (α/β)", () => {
     });
     expect(respondOutcome.state).toBe("accepted");
 
-    // The ak.contact.accepted fact federates back to α; alice@α converges to
-    // accepted, with bob -> alice invite grant surfaced as
-    // invite_consent_grant_ref on her row.
+    // The ak.contact.accepted fact federates back to α.
     await expect
       .poll(
         async () => {
@@ -144,7 +143,7 @@ test.describe("contact graph federation (α/β)", () => {
     const aliceRow = await contactRow(request, aliceToken, bob.did, {
       server: "alpha",
     });
-    expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ak:event:/);
+    expect(aliceRow?.next_prepare_input).toBeTruthy();
   });
 
   // S3-fed: cross-PS creation begins with an immutable participant-authorized
@@ -432,9 +431,8 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
 
-    // On β: alice requests bob (invite scope); bob accepts granting invite.
-    // bob's accept mints a contact-managed grant holder=bob, peer=alice,
-    // scope=invite on β. bob's contact row then surfaces the ref alice needs.
+    // On β the Contact is established first. Bob then authors a separate
+    // holder-private Consent grant for Alice.
     const { outcome } = await requestContactArkret(
       request,
       aliceTokenBeta,
@@ -448,20 +446,14 @@ test.describe("contact graph federation (α/β)", () => {
       grantedScopes: ["invite"],
       server: "beta",
     });
-    // bob's accept minted a grant holder=bob, peer=alice (bob -> alice invite).
-    // That surfaces on ALICE's contact row (actor=alice, peer=bob), whose
-    // invite_consent_grant_ref resolves the bob->alice grant — exactly the ref
-    // β's `has_active_consent_grant_evidence(subject=bob, inviter=alice)`
-    // verifies. (Reading bob's own row would surface the inverse alice->bob
-    // grant and fail verification.)
-    const aliceRowBeta = await contactRow(request, aliceTokenBeta, bob.did, {
-      server: "beta",
-    });
-    const grantRef = aliceRowBeta?.invite_consent_grant_ref;
-    expect(
-      grantRef,
-      "alice@β row invite_consent_grant_ref (bob -> alice invite grant)",
-    ).toMatch(/^ak:event:/);
+    const consent = await grantInviteConsentArkret(
+      request,
+      bobTokenBeta,
+      bob,
+      alice.did,
+      { server: "beta" },
+    );
+    const grantRef = consent.eventRef;
 
     // On α: alice creates the realm she wants to pull bob into.
     const realmId = await createRealmApi(

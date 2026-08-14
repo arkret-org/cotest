@@ -21,12 +21,14 @@ import {
   canonicalTimestamp,
   createRealmApi,
   readRealmSealBasis,
+  registeredEventVerificationMethod,
+  retypeEventDerivedId,
   seedConformanceRealmBasisApi,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
   submitSignedEventApi,
   typedId,
-  uuidV7,
+  waitForRealmControlIdleApi,
   wireErrCode,
 } from "./soland-api";
 import {
@@ -226,8 +228,9 @@ export function buildSignalEnvelope(args: {
     },
     proof: {
       kind: "detached_jws",
-      verification_method: `${args.actorDid}#${args.deviceId}`,
-      alg: "Ed25519",
+      verification_method:
+        registeredEventVerificationMethod(args.actorDid, args.deviceId) ??
+        `${args.actorDid}#${args.deviceId}`,
       envelope_digest: `sha256:${"0".repeat(64)}`,
       created_at: canonicalEventTimestamp(sentAt),
       jws: "",
@@ -364,7 +367,6 @@ export async function grantCallCapability(
   subjectDid: string,
   action: string,
 ): Promise<void> {
-  const grantId = typedId("grant");
   const resources = [{ kind: "realm", realm_id: realmId }];
   const issuedAt = canonicalTimestamp();
   const authorityConstraint: Record<string, unknown> = {
@@ -382,7 +384,6 @@ export async function grantCallCapability(
     authorityConstraint.depends_on_moderation_state = true;
   }
   const unsignedGrant: Record<string, unknown> = {
-    id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: realmId,
     issuer: ownerDid,
@@ -413,7 +414,6 @@ export async function grantCallCapability(
       realmId,
       kind: "ak.capability.grant",
       payload: {
-        grant_id: grantId,
         grant,
       },
     }),
@@ -443,11 +443,13 @@ async function waitForRealmSealAdvance(
   realmId: string,
   previousBasis: Record<string, unknown>,
 ): Promise<void> {
-  const previousStateRoot = previousBasis.state_root;
+  const previousLeaves = JSON.stringify(previousBasis.leaves);
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     const current = await readRealmSealBasis(request, token, realmId);
-    if (current.state_root !== previousStateRoot) {
+    // Event seal_basis carries only the sorted predecessor leaves. Seal roots
+    // stay on the referenced Seal and are recomputed by the receiver.
+    if (JSON.stringify(current.leaves) !== previousLeaves) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -479,7 +481,12 @@ export async function seedCallState(
     );
   }
   const lifecycleKey = `${realmId}\u001f${callId}`;
-  const previousState = callLifecycleByRealmAndCall.get(lifecycleKey) ?? null;
+  const previousState = callLifecycleByRealmAndCall.get(lifecycleKey);
+  if (!previousState) {
+    throw new Error(
+      `call ${callId} has no accepted ak.call.create lifecycle in ${realmId}`,
+    );
+  }
   const nextState = opts.state ?? "active";
   const payload: Record<string, unknown> = {
     call_id: callId,
@@ -529,12 +536,33 @@ export async function seedCallState(
   callLifecycleByRealmAndCall.set(lifecycleKey, nextState);
 }
 
-/** Mint a fresh `ak:call:<uuidv7>` id. The media token issuer + signaling are
- *  decoupled from any prior session (media-service-binding.md settlement ordering).
- *  `ak:call:` is its own id-kind (id-kind-registry.json), independent of the
- *  generic `OperationKind` set, so we mint a uuidv7 directly. */
+export async function createCallApi(
+  request: APIRequestContext,
+  ownerToken: string,
+  ownerDid: string,
+  realmId: string,
+  initialState: "scheduled" | "ringing" | "connecting" = "ringing",
+): Promise<string> {
+  const sealBasis = await readRealmSealBasis(request, ownerToken, realmId);
+  const envelope = signedEventEnvelope({
+    actorDid: ownerDid,
+    realmId,
+    kind: "ak.call.create",
+    sealBasis,
+    payload: { initial_state: initialState },
+  });
+  await submitSignedEventApi(request, ownerToken, envelope, {
+    context: `create call in ${realmId}`,
+  });
+  await waitForRealmSealAdvance(request, ownerToken, realmId, sealBasis);
+  const callId = retypeEventDerivedId(String(envelope.event_id), "call");
+  callLifecycleByRealmAndCall.set(`${realmId}\u001f${callId}`, initialState);
+  return callId;
+}
+
+/** Mint a fresh `ak:call:<44-char-event-token>` id. */
 export function newCallId(): string {
-  return `ak:call:${uuidV7()}`;
+  return typedId("call");
 }
 
 // ── Signal submit + subscribe read-back (canonical wire) ────────────────────
@@ -595,8 +623,8 @@ async function postPreparedSignalEnvelopeRaw(
   envelope: Record<string, unknown>,
 ): Promise<APIResponse> {
   return await request.post(`${solandBaseUrl()}/_arkret/self/signal`, {
-    headers: authHeaders(token),
-    data: envelope,
+    headers: { ...authHeaders(token), "content-type": "application/json" },
+    data: canonicalJson(envelope),
   });
 }
 
@@ -752,10 +780,7 @@ export async function configureMediaService(
   serviceId: string,
   foci: MediaFocusConfig[],
 ): Promise<void> {
-  const payload = {
-    service_id: serviceId,
-    foci,
-  };
+  const payload = { value: { service_id: serviceId, foci } };
   const cell = "ak:cell:ak.component.realm.media_service.v1:null";
   const sealBasis = await readRealmSealBasis(request, token, realmId);
   await submitSignedEventApi(
@@ -771,7 +796,9 @@ export async function configureMediaService(
     }),
     { context: `configure media_service for ${realmId}` },
   );
-  await waitForRealmSealAdvance(request, token, realmId, sealBasis);
+  await waitForRealmControlIdleApi(request, token, realmId, {
+    afterControlEventSetRoot: String(sealBasis.control_event_set_root),
+  });
 }
 
 export interface MediaParticipantBinding {
@@ -818,8 +845,8 @@ export async function exchangeMediaToken(
   },
 ): Promise<APIResponse> {
   return await request.post(`${solandBaseUrl()}/_arkret/self/rtc/token`, {
-    headers: authHeaders(token),
-    data: body,
+    headers: { ...authHeaders(token), "content-type": "application/json" },
+    data: canonicalJson(body),
   });
 }
 
@@ -872,8 +899,8 @@ export async function fetchIceConfig(
   },
 ): Promise<APIResponse> {
   return await request.post(`${solandBaseUrl()}/_arkret/self/rtc/ice-config`, {
-    headers: authHeaders(token),
-    data: { mode: "p2p", ...body },
+    headers: { ...authHeaders(token), "content-type": "application/json" },
+    data: canonicalJson({ mode: "p2p", ...body }),
   });
 }
 

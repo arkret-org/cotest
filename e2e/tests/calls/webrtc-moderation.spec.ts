@@ -25,6 +25,7 @@ import {
   buildCallSignalEnvelope,
   callSignalPlaintext,
   configureMediaService,
+  createCallApi,
   exchangeMediaToken,
   grantCallCapability,
   newCallId,
@@ -55,7 +56,13 @@ test.describe("call moderation (spec wire)", () => {
   }) => {
     const { alice, aliceToken, bob, bobToken, realmId } =
       await setupTwoPartyCallRealm(request, "mod-kick");
-    const callId = newCallId();
+    const callId = await createCallApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      "ringing",
+    );
 
     const moderation = buildCallSignalEnvelope({
       actorDid: alice.did,
@@ -93,7 +100,9 @@ test.describe("call moderation (spec wire)", () => {
     // moderator).
     const proof = frame!.proof as Record<string, unknown>;
     expect(proof.kind).toBe("detached_jws");
-    expect(proof.verification_method).toBe(`${alice.did}#${alice.deviceId}`);
+    expect(proof.verification_method).toBe(
+      `${alice.fullDid}#${alice.deviceId}`,
+    );
   });
 
   test("moderator ban: ak.call.signal{moderation=ban} omits target_device_id (actor-wide scope)", async ({
@@ -219,7 +228,13 @@ test.describe("call moderation (spec wire)", () => {
       bob.did,
       CAP_CALL_JOIN,
     );
-    const callId = newCallId();
+    const callId = await createCallApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      "ringing",
+    );
 
     // Pre-ban: bob can exchange a media token (no committed focus yet).
     const preBan = await exchangeMediaToken(request, bobToken, {
@@ -230,12 +245,6 @@ test.describe("call moderation (spec wire)", () => {
       focus_id: LIVEKIT_FOCUS.focus_id,
     });
     expect(preBan.status(), await preBan.text()).toBe(200);
-
-    // Open the durable call state with a legal initial state before recording
-    // the actor-wide ban. call-state.md §4.2 forbids a first state of `active`.
-    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
-      state: "ringing",
-    });
 
     // A moderator actor-wide-bans bob: the durable moderation OR-Set value
     // carries a `ban` with no device_id (§3a).

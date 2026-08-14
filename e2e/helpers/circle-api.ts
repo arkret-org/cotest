@@ -28,12 +28,14 @@ import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
 import {
   authHeaders,
+  canonicalJson,
   canonicalTimestamp,
   expectJsonOk,
+  prepareSignedEventSubmissionApi,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
   submitSignedEventApi,
-  typedId,
+  retypeEventDerivedId,
 } from "./soland-api";
 
 export type CircleOutcome = {
@@ -81,10 +83,8 @@ export async function grantCircleMemberManageCapability(
     server?: SolandKey;
   },
 ): Promise<string> {
-  const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
   const unsignedGrant: Record<string, unknown> = {
-    id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
@@ -112,27 +112,23 @@ export async function grantCircleMemberManageCapability(
       },
     ],
   };
+  const envelope = signedEventEnvelope({
+    actorDid: args.ownerDid,
+    realmId: args.realmId,
+    kind: "ak.capability.grant",
+    payload: { grant: unsignedGrant },
+    createdAt: issuedAt,
+  });
   await submitSignedEventApi(
     request,
     ownerToken,
-    signedEventEnvelope({
-      actorDid: args.ownerDid,
-      realmId: args.realmId,
-      kind: "ak.capability.grant",
-      payload: {
-        grant_id: grantId,
-        // The grant body is closed and carries no inner proof; the Event
-        // envelope proof is the sole durable issuer signature.
-        grant: unsignedGrant,
-      },
-      createdAt: issuedAt,
-    }),
+    envelope,
     {
       server: args.server,
       context: `grant ak.circle.member.manage for ${args.circleId} to ${args.subjectDid}`,
     },
   );
-  return grantId;
+  return retypeEventDerivedId(String(envelope.event_id), "grant");
 }
 
 export async function grantCircleManageCapability(
@@ -146,10 +142,8 @@ export async function grantCircleManageCapability(
     server?: SolandKey;
   },
 ): Promise<string> {
-  const grantId = typedId("grant");
   const issuedAt = canonicalTimestamp();
   const unsignedGrant: Record<string, unknown> = {
-    id: grantId,
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: args.ownerDid,
@@ -177,27 +171,23 @@ export async function grantCircleManageCapability(
       },
     ],
   };
+  const envelope = signedEventEnvelope({
+    actorDid: args.ownerDid,
+    realmId: args.realmId,
+    kind: "ak.capability.grant",
+    payload: { grant: unsignedGrant },
+    createdAt: issuedAt,
+  });
   await submitSignedEventApi(
     request,
     ownerToken,
-    signedEventEnvelope({
-      actorDid: args.ownerDid,
-      realmId: args.realmId,
-      kind: "ak.capability.grant",
-      payload: {
-        grant_id: grantId,
-        // The grant body is closed and carries no inner proof; the Event
-        // envelope proof is the sole durable issuer signature.
-        grant: unsignedGrant,
-      },
-      createdAt: issuedAt,
-    }),
+    envelope,
     {
       server: args.server,
       context: `grant ak.circle.manage for ${args.circleId} to ${args.subjectDid}`,
     },
   );
-  return grantId;
+  return retypeEventDerivedId(String(envelope.event_id), "grant");
 }
 
 // `display.short_name` derived from a Circle title, mirroring inkson's
@@ -280,21 +270,27 @@ export async function createCircleArkret(
   },
 ): Promise<CircleOutcome> {
   const createdAt = canonicalTimestamp();
+  const createEvent = await prepareSignedEventSubmissionApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: args.actorDid,
+      realmId: args.realmId,
+      kind: "ak.circle.create",
+      payload: { object: circleCreateObject({ ...args, createdAt }) },
+      createdAt,
+    }),
+    { server: args.server, context: `prepare circle ${args.title}` },
+  );
   const response = await request.post(
     `${solandBaseUrl(args.server)}/_arkret/self/circles`,
     {
-      headers: authHeaders(token),
-      data: {
+      headers: { ...authHeaders(token), "content-type": "application/json" },
+      data: canonicalJson({
         create_event: {
-          event: signedEventEnvelope({
-            actorDid: args.actorDid,
-            realmId: args.realmId,
-            kind: "ak.circle.create",
-            payload: { object: circleCreateObject({ ...args, createdAt }) },
-            createdAt,
-          }),
+          ...createEvent,
         },
-      },
+      }),
     },
   );
   return await expectJsonOk<CircleOutcome>(
@@ -335,27 +331,30 @@ export async function addCircleMemberRaw(
     server?: SolandKey;
   },
 ): Promise<APIResponse> {
+  const memberEvent = await prepareSignedEventSubmissionApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: args.actorDid,
+      realmId: args.realmId,
+      kind: "ak.circle.member.state",
+      payload: {
+        circle_id: circleId,
+        actor_id: args.actorId,
+        membership: args.membership ?? "join",
+      },
+    }),
+    { server: args.server, context: `prepare circle member ${args.actorId}` },
+  );
   return await request.post(
     `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members`,
     {
-      headers: authHeaders(token),
-      data: {
+      headers: { ...authHeaders(token), "content-type": "application/json" },
+      data: canonicalJson({
         member_event: {
-          event: signedEventEnvelope({
-            actorDid: args.actorDid,
-            realmId: args.realmId,
-            kind: "ak.circle.member.state",
-            payload: {
-              circle_id: circleId,
-              actor_id: args.actorId,
-              // `circle_member_state_payload` is closed and requires
-              // `membership`, so there is no server-side default left to lean
-              // on; the surface's own default was `join`.
-              membership: args.membership ?? "join",
-            },
-          }),
+          ...memberEvent,
         },
-      },
+      }),
     },
   );
 }
@@ -391,28 +390,31 @@ export async function removeCircleMemberArkret(
     server?: SolandKey;
   },
 ): Promise<CircleMembershipOutcome> {
+  const memberEvent = await prepareSignedEventSubmissionApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: args.actorDid,
+      realmId: args.realmId,
+      kind: "ak.circle.member.state",
+      payload: {
+        circle_id: circleId,
+        actor_id: actorId,
+        membership: "leave",
+        expected_membership: "join",
+      },
+    }),
+    { server: args.server, context: `prepare remove circle member ${actorId}` },
+  );
   const response = await request.delete(
     `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
     {
-      headers: authHeaders(token),
-      data: {
+      headers: { ...authHeaders(token), "content-type": "application/json" },
+      data: canonicalJson({
         member_event: {
-          event: signedEventEnvelope({
-            actorDid: args.actorDid,
-            realmId: args.realmId,
-            kind: "ak.circle.member.state",
-            payload: {
-              circle_id: circleId,
-              actor_id: actorId,
-              membership: "leave",
-              // The member list only contains active members, so DELETE signs
-              // the exact joined head it observed instead of issuing an
-              // unconditional transition.
-              expected_membership: "join",
-            },
-          }),
+          ...memberEvent,
         },
-      },
+      }),
     },
   );
   return await expectJsonOk<CircleMembershipOutcome>(
@@ -439,23 +441,29 @@ async function submitCircleLifecycleArkret(
   action: "archive" | "restore" | "tombstone",
   args: CircleLifecycleArgs,
 ): Promise<CircleOutcome> {
+  const lifecycleEvent = await prepareSignedEventSubmissionApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorDid: args.actorDid,
+      realmId: args.realmId,
+      kind: `ak.circle.${action}`,
+      payload: {
+        target_ref: circleId,
+        ...(args.reason !== undefined ? { reason: args.reason } : {}),
+      },
+    }),
+    { server: args.server, context: `prepare ${action} circle ${circleId}` },
+  );
   const response = await request.post(
     `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/${action}`,
     {
-      headers: authHeaders(token),
-      data: {
+      headers: { ...authHeaders(token), "content-type": "application/json" },
+      data: canonicalJson({
         lifecycle_event: {
-          event: signedEventEnvelope({
-            actorDid: args.actorDid,
-            realmId: args.realmId,
-            kind: `ak.circle.${action}`,
-            payload: {
-              target_ref: circleId,
-              ...(args.reason !== undefined ? { reason: args.reason } : {}),
-            },
-          }),
+          ...lifecycleEvent,
         },
-      },
+      }),
     },
   );
   return await expectJsonOk<CircleOutcome>(

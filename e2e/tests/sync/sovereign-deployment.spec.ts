@@ -6,6 +6,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import { solandBaseUrl, solandServiceId, hasDualSoland, type SolandKey } from "../../helpers/env";
 import { issueDevSession, uniqueUser } from "../../helpers/users";
+import { canonicalJson } from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -351,8 +352,11 @@ async function postJson(
   token?: string,
 ) {
   const response = await request.post(`${solandBaseUrl(server)}${path}`, {
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
-    data,
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      "content-type": "application/json",
+    },
+    data: canonicalJson(data),
   });
   const text = await response.text();
   expect(response.status(), `${path}: ${text}`).toBe(200);

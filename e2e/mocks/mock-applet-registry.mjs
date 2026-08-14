@@ -31,6 +31,7 @@
 //     → bot actor minted → ghost transaction with accountability".
 
 import { createServer } from "node:http";
+import { spawnSync } from "node:child_process";
 import {
   createHash,
   createPrivateKey,
@@ -48,16 +49,22 @@ const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 // Auto-generate the registry DID unless overridden, so each harness run
 // gets a unique registry identity (preventing test cross-contamination
 // across runs that share a persistent backing store).
-const registryDid =
-  process.env.MOCK_APPLET_REGISTRY_DID ??
-  `did:web:applet-registry-${randomUUID().slice(0, 8)}.joint-e2e.local`;
+const configuredRegistryDid = process.env.MOCK_APPLET_REGISTRY_DID;
+const registryFullDid = configuredRegistryDid?.startsWith("ak:did_core:")
+  ? `did:${configuredRegistryDid.slice("ak:did_core:".length)}`
+  : (configuredRegistryDid ??
+    `did:web:applet-registry-${randomUUID().slice(0, 8)}.joint-e2e.local`);
+const registryDid = configuredRegistryDid?.startsWith("ak:did_core:")
+  ? configuredRegistryDid
+  : `ak:did_core:${registryFullDid.slice("did:".length)}`;
 
-const { publicKey, privateKey, jwks } = createEd25519KeyPair("mock-applet-registry-key-1");
+const { publicKey, privateKey, jwks } = createEd25519KeyPair(
+  "mock-applet-registry-key-1",
+);
 const publicJwk = publicKey.export({ format: "jwk" });
 const packagesByApplet = new Map();
 const provisionedGhosts = new Map();
 const actorSequences = new Map();
-
 
 function canonicalHash(value) {
   return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
@@ -77,13 +84,18 @@ function registrationEpochHash(packageBase, evidence) {
     ["bearer", 2],
     ["mtls", 3],
   ]);
-  const sortedEndpoints = [...packageBase.endpoint_policy.endpoints].sort((left, right) => {
-    const method = methodOrder.get(left.method) - methodOrder.get(right.method);
-    if (method !== 0) return method;
-    const path = left.path.localeCompare(right.path);
-    if (path !== 0) return path;
-    return (authOrder.get(left.auth) ?? -1) - (authOrder.get(right.auth) ?? -1);
-  });
+  const sortedEndpoints = [...packageBase.endpoint_policy.endpoints].sort(
+    (left, right) => {
+      const method =
+        methodOrder.get(left.method) - methodOrder.get(right.method);
+      if (method !== 0) return method;
+      const path = left.path.localeCompare(right.path);
+      if (path !== 0) return path;
+      return (
+        (authOrder.get(left.auth) ?? -1) - (authOrder.get(right.auth) ?? -1)
+      );
+    },
+  );
   const sortedNamespaces = Object.fromEntries(
     Object.entries(packageBase.namespaces).map(([kind, entries]) => [
       kind,
@@ -101,7 +113,8 @@ function registrationEpochHash(packageBase, evidence) {
     delegation_policy: packageBase.delegation_policy,
     e2ee_policy: packageBase.e2ee_policy,
   };
-  if (packageBase.widget !== undefined) securityPolicy.widget = packageBase.widget;
+  if (packageBase.widget !== undefined)
+    securityPolicy.widget = packageBase.widget;
   const transcript = {
     schema: "ak.schema.applet_registration_epoch_transcript.v1",
     derived_registration: {
@@ -120,12 +133,12 @@ function registrationEpochHash(packageBase, evidence) {
       created_at: packageBase.created_at,
     },
     service_did_document: {
-      service_id: evidence.service_id,
+      full_id: evidence.full_id,
       document_digest: evidence.did_document_digest,
       method_version: evidence.method_version_evidence,
     },
-    accepted_signing_keys: [...evidence.accepted_signing_keys].sort((left, right) =>
-      left.key_ref.localeCompare(right.key_ref),
+    accepted_signing_keys: [...evidence.accepted_signing_keys].sort(
+      (left, right) => left.key_ref.localeCompare(right.key_ref),
     ),
     endpoint_policy: {
       ...packageBase.endpoint_policy,
@@ -164,7 +177,9 @@ function developmentAppletPrivateKey(verificationMethod) {
 }
 
 function developmentAppletPublicJwk(verificationMethod) {
-  return createPublicKey(developmentAppletPrivateKey(verificationMethod)).export({
+  return createPublicKey(
+    developmentAppletPrivateKey(verificationMethod),
+  ).export({
     format: "jwk",
   });
 }
@@ -189,6 +204,23 @@ function uuidV7Like() {
 
 function typedId(kind) {
   return `ak:${kind}:${uuidV7Like()}`;
+}
+
+function deriveEventId(event) {
+  const binary = process.env.COTEST_WIRE_BIN;
+  const command = binary ?? "cargo";
+  const args = binary
+    ? ["event-derived-id"]
+    : ["run", "--quiet", "--bin", "cotest-wire", "--", "event-derived-id"];
+  const result = spawnSync(command, args, {
+    cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
+    encoding: "utf8",
+    input: canonicalJson(event),
+  });
+  if (result.status !== 0) {
+    throw new Error(`derive Event id failed: ${result.stderr}`);
+  }
+  return JSON.parse(result.stdout).event_id;
 }
 
 function safeToken(value) {
@@ -219,16 +251,20 @@ function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
     verification_method: verificationMethod,
     created_at: createdAt,
   };
-  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString("base64url");
-  const signingInput = `${protectedHeader}.${Buffer.from(canonicalJson(binding), "utf8").toString(
-    "base64url",
-  )}`;
-  const signature = sign(null, Buffer.from(signingInput, "utf8"), signingKey).toString(
+  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString(
     "base64url",
   );
+  const signingInput = `${protectedHeader}.${Buffer.from(
+    canonicalJson(binding),
+    "utf8",
+  ).toString("base64url")}`;
+  const signature = sign(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    signingKey,
+  ).toString("base64url");
   return {
     kind: "detached_jws",
-    alg: "Ed25519",
     verification_method: verificationMethod,
     event_digest: eventDigest,
     created_at: createdAt,
@@ -237,27 +273,35 @@ function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
 }
 
 function detachedJws(binding, signingKey) {
-  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString("base64url");
+  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString(
+    "base64url",
+  );
   const signingInput = `${protectedHeader}.${Buffer.from(
     canonicalJson(binding),
     "utf8",
   ).toString("base64url")}`;
-  const signature = sign(null, Buffer.from(signingInput, "utf8"), signingKey).toString(
-    "base64url",
-  );
+  const signature = sign(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    signingKey,
+  ).toString("base64url");
   return `${protectedHeader}..${signature}`;
 }
 
 async function readRealmFrontier(solandBase, authorization, realmId) {
   const response = await fetch(
-    `${String(solandBase).replace(/\/$/, "")}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(
-      realmId,
-    )}`,
-    { headers: { authorization } },
+    `${String(solandBase).replace(/\/$/, "")}/_arkret/self/events/frontier`,
+    {
+      method: "QUERY",
+      headers: { authorization, "content-type": "application/json" },
+      body: canonicalJson({ realm_id: realmId }),
+    },
   );
   const responseText = await response.text();
   if (!response.ok) {
-    throw new Error(`Realm frontier returned ${response.status}: ${responseText}`);
+    throw new Error(
+      `Realm frontier returned ${response.status}: ${responseText}`,
+    );
   }
   const body = JSON.parse(responseText);
   const frontier = body?.frontier;
@@ -266,7 +310,9 @@ async function readRealmFrontier(solandBase, authorization, realmId) {
     typeof frontier?.control_event_set_root !== "string" ||
     typeof frontier?.state_root !== "string"
   ) {
-    throw new Error("Realm frontier response is missing the accepted Seal basis");
+    throw new Error(
+      "Realm frontier response is missing the accepted Seal basis",
+    );
   }
   return {
     sealRef: frontier.seal_id,
@@ -319,7 +365,6 @@ function signedGhostProvisionEvents({
     ...grantWithoutProof,
     proof: {
       kind: "detached_jws",
-      alg: "Ed25519",
       verification_method: verificationMethod,
       payload_digest: payloadDigest,
       created_at: createdAt,
@@ -327,7 +372,6 @@ function signedGhostProvisionEvents({
     },
   };
   const accountabilityEvent = {
-    event_id: typedId("event"),
     kind: "ak.identity.accountability_grant",
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
@@ -342,6 +386,7 @@ function signedGhostProvisionEvents({
     seal_basis: sealBasis,
     payload: grantPayload,
   };
+  accountabilityEvent.event_id = deriveEventId(accountabilityEvent);
   accountabilityEvent.proofs = [
     detachedEventProof(
       accountabilityEvent,
@@ -352,7 +397,6 @@ function signedGhostProvisionEvents({
   ];
 
   const profileEvent = {
-    event_id: typedId("event"),
     kind: "ak.profile.create",
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
@@ -364,11 +408,16 @@ function signedGhostProvisionEvents({
     created_at: createdAt,
     hlc: currentHlc(),
     prev_refs: [],
-    refs: [{ id: accountabilityEvent.event_id, role: "accountability", critical: true }],
+    refs: [
+      {
+        id: accountabilityEvent.event_id,
+        role: "accountability",
+        critical: true,
+      },
+    ],
     seal_basis: sealBasis,
     payload: {
       object: {
-        id: typedId("actor_profile"),
         schema: "ak.schema.actor_profile.v1",
         realm_id: realmId,
         principal_id: ghostActorId,
@@ -390,6 +439,7 @@ function signedGhostProvisionEvents({
       },
     },
   };
+  profileEvent.event_id = deriveEventId(profileEvent);
   profileEvent.proofs = [
     detachedEventProof(
       profileEvent,
@@ -413,11 +463,8 @@ function signedGhostMessageEvent({
   text,
 }) {
   const createdAt = rfc3339Now();
-  const eventId = typedId("event");
-  const messageId = eventId.replace(/^ak:event:/, "ak:message:");
   const keyFragment = packageInfo.verificationMethod.split("#", 2)[1];
   const event = {
-    event_id: eventId,
     kind: "ak.message.create",
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
@@ -458,6 +505,9 @@ function signedGhostMessageEvent({
       },
     },
   };
+  const eventId = deriveEventId(event);
+  event.event_id = eventId;
+  const messageId = eventId.replace(/^ak:event:/, "ak:message:");
   // Applet-originated ghost events are executed and signed by the installed
   // service principal; actor_id remains the accountable ghost identity.
   const verificationMethod = packageInfo.verificationMethod;
@@ -465,7 +515,12 @@ function signedGhostMessageEvent({
     event: {
       ...event,
       proofs: [
-        detachedEventProof(event, provision.ghost_actor_id, verificationMethod, packageInfo.signingKey),
+        detachedEventProof(
+          event,
+          provision.ghost_actor_id,
+          verificationMethod,
+          packageInfo.signingKey,
+        ),
       ],
     },
     eventId,
@@ -482,7 +537,10 @@ async function submitSignedAppletTransaction({
 }) {
   const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
   const targetUrl = new URL(target);
-  const transaction = { source_service_id: packageInfo.serviceId, events: [event] };
+  const transaction = {
+    source_service_id: packageInfo.serviceId,
+    events: [event],
+  };
   const body = canonicalJson(transaction);
   const contentDigest = `sha-256=:${createHash("sha256")
     .update(body, "utf8")
@@ -524,8 +582,7 @@ async function submitSignedAppletTransaction({
 }
 
 function requestedScopesFromBody(body) {
-  const input =
-    body.requested_scopes ??
+  const input = body.requested_scopes ??
     body.requested_capabilities ??
     body.capabilities ?? ["ak.message.create", "ak.applet.ghost.provision"];
   return Array.from(new Set(input.map(String)));
@@ -543,35 +600,42 @@ function signedPackage(body) {
   const namespace = body.namespace ?? body.metadata?.namespace ?? "bridge.demo";
   const safe = safeToken(namespace);
   const appletId =
-    typeof body.applet_id === "string" && body.applet_id.startsWith("ak:applet:")
+    typeof body.applet_id === "string" &&
+    body.applet_id.startsWith("ak:applet:")
       ? body.applet_id
       : typedId("applet");
   const createdAt = rfc3339Now();
-  const serviceId =
-    body.service_id ?? `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
+  const serviceFullId =
+    body.service_id_document?.id ??
+    body.service_id ??
+    `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
+  const serviceId = String(body.service_id ?? serviceFullId).startsWith(
+    "ak:did_core:",
+  )
+    ? body.service_id
+    : `ak:did_core:${String(serviceFullId).slice("did:".length)}`;
   const webhookAuth = body.webhook_auth ?? {
     kind: "http_message_signature",
-    key_ref: `${serviceId}#applet-service-key`,
+    key_ref: `${serviceFullId}#applet-service-key`,
     accepted_signature_algorithms: ["ed25519"],
   };
   const webhookPublicJwk =
-    body.service_signing_public_jwk ?? developmentAppletPublicJwk(webhookAuth.key_ref);
+    body.service_signing_public_jwk ??
+    developmentAppletPublicJwk(webhookAuth.key_ref);
   const webhookPublicKeyMaterial = canonicalJson(webhookPublicJwk);
-  const serviceIdDocument =
-    body.service_id_document ??
-    {
-      id: serviceId,
-      verificationMethod: {
-        [webhookAuth.key_ref]: webhookPublicKeyMaterial,
-      },
-      updated: createdAt,
-    };
+  const serviceIdDocument = body.service_id_document ?? {
+    id: serviceFullId,
+    verificationMethod: {
+      [webhookAuth.key_ref]: webhookPublicKeyMaterial,
+    },
+    updated: createdAt,
+  };
   const registrationEpochEvidence = {
-    service_id: serviceId,
+    full_id: serviceIdDocument.id,
     did_document_digest: canonicalHash(serviceIdDocument),
     method_version_evidence:
       body.service_id_method_version_evidence ??
-      (serviceId.startsWith("did:webvh:")
+      (serviceFullId.startsWith("did:webvh:")
         ? {
             method: "did:webvh",
             version_time: createdAt,
@@ -595,14 +659,15 @@ function signedPackage(body) {
     service_id: serviceId,
     controller_id: body.controller_id ?? registryDid,
     base_url: body.base_url ?? serverBaseUrl(),
-    bot_actor_id: body.bot_actor_id ?? `did:web:bot-${safe}.joint-e2e.local`,
+    bot_actor_id:
+      body.bot_actor_id ?? `ak:did_core:web:bot-${safe}.joint-e2e.local`,
     claimed_profiles: [
       "ak.profile.applet_bridge.v1",
       "ak.profile.applet_service.v1",
     ],
     protocols: body.protocols ?? ["bridge"],
     namespaces: body.namespaces ?? {
-      actors: [{ exclusive: true, pattern: `did:web:ghost-${safe}:*` }],
+      actors: [{ exclusive: true, pattern: `ak:did_core:web:ghost-${safe}:*` }],
       realms: [{ exclusive: true, pattern: `bridge:${safe}:*` }],
       handles: [{ exclusive: true, pattern: `${safe}/*` }],
     },
@@ -653,7 +718,8 @@ function signedPackage(body) {
     packageBase.widget = body.widget;
   }
   packageBase.registration_epoch =
-    body.registration_epoch ?? registrationEpochHash(packageBase, registrationEpochEvidence);
+    body.registration_epoch ??
+    registrationEpochHash(packageBase, registrationEpochEvidence);
   // The evidence is required on input so the Principal Server can validate
   // the service DID epoch, but AppletPackage deliberately excludes it from
   // serialization and therefore from both canonical package transcripts.
@@ -669,18 +735,21 @@ function signedPackage(body) {
   // Detached JWS per RFC 7515 appendix F, matching the SDK contract
   // (arkret-rust-sdk signatures/proof.rs): wire form is `header..signature`
   // with an empty payload segment, signed over `header.BASE64URL(payload)`.
-  const jwsHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString("base64url");
-  const signingInput = `${jwsHeader}.${Buffer.from(canonicalJson(sealedForSignature), "utf8").toString("base64url")}`;
-  const signature = sign(null, Buffer.from(signingInput, "utf8"), privateKey).toString(
+  const jwsHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString(
     "base64url",
   );
+  const signingInput = `${jwsHeader}.${Buffer.from(canonicalJson(sealedForSignature), "utf8").toString("base64url")}`;
+  const signature = sign(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    privateKey,
+  ).toString("base64url");
   const jws = `${jwsHeader}..${signature}`;
   const appletPackage = {
     ...sealed,
     proof: {
       kind: "detached_jws",
-      alg: "Ed25519",
-      verification_method: `${registryDid}#mock-applet-registry-key-1`,
+      verification_method: `${registryFullDid}#mock-applet-registry-key-1`,
       event_digest: payloadDigest,
       created_at: createdAt,
       jws,
@@ -694,7 +763,10 @@ function signedPackage(body) {
     serviceId,
     verificationMethod: webhookAuth.key_ref,
     signingKey: body.service_signing_private_jwk
-      ? createPrivateKey({ key: body.service_signing_private_jwk, format: "jwk" })
+      ? createPrivateKey({
+          key: body.service_signing_private_jwk,
+          format: "jwk",
+        })
       : developmentAppletPrivateKey(webhookAuth.key_ref),
   });
   return {
@@ -781,10 +853,14 @@ const server = createServer(async (req, res) => {
     const authorization =
       req.headers.authorization ??
       body.authorization ??
-      (body.session_credential ? `Bearer ${body.session_credential}` : undefined);
+      (body.session_credential
+        ? `Bearer ${body.session_credential}`
+        : undefined);
     if (!solandBase || !authorization) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_soland_base_url_or_authorization" }));
+      res.end(
+        JSON.stringify({ error: "missing_soland_base_url_or_authorization" }),
+      );
       return;
     }
     const packageInfo = packagesByApplet.get(body.applet_id);
@@ -793,24 +869,37 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify({ error: "unknown_applet_package" }));
       return;
     }
-    const externalId = String(body.external_user?.id ?? body.external_id ?? "bot");
+    const externalId = String(
+      body.external_user?.id ?? body.external_id ?? "bot",
+    );
     const displayName = body.external_user?.display_name ?? body.display_name;
     const ghostKey = `${body.applet_id}\n${externalId}`;
     let provision = provisionedGhosts.get(ghostKey);
     if (!provision) {
-      const ghostActorId = `did:web:ghost-${packageInfo.safe}:${safeToken(externalId)}`;
+      const ghostActorId = `ak:did_core:web:ghost-${packageInfo.safe}:${safeToken(externalId)}`;
       const provisionAuthorizationRef = body.provision_authorization_ref;
       if (!provisionAuthorizationRef) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "missing_provision_authorization_ref" }));
+        res.end(
+          JSON.stringify({ error: "missing_provision_authorization_ref" }),
+        );
         return;
       }
       let sealBasis;
       try {
-        ({ sealBasis } = await readRealmFrontier(solandBase, authorization, body.realm_id));
+        ({ sealBasis } = await readRealmFrontier(
+          solandBase,
+          authorization,
+          body.realm_id,
+        ));
       } catch (err) {
         res.statusCode = 502;
-        res.end(JSON.stringify({ error: "realm_frontier_unavailable", detail: String(err) }));
+        res.end(
+          JSON.stringify({
+            error: "realm_frontier_unavailable",
+            detail: String(err),
+          }),
+        );
         return;
       }
       const signedProvision = signedGhostProvisionEvents({
@@ -835,7 +924,7 @@ const server = createServer(async (req, res) => {
               authorization: body.service_authorization ?? authorization,
               "Idempotency-Key": `provision-${body.applet_id}-${safeToken(externalId)}`,
             },
-            body: JSON.stringify({
+            body: canonicalJson({
               schema: "ak.applet.ghost_actor.provision_request.v1",
               applet_id: body.applet_id,
               service_id: packageInfo.serviceId,
@@ -853,7 +942,12 @@ const server = createServer(async (req, res) => {
         );
       } catch (err) {
         res.statusCode = 502;
-        res.end(JSON.stringify({ error: "upstream_unreachable", detail: String(err) }));
+        res.end(
+          JSON.stringify({
+            error: "upstream_unreachable",
+            detail: String(err),
+          }),
+        );
         return;
       }
       const provisionText = await provisionResponse.text();
@@ -890,10 +984,19 @@ const server = createServer(async (req, res) => {
     }
     let sealRef;
     try {
-      ({ sealRef } = await readRealmFrontier(solandBase, authorization, body.realm_id));
+      ({ sealRef } = await readRealmFrontier(
+        solandBase,
+        authorization,
+        body.realm_id,
+      ));
     } catch (err) {
       res.statusCode = 502;
-      res.end(JSON.stringify({ error: "realm_frontier_unavailable", detail: String(err) }));
+      res.end(
+        JSON.stringify({
+          error: "realm_frontier_unavailable",
+          detail: String(err),
+        }),
+      );
       return;
     }
     const signed = signedGhostMessageEvent({
@@ -915,7 +1018,8 @@ const server = createServer(async (req, res) => {
         packageInfo,
         event: signed.event,
         idempotencyKey:
-          body.idempotency_key ?? `external-${body.applet_id}-${safeToken(externalId)}-${Date.now()}`,
+          body.idempotency_key ??
+          `external-${body.applet_id}-${safeToken(externalId)}-${Date.now()}`,
       });
     } catch (err) {
       // soland unreachable / connection refused / timeout: degrade to a
@@ -923,7 +1027,9 @@ const server = createServer(async (req, res) => {
       // createServer async callback (process-level unhandledRejection) and
       // leaving the client hung with no status written.
       res.statusCode = 502;
-      res.end(JSON.stringify({ error: "upstream_unreachable", detail: String(err) }));
+      res.end(
+        JSON.stringify({ error: "upstream_unreachable", detail: String(err) }),
+      );
       return;
     }
     const upstreamText = await upstream.text();

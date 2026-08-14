@@ -13,11 +13,16 @@ import { createHash, createPrivateKey, sign } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
+  advanceEnvelopeToActorFrontier,
+  canonicalDidCoreId,
   canonicalJson,
   createRealmApi,
+  grantCapabilityEventApi,
   grantServiceCapabilityApi,
   queryRealmEventsApi,
+  readRealmSealBasis,
   resolveDefaultStrandId,
+  signedEventEnvelope,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -33,63 +38,72 @@ test.describe("mimi federation", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "e2ee");
+    const { token, realmId, roomId } = await createBoundMimiRoom(
+      request,
+      stamp,
+      "e2ee",
+    );
     const governanceBinding = mimiGovernanceBinding(realmId, roomId);
 
     const unmarked = await postSignedMimiMessage(request, roomId, {
-        source_format: "application/mimi-content",
-        e2ee: true,
-        governance_binding: governanceBinding,
-        content: {
-          kind: "ak.content.text",
-          body: `silent plaintext leak ${stamp}`,
-        },
-        sender_did: "did:web:mimi.example",
-        mimi_message_id: `mimi:e2ee:unmarked:${stamp}`,
-        protocol_draft: "draft-ietf-mimi-protocol-06",
-        content_draft: "draft-ietf-mimi-content-08",
+      source_format: "application/mimi-content",
+      e2ee: true,
+      governance_binding: governanceBinding,
+      content: {
+        kind: "ak.content.text",
+        body: `silent plaintext leak ${stamp}`,
+      },
+      sender_did: "did:web:mimi.example",
+      mimi_message_id: `mimi:e2ee:unmarked:${stamp}`,
+      protocol_draft: "draft-ietf-mimi-protocol-06",
+      content_draft: "draft-ietf-mimi-content-08",
     });
     expect(unmarked.status()).toBe(400);
-    expect(wireErrCode(await unmarked.json())).toBe("mimi_e2ee_boundary_unmarked");
+    expect(wireErrCode(await unmarked.json())).toBe(
+      "mimi_e2ee_boundary_unmarked",
+    );
 
     const downgradeText = `explicit downgrade ${stamp}`;
     const downgrade = await postSignedMimiMessage(request, roomId, {
-        source_format: "application/mimi-content",
-        e2ee: true,
-        e2ee_downgrade: "mimi_bridge",
-        governance_binding: governanceBinding,
-        content: {
-          kind: "ak.content.text",
-          body: downgradeText,
-        },
-        sender_did: "did:web:mimi.example",
-        mimi_message_id: `mimi:e2ee:downgrade:${stamp}`,
-        protocol_draft: "draft-ietf-mimi-protocol-06",
-        content_draft: "draft-ietf-mimi-content-08",
+      source_format: "application/mimi-content",
+      e2ee: true,
+      e2ee_downgrade: "mimi_bridge",
+      governance_binding: governanceBinding,
+      content: {
+        kind: "ak.content.text",
+        body: downgradeText,
+      },
+      sender_did: "did:web:mimi.example",
+      mimi_message_id: `mimi:e2ee:downgrade:${stamp}`,
+      protocol_draft: "draft-ietf-mimi-protocol-06",
+      content_draft: "draft-ietf-mimi-content-08",
     });
     const downgradeResponseText = await downgrade.text();
     expect(downgrade.status(), downgradeResponseText).toBe(200);
-    const downgradeBody = JSON.parse(downgradeResponseText) as Record<string, unknown>;
+    const downgradeBody = JSON.parse(downgradeResponseText) as Record<
+      string,
+      unknown
+    >;
     expect(nested(downgradeBody, "delivery", "status")).toBe("accepted");
 
     const transcriptText = `transcript bound ${stamp}`;
     const transcriptHash = `sha256:${"1".repeat(64)}`;
     const transcript = await postSignedMimiMessage(request, roomId, {
-        source_format: "application/mimi-content",
-        e2ee: true,
-        governance_binding: governanceBinding,
-        transcript_binding: {
-          profile: "mls-via-ietf-mimi",
-          transcript_hash: transcriptHash,
-        },
-        content: {
-          kind: "ak.content.text",
-          body: transcriptText,
-        },
-        sender_did: "did:web:mimi.example",
-        mimi_message_id: `mimi:e2ee:transcript:${stamp}`,
-        protocol_draft: "draft-ietf-mimi-protocol-06",
-        content_draft: "draft-ietf-mimi-content-08",
+      source_format: "application/mimi-content",
+      e2ee: true,
+      governance_binding: governanceBinding,
+      transcript_binding: {
+        profile: "mls-via-ietf-mimi",
+        transcript_hash: transcriptHash,
+      },
+      content: {
+        kind: "ak.content.text",
+        body: transcriptText,
+      },
+      sender_did: "did:web:mimi.example",
+      mimi_message_id: `mimi:e2ee:transcript:${stamp}`,
+      protocol_draft: "draft-ietf-mimi-protocol-06",
+      content_draft: "draft-ietf-mimi-content-08",
     });
     expect(transcript.status()).toBe(200);
     const transcriptBody = (await transcript.json()) as Record<string, unknown>;
@@ -97,8 +111,12 @@ test.describe("mimi federation", () => {
 
     const events = await queryRealmEventsApi(request, token, realmId);
     const downgradeEvent = eventById(events, String(downgradeBody.event_ref));
-    expect(nested(downgradeEvent, "payload", "content", "body")).toBe(downgradeText);
-    expect(nested(downgradeEvent, "payload", "content", "e2ee_downgrade")).toBe("mimi_bridge");
+    expect(nested(downgradeEvent, "payload", "content", "body")).toBe(
+      downgradeText,
+    );
+    expect(nested(downgradeEvent, "payload", "content", "e2ee_downgrade")).toBe(
+      "mimi_bridge",
+    );
     expect(
       nested(
         downgradeEvent,
@@ -110,9 +128,17 @@ test.describe("mimi federation", () => {
     ).toBe("explicit_downgrade");
 
     const transcriptEvent = eventById(events, String(transcriptBody.event_ref));
-    expect(nested(transcriptEvent, "payload", "content", "body")).toBe(transcriptText);
+    expect(nested(transcriptEvent, "payload", "content", "body")).toBe(
+      transcriptText,
+    );
     expect(
-      nested(transcriptEvent, "payload", "content", "transcript_binding", "transcript_hash"),
+      nested(
+        transcriptEvent,
+        "payload",
+        "content",
+        "transcript_binding",
+        "transcript_hash",
+      ),
     ).toBe(transcriptHash);
     expect(
       nested(
@@ -129,23 +155,27 @@ test.describe("mimi federation", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const { token, realmId, roomId } = await createBoundMimiRoom(request, stamp, "content");
+    const { token, realmId, roomId } = await createBoundMimiRoom(
+      request,
+      stamp,
+      "content",
+    );
     const rawLocation = `geo:31.2304,121.4737;u=${stamp % 100}`;
     const governanceBinding = mimiGovernanceBinding(realmId, roomId);
 
     const quarantine = await postSignedMimiMessage(request, roomId, {
-        source_format: "application/mimi-content",
-        governance_binding: governanceBinding,
-        content_kind: "m.location.share.live",
-        content: {
-          kind: "m.location.share.live",
-          geo_uri: rawLocation,
-          body: `live location ${stamp}`,
-        },
-        sender_did: "did:web:mimi.example",
-        mimi_message_id: `mimi:content:unknown:${stamp}`,
-        protocol_draft: "draft-ietf-mimi-protocol-06",
-        content_draft: "draft-ietf-mimi-content-08",
+      source_format: "application/mimi-content",
+      governance_binding: governanceBinding,
+      content_kind: "m.location.share.live",
+      content: {
+        kind: "m.location.share.live",
+        geo_uri: rawLocation,
+        body: `live location ${stamp}`,
+      },
+      sender_did: "did:web:mimi.example",
+      mimi_message_id: `mimi:content:unknown:${stamp}`,
+      protocol_draft: "draft-ietf-mimi-protocol-06",
+      content_draft: "draft-ietf-mimi-content-08",
     });
     const quarantineResponseText = await quarantine.text();
     expect(quarantine.status(), quarantineResponseText).toBe(200);
@@ -155,13 +185,21 @@ test.describe("mimi federation", () => {
     const events = await queryRealmEventsApi(request, token, realmId);
     const event = eventById(events, String(body.event_ref));
     expect(nested(event, "payload", "content", "kind")).toBe("ak.content.text");
-    expect(nested(event, "payload", "content", "body")).toBe("unsupported content from MIMI");
+    expect(nested(event, "payload", "content", "body")).toBe(
+      "unsupported content from MIMI",
+    );
     expect(nested(event, "payload", "content", "unknown_content_kind")).toBe(
       "m.location.share.live",
     );
-    expect(nested(event, "payload", "metadata", "quarantine", "unknown_content_kind")).toBe(
-      "m.location.share.live",
-    );
+    expect(
+      nested(
+        event,
+        "payload",
+        "metadata",
+        "quarantine",
+        "unknown_content_kind",
+      ),
+    ).toBe("m.location.share.live");
     expect(JSON.stringify(event)).not.toContain(rawLocation);
   });
 });
@@ -190,33 +228,51 @@ async function createBoundMimiRoom(
     subjectServiceId: solandServiceId(),
     action: "ak.message.create",
   });
+  await grantCapabilityEventApi(request, token, {
+    ownerDid: alice.did,
+    realmId,
+    subjectDid: alice.did,
+    actions: ["ak.realm.admin"],
+  });
   const strandId = await resolveDefaultStrandId(request, token, realmId);
   const roomId = `MIMI-${suffix}-${stamp}`;
   const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/strands/${roomId}/update`;
   const roomBinding = {
     kind: "ak.mimi.room_binding",
     payload: {
-        profile: "ak.profile.mimi_interop.v1",
-        mimi_room_uri: localMimiRoomUri(roomId),
-        binding_scope: {
-          realm_id: realmId,
-          strand_id: strandId,
-        },
-        hub_provider: solandServiceId(),
-        local_provider_role: "hub",
-        content_profile: "application/mimi-content",
-        mls_group_id: `mls:${roomId}`,
-        status: "accepted",
+      profile: "ak.profile.mimi_interop.v1",
+      mimi_room_uri: localMimiRoomUri(roomId),
+      binding_scope: {
+        realm_id: realmId,
+        strand_id: strandId,
+      },
+      hub_provider: solandServiceId(),
+      local_provider_role: "hub",
+      content_profile: "application/mimi-content",
+      mls_group_id: `mls:${roomId}`,
+      status: "accepted",
     },
   };
+  const bindingEvent = signedEventEnvelope({
+    actorDid: alice.did,
+    realmId,
+    kind: "ak.mimi.room_binding",
+    sealBasis: await readRealmSealBasis(request, token, realmId),
+    payload: roomBinding.payload,
+  });
+  await advanceEnvelopeToActorFrontier(request, token, bindingEvent);
   const updateBody = {
     mls_group_id: `mls:${roomId}`,
     update: {
       kind: "ak.mimi.room_binding",
-      payload: opaquePayload(roomBinding, "application/vnd.arkret.mimi.room-binding+json"),
+      payload: opaquePayload(
+        roomBinding,
+        "application/vnd.arkret.mimi.room-binding+json",
+      ),
     },
     epoch: 1,
-    sender_actor_id: MIMI_SOURCE_SERVICE_ID,
+    sender_actor_id: canonicalDidCoreId(alice.did),
+    room_binding_event: { event: bindingEvent },
   };
   const update = await request.post(updateUrl, {
     headers: signedMimiHeaders({
@@ -234,7 +290,10 @@ function mimiMessagesUrl(roomId: string): string {
   return `${solandBaseUrl()}/_arkret/open/mimi/strands/${encodeURIComponent(roomId)}/messages`;
 }
 
-function mimiGovernanceBinding(realmId: string, roomId: string): Record<string, unknown> {
+function mimiGovernanceBinding(
+  realmId: string,
+  roomId: string,
+): Record<string, unknown> {
   return {
     binding_version: 1,
     encoding_profile: "cbor-deterministic-rfc8949-v1",
@@ -259,7 +318,7 @@ async function postSignedMimiMessage(
 ) {
   const url = mimiMessagesUrl(roomId);
   const body = {
-    sender_actor_id: MIMI_SOURCE_SERVICE_ID,
+    sender_actor_id: canonicalDidCoreId(MIMI_SOURCE_SERVICE_ID),
     device_id: MIMI_DEVICE_ID,
     mls_group_id: `mls:${roomId}`,
     epoch: 1,
@@ -279,7 +338,10 @@ const MIMI_SOURCE_SERVICE_ID = "did:web:mimi.example";
 const MIMI_PROVIDER_ID = "mimi://mimi.example";
 const MIMI_DEVICE_ID = "ak:device:018f6f50-6a23-7abc-8def-0123456789ab";
 
-function opaquePayload(value: unknown, contentType: string): Record<string, string> {
+function opaquePayload(
+  value: unknown,
+  contentType: string,
+): Record<string, string> {
   const canonical = canonicalJson(value);
   return {
     content_type: contentType,
@@ -288,7 +350,10 @@ function opaquePayload(value: unknown, contentType: string): Record<string, stri
   };
 }
 
-function ciphertextPayload(value: unknown, contentType: string): Record<string, string> {
+function ciphertextPayload(
+  value: unknown,
+  contentType: string,
+): Record<string, string> {
   const canonical = canonicalJson(value);
   return {
     content_type: contentType,
@@ -302,6 +367,7 @@ function signedMimiHeaders(args: {
   targetUri: string;
   roomUri: string;
 }): Record<string, string> {
+  const sourceServiceId = canonicalDidCoreId(MIMI_SOURCE_SERVICE_ID);
   const canonicalBody = Buffer.from(canonicalJson(args.body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(canonicalBody).digest("base64")}:`;
   const created = Math.floor(Date.now() / 1000);
@@ -326,7 +392,7 @@ function signedMimiHeaders(args: {
     `"@target-uri": ${args.targetUri}`,
     `"@authority": ${new URL(args.targetUri).host}`,
     `"content-digest": ${contentDigest}`,
-    `"source-service-id": ${MIMI_SOURCE_SERVICE_ID}`,
+    `"source-service-id": ${sourceServiceId}`,
     `"destination-service-id": ${destinationServiceId}`,
     `"provider-id": ${MIMI_PROVIDER_ID}`,
     `"mimi-room-uri": ${args.roomUri}`,
@@ -340,7 +406,7 @@ function signedMimiHeaders(args: {
   return {
     "content-type": "application/json",
     "content-digest": contentDigest,
-    "source-service-id": MIMI_SOURCE_SERVICE_ID,
+    "source-service-id": sourceServiceId,
     "destination-service-id": destinationServiceId,
     "provider-id": MIMI_PROVIDER_ID,
     "mimi-room-uri": args.roomUri,
@@ -384,7 +450,10 @@ function sha256Prefixed(input: string | Buffer): string {
   return `sha256:${createHash("sha256").update(input).digest("hex")}`;
 }
 
-function eventById(eventsBody: Record<string, unknown>, eventId: string): Record<string, unknown> {
+function eventById(
+  eventsBody: Record<string, unknown>,
+  eventId: string,
+): Record<string, unknown> {
   const events = Array.isArray(eventsBody.events) ? eventsBody.events : [];
   const event = events.find(
     (item) =>

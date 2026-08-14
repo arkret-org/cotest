@@ -10,13 +10,11 @@
 // New `requested_scopes:[...]` contract (NOT the legacy `/_soland` + `scope`
 // surface that consent-grant.spec.ts exercises).
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { expectStructurallyIdentical } from "../../helpers/secret-safe";
 import {
-  ensureRegistered,
-  issueDevSession,
-  uniqueUser,
+  createDpopUserSession,
 } from "../../helpers/users";
 import { authHeaders, createRealmApi } from "../../helpers/soland-api";
 import {
@@ -25,12 +23,14 @@ import {
   countInvitesFor,
   deliverInviteExplicitAddress,
   deliverInviteWithConsentGrant,
+  grantInviteConsentArkret,
   getInviteReceivePolicyArkret,
   listAuthzInvitesArkret,
   requestContactArkret,
   prepareDirectConversationIdentityArkret,
   resolveDirectConversationArkret,
   respondContactArkret,
+  revokeInviteConsentArkret,
   seedDirectConversationIdentityArkret,
   setInviteReceivePolicyArkret,
   tombstoneContactArkret,
@@ -38,23 +38,30 @@ import {
 
 // Each test provisions fresh DIDs, so parallel execution is safe.
 
+async function activeContactUser(
+  request: APIRequestContext,
+  prefix: string,
+) {
+  const session = await createDpopUserSession(request, prefix);
+  if (!session) {
+    throw new Error("contact graph requires the joint Coauth stack");
+  }
+  return { user: session.user, token: session.grantJwt };
+}
+
 test.describe("contact graph (same principal server)", () => {
-  // S1: add friend with greeting + invite scope -> accept -> both accepted,
-  // message passthrough, bidirectional scope, holder row carries a legal
-  // ak:event invite_consent_grant_ref.
-  test("S1 add friend with greeting + invite scope, accept -> bidirectional + invite_consent_grant_ref", async ({
+  // S1: Contact facts and receipts establish the bidirectional projection.
+  // Consent is a separate holder-private component and is not synthesized by
+  // Contact admission.
+  test("S1 add friend with greeting + invite scope, accept -> bidirectional projection", async ({
     request,
   }) => {
-    const alice = uniqueUser("cg-s1-alice");
-    const bob = uniqueUser("cg-s1-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      activeContactUser(request, "cg-s1-alice"),
+      activeContactUser(request, "cg-s1-bob"),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
+    const { user: alice, token: aliceToken } = aliceSession;
+    const { user: bob, token: bobToken } = bobSession;
 
     const greeting = `hello bob, let's connect ${Date.now()}`;
     const { outcome: reqOutcome } = await requestContactArkret(
@@ -65,9 +72,7 @@ test.describe("contact graph (same principal server)", () => {
     );
     expect(reqOutcome.state).toBe("pending_outgoing");
     expect(reqOutcome.request_event_ref).toMatch(/^ak:event:/);
-    // The requester-side contact-managed grant is event-backed.
-    expect(reqOutcome.requester_consent_refs.length).toBeGreaterThan(0);
-    expect(reqOutcome.requester_consent_refs[0]).toMatch(/^ak:event:/);
+    expect(reqOutcome.request_acceptance_receipt.core).toBeTruthy();
 
     // Bob sees the incoming request.
     const bobIncoming = await contactRow(request, bobToken, alice.did);
@@ -80,8 +85,8 @@ test.describe("contact graph (same principal server)", () => {
       grantedScopes: ["invite"],
     });
     expect(respondOutcome.state).toBe("accepted");
-    expect(respondOutcome.consent_grant_refs.length).toBeGreaterThan(0);
-    expect(respondOutcome.consent_grant_refs[0]).toMatch(/^ak:event:/);
+    expect(respondOutcome.response_event_ref).toMatch(/^ak:event:/);
+    expect(respondOutcome.acceptance_receipt).toBeTruthy();
 
     // Both sides now list each other as accepted.
     const aliceRow = await contactRow(request, aliceToken, bob.did);
@@ -93,25 +98,20 @@ test.describe("contact graph (same principal server)", () => {
     expect(aliceRow?.bidirectional_scopes).toContain("invite");
     expect(bobRow?.bidirectional_scopes).toContain("invite");
 
-    // Holder (alice) row carries a legal ak:event invite_consent_grant_ref:
-    // bob granted alice an active invite consent, so alice's row surfaces it.
-    expect(aliceRow?.invite_consent_grant_ref).toMatch(/^ak:event:/);
+    expect(aliceRow?.next_prepare_input).toBeTruthy();
+    expect(bobRow?.next_prepare_input).toBeTruthy();
   });
 
   // S2: add friend -> reject -> state=rejected, no consent written.
   test("S2 add friend, reject -> rejected, no bidirectional consent", async ({
     request,
   }) => {
-    const alice = uniqueUser("cg-s2-alice");
-    const bob = uniqueUser("cg-s2-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      activeContactUser(request, "cg-s2-alice"),
+      activeContactUser(request, "cg-s2-bob"),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
+    const { user: alice, token: aliceToken } = aliceSession;
+    const { user: bob, token: bobToken } = bobSession;
 
     const { outcome } = await requestContactArkret(
       request,
@@ -138,23 +138,12 @@ test.describe("contact graph (same principal server)", () => {
   test("S3 friends via direct_message -> immutable participant-authoring plan", async ({
     request,
   }) => {
-    const [aliceIdentity, bobIdentity] = await Promise.all([
-      prepareDirectConversationIdentityArkret(
-        request,
-        uniqueUser("cg-s3-alice"),
-      ),
-      prepareDirectConversationIdentityArkret(request, uniqueUser("cg-s3-bob")),
+    const [aliceSession, bobSession] = await Promise.all([
+      activeContactUser(request, "cg-s3-alice"),
+      activeContactUser(request, "cg-s3-bob"),
     ]);
-    const alice = aliceIdentity.user;
-    const bob = bobIdentity.user;
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
-    ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
+    const { user: alice, token: aliceToken } = aliceSession;
+    const { user: bob, token: bobToken } = bobSession;
     await Promise.all([
       seedDirectConversationIdentityArkret(request, aliceToken, alice),
       seedDirectConversationIdentityArkret(request, bobToken, bob),
@@ -227,20 +216,14 @@ test.describe("contact graph (same principal server)", () => {
   test("S4 consent_grant evidence pulls friend into a new realm (closed loop)", async ({
     request,
   }) => {
-    const alice = uniqueUser("cg-s4-alice");
-    const bob = uniqueUser("cg-s4-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      activeContactUser(request, "cg-s4-alice"),
+      activeContactUser(request, "cg-s4-bob"),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
+    const { user: alice, token: aliceToken } = aliceSession;
+    const { user: bob, token: bobToken } = bobSession;
 
-    // alice requests invite-scope contact; bob accepts granting invite. After
-    // accept, bob has granted alice an active invite consent — so alice's
-    // contact row surfaces invite_consent_grant_ref (bob -> alice grant).
+    // Contact admission and holder-private Consent are separate protocols.
     const { outcome } = await requestContactArkret(
       request,
       aliceToken,
@@ -254,11 +237,13 @@ test.describe("contact graph (same principal server)", () => {
       grantedScopes: ["invite"],
     });
 
-    const aliceRow = await contactRow(request, aliceToken, bob.did);
-    const grantRef = aliceRow?.invite_consent_grant_ref;
-    expect(grantRef, "alice row invite_consent_grant_ref").toMatch(
-      /^ak:event:/,
+    const consent = await grantInviteConsentArkret(
+      request,
+      bobToken,
+      bob,
+      alice.did,
     );
+    const grantRef = consent.eventRef;
 
     // alice creates a NEW realm and pulls bob in using the consent_grant ref.
     const realmId = await createRealmApi(request, aliceToken, {
@@ -299,10 +284,10 @@ test.describe("contact graph (same principal server)", () => {
     await expect
       .poll(
         async () => {
-          const resp = await request.get(
-            `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-            { headers: authHeaders(bobToken) },
-          );
+          const realmUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+          const resp = await request.get(realmUrl, {
+            headers: authHeaders(bobToken, "GET", realmUrl),
+          });
           if (!resp.ok()) return false;
           const realm = await resp.json();
           return (
@@ -319,16 +304,12 @@ test.describe("contact graph (same principal server)", () => {
   test("S5 stranger explicit_address pull -> opaque + not a member", async ({
     request,
   }) => {
-    const mallory = uniqueUser("cg-s5-mallory");
-    const victim = uniqueUser("cg-s5-victim");
-    await Promise.all([
-      ensureRegistered(request, mallory),
-      ensureRegistered(request, victim),
+    const [mallorySession, victimSession] = await Promise.all([
+      activeContactUser(request, "cg-s5-mallory"),
+      activeContactUser(request, "cg-s5-victim"),
     ]);
-    const [malloryToken, victimToken] = await Promise.all([
-      issueDevSession(request, mallory),
-      issueDevSession(request, victim),
-    ]);
+    const { user: mallory, token: malloryToken } = mallorySession;
+    const { user: victim, token: victimToken } = victimSession;
 
     const realmId = await createRealmApi(request, malloryToken, {
       title: `S5 stranger realm ${Date.now()}`,
@@ -359,18 +340,15 @@ test.describe("contact graph (same principal server)", () => {
   // S6: block (tombstone block_peer=true) -> peer pulls via any evidence ->
   // drop + opaque.
   test("S6 block_peer then pull -> dropped + opaque", async ({ request }) => {
-    const alice = uniqueUser("cg-s6-alice");
-    const bob = uniqueUser("cg-s6-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      activeContactUser(request, "cg-s6-alice"),
+      activeContactUser(request, "cg-s6-bob"),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
+    const { user: alice, token: aliceToken } = aliceSession;
+    const { user: bob, token: bobToken } = bobSession;
 
-    // Establish invite-scope friendship so bob has a consent_grant ref to try.
+    // Establish the Contact, then separately grant holder-private invite
+    // consent from alice to bob.
     const { outcome } = await requestContactArkret(
       request,
       bobToken,
@@ -383,9 +361,13 @@ test.describe("contact graph (same principal server)", () => {
       action: "accept",
       grantedScopes: ["invite"],
     });
-    const bobRow = await contactRow(request, bobToken, alice.did);
-    const grantRef = bobRow?.invite_consent_grant_ref;
-    expect(grantRef).toMatch(/^ak:event:/);
+    const consent = await grantInviteConsentArkret(
+      request,
+      aliceToken,
+      alice,
+      bob.did,
+    );
+    const grantRef = consent.eventRef;
 
     // alice blocks bob.
     const tomb = await tombstoneContactArkret(request, aliceToken, bob.did, {
@@ -426,19 +408,15 @@ test.describe("contact graph (same principal server)", () => {
   test("S7 revoked invite consent is downgraded and quarantine remains opaque", async ({
     request,
   }) => {
-    const alice = uniqueUser("cg-s7-alice");
-    const bob = uniqueUser("cg-s7-bob");
-    await Promise.all([
-      ensureRegistered(request, alice),
-      ensureRegistered(request, bob),
+    const [aliceSession, bobSession] = await Promise.all([
+      activeContactUser(request, "cg-s7-alice"),
+      activeContactUser(request, "cg-s7-bob"),
     ]);
-    const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice),
-      issueDevSession(request, bob),
-    ]);
+    const { user: alice, token: aliceToken } = aliceSession;
+    const { user: bob, token: bobToken } = bobSession;
 
-    // bob asks alice; alice accepts granting invite -> alice gave bob invite
-    // consent (alice=holder, bob=peer). bob's row surfaces the grant ref.
+    // Contact admission does not synthesize Consent. Alice separately grants
+    // bob an invite consent dot and later revokes that exact dot.
     const { outcome } = await requestContactArkret(
       request,
       bobToken,
@@ -451,17 +429,15 @@ test.describe("contact graph (same principal server)", () => {
       action: "accept",
       grantedScopes: ["invite"],
     });
-    const bobRow = await contactRow(request, bobToken, alice.did);
-    const grantRef = bobRow?.invite_consent_grant_ref;
-    expect(grantRef).toMatch(/^ak:event:/);
+    const consent = await grantInviteConsentArkret(
+      request,
+      aliceToken,
+      alice,
+      bob.did,
+    );
+    const grantRef = consent.eventRef;
 
-    // alice revokes the invite consent (tombstone with revoke_scopes=[invite],
-    // NO block). This revokes alice->bob invite grant so the consent_grant
-    // evidence no longer verifies.
-    const tomb = await tombstoneContactArkret(request, aliceToken, bob.did, {
-      revokeScopes: ["invite"],
-    });
-    expect(tomb.state).toBe("tombstoned");
+    await revokeInviteConsentArkret(request, aliceToken, alice, consent);
 
     // bob pulls alice using the now-revoked consent_grant ref. The grant fails
     // to verify and is downgraded to explicit_address (low trust). Default

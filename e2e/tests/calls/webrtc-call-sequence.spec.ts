@@ -25,8 +25,8 @@ import {
   CAP_CALL_SIGNAL_SEND,
   buildCallSignalEnvelope,
   callSignalPlaintext,
+  createCallApi,
   grantCallCapability,
-  newCallId,
   postCallSignal,
   relayedCallSignals,
   seedCallState,
@@ -51,7 +51,13 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       bob.did,
       CAP_CALL_SIGNAL_SEND,
     );
-    const callId = newCallId();
+    const callId = await createCallApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      "connecting",
+    );
 
     // Signaling plane — each frame relayed verbatim.
     await postCallSignal(
@@ -147,9 +153,6 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     // ended (call-state.md §4.2). The owner writes the durable cell; we drive
     // it through the legal FSM transitions.
     await seedCallState(request, aliceToken, alice.did, realmId, callId, {
-      state: "connecting",
-    });
-    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
       state: "active",
     });
     await seedCallState(request, aliceToken, alice.did, realmId, callId, {
@@ -178,7 +181,13 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       );
     }
 
-    const callId = newCallId();
+    const callId = await createCallApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      "connecting",
+    );
     const focusId = "ak:focus:livekit-lhr";
 
     await postCallSignal(

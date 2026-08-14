@@ -124,11 +124,12 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     };
 
     const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         vector_id: "ak.vector.snapshot.manifest_integrity.v1",
         manifest,
         chunks,
-      },
+      }),
     });
     expect(resp.status()).toBe(200);
     const body = await resp.json();
@@ -138,11 +139,12 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     expect(body.state_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const tampered = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         vector_id: "ak.vector.snapshot.tampered_chunk.v1",
         manifest,
         chunks: [{ ...chunks[0], payload: { cell: "a", value: "tampered", version: 1 } }, chunks[1]],
-      },
+      }),
     });
     expect(tampered.status()).toBeGreaterThanOrEqual(400);
     expect(wireErrCode(await tampered.json())).toBe("snapshot_chunk_digest_mismatch");
@@ -168,13 +170,14 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       },
     };
     const resp = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         vector_id: "ak.vector.snapshot.signature_binding.v1",
         manifest,
         chunks,
-      },
+      }),
     });
-    expect(resp.status()).toBe(200);
+    expect(resp.status(), await resp.text()).toBe(200);
     const body = await resp.json();
     expect(body.signature_valid).toBe(true);
     expect(body.signer_did).toBe(signerDid);
@@ -193,12 +196,13 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ]);
 
     const revoked = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         vector_id: "ak.vector.snapshot.signature_binding.revoked.v1",
         manifest,
         chunks,
         revoked_signer_dids: [signerDid],
-      },
+      }),
     });
     expect(revoked.status()).toBeGreaterThanOrEqual(400);
     expect(wireErrCode(await revoked.json())).toBe("snapshot_issuer_revoked");
@@ -219,7 +223,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       limit: 2,
     };
     const first = await request.post(`${conformanceBaseUrl()}/query`, {
-      data: { vector_id: "ak.vector.query.page_order.v1", rows, query },
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({ vector_id: "ak.vector.query.page_order.v1", rows, query }),
     });
     expect(first.status()).toBe(200);
     const page1 = await first.json();
@@ -235,7 +240,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       query: { ...query, cursor: page1.next_cursor },
     };
     const second = await request.post(`${conformanceBaseUrl()}/query`, {
-      data: page2Req,
+      headers: { "content-type": "application/json" },
+      data: canonicalJson(page2Req),
     });
     expect(second.status()).toBe(200);
     const page2 = await second.json();
@@ -243,7 +249,8 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     expect(page2.has_more).toBe(false);
 
     const secondAgain = await request.post(`${conformanceBaseUrl()}/query`, {
-      data: page2Req,
+      headers: { "content-type": "application/json" },
+      data: canonicalJson(page2Req),
     });
     expect(await secondAgain.json()).toEqual(page2);
   });

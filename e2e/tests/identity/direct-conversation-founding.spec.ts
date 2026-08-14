@@ -16,7 +16,6 @@ import {
   canonicalTimestamp,
   cotestWire,
   expectJsonOk,
-  localPrincipalControlProposalAck,
   refreshEventEnvelopeProof,
   sdkCapabilityActionRegistryDigest,
   sdkEventDerivedObjectId,
@@ -116,9 +115,6 @@ async function prepareAndCommitContactEvent(
   ) as JsonObject;
   refreshEventEnvelopeProof(event);
   expect(event.event_id).toBe(draft.event_id);
-  const controlProposalAck = localPrincipalControlProposalAck(event);
-  expect(controlProposalAck, "Contact Control Proposal Ack").toBeTruthy();
-
   const commitResponse = await request.post(
     url,
     {
@@ -132,7 +128,6 @@ async function prepareAndCommitContactEvent(
         idempotency_key: prepareBody.idempotency_key,
         reservation_handle: prepared.reservation_handle,
         signed_event: event,
-        control_proposal_ack: controlProposalAck,
       }),
     },
   );

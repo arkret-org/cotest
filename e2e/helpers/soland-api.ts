@@ -69,11 +69,8 @@ const registeredRequestAuth = new Map<
   string,
   (method: string, url: string) => Record<string, string>
 >();
-const localControlProposalAuthorityAcks = new Map<
-  string,
-  Record<string, unknown>
->();
 const realmAuthorityControllers = new Map<string, string>();
+const principalControlEvents = new Map<string, Array<Record<string, unknown>>>();
 
 const REALM_AUTHORITY_ROOT_CELL =
   "ak:cell:ak.component.realm.authority_root.v1:null";
@@ -128,6 +125,21 @@ function eventSignerFor(
     return undefined;
   }
   return registered;
+}
+
+export function registeredEventVerificationMethod(
+  actorDid: string,
+  deviceId?: string,
+): string | undefined {
+  const signer = eventSignerFor(actorDid);
+  if (!signer) {
+    return undefined;
+  }
+  if (!deviceId || signer.verificationMethod.endsWith(`#${deviceId}`)) {
+    return signer.verificationMethod;
+  }
+  const did = signer.verificationMethod.split("#", 1)[0];
+  return `${did}#${deviceId}`;
 }
 
 export function signWithRegisteredEventSigner(
@@ -221,7 +233,7 @@ const EVENT_DERIVED_FIXTURE_TOKEN_BODIES = [
 let eventDerivedFixtureCursor = 0;
 
 export function typedId(kind: string): string {
-  if (["event", "realm", "circle", "strand"].includes(kind)) {
+  if (["event", "realm", "circle", "strand", "call"].includes(kind)) {
     const token = EVENT_DERIVED_FIXTURE_TOKEN_BODIES[eventDerivedFixtureCursor];
     if (!token) {
       throw new Error(
@@ -234,7 +246,7 @@ export function typedId(kind: string): string {
   return `ak:${kind}:${uuidV7()}`;
 }
 
-function retypeEventDerivedId(eventId: string, kind: string): string {
+export function retypeEventDerivedId(eventId: string, kind: string): string {
   if (!eventId.startsWith("ak:event:")) {
     throw new Error(`cannot retype non-Event id ${eventId}`);
   }
@@ -255,6 +267,65 @@ export function registerPrincipalControlRealm(
     );
   }
   acceptedPrincipalControlRealms.set(principalId, realmId);
+}
+
+export function registerPrincipalControlEvents(
+  did: string,
+  events: Array<Record<string, unknown>>,
+): void {
+  principalControlEvents.set(
+    canonicalDidCoreId(did),
+    events.map((event) => JSON.parse(canonicalJson(event)) as Record<string, unknown>),
+  );
+}
+
+export async function submitPrincipalSuccessorSealApi(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  event: Record<string, unknown>,
+  opts: { server?: SolandKey } = {},
+): Promise<void> {
+  const actorId = canonicalDidCoreId(actorDid);
+  const events = principalControlEvents.get(actorId);
+  const signer = eventSignerFor(actorId);
+  const realmId = principalControlRealmForDid(actorId);
+  if (!events || !signer?.signingSeedB64url) {
+    throw new Error(`principal successor Seal material is unavailable for ${actorId}`);
+  }
+  if (events.some((known) => known.event_id === event.event_id)) {
+    return;
+  }
+  const frontierUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events/frontier`;
+  const frontierResponse = await request.fetch(frontierUrl, {
+    method: "QUERY",
+    headers: {
+      ...authHeaders(token, "QUERY", frontierUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ realm_id: realmId }),
+  });
+  const frontier = await expectJsonOk<{ frontier: Record<string, unknown> }>(
+    frontierResponse,
+    `read principal Seal frontier for ${actorId}`,
+  );
+  const seal = cotestWire<Record<string, unknown>>("principal-successor-seal", {
+    events: [...events, event],
+    predecessor_frontier: frontier.frontier,
+    device_signing_seed_b64url: signer.signingSeedB64url,
+  });
+  const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events/seals`;
+  await expectJsonOk(
+    await request.post(sealUrl, {
+      headers: {
+        ...authHeaders(token, "POST", sealUrl),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(seal),
+    }),
+    `submit principal successor Seal for ${actorId}`,
+  );
+  events.push(JSON.parse(canonicalJson(event)) as Record<string, unknown>);
 }
 
 export function principalControlRealmForDid(did: string): string {
@@ -564,8 +635,10 @@ export async function createRealmApi(
     unroutable_membership_allowed: true,
   };
   if (data.creator_service_id) {
+    const creatorFullDid =
+      eventSignerFor(ownerDid)?.verificationMethod.split("#", 1)[0] ?? ownerDid;
     const didDocumentResponse = await request.get(
-      `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(ownerDid)}/did-document`,
+      `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(creatorFullDid)}/did-document`,
     );
     const didDocument = await expectJsonOk<Record<string, unknown>>(
       didDocumentResponse,
@@ -637,7 +710,6 @@ export async function createRealmApi(
     const recipientServiceId =
       data.invitee_service_ids?.[invitee] ?? solandServiceId(opts.server);
     const evidence = { kind: "explicit_address" };
-    const inviteId = typedId("invite");
     const sealBasis = await readRealmSealBasis(
       request,
       token,
@@ -650,7 +722,6 @@ export async function createRealmApi(
       kind: "ak.invite.create",
       sealBasis,
       payload: {
-        invite_id: inviteId,
         invitee,
         invite_delivery_target: {
           recipient_service_id: recipientServiceId,
@@ -1483,7 +1554,6 @@ export async function submitInviteCreateApi(
   joinAuthorisedByRef: string,
   opts: { server?: SolandKey } = {},
 ) {
-  const inviteId = typedId("invite");
   const expiresAt = canonicalTimestamp(new Date(Date.now() + 86_400_000));
   const sealBasis = await readRealmSealBasis(
     request,
@@ -1503,7 +1573,6 @@ export async function submitInviteCreateApi(
     // `invitee` (a DID); the forbidden `subject_did` wire field and the
     // non-schema `realm_id` / `inviter` keys are intentionally absent.
     payload: {
-      invite_id: inviteId,
       invitee: subjectDid,
       invite_delivery_target: {
         recipient_service_id: solandServiceId(opts.server),
@@ -1576,11 +1645,15 @@ export async function acceptInviteApi(
   await expect
     .poll(
       async () => {
+        const resolveUrl = `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`;
         const resolutionResponse = await request.post(
-          `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`,
+          resolveUrl,
           {
-            headers: authHeaders(token),
-            data: { realm_id: realmId, requester: actorDid },
+            headers: {
+              ...authHeaders(token, "POST", resolveUrl),
+              "content-type": "application/json",
+            },
+            data: canonicalJson({ realm_id: realmId, requester: actorDid }),
           },
         );
         const resolution = await expectJsonOk<{
@@ -1625,6 +1698,7 @@ export async function acceptInviteApi(
       sealBasis,
       payload: {
         invite_id: inviteId,
+        delivery_status: "unroutable",
       },
     }),
     { server: candidateServer, context: `accept invite ${inviteId}` },
@@ -1668,7 +1742,15 @@ export async function sendMessageApi(
     server?: SolandKey;
     encrypted?: boolean;
     createdAt?: string;
-    mentions?: string[];
+    mentions?: Array<
+      | string
+      | {
+          kind: "mention";
+          subject_id: string;
+          handle_at_time?: string;
+          mention_text_original?: string;
+        }
+    >;
     actorSeq?: number;
   } = {},
 ) {
@@ -1688,7 +1770,15 @@ export async function sendMessageApi(
       content: {
         kind: "ak.content.text",
         body,
-        ...(opts.mentions ? { mentions: opts.mentions } : {}),
+        ...(opts.mentions
+          ? {
+              mentions: opts.mentions.map((mention) =>
+                typeof mention === "string"
+                  ? { kind: "mention", subject_id: mention }
+                  : mention,
+              ),
+            }
+          : {}),
       },
     },
   });
@@ -2249,6 +2339,7 @@ export async function submitSignedEventApi(
     const previousControlRoot =
       controlControlProposalAck &&
       realmId &&
+      envelope.kind !== "ak.invite.accept" &&
       (!actorControlRealm || realmId !== actorControlRealm)
         ? (await readRealmSealFrontier(request, token, realmId, opts.server))
             .control_event_set_root
@@ -2611,9 +2702,11 @@ async function issueControlProposalAckApi(
   if (event.seal_basis == null) {
     return undefined;
   }
-  const localAck = localPrincipalControlProposalAck(event);
-  if (localAck) {
-    return localAck;
+  if (isAuthorityAuthoredSelfPrincipalMove(event)) {
+    // cba-profiles.md §4: once the human PCR genesis is accepted, a current
+    // device authoring in its own principal-control Realm is the authority.
+    // This exceptional Control Move must omit an independent Proposal Ack.
+    return undefined;
   }
   const url = `${solandBaseUrl(server)}/_arkret/self/control-proposal-acks`;
   const response = await request.post(url, {
@@ -2651,9 +2744,9 @@ async function issueControlProposalAckApi(
   };
 }
 
-export function localPrincipalControlProposalAck(
+function isAuthorityAuthoredSelfPrincipalMove(
   event: Record<string, unknown>,
-): Record<string, unknown> | undefined {
+): boolean {
   const actorDid = stringValue(event.actor_id);
   const scopeRef = event.scope_ref as Record<string, unknown> | undefined;
   const realmId =
@@ -2667,91 +2760,9 @@ export function localPrincipalControlProposalAck(
     !actorControlRealm ||
     realmId !== actorControlRealm
   ) {
-    return undefined;
+    return false;
   }
-  const proof = Array.isArray(event.proofs)
-    ? (event.proofs[0] as Record<string, unknown> | undefined)
-    : undefined;
-  const registeredSigner = eventSignerFor(
-    actorDid,
-    stringValue(proof?.verification_method),
-  );
-  const verificationMethod =
-    registeredSigner?.verificationMethod ??
-    stringValue(proof?.verification_method) ??
-    `${actorDid}#device`;
-  const proposalPayload = { ...event };
-  delete proposalPayload.proofs;
-  delete proposalPayload.unsigned;
-  delete proposalPayload.actor_kind;
-  // `event_id` is derived from the Event digest and therefore cannot be part
-  // of that digest's preimage. Keep this local principal ack byte-identical to
-  // `arkret_wire::event_digest_preimage`.
-  delete proposalPayload.event_id;
-  const proposalDigest = `sha256:${sha256CanonicalJson(proposalPayload)}`;
-  const authoritySetRef = `sha256:${sha256CanonicalJson({
-    kind: "single_did",
-    actor_id: actorDid,
-  })}`;
-  const cacheKey = `${proposalDigest}\0${authoritySetRef}\0${verificationMethod}`;
-  let member = localControlProposalAuthorityAcks.get(cacheKey);
-  if (!member) {
-    const receivedAt = new Date();
-    const memberWithoutSignature = {
-      realm_id: realmId,
-      proposal_digest: proposalDigest,
-      received_at: receivedAt.toISOString(),
-      decision_due_at: new Date(receivedAt.getTime() + 30_000).toISOString(),
-      absolute_due_at: new Date(receivedAt.getTime() + 90_000).toISOString(),
-      authority_set_ref: authoritySetRef,
-    };
-    const payloadDigest = `sha256:${sha256CanonicalJson(
-      memberWithoutSignature,
-    )}`;
-    const transcript = {
-      context: "ak.control-proposal-authority-ack-proof-v1",
-      payload_digest: payloadDigest,
-      verification_method: verificationMethod,
-      created_at: memberWithoutSignature.received_at,
-    };
-    const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
-    const signingInput = `${protectedHeader}.${base64urlJsonCanonical(
-      transcript,
-    )}`;
-    const signature =
-      signWithRegisteredEventSigner(
-        actorDid,
-        verificationMethod,
-        signingInput,
-      ) ??
-      sign(
-        null,
-        Buffer.from(signingInput, "utf8"),
-        developmentProtocolPrivateKey(verificationMethod),
-      ).toString("base64url");
-    member = {
-      ...memberWithoutSignature,
-      signature: {
-        alg: "Ed25519",
-        verification_method: verificationMethod,
-        payload_digest: payloadDigest,
-        created_at: memberWithoutSignature.received_at,
-        jws: `${protectedHeader}..${signature}`,
-      },
-    };
-    localControlProposalAuthorityAcks.set(cacheKey, member);
-  }
-  return {
-    kind: "signed_ack",
-    realm_id: member.realm_id,
-    proposal_digest: member.proposal_digest,
-    received_at: member.received_at,
-    decision_due_at: member.decision_due_at,
-    absolute_due_at: member.absolute_due_at,
-    defer_count: 0,
-    authority_set_ref: member.authority_set_ref,
-    authority_acks: [member],
-  };
+  return true;
 }
 
 async function issueAuthorizationLeasesApi(
@@ -3421,7 +3432,10 @@ export async function resolveDefaultStrandId(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { server?: SolandKey } = {},
+  opts: {
+    server?: SolandKey;
+    authorityRootController?: string;
+  } = {},
 ): Promise<string> {
   // Primary: Realm projection carries the authoritative default_strand_id.
   const realmResp = await request.get(
@@ -3460,9 +3474,106 @@ export async function resolveDefaultStrandId(
   if (def?.strand_id) {
     return def.strand_id;
   }
-  throw new Error(
-    `resolveDefaultStrandId: accepted projections for ${realmId} expose no default Strand`,
-  );
+  const actorDid = await currentActorDidApi(request, token, opts);
+  if (opts.authorityRootController !== undefined) {
+    expect(
+      canonicalDidCoreId(opts.authorityRootController),
+      "default Strand fixture authority-root controller must match the authenticated actor",
+    ).toBe(canonicalDidCoreId(actorDid));
+    // UI-authored Realm bootstrap is outside this API helper's in-memory
+    // registry. The fixture supplies the genesis actor it just observed so
+    // applyRegisteredCbaPlane can stamp the explicit authority-root claim;
+    // Soland still validates that claim against the accepted Seal state.
+    realmAuthorityControllers.set(
+      realmAuthorityControllerKey(opts.server, realmId),
+      canonicalDidCoreId(actorDid),
+    );
+  }
+  const createdAt = canonicalTimestamp();
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.strand.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.strand.v1",
+        realm_id: realmId,
+        tracks: {
+          discussion: {
+            enabled: true,
+            is_primary: true,
+            profile: "discussion",
+          },
+        },
+        created_by: actorDid,
+        created_at: createdAt,
+      },
+    },
+  });
+  await submitSignedEventApi(request, token, envelope, {
+    server: opts.server,
+    context: `create discussion Strand for ${realmId}`,
+  });
+  const strandId = retypeEventDerivedId(String(envelope.event_id), "strand");
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
+          { headers: authHeaders(token) },
+        );
+        if (!response.ok()) return false;
+        const body = (await response.json()) as {
+          strands?: Array<{ strand_id?: string }>;
+          items?: Array<{ strand_id?: string }>;
+        };
+        return [...(body.strands ?? []), ...(body.items ?? [])].some(
+          (strand) => strand.strand_id === strandId,
+        );
+      },
+      {
+        message: `discussion Strand ${strandId} reaches the accepted projection`,
+        timeout: 30_000,
+        intervals: [100, 250, 500, 1_000],
+      },
+    )
+    .toBe(true);
+  const setDefault = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.realm.set_default_strand",
+    payload: { realm_id: realmId, strand_id: strandId },
+  });
+  await submitSignedEventApi(request, token, setDefault, {
+    server: opts.server,
+    context: `set default discussion Strand for ${realmId}`,
+  });
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
+          { headers: authHeaders(token) },
+        );
+        if (!response.ok()) return false;
+        const body = (await response.json()) as {
+          strands?: Array<{ strand_id?: string; is_default?: boolean }>;
+          items?: Array<{ strand_id?: string; is_default?: boolean }>;
+        };
+        return [...(body.strands ?? []), ...(body.items ?? [])].some(
+          (strand) =>
+            strand.strand_id === strandId && strand.is_default === true,
+        );
+      },
+      {
+        message: `Realm ${realmId} projects default Strand ${strandId}`,
+        timeout: 30_000,
+        intervals: [100, 250, 500, 1_000],
+      },
+    )
+    .toBe(true);
+  return strandId;
 }
 
 export function canonicalTimestamp(date: Date = new Date()): string {
@@ -3959,7 +4070,10 @@ function signedFederationPushHeaders(
   // request is rejected on the freshness check, not on a bad signature.
   const created = opts.expireSignature ? nowSeconds - 600 : nowSeconds;
   const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;
-  const keyid = `${sourceDid}#federation-fanout-key`;
+  const sourceKey = (["default", "alpha", "beta"] as SolandKey[]).find(
+    (key) => solandServiceId(key) === sourceDid,
+  );
+  const keyid = `${sourceKey ? solandServiceFullId(sourceKey) : sourceDid}#federation-fanout-key`;
   const idempotencyComponent = opts.idempotencyKey ? ' "idempotency-key"' : "";
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "source-service-id" ` +
@@ -4068,16 +4182,23 @@ function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
 }
 
 function trustDomainFromServiceId(serviceId: string): string {
-  const webHost = serviceId.startsWith("did:web:")
-    ? serviceId.slice("did:web:".length).split(":")[0]
+  const localKey = (["default", "alpha", "beta"] as SolandKey[]).find(
+    (key) => solandServiceId(key) === serviceId,
+  );
+  if (localKey) {
+    return "ak:trust_domain:local.host";
+  }
+  const locationDid = localKey ? solandServiceFullId(localKey) : serviceId;
+  const webHost = locationDid.startsWith("did:web:")
+    ? locationDid.slice("did:web:".length).split(":")[0]
     : undefined;
-  const webvhHost = serviceId.startsWith("did:webvh:")
-    ? serviceId.slice("did:webvh:".length).split(":")[1]
+  const webvhHost = locationDid.startsWith("did:webvh:")
+    ? locationDid.slice("did:webvh:".length).split(":")[1]
     : undefined;
-  const keyScope = serviceId.startsWith("did:key:")
-    ? serviceId.slice("did:key:".length)
+  const keyScope = locationDid.startsWith("did:key:")
+    ? locationDid.slice("did:key:".length)
     : undefined;
-  const rawScope = webHost ?? webvhHost ?? keyScope ?? serviceId;
+  const rawScope = webHost ?? webvhHost ?? keyScope ?? locationDid;
   const scope = rawScope
     .split(/%3a/i)[0]
     .replace(/\.+$/, "")
