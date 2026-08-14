@@ -1,4 +1,5 @@
 mod aad_visibility_ceiling;
+mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
 mod agent_participation;
 mod agent_signer_evidence;
@@ -107,6 +108,7 @@ pub use aad_visibility_ceiling::{
     REASON_AAD_VISIBILITY_POLICY_VIOLATION, VECTOR_ID_AAD_VISIBILITY_POLICY_CEILING,
     run_aad_visibility_policy_ceiling_vector,
 };
+pub use agent_membership_cascade::run_agent_membership_cascade_suite;
 pub use agent_mls_keypackage_authorization::run_agent_mls_keypackage_authorization_vector;
 pub use agent_participation::{
     ALL_AGENT_PARTICIPATION_VECTOR_IDS, run_agent_mention_selector_vector,

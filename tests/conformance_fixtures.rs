@@ -775,6 +775,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Native Agent membership is immediately AND-gated by the exact
+    /// controller generation, while explicit cleanup stays caller-signed,
+    /// complete-set, durable and atomic.
+    agent_membership_cascade,
+    "agent_membership_cascade",
+    cotest::conformance::run_agent_membership_cascade_suite,
+);
+
+conformance_test!(
     /// Durable accepted revocation blocks every closed action class, while
     /// SessionGrant issue/refresh consume a fresh exact origin-PS receipt and
     /// client material survives pending until a covering Seal is accepted.
