@@ -1,24 +1,38 @@
 import { createHash, randomBytes } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import {
   solandBaseUrl,
   solandServiceId,
   solandServiceResolution,
 } from "../../helpers/env";
+import {
+  countInvitesFor,
+  listAuthzInvitesArkret,
+} from "../../helpers/contact-api";
 import type { InviteDeliveryRequestBodyBodyBody } from "../../helpers/soland-api";
 import {
+  acceptedInviteDeliveryBodyApi,
+  advanceEnvelopeToActorFrontier,
+  canonicalServiceResolution,
   canonicalTimestamp,
   authHeaders,
+  createRealmApi,
+  dispatchSelfInviteApi,
+  rawDispatchSelfInviteApi,
+  readRealmSealBasis,
+  refreshEventEnvelopeProof,
   sha256CanonicalJson,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
+  submitSignedEventApi,
   typedId,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
   uniqueUser,
+  type JointUser,
 } from "../../helpers/users";
 
 type InviteLocatorIssueOutcome = {
@@ -45,7 +59,115 @@ async function errorFingerprint(response: {
   };
 }
 
+// The three §7 `invite_event` preconditions are a closed rejection set:
+// `failed_precondition` plus one of `invite_event_unaccepted` /
+// `invite_event_actor_mismatch` / `invite_event_bytes_mismatch`. The reason is
+// the ErrorEnvelope sub-reason (error-code-registry.json marks all three
+// `applies_to: ["service_call"]`), which soland may carry either directly on
+// `error` or inside `error.details`.
+async function dispatchRejection(response: {
+  status(): number;
+  text(): Promise<string>;
+}): Promise<{ status: number; code?: string; reason?: string }> {
+  const text = await response.text();
+  const body = JSON.parse(text) as {
+    error?: {
+      code?: string;
+      reason?: string;
+      reason_code?: string;
+      details?: { reason?: string; reason_code?: string };
+    };
+  };
+  return {
+    status: response.status(),
+    code: body.error?.code,
+    reason:
+      body.error?.reason_code ??
+      body.error?.reason ??
+      body.error?.details?.reason_code ??
+      body.error?.details?.reason,
+  };
+}
+
+type AcceptedInviteFixture = {
+  inviter: JointUser;
+  inviterToken: string;
+  invitee: JointUser;
+  inviteeToken: string;
+  realmId: string;
+  acceptedEventId: string;
+  evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
+  inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
+};
+
+// A durable `ak.invite.create` that this Principal Server has already accepted
+// — §7's precondition for starting private delivery at all.
+async function acceptedInviteFixture(
+  request: APIRequestContext,
+  slug: string,
+): Promise<AcceptedInviteFixture> {
+  const inviter = uniqueUser(`${slug}-inviter`);
+  const invitee = uniqueUser(`${slug}-invitee`);
+  await ensureRegistered(request, inviter);
+  await ensureRegistered(request, invitee);
+  const inviterToken = await issueDevSession(request, inviter);
+  const inviteeToken = await issueDevSession(request, invitee);
+  const realmId = await createRealmApi(request, inviterToken, {
+    title: `invite dispatch ${slug} ${Date.now()}`,
+    ownerDid: inviter.did,
+  });
+
+  const evidence = { kind: "explicit_address" } as const;
+  const inviteAddress = {
+    subject_id: invitee.did,
+    recipient_service_id: solandServiceId(),
+    // §7 step 6: this carrier and the durable
+    // `invite_delivery_target.service_resolution` MUST be byte-for-byte equal.
+    service_resolution: canonicalServiceResolution(),
+    recipient_service_kind: "principal_server" as const,
+  };
+  const event = signedEventEnvelope({
+    actorDid: inviter.did,
+    realmId,
+    kind: "ak.invite.create",
+    payload: {
+      invitee: invitee.did,
+      invite_delivery_target: {
+        recipient_service_id: inviteAddress.recipient_service_id,
+        service_resolution: inviteAddress.service_resolution,
+        recipient_service_kind: "principal_server",
+      },
+      introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
+      expires_at: canonicalTimestamp(
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      ),
+    },
+  });
+  await advanceEnvelopeToActorFrontier(request, inviterToken, event);
+  event.seal_basis = await readRealmSealBasis(request, inviterToken, realmId);
+  refreshEventEnvelopeProof(event);
+  await submitSignedEventApi(request, inviterToken, event, {
+    context: `persist ${slug} invite create`,
+  });
+
+  return {
+    inviter,
+    inviterToken,
+    invitee,
+    inviteeToken,
+    realmId,
+    acceptedEventId: String(event.event_id),
+    evidence,
+    inviteAddress,
+  };
+}
+
 test.describe("invite addressing", () => {
+  // Peer-layer direct coverage. `ak.peer.invites.command.submit` is a
+  // Principal-Server-to-Principal-Server operation, so this test stands in for
+  // an inviter Principal Server on purpose; it is NOT the client path. A client
+  // reaches the same receive pipeline through
+  // `ak.self.invites.command.dispatch` (§7), covered below.
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
     const recipientServiceId = solandServiceId();
     const invitee = "did:web:cotest-invitee.example";
@@ -255,5 +377,177 @@ test.describe("invite addressing", () => {
       (response) => response.status() === 200,
     );
     expect((await successfulOneTime!.json()).display_hint).toBeUndefined();
+  });
+
+  // invite-addressing.md §7 — `ak.self.invites.command.dispatch`. This is the
+  // only conforming client entry point into private invite delivery: the client
+  // hands raw `introduction_evidence` plus the already accepted Event to its own
+  // Principal Server and never synthesizes federation trust material.
+  test("self invite dispatch delivers a same-service invite and is retry-idempotent", async ({
+    request,
+  }) => {
+    const fixture = await acceptedInviteFixture(request, "dispatch-local");
+
+    // §7 requires `invite_event` to be filled from
+    // `ak.self.events.read.resolve`, so `acceptedInviteDeliveryBodyApi` reads
+    // the server's canonical view instead of re-authoring an equivalent Event.
+    const body = await acceptedInviteDeliveryBodyApi(request, fixture.inviterToken, {
+      eventId: fixture.acceptedEventId,
+      inviteAddress: fixture.inviteAddress,
+      evidence: fixture.evidence,
+    });
+    expect(
+      body.invite_event.event_id,
+      "dispatch MUST carry the service's own view of the accepted Event",
+    ).toBe(fixture.acceptedEventId);
+    expect(body.invite_event.actor_id).toBe(fixture.inviter.did);
+    // §7 step 5 / §6: the durable target and the delivery address agree.
+    expect(body.invite_event.payload.invitee).toBe(fixture.inviteAddress.subject_id);
+
+    const outcome = await dispatchSelfInviteApi(
+      request,
+      fixture.inviterToken,
+      body,
+    );
+    // The target is this service, so §7 runs the receive verification from step
+    // 4 onward locally. The invitee published no `invite_receive_policy`, so §5
+    // fails closed: `explicit_address` is low trust and is quarantined or
+    // dropped. §5.1 pins that to `status="deferred"` with no
+    // `disclosed_outcome`, indistinguishable from a silent drop.
+    expect(outcome.status).toBe("deferred");
+    expect(outcome.disclosed_outcome).toBeUndefined();
+
+    // §7: an uncertain transport outcome MUST be retried with the same body and
+    // the same `idempotency_key`, never with substituted evidence or Event.
+    const retry = await dispatchSelfInviteApi(
+      request,
+      fixture.inviterToken,
+      body,
+    );
+    expect(
+      ["deferred", "duplicate"],
+      "an exact §7 retry must stay inside the opaque low-trust equivalence class",
+    ).toContain(retry.status);
+    expect(retry.disclosed_outcome).toBeUndefined();
+
+    // A quarantined low-trust invite MUST NOT surface to the invitee, and the
+    // retry MUST NOT have produced a second holder-private write.
+    expect(
+      countInvitesFor(
+        await listAuthzInvitesArkret(request, fixture.inviteeToken),
+        fixture.realmId,
+        fixture.invitee.did,
+      ),
+      "a quarantined low-trust invite must stay invisible to the invitee",
+    ).toBe(0);
+  });
+
+  // §7 defines exactly three `invite_event` preconditions, and their rejection
+  // semantics are closed. None of them may produce a delivery, an outbox
+  // enqueue, or a holder-private write.
+  test("self invite dispatch fails closed on the three invite_event preconditions", async ({
+    request,
+  }) => {
+    const fixture = await acceptedInviteFixture(request, "dispatch-reject");
+    const accepted = await acceptedInviteDeliveryBodyApi(
+      request,
+      fixture.inviterToken,
+      {
+        eventId: fixture.acceptedEventId,
+        inviteAddress: fixture.inviteAddress,
+        evidence: fixture.evidence,
+      },
+    );
+
+    // §7: an Event this service has not accepted MUST be rejected with
+    // `failed_precondition` / `invite_event_unaccepted`. The Event below is well
+    // formed and correctly signed but was never submitted.
+    const unsubmitted = signedEventEnvelope({
+      actorDid: fixture.inviter.did,
+      realmId: fixture.realmId,
+      kind: "ak.invite.create",
+      payload: {
+        invitee: fixture.invitee.did,
+        invite_delivery_target: {
+          recipient_service_id: fixture.inviteAddress.recipient_service_id,
+          service_resolution: fixture.inviteAddress.service_resolution,
+          recipient_service_kind: "principal_server",
+        },
+        introduction_evidence_digest: `sha256:${sha256CanonicalJson(fixture.evidence)}`,
+        expires_at: canonicalTimestamp(
+          new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ),
+      },
+    });
+    const unaccepted = await rawDispatchSelfInviteApi(
+      request,
+      fixture.inviterToken,
+      {
+        ...accepted,
+        invite_event:
+          unsubmitted as InviteDeliveryRequestBodyBodyBody["invite_event"],
+        idempotency_key: `${accepted.idempotency_key}-unaccepted`,
+      },
+    );
+    expect(await dispatchRejection(unaccepted)).toMatchObject({
+      // error-code-registry.json maps `failed_precondition` to HTTP 409.
+      status: 409,
+      code: "failed_precondition",
+      reason: "invite_event_unaccepted",
+    });
+
+    // §7: a signer that is not the authenticated session actor MUST be
+    // rejected with `failed_precondition` / `invite_event_actor_mismatch`. The
+    // Event here is accepted and byte-exact — only the session belongs to
+    // someone else, and the service MUST NOT co-sign or re-author for them.
+    const actorMismatch = await rawDispatchSelfInviteApi(
+      request,
+      fixture.inviteeToken,
+      accepted,
+    );
+    expect(await dispatchRejection(actorMismatch)).toMatchObject({
+      // error-code-registry.json maps `failed_precondition` to HTTP 409.
+      status: 409,
+      code: "failed_precondition",
+      reason: "invite_event_actor_mismatch",
+    });
+
+    // §7: an `invite_event` that is not byte-for-byte equal to the persisted
+    // canonical bytes MUST be rejected with `failed_precondition` /
+    // `invite_event_bytes_mismatch`. The `event_id` still names the accepted
+    // Event, so the service can locate it; only the bytes were tampered with.
+    // The stored canonical bytes are the authority here, so the comparison MUST
+    // decide the outcome — reporting a generic signature failure instead would
+    // leave the §7 rejection set open.
+    const tampered = structuredClone(accepted);
+    tampered.invite_event.payload = {
+      ...tampered.invite_event.payload,
+      expires_at: canonicalTimestamp(
+        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+      ),
+    };
+    tampered.idempotency_key = `${accepted.idempotency_key}-tampered`;
+    const bytesMismatch = await rawDispatchSelfInviteApi(
+      request,
+      fixture.inviterToken,
+      tampered,
+    );
+    expect(await dispatchRejection(bytesMismatch)).toMatchObject({
+      // error-code-registry.json maps `failed_precondition` to HTTP 409.
+      status: 409,
+      code: "failed_precondition",
+      reason: "invite_event_bytes_mismatch",
+    });
+
+    // §7: none of these three rejections may produce a delivery, an outbox
+    // enqueue, or a holder-private write.
+    expect(
+      countInvitesFor(
+        await listAuthzInvitesArkret(request, fixture.inviteeToken),
+        fixture.realmId,
+        fixture.invitee.did,
+      ),
+      "a rejected §7 precondition must not create any holder-private invite",
+    ).toBe(0);
   });
 });

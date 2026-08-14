@@ -1515,12 +1515,44 @@ mod realm_bootstrap_tests {
                 arkret_wire::event_kind_str::MEMBER_STATE,
             ]
         );
+        // `models/realm-and-space.md` section 2.7: the creator membership comes
+        // only from this last standalone `ak.member.state{membership="join"}`,
+        // and `ak.realm.create` MUST NOT write membership implicitly.
+        let membership = events.last().expect("creator membership slot");
         assert_eq!(
             events
-                .last()
-                .and_then(|event| event.payload.get("actor_id")),
-            Some(&json!(ACTOR_CORE))
+                .iter()
+                .filter(|event| event.kind.as_str() == arkret_wire::event_kind_str::MEMBER_STATE)
+                .count(),
+            1
         );
+        assert_eq!(
+            membership.payload.get("actor_id"),
+            Some(&json!(ACTOR_CORE)),
+            "the membership subject is the creator"
+        );
+        assert_eq!(
+            membership.payload.get("membership"),
+            Some(&json!("join")),
+            "the bootstrap membership slot is a join"
+        );
+        // The slot is the genesis write of the creator's own member cell, so it
+        // MUST carry `head_eq null`.
+        assert_eq!(
+            membership.preconditions.len(),
+            1,
+            "the creator member cell genesis write carries exactly one precondition"
+        );
+        let precondition = &membership.preconditions[0];
+        assert_eq!(
+            precondition.cell.as_str(),
+            format!("ak:cell:ak.component.member.state.v1:{ACTOR_CORE}")
+        );
+        assert_eq!(
+            precondition.predicate.op,
+            arkret_wire::cba::PredicateOp::HeadEq
+        );
+        assert_eq!(precondition.predicate.value, Some(Value::Null));
     }
 
     #[test]

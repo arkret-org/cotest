@@ -103,9 +103,37 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         bootstrap!.some((event) => event.kind === "ak.capability.grant"),
         "genesis batch carries no capability grant",
       ).toBe(false);
-      expect(bootstrap![1].kind).toBe("ak.realm.join_rule");
+      // `artifacts/registry/contract-registry.json`
+      // `realm_bootstrap_registry.ordinary_collaboration.ordered_slots`: the
+      // slot after `ak.realm.create` is `ak.realm.profile` (join_rule is slot
+      // 3, after policy_bundle).
+      expect(bootstrap![1].kind).toBe("ak.realm.profile");
       expect(bootstrap![1].actor_seq).toBe(1);
       expect(bootstrap![1].prev_refs).toEqual([bootstrap![0].event_id]);
+
+      // realm-and-space.md section 2.7: the creator's membership comes only
+      // from the unit's LAST standalone `ak.member.state{membership="join"}`,
+      // which is the genesis write of that member cell and MUST carry
+      // `head_eq null`. `ak.realm.create` never writes membership implicitly.
+      const creatorMembership = bootstrap!.at(-1)!;
+      const creatorDid = bootstrap![0].actor_id;
+      expect(creatorMembership.kind).toBe("ak.member.state");
+      expect(creatorMembership.actor_id).toBe(creatorDid);
+      expect(creatorMembership.payload).toMatchObject({
+        realm_id: realmId,
+        actor_id: creatorDid,
+        membership: "join",
+      });
+      expect(creatorMembership.preconditions).toEqual([
+        {
+          cell: `ak:cell:ak.component.member.state.v1:${creatorDid}`,
+          predicate: { op: "head_eq", value: null },
+        },
+      ]);
+      expect(
+        bootstrap!.filter((event) => event.kind === "ak.member.state"),
+        "genesis carries exactly one membership write",
+      ).toHaveLength(1);
 
       const preflightForNewRealm = frontierRequests.filter((observed) => {
         const url = new URL(observed.url);

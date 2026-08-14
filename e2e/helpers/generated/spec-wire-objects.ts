@@ -74,7 +74,7 @@ export type RealmObject = {
   "notary_profile": "single_did" | "threshold" | "open_set" | "mixed";
   "availability_policy"?: {
     "min_holders": number;
-    "holder_roles": Array<"notary" | "independent_witness" | "sync_mirror" | "archive_node">;
+    "holder_roles": Array<"joined_member_principal_server" | "joined_service_actor">;
     "applies_to": Array<"seal_include" | "snapshot" | "backfill">;
     "minimum_retention_ms"?: number;
   };
@@ -161,11 +161,13 @@ export type CapabilityGrantObject = {
   "schema": "ak.schema.capability.v1";
   "realm_id"?: string;
   "issuer": string;
+  "issuer_principal_server_id": string;
   "subject": string | {
     "kind": "condition";
     "required_claims": unknown[];
     [key: string]: unknown;
   };
+  "subject_principal_server_id"?: string;
   "actions": string[];
   "resources": Array<{
     "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*";
@@ -350,6 +352,7 @@ export type InviteDeliveryRequestBody = {
       "kind": "realm_genesis";
     };
     "actor_id": string;
+    "principal_server_id": string;
     "executed_by"?: string;
     "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
@@ -413,6 +416,15 @@ export type InviteDeliveryRequestBody = {
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    } | {
+      "kind": "principal_server_admission";
+      "verification_method": string;
+      "event_digest": string;
+      "producer_proof_digest": string;
+      "producer_verification_method": string;
+      "producer_signing_key": string;
+      "accepted_at": string;
       "jws": string;
     }>;
     "requirements"?: {
@@ -503,7 +515,7 @@ export type InviteDeliveryRequestBody = {
       "issued_at": string;
       "expires_at": string;
       "locator_ref_digest": string;
-      "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "key_packages">;
+      "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "keypackages">;
       "display_hint"?: {
         "display_name_hint"?: string;
         "avatar_blob_ref"?: string;
@@ -579,7 +591,7 @@ export type InviteDeliveryRequestBody = {
         };
         "recipient_service_kind"?: "principal_server";
         "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
-        "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "key_packages">;
+        "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "keypackages">;
         "service_acceptance_ref"?: string;
         "policy_event_ref"?: string;
       };
@@ -602,10 +614,6 @@ export type InviteDeliveryRequestBody = {
     };
     "member_delivery_binding_candidate"?: {
       "subject_id": string;
-      "principal_authority": {
-        "principal_id": string;
-        "principal_server_id": string;
-      };
       "handle": string;
       "handle_aliases"?: string[];
       "member_delivery_binding": {
@@ -640,7 +648,7 @@ export type InviteDeliveryRequestBody = {
         };
         "recipient_service_kind"?: "principal_server";
         "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
-        "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "key_packages">;
+        "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "keypackages">;
         "service_acceptance_ref"?: string;
         "policy_event_ref"?: string;
       };
@@ -804,6 +812,7 @@ export type EventFederationSubmission = {
       "kind": "realm_genesis";
     };
     "actor_id": string;
+    "principal_server_id": string;
     "executed_by"?: string;
     "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
@@ -867,6 +876,15 @@ export type EventFederationSubmission = {
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
+      "jws": string;
+    } | {
+      "kind": "principal_server_admission";
+      "verification_method": string;
+      "event_digest": string;
+      "producer_proof_digest": string;
+      "producer_verification_method": string;
+      "producer_signing_key": string;
+      "accepted_at": string;
       "jws": string;
     }>;
     "requirements"?: {

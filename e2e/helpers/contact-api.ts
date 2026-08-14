@@ -1,7 +1,8 @@
 // Contact-graph protocol-face helpers (`/_arkret/self/contacts/*`,
 // `/_arkret/self/direct-conversations/resolve`,
-// `/_arkret/self/invite-receive-policy`, and the `consent_grant`-evidence
-// invite-delivery path `/_arkret/peer/invites`).
+// `/_arkret/self/invite-receive-policy`, and the private invite-delivery path
+// `/_arkret/self/invites/dispatch`, which falls back to `/_arkret/peer/invites`
+// only for the cross-server receive-side scenarios).
 //
 // These target the NEW `/_arkret` contract with `requested_scopes:[...]`,
 // distinct from the legacy `/_soland/self/contacts/request` + `scope` helper
@@ -17,20 +18,18 @@ import {
   type APIRequestContext,
   type APIResponse,
 } from "@playwright/test";
-import {
-  type SolandKey,
-  solandBaseUrl,
-  solandServiceId,
-  solandServiceResolution,
-} from "./env";
+import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
   alignSignedEventToActorFrontierApi,
   acceptInviteApi,
+  acceptedInviteDeliveryBodyApi,
   authHeaders,
   base64url,
   canonicalJson,
+  canonicalServiceResolution,
   canonicalTimestamp,
   currentActorDidApi,
+  dispatchSelfInviteApi,
   expectJsonOk,
   principalControlRealmForDid,
   readRealmSealBasis,
@@ -42,6 +41,7 @@ import {
   submitPrincipalSuccessorSealApi,
   submitSignedEventApi,
   typedId,
+  type InviteDeliveryOutcomeView,
   type InviteDeliveryRequestBodyBodyBody,
   uuidV7,
 } from "./soland-api";
@@ -127,12 +127,10 @@ export type DirectConversationResolveOutcome = {
   materialization_draft?: Record<string, unknown>;
 };
 
-export type InviteDeliveryOutcome = {
-  status: "accepted" | "duplicate" | "deferred";
-  disclosed_outcome?: "delivered" | "blocked" | "quarantined";
-  received_at?: string;
-  retry_after_ms?: number;
-};
+// invite-addressing.md §5.1: `disclosed_outcome` is a closed two-value enum
+// (`delivered | blocked`). Quarantine MUST NOT be disclosed at all — it is
+// reported as `status="deferred"` with no `disclosed_outcome`.
+export type InviteDeliveryOutcome = InviteDeliveryOutcomeView;
 
 export type InviteConsentGrant = {
   consentId: string;
@@ -727,7 +725,7 @@ export function buildInviteCreateEvent(args: {
   realmId: string;
   inviteeDid: string;
   recipientServiceId: string;
-  recipientServiceResolution: Record<string, unknown>;
+  recipientServer?: SolandKey;
   evidence: IntroductionEvidence;
   inviteId?: string;
   expiresAt?: string;
@@ -748,11 +746,10 @@ export function buildInviteCreateEvent(args: {
       invite_delivery_target: {
         recipient_service_id: args.recipientServiceId,
         recipient_service_kind: "principal_server",
-        service_resolution: {
-          current_record_url: new URL(
-            String(args.recipientServiceResolution.current_record_url),
-          ).toString().replace(/^http:/, "https:"),
-        },
+        // invite-addressing.md §6: this carrier MUST later be byte-for-byte
+        // equal to `invite_address.service_resolution`, so both sides read the
+        // same normalizer.
+        service_resolution: canonicalServiceResolution(args.recipientServer),
       },
       introduction_evidence_digest: evidenceDigest,
       expires_at: expiresAt,
@@ -765,9 +762,108 @@ export function buildInviteCreateEvent(args: {
   return { event, inviteId };
 }
 
-// Privately deliver a consent_grant-evidence invite to the subject's principal
-// server via `POST /_arkret/peer/invites`. Returns the graded-disclosure
-// outcome. `origin` is the inviter's service DID (signs the federation push).
+// Persist the durable `ak.invite.create` fact on the inviter's Principal Server
+// and then start private delivery for it.
+//
+// invite-addressing.md §7 splits the two hops by actor: an authenticated CLIENT
+// only ever calls `ak.self.invites.command.dispatch` on its own Principal
+// Server, and only a Principal Server may speak `ak.peer.invites.command.submit`
+// (§7 step 1 binds that surface to verified service-to-service authentication).
+// Same-service delivery therefore goes through dispatch, whose local branch
+// reruns the very same §7 verification from step 4 and yields the same graded
+// disclosure. The cross-server variant still posts to the peer surface: those
+// scenarios deliberately exercise the RECEIVING server, standing in for an
+// inviter Principal Server whose durable outbox is out of this helper's scope.
+async function deliverInvite(
+  request: APIRequestContext,
+  args: {
+    inviterDid: string;
+    inviterToken: string;
+    realmId: string;
+    inviteeDid: string;
+    evidence: IntroductionEvidence;
+    originServer: SolandKey;
+    recipientServer: SolandKey;
+    idempotencyKey?: string;
+    idempotencyKeyPrefix: string;
+    context: string;
+  },
+): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
+  const recipientServiceId = solandServiceId(args.recipientServer);
+  const { event } = buildInviteCreateEvent({
+    inviterDid: args.inviterDid,
+    realmId: args.realmId,
+    inviteeDid: args.inviteeDid,
+    recipientServiceId,
+    recipientServer: args.recipientServer,
+    evidence: args.evidence,
+  });
+  await alignSignedEventToActorFrontierApi(request, args.inviterToken, event, {
+    server: args.originServer,
+  });
+  event.seal_basis = await readRealmSealBasis(
+    request,
+    args.inviterToken,
+    args.realmId,
+    args.originServer,
+  );
+  refreshEventEnvelopeProof(event);
+  await submitSignedEventApi(request, args.inviterToken, event, {
+    server: args.originServer,
+    context: args.context,
+  });
+  const acceptedEventId = String(event.event_id);
+  const inviteId = retypeEventDerivedId(acceptedEventId, "invite");
+  const inviteAddress = {
+    subject_id: args.inviteeDid,
+    recipient_service_id: recipientServiceId,
+    service_resolution: canonicalServiceResolution(args.recipientServer),
+    recipient_service_kind: "principal_server" as const,
+  };
+  const idempotencyKey =
+    args.idempotencyKey ?? `${args.idempotencyKeyPrefix}:${inviteId}`;
+
+  if (args.originServer === args.recipientServer) {
+    const body = await acceptedInviteDeliveryBodyApi(
+      request,
+      args.inviterToken,
+      {
+        eventId: acceptedEventId,
+        inviteAddress,
+        evidence: args.evidence,
+        idempotencyKey,
+      },
+      { server: args.originServer },
+    );
+    return {
+      outcome: await dispatchSelfInviteApi(request, args.inviterToken, body, {
+        server: args.originServer,
+      }),
+      inviteId,
+    };
+  }
+
+  const body: InviteDeliveryRequestBodyBodyBody = {
+    schema: "ak.schema.invite_delivery_request.v1",
+    // `signedEventEnvelope` still returns an untyped record — wiring the Event
+    // envelope itself to the generated type is the remaining B3 item.
+    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
+    invite_address: inviteAddress,
+    introduction_evidence: args.evidence,
+    idempotency_key: idempotencyKey,
+  };
+  return {
+    outcome: await submitPeerInviteDeliveryApi(request, body, {
+      origin: solandServiceId(args.originServer),
+      destination: recipientServiceId,
+      server: args.recipientServer,
+    }),
+    inviteId,
+  };
+}
+
+// High-trust `consent_grant` pull: the invitee already issued the inviter an
+// active `invite`/`any` grant (§2), so §5.1 lets the outcome be disclosed.
 export async function deliverInviteWithConsentGrant(
   request: APIRequestContext,
   args: {
@@ -781,59 +877,19 @@ export async function deliverInviteWithConsentGrant(
     idempotencyKey?: string;
   },
 ): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
-  const recipientServiceId = solandServiceId(args.recipientServer);
-  const evidence: IntroductionEvidence = {
-    kind: "consent_grant",
-    consent_grant_ref: args.consentGrantRef,
-  };
-  const resolutionUrl = solandServiceResolution(args.recipientServer).current_record_url;
-  const { event } = buildInviteCreateEvent({
-    inviterDid: args.inviterDid,
-    realmId: args.realmId,
-    inviteeDid: args.inviteeDid,
-    recipientServiceId,
-    recipientServiceResolution: { current_record_url: resolutionUrl },
-    evidence,
-  });
-  await alignSignedEventToActorFrontierApi(request, args.inviterToken, event, {
-    server: args.originServer,
-  });
-  event.seal_basis = await readRealmSealBasis(
-    request,
-    args.inviterToken,
-    args.realmId,
-    args.originServer,
-  );
-  refreshEventEnvelopeProof(event);
-  await submitSignedEventApi(request, args.inviterToken, event, {
-    server: args.originServer,
+  return await deliverInvite(request, {
+    ...args,
+    evidence: {
+      kind: "consent_grant",
+      consent_grant_ref: args.consentGrantRef,
+    },
+    idempotencyKeyPrefix: "cotest-contact-graph",
     context: "persist shared consent-grant invite",
   });
-  const inviteId = retypeEventDerivedId(String(event.event_id), "invite");
-  const body: InviteDeliveryRequestBodyBodyBody = {
-    schema: "ak.schema.invite_delivery_request.v1",
-    // `signedEventEnvelope` still returns an untyped record — wiring the Event
-    // envelope itself to the generated type is the remaining B3 item.
-    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
-    invite_address: {
-      subject_id: args.inviteeDid,
-      recipient_service_id: recipientServiceId,
-      service_resolution: solandServiceResolution(args.recipientServer),
-      recipient_service_kind: "principal_server",
-    },
-    introduction_evidence: evidence,
-    idempotency_key: args.idempotencyKey ?? `cotest-contact-graph:${inviteId}`,
-  };
-  const outcome = (await submitPeerInviteDeliveryApi(request, body, {
-    origin: solandServiceId(args.originServer),
-    destination: recipientServiceId,
-    server: args.recipientServer,
-  })) as unknown as InviteDeliveryOutcome;
-  return { outcome, inviteId };
 }
 
-// Deliver an explicit-address (low-trust) invite — no consent_grant evidence.
-// Used for the stranger / blocked scenarios.
+// Low-trust `explicit_address` pull — no consent_grant evidence. Used for the
+// stranger / blocked scenarios, where §5.1 keeps the outcome opaque.
 export async function deliverInviteExplicitAddress(
   request: APIRequestContext,
   args: {
@@ -846,53 +902,12 @@ export async function deliverInviteExplicitAddress(
     idempotencyKey?: string;
   },
 ): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
-  const recipientServiceId = solandServiceId(args.recipientServer);
-  const evidence: IntroductionEvidence = { kind: "explicit_address" };
-  const resolutionUrl = solandServiceResolution(args.recipientServer).current_record_url;
-  const { event } = buildInviteCreateEvent({
-    inviterDid: args.inviterDid,
-    realmId: args.realmId,
-    inviteeDid: args.inviteeDid,
-    recipientServiceId,
-    recipientServiceResolution: { current_record_url: resolutionUrl },
-    evidence,
-  });
-  await alignSignedEventToActorFrontierApi(request, args.inviterToken, event, {
-    server: args.originServer,
-  });
-  event.seal_basis = await readRealmSealBasis(
-    request,
-    args.inviterToken,
-    args.realmId,
-    args.originServer,
-  );
-  refreshEventEnvelopeProof(event);
-  await submitSignedEventApi(request, args.inviterToken, event, {
-    server: args.originServer,
+  return await deliverInvite(request, {
+    ...args,
+    evidence: { kind: "explicit_address" },
+    idempotencyKeyPrefix: "cotest-contact-graph-explicit",
     context: "persist shared explicit-address invite",
   });
-  const inviteId = retypeEventDerivedId(String(event.event_id), "invite");
-  const body: InviteDeliveryRequestBodyBodyBody = {
-    schema: "ak.schema.invite_delivery_request.v1",
-    // `signedEventEnvelope` still returns an untyped record — wiring the Event
-    // envelope itself to the generated type is the remaining B3 item.
-    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
-    invite_address: {
-      subject_id: args.inviteeDid,
-      recipient_service_id: recipientServiceId,
-      service_resolution: solandServiceResolution(args.recipientServer),
-      recipient_service_kind: "principal_server",
-    },
-    introduction_evidence: evidence,
-    idempotency_key:
-      args.idempotencyKey ?? `cotest-contact-graph-explicit:${inviteId}`,
-  };
-  const outcome = (await submitPeerInviteDeliveryApi(request, body, {
-    origin: solandServiceId(args.originServer),
-    destination: recipientServiceId,
-    server: args.recipientServer,
-  })) as unknown as InviteDeliveryOutcome;
-  return { outcome, inviteId };
 }
 
 // List the authenticated actor's pending invites with the canonical wire

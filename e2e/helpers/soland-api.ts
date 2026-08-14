@@ -20,6 +20,7 @@ import {
   solandBaseUrl,
   solandServiceFullId,
   solandServiceId,
+  solandServiceResolution,
 } from "./env";
 import { base64url } from "./encoding";
 import type {
@@ -444,6 +445,21 @@ export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
   }));
 }
 
+// `identity-resolution.schema.json#/$defs/service_resolution_carrier` pins
+// `current_record_url` to `https://`, and invite-addressing.md §6 requires the
+// durable `invite_delivery_target.service_resolution` and the delivery
+// `invite_address.service_resolution` to be byte-for-byte equal (§7 step 6
+// re-checks it on the receiving side). Both producers therefore go through this
+// single normalizer instead of hand-rolling the scheme per call site.
+export function canonicalServiceResolution(server?: SolandKey): {
+  current_record_url: string;
+} {
+  const { current_record_url } = solandServiceResolution(server);
+  return {
+    current_record_url: current_record_url.replace(/^http:\/\//, "https://"),
+  };
+}
+
 export type AcceptedRealmBootstrap = {
   events: Array<Record<string, unknown>>;
   outcome: Record<string, unknown>;
@@ -725,6 +741,12 @@ export async function createRealmApi(
         invitee,
         invite_delivery_target: {
           recipient_service_id: recipientServiceId,
+          // `invite_create_payload.invite_delivery_target` is the closed
+          // `invite-delivery-request.schema.json#/$defs/invite_delivery_target`,
+          // whose `service_resolution` is required — omitting it produced a
+          // durable Event that could never satisfy invite-addressing.md §7
+          // step 6.
+          service_resolution: canonicalServiceResolution(opts.server),
           recipient_service_kind: "principal_server",
         },
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
@@ -916,6 +938,7 @@ export async function grantRealmReviewCapabilityApi(
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
+    issuer_principal_server_id: solandServiceId(args.server),
     subject: canonicalDidCoreId(args.subjectDid),
     actions: ["ak.realm.join.review"],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
@@ -1012,6 +1035,7 @@ export async function grantServiceCapabilityApi(
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
+    issuer_principal_server_id: solandServiceId(args.server),
     subject: canonicalDidCoreId(args.subjectServiceId),
     actions: [action],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
@@ -1093,6 +1117,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
+    issuer_principal_server_id: solandServiceId(args.server),
     subject: canonicalDidCoreId(args.subjectDid),
     actions: args.actions,
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
@@ -1576,6 +1601,7 @@ export async function submitInviteCreateApi(
       invitee: subjectDid,
       invite_delivery_target: {
         recipient_service_id: solandServiceId(opts.server),
+        service_resolution: canonicalServiceResolution(opts.server),
         recipient_service_kind: "principal_server",
       },
       introduction_evidence_digest: `sha256:${sha256CanonicalJson({ kind: "explicit_address" })}`,
@@ -3728,6 +3754,140 @@ export async function rawPushFederationEvents(
 // the schema actually requires.
 export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
 
+// The closed `invite_delivery_outcome`
+// (`invite-delivery-request.schema.json#/$defs/invite_delivery_outcome`).
+// `disclosed_outcome` is closed to `delivered | blocked` and, per
+// invite-addressing.md §5.1, MUST be absent whenever `status` is `deferred`.
+export type InviteDeliveryOutcomeView = {
+  status: "accepted" | "duplicate" | "deferred";
+  disclosed_outcome?: "delivered" | "blocked";
+  received_at?: string;
+  retry_after_ms?: number;
+};
+
+// ── invite-addressing.md §7: the authenticated client dispatch path. ──
+//
+// `ak.self.invites.command.dispatch` is the ONLY legal way for a client to
+// start private invite delivery. The client hands the raw
+// `introduction_evidence` plus the already accepted `ak.invite.create` Event to
+// its own Principal Server; that server owns every service-to-service hop from
+// there. Local targets rerun the §7 receive verification from step 4, remote
+// targets enter the exact-body S2S outbox.
+
+// §7 requires the client to fill `invite_event` by reading the accepted Event
+// back through `ak.self.events.read.resolve`, and forbids re-authoring an
+// equivalent Event from local state: a locally rebuilt envelope cannot be
+// guaranteed byte-identical to the persisted canonical bytes.
+export async function resolveSelfEventsApi(
+  request: APIRequestContext,
+  token: string,
+  eventIds: string[],
+  opts: { server?: SolandKey } = {},
+): Promise<{
+  events: Array<Record<string, unknown>>;
+  seals?: Array<Record<string, unknown>>;
+  missing: string[];
+  unauthorized?: string[];
+}> {
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events/resolve`;
+  const response = await request.fetch(url, {
+    method: "QUERY",
+    data: canonicalJson({ event_ids: eventIds, include_payload: true }),
+    headers: {
+      ...authHeaders(token, "QUERY", url),
+      "content-type": "application/json",
+    },
+  });
+  return await expectJsonOk(response, `resolve events ${eventIds.join(",")}`);
+}
+
+export async function resolveAcceptedEventApi(
+  request: APIRequestContext,
+  token: string,
+  eventId: string,
+  opts: { server?: SolandKey } = {},
+): Promise<Record<string, unknown>> {
+  const outcome = await resolveSelfEventsApi(request, token, [eventId], opts);
+  const event = outcome.events.find(
+    (candidate) => stringValue(candidate.event_id) === eventId,
+  );
+  expect(
+    event,
+    `accepted Event ${eventId} must be readable through ak.self.events.read.resolve`,
+  ).toBeTruthy();
+  return event!;
+}
+
+// Build the §7 dispatch body from the server's own view of the accepted Event.
+// `idempotency_key` defaults to the accepted `event_id` so an uncertain
+// transport outcome is retried with the same body and the same key, exactly as
+// §7 requires.
+export async function acceptedInviteDeliveryBodyApi(
+  request: APIRequestContext,
+  token: string,
+  args: {
+    eventId: string;
+    inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
+    evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
+    idempotencyKey?: string;
+  },
+  opts: { server?: SolandKey } = {},
+): Promise<InviteDeliveryRequestBodyBodyBody> {
+  const event = await resolveAcceptedEventApi(
+    request,
+    token,
+    args.eventId,
+    opts,
+  );
+  return {
+    schema: "ak.schema.invite_delivery_request.v1",
+    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
+    invite_address: args.inviteAddress,
+    introduction_evidence: args.evidence,
+    idempotency_key: args.idempotencyKey ?? args.eventId,
+  };
+}
+
+export async function dispatchSelfInviteApi(
+  request: APIRequestContext,
+  token: string,
+  body: InviteDeliveryRequestBodyBodyBody,
+  opts: { server?: SolandKey } = {},
+): Promise<InviteDeliveryOutcomeView> {
+  const response = await rawDispatchSelfInviteApi(request, token, body, opts);
+  return await expectJsonOk<InviteDeliveryOutcomeView>(
+    response,
+    "dispatch self invite delivery",
+  );
+}
+
+export async function rawDispatchSelfInviteApi(
+  request: APIRequestContext,
+  token: string,
+  body: InviteDeliveryRequestBodyBodyBody,
+  opts: { server?: SolandKey } = {},
+) {
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/invites/dispatch`;
+  return await request.post(url, {
+    data: canonicalJson(body),
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
+  });
+}
+
+// ── Peer-layer direct submission. NOT a client path. ──
+//
+// `ak.peer.invites.command.submit` is a Principal-Server-to-Principal-Server
+// operation: invite-addressing.md §7 step 1 binds it to verified S2S
+// authentication. This helper self-signs those federation headers, so calling
+// it makes the test process impersonate an inviter Principal Server. That is
+// legitimate ONLY for exercising the receiving side directly — peer-layer
+// negative cases and cross-server receive-policy coverage. A test that models
+// what a conforming CLIENT does MUST use `dispatchSelfInviteApi` instead; §7
+// forbids clients from synthesizing federation trust headers or faking a peer
+// session.
 export async function submitPeerInviteDeliveryApi(
   request: APIRequestContext,
   body: InviteDeliveryRequestBodyBodyBody,
@@ -3738,11 +3898,10 @@ export async function submitPeerInviteDeliveryApi(
   },
 ) {
   const response = await rawSubmitPeerInviteDeliveryApi(request, body, opts);
-  return await expectJsonOk<{
-    status: "accepted" | "duplicate" | "deferred";
-    received_at?: string;
-    retry_after_ms?: number;
-  }>(response, "submit peer invite delivery");
+  return await expectJsonOk<InviteDeliveryOutcomeView>(
+    response,
+    "submit peer invite delivery",
+  );
 }
 
 export async function rawSubmitPeerInviteDeliveryApi(
