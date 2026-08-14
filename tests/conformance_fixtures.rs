@@ -775,6 +775,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Durable accepted revocation blocks every closed action class, while
+    /// SessionGrant issue/refresh consume a fresh exact origin-PS receipt and
+    /// client material survives pending until a covering Seal is accepted.
+    device_revocation_pending,
+    "device_revocation_pending",
+    cotest::conformance::run_device_revocation_pending_suite,
+);
+
+conformance_test!(
     /// Protocol-gap closure vectors assert proposal quorum evidence, durable
     /// security-transaction replay, closed track names, and WebSocket fallback.
     protocol_gap_closure_fixture_suite_matches_reference_semantics,

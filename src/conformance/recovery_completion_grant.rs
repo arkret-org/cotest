@@ -15,8 +15,8 @@ use arkret_models_identity::{
 };
 use arkret_wire::{
     DidFullId, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
-    RecoveryModelGenerationRef, UnsignedRecoveryCompletionAttestation,
-    UnsignedRecoveryCompletionAttestationBody, project_full_id_to_core_id,
+    UnsignedRecoveryCompletionAttestation, UnsignedRecoveryCompletionAttestationBody,
+    project_full_id_to_core_id,
 };
 use base64::Engine as _;
 use chrono::{Duration, TimeZone as _, Utc};
@@ -55,8 +55,8 @@ fn completion_vector() -> Result<CompletionVector> {
     let prepared_plan_digest = hash('2');
     let authorization_event_id = "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM";
     let authorization_event_digest = hash('3');
-    let previous_generation = "1-QmPreviousRoot";
-    let result_generation = "2-QmReplacementRoot";
+    let previous_generation = 1;
+    let result_generation = 2;
     let started_at = Utc
         .with_ymd_and_hms(2026, 8, 9, 12, 0, 0)
         .single()
@@ -86,14 +86,8 @@ fn completion_vector() -> Result<CompletionVector> {
             trust_domain: "ak:trust_domain:example.net".parse()?,
             new_device_id: device_id.parse()?,
             identity_model: arkret_models_crypto::RecoveryIdentityModel::RootAnchored,
-            previous_model_generation_ref: arkret_models_crypto::RecoveryModelGenerationRef::new(
-                arkret_wire::NonEmptyString::new(previous_generation.to_owned())
-                    .map_err(anyhow::Error::msg)?,
-            )?,
-            result_model_generation_ref: arkret_models_crypto::RecoveryModelGenerationRef::new(
-                arkret_wire::NonEmptyString::new(result_generation.to_owned())
-                    .map_err(anyhow::Error::msg)?,
-            )?,
+            previous_model_generation_ref: previous_generation,
+            result_model_generation_ref: result_generation,
             authorization_event_id: authorization_event_id.parse()?,
             device_list_update_event_id: None,
             reanchor_event_id: Some(
@@ -143,9 +137,7 @@ fn completion_vector() -> Result<CompletionVector> {
             replacement_device_id: device_id.parse()?,
             device_authorization_event_id: authorization_event_id.parse()?,
             device_authorization_event_digest: authorization_event_digest.parse()?,
-            result_model_generation_ref: RecoveryModelGenerationRef::RootAnchored(
-                result_generation.to_owned(),
-            ),
+            result_model_generation_ref: result_generation,
             completed_at,
         },
         crate::fixture_did_url(verification_method.clone()),
@@ -178,9 +170,7 @@ fn completion_vector() -> Result<CompletionVector> {
         terminal_receipt,
         completion_attestation: attestation,
         device_authorization_event_id: authorization_event_id.parse()?,
-        result_model_generation_ref: RecoveryModelGenerationRef::RootAnchored(
-            result_generation.to_owned(),
-        ),
+        result_model_generation_ref: result_generation,
         initial_session: serde_json::to_value(&initial_session)?,
         canonical_request_digest: hash('0').parse()?,
     };
@@ -373,8 +363,7 @@ fn validate_mutation_matrix(vector: &CompletionVector) -> Result<()> {
     mutations.push(("device", device));
 
     let mut generation = vector.clone();
-    generation.request.result_model_generation_ref =
-        RecoveryModelGenerationRef::RootAnchored("3-QmUnexpectedRoot".to_owned());
+    generation.request.result_model_generation_ref = 3;
     generation.request.canonical_request_digest =
         generation.request.expected_canonical_request_digest()?;
     mutations.push(("generation", generation));
