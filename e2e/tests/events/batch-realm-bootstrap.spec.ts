@@ -69,6 +69,49 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       "ak.member.state",
     ];
     expect(events.map((event) => event.kind)).toEqual(expectedKinds);
+
+    // realm-and-space.md section 2.7: an ordinary Collaboration bootstrap
+    // establishes the creator's membership ONLY through the atomic unit's last
+    // standalone `ak.member.state{membership="join"}`. That slot is the genesis
+    // write of the creator's own member cell, so it MUST carry `head_eq null`,
+    // and `ak.realm.create` MUST NOT write membership implicitly — which is why
+    // exactly one member cell write may exist in the whole founding unit.
+    const timelineEvents = (timeline.events ?? []) as Array<
+      Record<string, unknown>
+    >;
+    const memberStates = timelineEvents.filter(
+      (event) => event.kind === "ak.member.state",
+    );
+    expect(
+      memberStates.map((event) => event.event_id),
+      "genesis carries exactly one membership write",
+    ).toEqual([events.at(-1)!.event_id]);
+    const creatorMembership = events.at(-1)!;
+    expect(
+      creatorMembership.actor_id,
+      "the creator membership slot is authored by the creator",
+    ).toBe(alice.did);
+    expect(creatorMembership.payload).toMatchObject({
+      realm_id: realmId,
+      actor_id: alice.did,
+      membership: "join",
+    });
+    expect(
+      creatorMembership.preconditions,
+      "the creator member cell genesis write MUST carry head_eq null",
+    ).toEqual([
+      {
+        cell: `ak:cell:ak.component.member.state.v1:${alice.did}`,
+        predicate: { op: "head_eq", value: null },
+      },
+    ]);
+    // The same slot has to sit inside the atomic unit the genesis Seal covers,
+    // not arrive as a follow-up write after bootstrap.
+    expect(
+      String(acceptedBootstrap!.events.at(-1)!.event_id),
+      "the membership slot belongs to the sealed genesis unit",
+    ).toBe(String(creatorMembership.event_id));
+
     const create = events.find((event) => event.kind === "ak.realm.create");
     expect(create, "accepted Realm create Event").toBeTruthy();
     // realm-and-space.md section 2.5: v1 deleted the founding

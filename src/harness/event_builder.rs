@@ -1433,36 +1433,6 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
     })
 }
 
-/// Builds a signed envelope that additionally carries semantic causal edges.
-///
-/// RSVP needs this: the entry's schedule basis MUST be a subset of
-/// `causal_refs`, and those same edges decide which earlier heads a response
-/// dominates. Two responses that omit each other's digest are concurrent by
-/// construction, which is exactly what the convergence scenario exercises.
-pub(crate) fn event_envelope_with_causal_refs(
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    actor_seq: Option<u64>,
-    prev_event_ids: Vec<EventId>,
-    causal_refs: Vec<String>,
-) -> Event {
-    let (signing_seed, verification_method) = event_signing_identity(actor);
-    event_envelope_with_chain_and_signing_identity_and_causal_refs(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        actor_seq,
-        prev_event_ids,
-        signing_seed,
-        &verification_method,
-        None,
-        causal_refs,
-    )
-}
-
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn event_envelope_with_causal_refs_for_device(
     actor: &str,
@@ -1545,12 +1515,44 @@ mod realm_bootstrap_tests {
                 arkret_wire::event_kind_str::MEMBER_STATE,
             ]
         );
+        // `models/realm-and-space.md` section 2.7: the creator membership comes
+        // only from this last standalone `ak.member.state{membership="join"}`,
+        // and `ak.realm.create` MUST NOT write membership implicitly.
+        let membership = events.last().expect("creator membership slot");
         assert_eq!(
             events
-                .last()
-                .and_then(|event| event.payload.get("actor_id")),
-            Some(&json!(ACTOR_CORE))
+                .iter()
+                .filter(|event| event.kind.as_str() == arkret_wire::event_kind_str::MEMBER_STATE)
+                .count(),
+            1
         );
+        assert_eq!(
+            membership.payload.get("actor_id"),
+            Some(&json!(ACTOR_CORE)),
+            "the membership subject is the creator"
+        );
+        assert_eq!(
+            membership.payload.get("membership"),
+            Some(&json!("join")),
+            "the bootstrap membership slot is a join"
+        );
+        // The slot is the genesis write of the creator's own member cell, so it
+        // MUST carry `head_eq null`.
+        assert_eq!(
+            membership.preconditions.len(),
+            1,
+            "the creator member cell genesis write carries exactly one precondition"
+        );
+        let precondition = &membership.preconditions[0];
+        assert_eq!(
+            precondition.cell.as_str(),
+            format!("ak:cell:ak.component.member.state.v1:{ACTOR_CORE}")
+        );
+        assert_eq!(
+            precondition.predicate.op,
+            arkret_wire::cba::PredicateOp::HeadEq
+        );
+        assert_eq!(precondition.predicate.value, Some(Value::Null));
     }
 
     #[test]
