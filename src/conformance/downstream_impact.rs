@@ -9,7 +9,9 @@ use arkret_models_collaboration::governance::policy_check::{
     PolicyCheckOutcome, policy_decision_transcript_bytes,
 };
 use arkret_models_collaboration::objects::queries::View;
-use arkret_wire::{DidCoreId, DidFullId, ErrorCode, ErrorStatusContext, OperationId, RealmId};
+use arkret_wire::{
+    DidCoreId, DidFullId, ErrorCode, ErrorStatusContext, EventKind, OperationId, RealmId,
+};
 use ed25519_dalek::{Signer as _, SigningKey, Verifier as _};
 use serde_json::{Value, json};
 use soland_domain::hlc::ServerHlc;
@@ -22,6 +24,7 @@ pub fn run_downstream_impact_contract_suite() -> Result<()> {
     run_policy_transcript_tamper_vector()?;
     run_error_status_context_vector()?;
     run_error_code_vocabulary_rename_vector()?;
+    run_event_kind_rename_vector()?;
     Ok(())
 }
 
@@ -324,6 +327,32 @@ fn run_error_code_vocabulary_rename_vector() -> Result<()> {
             .ok_or_else(|| anyhow!("current error code `{current}` is not recognised"))?;
         if parsed.as_str() != current {
             bail!("current error code `{current}` did not round-trip exactly");
+        }
+    }
+
+    Ok(())
+}
+
+fn run_event_kind_rename_vector() -> Result<()> {
+    const RENAMES: &[(&str, &str)] = &[
+        ("ak.contact.tombstoned", "ak.contact.tombstone"),
+        ("ak.state.conflict_recovery", "ak.conflict.recovery"),
+    ];
+
+    for &(legacy, current) in RENAMES {
+        if EventKind::try_new(legacy)
+            .and_then(|kind| kind.descriptor())
+            .is_some()
+        {
+            bail!("legacy event kind `{legacy}` still resolves to an SDK descriptor");
+        }
+        let parsed = EventKind::try_new(current)
+            .ok_or_else(|| anyhow!("current event kind `{current}` is invalid"))?;
+        if parsed.descriptor().is_none() {
+            bail!("current event kind `{current}` has no SDK descriptor");
+        }
+        if parsed.as_str() != current {
+            bail!("current event kind `{current}` did not round-trip exactly");
         }
     }
 

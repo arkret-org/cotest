@@ -56,7 +56,7 @@ pub fn run_event_kind_lattice_dispatch_fixture_suite() -> Result<()> {
         }
         for write in descriptor.cell_writes {
             let Some(family_id) = write.cell_family else {
-                if descriptor.kind != "ak.state.conflict_recovery"
+                if descriptor.kind != "ak.conflict.recovery"
                     || write.cell_ref_rule.is_none()
                     || write.effect_projection_rule.is_none_or(|rule| {
                         rule.operator() != Some(arkret_wire::EventCellRuleOperator::Reset)
