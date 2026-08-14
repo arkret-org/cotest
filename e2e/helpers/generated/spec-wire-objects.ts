@@ -738,6 +738,67 @@ export type RealmSealFrontierView = {
       "defer_count": number;
       "decision_state": "pending" | "deferred" | "overdue";
       "fault_reason"?: "control_proposal_decision_overdue";
+      "device_revocation_state"?: {
+        "schema": "ak.schema.device_revocation_state.v1";
+        "principal_authority": {
+          "principal_id": string;
+          "principal_server_id": string;
+        };
+        "device_id": string;
+        "target_device_authorize_event_id": string;
+        "target_device_generation_ref": number;
+        "proposal_event_id": string;
+        "proposal_digest": string;
+        "accepted_at": string;
+        "acceptance_seq": number;
+        "control_proposal_ack": {
+          "kind": "signed_ack";
+          "realm_id": string;
+          "proposal_digest": string;
+          "received_at": string;
+          "decision_due_at": string;
+          "absolute_due_at": string;
+          "defer_count": 0;
+          "authority_set_ref": string;
+          "authority_acks": Array<{
+            "realm_id": string;
+            "proposal_digest": string;
+            "received_at": string;
+            "decision_due_at": string;
+            "absolute_due_at": string;
+            "authority_set_ref": string;
+            "signature": {
+              "verification_method": string;
+              "payload_digest": string;
+              "created_at": string;
+              "jws": string;
+            };
+          }>;
+        };
+        "status": "revocation_pending";
+        "decision_state": "pending" | "deferred" | "overdue";
+        "denied_actions": unknown[];
+        "decisions"?: Array<{
+          "kind": "signed_defer";
+          "realm_id": string;
+          "proposal_digest": string;
+          "proposal_ack_digest": string;
+          "decided_at": string;
+          "decision_due_at": string;
+          "absolute_due_at": string;
+          "defer_count": number;
+          "reason_code": string;
+          "authority_set_ref": string;
+          "proofs": Array<{
+            "verification_method": string;
+            "payload_digest": string;
+            "created_at": string;
+            "jws": string;
+          }>;
+        }>;
+        "fault_reason"?: "control_proposal_decision_overdue";
+        [key: string]: unknown;
+      };
     }>;
     "retained_faults": Array<{
       "proposal_digest": string;
