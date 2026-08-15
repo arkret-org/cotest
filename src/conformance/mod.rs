@@ -29,6 +29,7 @@ mod direct_conversation_flow;
 mod downstream_impact;
 mod encoding;
 mod envelope;
+mod fanout_route_miss;
 mod federation;
 mod final_conformance_closure;
 mod handle_claim_rejection_vectors;
@@ -210,6 +211,7 @@ pub use envelope::{
     run_container_realm_control_payload_suite, run_deprecated_event_alias_suite,
     run_event_envelope_fixture_suite,
 };
+pub use fanout_route_miss::run_fanout_route_miss_suite;
 pub use federation::run_federation_fixture_suite;
 pub use final_conformance_closure::{
     ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS,

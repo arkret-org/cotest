@@ -793,6 +793,14 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// A missing verified route remains a durable per-target obligation and
+    /// never rolls back an otherwise admitted Realm Event.
+    fanout_route_miss,
+    "fanout_route_miss",
+    cotest::conformance::run_fanout_route_miss_suite,
+);
+
+conformance_test!(
     /// Protocol-gap closure vectors assert proposal quorum evidence, durable
     /// security-transaction replay, closed track names, and WebSocket fallback.
     protocol_gap_closure_fixture_suite_matches_reference_semantics,
