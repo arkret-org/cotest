@@ -49,6 +49,7 @@ pub struct ArkretServer {
     _port_reservations: Vec<ReservedPort>,
 }
 
+#[derive(Clone)]
 struct ExternalRestartConfig {
     bin_path: PathBuf,
     bind: String,
@@ -485,25 +486,38 @@ impl ArkretServer {
             .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
     }
 
-    /// Kill and restart an externally spawned Soland process without changing
-    /// its ports, durable database, service identity inputs, blob root, or
-    /// upstream participant wiring.
-    pub async fn restart_external_process(&mut self) -> Result<()> {
-        let Some(config) = self.external_restart.as_ref() else {
+    /// Stop an externally spawned Soland while retaining every restart input.
+    pub async fn stop_external_process(&mut self) -> Result<()> {
+        if self.external_restart.is_none() {
             return Err(anyhow!(
-                "Soland restart requires the pre-built external-binary harness"
+                "Soland stop requires the pre-built external-binary harness"
             ));
-        };
+        }
         let handle = mem::replace(&mut self.handle, SutHandle::Terminated);
         let SutHandle::Local(mut child) = handle else {
             self.handle = handle;
-            return Err(anyhow!("Soland restart is only supported in process mode"));
+            return Err(anyhow!("Soland stop is only supported in process mode"));
         };
         let _ = child.kill();
         child.wait().context("wait for stopped Soland child")?;
+        Ok(())
+    }
+
+    /// Start a previously stopped external Soland from the exact retained
+    /// ports, durable database, service identity inputs, blob root, and peer
+    /// wiring.
+    pub async fn start_external_process(&mut self) -> Result<()> {
+        let Some(config) = self.external_restart.clone() else {
+            return Err(anyhow!(
+                "Soland start requires the pre-built external-binary harness"
+            ));
+        };
+        if !matches!(&self.handle, SutHandle::Terminated) {
+            return Err(anyhow!("Soland start requires a stopped process"));
+        }
         append_service_log(
             self.log_path.as_deref(),
-            &format!("[cotest] restarting service={}", config.name),
+            &format!("[cotest] starting retained service={}", config.name),
         )?;
 
         let (stdout, stderr) = service_log_stdio(self.log_path.as_deref())?;
@@ -574,6 +588,14 @@ impl ArkretServer {
         }
         self.handle = SutHandle::Local(restarted);
         Ok(())
+    }
+
+    /// Kill and restart an externally spawned Soland process without changing
+    /// its ports, durable database, service identity inputs, blob root, or
+    /// upstream participant wiring.
+    pub async fn restart_external_process(&mut self) -> Result<()> {
+        self.stop_external_process().await?;
+        self.start_external_process().await
     }
 
     pub fn sdk(&self) -> Result<SdkClient> {
@@ -832,22 +854,23 @@ impl TestServerGroup {
             owned_env.retain(|(key, _)| {
                 !matches!(
                     key.as_str(),
-                    "SOLAND_FEDERATION_PEERS"
-                        | "SOLAND_FEDERATION_OUTBOUND"
-                        | "SOLAND_TRUST_DOMAIN"
+                    "SOLAND_FEDERATION_PEERS" | "SOLAND_TRUST_DOMAIN"
                 )
             });
-            owned_env.extend([
-                (
-                    "SOLAND_FEDERATION_PEERS".to_owned(),
-                    peer_lists[index].clone(),
-                ),
-                ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "0".to_owned()),
-                (
-                    "SOLAND_TRUST_DOMAIN".to_owned(),
-                    shared_trust_domain.clone(),
-                ),
-            ]);
+            if !owned_env
+                .iter()
+                .any(|(key, _)| key == "SOLAND_FEDERATION_OUTBOUND")
+            {
+                owned_env.push(("SOLAND_FEDERATION_OUTBOUND".to_owned(), "0".to_owned()));
+            }
+            owned_env.push((
+                "SOLAND_FEDERATION_PEERS".to_owned(),
+                peer_lists[index].clone(),
+            ));
+            owned_env.push((
+                "SOLAND_TRUST_DOMAIN".to_owned(),
+                shared_trust_domain.clone(),
+            ));
             let extra_env = owned_env
                 .iter()
                 .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -930,6 +953,10 @@ impl TestServerGroup {
 
     pub fn server(&self, index: usize) -> &ArkretServer {
         &self.servers[index]
+    }
+
+    pub fn server_mut(&mut self, index: usize) -> &mut ArkretServer {
+        &mut self.servers[index]
     }
 
     pub fn len(&self) -> usize {

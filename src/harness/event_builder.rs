@@ -1401,6 +1401,8 @@ fn member_payload(
         via_service_ids: Vec::new(),
         reason,
         invite_ref,
+        membership_cause: None,
+        agent_controller_binding: None,
     }
     .to_value()
     .map_err(|err| anyhow!("member state payload serialize: {err}"))

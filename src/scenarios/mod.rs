@@ -22,6 +22,7 @@ pub mod event_idempotency_replay;
 pub mod events_backfill;
 pub mod events_resolve;
 pub mod extension_surface_gaps;
+pub mod fanout_route_miss_live;
 pub mod federation_idempotency_after_revoke;
 pub mod federation_idempotency_historical_only;
 pub mod federation_readiness;

@@ -775,12 +775,29 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Native Agent membership is immediately AND-gated by the exact
+    /// controller generation, while explicit cleanup stays caller-signed,
+    /// complete-set, durable and atomic.
+    agent_membership_cascade,
+    "agent_membership_cascade",
+    cotest::conformance::run_agent_membership_cascade_suite,
+);
+
+conformance_test!(
     /// Durable accepted revocation blocks every closed action class, while
     /// SessionGrant issue/refresh consume a fresh exact origin-PS receipt and
     /// client material survives pending until a covering Seal is accepted.
     device_revocation_pending,
     "device_revocation_pending",
     cotest::conformance::run_device_revocation_pending_suite,
+);
+
+conformance_test!(
+    /// A missing verified route remains a durable per-target obligation and
+    /// never rolls back an otherwise admitted Realm Event.
+    fanout_route_miss,
+    "fanout_route_miss",
+    cotest::conformance::run_fanout_route_miss_suite,
 );
 
 conformance_test!(
