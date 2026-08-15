@@ -559,10 +559,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arkret-retry"
-version = "0.3.0"
-
-[[package]]
 name = "arkret-schema"
 version = "0.3.0"
 dependencies = [
@@ -1506,7 +1502,6 @@ dependencies = [
  "arkret-models-discovery",
  "arkret-models-integration",
  "arkret-push-policy",
- "arkret-retry",
  "arkret-signatures",
  "arkret-wire",
  "base64 0.22.1",
@@ -3552,7 +3547,6 @@ dependencies = [
  "arkret-models-discovery",
  "arkret-models-identity",
  "arkret-policy",
- "arkret-retry",
  "arkret-schema",
  "arkret-signatures",
  "arkret-state",

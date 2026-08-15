@@ -801,6 +801,14 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// Effective grant queries and join review receipts bind one exact
+    /// principal authority pair, while quorum still counts one actor once.
+    reviewer_authority_pair,
+    "reviewer_authority_pair",
+    cotest::conformance::run_reviewer_authority_pair_suite,
+);
+
+conformance_test!(
     /// Protocol-gap closure vectors assert proposal quorum evidence, durable
     /// security-transaction replay, closed track names, and WebSocket fallback.
     protocol_gap_closure_fixture_suite_matches_reference_semantics,

@@ -4,8 +4,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status,
-    submit_event,
+    TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status, submit_event,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, authorize_device_public_key,
@@ -13,13 +12,23 @@ use crate::scenarios::identity_test_support::{
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
-    let server = ArkretServer::spawn("authz-grants").await?;
+    let server = spawn_with_harness_account_authority("authz-grants", &[]).await?;
+    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "authz-alice")?;
     let alice = server
         .demo_client(
-            "did:web:alice.example",
+            &alice_actor,
             "ak:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
+    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
+    authorize_device_public_key(
+        &server,
+        &alice.token,
+        &alice.actor,
+        &alice.device_id,
+        &alice_device_key,
+    )
+    .await?;
     let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
     let bob = server
         .register_client(
@@ -87,6 +96,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let effective_grants = expect_json(
         alice.get("/_arkret/self/authz/effective-grants").query(&[
             ("subject", bob_core_id.as_str()),
+            ("subject_principal_server_id", alice.service_id()),
             ("realm_id", realm_id.as_str()),
         ]),
         StatusCode::OK,
@@ -103,6 +113,35 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
                     || grant["grant_id"].as_str() == Some(manage_grant_id.as_str())
             ),
         "effective grants did not include projected manage grant: {effective_grants}"
+    );
+
+    expect_api_error(
+        alice.get("/_arkret/self/authz/effective-grants").query(&[
+            ("subject", bob_core_id.as_str()),
+            ("realm_id", realm_id.as_str()),
+        ]),
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
+    )
+    .await?;
+
+    let wrong_authority = expect_json(
+        alice.get("/_arkret/self/authz/effective-grants").query(&[
+            ("subject", bob_core_id.as_str()),
+            (
+                "subject_principal_server_id",
+                "ak:did_core:web:other-principal.example",
+            ),
+            ("realm_id", realm_id.as_str()),
+        ]),
+        StatusCode::OK,
+    )
+    .await?;
+    assert!(
+        wrong_authority["grants"]
+            .as_array()
+            .is_some_and(Vec::is_empty),
+        "wrong authority pair leaked grants: {wrong_authority}"
     );
 
     let allowed_after_grant = expect_json(
