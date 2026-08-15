@@ -8,7 +8,7 @@ use arkret_models_collaboration::objects::interop::{
 };
 use arkret_signatures::Ed25519PayloadSigner;
 use arkret_signatures::signer::verify_ed25519_payload_signature;
-use arkret_wire::{DidFullId, DidUrl, Hash, PayloadProof, PayloadSigner as _};
+use arkret_wire::{DidFullId, DidUrl, Hash, MimiUri, PayloadProof, PayloadSigner as _};
 use chrono::{Duration, Utc};
 
 pub const VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE: &str =
@@ -128,7 +128,8 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
             room_policy_draft: "draft-ietf-mimi-room-policy-03".to_owned(),
             identifier_draft: "draft-kohbrok-mimi-identifiers-01".to_owned(),
             base_url: "https://provider.example/_arkret/open/mimi".to_owned(),
-            provider_id: "mimi://provider.example".to_owned(),
+            provider_id: MimiUri::new("mimi://provider.example")
+                .expect("canonical MIMI provider id"),
             endpoints: [
                 ("consent", "/consent/request"),
                 ("group_info", "/strands/{strand_id}/group-info"),

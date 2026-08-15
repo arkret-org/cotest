@@ -175,14 +175,29 @@ fn reduce_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
         let Some(value) = write.get("value") else {
             return KernelGateOutcome::error("schema_violation", "data_value_missing");
         };
-        by_digest.insert(digest.to_owned(), value.clone());
+        let Some(actor_id) = write.get("actor_id").and_then(Value::as_str) else {
+            return KernelGateOutcome::error("schema_violation", "actor_id_missing");
+        };
+        by_digest.insert(digest.to_owned(), (actor_id.to_owned(), value.clone()));
     }
-    let Some((winner_digest, value)) = by_digest.last_key_value() else {
+    if by_digest.is_empty() {
         return KernelGateOutcome::error("schema_violation", "offline_writes_empty");
-    };
+    }
+    let entries = by_digest
+        .iter()
+        .map(|(digest, (actor_id, value))| {
+            json!({
+                "issuer": actor_id,
+                "issuer_seq": 0,
+                "event_digest": digest,
+                "value": value
+            })
+        })
+        .collect::<Vec<_>>();
+    let sibling_event_digests = by_digest.keys().cloned().collect::<Vec<_>>();
     KernelGateOutcome::projection(json!({
-        "value": value,
-        "winner_event_digest": winner_digest
+        "entries": entries,
+        "sibling_event_digests": sibling_event_digests
     }))
 }
 

@@ -1046,21 +1046,38 @@ fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result
             }
             "realm_bootstrap_transaction_chain" => {
                 let events = required_array(case, "/events", vector_name)?;
-                if events.len() != 2 {
-                    bail!("vector {vector_name} Realm bootstrap chain needs two Events");
+                let expected_kinds = [
+                    "ak.realm.create",
+                    "ak.realm.profile",
+                    "ak.realm.policy_bundle",
+                    "ak.realm.join_rule",
+                    "ak.realm.history_visibility",
+                    "ak.realm.discovery",
+                    "ak.realm.delivery_binding_policy",
+                    "ak.member.state",
+                ];
+                if events.len() != expected_kinds.len() {
+                    bail!("vector {vector_name} Realm bootstrap chain cardinality drifted");
                 }
-                let create_id = required_pointer_str(&events[0], "/event_id", vector_name)?;
-                if required_pointer_str(&events[0], "/kind", vector_name)? != "ak.realm.create"
-                    || required_u64(&events[0], "/actor_seq", vector_name)? != 0
-                    || events[0].pointer("/prev_refs") != Some(&json!([]))
-                    || required_pointer_str(&events[1], "/kind", vector_name)?
-                        != "ak.capability.grant"
-                    || required_u64(&events[1], "/actor_seq", vector_name)? != 1
-                    || events[1].pointer("/prev_refs") != Some(&json!([create_id]))
-                    || required_pointer_str(&events[0], "/realm_id", vector_name)?
-                        != required_pointer_str(&events[1], "/realm_id", vector_name)?
+                let realm_id = required_pointer_str(&events[0], "/realm_id", vector_name)?;
+                for (index, (event, expected_kind)) in events.iter().zip(expected_kinds).enumerate()
                 {
-                    bail!("vector {vector_name} Realm bootstrap actor chain drifted");
+                    let expected_prev = if index == 0 {
+                        json!([])
+                    } else {
+                        json!([required_pointer_str(
+                            &events[index - 1],
+                            "/event_id",
+                            vector_name,
+                        )?])
+                    };
+                    if required_pointer_str(event, "/kind", vector_name)? != expected_kind
+                        || required_u64(event, "/actor_seq", vector_name)? != index as u64
+                        || event.pointer("/prev_refs") != Some(&expected_prev)
+                        || required_pointer_str(event, "/realm_id", vector_name)? != realm_id
+                    {
+                        bail!("vector {vector_name} Realm bootstrap actor chain drifted");
+                    }
                 }
                 require_str_eq(case, "/expected/result", "accept", vector_name)?;
                 require_str_eq(

@@ -916,9 +916,8 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
 
 fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     let lattice = OrderedLog;
-    // event-auth-state-resolution.md 9.3.1: each issuer sub-chain starts at
-    // issuer_seq 0, and slots are keyed by (cell, actor_id, issuer_seq) so two
-    // issuers at the same seq are independent entries, not a conflict.
+    // issuer_seq is the enclosing Event actor_seq. It is sparse within any
+    // particular cell; two issuers at the same sequence remain independent.
     let ops = vec![
         issued_op(
             "did:web:bob.example",
@@ -935,20 +934,19 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
             "99",
             op_append(json!({"actor": "alice", "msg": "ack"}), 1),
         ),
-        // Byte-identical replay of alice seq 0: an idempotent duplicate, not
-        // equivocation, even though it arrives under a different Event digest.
+        // Exact Event replay is idempotent.
         issued_op(
             "did:web:alice.example",
-            "9a",
+            "88",
             op_append(json!({"actor": "alice", "msg": "hi"}), 0),
         ),
     ];
     let report = lattice.join_with_issuer_report(&ops);
-    if !report.fail_closed.is_empty() {
+    if !report.identity_collisions.is_empty() {
         bail!("OrderedLog monotonic append must not fail closed: {report:?}");
     }
-    if !report.equivocations.is_empty() {
-        bail!("byte-identical replay is a duplicate, not equivocation: {report:?}");
+    if !report.sibling_groups.is_empty() {
+        bail!("exact Event replay is a duplicate, not a sibling: {report:?}");
     }
     let entries = &report.entries;
     if entries.len() != 3 {
@@ -964,31 +962,21 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
         bail!("OrderedLog entries are not sorted by issuer then seq: {entries:?}");
     }
 
-    // Starting a sub-chain above 0 must not materialize: the prefix is anchored
-    // at 0, not at the lowest seq observed.
+    // A sparse actor_seq above zero materializes without a cell-local prefix.
     let late_only = vec![issued_op(
         "did:web:carol.example",
         "b3",
         op_append(json!({"actor": "carol", "msg": "late"}), 3),
     )];
     let late_report = lattice.join_with_issuer_report(&late_only);
-    if !late_report.entries.is_empty() {
-        bail!("OrderedLog prefix must start at issuer_seq 0, got {late_report:?}");
-    }
-    if late_report
-        .pending_gaps
-        .iter()
-        .all(|gap| gap.missing_seq != 0)
-    {
-        bail!("OrderedLog must report the missing seq 0 gap: {late_report:?}");
+    if late_report.entries.len() != 1 || late_report.entries[0]["issuer_seq"] != 3 {
+        bail!("sparse actor_seq must materialize directly: {late_report:?}");
     }
     Ok(())
 }
 
-/// encoding.md 4.2: one issuer making non-equivalent claims on a single slot
-/// resolves to the greatest canonical `event_digest`, compared as decoded
-/// octets. Arrival order and causal edges MUST NOT change the winner, and the
-/// loser MUST stay visible as a diagnostic.
+/// Same-height Event siblings all enter the joined value. Digest comparison
+/// only stabilizes their serialization order and never elects a winner.
 fn ordered_log_equivocation_resolves_to_max_event_digest() -> Result<()> {
     let lattice = OrderedLog;
     let loser = issued_op(
@@ -1007,30 +995,22 @@ fn ordered_log_equivocation_resolves_to_max_event_digest() -> Result<()> {
         ("winner-first", vec![winner.clone(), loser.clone()]),
     ] {
         let report = lattice.join_with_issuer_report(&ops);
-        if !report.fail_closed.is_empty() {
-            bail!("{label}: equivocation must resolve, not fail closed: {report:?}");
+        if !report.identity_collisions.is_empty() {
+            bail!("{label}: unrelated siblings must not fail closed: {report:?}");
         }
-        if report.entries.len() != 1 {
-            bail!(
-                "{label}: one slot must yield one entry, got {:?}",
-                report.entries
-            );
+        if report.entries.len() != 2 {
+            bail!("{label}: both siblings must join, got {:?}", report.entries);
         }
-        let value = report.entries[0]
-            .get("value")
-            .cloned()
-            .unwrap_or(Value::Null);
-        if value.get("msg").and_then(Value::as_str) != Some("winner") {
-            bail!("{label}: winner must be the greatest event_digest, got {value:?}");
+        let messages = report
+            .entries
+            .iter()
+            .filter_map(|entry| entry.pointer("/value/msg").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        if messages != ["loser", "winner"] {
+            bail!("{label}: canonical order or sibling retention drifted: {report:?}");
         }
-        if report.equivocations.len() != 1 {
-            bail!("{label}: the losing claim must remain an auditable diagnostic: {report:?}");
-        }
-        let diagnostic = &report.equivocations[0];
-        if diagnostic.winner_event_digest != issuer_digest("22").as_str()
-            || diagnostic.loser_event_digests != vec![issuer_digest("11").as_str().to_owned()]
-        {
-            bail!("{label}: equivocation diagnostic does not name winner/loser: {diagnostic:?}");
+        if report.sibling_groups.len() != 1 || report.sibling_groups[0].event_digests.len() != 2 {
+            bail!("{label}: complete sibling diagnostic missing: {report:?}");
         }
     }
 
@@ -1054,9 +1034,9 @@ fn ordered_log_equivocation_resolves_to_max_event_digest() -> Result<()> {
         bail!("digest collision must not materialize an entry: {collision_report:?}");
     }
     if collision_report
-        .fail_closed
+        .identity_collisions
         .iter()
-        .all(|slot| slot.reason != "digest_collision")
+        .all(|slot| slot.reason != "event_identity_collision")
     {
         bail!("digest collision must fail closed: {collision_report:?}");
     }
@@ -1105,9 +1085,9 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
     ];
 
     let gap_report = lattice.join_with_issuer_report(&gap_ops);
-    if gap_report.entries.len() != 2 {
+    if gap_report.entries.len() != 3 {
         bail!(
-            "OrderedLog gap must expose only contiguous prefix seq 0,1; got {:?}",
+            "sparse actor_seq must expose all entries: {:?}",
             gap_report.entries
         );
     }
@@ -1115,27 +1095,13 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
         entry.get("issuer_seq").and_then(Value::as_u64) == Some(3)
             || entry.to_string().contains("late-b")
     }) {
-        bail!("OrderedLog pending gap entry leaked into materialized cell value");
-    }
-    if gap_report.pending_gaps.len() != 1 {
-        bail!(
-            "OrderedLog gap must report one pending_gap diagnostic, got {:?}",
-            gap_report.pending_gaps
-        );
-    }
-    let gap = &gap_report.pending_gaps[0];
-    if gap.issuer != "ak:did_core:web:alice.example"
-        || gap.missing_seq != 2
-        || gap.pending_seq != 3
-        || gap.reason != "dependency_missing"
-    {
-        bail!("OrderedLog pending_gap diagnostic drifted: {gap:?}");
+        bail!("sparse actor_seq entry did not enter the joined value");
     }
     let CellState::Value(value) = lattice.join_with_issuers(&cref, &gap_ops) else {
         bail!("OrderedLog gap must not Bottom");
     };
-    if value.as_array().is_none_or(|entries| entries.len() != 2) {
-        bail!("OrderedLog join value must withhold pending gap entry: {value}");
+    if value.as_array().is_none_or(|entries| entries.len() != 3) {
+        bail!("OrderedLog joined value must retain sparse entry: {value}");
     }
 
     let backfilled_a = vec![
@@ -1165,45 +1131,13 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
             op_append(json!({"entry_id": "entry-0003-a", "kind": "late-a"}), 3),
         ),
     ];
-    let backfilled_b = vec![
-        issued_op(
-            "did:web:alice.example",
-            "b0",
-            op_append(json!({"entry_id": "entry-0000", "kind": "start"}), 0),
-        ),
-        issued_op(
-            "did:web:alice.example",
-            "b1",
-            op_append(json!({"entry_id": "entry-0001", "kind": "next"}), 1),
-        ),
-        issued_op(
-            "did:web:alice.example",
-            "b2",
-            op_append(json!({"entry_id": "entry-0002", "kind": "backfill"}), 2),
-        ),
-        issued_op(
-            "did:web:alice.example",
-            "b4",
-            op_append(json!({"entry_id": "entry-0003-a", "kind": "late-a"}), 3),
-        ),
-        issued_op(
-            "did:web:alice.example",
-            "b3",
-            op_append(json!({"entry_id": "entry-0003-b", "kind": "late-b"}), 3),
-        ),
-    ];
+    let mut backfilled_b = backfilled_a.clone();
+    backfilled_b.reverse();
     let report_a = lattice.join_with_issuer_report(&backfilled_a);
     let report_b = lattice.join_with_issuer_report(&backfilled_b);
-    if !report_a.pending_gaps.is_empty() || !report_b.pending_gaps.is_empty() {
+    if report_a.entries.len() != 5 || report_b.entries.len() != 5 {
         bail!(
-            "OrderedLog backfill must clear pending gaps: {:?} / {:?}",
-            report_a.pending_gaps,
-            report_b.pending_gaps
-        );
-    }
-    if report_a.entries.len() != 4 || report_b.entries.len() != 4 {
-        bail!(
-            "OrderedLog backfill must materialize seq 0..3: {:?} / {:?}",
+            "OrderedLog must retain both seq 3 siblings: {:?} / {:?}",
             report_a.entries,
             report_b.entries
         );
@@ -1211,15 +1145,8 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
     if canonical_json_bytes(&report_a.entries)? != canonical_json_bytes(&report_b.entries)? {
         bail!("OrderedLog backfill recompute depended on arrival order");
     }
-    if report_a.entries[3]["value"]
-        .get("entry_id")
-        .and_then(Value::as_str)
-        != Some("entry-0003-a")
-    {
-        bail!(
-            "OrderedLog duplicate same issuer_seq must keep min entry_id, got {:?}",
-            report_a.entries[3]
-        );
+    if report_a.sibling_groups.len() != 1 {
+        bail!("same-height siblings require one complete diagnostic: {report_a:?}");
     }
 
     Ok(())
@@ -1520,20 +1447,19 @@ fn mls_covered_frontier_after_rotation_keeps_old_refs_visible() -> Result<()> {
 /// matching case fails the run instead of silently widening claimed coverage.
 fn executed_lattice_assertion(vector_id: &str, assertion: &str) -> bool {
     const ORDERED_LOG_JOIN: &[&str] = &[
-        "per_issuer_sequence_order",
-        "issuer_prefix_starts_at_seq_zero",
-        "byte_identical_projected_op_is_idempotent",
-        "same_issuer_seq_equivocation_uses_max_event_digest",
-        "equivocation_winner_is_independent_of_causal_edges",
-        "equivocation_loser_remains_in_canonical_log",
-        "max_event_digest_compares_decoded_octets_across_suites",
+        "sparse_actor_sequence_order",
+        "sequence_gaps_do_not_block_entries",
+        "exact_event_replay_is_idempotent",
+        "same_actor_seq_siblings_all_enter_joined_value",
+        "causal_edges_do_not_create_a_sibling_winner",
+        "canonical_order_compares_decoded_octets_across_suites",
         "distinct_digest_preimage_same_event_digest_fails_closed",
         "proofs_or_reducer_stamp_difference_is_not_a_digest_collision",
     ];
     const ORDERED_LOG_GAP: &[&str] = &[
-        "gap_after_contiguous_prefix_is_pending_diagnostic",
-        "pending_gap_entry_does_not_enter_cell_value",
-        "backfill_recompute_is_arrival_order_independent",
+        "sparse_gap_entry_enters_cell_value",
+        "no_pending_gap_diagnostic_exists",
+        "additional_entry_recompute_is_arrival_order_independent",
     ];
     match vector_id {
         "ak.vector.lattice.ordered_log_join.v1" => ORDERED_LOG_JOIN.contains(&assertion),

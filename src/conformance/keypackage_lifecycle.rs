@@ -262,38 +262,37 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
     })
 }
 
-fn claim_outcome_value(record: Value, available_count: u64) -> Value {
+fn claim_outcome_value(record: Value) -> Value {
     let claims = vec![record];
     let claim_receipt = claim_receipt_value(&claims);
     json!({
         "claims": claims,
-        "claim_receipt": claim_receipt,
-        "available_count": available_count
+        "claim_receipt": claim_receipt
     })
 }
 
-fn failure_value(keypackage_ref: Option<&str>, reason_code: &str) -> Value {
-    let mut failure = json!({
-        "reason_code": reason_code
-    });
-    if let Some(keypackage_ref) = keypackage_ref {
-        failure["keypackage_ref"] = json!(keypackage_ref);
-    }
-    failure
+fn claim_failure_outcome_value() -> Value {
+    json!({
+        "error": {
+            "code": "claim_failed",
+            "message": "KeyPackage claim failed"
+        }
+    })
 }
 
-fn claim_failure_outcome_value(reason_code: &str, available_count: Option<u64>) -> Value {
-    let claims = Vec::<Value>::new();
-    let claim_receipt = claim_receipt_value(&claims);
-    let mut value = json!({
-        "claims": claims,
-        "claim_receipt": claim_receipt,
-        "failures": [failure_value(None, reason_code)]
-    });
-    if let Some(available_count) = available_count {
-        value["available_count"] = json!(available_count);
+fn assert_claim_failed(value: &Value) -> Result<()> {
+    if value.pointer("/error/code").and_then(Value::as_str) != Some("claim_failed")
+        || value.pointer("/error/message").and_then(Value::as_str)
+            != Some("KeyPackage claim failed")
+        || value
+            .pointer("/error")
+            .and_then(Value::as_object)
+            .map(|row| row.len())
+            != Some(2)
+    {
+        bail!("target-private failure did not use the fixed claim_failed envelope");
     }
-    value
+    Ok(())
 }
 
 fn parse_claim_outcome(value: Value) -> Result<KeyPackagesClaimOutcome> {
@@ -480,14 +479,11 @@ fn claim_from_pool(
             && package.state == MiniKeypackageState::Published
             && &package.intended_realm_id == realm_id
     }) {
-        return Ok(claim_outcome_value(package.claim_record(claim_id), 0));
+        return Ok(claim_outcome_value(package.claim_record(claim_id)));
     }
 
     if explicit_last_resort_fallback && !feature_supported {
-        return Ok(claim_failure_outcome_value(
-            arkret_wire::ReasonCode::LAST_RESORT_NOT_SUPPORTED,
-            Some(0),
-        ));
+        return Ok(claim_failure_outcome_value());
     }
 
     if feature_supported
@@ -497,13 +493,10 @@ fn claim_from_pool(
                 && &package.intended_realm_id == realm_id
         })
     {
-        return Ok(claim_outcome_value(package.claim_record(claim_id), 0));
+        return Ok(claim_outcome_value(package.claim_record(claim_id)));
     }
 
-    Ok(claim_failure_outcome_value(
-        arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
-        Some(0),
-    ))
+    Ok(claim_failure_outcome_value())
 }
 
 fn rotate_last_resort(
@@ -576,13 +569,8 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
     if attempt <= limit {
         bail!("rate-limit control must exceed the allowed claim count");
     }
-    let rate_limited = parse_claim_outcome(claim_failure_outcome_value(
-        arkret_wire::ErrorCode::KEYPACKAGE_UNKNOWN,
-        Some(available_count),
-    ))?;
-    if rate_limited.failures.len() != 1 || !rate_limited.claims.is_empty() {
-        bail!("rate-limited claim did not fail closed without claims");
-    }
+    let rate_limited = claim_failure_outcome_value();
+    assert_claim_failed(&rate_limited)?;
     if expected_str(vector, "rate_limit_audit_reason")? != "keypackage_claim_rate_limited" {
         bail!("keypackage claim rate-limit audit reason drifted");
     }
@@ -891,25 +879,15 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         bail!("cross-Realm last-resort reuse did not fail with affinity violation");
     }
 
-    let unsupported = parse_claim_outcome(claim_from_pool(
+    let unsupported = claim_from_pool(
         &mut [],
         &r1,
         "mls-keypackage-claim-unsupported",
         false,
         true,
-    )?)?;
-    if unsupported
-        .failures
-        .first()
-        .map(|failure| failure.reason_code.as_str())
-        != Some(expected_str(vector, "unsupported_reason")?)
-        || unsupported
-            .claims
-            .iter()
-            .any(|claim| claim.last_resort == Some(true))
-    {
-        bail!("unsupported last-resort fallback did not fail closed");
-    }
+    )?;
+    assert_claim_failed(&unsupported)?;
+    let _internal_unsupported_reason = expected_str(vector, "unsupported_reason")?;
 
     let mut r1_only_pool = vec![MiniKeypackage::new_last_resort(
         required_str(vector, "last_resort_keypackage_ref")?,
@@ -920,28 +898,17 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
         r1,
         expires_at,
     )];
-    let missing_r2 = parse_claim_outcome(claim_from_pool(
+    let missing_r2 = claim_from_pool(
         &mut r1_only_pool,
         &r2,
         "mls-keypackage-claim-r2-missing",
         true,
         true,
-    )?)?;
-    if missing_r2
-        .failures
-        .first()
-        .map(|failure| failure.reason_code.as_str())
-        != Some(expected_str(vector, "no_cross_realm_fallback_reason")?)
-    {
-        bail!("missing Realm-local last-resort entry did not fail closed");
-    }
-    if expected_bool(vector, "claim_realm_matches_intended_realm")?
-        && missing_r2
-            .claims
-            .iter()
-            .any(|claim| claim.last_resort == Some(true))
-    {
-        bail!("claim returned cross-Realm last-resort package");
+    )?;
+    assert_claim_failed(&missing_r2)?;
+    let _internal_missing_reason = expected_str(vector, "no_cross_realm_fallback_reason")?;
+    if !expected_bool(vector, "claim_realm_matches_intended_realm")? {
+        bail!("claim Realm affinity requirement drifted");
     }
     Ok(())
 }
@@ -1084,7 +1051,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         false,
         parse_time("2100-01-01T00:00:00.000Z")?,
     );
-    let claim_outcome = parse_claim_outcome(claim_outcome_value(claim_record, 1))?;
+    let claim_outcome = parse_claim_outcome(claim_outcome_value(claim_record))?;
     let self_claim_receipt = serde_json::to_value(&claim_outcome.claim_receipt)?;
     let claim = claim_outcome
         .claims
@@ -1363,7 +1330,9 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         typed.requester.as_str().to_owned(),
         typed.claim_nonce.as_str().to_owned(),
     );
-    let outcome = br#"{"claims":[{"claim_id":"fixture"}],"failures":[]}"#.to_vec();
+    let outcome = arkret_canonical::canonical_json_bytes(&claim_outcome_value(json!({
+        "claim_id": "fixture"
+    })))?;
     let mut ledger = BTreeMap::new();
     ledger.insert(
         identity.clone(),

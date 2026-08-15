@@ -5,7 +5,7 @@ use arkret_canonical::{canonical_json_bytes, from_canonical_json_slice};
 use arkret_crypto::secret_share::{SecretShareRequestContent, SecretShareSendContent};
 use arkret_identifiers::{DeviceId, DeviceMessageId, DidCoreId};
 use arkret_models_collaboration::sync_frames::account_sync::{
-    DeviceMessageEnvelope, DeviceMessageTarget, DeviceMessagesSendRequestBody,
+    DeviceMessageEnvelope, DeviceMessageSender, DeviceMessageTarget, DeviceMessagesSendRequestBody,
 };
 use arkret_wire::{
     HPKE_SUITE_X25519_CHACHA20POLY1305_V1, ProtocolKind, SECRET_REQUEST_KIND, SECRET_SEND_KIND,
@@ -158,7 +158,9 @@ fn d2d_root_secret_share_rejects_unsolicited_or_tampered_sends() -> Result<()> {
     assert!(format!("{err}").contains("secret_id"));
 
     let mut wrong_sender = envelope.clone();
-    wrong_sender.sender_device_id = device_id(OTHER_DEVICE)?;
+    wrong_sender.sender = DeviceMessageSender::Device {
+        sender_device_id: device_id(OTHER_DEVICE)?,
+    };
     assert!(open_secret_send(&request, &wrong_sender).is_err());
 
     let mut wrong_recipient = envelope.clone();
@@ -252,7 +254,14 @@ fn open_secret_send(
     if content.secret_id != request.secret_id || content.secret_id != SECRET_ID {
         bail!("unsupported ak.secret.send secret_id");
     }
-    if content.from_device != envelope.sender_device_id {
+    // `ak.secret.send` is a device-to-device secret transfer, so the envelope
+    // MUST carry the `device` sender branch: an Agent runtime has no device
+    // identity to match `from_device` against.
+    let sender_device_id = envelope
+        .sender
+        .device_id()
+        .ok_or_else(|| anyhow::anyhow!("ak.secret.send envelope has no sender device"))?;
+    if &content.from_device != sender_device_id {
         bail!("ak.secret.send from_device does not match envelope sender");
     }
     if content.scheme != HPKE_SUITE_X25519_CHACHA20POLY1305_V1 {
@@ -260,7 +269,7 @@ fn open_secret_send(
     }
 
     let aad = send_aad(
-        envelope.sender_device_id.as_str(),
+        sender_device_id.as_str(),
         envelope.recipient_device_id.as_str(),
         &arkret_canonical::format_timestamp_canonical(envelope.expires_at),
     )?;
@@ -339,7 +348,9 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
         message_id: DeviceMessageId::new("ak:device_message:0196419b-0000-7000-8000-000000000099")?,
         kind: ProtocolKind::new(SECRET_SEND_KIND).map_err(anyhow::Error::msg)?,
         sender_principal_id: DidCoreId::new(ACCOUNT_ID.to_owned())?,
-        sender_device_id: device_id(OLD_DEVICE)?,
+        sender: DeviceMessageSender::Device {
+            sender_device_id: device_id(OLD_DEVICE)?,
+        },
         recipient_principal_id: DidCoreId::new(ACCOUNT_ID.to_owned())?,
         recipient_device_id: device_id(NEW_DEVICE)?,
         sent_at: parse_utc("2026-06-10T00:00:00.000Z")?,

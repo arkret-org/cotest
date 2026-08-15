@@ -34,7 +34,7 @@ export type RealmObject = {
     "max_from_per_to"?: number;
     "multi_edge"?: boolean;
     "rank_field"?: string;
-    "on_conflict"?: "reject" | "close_previous" | "deterministic_winner" | "require_review";
+    "on_conflict"?: "reject" | "close_previous" | "require_review";
     [key: string]: unknown;
   }>;
   "policy_id"?: string;

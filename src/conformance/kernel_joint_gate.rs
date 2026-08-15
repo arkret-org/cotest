@@ -298,17 +298,16 @@ fn kernel_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
         });
     }
     let report = OrderedLog.join_with_issuer_report(&ops);
-    if !report.fail_closed.is_empty() || report.entries.len() != 1 {
+    if !report.identity_collisions.is_empty() || report.entries.len() != writes.len() {
         return error("state_mismatch", "offline_data_join_failed");
     }
-    let winner = report
-        .equivocations
-        .first()
-        .map(|item| item.winner_event_digest.clone())
-        .or_else(|| ops.first().map(|item| item.op.move_id.as_str().to_owned()));
     projection(json!({
-        "value": report.entries[0]["value"],
-        "winner_event_digest": winner
+        "entries": report.entries,
+        "sibling_event_digests": report
+            .sibling_groups
+            .first()
+            .map(|item| item.event_digests.clone())
+            .unwrap_or_default()
     }))
 }
 

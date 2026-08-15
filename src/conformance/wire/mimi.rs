@@ -14,6 +14,7 @@ const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
     "ak.vector.mimi.provider_directory_draft_pinning.v1",
     "ak.vector.mimi.provider_directory_signature.v1",
     "ak.vector.mimi.room_binding_projection.v1",
+    "ak.vector.mimi.room_update_branched_effect.v1",
     "ak.vector.mimi.keypackage_claim_lifecycle.v1",
     "ak.vector.mimi.content_roundtrip.v1",
     "ak.vector.mimi.identifier_query_privacy.v1",
@@ -58,6 +59,9 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
                 crate::conformance::run_mimi_provider_directory_signature_vector()?
             }
             "ak.vector.mimi.room_binding_projection.v1" => validate_room_binding_case(case)?,
+            "ak.vector.mimi.room_update_branched_effect.v1" => {
+                validate_room_update_branched_effect_case(case)?
+            }
             "ak.vector.mimi.keypackage_claim_lifecycle.v1" => validate_keypackage_claim_case(case)?,
             "ak.vector.mimi.content_roundtrip.v1" => validate_content_roundtrip_case(case)?,
             "ak.vector.mimi.identifier_query_privacy.v1" => validate_identifier_query_case(case)?,
@@ -78,6 +82,69 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
         if !seen.contains(*vector_id) {
             bail!("mimi interop fixture missing asserted case {vector_id}");
         }
+    }
+    Ok(())
+}
+
+fn validate_room_update_branched_effect_case(case: &Value) -> Result<()> {
+    let rows = case
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("MIMI room update branched-effect vector omits cases[]"))?;
+    let expected = [
+        (
+            "binding_kind_requires_exact_caller_event",
+            "ak.mimi.room_binding",
+            Some("ordinary_event_admission"),
+            None,
+        ),
+        (
+            "binding_kind_missing_event",
+            "ak.mimi.room_binding",
+            None,
+            Some("mimi_room_binding_event_invalid"),
+        ),
+        (
+            "binding_kind_mismatched_event",
+            "ak.mimi.room_binding",
+            None,
+            Some("mimi_room_binding_event_invalid"),
+        ),
+        (
+            "receipt_only_kind_rejects_event",
+            "m.room.name",
+            None,
+            Some("mimi_room_binding_event_invalid"),
+        ),
+        (
+            "receipt_only_kind_has_no_event_effect",
+            "m.room.name",
+            Some("receipt_only"),
+            None,
+        ),
+    ];
+    if rows.len() != expected.len() {
+        bail!("MIMI room update branched-effect vector must expose five closed paths");
+    }
+    for (name, update_kind, outcome, error) in expected {
+        let row = rows
+            .iter()
+            .find(|row| row["name"] == name)
+            .ok_or_else(|| anyhow!("MIMI room update vector missing case {name}"))?;
+        if row["update_kind"] != update_kind
+            || row.get("expected").and_then(Value::as_str) != outcome
+            || row.get("expected_error").and_then(Value::as_str) != error
+        {
+            bail!("MIMI room update case {name} has the wrong branched effect");
+        }
+    }
+    let failure = required_field(case, "failure_equivalence")?;
+    if failure["http_status"] != 400
+        || failure["reason_code"] != "mimi_room_binding_event_invalid"
+        || failure["body_shape"] != "identical"
+        || failure["depends_on_room_or_binding_existence"] != false
+    {
+        bail!("MIMI room update failures do not share the closed outward bucket");
     }
     Ok(())
 }
@@ -723,4 +790,14 @@ fn resolve_pref_display(vector: &Value, prefs: &Value) -> Result<bool> {
         .pointer("/default/display")
         .and_then(Value::as_bool)
         .unwrap_or(true))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mimi_interop_fixture_suite_closes_branched_room_update_effects() {
+        run_mimi_interop_fixture_suite().unwrap();
+    }
 }

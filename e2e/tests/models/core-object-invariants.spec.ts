@@ -535,9 +535,9 @@ test.describe("core object invariants", () => {
       await createDefaultView(v1, typedId("relation"));
       // Second default-view edge for the same source: many_to_one means one
       // edge is auto-tombstoned, leaving exactly 1 active edge. The surviving
-      // edge is the deterministic_winner (largest canonical event_digest per
-      // relation.md §6), so we assert the cardinality invariant — exactly one
-      // active edge pointing at one of the two views — not which view wins.
+      // concurrent mutually exclusive edges cannot acquire active status from
+      // digest ordering. The projection exposes at most one active edge and
+      // normally none until an explicit complete-head resolution.
       await createDefaultView(v2, typedId("relation"));
 
       const activeEdges = await request.get(

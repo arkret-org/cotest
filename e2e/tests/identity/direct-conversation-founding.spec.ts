@@ -339,8 +339,32 @@ function foundingEvents(args: {
       },
     },
   });
+  const strandId = String(strand.event_id);
+  const founderMember = signedEventEnvelope({
+    actorDid: args.founderDid,
+    realmId,
+    kind: "ak.member.state",
+    actorSeq: 3,
+    createdAt: args.createdAt,
+    hlc: `${args.hlcMillis}-0003-dc0fcafe`,
+    prevRefs: [strandId],
+    authorizationRef: REALM_AUTHORITY_ROOT_CELL,
+    preconditions: [
+      {
+        cell: `ak:cell:ak.component.member.state.v1:${args.founderDid}`,
+        predicate: { op: "head_eq", value: null },
+      },
+    ],
+    payload: {
+      realm_id: realmId,
+      actor_id: args.founderDid,
+      membership: "join",
+      delivery_status: "unroutable",
+      reason: "direct_conversation_bootstrap",
+    },
+  });
   return {
-    events: [create, member, strand],
+    events: [create, member, strand, founderMember],
     realmId,
     mainStrandId: sdkEventDerivedObjectId(strand),
   };

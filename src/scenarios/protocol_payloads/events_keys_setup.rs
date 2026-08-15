@@ -124,6 +124,46 @@ async fn upload_and_inspect_keys(
             .is_some_and(|key| key.starts_with("did:key:z6Mk")),
         "query must expose the authoritative active device signing key: {queried_device}"
     );
+    // `device-lifecycle.md` §8.2 — a returned row is complete and attested, and
+    // the attestation covers this exact projection. That is the whole
+    // verification closure of this cross-principal surface: PCR genesis
+    // receipts, authorization chains and Seals MUST NOT appear here.
+    let attestation = &queried_device["device_projection_attestation"];
+    assert_eq!(
+        attestation["attestation"]["device_signing_key"], queried_device["device_signing_key"],
+        "attestation must cover the row's signing key: {queried_device}"
+    );
+    assert_eq!(
+        attestation["attestation"]["authorized_generation_ref"],
+        queried_device["authorized_generation_ref"],
+        "attestation must cover the row's generation: {queried_device}"
+    );
+    assert_eq!(attestation["attestation"]["device_status"], "active");
+    assert!(
+        attestation["proof"]["verification_method"]
+            .as_str()
+            .is_some_and(|method| method.contains('#')),
+        "attestation proof must name a verification method: {attestation}"
+    );
+    assert_eq!(
+        attestation["proof"]["created_at"], attestation["attestation"]["attested_at"],
+        "proof timestamp must equal the attested instant: {attestation}"
+    );
+    for forbidden in [
+        "principal_genesis_receipt",
+        "authorization_chain",
+        "seal",
+        "seal_ref",
+    ] {
+        assert!(
+            queried_device.get(forbidden).is_none(),
+            "keys/query MUST NOT carry PCR material ({forbidden}): {queried_device}"
+        );
+    }
+    // The typed DTO is the contract: a row that is not complete and attested
+    // fails to decode rather than being consumed as a partial projection.
+    serde_json::from_value::<arkret_models_crypto::QueryDeviceRecord>(queried_device.clone())
+        .expect("keys/query row must decode as a complete attested QueryDeviceRecord");
 
     let claimed = expect_json(
         server

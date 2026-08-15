@@ -223,10 +223,28 @@
       "expected": {
         "outcome": "projection",
         "value": {
-          "value": {
-            "body": "from-tablet"
-          },
-          "winner_event_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          "entries": [
+            {
+              "issuer": "ak:did_core:web:alice.example",
+              "issuer_seq": 0,
+              "event_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+              "value": {
+                "body": "from-phone"
+              }
+            },
+            {
+              "issuer": "ak:did_core:web:alice.example",
+              "issuer_seq": 0,
+              "event_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "value": {
+                "body": "from-tablet"
+              }
+            }
+          ],
+          "sibling_event_digests": [
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+          ]
         }
       }
     },

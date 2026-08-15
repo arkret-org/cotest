@@ -31,6 +31,8 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
+type JsonObject = Record<string, unknown>;
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("mimi federation", () => {
@@ -274,6 +276,43 @@ async function createBoundMimiRoom(
     sender_actor_id: canonicalDidCoreId(alice.did),
     room_binding_event: { event: bindingEvent },
   };
+  const invalidBodies: JsonObject[] = [
+    // Binding semantics without its caller-authored Event.
+    Object.fromEntries(
+      Object.entries(updateBody).filter(([key]) => key !== "room_binding_event"),
+    ),
+    // The Event exists but does not bind the declared MLS group.
+    { ...updateBody, mls_group_id: `mls:${roomId}:mismatch` },
+    // Receipt-only semantics must not smuggle an Event into ordinary admission.
+    {
+      ...updateBody,
+      update: {
+        kind: "m.room.name",
+        payload: opaquePayload(
+          { kind: "m.room.name", payload: { name: "receipt only" } },
+          "application/vnd.arkret.mimi.room-update+json",
+        ),
+      },
+    },
+  ];
+  let invalidShape: string[] | undefined;
+  for (const invalidBody of invalidBodies) {
+    const invalid = await request.post(updateUrl, {
+      headers: signedMimiHeaders({
+        body: invalidBody,
+        targetUri: updateUrl,
+        roomUri: localMimiRoomUri(roomId),
+      }),
+      data: canonicalJson(invalidBody),
+    });
+    const invalidText = await invalid.text();
+    expect(invalid.status(), invalidText).toBe(400);
+    const invalidEnvelope = JSON.parse(invalidText) as JsonObject;
+    expect(wireErrCode(invalidEnvelope)).toBe("mimi_room_binding_event_invalid");
+    const shape = Object.keys(invalidEnvelope).sort();
+    invalidShape ??= shape;
+    expect(shape).toEqual(invalidShape);
+  }
   const update = await request.post(updateUrl, {
     headers: signedMimiHeaders({
       body: updateBody,

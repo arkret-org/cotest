@@ -30,7 +30,7 @@ struct PrivateChatPrivacyFixture {
 
 #[derive(Debug, Deserialize)]
 struct FoundingTranscriptVector {
-    event_ids: [String; 3],
+    event_ids: [String; 4],
     expected_founding_unit_digest: String,
     receipt: Value,
     expected_receipt_transcript_digest: String,
@@ -167,7 +167,7 @@ fn validate_founding_transcript_vector(vector: &FoundingTranscriptVector) -> Res
         .into_iter()
         .collect::<std::result::Result<Vec<_>, _>>()?
         .try_into()
-        .map_err(|_| anyhow!("founding vector must contain three Event IDs"))?;
+        .map_err(|_| anyhow!("founding vector must contain four Event IDs"))?;
     let sdk_unit = arkret_models_collaboration::direct_conversation_ops::direct_conversation_founding_unit_digest(
         &event_ids,
     )?;

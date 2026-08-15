@@ -228,7 +228,7 @@ async function createBoardWithCard(
 
 // relation.md §5 — register a RelationProfile that tightens `assigned_to` to a
 // single active assignee per Strand (max_to_per_from=1) with the
-// deterministic_winner conflict policy. soland reads relation_profiles from the
+// require_review conflict policy. soland reads relation_profiles from the
 // canonical `ak.realm.policy_bundle.value.relation_profiles` cell value.
 async function registerSingleAssigneeProfile(
   request: APIRequestContext,
@@ -244,7 +244,7 @@ async function registerSingleAssigneeProfile(
       relation_scope: "realm",
       cardinality: "many_to_one",
       max_to_per_from: 1,
-      on_conflict: "deterministic_winner",
+      on_conflict: "require_review",
     },
   ];
   await submitSignedEventApi(
@@ -263,15 +263,6 @@ async function registerSingleAssigneeProfile(
     }),
     { context: `register single-assignee relation profile ${realmId}` },
   );
-}
-
-// relation.md §6 — the deterministic winner is the candidate with the
-// bytewise-largest canonical event_digest. The signed-event helper stamps each
-// proof with sha256 over the canonical event; recompute it here so the test can
-// assert WHICH assignment soland keeps active, not merely that exactly one wins.
-function eventDigestOf(envelope: Record<string, unknown>): string {
-  const { proofs: _proofs, ...event } = envelope;
-  return `sha256:${sha256CanonicalJson(event)}`;
 }
 
 test.describe("project simulation", () => {
@@ -658,13 +649,12 @@ test.describe("project simulation", () => {
     }
   });
 
-  test("E16.G concurrent assignment from two devices: relation profile on_conflict=deterministic_winner picks one; Card has exactly one active assignee", async ({
+  test("E16.G concurrent assignment from two devices: require_review exposes no active assignee", async ({
     request,
   }) => {
-    // spec: relation.md §5 (single-assignee profile max_to_per_from=1) + §6
-    // (deterministic_winner = bytewise-largest event_digest). Two devices
-    // concurrently assign the SAME Card to two different actors; soland keeps
-    // exactly one active assignee and the winner is the larger event_digest.
+    // spec: relation.md §5 (single-assignee profile max_to_per_from=1) + §6.
+    // Concurrent mutually exclusive heads remain review-required; digest
+    // ordering cannot turn either edge into the active assignment.
     const stamp = Date.now();
     const alice = uniqueUser("s16-conflict-alice");
     const bob = uniqueUser("s16-conflict-bob");
@@ -699,8 +689,7 @@ test.describe("project simulation", () => {
 
     // Two concurrent assignments of the same Card to two different actors. The
     // single-assignee profile (max_to_per_from=1) forces a conflict; the
-    // deterministic winner is the candidate with the larger canonical
-    // event_digest.
+    // complete head set remains available for a later explicit resolution.
     const assignToAlice = signedEventEnvelope({
       actorDid: alice.did,
       realmId,
@@ -743,16 +732,9 @@ test.describe("project simulation", () => {
       context: "assign Card to bob",
     });
 
-    const winnerActor =
-      eventDigestOf(assignToAlice) > eventDigestOf(assignToBob)
-        ? alice.did
-        : bob.did;
-
     const row = await readStrandRow(request, aliceToken, realmId, cardId);
     expect(row, "Card visible").toBeTruthy();
-    // Exactly one active assignee survives the single-assignee profile.
-    expect(row?.assigned_actor_ids ?? []).toHaveLength(1);
-    expect(row?.assigned_actor_ids ?? []).toEqual([winnerActor]);
+    expect(row?.assigned_actor_ids ?? []).toEqual([]);
   });
 
   test("E16.1 unassign emits ak.relation.tombstone; assignment no longer shows in card projection", async ({
