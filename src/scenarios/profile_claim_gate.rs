@@ -83,7 +83,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     expect_profile_rejected(&failed, "failed conformance results")?;
 
     let limited = serde_json::json!({
-        "supported_profiles": ["ak.profile.soland_limited_server.v1"],
+        "supported_profiles": ["org.arkret.soland.profile.limited_server.v1"],
         "supported_operations": [],
     });
     expect_profile_rejected(&limited, "limited profile")?;

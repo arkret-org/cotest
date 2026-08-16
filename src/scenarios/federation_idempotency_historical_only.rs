@@ -211,7 +211,10 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     // Request body X — canonical-JSON over a small federation_transaction.
     let body_x = json!({
         "operation": "ak.self.events.command.submit",
-        "envelopes": [{"kind": "ak.message.text", "payload": {"body": "federation-c3"}}],
+        "envelopes": [{
+            "kind": arkret_models_collaboration::events_payloads::CONTENT_KIND_TEXT,
+            "payload": {"body": "federation-c3"}
+        }],
         "idempotency_key": "idem-c3-001",
     });
     let body_x_bytes = canonical_json_bytes(&body_x)

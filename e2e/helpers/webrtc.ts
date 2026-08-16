@@ -885,6 +885,42 @@ export function decodeLiveKitToken(
   return JSON.parse(payloadJson) as Record<string, unknown>;
 }
 
+export interface ArkretNativeBackendToken {
+  kid: string;
+  payload: {
+    call_id: string;
+    focus_id: string;
+    participant_identity: string;
+    issued_at: string;
+    expires_at: string;
+    media: { audio: boolean; video: boolean; screen: boolean };
+  };
+  sig: string;
+  signature_algorithm: "Ed25519";
+}
+
+/** Decode and validate the arkret-native binding's closed backend token. */
+export function decodeArkretNativeToken(
+  backendToken: unknown,
+): ArkretNativeBackendToken {
+  expect(typeof backendToken).toBe("object");
+  expect(backendToken).not.toBeNull();
+  expect(Array.isArray(backendToken)).toBe(false);
+  const parsed = backendToken as Record<string, unknown>;
+  expect(Object.keys(parsed).sort()).toEqual([
+    "kid",
+    "payload",
+    "sig",
+    "signature_algorithm",
+  ]);
+  expect(typeof parsed.kid).toBe("string");
+  expect(typeof parsed.sig).toBe("string");
+  expect(parsed.signature_algorithm).toBe("Ed25519");
+  expect(typeof parsed.payload).toBe("object");
+  expect(parsed.payload).not.toBeNull();
+  return parsed as unknown as ArkretNativeBackendToken;
+}
+
 // ── ICE config (webrtc-signaling.md §4.1) ────────────────────────────────────
 
 export async function fetchIceConfig(

@@ -42,7 +42,7 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
     assert_eq!(describe["did_webvh"]["method"], "did:webvh");
     assert_eq!(
         describe["did_webvh"]["profile"],
-        "ak.identity.webvh.provider.v1"
+        arkret_models_identity::did_document::DID_WEBVH_V1_METHOD
     );
     assert_eq!(
         describe["did_webvh"]["default_provider_id"],
@@ -87,7 +87,10 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
         .find(|root| root["id"] == "external.webvh")
         .expect("external webvh trust root");
     assert_eq!(external_root["kind"], "external");
-    assert_eq!(external_root["profile"], "ak.identity.webvh.provider.v1");
+    assert_eq!(
+        external_root["profile"],
+        arkret_models_identity::did_document::DID_WEBVH_V1_METHOD
+    );
     assert_eq!(external_root["base_url"], EXTERNAL_PROVIDER_URL);
     assert!(
         external_root["expected_trust_domain"]

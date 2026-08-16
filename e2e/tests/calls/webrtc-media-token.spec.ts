@@ -23,6 +23,7 @@ import {
   CAP_CALL_JOIN,
   PARTICIPANT_BINDING_SCHEME,
   configureMediaService,
+  decodeArkretNativeToken,
   decodeLiveKitToken,
   exchangeMediaToken,
   expectedLiveKitRoom,
@@ -38,6 +39,14 @@ const LIVEKIT_FOCUS: MediaFocusConfig = {
   type: "livekit",
   issuer_kid: ISSUER_KID,
   connect_url: "wss://livekit.media.example",
+  ttl_seconds: 300,
+  e2ee_key_source: "mls-exporter",
+};
+const ARKRET_NATIVE_FOCUS: MediaFocusConfig = {
+  focus_id: "ak:focus:arkret-native-reference",
+  type: "arkret_native",
+  issuer_kid: ISSUER_KID,
+  connect_url: "wss://native.media.example",
   ttl_seconds: 300,
   e2ee_key_source: "mls-exporter",
 };
@@ -132,6 +141,44 @@ test.describe("media token exchange", () => {
     expect(video.canPublishSources).not.toContain("screen_share");
   });
 
+  test("arkret-native backend_token parses as the closed signed token object", async ({
+    request,
+  }) => {
+    const { alice, aliceToken, realmId, callId } =
+      await setupMediaCall(request);
+    const response = await exchangeMediaToken(request, aliceToken, {
+      realm_id: realmId,
+      call_id: callId,
+      actor_id: alice.did,
+      device_id: alice.deviceId,
+      focus_id: ARKRET_NATIVE_FOCUS.focus_id,
+      desired_media: { audio: true, video: true, screen: false },
+    });
+    expect(response.status(), await response.text()).toBe(200);
+    const body = await response.json();
+    expect(body.backend_kind).toBe("arkret_native");
+    expect(body.connect_url).toBe(ARKRET_NATIVE_FOCUS.connect_url);
+
+    const token = decodeArkretNativeToken(body.backend_token);
+    expect(token.kid).toBe(ISSUER_KID);
+    expect(token.sig.length).toBeGreaterThan(0);
+    expect(token.payload.call_id).toBe(callId);
+    expect(token.payload.focus_id).toBe(ARKRET_NATIVE_FOCUS.focus_id);
+    expect(token.payload.participant_identity).toBe(body.participant_identity);
+    expect(token.payload.media).toEqual({
+      audio: true,
+      video: true,
+      screen: false,
+    });
+    expect(
+      new Date(token.payload.expires_at).getTime() -
+        new Date(token.payload.issued_at).getTime(),
+    ).toBeLessThanOrEqual(600_000);
+    for (const forbidden of ["actor_id", "device_id", "realm_id"]) {
+      expect(token.payload).not.toHaveProperty(forbidden);
+    }
+  });
+
   test("unknown focus token request fails closed with focus_mismatch", async ({
     request,
   }) => {
@@ -217,7 +264,7 @@ async function setupMediaCall(request: APIRequestContext): Promise<{
     realmId,
     alice.did,
     SERVICE_ID,
-    [LIVEKIT_FOCUS],
+    [LIVEKIT_FOCUS, ARKRET_NATIVE_FOCUS],
   );
 
   // Token exchange is decoupled from any prior signaling session
