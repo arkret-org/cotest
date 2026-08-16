@@ -339,6 +339,8 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
     for name in [
         "history_beyond_64_uses_checkpoint_and_bounded_tail",
         "same_sequence_different_digest_is_fork",
+        "single_roundtrip_countersigns_and_commits_same_checkpoint",
+        "response_loss_replays_same_completed_checkpoint",
         "rollback_or_missing_checkpoint_predecessor_is_invalid",
         "wrong_root_pair_accumulator_or_single_signature_is_invalid",
         "temporarily_missing_portable_material_is_unavailable",
@@ -374,6 +376,18 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
         .unwrap();
     if new_lineage["inherits_history"] != false || new_lineage["expected"] != "independent_root" {
         bail!("new Contact lineage silently inherited compacted history");
+    }
+    let registry = load_artifact_json("registry/operation-registry.json")?;
+    let operations = registry["operations"]
+        .as_array()
+        .ok_or_else(|| anyhow!("operation registry has no operations"))?;
+    let self_checkpoint = operations
+        .iter()
+        .find(|operation| operation["operation_id"] == "ak.self.contact.command.checkpoint");
+    if self_checkpoint.and_then(|operation| operation["http"].as_str())
+        != Some("POST /_arkret/self/contacts/continuity-checkpoint")
+    {
+        bail!("bilateral checkpoint has no registered holder-authorized issuance surface");
     }
     Ok(())
 }

@@ -15,7 +15,7 @@ use arkret_identifiers::{CallId, CellRef, DeviceId, DidCoreId, DidFullId, Hash, 
 use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::{
     CallMediaParticipantBinding, CallMediaServiceSignature, CallMediaTokenExchangeOutcome,
-    CallMediaTokenExchangeRequestBody,
+    CallMediaTokenExchangeRequestBody, MediaBackendKind, MediaBackendToken,
 };
 use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp};
 use arkret_wire::{BottomKind, LatticeOp, LatticeOpType, ProfileId};
@@ -158,9 +158,9 @@ fn unsigned_token_outcome(
     let identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000".to_owned();
     CallMediaTokenExchangeOutcome {
         focus_id: request.focus_id.clone(),
-        backend_kind: "livekit".to_owned(),
+        backend_kind: MediaBackendKind::Livekit,
         connect_url: "wss://livekit-fra.example.com".to_owned(),
-        backend_token: "opaque-backend-token".to_owned(),
+        backend_token: MediaBackendToken::Opaque("opaque-backend-token".to_owned()),
         participant_identity: identity.clone(),
         participant_binding: CallMediaParticipantBinding {
             scheme: ParticipantBinding::SCHEMA.to_owned(),

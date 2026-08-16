@@ -224,28 +224,21 @@ fn claim_record_value(
 
 fn claim_receipt_value(claims: &[Value]) -> Value {
     let request = json!({
+        "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "target_principal_id": "ak:did_core:webvh:z6mkfixture",
         "intended_realm_id": "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
         "requester": "ak:did_core:webvh:z6mkfixture",
+        "mls_group_id": "fixture-group",
+        "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.mls.profile.full"],
         "claim_nonce": "AAAAAAAAAAAAAAAAAAAAAA",
-        "expires_at": "2026-01-01T00:05:00.000Z",
-        "holder_acceptance_proof": {
-            "kind": "detached_jws",
-            "verification_method": "did:webvh:z6mkfixture:alice.example#key-1",
-            "payload_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-            "created_at": "2025-12-31T23:59:00.000Z",
-            "audience": "ak:did_core:webvh:z6mkfixtureservice",
-            "proof_purpose": "holder_acceptance",
-            "jws": "a..b"
-        }
+        "expires_at": "2026-01-01T00:05:00.000Z"
     });
     let request_digest = arkret_canonical::canonical_sha256(&request)
         .expect("fixture claim request must be canonicalizable");
     let claims_digest = arkret_canonical::canonical_sha256(&claims)
         .expect("fixture claim records must be canonicalizable");
     json!({
-        "operation_id": "ak.self.keys.keypackages.command.claim",
         "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "request_digest": request_digest,
         "claims_digest": claims_digest,
@@ -266,6 +259,7 @@ fn claim_outcome_value(record: Value) -> Value {
     let claims = vec![record];
     let claim_receipt = claim_receipt_value(&claims);
     json!({
+        "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "claims": claims,
         "claim_receipt": claim_receipt
     })
@@ -946,7 +940,7 @@ struct WelcomePayloadFixture<'a> {
     intended_realm_id: &'a str,
     requester_actor_id: &'a str,
     requester_verification_method: &'a str,
-    self_claim_receipt: &'a Value,
+    claim_receipt: &'a Value,
     claim_nonce: &'a str,
     welcome_digest: &'a str,
 }
@@ -984,7 +978,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
                 "sig": "c2ln"
             }
         },
-        "self_claim_receipt": fixture.self_claim_receipt,
+        "claim_receipt": fixture.claim_receipt,
         "commit_ref": "ak:event:AR8j96rkirO3GDtvwgRddZScc5YX1AgFEOGO5Bs1wrgC",
         "governance_binding": {
             "binding_version": 1,
@@ -1052,7 +1046,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         parse_time("2100-01-01T00:00:00.000Z")?,
     );
     let claim_outcome = parse_claim_outcome(claim_outcome_value(claim_record))?;
-    let self_claim_receipt = serde_json::to_value(&claim_outcome.claim_receipt)?;
+    let claim_receipt = serde_json::to_value(&claim_outcome.claim_receipt)?;
     let claim = claim_outcome
         .claims
         .into_iter()
@@ -1074,7 +1068,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         intended_realm_id: intended_realm_id.as_str(),
         requester_actor_id: requester_core_id.as_str(),
         requester_verification_method: requester_verification_method.as_str(),
-        self_claim_receipt: &self_claim_receipt,
+        claim_receipt: &claim_receipt,
         claim_nonce,
         welcome_digest: welcome_digest.as_str(),
     };
@@ -1276,95 +1270,96 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     arkret_wire::EventId::new(device_authorization_event_id.to_owned())?;
     require_model_generation_ref(vector, "model_generation_ref")?;
 
-    let mut request = vector["proof_free_request"].clone();
-    request["holder_acceptance_proof"] = json!({
-        "kind": "detached_jws",
-        "verification_method": expected_verification_method.clone(),
-        "payload_digest": required_str(vector, "payload_digest")?,
-        "created_at": "2026-07-31T00:00:00.000Z",
-        "audience": required_str(vector, "authority_service_id")?,
-        "proof_purpose": "holder_acceptance",
-        "jws": "eyJhbGciOiJFZDI1NTE5In0..c2ln"
-    });
+    let request = fixture["schema_validation_cases"]
+        .as_array()
+        .and_then(|cases| {
+            cases.iter().find(|case| {
+                case.get("name").and_then(Value::as_str)
+                    == Some("local_and_remote_claim_share_closed_authorization_carrier")
+            })
+        })
+        .and_then(|case| case.get("instance"))
+        .cloned()
+        .ok_or_else(|| anyhow!("fixture omits the canonical unified claim request"))?;
     let typed: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(request.clone())?;
-    if typed.holder_acceptance_proof.verification_method.as_str() != expected_verification_method {
-        bail!("self-claim proof is not bound to the canonical accepted-device method");
-    }
-    let typed_payload_digest = typed.payload_digest()?;
-    if typed_payload_digest.as_str() != required_str(vector, "payload_digest")? {
-        let mut typed_proof_free = serde_json::to_value(&typed)?;
-        typed_proof_free
-            .as_object_mut()
-            .expect("request object")
-            .remove("holder_acceptance_proof");
-        bail!(
-            "self-claim proof-free payload digest drifted: expected {}, got {}, projection={}",
-            required_str(vector, "payload_digest")?,
-            typed_payload_digest,
-            String::from_utf8(arkret_canonical::canonical_json_bytes(&typed_proof_free)?)?
-        );
-    }
-    let proof_free_bytes = arkret_canonical::canonical_json_bytes(&vector["proof_free_request"])?;
-    if std::str::from_utf8(&proof_free_bytes)?
-        != required_str(vector, "canonical_proof_free_request_json")?
+    typed.validate_shape()?;
+    let arkret_models_crypto::PeerKeyPackageRequesterAuthorization::Device {
+        verification_method,
+        requester_device_id: authorized_device_id,
+        device_authorize_event_id: authorized_event_id,
+        ..
+    } = &typed.requester_authorization
+    else {
+        bail!("self-claim fixture must use the closed device authorization branch");
+    };
+    if verification_method != &expected_verification_method_typed
+        || authorized_device_id.as_str() != requester_device_id
+        || authorized_event_id.as_str() != device_authorization_event_id
     {
-        bail!("self-claim proof-free canonical projection drifted");
+        bail!("self-claim authorization is not bound to the accepted device selector");
     }
-    let binding = typed.proof_binding_bytes()?;
-    let actual_binding = std::str::from_utf8(&binding)?;
-    let actual_binding_digest =
-        arkret_canonical::canonical_sha256(&serde_json::from_slice::<Value>(&binding)?)?;
-    if actual_binding != required_str(vector, "canonical_proof_binding_json")?
-        || actual_binding_digest != required_str(vector, "proof_binding_digest")?
+    if serde_json::to_value(typed.unsigned_request())? != vector["unsigned_request"]
+        || serde_json::to_value(&typed.service_binding)? != vector["service_binding"]
     {
-        bail!(
-            "self-claim proof binding or digest drifted: binding={actual_binding}, digest={actual_binding_digest}"
-        );
+        bail!("unified claim request drifted from its unsigned request or service binding");
     }
-    let authority =
-        arkret_identifiers::DidCoreId::new(required_str(vector, "authority_service_id")?)?;
-    typed.validate_proof_shape(&authority, parse_time("2026-07-31T00:01:00.000Z")?)?;
+    let binding = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+        &typed.unsigned_request(),
+        &typed.service_binding,
+        &typed.requester_authorization,
+    )?;
+    if !binding.starts_with(b"ak.keypackage-claim-authorization-v1\n") {
+        bail!("self-claim authorization uses the wrong signing domain");
+    }
+    let request_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&typed)?)?;
 
     let identity = (
-        typed.requester.as_str().to_owned(),
-        typed.claim_nonce.as_str().to_owned(),
+        typed.service_binding.source_service_id.as_str().to_owned(),
+        typed.claim_request_id.as_str().to_owned(),
     );
     let outcome = arkret_canonical::canonical_json_bytes(&claim_outcome_value(json!({
         "claim_id": "fixture"
     })))?;
     let mut ledger = BTreeMap::new();
-    ledger.insert(
-        identity.clone(),
-        (typed.payload_digest()?.to_string(), outcome.clone()),
-    );
+    ledger.insert(identity.clone(), (request_digest.clone(), outcome.clone()));
     let replay = ledger.get(&identity).expect("inserted terminal outcome");
-    if replay.0 != typed.payload_digest()?.as_str() || replay.1 != outcome {
+    if replay.0 != request_digest || replay.1 != outcome {
         bail!("exact retry did not return the byte-identical terminal outcome");
     }
     let mut conflict = request;
     conflict["target_principal_id"] = json!("ak:did_core:webvh:z6mkfixturemalloryexample");
     let conflict: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(conflict)?;
-    if conflict.payload_digest()?.as_str() == replay.0 {
+    let conflict_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&conflict)?)?;
+    if conflict_digest == replay.0 {
         bail!("same requester/nonce with a changed payload did not conflict");
+    }
+    let conflict_binding = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
+        &conflict.unsigned_request(),
+        &conflict.service_binding,
+        &conflict.requester_authorization,
+    )?;
+    if conflict_binding == binding {
+        bail!("claim authorization transcript did not bind the changed target");
     }
 
     let mut missing = serde_json::to_value(&typed)?;
     missing
         .as_object_mut()
         .expect("request object")
-        .remove("holder_acceptance_proof");
+        .remove("requester_authorization");
     if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(missing).is_ok()
     {
-        bail!("a self claim without exactly one proof was accepted");
+        bail!("a self claim without requester authorization was accepted");
     }
-    let mut multiple = serde_json::to_value(&typed)?;
-    let proof = multiple["holder_acceptance_proof"].clone();
-    multiple["proofs"] = json!([proof.clone(), proof]);
-    if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(multiple).is_ok()
-    {
-        bail!("a self claim with multiple proofs was accepted");
+    let mut wrong_branch = serde_json::to_value(&typed)?;
+    wrong_branch["requester_authorization"]["signature"]["kid"] =
+        json!("did:webvh:z6mkfixture:alice.example#other-key");
+    let wrong_branch: arkret_models_crypto::KeyPackagesClaimRequestBody =
+        serde_json::from_value(wrong_branch)?;
+    if wrong_branch.validate_shape().is_ok() {
+        bail!("a requester authorization whose signature key differs from its method was accepted");
     }
     Ok(())
 }
