@@ -459,7 +459,7 @@ fn validate_three_point_limit_matrix(case: &Value, generator: &Value) -> Result<
             "schema_violation",
         ),
         (
-            "chunk.chunk_inclusion_proof",
+            "chunk.chunk_proof",
             10,
             "over_error_code",
             "schema_violation",

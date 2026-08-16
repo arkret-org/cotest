@@ -1091,7 +1091,7 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
             gap_report.entries
         );
     }
-    if gap_report.entries.iter().any(|entry| {
+    if !gap_report.entries.iter().any(|entry| {
         entry.get("issuer_seq").and_then(Value::as_u64) == Some(3)
             || entry.to_string().contains("late-b")
     }) {

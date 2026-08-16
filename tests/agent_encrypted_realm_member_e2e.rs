@@ -100,9 +100,9 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                 )?;
                 let entry: KeyPackageUploadEntry = serde_json::from_value(
                     request
-                        .get("key_package")
+                        .get("keypackage")
                         .cloned()
-                        .context("entry case missing key_package")?,
+                        .context("entry case missing keypackage")?,
                 )?;
                 (
                     keypackage_upload_entry_signing_input(&principal_id, &device_id, &entry)?,

@@ -908,7 +908,7 @@ fn evaluate_moderation_appeal_atomicity(scenario: &Value) -> Result<Value> {
         }));
     }
 
-    match required_str(scenario, "verdict")? {
+    match required_str(scenario, "decision")? {
         "overturn" => {
             if scenario
                 .get("same_batch_lift_target_matches")

@@ -40,8 +40,10 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
     .await?;
     assert_eq!(describe["did_webvh"]["enabled"], true);
     assert_eq!(describe["did_webvh"]["method"], "did:webvh");
+    // `did-method-adapter-registry.json` names the method version
+    // `adapter_version`; it is not a `ak.profile.*` id.
     assert_eq!(
-        describe["did_webvh"]["profile"],
+        describe["did_webvh"]["adapter_version"],
         arkret_models_identity::did_document::DID_WEBVH_V1_METHOD
     );
     assert_eq!(
@@ -88,7 +90,7 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
         .expect("external webvh trust root");
     assert_eq!(external_root["kind"], "external");
     assert_eq!(
-        external_root["profile"],
+        external_root["adapter_version"],
         arkret_models_identity::did_document::DID_WEBVH_V1_METHOD
     );
     assert_eq!(external_root["base_url"], EXTERNAL_PROVIDER_URL);

@@ -1,11 +1,14 @@
 use anyhow::{Result, anyhow, bail};
-use arkret::identity::verify_did_webvh_v1_log;
+use arkret::identity::{derive_did_webvh_scid, verify_did_webvh_v1_log};
 use arkret::webvh::{
     PreparedPrincipalInception, PrincipalInceptionInput, PrincipalRotationInput,
     prepare_principal_inception, prepare_principal_rotation,
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_models_identity::did_document::validate_did_webvh_v1_method;
+use arkret_signatures::webvh::skeleton::{
+    derive_webvh_scid, finalize_webvh_scid_substitution, webvh_entry_hash_multibase,
+};
 use arkret_wire::{DidFullId, ProfileId};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
@@ -75,6 +78,11 @@ fn run_case(case: &Value) -> Result<()> {
             "/expected/verification_method_may_be_empty",
             outcome.verification_method_may_be_empty.map(Value::Bool),
         ),
+        ("/expected/scid", outcome.scid.map(Value::String)),
+        (
+            "/expected/version_id",
+            outcome.version_id.map(Value::String),
+        ),
     ] {
         if let Some(expected) = case.pointer(pointer)
             && actual.as_ref() != Some(expected)
@@ -91,6 +99,8 @@ struct CaseOutcome {
     identity_model: Option<String>,
     verification_key_source: Option<String>,
     verification_method_may_be_empty: Option<bool>,
+    scid: Option<String>,
+    version_id: Option<String>,
 }
 
 fn accept(identity_model: Option<&str>) -> CaseOutcome {
@@ -99,6 +109,8 @@ fn accept(identity_model: Option<&str>) -> CaseOutcome {
         identity_model: identity_model.map(str::to_owned),
         verification_key_source: None,
         verification_method_may_be_empty: None,
+        scid: None,
+        version_id: None,
     }
 }
 
@@ -108,6 +120,8 @@ fn reject() -> CaseOutcome {
         identity_model: None,
         verification_key_source: None,
         verification_method_may_be_empty: None,
+        scid: None,
+        version_id: None,
     }
 }
 
@@ -116,6 +130,38 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
         "accept_exact_v1_method" => {
             validate_did_webvh_v1_method(required_value(input, "parameters")?)?;
             Ok(accept(None))
+        }
+        "accept_scid_substituted_over_the_whole_entry" => {
+            // identity-did.md 3.4.4: substitution covers the whole entry, so a
+            // holder-owned `{SCID}` outside the skeleton members is replaced as
+            // well. Deriving the SCID and the entry hash from the substituted
+            // entry is the only way the published bytes and the versionId can
+            // both match.
+            let preliminary = required_value(input, "preliminary_entry")?;
+            let scid = derive_webvh_scid(preliminary)?;
+            let mut published = finalize_webvh_scid_substitution(preliminary, &scid)?;
+            let version_id = format!("1-{}", webvh_entry_hash_multibase(&published, &scid)?);
+            published["versionId"] = json!(version_id);
+            let expected_published = required_value(input, "published_entry")?;
+            if &published != expected_published {
+                bail!(
+                    "{name} published entry drifted: expected {expected_published}, got {published}"
+                );
+            }
+            let mut outcome = accept(None);
+            outcome.scid = Some(scid);
+            outcome.version_id = Some(version_id);
+            Ok(outcome)
+        }
+        "reject_residual_scid_placeholder_in_published_entry" => {
+            // A producer that substituted only the skeleton-owned members
+            // still publishes a self-consistent entry whose SCID re-derives,
+            // so the residual literal is the only detector.
+            expect_rejected(
+                derive_did_webvh_scid(required_value(input, "published_entry")?),
+                name,
+            )?;
+            Ok(reject())
         }
         "reject_unknown_method_version" | "reject_missing_method_version" => {
             expect_rejected(

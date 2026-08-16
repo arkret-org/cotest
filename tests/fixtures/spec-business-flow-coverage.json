@@ -754,7 +754,7 @@
           "kind": "ordinary",
           "path": "../teabay/crates/server/src/routing.rs",
           "markers": [
-            "ak.find.directory.command.takedown_appeal"
+            "FIND_DIRECTORY_COMMAND_TAKEDOWN_APPEAL"
           ]
         },
         {

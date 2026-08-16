@@ -56,6 +56,12 @@ export type SignedEventEnvelopeArgs = {
   prevRefs?: string[];
   scopeRef?: Record<string, unknown>;
   authorizationRef?: string;
+  /// The Principal Server this actor is anchored to. `event-envelope.schema.json`
+  /// makes it a required envelope member, so it is part of the digest preimage
+  /// every id derivation and proof covers. Defaults to the server the harness
+  /// is driving.
+  principalServerId?: string;
+  server?: SolandKey;
 };
 
 export type EventProofMode = "dev-proof" | "detached-jws";
@@ -944,6 +950,9 @@ export async function grantRealmReviewCapabilityApi(
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
     subject: canonicalDidCoreId(args.subjectDid),
+    // `capability_grant_payload` requires the subject's Principal Server
+    // whenever `subject` is a plain principal id.
+    subject_principal_server_id: canonicalDidCoreId(solandServiceId(args.server)),
     actions: ["ak.realm.join.review"],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -1045,6 +1054,9 @@ export async function grantServiceCapabilityApi(
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
     subject: canonicalDidCoreId(args.subjectServiceId),
+    // `capability_grant_payload` requires the subject's Principal Server
+    // whenever `subject` is a plain principal id.
+    subject_principal_server_id: canonicalDidCoreId(solandServiceId(args.server)),
     actions: [action],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -1131,6 +1143,10 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     realm_id: args.realmId,
     issuer: canonicalDidCoreId(args.ownerDid),
     subject: canonicalDidCoreId(args.subjectDid),
+    // `capability_grant_payload` makes `subject_principal_server_id` required
+    // whenever `subject` is a plain principal id: the authority pair is
+    // (subject, subject Principal Server), not the subject alone.
+    subject_principal_server_id: canonicalDidCoreId(solandServiceId(args.server)),
     actions: args.actions,
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -2195,6 +2211,9 @@ export function signedEventEnvelope(
         ? { kind: "realm_genesis" }
         : { kind: "realm", realm_id: args.realmId }),
     actor_id: canonicalDidCoreId(args.actorDid),
+    principal_server_id: canonicalDidCoreId(
+      args.principalServerId ?? solandServiceId(args.server),
+    ),
     authorization_ref: args.authorizationRef,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,

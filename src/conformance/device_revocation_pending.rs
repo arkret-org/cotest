@@ -276,7 +276,7 @@ fn signed_receipt(
             .then(|| hash('e'))
             .transpose()?,
         covering_seal_id: (decision == DeviceRevocationGateDecision::Revoked)
-            .then(|| "ak:seal:AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq".parse())
+            .then(|| format!("ak:seal:sha256:{}", "c".repeat(64)).parse())
             .transpose()?,
         verification_method: DidUrl::new("did:web:ps.example#service-key")
             .map_err(anyhow::Error::msg)?,

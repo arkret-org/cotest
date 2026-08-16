@@ -327,10 +327,9 @@ async fn install_fixture_events(
     events: &[Event],
 ) -> Result<()> {
     let outcome = expect_json(
-        server
-            .http()
-            .post(server.url(INSTALL_PATH))
-            .json(&json!({"events": events})),
+        server.http().post(server.url(INSTALL_PATH)).json(
+            &crate::harness::NonProtocolTestBody::new(json!({"events": events})),
+        ),
         StatusCode::OK,
     )
     .await?;

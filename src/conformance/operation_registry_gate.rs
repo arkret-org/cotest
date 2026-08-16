@@ -432,16 +432,47 @@ fn validate_durable_effects(
             }
             continue;
         };
+        validate_durable_effect(
+            &operation.operation_id,
+            effect,
+            &active,
+            private_writes,
+            false,
+            &mut failures,
+        );
+    }
+    Ok(failures)
+}
+
+/// Validate one `durable_effect` object against the closed union in
+/// `operation-registry.json`. `nested` marks the effects reached through a
+/// `branched` effect's `effect_branches[]`, which are the only place where a
+/// branch may pin the request member carrying the submitted Event.
+fn validate_durable_effect(
+    operation_id: &str,
+    effect: &Value,
+    active: &BTreeSet<&str>,
+    private_writes: &serde_json::Map<String, Value>,
+    nested: bool,
+    failures: &mut Vec<String>,
+) {
+    {
         let Some(effect) = effect.as_object() else {
-            failures.push(format!(
-                "{} durable_effect must be an object",
-                operation.operation_id
-            ));
-            continue;
+            failures.push(format!("{operation_id} durable_effect must be an object"));
+            return;
         };
         let kind = effect.get("kind").and_then(Value::as_str).unwrap_or("");
         let allowed_keys: &[&str] = match kind {
             "none" => &["kind", "rationale"],
+            "event_log" if nested => &[
+                "kind",
+                "event_kinds",
+                "event_kind_source",
+                "event_kind_sources",
+                "event_submission_path",
+                "cross_service_effects",
+                "irreversibility_note",
+            ],
             "event_log" => &[
                 "kind",
                 "event_kinds",
@@ -451,19 +482,18 @@ fn validate_durable_effects(
                 "irreversibility_note",
             ],
             "actor_private_event" => &["kind", "event_kind"],
+            "branched" if !nested => &["kind", "discriminator", "effect_branches"],
             _ => {
                 failures.push(format!(
-                    "{} durable_effect.kind is not in the closed union: {kind:?}",
-                    operation.operation_id
+                    "{operation_id} durable_effect.kind is not in the closed union: {kind:?}"
                 ));
-                continue;
+                return;
             }
         };
         for key in effect.keys() {
             if !allowed_keys.contains(&key.as_str()) {
                 failures.push(format!(
-                    "{} durable_effect contains unknown field {key}",
-                    operation.operation_id
+                    "{operation_id} durable_effect contains unknown field {key}",
                 ));
             }
         }
@@ -475,8 +505,7 @@ fn validate_durable_effects(
                     .is_none_or(|value| value.trim().is_empty())
                 {
                     failures.push(format!(
-                        "{} durable_effect=none requires a non-empty rationale",
-                        operation.operation_id
+                        "{operation_id} durable_effect=none requires a non-empty rationale",
                     ));
                 }
             }
@@ -495,27 +524,23 @@ fn validate_durable_effects(
                     != 1
                 {
                     failures.push(format!(
-                        "{} event_log durable_effect must declare exactly one of event_kinds, event_kind_source, or event_kind_sources",
-                        operation.operation_id
+                        "{operation_id} event_log durable_effect must declare exactly one of event_kinds, event_kind_source, or event_kind_sources",
                     ));
                 }
                 if let Some(kinds) = static_kinds {
                     if kinds.is_empty() {
                         failures.push(format!(
-                            "{} event_log durable_effect has empty event_kinds",
-                            operation.operation_id
+                            "{operation_id} event_log durable_effect has empty event_kinds",
                         ));
                     }
                     for event_kind in kinds {
                         match event_kind.as_str() {
                             Some(event_kind) if active.contains(event_kind) => {}
                             Some(event_kind) => failures.push(format!(
-                                "{} references inactive or unknown event kind {event_kind}",
-                                operation.operation_id
+                                "{operation_id} references inactive or unknown event kind {event_kind}",
                             )),
                             None => failures.push(format!(
-                                "{} event_kinds contains a non-string value",
-                                operation.operation_id
+                                "{operation_id} event_kinds contains a non-string value",
                             )),
                         }
                     }
@@ -526,15 +551,13 @@ fn validate_durable_effects(
                         || source.contains(char::is_whitespace))
                 {
                     failures.push(format!(
-                        "{} has an unresolvable event_kind_source {source}",
-                        operation.operation_id
+                        "{operation_id} has an unresolvable event_kind_source {source}",
                     ));
                 }
                 if let Some(sources) = dynamic_sources {
                     if sources.is_empty() {
                         failures.push(format!(
-                            "{} event_log durable_effect has empty event_kind_sources",
-                            operation.operation_id
+                            "{operation_id} event_log durable_effect has empty event_kind_sources",
                         ));
                     }
                     for source in sources {
@@ -544,12 +567,10 @@ fn validate_durable_effects(
                                     && source.ends_with(".event.kind")
                                     && !source.contains(char::is_whitespace) => {}
                             Some(source) => failures.push(format!(
-                                "{} has an unresolvable event_kind_sources entry {source}",
-                                operation.operation_id
+                                "{operation_id} has an unresolvable event_kind_sources entry {source}",
                             )),
                             None => failures.push(format!(
-                                "{} event_kind_sources contains a non-string value",
-                                operation.operation_id
+                                "{operation_id} event_kind_sources contains a non-string value",
                             )),
                         }
                     }
@@ -564,8 +585,7 @@ fn validate_durable_effects(
                                         .is_some_and(|value| !value.trim().is_empty())
                                 }) => {}
                         _ => failures.push(format!(
-                            "{} cross_service_effects must be a non-empty array of non-empty strings",
-                            operation.operation_id
+                            "{operation_id} cross_service_effects must be a non-empty array of non-empty strings",
                         )),
                     }
                 }
@@ -574,31 +594,27 @@ fn validate_durable_effects(
                     .is_some_and(|value| value.as_str().is_none_or(|value| value.trim().is_empty()))
                 {
                     failures.push(format!(
-                        "{} irreversibility_note must be a non-empty string",
-                        operation.operation_id
+                        "{operation_id} irreversibility_note must be a non-empty string",
                     ));
                 }
             }
             "actor_private_event" => {
                 let Some(event_kind) = effect.get("event_kind").and_then(Value::as_str) else {
                     failures.push(format!(
-                        "{} actor_private_event is missing event_kind",
-                        operation.operation_id
+                        "{operation_id} actor_private_event is missing event_kind",
                     ));
-                    continue;
+                    return;
                 };
                 if !active.contains(event_kind) {
                     failures.push(format!(
-                        "{} references inactive or unknown actor-private event {event_kind}",
-                        operation.operation_id
+                        "{operation_id} references inactive or unknown actor-private event {event_kind}",
                     ));
                 }
                 let Some(contract) = private_writes.get(event_kind) else {
                     failures.push(format!(
-                        "{} event {event_kind} is not registered as actor-private",
-                        operation.operation_id
+                        "{operation_id} event {event_kind} is not registered as actor-private",
                     ));
-                    continue;
+                    return;
                 };
                 if contract
                     .get("cell_family")
@@ -606,15 +622,94 @@ fn validate_durable_effects(
                     .is_none_or(|family| !family.starts_with("ak.private."))
                 {
                     failures.push(format!(
-                        "{} actor-private event {event_kind} does not target an ak.private.* family",
-                        operation.operation_id
+                        "{operation_id} actor-private event {event_kind} does not target an ak.private.* family",
+                    ));
+                }
+            }
+            "branched" => {
+                let discriminator = effect.get("discriminator").and_then(Value::as_object);
+                match discriminator {
+                    Some(discriminator) => {
+                        if discriminator
+                            .get("request_path")
+                            .and_then(Value::as_str)
+                            .is_none_or(|path| !path.starts_with('/'))
+                        {
+                            failures.push(format!(
+                                "{operation_id} branched discriminator.request_path must be a JSON pointer into the request body",
+                            ));
+                        }
+                        for key in discriminator.keys() {
+                            if !["request_path", "description"].contains(&key.as_str()) {
+                                failures.push(format!(
+                                    "{operation_id} branched discriminator contains unknown field {key}",
+                                ));
+                            }
+                        }
+                    }
+                    None => failures.push(format!(
+                        "{operation_id} branched durable_effect requires a discriminator object",
+                    )),
+                }
+                let Some(branches) = effect.get("effect_branches").and_then(Value::as_array) else {
+                    failures.push(format!(
+                        "{operation_id} branched durable_effect requires effect_branches[]",
+                    ));
+                    return;
+                };
+                let mut fallbacks = 0_usize;
+                for branch in branches {
+                    let Some(branch) = branch.as_object() else {
+                        failures.push(format!(
+                            "{operation_id} effect_branches entry must be an object",
+                        ));
+                        continue;
+                    };
+                    for key in branch.keys() {
+                        if !["equals", "otherwise", "effect"].contains(&key.as_str()) {
+                            failures.push(format!(
+                                "{operation_id} effect_branches entry contains unknown field {key}",
+                            ));
+                        }
+                    }
+                    let matches_value = branch
+                        .get("equals")
+                        .and_then(Value::as_str)
+                        .is_some_and(|value| !value.trim().is_empty());
+                    let is_fallback =
+                        branch.get("otherwise").and_then(Value::as_bool) == Some(true);
+                    if matches_value == is_fallback {
+                        failures.push(format!(
+                            "{operation_id} effect_branches entry must declare exactly one of equals or otherwise",
+                        ));
+                    }
+                    if is_fallback {
+                        fallbacks += 1;
+                    }
+                    let Some(branch_effect) = branch.get("effect") else {
+                        failures.push(format!(
+                            "{operation_id} effect_branches entry is missing effect",
+                        ));
+                        continue;
+                    };
+                    validate_durable_effect(
+                        operation_id,
+                        branch_effect,
+                        active,
+                        private_writes,
+                        true,
+                        failures,
+                    );
+                }
+                if fallbacks != 1 {
+                    failures.push(format!(
+                        "{operation_id} effect_branches must declare exactly one otherwise fallback",
                     ));
                 }
             }
             _ => unreachable!(),
         }
     }
-    Ok(failures)
 }
 
 fn load_openapi_operations(path: &Path) -> Result<BTreeMap<OperationKey, String>> {
