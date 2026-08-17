@@ -61,6 +61,12 @@ pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     // The rule is cross-object (policy value vs envelope discriminator), so
     // JSON Schema cannot express it and it lives here instead.
     crate::conformance::aad_visibility_ceiling::VECTOR_ID_AAD_VISIBILITY_POLICY_CEILING,
+    // 2026-08-17 — account lifecycle left the Event/PCR finality domain for the
+    // Account Authority issuer ledger (`identity/account-lifecycle.md` §3.1).
+    // The genesis/CAS, replay, fork, gap-recovery, binding-rollback and
+    // receipted-fanout closure is cross-object and single-writer, so it is a
+    // conformance vector rather than a schema case.
+    crate::conformance::account_status_issuer_ledger::VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER,
 ];
 
 /// Top-level fixture shape.

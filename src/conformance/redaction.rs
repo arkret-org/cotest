@@ -403,7 +403,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
 
     let stub = json!({
         "stub_schema": "ak.schema.erasure_verification_stub.v1",
-        "triggering_event_id": redaction_event_id,
+        "trigger": {"kind": "event", "event_id": redaction_event_id},
         "subject": {"kind": "event", "subject_ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,
@@ -433,7 +433,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     let mut receipt = json!({
         "schema": "ak.schema.erasure_receipt.v1",
         "receipt_id": receipt_id,
-        "triggering_event_id": redaction_event_id,
+        "trigger": {"kind": "event", "event_id": redaction_event_id},
         "issuer": "ak:did_core:web:erasure.example.com",
         "subject": {"kind": "event", "subject_ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
@@ -502,7 +502,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
 
     let tampered_stub = json!({
         "stub_schema": "ak.schema.erasure_verification_stub.v1",
-        "triggering_event_id": redaction_event_id,
+        "trigger": {"kind": "event", "event_id": redaction_event_id},
         "subject": {"kind": "event", "subject_ref": "ak:event:AY-zO3iRTy2WzTOhIUEixuzlytHijHJIELYTSNj4ZNwH"},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "receipt_id": receipt_id,

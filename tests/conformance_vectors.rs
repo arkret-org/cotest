@@ -208,6 +208,65 @@ fn aad_visibility_policy_ceiling_vector_runs_clean() {
         .expect("aad_visibility ceiling vector must pass");
 }
 
+/// 2026-08-17 — account lifecycle is an Account Authority issuer ledger, not a
+/// Principal Control Realm finality domain. Genesis/CAS, exact replay, same-seq
+/// fork, bounded gap recovery, binding rollback, service-key rotation, the
+/// offline/hostile-holder deny invariant and the closed erasure trigger are
+/// cross-object rules no JSON Schema can express.
+#[test]
+fn account_status_issuer_ledger_vector_runs_clean() {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER,
+        "ak.vector.account_status.issuer_ledger.v1"
+    );
+    cotest::conformance::run_account_status_issuer_ledger_vector()
+        .expect("account-status issuer ledger vector must pass");
+}
+
+/// 2026-08-17 — the over-broad `ak.directory-operation-proof-v1` /
+/// `ak.mimi-operation-proof-v1` contexts were replaced by twelve per-object-
+/// family contexts. Domain separation is what stops a proof minted for one
+/// operation from being replayed onto a sibling, and no JSON Schema can
+/// express it.
+#[test]
+fn proof_context_domain_separation_vector_runs_clean() {
+    assert_eq!(
+        cotest::conformance::DIRECTORY_PER_FAMILY_PROOF_CONTEXTS.len(),
+        5
+    );
+    assert_eq!(cotest::conformance::MIMI_PER_FAMILY_PROOF_CONTEXTS.len(), 7);
+    cotest::conformance::run_proof_context_domain_separation_vector()
+        .expect("per-family proof context domain separation must hold");
+}
+
+/// 2026-08-17 — snapshot witness attestations became a typed object family
+/// signed under their own context over a signature-free projection. Quorum
+/// counting, witness authorization and the issuer's binding to the final sorted
+/// list are cross-object rules.
+#[test]
+fn snapshot_witness_quorum_attestation_vector_runs_clean() {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_SNAPSHOT_WITNESS_QUORUM_ATTESTATION,
+        "ak.vector.snapshot.witness_quorum_attestation.v1"
+    );
+    cotest::conformance::run_snapshot_witness_quorum_attestation_vector()
+        .expect("snapshot witness quorum attestation vector must pass");
+}
+
+/// 2026-08-17 — `event-and-patch.md` §4.2.4 pinned against the machine-readable
+/// redactable-field registry: `$op="unset"` on a registered content-carrier
+/// slot is a slot-existence violation, while the metadata members stay
+/// ordinary optional fields.
+#[test]
+fn patch_redactable_content_slot_unset_ban_vector_runs_clean() {
+    assert_eq!(
+        cotest::conformance::VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,
+        "ak.vector.patch.redactable_content_slot_unset_ban.v1"
+    );
+    cotest::conformance::run_patch_redactable_content_slot_unset_ban_vector()
+        .expect("redactable content slot unset ban vector must pass");
+}
+
 #[test]
 fn presence_signal_receiver_vector_suite_runs_clean() {
     run_presence_signal_vector_suite().expect("presence receiver vectors must pass");

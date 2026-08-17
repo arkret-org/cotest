@@ -262,7 +262,10 @@ fn select_descriptor(instance: &Value) -> Option<WebSocketBindingDescriptor> {
 #[derive(Clone, Debug, Deserialize)]
 struct DpopKat {
     proof_schema_ref: String,
-    proof_context: String,
+    /// Namespace of the DPoP replay ledger key. It is a replay-cache namespace,
+    /// not a registered proof context: the WebSocket DPoP proof is a compact
+    /// JWS over its own claims, not an `ak.*-proof-v1` binding transcript.
+    replay_cache_namespace: String,
     base_url: String,
     origin: String,
     connection_id: String,
@@ -346,8 +349,15 @@ fn run_dpop_kat(fixture: &Value, env: &SchemaEnv) -> Result<DpopKat> {
     if kat.expected != "accepted" {
         bail!("{FIXTURE} dpop_kat must be the accepted known answer");
     }
-    if kat.proof_context != WEBSOCKET_AUTH_REPLAY_CONTEXT {
-        bail!("{FIXTURE} dpop_kat proof_context drifted from the SDK replay context");
+    if kat.replay_cache_namespace != WEBSOCKET_AUTH_REPLAY_CONTEXT {
+        bail!("{FIXTURE} dpop_kat replay_cache_namespace drifted from the SDK replay namespace");
+    }
+    if arkret_wire::ProofContextId::from_wire(&kat.replay_cache_namespace).is_some() {
+        bail!(
+            "{FIXTURE} dpop_kat replay namespace `{}` is a registered proof context; the replay \
+             ledger namespace must not be confusable with a proof binding context",
+            kat.replay_cache_namespace
+        );
     }
     if kat.challenge_state.key != [kat.connection_id.clone(), kat.nonce.clone()] {
         bail!("{FIXTURE} challenge_state key must be (connection_id, nonce)");

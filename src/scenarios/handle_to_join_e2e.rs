@@ -100,6 +100,13 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     negative_case_acct_canonical_rejected().context("T3.5 negative — acct: as canonical handle")?;
     negative_case_did_document_fallback_rejected()
         .context("T3.5 negative — DID Document fallback masquerades as handle candidate")?;
+    // The directory leg of this chain is reached through a requester-signed
+    // directory operation, and every directory request family has its own
+    // registered proof context. A proof minted for one family and replayed onto
+    // a sibling operation MUST be refused even after its `payload_digest` is
+    // re-pointed at the target body, so the digest gate is not what rejects it.
+    crate::conformance::run_proof_context_domain_separation_vector()
+        .context("T3.5 negative — cross-family directory/MIMI proof replay")?;
 
     // 3. Best-effort live-stack probe. If the full joint service stack happens to be available
     //    (COAUTH_BIN + SOLAND_BIN + TEABAY_BIN

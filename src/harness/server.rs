@@ -1310,9 +1310,7 @@ fn test_trust_domain(name: &str) -> String {
     )
 }
 
-async fn fetch_service_identity(
-    base_url: &Url,
-) -> Result<(DidCoreId, DidFullId, TrustDomainId)> {
+async fn fetch_service_identity(base_url: &Url) -> Result<(DidCoreId, DidFullId, TrustDomainId)> {
     let url = base_url.join("/_arkret/describe")?;
     let response = probe_http_client()?
         .get(url.clone())

@@ -398,7 +398,38 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
     }))?;
     let reason = Some("operator-request");
     let baseline = challenge.delete_intent_digest(reason)?.to_string();
+
+    // The transcript binds the delete-intent family's own registered context.
+    // `key-management.md` §7.8.1 gives the deletion authority its own object
+    // family, so a signature minted under any other context signs different
+    // bytes and can never be replayed onto a delete.
+    let transcript = challenge.delete_intent_transcript(reason);
+    let context = transcript
+        .get("context")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("backup delete-intent transcript carries no context"))?;
+    if context != arkret_wire::ProofContextId::KEY_BACKUP_DELETE_PROOF_V1 {
+        bail!(
+            "backup delete-intent transcript signs under `{context}`, the registered family \
+             context is `{}`",
+            arkret_wire::ProofContextId::KEY_BACKUP_DELETE_PROOF_V1
+        );
+    }
+    if arkret_wire::ProofContextId::from_wire(context).is_none() {
+        bail!("backup delete-intent context `{context}` is not a registered proof context");
+    }
+    let mut foreign_context = transcript.clone();
+    foreign_context["context"] = json!(arkret_wire::ProofContextId::AUTHORIZATION_LEASE_PROOF_V1);
+    let foreign_context_digest = arkret_canonical::canonical_sha256(&foreign_context)?;
+    if foreign_context_digest == baseline {
+        bail!(
+            "swapping the delete-intent context did not change the signed transcript; the context \
+             is not part of the signed bytes"
+        );
+    }
+
     let mut mutations = Vec::new();
+    mutations.push(foreign_context_digest);
     let mut backup = serde_json::to_value(&challenge)?;
     backup["backup_id"] = json!("ak:backup:0196419b-0000-7000-8000-000000000002");
     mutations.push(

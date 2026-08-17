@@ -25,6 +25,7 @@ pub fn run_sync_fixture_suite() -> Result<()> {
     validate_strand_discussion_timeline(&value)?;
     validate_snapshot_frontier_recovery(&value)?;
     validate_snapshot_inclusion_challenge(&value)?;
+    super::snapshot_witness_quorum::run_snapshot_witness_quorum_attestation_vector()?;
     validate_e2ee_pending(&value)?;
     validate_realm_actor_frontier_vectors(&value)?;
     run_stream_frame_sequence_vector()?;

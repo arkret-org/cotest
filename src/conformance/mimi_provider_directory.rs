@@ -101,6 +101,86 @@ fn validate_directory(
     Ok(())
 }
 
+/// The signed projection binds the provider directory's own registered
+/// object-family context. `mimi-interop.md` §5.1 gives every MIMI family its
+/// own context, so this value is what keeps a provider-directory signature from
+/// being replayed onto a sibling MIMI operation.
+fn assert_signed_projection_context(directory: &ProviderDirectory) -> Result<()> {
+    let context = directory
+        .unsigned_projection()
+        .get("context")
+        .and_then(serde_json::Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("MIMI provider-directory projection carries no context"))?;
+    if context != arkret_wire::ProofContextId::MIMI_PROVIDER_DIRECTORY_PROOF_V1 {
+        bail!(
+            "MIMI provider-directory projection signs under `{context}`, the registered family \
+             context is `{}`",
+            arkret_wire::ProofContextId::MIMI_PROVIDER_DIRECTORY_PROOF_V1
+        );
+    }
+    if arkret_wire::ProofContextId::from_wire(&context).is_none() {
+        bail!("MIMI provider-directory context `{context}` is not a registered proof context");
+    }
+    Ok(())
+}
+
+/// A signature minted over the same projection under a different `context`
+/// MUST be rejected.
+///
+/// The proof keeps the real projection's `payload_digest`, so the digest gate
+/// admits it and the rejection can only come from the domain-separated
+/// transcript. Without that the case would only be re-testing the digest.
+fn assert_foreign_context_signature_is_rejected(
+    directory: &ProviderDirectory,
+    key: &ed25519_dalek::VerifyingKey,
+) -> Result<()> {
+    let mut forged_projection = directory.unsigned_projection();
+    forged_projection
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("MIMI provider-directory projection is not a JSON object"))?
+        .insert(
+            "context".to_owned(),
+            serde_json::Value::String(
+                arkret_wire::ProofContextId::MIMI_KEY_MATERIAL_OUTCOME_PROOF_V1.to_owned(),
+            ),
+        );
+    let forged_bytes = arkret_canonical::canonical_json_bytes(&forged_projection)?;
+    let authentic_bytes = directory.unsigned_projection_bytes()?;
+    if forged_bytes == authentic_bytes {
+        bail!("the MIMI provider-directory context is not part of the signed projection bytes");
+    }
+
+    let service_full_id = DidFullId::new("did:webvh:z6mkfixture:provider.example")?;
+    let signer = Ed25519PayloadSigner::from_did_key_seed(
+        [0x51; 32],
+        service_full_id,
+        directory.proof.0.verification_method.clone(),
+    );
+    let forged_signature = signer.sign_payload(&forged_bytes)?;
+
+    let mut forged = directory.clone();
+    forged.proof = ProviderDirectoryProof(PayloadProof {
+        kind: "detached_jws".to_owned(),
+        verification_method: forged_signature.verification_method,
+        // Keep the authentic digest so the digest gate is not the reason.
+        payload_digest: directory.proof.0.payload_digest.clone(),
+        created_at: forged_signature.created_at,
+        domain: None,
+        audience: None,
+        proof_purpose: None,
+        jws: forged_signature.jws,
+    });
+    if validate_directory(&forged, forged.proof.0.created_at, key).is_ok() {
+        bail!(
+            "a provider-directory signature minted under `{}` was accepted; the per-family MIMI \
+             contexts do not separate the two transcripts",
+            arkret_wire::ProofContextId::MIMI_KEY_MATERIAL_OUTCOME_PROOF_V1
+        );
+    }
+    Ok(())
+}
+
 fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)> {
     let service_full_id = DidFullId::new("did:webvh:z6mkfixture:provider.example")?;
     let service_id =
@@ -192,6 +272,8 @@ pub fn run_mimi_provider_directory_signature_vector() -> Result<()> {
     }
     let (directory, key) = signed_directory()?;
     validate_directory(&directory, directory.proof.0.created_at, &key)?;
+    assert_signed_projection_context(&directory)?;
+    assert_foreign_context_signature_is_rejected(&directory, &key)?;
 
     for mutate in [
         |value: &mut ProviderDirectory| value.mimi.endpoints[0].relative_path.push_str("/tampered"),

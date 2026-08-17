@@ -14,21 +14,37 @@ use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_STATE_ROOT_INCREMENTAL: &str = "ak.vector.state_root.incremental.v1";
 pub const VECTOR_ID_STRAND_TRACKS_UPDATE_ATOMIC: &str = "ak.vector.strand_tracks_update.atomic.v1";
+pub const VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN: &str =
+    "ak.vector.patch.redactable_content_slot_unset_ban.v1";
 
 pub const ALL_STATE_REDUCER_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_STATE_ROOT_INCREMENTAL,
     VECTOR_ID_STRAND_TRACKS_UPDATE_ATOMIC,
+    VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,
 ];
 
 const STATE_REDUCER_HARDENING_FIXTURE_FILE: &str = "state-reducer-hardening-fixture.json";
 const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cba_lattice.v1";
+const STATE_REDUCER_HARDENING_SUITE_ENTRYPOINT: &str = "ak.suite.reducer.hardening.v1";
 const STRAND_TRACKS_CELL_FAMILY: &str = arkret_wire::CellFamilyId::STRAND_TRACKS_V1;
 
 pub fn run_state_reducer_hardening_fixture_suite() -> Result<()> {
     let fixture = state_reducer_hardening_fixture()?;
     run_state_root_incremental_case(case(&fixture, VECTOR_ID_STATE_ROOT_INCREMENTAL)?)?;
     run_strand_tracks_update_atomic_case(case(&fixture, VECTOR_ID_STRAND_TRACKS_UPDATE_ATOMIC)?)?;
+    run_redactable_content_slot_unset_ban_case(case(
+        &fixture,
+        VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,
+    )?)?;
     Ok(())
+}
+
+pub fn run_patch_redactable_content_slot_unset_ban_vector() -> Result<()> {
+    let fixture = state_reducer_hardening_fixture()?;
+    run_redactable_content_slot_unset_ban_case(case(
+        &fixture,
+        VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,
+    )?)
 }
 
 pub fn run_state_root_incremental_vector() -> Result<()> {
@@ -51,6 +67,16 @@ fn state_reducer_hardening_fixture() -> Result<Value> {
 fn validate_state_reducer_fixture_metadata(fixture: &Value) -> Result<()> {
     if fixture.get("suite").and_then(Value::as_str) != Some("state_reducer_hardening") {
         bail!("state reducer hardening fixture suite drifted");
+    }
+    if fixture
+        .pointer("/runner/entrypoint")
+        .and_then(Value::as_str)
+        != Some(STATE_REDUCER_HARDENING_SUITE_ENTRYPOINT)
+    {
+        bail!(
+            "state reducer hardening fixture runner entrypoint is not \
+             {STATE_REDUCER_HARDENING_SUITE_ENTRYPOINT}"
+        );
     }
 
     let covers = fixture
@@ -657,6 +683,301 @@ fn valid_track_key(key: &str) -> bool {
         return false;
     }
     chars.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
+}
+
+// ── `ak.vector.patch.redactable_content_slot_unset_ban.v1` ─────────────────
+//
+// `event-and-patch.md` §4.2.4 is a slot-existence rule, not a capability
+// boundary: absence of a content slot on a materialized object is reserved for
+// "never authored" and "cleared by redaction", so an ordinary update MUST NOT
+// remove it. The normative path set is the machine-readable
+// `registry/redactable-field-registry.json`, which is why this vector reads the
+// registry instead of restating a list, and why `metadata.title` /
+// `metadata.summary` / `metadata.fields.*` — which are ordinary optional
+// members — must keep accepting `$op="unset"` or an optional field would become
+// write-once.
+
+const REDACTABLE_FIELD_REGISTRY_REF: &str = "registry/redactable-field-registry.json";
+const REDACTABLE_PATH_SOURCE: &str = "registry/redactable-field-registry.json#/redactable_fields";
+
+/// Object refs the object-patch payload schema accepts, one per registered
+/// content-carrier object kind.
+const PATCH_TARGET_REFS: &[(&str, &str)] = &[
+    (
+        "message",
+        "ak:message:AV624IkuHj3HmxAYE6uyYmBa4Est3gGGdnOsjn71z5L2",
+    ),
+    (
+        "morph",
+        "ak:morph:ASc_XP_IqOBAY6GgbPMLFCeZmi0uBNaWvHazHgmn-B8K",
+    ),
+    (
+        "strand",
+        "ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",
+    ),
+];
+
+fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
+    let input = case
+        .get("input")
+        .ok_or_else(|| anyhow!("redactable slot case missing input"))?;
+    if required_str(input, "path_source")? != REDACTABLE_PATH_SOURCE {
+        bail!(
+            "redactable slot vector no longer derives its path set from \
+             {REDACTABLE_PATH_SOURCE}; a hand-maintained list would drift from the registry"
+        );
+    }
+    let registry = super::load_artifact_json(REDACTABLE_FIELD_REGISTRY_REF)?;
+    let registered = registered_redactable_slots(&registry)?;
+    let cases = pointer_array(input, "/cases")?;
+
+    let mut covered_slots = BTreeSet::new();
+    let mut saw_empty_body_set = false;
+    let mut metadata_accepts = BTreeSet::new();
+    for entry in cases {
+        let name = required_str(entry, "name")?;
+        let object_kind = required_str(entry, "object_kind")?;
+        let event_kind = required_str(entry, "event_kind")?;
+        let patch: arkret_wire::patch::Patch =
+            serde_json::from_value(entry.get("patch").cloned().ok_or_else(|| {
+                anyhow!("redactable slot case `{name}` carries no ak.schema.patch.v1 body")
+            })?)?;
+        let paths = patch.iter().map(|(path, _)| path).collect::<Vec<_>>();
+        let [path] = paths.as_slice() else {
+            bail!("redactable slot case `{name}` must address exactly one path");
+        };
+        let path = (*path).to_owned();
+
+        let prestate = redactable_prestate(object_kind, &path);
+        let observed = patch.apply(&prestate);
+        let payload = arkret_models_collaboration::object_patch::ObjectPatchPayload::for_target(
+            patch_target_ref(object_kind)?,
+            patch.clone(),
+        );
+
+        let decision = entry
+            .pointer("/expected/decision")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("redactable slot case `{name}` has no expected.decision"))?;
+        match decision {
+            "reject" => {
+                let reason_code = entry
+                    .pointer("/expected/reason_code")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| {
+                        anyhow!("redactable slot rejection `{name}` names no reason_code")
+                    })?;
+                if reason_code != arkret_wire::ReasonCode::PATCH_UNSET_REDACTABLE_FIELD {
+                    bail!(
+                        "redactable slot rejection `{name}` names `{reason_code}`, the registered \
+                         reason is `{}`",
+                        arkret_wire::ReasonCode::PATCH_UNSET_REDACTABLE_FIELD
+                    );
+                }
+                if entry.pointer("/expected/reason").and_then(Value::as_str)
+                    != Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION)
+                {
+                    bail!("redactable slot rejection `{name}` is not a schema_violation");
+                }
+                let error = observed.err().ok_or_else(|| {
+                    anyhow!(
+                        "`$op=\"unset\"` on registered content slot `{path}` was applied; the \
+                         cleared slot is now indistinguishable from a redacted one"
+                    )
+                })?;
+                if !error.to_string().contains(reason_code) {
+                    bail!("redactable slot rejection `{name}` reported `{error}`");
+                }
+                if payload.is_ok() {
+                    bail!(
+                        "the object-patch payload accepted `{path}` unset for `{name}`; the \
+                         payload and container gates disagree"
+                    );
+                }
+                if entry
+                    .pointer("/expected/object_unchanged")
+                    .and_then(Value::as_bool)
+                    != Some(true)
+                {
+                    bail!("redactable slot rejection `{name}` does not assert object_unchanged");
+                }
+                assert_ordinary_update_is_not_the_redaction_event(
+                    &registry,
+                    object_kind,
+                    &path,
+                    event_kind,
+                )?;
+                covered_slots.insert((object_kind.to_owned(), path.clone()));
+            }
+            "accept" => {
+                let post = observed.map_err(|error| {
+                    anyhow!("redactable slot case `{name}` must be accepted, got `{error}`")
+                })?;
+                payload.map_err(|error| {
+                    anyhow!(
+                        "redactable slot case `{name}` was refused by the object-patch payload: \
+                         `{error}`"
+                    )
+                })?;
+                if let Some(state) = entry
+                    .pointer("/expected/state_unchanged")
+                    .and_then(Value::as_str)
+                    && post.get("state").and_then(Value::as_str) != Some(state)
+                {
+                    bail!("redactable slot case `{name}` moved the object out of `{state}`");
+                }
+                if entry
+                    .pointer("/expected/content_slot_present")
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                {
+                    if post.get(path.as_str()).is_none() {
+                        bail!(
+                            "redactable slot case `{name}` cleared `{path}` through `$op=\"set\"`; \
+                             the non-terminal clear must keep the slot present"
+                        );
+                    }
+                    saw_empty_body_set = true;
+                }
+                if path.starts_with("metadata") {
+                    if post
+                        .pointer(&format!("/{}", path.replace('.', "/")))
+                        .is_some()
+                    {
+                        bail!(
+                            "redactable slot case `{name}` left `{path}` in place; `$op=\"unset\"` \
+                             is the only non-terminal clear path for an ordinary optional member"
+                        );
+                    }
+                    metadata_accepts.insert(path.clone());
+                }
+            }
+            other => bail!("redactable slot case `{name}` has unknown decision `{other}`"),
+        }
+    }
+
+    for slot in &registered {
+        if !covered_slots.contains(slot) {
+            bail!(
+                "registered redactable slot `{}.{}` has no `$op=\"unset\"` rejection case",
+                slot.0,
+                slot.1
+            );
+        }
+    }
+    if covered_slots.len() != registered.len() {
+        bail!(
+            "the redactable slot vector drives {} slots, the registry publishes {}",
+            covered_slots.len(),
+            registered.len()
+        );
+    }
+    if !saw_empty_body_set {
+        bail!(
+            "the redactable slot vector lost its `$op=\"set\"` empty-body case; without it nothing \
+             proves the rule is slot existence rather than a capability boundary"
+        );
+    }
+    if metadata_accepts.len() < 2 {
+        bail!(
+            "the redactable slot vector must accept `$op=\"unset\"` on metadata.summary and on a \
+             metadata.fields.* member; it covers {:?}",
+            metadata_accepts
+        );
+    }
+    Ok(())
+}
+
+/// `(object_kind, path)` rows of the redactable-field registry.
+fn registered_redactable_slots(registry: &Value) -> Result<BTreeSet<(String, String)>> {
+    let rows = registry
+        .get("redactable_fields")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("redactable-field registry has no redactable_fields[]"))?;
+    let mut slots = BTreeSet::new();
+    for row in rows {
+        slots.insert((
+            required_str(row, "object_kind")?.to_owned(),
+            required_str(row, "path")?.to_owned(),
+        ));
+    }
+    if slots.is_empty() {
+        bail!("redactable-field registry publishes no content-carrier slots");
+    }
+    Ok(slots)
+}
+
+/// The rejected patch is an *ordinary* update, not the terminal redaction the
+/// registry reserves for the same slot. Without this the vector would pass even
+/// if the fixture quietly moved to the redaction event kind.
+fn assert_ordinary_update_is_not_the_redaction_event(
+    registry: &Value,
+    object_kind: &str,
+    path: &str,
+    event_kind: &str,
+) -> Result<()> {
+    let row = registry
+        .get("redactable_fields")
+        .and_then(Value::as_array)
+        .and_then(|rows| {
+            rows.iter().find(|row| {
+                row.get("object_kind").and_then(Value::as_str) == Some(object_kind)
+                    && row.get("path").and_then(Value::as_str) == Some(path)
+            })
+        })
+        .ok_or_else(|| anyhow!("`{object_kind}.{path}` is not a registered redactable slot"))?;
+    if required_str(row, "non_terminal_clear_op")? != "set" {
+        bail!("`{object_kind}.{path}` no longer declares `set` as its non-terminal clear op");
+    }
+    let terminal = row
+        .get("terminal_clear_event_kinds")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("`{object_kind}.{path}` declares no terminal clear event kinds"))?;
+    if terminal
+        .iter()
+        .any(|kind| kind.as_str() == Some(event_kind))
+    {
+        bail!(
+            "`{object_kind}.{path}` unset case uses the terminal redaction kind `{event_kind}`; \
+             the vector must reject an ordinary update"
+        );
+    }
+    if EventKind::try_new(event_kind).is_none() {
+        bail!("redactable slot case names an unregistered event kind `{event_kind}`");
+    }
+    Ok(())
+}
+
+fn patch_target_ref(object_kind: &str) -> Result<&'static str> {
+    PATCH_TARGET_REFS
+        .iter()
+        .find(|(kind, _)| *kind == object_kind)
+        .map(|(_, target_ref)| *target_ref)
+        .ok_or_else(|| anyhow!("no object-patch target ref for object kind `{object_kind}`"))
+}
+
+/// A materialized object carrying the addressed slot plus the ordinary optional
+/// metadata members, so an accepted `unset` really removes something.
+fn redactable_prestate(object_kind: &str, path: &str) -> Value {
+    let mut object = json!({
+        "kind": object_kind,
+        "state": "active",
+        "metadata": {
+            "title": "authored title",
+            "summary": "authored summary",
+            "fields": { "dropped_field": "authored value" }
+        }
+    });
+    let slot = path.split('.').next().unwrap_or(path);
+    if slot == "encrypted_content" {
+        object["encrypted_content"] = json!({
+            "algorithm": "mls_application_v1",
+            "ciphertext": "Y2lwaGVydGV4dA"
+        });
+    } else {
+        object["content"] = json!({ "kind": "ak.content.text", "body": "authored body" });
+    }
+    object
 }
 
 fn pointer_array<'a>(value: &'a Value, pointer: &str) -> Result<&'a [Value]> {

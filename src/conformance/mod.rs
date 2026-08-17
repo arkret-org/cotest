@@ -1,4 +1,5 @@
 mod aad_visibility_ceiling;
+mod account_status_issuer_ledger;
 mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
 mod agent_participation;
@@ -63,6 +64,7 @@ mod privacy_security;
 mod private_chat_privacy;
 mod profile_matrix;
 mod profile_registry;
+mod proof_context_domain_separation;
 mod protocol_gap_closure;
 mod push_rule_core;
 mod read_receipt_signal;
@@ -85,6 +87,7 @@ mod session_grant_issuer_ledger;
 mod sidecar_vectors;
 mod signal_federation;
 mod signal_sequence_high_water;
+mod snapshot_witness_quorum;
 mod spec_business_flow;
 mod state_reducer_hardening;
 mod state_resolution;
@@ -110,6 +113,9 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 pub use aad_visibility_ceiling::{
     REASON_AAD_VISIBILITY_POLICY_VIOLATION, VECTOR_ID_AAD_VISIBILITY_POLICY_CEILING,
     run_aad_visibility_policy_ceiling_vector,
+};
+pub use account_status_issuer_ledger::{
+    VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
 };
 pub use agent_membership_cascade::run_agent_membership_cascade_suite;
 pub use agent_mls_keypackage_authorization::run_agent_mls_keypackage_authorization_vector;
@@ -202,9 +208,9 @@ pub use did_binding_digests::{
 pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
 pub use direct_conversation_flow::run_direct_conversation_flow_suite;
 pub use downstream_impact::{
-    run_account_status_authority_binding_vector, run_downstream_impact_contract_suite,
-    run_error_status_context_vector, run_moderation_dismiss_and_concurrent_fold_vector,
-    run_policy_transcript_tamper_vector, run_private_view_account_data_vector,
+    run_downstream_impact_contract_suite, run_error_status_context_vector,
+    run_moderation_dismiss_and_concurrent_fold_vector, run_policy_transcript_tamper_vector,
+    run_private_view_account_data_vector,
 };
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
@@ -353,6 +359,10 @@ pub use profile_registry::{
     ProfileGateEntry, ProfileGateReport, ProfileGateStatus, build_profile_gate_report,
     render_profile_gate_report_json, render_profile_gate_report_markdown,
 };
+pub use proof_context_domain_separation::{
+    DIRECTORY_PER_FAMILY_PROOF_CONTEXTS, MIMI_PER_FAMILY_PROOF_CONTEXTS,
+    run_proof_context_domain_separation_vector,
+};
 pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
 pub use push_rule_core::{
     run_hardened_mention_routing_hint_vector, run_push_rule_client_only_vector,
@@ -415,9 +425,13 @@ pub use signal_federation::{
     run_signal_federation_fixture_suite,
 };
 pub use signal_sequence_high_water::run_signal_sequence_high_water_suite;
+pub use snapshot_witness_quorum::{
+    VECTOR_ID_SNAPSHOT_WITNESS_QUORUM_ATTESTATION, run_snapshot_witness_quorum_attestation_vector,
+};
 pub use spec_business_flow::run_spec_business_flow_coverage_suite;
 pub use state_reducer_hardening::{
-    ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, run_state_reducer_hardening_fixture_suite,
+    ALL_STATE_REDUCER_HARDENING_VECTOR_IDS, VECTOR_ID_PATCH_REDACTABLE_CONTENT_SLOT_UNSET_BAN,
+    run_patch_redactable_content_slot_unset_ban_vector, run_state_reducer_hardening_fixture_suite,
     run_state_root_incremental_vector, run_strand_tracks_update_atomic_vector,
 };
 pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};

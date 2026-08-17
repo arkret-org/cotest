@@ -147,7 +147,7 @@ fn reduce_membership_mls(input: &KernelGateInput) -> KernelGateOutcome {
         .unwrap_or(0);
     let expected_previous = input
         .payload
-        .pointer("/commit/expected_prev_epoch")
+        .pointer("/commit/base_epoch")
         .and_then(Value::as_u64);
     if expected_previous != Some(current_epoch) {
         return KernelGateOutcome::error("state_mismatch", "mls_epoch_skew");

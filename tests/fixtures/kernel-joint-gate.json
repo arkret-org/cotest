@@ -130,7 +130,9 @@
             "creator_principal_id": "ak:did_core:web:alice.example",
             "creator_device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
             "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+            "group_info_ref": "ak:blob:sha256:3333333333333333333333333333333333333333333333333333333333333333",
             "group_info_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "ratchet_tree_ref": "ak:blob:sha256:4444444444444444444444444444444444444444444444444444444444444444",
             "ratchet_tree_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
             "governance_binding": {
               "binding_version": 1,
@@ -150,11 +152,13 @@
             "created_at": "2026-07-28T00:00:00.000Z"
           },
           "commit": {
-            "group_id": "ak:mls_group:abc",
-            "expected_prev_epoch": 0,
+            "mls_group_id": "ak:mls_group:abc",
+            "base_epoch": 0,
+            "base_epoch_ref": "ak:event:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
+            "proposal_refs": [],
             "next_epoch": 1,
-            "leader_actor_id": "ak:did_core:web:alice.example",
             "commit_bytes_b64": "b3BhcXVlLWNvbW1pdA",
+            "commit_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
             "governance_binding": {
               "binding_version": 1,
               "encoding_profile": "cbor-deterministic-rfc8949-v1",
