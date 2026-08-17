@@ -8,7 +8,7 @@
 // HTTP face: `/_arkret/self/circles` (now a normative Arkret surface — the
 // `ak.self.circle.*` operations are published in the arkret-spec OpenAPI
 // artifact, operation registry, and contract catalog; see helpers/circle-api.ts
-// header for the full reasoning. The legacy `/_soland` mirror was retired).
+// header for the full reasoning. `/_soland/self/circles` is not mounted).
 // Spec refs: AKP-0007 — `ak.circle.*` data model, reducer invariant
 // `Circle.members ⊆ Realm.members` (`circle_member_must_be_realm_member`), and
 // §8 `ak.circle.member.manage` capability for cross-actor adds.

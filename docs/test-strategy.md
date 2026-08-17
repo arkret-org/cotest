@@ -236,7 +236,7 @@ The coauth/soland test mapping is fixed by the runner:
   browser
 - event proof mode: `COTEST_EVENT_PROOF_MODE` selects the envelope proof the
   helpers sign with (`detached-jws` default = real detached-JWS fixture;
-  `dev-proof` = legacy development placeholder, dev builds only), and
+  `dev-proof` = development placeholder, dev builds only), and
   `COTEST_FORBID_DEV_PROOF=1` hard-fails any dev-proof selection so
   production-shaped runs cannot regress onto the placeholder (implementation:
   `e2e/helpers/soland-api.ts` `eventProofMode()`)

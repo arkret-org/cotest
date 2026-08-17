@@ -6,8 +6,8 @@
 //! never re-implements the organization-side invariants:
 //!
 //!   * `arkret_schema::payloads` strong [`EventPayloadValidatorCatalog`] dispatches
-//!     `ak.realm.organization` to the `realm_organization_payload` def (no fallback to a legacy `{
-//!     organization_ref }` shape).
+//!     `ak.realm.organization` to the `realm_organization_payload` def (the singleton `{
+//!     organization_ref }` shape is not accepted).
 //!   * `arkret_policy::verify_realm_organization_statement` enforces the issuer-role / delegation /
 //!     proof / validity-window / scope / revocation invariants, fail-closed.
 //!
@@ -96,7 +96,7 @@ fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() ->
         catalog
             .validate_payload(arkret_wire::event_kind_str::REALM_ORGANIZATION, payload)
             .with_context(|| format!("strong schema must accept {name}"))?;
-        // Strong-typed deserialization round-trip (rejects the legacy shape).
+        // Strong-typed deserialization round-trip (rejects the singleton shape).
         let _typed: RealmOrganizationPayload = serde_json::from_value(payload.clone())
             .with_context(|| {
                 format!("vector {name} must deserialize to RealmOrganizationPayload")
@@ -133,18 +133,18 @@ fn coverage_fixture_active_and_revoked_realm_organization_payloads_validate() ->
 }
 
 #[test]
-fn coverage_fixture_drops_legacy_organization_ref_shape() {
+fn coverage_fixture_rejects_singleton_organization_ref_shape() {
     let catalog = strong_catalog();
-    let legacy = serde_json::json!({ "organization_ref": "did:web:org.example" });
+    let singleton = serde_json::json!({ "organization_ref": "did:web:org.example" });
     assert!(
         catalog
-            .validate_payload(arkret_wire::event_kind_str::REALM_ORGANIZATION, &legacy)
+            .validate_payload(arkret_wire::event_kind_str::REALM_ORGANIZATION, &singleton)
             .is_err(),
-        "legacy {{ organization_ref }} shape must be rejected by the strong validator"
+        "singleton {{ organization_ref }} shape must be rejected by the strong validator"
     );
     assert!(
-        serde_json::from_value::<RealmOrganizationPayload>(legacy).is_err(),
-        "legacy {{ organization_ref }} shape must not deserialize to RealmOrganizationPayload"
+        serde_json::from_value::<RealmOrganizationPayload>(singleton).is_err(),
+        "singleton {{ organization_ref }} shape must not deserialize to RealmOrganizationPayload"
     );
 }
 

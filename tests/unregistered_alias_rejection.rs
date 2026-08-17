@@ -46,7 +46,7 @@ struct ObjectShape {
 }
 
 #[test]
-fn resource_selector_rejects_legacy_schema_id_fields() {
+fn resource_selector_rejects_unregistered_schema_id_fields() {
     let realm_id = "ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_";
     let schema_ref = "ak.schema.strand.v1";
 
@@ -60,7 +60,7 @@ fn resource_selector_rejects_legacy_schema_id_fields() {
     assert_eq!(encoded.get("schema_ref"), Some(&json!(schema_ref)));
     assert_eq!(encoded.get("schema_id"), None);
 
-    for legacy in [
+    for unregistered in [
         json!({
             "kind": "schema",
             "realm_id": realm_id,
@@ -73,18 +73,18 @@ fn resource_selector_rejects_legacy_schema_id_fields() {
             "schema_id": schema_ref
         }),
     ] {
-        let error = ResourceSelector::from_spec_value(&legacy)
+        let error = ResourceSelector::from_spec_value(&unregistered)
             .expect_err("schema_id must never be accepted as an alias")
             .to_string();
         assert!(
             error.contains("schema_id"),
-            "legacy-field rejection should identify schema_id, got: {error}"
+            "unregistered-field rejection should identify schema_id, got: {error}"
         );
     }
 }
 
 #[test]
-fn simple_mutations_reject_legacy_success_discriminators() -> Result<()> {
+fn simple_mutations_reject_unregistered_success_discriminators() -> Result<()> {
     let registry: OperationRegistry = load_artifact(OPERATION_REGISTRY)?;
     let schema_index: OperationSchemaIndex = load_artifact(OPERATION_SCHEMA_INDEX)?;
     let registry_by_id = registry
@@ -149,7 +149,7 @@ fn simple_mutations_reject_legacy_success_discriminators() -> Result<()> {
                 .collect::<Vec<_>>();
             assert!(
                 !accepts_top_level_fields(shape, &alias_instead_of_ok),
-                "{} must reject legacy {alias} in place of ok",
+                "{} must reject unregistered {alias} in place of ok",
                 operation.operation_id
             );
         }
@@ -233,7 +233,7 @@ fn assert_typed_business_value_allowed(
     let fields = object.keys().map(String::as_str).collect::<Vec<_>>();
     assert!(
         accepts_top_level_fields(shape, &fields),
-        "typed business fields for {operation_id} must remain distinct from rejected legacy fields"
+        "typed business fields for {operation_id} must remain distinct from rejected unregistered fields"
     );
     if let Some(accepted) = object.get("accepted") {
         assert!(

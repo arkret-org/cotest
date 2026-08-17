@@ -874,8 +874,8 @@ export function decodeLiveKitToken(
   const segments = backendToken.split(".");
   expect(segments.length, "livekit token is a standard 3-segment JWT").toBe(3);
   // bindings/livekit.md §2: backend_token is a real LiveKit JWT
-  // (base64url(header).base64url(payload).base64url(HS256 sig)) — no legacy
-  // `livekit.` envelope prefix. Header MUST be {alg:HS256, typ:JWT}.
+  // (base64url(header).base64url(payload).base64url(HS256 sig)) — a wrapping
+  // `livekit.` envelope prefix is not accepted. Header MUST be {alg:HS256, typ:JWT}.
   const header = JSON.parse(
     Buffer.from(segments[0], "base64url").toString("utf8"),
   ) as Record<string, unknown>;

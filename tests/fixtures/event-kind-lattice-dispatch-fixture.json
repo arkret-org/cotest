@@ -56,7 +56,7 @@
     {
       "name": "cell_family_outside_ak_component_namespace_rejected",
       "scope": "synthetic",
-      "drift": { "kind": "wrong_namespace", "cell_family": "ak.cell.legacy.v1" },
+      "drift": { "kind": "wrong_namespace", "cell_family": "ak.cell.unregistered.v1" },
       "expected": { "outcome": "reject", "reason_code": "cell_family_invalid_namespace" }
     },
     {

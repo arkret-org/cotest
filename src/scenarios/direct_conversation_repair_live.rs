@@ -67,7 +67,7 @@ fn canonical_now() -> DateTime<Utc> {
 }
 
 fn fixture_events(
-    trust_domain: arkret_wire::TypedTrustDomainId,
+    trust_domain: arkret_wire::TrustDomainId,
     requester: &DidCoreId,
     recipient: &DidCoreId,
 ) -> Result<FixtureEvents> {

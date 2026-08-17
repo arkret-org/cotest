@@ -155,7 +155,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
     let upload: KeyPackagesUploadUnsignedRequest =
         serde_json::from_value(upload_case["unsigned_request"].clone())?;
     let signature = sign_keypackages_upload_request(&upload, kid, &seed)?;
-    let legacy_input = [
+    let unregistered_domain_input = [
         b"ak.keypackage-upload-v1\n".as_slice(),
         upload_case["canonical_jcs"]
             .as_str()
@@ -163,7 +163,10 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
             .as_bytes(),
     ]
     .concat();
-    assert!(verify_keypackage_signing_input(&public_key, kid, &legacy_input, &signature).is_err());
+    assert!(
+        verify_keypackage_signing_input(&public_key, kid, &unregistered_domain_input, &signature)
+            .is_err()
+    );
     Ok(())
 }
 

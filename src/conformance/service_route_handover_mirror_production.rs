@@ -191,7 +191,7 @@ impl ProductionFetcher {
             },
             http_json_base_url: record.record.base_url.clone(),
             route_binding_digest: record.record.describe_digest.clone(),
-            trust_domain: arkret_wire::TypedTrustDomainId::new("ak:trust_domain:route.example")
+            trust_domain: arkret_wire::TrustDomainId::new("ak:trust_domain:route.example")
                 .expect("fixed trust domain"),
             protocol_version: "1".to_owned(),
         }

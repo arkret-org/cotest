@@ -110,7 +110,6 @@ export async function createSharedRealmViaApi(
   owner: JointUser,
   ownerToken: string,
   member: JointUser,
-  memberToken: string,
   opts: Omit<ApiRealmOpts, "invitees">,
 ): Promise<string> {
   const realmId = await createRealmViaApi(request, ownerToken, {
@@ -133,10 +132,7 @@ export async function createSharedRealmViaApi(
     }),
     { server: opts.server, context: `join ${member.did}` },
   );
-  // The helper writes the member join as the realm owner; the member token is
-  // retained for legacy call-site symmetry until those tests move to direct
-  // owner/member action helpers.
-  void memberToken;
+  // The helper writes the member join as the realm owner.
   return realmId;
 }
 

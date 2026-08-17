@@ -82,7 +82,6 @@ test.describe("moderation appeal", () => {
       reviewer,
       reviewerToken,
       appellant,
-      appellantToken,
       { title: `appeal ui ${stamp}`, historyVisibility: "world_readable" },
     );
     const decisionNotice = await sendPlaintextMessageViaApi(
@@ -334,7 +333,6 @@ async function createAppealFixture(
     moderator,
     moderatorToken,
     appellant,
-    appellantToken,
     { title: `appeal ${label} ${stamp}`, historyVisibility: "shared" },
   );
   await submitSignedEventApi(

@@ -265,7 +265,7 @@ pub fn run_stream_aead_scheme_closure_vector() -> Result<()> {
     // The typed envelope enum is closed: an unknown scheme id cannot even
     // deserialize, so no decryptor can be constructed for it.
     let mut unknown_scheme = serde_json::to_value(&env)?;
-    unknown_scheme["scheme"] = json!("ak.blob.stream_aead.v2");
+    unknown_scheme["scheme"] = json!("ak.blob.stream_aead.unregistered.v1");
     if serde_json::from_value::<EncryptedAttachment>(unknown_scheme).is_ok() {
         bail!("unknown attachment scheme survived the closed envelope enum");
     }

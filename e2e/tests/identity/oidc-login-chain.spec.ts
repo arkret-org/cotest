@@ -179,8 +179,8 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
   test("3. a dev-login bearer still authenticates the /_arkret/root/* read (no regression)", async ({
     request,
   }) => {
-    // The legacy dev bearer (no DPoP) must keep working on root paths so the
-    // tri-modal inbound contract didn't regress the dev path.
+    // The dev bearer (no DPoP) must keep working on root paths so the
+    // tri-modal inbound contract did not regress the dev path.
     const alice = uniqueUser("oidc-chain-devbearer");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);

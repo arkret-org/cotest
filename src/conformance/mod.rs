@@ -209,10 +209,7 @@ pub use downstream_impact::{
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,
 };
-pub use envelope::{
-    run_container_realm_control_payload_suite, run_deprecated_event_alias_suite,
-    run_event_envelope_fixture_suite,
-};
+pub use envelope::{run_container_realm_control_payload_suite, run_event_envelope_fixture_suite};
 pub use fanout_route_miss::run_fanout_route_miss_suite;
 pub use federation::run_federation_fixture_suite;
 pub use final_conformance_closure::{

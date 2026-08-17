@@ -4310,7 +4310,7 @@ function eventProofMode(): EventProofMode {
   }
   if (mode === "dev-proof" && process.env.COTEST_FORBID_DEV_PROOF === "1") {
     throw new Error(
-      "COTEST_FORBID_DEV_PROOF=1 forbids the legacy dev-proof fixture; set COTEST_EVENT_PROOF_MODE=detached-jws",
+      "COTEST_FORBID_DEV_PROOF=1 forbids the dev-proof fixture; set COTEST_EVENT_PROOF_MODE=detached-jws",
     );
   }
   return mode;

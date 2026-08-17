@@ -103,7 +103,7 @@ fn validate_phase(name: &str, phase: &str, expect: &str, case: &Value) -> Result
         "device_revoke_account_status_lifecycle" => {
             require_expect(name, expect, "pass")?;
             require_operation(case, "device_revoke")?;
-            require_operation(case, "account_status_update")?;
+            require_operation(case, "account_status_record_append")?;
             let device_states = string_array_at(case, "/observed/device_status_sequence", name)?;
             if device_states != ["active", "revoked"] {
                 bail!(
@@ -118,7 +118,7 @@ fn validate_phase(name: &str, phase: &str, expect: &str, case: &Value) -> Result
                 bail!("{name} revoked device session must be inactive");
             }
             let account_states = string_array_at(case, "/observed/account_status_sequence", name)?;
-            for required in ["active", "suspended", "reactivated", "closed"] {
+            for required in ["active", "suspended", "deactivated"] {
                 if !account_states.iter().any(|state| state == required) {
                     bail!("{name} account_status_sequence missing {required}");
                 }

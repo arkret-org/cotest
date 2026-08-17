@@ -194,7 +194,7 @@ If the image already exists:
 
 Always pass `-CargoTestTarget` with `-CargoTestFilter` for target-aware
 scheduling. Filter-only calls remain available temporarily as an explicitly
-reported `legacy-broad-scan` and scan every integration target.
+reported `broad-scan` and scan every integration target.
 
 Inspect or validate a profile without starting the SUT:
 

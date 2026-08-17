@@ -58,7 +58,7 @@
    {
      "morph_id": "<morphId>",
      "from_schema_refs": ["ak.schema.morph.customer_risk.v1"],
-     "to_schema_refs": ["ak.schema.morph.customer_risk.v2"],
+     "to_schema_refs": ["ak.schema.morph.customer_risk_revised.v1"],
      "compatibility_class": "transformation",
      "transformation_rules": [
        { "rule": "ak.transform.bogus.unsupported.v1", "field": "fields.status" }
@@ -72,18 +72,18 @@
    - 若 Realm 未声明 profile → 不论 rule id 是否合法,reducer 都 MUST 用 `morph_schema_refs_transformation_unsupported` 拒绝(spec §4.1 S3)
    - response body **不含** 已 apply 的 Morph echo(reducer 必须在 registration 阶段 fail,不能进入 transformation 执行)
 
-### Phase B — Compatible (additive) migration 接受 + 历史 event 兼容
+### Phase B — additive migration 接受 + 历史 event 按写入时绑定的 schema 校验
 
-6. **alice** 重置一个新 Morph `morphId_B` (同 `R`),`schema_refs = ["ak.schema.morph.customer_risk.v1"]`,写入若干 v1 字段
-7. **alice** 发一条 `ak.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含旧/新 schema(spec §4.1 S2 重叠期声明)
+6. **alice** 重置一个新 Morph `morphId_B` (同 `R`),`schema_refs = ["ak.schema.morph.customer_risk.v1"]`,写入若干 `customer_risk.v1` 定义的字段
+7. **alice** 发一条 `ak.morph.update`,在 `payload` 中把 `schema_refs` 改为 `["ak.schema.morph.customer_risk.v1", "ak.schema.morph.customer_risk.optional_ext.v1"]`(后者只添加 optional 字段 → additive)。该 event 的 `requirements.schema[]` 同时包含变更前与变更后的 schema id(spec §4.1 S2 要求一条 evolution event 同时声明两端)
 8. 断言:
    - HTTP 2xx,Morph 当前 `schema_refs[]` = new set
-   - 后续 `GET /_arkret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,v1 时期写入的字段未被丢弃
+   - 后续 `GET /_arkret/self/realms/${realmId}/morphs/${morphId_B}` 投影成功,按 `customer_risk.v1` 写入的字段未被丢弃
    - audit log(`GET /_soland/self/audit/recent` 或等价)含一条 `schema_evolution` entry,记录 issuer + old/new schema_refs + authorization_ref
 9. **alice** 再发一条 `ak.morph.schema_migrate`,`compatibility_class = "additive"`:
-   - to_schema_refs 在 v2 的 optional 扩展位上再叠一层
+   - to_schema_refs 在 step 7 已加入的 optional 扩展 schema 之上再叠一个 optional-only schema ref
    - 不需要 profile opt-in,reducer MUST 接受(spec §4.1 S3 additive 段)
-10. 断言:HTTP 2xx;并且 spec §4.1 S1 — reader 重放历史 v1 event 时仍按 v1 schema 验证(harness 通过 `GET /_arkret/self/realms/${realmId}/events?morph_id=...` 拉历史,断言 event-level `requirements.schema[]` 与写入时绑定一致,未被静默改写)
+10. 断言:HTTP 2xx;并且 spec §4.1 S1 — reader 重放早先写入的 event 时仍按该 event 自己绑定的 schema 版本验证(harness 通过 `GET /_arkret/self/realms/${realmId}/events?morph_id=...` 拉历史,断言 event-level `requirements.schema[]` 与写入时绑定一致,未被静默改写)
 
 ### Phase C — Breaking / transformation migration 需 profile + capability
 
@@ -118,7 +118,7 @@
 ## Observable assertions (合并清单)
 
 - Phase A:每个 unsupported transformation_rules POST → HTTP 4xx + `morph_schema_refs_transformation_unsupported` 或 `unsupported_transformation_rule`;无 partial echo
-- Phase B:additive `ak.morph.update` schema_refs[] 接受;additive `ak.morph.schema_migrate` 不需 profile;v1 历史 event `requirements.schema[]` 未被 silently rewrite
+- Phase B:additive `ak.morph.update` schema_refs[] 接受;additive `ak.morph.schema_migrate` 不需 profile;早先写入的 event 其 `requirements.schema[]` 未被 silently rewrite
 - Phase C:breaking/transformation 在无 profile 时 reject;Realm 声明 profile + capability 后接受;audit 含 `schema_migration_breaking` marker;撤 capability 后 `capability_denied`
 - Phase D (fixme):`ak.vector.morph.*` fixture 驱动的 transform 投影与 expected_output byte-equal(等 fixture 落地)
 - Phase E (LIVE):`morph-kind-decision-table.json` 与 `ak.profile.morph.schema_migration_transformations.v1` profile 块结构正确解析;`precedence[*].consumed_by` ∩ `MUST_NOT_consume_by` 为空;`required_event_kinds` 含 `ak.morph.schema_migrate`

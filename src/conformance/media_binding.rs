@@ -105,7 +105,7 @@ fn validate_media_binding_fixture_metadata() -> Result<()> {
 
 /// Known media-backend type tags from `ak.realm.media_service.foci[].type`.
 /// Mirrors the Signatures owner's
-/// `arkret_signatures::media::MediaBackendType` enum; kept local so the vector suite runs under
+/// `arkret_signatures::media::MediaBackendKind` enum; kept local so the vector suite runs under
 /// cotest's minimal direct-owner dependency slice.
 const KNOWN_MEDIA_BACKEND_TYPES: &[&str] = &[
     "livekit",
@@ -313,8 +313,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
     for bogus in [
         "",
         "ak.media.participant_binding",
-        "ak.media.participant_binding.v0",
-        "ak.media.participant_binding.v2",
+        "ak.media.participant_binding.unregistered.v1",
     ] {
         if bogus == valid_scheme {
             bail!("participant_binding scheme leak: {bogus}");

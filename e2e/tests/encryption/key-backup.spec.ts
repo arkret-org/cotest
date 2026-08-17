@@ -999,12 +999,12 @@ async function createMlsRecoveryBackupFromPrompt(
     return setupRecoveryKey;
   }
 
-  const legacyPrompt = page.getByTestId("mls-backup-modal");
-  const legacyPromptVisible = await legacyPrompt
+  const backupPrompt = page.getByTestId("mls-backup-modal");
+  const backupPromptVisible = await backupPrompt
     .waitFor({ state: "visible", timeout: 5_000 })
     .then(() => true)
     .catch(() => false);
-  if (!legacyPromptVisible) {
+  if (!backupPromptVisible) {
     if (bootstrapRecoveryKey) {
       expect(bootstrapRecoveryKey.split(/\s+/)).toHaveLength(24);
       return bootstrapRecoveryKey;
@@ -1014,7 +1014,7 @@ async function createMlsRecoveryBackupFromPrompt(
     );
   }
 
-  await expect(legacyPrompt).toBeVisible({
+  await expect(backupPrompt).toBeVisible({
     timeout: 90_000,
   });
   await expect(page.getByTestId("mls-backup-banner")).toHaveAttribute(

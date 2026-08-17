@@ -337,7 +337,7 @@ the proof shape:
 
 - `COTEST_EVENT_PROOF_MODE` — `detached-jws` (default) emits the
   `cotest.detached_jws.fixture.v1` detached-JWS proof that soland verifies
-  cryptographically; `dev-proof` emits the legacy development placeholder
+  cryptographically; `dev-proof` emits the development placeholder
   proof, accepted only by soland development builds. Any other value throws.
 - `COTEST_FORBID_DEV_PROOF=1` — hard-fails the run if anything selects
   `dev-proof`, so production-shaped runs cannot silently fall back to the

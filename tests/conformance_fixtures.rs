@@ -161,12 +161,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    deprecated_event_alias_suite_matches_reference_semantics,
-    "deprecated_event_alias",
-    cotest::conformance::run_deprecated_event_alias_suite,
-);
-
-conformance_test!(
     capability_facet_suite_matches_reference_semantics,
     "capability_facet",
     cotest::conformance::run_capability_facet_fixture_suite,

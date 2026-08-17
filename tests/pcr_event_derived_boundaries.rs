@@ -3,7 +3,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
 #[test]
-fn notary_value_uses_core_actor_id_and_rejects_legacy_full_did() {
+fn notary_value_uses_core_actor_id_and_rejects_full_did_spelling() {
     let actor_id = arkret_wire::DidCoreId::new("ak:did_core:web:notary.example").unwrap();
     let recovery_id =
         arkret_wire::DidCoreId::new("ak:did_core:web:recovery.notary.example").unwrap();
@@ -21,7 +21,7 @@ fn notary_value_uses_core_actor_id_and_rejects_legacy_full_did() {
     assert_eq!(mixed["actor_id"], "ak:did_core:web:notary.example");
     assert!(mixed.get("did").is_none());
 
-    for legacy in [
+    for unregistered in [
         json!({"kind": "single_did", "did": "did:web:notary.example"}),
         json!({
             "kind": "mixed",
@@ -29,7 +29,7 @@ fn notary_value_uses_core_actor_id_and_rejects_legacy_full_did() {
             "recovery_members": ["ak:did_core:web:recovery.notary.example"]
         }),
     ] {
-        assert!(serde_json::from_value::<arkret_wire::NotaryValue>(legacy).is_err());
+        assert!(serde_json::from_value::<arkret_wire::NotaryValue>(unregistered).is_err());
     }
 }
 

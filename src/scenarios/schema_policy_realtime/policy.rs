@@ -51,8 +51,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert!(policy_id.starts_with("ak:policy:"));
     assert_eq!(policy["owner"], alice_core);
 
-    // Negative vector: the legacy `deny` decision is no longer a valid wire
-    // effect (v1 enum is allow/soft_deny/hard_deny/quarantine/require_review).
+    // Negative vector: `deny` is not a registered wire effect
+    // (v1 enum is allow/soft_deny/hard_deny/quarantine/require_review).
     expect_api_error(
         alice
             .post("/_soland/self/policies")

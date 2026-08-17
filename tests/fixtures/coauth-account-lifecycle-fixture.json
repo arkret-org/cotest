@@ -84,7 +84,7 @@
       "expect": "pass",
       "operations": [
         "device_revoke",
-        "account_status_update"
+        "account_status_record_append"
       ],
       "fallbacks": [
         "none"
@@ -98,14 +98,14 @@
         "account_status_sequence": [
           "active",
           "suspended",
-          "reactivated",
-          "closed"
+          "active",
+          "deactivated"
         ],
         "audit_actions": [
           "device.revoked",
           "account.suspended",
-          "account.reactivated",
-          "account.closed"
+          "account.status_record.active",
+          "account.status_record.deactivated"
         ]
       }
     },

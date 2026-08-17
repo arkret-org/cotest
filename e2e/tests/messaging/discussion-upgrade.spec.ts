@@ -153,7 +153,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       alice,
       aliceToken,
       carol,
-      carolToken,
       { title: `circle visibility ${stamp}`, historyVisibility: "shared" },
     );
     const publicStrandId = await createStrandViaApi(

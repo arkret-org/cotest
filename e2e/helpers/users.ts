@@ -703,10 +703,10 @@ export class JointUserPage {
   async acknowledgeRecommendedEncryptionPromptIfVisible(
     timeoutMs = 5_000,
   ): Promise<boolean> {
-    // The recommended encryption floor is auto-acknowledged by the client.
-    // Keep this helper as a compatibility hook for tests that previously
-    // clicked the old modal: the only visible follow-up can be Recovery Key
-    // setup when the account has no configured recovery material.
+    // The recommended encryption floor is auto-acknowledged by the client, so
+    // no encryption-floor prompt is ever presented. The only visible follow-up
+    // is Recovery Key setup, and only when the account has no configured
+    // recovery material; that is what this helper drains.
     const recoveryKey = await this.completeRecoveryKeySetupIfPrompted(
       Math.min(timeoutMs, 1_000),
     );

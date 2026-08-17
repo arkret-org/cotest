@@ -85,7 +85,7 @@ test.describe("single-server triad collaboration", () => {
       issueDevSession(request, alice),
       issueDevSession(request, bob),
     ]);
-    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
+    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
       title: `triad audit ${stamp}`,
       historyVisibility: "shared",
     });
@@ -170,7 +170,7 @@ test.describe("single-server triad collaboration", () => {
       issueDevSession(request, bob),
       issueDevSession(request, carol),
     ]);
-    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
+    const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
       title: `triad joined ${stamp}`,
       historyVisibility: "joined",
     });
@@ -493,7 +493,7 @@ test.describe("single-server triad collaboration", () => {
         issueDevSession(request, alice),
         issueDevSession(request, bob),
       ]);
-      const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, bobToken, {
+      const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
         title: `S1.4 Leave Rejoin ${stamp}`,
         historyVisibility: "shared",
       });

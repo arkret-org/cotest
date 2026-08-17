@@ -7,7 +7,7 @@
 // Spec refs: contact-and-direct-conversation.md §3-§4, invite-addressing.md
 // §2/§5/§5.1, consent-model.md §2-§3.
 //
-// New `requested_scopes:[...]` contract (NOT the legacy `/_soland` + `scope`
+// Uses the `requested_scopes:[...]` contract (NOT the `/_soland` + `scope`
 // surface that consent-grant.spec.ts exercises).
 
 import { expect, test, type APIRequestContext } from "@playwright/test";

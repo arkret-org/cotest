@@ -66,7 +66,6 @@ test.describe("offline sync + conflict repair", () => {
       alice,
       aliceToken,
       bob,
-      bobToken,
       {
         title: `G2.T3 Offline Backfill ${stamp}`,
         discoverability: "listed",
@@ -132,7 +131,6 @@ test.describe("offline sync + conflict repair", () => {
       alice,
       aliceToken,
       bob,
-      bobToken,
       {
         title: `G2.T3 ordered catchup ${stamp}`,
         discoverability: "listed",
@@ -559,7 +557,6 @@ async function createBottomConflictFixture(
     alice,
     aliceToken,
     bob,
-    bobToken,
     {
       title: `bottom conflict ${label} ${stamp}`,
       historyVisibility: "shared",

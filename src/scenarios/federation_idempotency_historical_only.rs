@@ -47,7 +47,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Result, anyhow};
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
-use arkret_identifiers::{Hash, TypedTrustDomainId};
+use arkret_identifiers::{Hash, TrustDomainId};
 use arkret_signatures::federation::federation_trust_domain_transcript_fragment;
 use arkret_wire::{HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN};
 use serde_json::{Value, json};
@@ -203,9 +203,9 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     // Server A → Server B identifiers.
     let source_did = "did:web:server-a.example".to_owned();
     let dest_did = "did:web:server-b.example".to_owned();
-    let source_td = TypedTrustDomainId::new("ak:trust_domain:a")
+    let source_td = TrustDomainId::new("ak:trust_domain:a")
         .map_err(|e| anyhow!("typed source trust domain construction failed: {e}"))?;
-    let dest_td = TypedTrustDomainId::new("ak:trust_domain:b")
+    let dest_td = TrustDomainId::new("ak:trust_domain:b")
         .map_err(|e| anyhow!("typed destination trust domain construction failed: {e}"))?;
 
     // Request body X — canonical-JSON over a small federation_transaction.
@@ -396,8 +396,8 @@ mod tests {
     /// driver runs entirely against an in-memory simulated receiver.
     #[test]
     fn federation_trust_headers_transcript_fragment_contains_lowercase_names_and_values() {
-        let source_td = TypedTrustDomainId::new("ak:trust_domain:a").unwrap();
-        let dest_td = TypedTrustDomainId::new("ak:trust_domain:b").unwrap();
+        let source_td = TrustDomainId::new("ak:trust_domain:a").unwrap();
+        let dest_td = TrustDomainId::new("ak:trust_domain:b").unwrap();
         let fragment = federation_trust_domain_transcript_fragment(&source_td, &dest_td);
         // The two header names MUST appear in lowercase (RFC 9421 §2.2).
         assert!(

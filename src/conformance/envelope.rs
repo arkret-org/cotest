@@ -51,7 +51,7 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             true,
         ),
         (
-            "ak.cotest_vector.container.move_item.legacy_rejected.v1",
+            "ak.cotest_vector.container.move_item.unregistered_fields_rejected.v1",
             "ak.container.move_item",
             json!({
                 "object_ref": "ak:morph:AXh0mpVGb536xVxbSPfM4Wc_1WuXAxTYgmtXEncKM9T0",
@@ -145,63 +145,6 @@ pub fn run_container_realm_control_payload_suite() -> Result<()> {
             &json!({"accept": accepted}),
         );
     }
-    Ok(())
-}
-
-pub fn run_deprecated_event_alias_suite() -> Result<()> {
-    let event_kind_registry = load_artifact_json("registry/event-kind-registry.json")?;
-    let event_kinds = event_kind_metadata(&event_kind_registry)?;
-    let mut deprecated_aliases = Vec::new();
-
-    for (kind, info) in &event_kinds {
-        if info.status == "deprecated" || info.wire_scope == "deprecated_alias" {
-            let replacement = info
-                .replaced_by
-                .as_deref()
-                .ok_or_else(|| anyhow!("deprecated alias {kind} missing replaced_by"))?;
-            if !event_kinds.contains_key(replacement) {
-                bail!("deprecated alias {kind} points to unknown replacement {replacement}");
-            }
-            let mut event = sample_envelope_event(
-                kind,
-                1,
-                "01970e589d21-0001-a13f9c2e",
-                "2026-05-02T00:00:00.000Z",
-                json!({
-                    "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
-                    "body": "legacy alias"
-                }),
-            );
-            event["refs"] = json!([]);
-            let decision = validate_event_envelope(
-                &event,
-                &event_kinds,
-                &EventEnvelopeContext::default_for_durable_history(),
-            )?;
-            assert_event_decision(
-                &decision,
-                "reject",
-                Some("schema_violation"),
-                "deprecated_alias_producer_rejected",
-            )?;
-            deprecated_aliases.push(kind.clone());
-        }
-    }
-
-    record_vector_event(
-        "event_envelope.deprecated_alias",
-        &json!({
-            "deprecated_aliases": deprecated_aliases,
-        }),
-        &json!({
-            "producer_behavior": "reject",
-            "replacement_required": true,
-        }),
-        &json!({
-            "status": "ok",
-        }),
-    );
-
     Ok(())
 }
 
@@ -532,7 +475,7 @@ fn validate_synthetic_event_envelope_negatives(
     )?;
 
     // Unknown top-level field MUST be rejected (envelope root is
-    // `additionalProperties:false`). Inject a forbidden legacy field
+    // `additionalProperties:false`). Inject an unregistered field
     // (`space_id`) onto an otherwise-valid event and assert hard rejection.
     let mut unknown_field_event = sample_envelope_event(
         "ak.message.create",
@@ -543,7 +486,7 @@ fn validate_synthetic_event_envelope_negatives(
             "strand_id": "ak:strand:AXYlSrZyrvLo7DtDjCwS6u7unEkJVXS12FTvdJM5AlGa",
             "content": {
                 "kind": "ak.content.text",
-                "body": "legacy field"
+                "body": "unregistered field"
             }
         }),
     );
@@ -582,8 +525,8 @@ fn validate_event_envelope(
 
     // event-envelope.schema.json roots `additionalProperties:false`: any
     // top-level field outside this set MUST be rejected. This is the hard
-    // guard against legacy/forbidden envelope fields (`schema`, `schema_id`,
-    // `space_id`, …) leaking back onto the wire.
+    // guard against unregistered/forbidden envelope fields (`schema`,
+    // `schema_id`, `space_id`, …) reaching the wire.
     const ALLOWED_TOP_LEVEL_FIELDS: &[&str] = &[
         "event_id",
         "kind",
@@ -638,10 +581,10 @@ fn validate_event_envelope(
             "Event.kind is not registered",
         ));
     };
-    if kind_info.status != "active" || kind_info.wire_scope == "deprecated_alias" {
+    if kind_info.status != "active" {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "deprecated_alias producers MUST emit replaced_by",
+            "Event.kind is not an active registry entry",
         ));
     }
     if context.durable_history && kind_info.wire_scope != "durable_event" {
@@ -990,7 +933,6 @@ fn missing_payload_fields(content: &Value, fields: &[&str]) -> Option<String> {
 pub(crate) struct EventKindInfo {
     pub(crate) status: String,
     pub(crate) wire_scope: String,
-    pub(crate) replaced_by: Option<String>,
 }
 
 pub(crate) fn event_kind_metadata(registry: &Value) -> Result<HashMap<String, EventKindInfo>> {
@@ -1006,10 +948,6 @@ pub(crate) fn event_kind_metadata(registry: &Value) -> Result<HashMap<String, Ev
             EventKindInfo {
                 status: required_str(entry, "status")?.to_owned(),
                 wire_scope: required_str(entry, "wire_scope")?.to_owned(),
-                replaced_by: entry
-                    .get("replaced_by")
-                    .and_then(Value::as_str)
-                    .map(ToOwned::to_owned),
             },
         );
     }

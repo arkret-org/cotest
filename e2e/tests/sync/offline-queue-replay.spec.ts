@@ -107,7 +107,6 @@ async function createOfflineFixture(
     alice,
     aliceToken,
     bob,
-    bobToken,
     {
       title: `offline queue ${label} ${stamp}`,
       historyVisibility: "shared",

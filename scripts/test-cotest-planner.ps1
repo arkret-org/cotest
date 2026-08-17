@@ -101,9 +101,9 @@ Assert-Equal -Actual $targetFilter.invocations[0].selection_mode -Expected "targ
 $targetAll = Invoke-Planner -Arguments @("-Profile", "all", "-CargoTestTarget", "api_contracts_auth", "-PlanOnly")
 Assert-Equal -Actual $targetAll.invocations[0].selection_mode -Expected "target-all" -Message "manual target-only mode drifted"
 
-$legacy = Invoke-Planner -Arguments @("-Profile", "all", "-CargoTestFilter", "account_auth_and_session_edges_are_enforced", "-PlanOnly")
-Assert-Equal -Actual $legacy.invocations[0].selection_mode -Expected "legacy-broad-scan" -Message "legacy filter mode drifted"
-Assert-True -Condition ($legacy.invocations[0].cargo_args -contains "--tests") -Message "legacy filter mode must remain an explicit broad scan"
+$broadScan = Invoke-Planner -Arguments @("-Profile", "all", "-CargoTestFilter", "account_auth_and_session_edges_are_enforced", "-PlanOnly")
+Assert-Equal -Actual $broadScan.invocations[0].selection_mode -Expected "broad-scan" -Message "filter-only selection mode drifted"
+Assert-True -Condition ($broadScan.invocations[0].cargo_args -contains "--tests") -Message "filter-only mode must remain an explicit broad scan"
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-planner-$([guid]::NewGuid().ToString('N'))"
 $null = New-Item -ItemType Directory -Path $tempRoot

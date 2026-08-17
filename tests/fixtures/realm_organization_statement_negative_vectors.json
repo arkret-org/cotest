@@ -169,9 +169,9 @@
       "expected": { "outcome": "reject", "reason_code": "schema_violation" }
     },
     {
-      "name": "legacy_organization_ref_shape",
+      "name": "singleton_organization_ref_shape",
       "surface": "schema",
-      "comment": "The pre-migration singleton shape { organization_ref } must be rejected by the strong schema (required fields missing).",
+      "comment": "The singleton shape { organization_ref } is not a registered payload and must be rejected by the strong schema (required fields missing).",
       "replace": { "organization_ref": "did:web:org.example" },
       "expected": { "outcome": "reject", "reason_code": "schema_violation" }
     },

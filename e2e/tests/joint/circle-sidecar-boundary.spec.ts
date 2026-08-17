@@ -39,19 +39,19 @@ jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () =
       expect(created.member_count).toBe(1);
       expect(created.viewer_membership).toBe("join");
 
-      // Negative migration assertion: the retired thread-shaped path is not
-      // an alias for the first-class Sidecar API.
-      const legacyPath = ["", "_arkret", "self", "agent-sidecar-threads:ensure"].join("/");
-      const legacyUrl = `${solandBaseUrl()}${legacyPath}`;
-      const legacy = await request.post(legacyUrl, {
+      // Fail-closed assertion: the thread-shaped path is not registered and
+      // MUST NOT be an alias for the first-class Sidecar API.
+      const unregisteredPath = ["", "_arkret", "self", "agent-sidecar-threads:ensure"].join("/");
+      const unregisteredUrl = `${solandBaseUrl()}${unregisteredPath}`;
+      const unregistered = await request.post(unregisteredUrl, {
         headers: selfPathHeadersForDpopSession(
           jointRealm.aliceSession,
           "POST",
-          legacyUrl,
+          unregisteredUrl,
         ),
         data: {},
       });
-      expect(legacy.status()).toBe(404);
+      expect(unregistered.status()).toBe(404);
     },
   );
 });

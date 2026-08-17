@@ -482,7 +482,6 @@ test.describe("chat advanced", () => {
       alice,
       aliceToken,
       bob,
-      bobToken,
       {
         title: `chat-route ${Date.now()}`,
         historyVisibility: "joined",
@@ -949,7 +948,6 @@ test.describe("chat advanced", () => {
       alice,
       aliceToken,
       bob,
-      bobToken,
       {
         title: `S14.2 E2EE Mention ${stamp}`,
         historyVisibility: "joined",

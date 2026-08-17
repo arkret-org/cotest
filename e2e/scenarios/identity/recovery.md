@@ -14,7 +14,7 @@
 - `identity/key-management.md` §7.2 — Backup envelope schema(Argon2id KDF + XChaCha20-Poly1305 + key_commitment)
 - `identity/key-management.md` §7.3 — Restore strand(凭证 = Recovery Key)
 - `identity/key-management.md` §7.4 — Ownership proof vs decryption proof
-- `identity/key-management.md` §7.5.1 — 独立 vault passphrase 凭证层 deprecated(wire method 仍合法)
+- `identity/key-management.md` §7.5.1 — `passphrase_kdf` 仅用于 `secret_storage`;`mls_history` MUST NOT 使用,即便作为 fallback
 - `identity/key-management.md` §7.7 — Recovery UI:解密凭证 MUST 是 Recovery Key
 - `identity/key-management.md` §7.10 — 自动持续备份
 - `identity/key-management.md` §8 — Threshold recovery service

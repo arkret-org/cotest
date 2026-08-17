@@ -2503,8 +2503,11 @@ try {
                 $InksonRoot,
                 (Join-Path $workspaceRoot "arkret-rust-sdk"),
                 (Join-Path $workspaceRoot "garth"),
-                (Join-Path $workspaceRoot "chime"),
-                (Join-Path $workspaceRoot "yoface")
+                # `yoface` is intentionally absent: inkson consumes it as a
+                # cargo git dependency, so there is no local checkout whose
+                # mtime could invalidate the bundle. A yoface bump lands here
+                # through inkson's Cargo.lock, which is under $InksonRoot.
+                (Join-Path $workspaceRoot "chime")
             )
         $inksonTestFeaturePresent = Test-BinaryContainsAsciiMarker `
             -Path $inksonWasm `

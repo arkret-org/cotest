@@ -4,10 +4,10 @@
 // `/_arkret/self/invites/dispatch`, which falls back to `/_arkret/peer/invites`
 // only for the cross-server receive-side scenarios).
 //
-// These target the NEW `/_arkret` contract with `requested_scopes:[...]`,
-// distinct from the legacy `/_soland/self/contacts/request` + `scope` helper
-// used by other specs (helpers/soland-api.ts + consent-grant.spec.ts). Do not
-// route new contact-graph coverage through the legacy surface.
+// These target the `/_arkret` contract with `requested_scopes:[...]`, distinct
+// from the `/_soland/self/contacts/request` + `scope` helper used by other
+// specs (helpers/soland-api.ts + consent-grant.spec.ts). Do not route new
+// contact-graph coverage through the `/_soland` surface.
 //
 // Wire shapes mirror arkret-rust-sdk core::http + core::model::invite_addressing
 // and soland src/routing/identity/account.rs + src/routing/invites.rs.

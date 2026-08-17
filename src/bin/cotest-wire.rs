@@ -424,7 +424,7 @@ fn build_pcr_genesis_unit(
                 version_id: version_id.to_owned(),
             },
             genesis_salt,
-            trust_domain: arkret::TypedTrustDomainId::new(trust_domain.to_owned())
+            trust_domain: arkret::TrustDomainId::new(trust_domain.to_owned())
                 .context("parse trust domain")?,
             did_inception_ref: arkret::EventRef::new(
                 version_id.to_owned(),

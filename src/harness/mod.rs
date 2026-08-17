@@ -318,7 +318,7 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
     let genesis = arkret_models_collaboration::events_payloads::RealmGenesis::event_derived(
         arkret_models_collaboration::events_payloads::RealmPurpose::Collaboration,
         genesis_salt,
-        arkret_identifiers::TypedTrustDomainId::new(trust_domain.to_owned())?,
+        arkret_identifiers::TrustDomainId::new(trust_domain.to_owned())?,
         serde_json::from_value(Value::Array(schema_refs))?,
         arkret_wire::CORE_REDUCER_PROFILE,
         arkret_canonical::DigestSuite::Sha256,

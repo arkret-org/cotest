@@ -4,10 +4,8 @@
 // The `ak.self.circle.*` operations (list/create/get/members/scope-rotate/
 // archive/restore/tombstone) are published in the arkret-spec OpenAPI artifact
 // (`/_arkret/self/circles*`), the operation registry, and the contract catalog,
-// so soland mounts them under the `/_arkret` tree. (Previously these were
-// AKP-0014 §5 implementation-local DRAFT candidates served under
-// `/_soland/self/circles`; they have since been accepted into the normative
-// catalog, and the legacy `/_soland` mirror was retired.)
+// so soland mounts them under the `/_arkret` tree. `/_soland/self/circles` is
+// not a mounted surface.
 //
 // The `ak.circle.*` data model itself is spec-canonical (AKP-0007); this HTTP
 // surface is the convenience wrapper that builds the canonical operations and

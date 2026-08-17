@@ -88,18 +88,6 @@ try {
 
     $index = Get-Content -Raw -LiteralPath (Join-Path $testRoot "latest\index.json") | ConvertFrom-Json
     Assert-True (@($index.channels | Where-Object channel -eq "full").Count -eq 1) "latest index is missing the full channel"
-
-    $legacySummary = Join-Path $testRoot "latest\summary.md"
-    $legacyServices = Join-Path $testRoot "latest\services"
-    $unrelatedFile = Join-Path $testRoot "latest\notes.txt"
-    Set-Content -LiteralPath $legacySummary -Value "legacy" -Encoding UTF8
-    $null = New-Item -ItemType Directory -Path $legacyServices
-    Set-Content -LiteralPath (Join-Path $legacyServices "soland.log") -Value "legacy" -Encoding UTF8
-    Set-Content -LiteralPath $unrelatedFile -Value "keep" -Encoding UTF8
-    Remove-LegacyLatestCotestMirror -OutputRoot $testRoot
-    Assert-True (-not (Test-Path -LiteralPath $legacySummary)) "legacy flat summary was not removed"
-    Assert-True (-not (Test-Path -LiteralPath $legacyServices)) "legacy flat services were not removed"
-    Assert-True (Test-Path -LiteralPath $unrelatedFile) "legacy cleanup removed an unknown file"
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {

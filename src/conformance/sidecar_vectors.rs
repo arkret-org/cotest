@@ -1391,14 +1391,14 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         &public_key,
         SidecarModelError::DraftMismatch,
     )?;
-    let mut legacy_scope_mutation = create_event.clone();
-    legacy_scope_mutation.payload.insert(
+    let mut unregistered_scope_mutation = create_event.clone();
+    unregistered_scope_mutation.payload.insert(
         "backing_circle_id".to_owned(),
         Value::String("ak:circle:AXeaYP8-Z4VTLwc8C3egj3Efq_jN9cyDleDhahC7LCfs".to_owned()),
     );
     assert_new_commit_failure_is_write_free(
         &mut model,
-        &commit(legacy_scope_mutation, attach_event.clone()),
+        &commit(unregistered_scope_mutation, attach_event.clone()),
         &public_key,
         SidecarModelError::DraftMismatch,
     )?;

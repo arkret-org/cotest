@@ -50,11 +50,13 @@ jobs:
           repository: ${{ github.repository_owner }}/chime
           path: chime
           ref: ${{ env.SIBLING_REF }}
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/yoface
-          path: yoface
-          ref: ${{ env.SIBLING_REF }}
+      # `yoface` is no longer checked out as a sibling: inkson pulls it from
+      # github.com/arkret-org/yoface (branch `main`) as a cargo git dependency.
+      # The repo is private, so cargo needs a credential rewrite; it fetches
+      # through the git CLI because inkson/.cargo/config.toml sets
+      # `net.git-fetch-with-cli`.
+      - name: Authenticate cargo for the private yoface git dependency
+        run: git config --global url."https://x-access-token:${{ secrets.CI_REPO_TOKEN || github.token }}@github.com/".insteadOf "https://github.com/"
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/inkson

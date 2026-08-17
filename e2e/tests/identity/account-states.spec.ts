@@ -240,7 +240,6 @@ test.describe("account states", () => {
       alice,
       aliceToken,
       bob,
-      bobToken,
       {
         title: "deactivation visibility",
         ownerDid: alice.did,

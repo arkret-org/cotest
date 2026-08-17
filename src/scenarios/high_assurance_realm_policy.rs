@@ -12,7 +12,7 @@
 //! integration test lives at `soland/tests/high_assurance_policy.rs`.
 
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{DidCoreId, RealmId, TypedTrustDomainId};
+use arkret_identifiers::{DidCoreId, RealmId, TrustDomainId};
 use arkret_models_collaboration::governance::circle::EncryptionFloor;
 use arkret_models_collaboration::objects::realm::{NotaryProfile, Realm};
 use arkret_wire::{
@@ -40,7 +40,7 @@ fn build_realm(
     // `trust_domain` is a required Realm binding
     // (arkret_models_collaboration::objects::realm::Realm). Cotest uses a fixed canonical trust
     // domain id here so the high-assurance policy scenario stays representative.
-    let trust_domain = TypedTrustDomainId::new("ak:trust_domain:example.net".to_owned())
+    let trust_domain = TrustDomainId::new("ak:trust_domain:example.net".to_owned())
         .map_err(|err| anyhow!("invalid trust_domain literal: {err}"))?;
     Ok(Realm {
         schema: "ak.schema.realm.v1".to_owned(),

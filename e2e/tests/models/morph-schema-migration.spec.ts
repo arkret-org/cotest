@@ -311,8 +311,8 @@ test.describe("morph schema migration @fully-implemented", () => {
     request,
   }) => {
     // spec: morph.md §4.1 S3 additive arm — the core reducer MUST accept an
-    // additive ak.morph.schema_migrate (to_schema_refs[] only adds a
-    // backward-compatible profile) WITHOUT the opt-in
+    // additive ak.morph.schema_migrate (to_schema_refs[] only adds a schema ref
+    // that contributes optional fields only) WITHOUT the opt-in
     // ak.profile.morph.schema_migration_transformations.v1 profile, and the
     // §4.1 S1 per-event requirements.schema[] binding carries the union of
     // from/to schema ids.

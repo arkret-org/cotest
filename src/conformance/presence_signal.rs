@@ -37,7 +37,7 @@ pub const ALL_PRESENCE_SIGNAL_VECTOR_IDS: &[&str] = &[
 
 /// §3.2: `state` is exactly `online` / `idle` / `offline` / `dnd`. A receiver
 /// meeting anything else MUST drop the update or fail closed with
-/// `schema_violation`, and MUST NOT guess a nearby state — the Matrix-legacy
+/// `schema_violation`, and MUST NOT guess a nearby state — Matrix's
 /// `unavailable` and `busy` are not v1 wire values.
 pub fn run_state_closed_set_vector() -> Result<()> {
     for accepted in ["online", "idle", "offline", "dnd"] {

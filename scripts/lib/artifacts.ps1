@@ -152,55 +152,6 @@ function Write-LatestArtifactIndex {
     $markdown | Set-Content -LiteralPath (Join-Path $latestRoot "README.md") -Encoding UTF8
 }
 
-function Remove-LegacyLatestCotestMirror {
-    param([Parameter(Mandatory = $true)][string]$OutputRoot)
-
-    $resolvedOutputRoot = [System.IO.Path]::GetFullPath($OutputRoot)
-    $latestRoot = [System.IO.Path]::GetFullPath((Join-Path $resolvedOutputRoot "latest"))
-    $fullMirror = Join-Path $latestRoot "full"
-    if (-not (Test-Path -LiteralPath $fullMirror -PathType Container)) {
-        throw "Refusing to remove the legacy latest mirror before latest/full exists"
-    }
-
-    $legacyFiles = @(
-        "raw.log",
-        "transcript.ndjson",
-        "summary.json",
-        "summary.md",
-        "summary.html",
-        "junit.xml",
-        "metadata.json",
-        "coverage-matrix.json",
-        "coverage-matrix.md",
-        "coverage-gate.json",
-        "coverage-gate.md",
-        "joint-smoke-gate.json",
-        "joint-smoke-gate.md",
-        "release-gate.json",
-        "release-gate.md",
-        "unresolved-gaps.json",
-        "unresolved-gaps.md",
-        "registry-gaps.json",
-        "ci-profile.json",
-        "ci-profile.md",
-        "secret-scan.json",
-        "secret-scan.md",
-        "spec-sync-gate.json",
-        "spec-sync-gate.md"
-    )
-    foreach ($name in $legacyFiles) {
-        $candidate = Join-Path $latestRoot $name
-        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            Remove-Item -LiteralPath $candidate -Force
-        }
-    }
-
-    $legacyServices = Join-Path $latestRoot "services"
-    if (Test-Path -LiteralPath $legacyServices -PathType Container) {
-        Remove-Item -LiteralPath $legacyServices -Recurse -Force
-    }
-}
-
 function Publish-ArtifactMirror {
     param(
         [Parameter(Mandatory = $true)][string]$SourceDirectory,

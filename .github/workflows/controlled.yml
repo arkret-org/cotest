@@ -82,12 +82,11 @@ jobs:
           repository: ${{ github.repository_owner }}/chime
           path: chime
           ref: ${{ inputs.sibling_ref }}
-      - uses: actions/checkout@v4
+      # `yoface` is a private cargo git dependency of inkson rather than a
+      # sibling checkout — see .github/workflows/integration.yml.
+      - name: Authenticate cargo for the private yoface git dependency
         if: inputs.lane == 'mls-data-plane'
-        with:
-          repository: ${{ github.repository_owner }}/yoface
-          path: yoface
-          ref: ${{ inputs.sibling_ref }}
+        run: git config --global url."https://x-access-token:${{ secrets.CI_REPO_TOKEN || github.token }}@github.com/".insteadOf "https://github.com/"
       - uses: actions/checkout@v4
         if: inputs.lane == 'mls-data-plane'
         with:

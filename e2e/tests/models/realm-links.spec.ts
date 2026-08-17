@@ -237,7 +237,7 @@ test.describe("realm links", () => {
       // reducer/apply_realm_policy.rs), and the effective-policy read
       // (reducer/realm_links.rs `narrowed_inheritance_intersection`) surfaces
       // the narrow-only INTERSECTION across every source the child opted into
-      // via a currently-active governance link, alongside the legacy UNION.
+      // via a currently-active governance link, alongside the UNION view.
       // `effective_policy.narrowed_policies` is the §6.2 narrow-only result:
       // a policy survives only when EVERY active source declares it.
       const stamp = Date.now();

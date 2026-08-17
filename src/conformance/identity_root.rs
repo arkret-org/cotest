@@ -13,7 +13,7 @@ use arkret_bootstrap::{
 };
 use arkret_event_draft::EventPayloadExt;
 use arkret_identifiers::{
-    DeviceId, DidCoreId, DidFullId, Hash, Hlc, TypedTrustDomainId, project_full_id_to_core_id,
+    DeviceId, DidCoreId, DidFullId, Hash, Hlc, TrustDomainId, project_full_id_to_core_id,
 };
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
@@ -275,7 +275,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
                 version_id: "1-Qmfixture".to_owned(),
             },
             genesis_salt: arkret_wire::GenesisSalt::generate()?,
-            trust_domain: TypedTrustDomainId::new("ak:trust_domain:example.net")?,
+            trust_domain: TrustDomainId::new("ak:trust_domain:example.net")?,
             did_inception_ref: EventRef::new(
                 "did:webvh:z6mkfixture:alice.example#entry-0",
                 DID_INCEPTION_REF_ROLE,

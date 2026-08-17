@@ -53,7 +53,6 @@ export async function createTwoUserMessagingRealm(
     ownerUser,
     ownerToken,
     memberUser,
-    memberToken,
     {
       ...opts.realm,
       title: opts.title,

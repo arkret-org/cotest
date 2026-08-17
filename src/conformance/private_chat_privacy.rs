@@ -593,7 +593,7 @@ fn validate_binding_payload(
     let binding = serde_json::from_value::<
         arkret_models_collaboration::events_payloads::device_identity::DirectConversationBoundPayload,
     >(payload.clone())?;
-    let trust_domain = arkret::TypedTrustDomainId::new(trust_domain.to_owned())
+    let trust_domain = arkret::TrustDomainId::new(trust_domain.to_owned())
         .map_err(|err| anyhow!("invalid trust domain: {err}"))?;
     binding.validate_pair_key(trust_domain)?;
     Ok(())

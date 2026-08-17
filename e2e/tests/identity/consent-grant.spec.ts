@@ -701,7 +701,7 @@ test.describe("consent grant", () => {
           .filter({ hasText: bob.did }),
       ).toBeVisible({ timeout: 30_000 });
       // Effective consent state is spec `active` (consent-model.md §2.2 /
-      // SDK `ConsentState::Active`); the legacy `granted` term was renamed.
+      // SDK `ConsentState::Active`).
       await expectConsentCell(
         request,
         aliceToken,

@@ -57,7 +57,6 @@ test.describe("read receipts + privacy", () => {
       bob,
       bobToken,
       alice,
-      aliceToken,
       {
         title: `G2.T7 Receipt ${stamp}`,
         discoverability: "listed",

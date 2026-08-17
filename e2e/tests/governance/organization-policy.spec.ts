@@ -103,7 +103,7 @@ test.describe("organization governance — verified relationship semantics", () 
   // Non-blocking guard: the local deployment surface, if present, must not be
   // the way callers learn protocol governance semantics. We only assert the
   // probe does not 5xx; the verified-relationship cases below own the semantics.
-  test("legacy local organizations surface is not the governance truth source", async ({
+  test("local organizations surface is not the governance truth source", async ({
     request,
   }) => {
     const alice = uniqueUser("s30-probe");

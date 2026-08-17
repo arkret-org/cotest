@@ -18,7 +18,7 @@
 #     `@blocking-on` is sometimes free prose ("blocked on soland multi-source
 #     ...") rather than a feature-id. When the value does NOT look like a
 #     `<service>#<slug>` feature-id, the group is derived from the file path as
-#     `soland#<dir>-<spec-basename>-gap`, matching the legacy fixme-debt.md.
+#     `soland#<dir>-<spec-basename>-gap`.
 #   * src/scenarios/*.rs — files containing `unimplemented!(` call sites are
 #     reported as one `rust-unimplemented-scaffold` entry per file, keyed off the
 #     first `pub (async) fn *_run` and the first `unimplemented!(` line.

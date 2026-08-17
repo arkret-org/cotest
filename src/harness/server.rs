@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
-use arkret::{DidCoreId, DidFullId, TypedTrustDomainId};
+use arkret::{DidCoreId, DidFullId, TrustDomainId};
 use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -37,7 +37,7 @@ pub struct ArkretServer {
     base_url: Url,
     service_id: DidCoreId,
     service_full_id: DidFullId,
-    trust_domain: TypedTrustDomainId,
+    trust_domain: TrustDomainId,
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
     /// `host:port` this soland's Prometheus listener was bound to, when the
@@ -442,7 +442,7 @@ impl ArkretServer {
         &self.service_full_id
     }
 
-    pub fn trust_domain(&self) -> &TypedTrustDomainId {
+    pub fn trust_domain(&self) -> &TrustDomainId {
         &self.trust_domain
     }
 
@@ -1312,7 +1312,7 @@ fn test_trust_domain(name: &str) -> String {
 
 async fn fetch_service_identity(
     base_url: &Url,
-) -> Result<(DidCoreId, DidFullId, TypedTrustDomainId)> {
+) -> Result<(DidCoreId, DidFullId, TrustDomainId)> {
     let url = base_url.join("/_arkret/describe")?;
     let response = probe_http_client()?
         .get(url.clone())

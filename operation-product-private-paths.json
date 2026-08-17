@@ -91,7 +91,7 @@
       "method": "GET",
       "path": "/_arkret/self/keys/backups/{wildcard}",
       "classification": "product-private",
-      "reason": "Negative method probe: key-backup-restore.spec.ts legacyGetBackup issues GET on a backup resource that the registry/soland expose only via PUT/DELETE, asserting 404/405; the GET method binding is intentionally absent, not a protocol operation."
+      "reason": "Negative method probe: the encryption/key-backup-restore scenario issues GET on a backup resource that the registry/soland expose only via PUT/DELETE, asserting 404/405; the GET method binding is intentionally absent, not a protocol operation."
     },
     {
       "source": "cotest",

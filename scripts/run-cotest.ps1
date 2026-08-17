@@ -360,7 +360,7 @@ function Get-CargoTestInvocations {
         } elseif ($CargoTestTarget) {
             "target-all"
         } else {
-            "legacy-broad-scan"
+            "broad-scan"
         }
         return @([pscustomobject]@{
                 label          = if ($CargoTestTarget) { "target:$CargoTestTarget" } else { "filter:$CargoTestFilter" }
@@ -423,7 +423,7 @@ function New-CargoTestArgs {
     $args = @("test")
     switch ($SelectionMode) {
         "all-tests" { $args += "--tests" }
-        "legacy-broad-scan" { $args += "--tests" }
+        "broad-scan" { $args += "--tests" }
         "target-all" { $args += @("--test", $Target) }
         "target-filter" { $args += @("--test", $Target) }
         default { throw "Unknown cargo test selection mode '$SelectionMode'" }
@@ -1494,7 +1494,7 @@ function Get-RegistryCoverageGaps {
         $registry = Get-Content $eventKindPath -Raw | ConvertFrom-Json
         $activeKinds = @()
         foreach ($ek in $registry.event_kinds) {
-            if ($ek.status -eq "active" -and $ek.wire_scope -ne "deprecated_alias") {
+            if ($ek.status -eq "active") {
                 $activeKinds += $ek.event_kind
             }
         }
@@ -1878,7 +1878,7 @@ if (-not $delegatedProfile) {
     )
     $invocations = @(Add-CargoTestArgsToInvocations -Invocations $invocations)
 
-    if (@($invocations | Where-Object { $_.selection_mode -eq "legacy-broad-scan" }).Count -gt 0) {
+    if (@($invocations | Where-Object { $_.selection_mode -eq "broad-scan" }).Count -gt 0) {
         Write-Warning "-CargoTestFilter without -CargoTestTarget scans every integration test target; add -CargoTestTarget to use target-aware scheduling"
     }
 
@@ -2381,7 +2381,6 @@ $isFullCotestRun = Test-IsCompleteCotestRun `
     -CargoTestFilter $CargoTestFilter
 if ($isFullCotestRun) {
     Publish-ArtifactMirror -SourceDirectory $runDir -OutputRoot $OutputRoot -Channel "full"
-    Remove-LegacyLatestCotestMirror -OutputRoot $OutputRoot
 }
 
 Write-Host ""

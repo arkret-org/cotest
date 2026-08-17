@@ -28,7 +28,7 @@
         ],
         "client_status": {
           "production_fallbacks": [
-            "legacy placeholder ciphertext",
+            "placeholder ciphertext",
             "demo ed25519 signing"
           ]
         }

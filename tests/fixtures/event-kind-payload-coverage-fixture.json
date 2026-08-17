@@ -213,14 +213,6 @@
       "lattice": "cas_register",
       "bottom": "reject",
       "payload_shape": { "rank": "K1", "space_id": "ak:space:ASVmv_EqnFQR2CH9hi8puYlg1qolDsgTIxqerMVv-1oN" }
-    },
-    {
-      "name": "account_status_ordered_log",
-      "event_kind": "ak.account.status",
-      "cell_family": "ak.component.account.status.v1",
-      "lattice": "ordered_log",
-      "bottom": "expose",
-      "payload_shape": { "status": "active" }
     }
   ],
   "negative_vectors": [

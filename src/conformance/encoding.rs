@@ -437,11 +437,11 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
     // The pre-composite-subject addressing (the scope value used directly as
     // the cell subject) must not be reachable: it is exactly the collision the
     // composite subject exists to prevent.
-    let legacy_subject = arkret_wire::CellRef::new(
+    let collision_subject = arkret_wire::CellRef::new(
         "ak:cell:ak.component.identity.accountability.v1:q76kFdC2LNwLBlUed_ICSOysggmqrOXJbAtWHO49Woc",
     )?;
-    if projected_cell(&event_for(json!("employment"), "active")?)? == legacy_subject {
-        bail!("{VECTOR_ID} projection still addresses the legacy direct-scalar subject");
+    if projected_cell(&event_for(json!("employment"), "active")?)? == collision_subject {
+        bail!("{VECTOR_ID} projection addresses the direct-scalar subject");
     }
     Ok(())
 }

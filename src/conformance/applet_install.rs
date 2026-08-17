@@ -26,10 +26,12 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
             bail!("canonical Applet delegation constraint lost {field}={expected}");
         }
     }
-    let mut legacy = canonical.clone();
-    legacy["constraint_kind"] = json!("applet_delegation_binding");
-    if serde_json::from_value::<GrantConstraint>(legacy).is_ok() {
-        bail!("retired applet_delegation_binding alias was accepted");
+    // Unregistered `constraint_kind` spellings MUST fail closed: only
+    // `authority_control` is a registered GrantConstraint kind.
+    let mut unregistered_kind = canonical.clone();
+    unregistered_kind["constraint_kind"] = json!("applet_delegation_binding");
+    if serde_json::from_value::<GrantConstraint>(unregistered_kind).is_ok() {
+        bail!("unregistered constraint_kind `applet_delegation_binding` was accepted");
     }
 
     let realm_resource: arkret_wire::WireResourceSelector = serde_json::from_value(json!({
@@ -117,13 +119,13 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
         }),
         &json!({
             "canonical_constraint": true,
-            "legacy_alias_rejected": true,
+            "unregistered_constraint_kind_rejected": true,
             "exact_scope_required": true,
             "ghost_pair_closed": true,
         }),
         &json!({
             "canonical_constraint": valid,
-            "legacy_alias_rejected": true,
+            "unregistered_constraint_kind_rejected": true,
             "exact_scope_required": true,
             "ghost_pair_closed": true,
         }),

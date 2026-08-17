@@ -1435,7 +1435,7 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     let mut flat = response.clone();
     flat["error"]["reason_code"] = Value::String("human_approval_required".to_owned());
     if validate_agent_human_approval_http_response(403, &flat).is_ok() {
-        bail!("legacy flat human-approval fields were accepted");
+        bail!("unregistered flat human-approval fields were accepted");
     }
     let mut json_message = response.clone();
     json_message["error"]["message"] = Value::String(details.to_string());
