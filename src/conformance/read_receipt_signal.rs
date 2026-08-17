@@ -152,7 +152,7 @@ pub fn run_genesis_join_policy_bundle_vector() -> Result<()> {
     bundle.join_policy = Some(serde_json::from_value(join_policy)?);
     bundle.aad_visibility = Some(
         arkret_models_collaboration::events_payloads::RealmAadVisibilityPolicy {
-            event_id: arkret_models_crypto::EncryptedEnvelopeAadVisibility::RoutingDigest,
+            event_id_kind: arkret_models_crypto::EncryptedEnvelopeAadVisibility::RoutingDigest,
         },
     );
 

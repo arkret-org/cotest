@@ -11,7 +11,7 @@
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §2.3 — 接口必须天然支持幂等重试
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §2.4 — 服务必须公布自己的实现 profile
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §3 — `GET /_arkret/describe` canonical shape
-- `arkret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe response claim levels(`supported_operations` / `implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` / `development_mode`)
+- `arkret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe response claim levels(`supported_operations` / `implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `interop_surfaces` / `development_mode`)
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §17 — 线级互操作要求(describe 必填字段、`verified_profiles` 与 `development_mode` 约束、claim-level partition)
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §4 — 标准成功响应 envelope
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5 — 标准错误响应(`ok=false`、`error.code`、`message`、`retry_after_ms`、`details`、`request_id`)
@@ -63,7 +63,7 @@
    - `service_kind === "principal_server"`(soland 是 principal server,见 `service-surface.md` §2.5)
    - `protocol_version === "1.0"`
    - `supported_bindings[0].kind === "http_json"`、`supported_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价
-   - **§3.0 claim-level partition**:`implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `compat_surfaces` 全部存在且是数组
+   - **§3.0 claim-level partition**:`implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `interop_surfaces` 全部存在且是数组
    - `claimed_profiles[*].claim_kind === "self_claimed"`(self-claim 不得直接写 `conformance_verified`)
    - 若 `development_mode === true`,则 `verified_profiles.length === 0`(spec §3.0 第 2 条 dev fail-closed)
    - `supported_operations` 至少含 `ak.server.read.describe` 与 `ak.self.events.command.submit`(spec §4.2 + service-api-schema §2.1 `/events POST`)

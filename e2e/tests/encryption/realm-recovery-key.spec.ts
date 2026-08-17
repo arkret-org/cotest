@@ -414,7 +414,7 @@ async function submitExporterAeadMessage(
           epoch,
           content_type: "application/json",
           ciphertext,
-          aad_visibility_event_id: "hidden",
+          aad_visibility_event_id_kind: "hidden",
           aad,
           key_ref: {
             algorithm: "MLS-EXPORTER-AEAD",

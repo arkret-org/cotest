@@ -255,7 +255,7 @@ test.describe.configure({ mode: "serial" });
 test.describe("third-party invite", () => {
   // Shared Phase-A/B/C setup: alice creates an `invite` Realm, allowlists a
   // resolvable did:webvh verification service, and submits a pending `ak.invite.third_party`
-  // whose `third_party_id` the test controls so the claim transcripts can be
+  // whose `third_party_invite` the test controls so the claim transcripts can be
   // reconstructed byte-for-byte.
   async function setupPendingInvite(
     request: APIRequestContext,

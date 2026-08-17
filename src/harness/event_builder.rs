@@ -110,6 +110,20 @@ pub fn default_event_verification_method(actor: &str) -> DidUrl {
         .expect("cotest default Event signer verification method is a canonical device DID URL")
 }
 
+/// `auth_context.key_id` for one verification method.
+///
+/// `event-envelope.schema.json` closes the member over
+/// `^(?!ak:)[A-Za-z0-9._:-]{1,128}$`, so the DID URL contributes only its
+/// fragment and the fragment drops the `ak:` sigil: the member labels the
+/// signing key locally and MUST NOT borrow the typed-ID lexical space.
+pub fn auth_context_key_id(verification_method: &str) -> arkret_wire::OpaqueLocalId {
+    let fragment = verification_method
+        .split_once('#')
+        .map_or(verification_method, |(_, fragment)| fragment);
+    arkret_wire::OpaqueLocalId::new(fragment.strip_prefix("ak:").unwrap_or(fragment))
+        .expect("cotest auth_context key id is an opaque local id")
+}
+
 pub(crate) fn registered_event_signing_seed(
     signer: &str,
     verification_method: &DidUrl,
@@ -205,7 +219,7 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
 pub fn device_message_send_request(
     recipient: &str,
     device_id: &str,
-    message_id: &str,
+    device_message_id: &str,
     kind: &str,
     content: Value,
     expires_at: DateTime<Utc>,
@@ -217,7 +231,7 @@ pub fn device_message_send_request(
         .into_iter()
         .collect();
     let target = DeviceMessageTarget {
-        message_id: DeviceMessageId::new(message_id.to_owned())?,
+        device_message_id: DeviceMessageId::new(device_message_id.to_owned())?,
         kind: ProtocolKind::new(kind.to_owned()).map_err(anyhow::Error::msg)?,
         content,
         expires_at,
@@ -761,7 +775,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
                 actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                     actor.to_owned(),
                 )?)?),
-                key_id: verification_method.to_string(),
+                key_id: auth_context_key_id(verification_method.as_str()),
                 key_epoch: 0,
                 credential_epoch: None,
             });

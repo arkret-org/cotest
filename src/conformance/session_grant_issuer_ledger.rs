@@ -94,7 +94,7 @@ pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
             "issuance digest drifted for {name}"
         );
         let grant_id = preimage.grant_id()?;
-        ensure!(grant_id.as_str() == text(vector, "grant_id")?);
+        ensure!(grant_id.as_str() == text(vector, "session_grant_id")?);
         ensure!(grant_id.as_str() == text(vector, "jwt_jti")?);
         derived_ids.insert(name.to_owned(), grant_id.to_string());
 
@@ -136,7 +136,7 @@ pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
             .context("preimage object")?
             .remove("schema");
         claims["kind"] = json!("ak.session.grant");
-        claims["jti"] = vector["grant_id"].clone();
+        claims["jti"] = vector["session_grant_id"].clone();
         Ok(claims)
     };
     for tamper in fixture["tamper_cases"]
@@ -163,7 +163,7 @@ pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
                     "{ \"kty\": \"OKP\", \"crv\": \"Ed25519\", \"x\": \"11qYAYdk9Jc1iP4Z9Qv7XKpM6Jw8LmN0RsTuVwXyZaB\" }"
                 )
             }
-            "session_id" => claims["session_id"] = base["grant_id"].clone(),
+            "session_id" => claims["session_id"] = base["session_grant_id"].clone(),
             other => bail!("unhandled SessionGrant tamper vector {other}"),
         }
         let rejected = serde_json::from_value::<SignedSessionGrantClaims>(claims)
@@ -302,7 +302,7 @@ pub fn run_session_grant_issuer_ledger_reference_model_suite() -> Result<()> {
             ]
     );
     let intent = br#"{"audience":"did:web:service.example","request":"same"}"#;
-    let outcome = br#"{"grant_id":"ak:session_grant:fixture","session_grant":"jwt.fixture"}"#;
+    let outcome = br#"{"session_grant_id":"ak:session_grant:fixture","session_grant":"jwt.fixture"}"#;
     let mut ledger = MiniIssuerLedger::default();
     ensure!(
         ledger.issue("proof-1", intent, outcome, 100) == LedgerResult::Outcome(outcome.to_vec())

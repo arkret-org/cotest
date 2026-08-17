@@ -389,7 +389,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         arkret_wire::event_kind_str::ACCOUNT_DATA_SET,
         json!({
             "key": account_data_key,
-            "owner": alice.actor.clone(),
+            "holder_id": alice.actor.clone(),
             "expected_revision": 0,
             "body": {"spotcheck": true},
         }),

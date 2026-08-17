@@ -62,7 +62,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 
 - soland `/_arkret/describe` 已暴露 T6.1 claim-level partition
   (`implemented_features` / `claimed_profiles` / `verified_profiles` /
-  `experimental_features` / `compat_surfaces`)
+  `experimental_features` / `interop_surfaces`)
 - soland 启动时 `development_mode=true`(cotest harness 默认配置)
 - catalog 通过 `path.resolve(__dirname, "../../../../arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json")`
   解析(相对于 `cotest/e2e/tests/conformance/`)

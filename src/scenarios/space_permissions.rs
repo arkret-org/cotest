@@ -227,7 +227,7 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
                     &arkret_identifiers::DidFullId::new(actor.to_owned())?,
                 )?,
             ),
-            key_id: verification_method.clone(),
+            key_id: crate::harness::auth_context_key_id(&verification_method),
             key_epoch: 0,
             credential_epoch: None,
         });

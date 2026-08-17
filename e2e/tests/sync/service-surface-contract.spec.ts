@@ -195,7 +195,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     //
     // Asserts the §17 must-have fields are present, that the §3.0 six claim-level
     // fields (implemented_features / claimed_profiles / verified_profiles /
-    // experimental_features / compat_surfaces + development_mode) are partitioned
+    // experimental_features / interop_surfaces + development_mode) are partitioned
     // correctly, and that dev-mode posture forces verified_profiles == [].
     const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
@@ -223,7 +223,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     expect(Array.isArray(body.claimed_profiles), "claimed_profiles array").toBe(true);
     expect(Array.isArray(body.verified_profiles), "verified_profiles array").toBe(true);
     expect(Array.isArray(body.experimental_features), "experimental_features array").toBe(true);
-    expect(Array.isArray(body.compat_surfaces), "compat_surfaces array").toBe(true);
+    expect(Array.isArray(body.interop_surfaces), "interop_surfaces array").toBe(true);
 
     // §3.0 — self-claim has claim_kind === "self_claimed"; conformance_verified MUST live
     // only under verified_profiles, never copied into claimed_profiles.
@@ -290,7 +290,7 @@ test.describe("describes coauth surface @fully-implemented", () => {
     expect(Array.isArray(body.claimed_profiles)).toBe(true);
     expect(Array.isArray(body.verified_profiles)).toBe(true);
     expect(Array.isArray(body.experimental_features)).toBe(true);
-    expect(Array.isArray(body.compat_surfaces)).toBe(true);
+    expect(Array.isArray(body.interop_surfaces)).toBe(true);
     expect(typeof body.development_mode).toBe("boolean");
 
     // G3.C3 — coauth MUST NOT claim canonical identity registry profile.

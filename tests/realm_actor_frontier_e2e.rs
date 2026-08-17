@@ -79,7 +79,9 @@ fn bind_seal_ref(event: &mut arkret_wire::Event, basis: &arkret_wire::SealBasis)
                     .map_err(anyhow::Error::msg)?,
             )?,
         ),
-        key_id: default_event_verification_method(ACTOR).to_string(),
+        key_id: cotest::harness::auth_context_key_id(
+            default_event_verification_method(ACTOR).as_str(),
+        ),
         key_epoch: 0,
         credential_epoch: None,
     });

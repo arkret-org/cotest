@@ -72,7 +72,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak.account_data.set",
             json!({
                 "key": "ak.push_rules",
-                "owner": bob_core,
+                "holder_id": bob_core,
                 "expected_revision": 0,
                 "body": push_rules_carrier.clone(),
                 "updated_at": "2026-05-02T00:00:00.000Z"
@@ -95,7 +95,7 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak.account_data.set",
             json!({
                 "key": "ak.push_rules",
-                "owner": bob_core,
+                "holder_id": bob_core,
                 "expected_revision": 1,
                 "tombstone": true,
                 "updated_at": "2026-05-02T00:00:01.000Z"

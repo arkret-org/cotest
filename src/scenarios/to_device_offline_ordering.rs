@@ -72,7 +72,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         DeviceMessageRequest {
             recipient: bob_did,
             device_id: bob_device,
-            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c101",
+            device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c101",
             idempotency_key: "ct10-msg-1",
             ciphertext: "ciphertext-msg-1",
             expect_delivery: true,
@@ -102,7 +102,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         DeviceMessageRequest {
             recipient: bob_did,
             device_id: bob_device,
-            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
+            device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
             idempotency_key: "ct10-msg-2",
             ciphertext: "ciphertext-msg-2",
             expect_delivery: true,
@@ -115,7 +115,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         DeviceMessageRequest {
             recipient: bob_did,
             device_id: bob_device,
-            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c103",
+            device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c103",
             idempotency_key: "ct10-msg-3",
             ciphertext: "ciphertext-msg-3",
             expect_delivery: true,
@@ -166,7 +166,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         DeviceMessageRequest {
             recipient: bob_did,
             device_id: bob_device,
-            message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
+            device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
             idempotency_key: "ct10-msg-2-replay",
             ciphertext: "ciphertext-msg-2",
             expect_delivery: true,
@@ -209,7 +209,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
 struct DeviceMessageRequest<'a> {
     recipient: &'a str,
     device_id: &'a str,
-    message_id: &'a str,
+    device_message_id: &'a str,
     idempotency_key: &'a str,
     ciphertext: &'a str,
     expect_delivery: bool,
@@ -223,7 +223,7 @@ async fn send_to_device(
     let DeviceMessageRequest {
         recipient,
         device_id,
-        message_id,
+        device_message_id,
         idempotency_key,
         ciphertext,
         expect_delivery,
@@ -231,7 +231,7 @@ async fn send_to_device(
     let body = device_message_send_request(
         recipient,
         device_id,
-        message_id,
+        device_message_id,
         "ak.mls.application",
         encrypted_envelope("ak.mls.application", ciphertext),
         chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?

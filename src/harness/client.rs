@@ -831,7 +831,7 @@ impl TestActorClient {
                 actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                     self.actor.clone(),
                 )?)?),
-                key_id: "cotest".to_owned(),
+                key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                 key_epoch: 0,
                 credential_epoch: None,
             });
@@ -944,7 +944,7 @@ impl TestActorClient {
                     actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                         self.actor.clone(),
                     )?)?),
-                    key_id: "cotest".to_owned(),
+                    key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                     key_epoch: 0,
                     credential_epoch: None,
                 });

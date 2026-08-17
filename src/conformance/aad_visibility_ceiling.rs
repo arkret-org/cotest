@@ -1,10 +1,10 @@
 //! `ak.vector.aad_visibility.policy_ceiling.v1` — the Realm ceiling on
-//! encrypted-envelope `aad_visibility_event_id`
+//! encrypted-envelope `aad_visibility_event_id_kind`
 //! (`crypto-media/encryption-and-audit.md` §§2.3.2 / 2.8).
 //!
-//! The rule is cross-object: it compares the `aad_visibility.event_id`
+//! The rule is cross-object: it compares the `aad_visibility.event_id_kind`
 //! component of the accepted `ak.realm.policy_bundle` against the
-//! `aad_visibility_event_id` discriminator of an encrypted envelope. JSON
+//! `aad_visibility_event_id_kind` discriminator of an encrypted envelope. JSON
 //! Schema cannot express that, which is why it is a conformance vector rather
 //! than a schema case.
 //!
@@ -77,7 +77,7 @@ pub fn run_aad_visibility_policy_ceiling_vector() -> Result<()> {
         // component absent. Anything else means the fixture shape drifted.
         let declared = match (
             input
-                .get("policy_aad_visibility_event_id")
+                .get("policy_aad_visibility_event_id_kind")
                 .and_then(Value::as_str),
             input
                 .get("policy_aad_visibility_component_present")
@@ -96,7 +96,7 @@ pub fn run_aad_visibility_policy_ceiling_vector() -> Result<()> {
         };
         let envelope = visibility(
             input
-                .get("envelope_aad_visibility_event_id")
+                .get("envelope_aad_visibility_event_id_kind")
                 .and_then(Value::as_str)
                 .ok_or_else(|| {
                     anyhow::anyhow!(

@@ -238,7 +238,7 @@ fn issue_session_grant(
         device_id: request.device_id.clone(),
         session_grant: "ak.session.grant.test".to_owned(),
         expires_at,
-        grant_id: SessionGrantId::from_issuance_digest(canonical::sha256_bytes(
+        session_grant_id: SessionGrantId::from_issuance_digest(canonical::sha256_bytes(
             expected_digest.as_str().as_bytes(),
         )),
         session_public_key: CanonicalSessionPublicJwk::new(

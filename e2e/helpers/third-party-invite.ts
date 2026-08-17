@@ -49,7 +49,7 @@ export type ThirdPartyInviteCell = {
   inviter: string;
   expiresAt: string;
   tokenCommitment: string;
-  thirdPartyId: Record<string, unknown>;
+  thirdPartyInvite: Record<string, unknown>;
   joinRuleSnapshot: Record<string, unknown>;
 };
 
@@ -82,7 +82,7 @@ function transcriptBytes(domain: string, transcript: unknown): Buffer {
 }
 
 // `sha256:` + canonical_sha256({expires_at, invite_id, realm_id,
-// third_party_id}) — soland invite_record_digest. `expires_at` is the
+// third_party_invite}) — soland invite_record_digest. `expires_at` is the
 // rfc3339-seconds form stored on the invite cell, which for events submitted
 // through `ak.invite.third_party` is exactly the `expires_at` the test wrote.
 function inviteRecordDigest(cell: ThirdPartyInviteCell): string {
@@ -90,11 +90,11 @@ function inviteRecordDigest(cell: ThirdPartyInviteCell): string {
     expires_at: cell.expiresAt,
     invite_id: cell.inviteId,
     realm_id: cell.realmId,
-    third_party_id: cell.thirdPartyId,
+    third_party_invite: cell.thirdPartyInvite,
   })}`;
 }
 
-// Build a `ak.invite.third_party` payload whose `third_party_id` the test fully
+// Build a `ak.invite.third_party` payload whose `third_party_invite` the test fully
 // controls (so the claim transcripts can be reconstructed byte-for-byte). The
 // commitment is `sha256:<hex>` over an opaque per-invite secret — the plaintext
 // 3PID never appears, satisfying the privacy invariant.
@@ -115,7 +115,7 @@ export function buildThirdPartyInvitePayload(args: {
     join_rule: args.joinRule ?? "invite",
     role: args.role ?? "member",
   };
-  const thirdPartyId: Record<string, unknown> = {
+  const thirdPartyInvite: Record<string, unknown> = {
     oob_code_kind: "offline_token",
     token_commitment: args.tokenCommitment,
     token_salt_id: args.tokenSaltId ?? "salt-3pid-e2e-001",
@@ -125,7 +125,7 @@ export function buildThirdPartyInvitePayload(args: {
     max_claims: 1,
   };
   if (args.displayNameHint) {
-    thirdPartyId.display_name_hint = args.displayNameHint;
+    thirdPartyInvite.display_name_hint = args.displayNameHint;
   }
   const createdAt = args.createdAt ?? canonicalTimestamp();
   const payload = {
@@ -134,7 +134,7 @@ export function buildThirdPartyInvitePayload(args: {
       schema: "ak.schema.invite.v1",
       realm_id: args.realmId,
       inviter: args.inviter,
-      third_party_id: thirdPartyId,
+      third_party_invite: thirdPartyInvite,
       join_rule_snapshot: joinRuleSnapshot,
       state: "pending",
       expires_at: args.expiresAt,
@@ -149,7 +149,7 @@ export function buildThirdPartyInvitePayload(args: {
       inviter: args.inviter,
       expiresAt: args.expiresAt,
       tokenCommitment: args.tokenCommitment,
-      thirdPartyId,
+      thirdPartyInvite,
       joinRuleSnapshot,
     },
   };

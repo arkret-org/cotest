@@ -193,7 +193,8 @@ fn completion_vector() -> Result<CompletionVector> {
         device_id: Some(device_id.parse()?),
         session_grant: jwt,
         expires_at: completed_at + Duration::hours(1),
-        grant_id: "ak:session_grant:ATLC-gY-xpE0kN3QXVYxo0Kh32EoNCTBQTSFuu_P57e6".parse()?,
+        session_grant_id: "ak:session_grant:ATLC-gY-xpE0kN3QXVYxo0Kh32EoNCTBQTSFuu_P57e6"
+            .parse()?,
         session_public_key,
         audience: audience.parse()?,
         granted_scope: initial_session.requested_scope_strings(),

@@ -196,7 +196,7 @@ function encryptedAttachmentEnvelope(
     group_id: "mls_test",
     epoch: 1,
     content_type: "application/vnd.arkret.attachment+json",
-    aad_visibility_event_id: "hidden",
+    aad_visibility_event_id_kind: "hidden",
     aad,
     key_ref: {
       algorithm: "MLS",

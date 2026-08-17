@@ -133,7 +133,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(created_space["owner"], alice_core_id);
+    assert_eq!(created_space["owner_id"], alice_core_id);
 
     expect_status(
         server
