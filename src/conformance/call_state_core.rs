@@ -14,7 +14,7 @@ use arkret_canonical::base64url::base64url_encode;
 use arkret_identifiers::{CallId, CellRef, DeviceId, DidCoreId, DidFullId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::{
-    CallMediaParticipantBinding, CallMediaServiceSignature, CallMediaTokenExchangeOutcome,
+    CallMediaParticipantBinding, CallMediaTokenExchangeOutcome,
     CallMediaTokenExchangeRequestBody, MediaBackendKind, MediaBackendToken,
 };
 use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp};
@@ -176,18 +176,12 @@ fn unsigned_token_outcome(
             expires_at,
         },
         expires_at,
-        service_signature: CallMediaServiceSignature {
-            kid: arkret::DidUrl::new(ISSUER_KID).unwrap(),
-            sig: String::new(),
-        },
     }
 }
 
 fn sign_outcome(outcome: &mut CallMediaTokenExchangeOutcome, key: &SigningKey) -> Result<()> {
     let input = participant_binding_signing_input(&outcome.participant_binding)?;
-    let sig = base64url_encode(key.sign(&input).to_bytes());
-    outcome.participant_binding.sig = sig.clone();
-    outcome.service_signature.sig = sig;
+    outcome.participant_binding.sig = base64url_encode(key.sign(&input).to_bytes());
     Ok(())
 }
 
@@ -241,7 +235,6 @@ pub fn run_participant_binding_invalid_vector() -> Result<()> {
 
     let mut rogue_issuer = unsigned_token_outcome(&request, expires_at);
     rogue_issuer.participant_binding.issuer_kid = arkret::DidUrl::new(ROGUE_KID).unwrap();
-    rogue_issuer.service_signature.kid = arkret::DidUrl::new(ROGUE_KID).unwrap();
     sign_outcome(&mut rogue_issuer, &key)?;
     assert_participant_binding_invalid(
         "unanchored issuer",

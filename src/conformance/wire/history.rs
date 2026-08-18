@@ -326,10 +326,18 @@ pub fn run_redaction_history_visibility_fixture_suite() -> Result<()> {
         if required_str(redaction, "kind")? != "ak.message.redact" {
             bail!("vector {name} redaction_event kind must be ak.message.redact");
         }
-        let redacts = required_str(redaction, "redacts")?;
+        // `payload.message_id` is the single registered target carrier; it shares
+        // the original create Event's 33-octet token (common-fields.md 6.0).
+        let payload = redaction
+            .get("payload")
+            .ok_or_else(|| anyhow!("vector {name} redaction_event missing payload"))?;
+        let message_id = required_str(payload, "message_id")?;
         let original_id = required_str(original, "event_id")?;
-        if redacts != original_id {
-            bail!("vector {name} redaction.redacts {redacts} != original.event_id {original_id}");
+        let expected_message_id = original_id.replace("ak:event:", "ak:message:");
+        if message_id != expected_message_id {
+            bail!(
+                "vector {name} redaction.payload.message_id {message_id} != retype(original.event_id) {expected_message_id}"
+            );
         }
 
         let expected = v

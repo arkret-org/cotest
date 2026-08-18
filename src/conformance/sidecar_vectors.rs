@@ -979,7 +979,6 @@ fn fixed_unsigned_sidecar_event(
         auth_context: None,
         seal_basis: None,
         payload,
-        redacts: None,
         unsigned: BTreeMap::new(),
         proofs: Vec::new(),
         requirements: EventRequirements::default(),

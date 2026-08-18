@@ -382,8 +382,7 @@ fn participant_binding_signing_input(
     Ok(input)
 }
 
-/// VECT-MB-5b — REAL Ed25519 golden vector for `participant_binding.sig` and the
-/// `service_signature.sig` (which reuses the SAME signing_input, §3.1).
+/// VECT-MB-5b — REAL Ed25519 golden vector for `participant_binding.sig`.
 ///
 /// Fixed issuer seed + fixed 7-tuple ⇒ a deterministic golden signature. The
 /// vector proves:
@@ -392,8 +391,7 @@ fn participant_binding_signing_input(
 ///   2. tampering with ANY one authoritative field breaks verification (the signature actually
 ///      covers the field, it is not merely compared);
 ///   3. the domain label is load-bearing — verifying the same `sig` under the ICE-config label
-///      (`ak.media.ice_config.v1`) MUST fail (cross-purpose signature confusion is rejected);
-///   4. `service_signature.sig` over the identical input verifies with the same issuer key.
+///      (`ak.media.ice_config.v1`) MUST fail (cross-purpose signature confusion is rejected).
 fn run_participant_binding_ed25519_vector() -> Result<()> {
     // Fixed golden inputs.
     const ISSUER_SEED: [u8; 32] = [
@@ -497,18 +495,6 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         bail!(
             "participant_binding sig verified under the ICE-config domain label — \
              domain separation is broken"
-        );
-    }
-
-    // 4. service_signature reuses the identical signing_input (§3.1) and verifies with the same
-    //    issuer key.
-    let service_sig = issuer.sign(&signing_input);
-    verifying
-        .verify(&signing_input, &service_sig)
-        .map_err(|err| anyhow!("service_signature over identical input must verify: {err}"))?;
-    if hex_lower(&service_sig.to_bytes()) != EXPECTED_SIG_HEX {
-        bail!(
-            "service_signature over the same input must reproduce the golden sig (deterministic ed25519)"
         );
     }
 

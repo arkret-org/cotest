@@ -26,6 +26,7 @@ const REQUEST_ID: &str = "secret-share-request-001";
 const SECRET_ID: &str = "inkson_mls_account_secret";
 const EXPIRES_AT: &str = "2026-06-10T00:30:00.000Z";
 const ACCOUNT_SECRET: &str = "base64url-account-mls-root-secret";
+const MESSAGE_ID: &str = "ak:device_message:0196419b-0000-7000-8000-000000000099";
 
 #[derive(Clone, Debug)]
 struct PendingRequest {
@@ -197,7 +198,14 @@ fn d2d_root_secret_aad_requires_canonical_millisecond_timestamps() -> Result<()>
     let opened = open_secret_send(&request, &envelope)?;
     assert_eq!(opened.secret_version, 11);
     assert!(
-        send_aad(OLD_DEVICE, NEW_DEVICE, "2026-06-10T00:30:00+00:00").is_err(),
+        send_aad(
+            MESSAGE_ID,
+            OLD_DEVICE,
+            NEW_DEVICE,
+            REQUEST_ID,
+            "2026-06-10T00:30:00+00:00"
+        )
+        .is_err(),
         "non-canonical RFC 3339 spelling must not enter the signed AAD"
     );
     Ok(())
@@ -226,7 +234,13 @@ fn seal_secret_send(
     }
     let recipient_pk = URL_SAFE_NO_PAD.decode(request.recipient_hpke_public_key.as_bytes())?;
     let plaintext = secret_plaintext(secret, secret_version, &request.request_id)?;
-    let aad = send_aad(OLD_DEVICE, request.from_device.as_str(), expires_at)?;
+    let aad = send_aad(
+        MESSAGE_ID,
+        OLD_DEVICE,
+        request.from_device.as_str(),
+        &request.request_id,
+        expires_at,
+    )?;
     let sealed = hpke_seal(
         &recipient_pk,
         arkret_wire::SECRET_SHARE_HPKE_INFO,
@@ -273,8 +287,10 @@ fn open_secret_send(
     }
 
     let aad = send_aad(
+        envelope.device_message_id.as_str(),
         sender_device_id.as_str(),
         envelope.recipient_device_id.as_str(),
+        &content.request_id,
         &arkret_canonical::format_timestamp_canonical(envelope.expires_at),
     )?;
     let enc = URL_SAFE_NO_PAD.decode(content.enc.as_bytes())?;
@@ -320,20 +336,32 @@ fn secret_plaintext(secret: &str, secret_version: u32, request_id: &str) -> Resu
     }))?)
 }
 
+/// Thin adapter over the single SDK AAD constructor.
+///
+/// The conformance suite MUST NOT keep its own JSON assembly: a local copy is
+/// exactly how the nine-member AAD drifted to six in the first place.
 fn send_aad(
+    device_message_id: &str,
     sender_device_id: &str,
     recipient_device_id: &str,
+    request_id: &str,
     expires_at: &str,
 ) -> Result<Vec<u8>> {
-    arkret_canonical::validate_timestamp_canonical(expires_at)?;
-    Ok(canonical_json_bytes(&json!({
-        "kind": SECRET_SEND_KIND,
-        "sender_principal_id": ACCOUNT_ID,
-        "sender_device_id": sender_device_id,
-        "recipient_principal_id": ACCOUNT_ID,
-        "recipient_device_id": recipient_device_id,
-        "expires_at": expires_at,
-    }))?)
+    let device_message_id = DeviceMessageId::new(device_message_id)?;
+    let account = DidCoreId::new(ACCOUNT_ID.to_owned())?;
+    let sender_device_id = device_id(sender_device_id)?;
+    let recipient_device_id = device_id(recipient_device_id)?;
+    Ok(arkret_crypto::secret_share::SecretShareSendAad {
+        device_message_id: &device_message_id,
+        sender_principal_id: &account,
+        sender_device_id: &sender_device_id,
+        recipient_principal_id: &account,
+        recipient_device_id: &recipient_device_id,
+        request_id,
+        secret_id: SECRET_ID,
+        expires_at,
+    }
+    .canonical_bytes()?)
 }
 
 fn device_message_body(
@@ -349,9 +377,7 @@ fn device_message_body(
 
 fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<DeviceMessageEnvelope> {
     Ok(DeviceMessageEnvelope {
-        device_message_id: DeviceMessageId::new(
-            "ak:device_message:0196419b-0000-7000-8000-000000000099",
-        )?,
+        device_message_id: DeviceMessageId::new(MESSAGE_ID)?,
         kind: ProtocolKind::new(SECRET_SEND_KIND).map_err(anyhow::Error::msg)?,
         sender_principal_id: DidCoreId::new(ACCOUNT_ID.to_owned())?,
         sender: DeviceMessageSender::Device {

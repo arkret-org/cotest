@@ -1179,39 +1179,14 @@ fn normalize_message_payload(kind: &str, payload: &mut Value) {
             object.remove("thread_id");
             normalize_message_content(object);
         }
-        "ak.message.revise" => {
-            if let Some(target_event_id) = object.remove("target_event_id")
-                && !object.contains_key("target_ref")
-                && !object.contains_key("message_id")
-                && !object.contains_key("revision_of")
-            {
-                object.insert(
-                    "target_ref".to_owned(),
-                    message_ref_from_event_ref(target_event_id),
-                );
-            }
+        // Both Message-scoped payload classes register exactly one target
+        // carrier, `message_id`; normalize any create-Event spelling to it.
+        "ak.message.revise" | "ak.message.redact" => {
+            normalize_message_target_carrier(object);
             object.remove("thread_id");
-            normalize_message_content(object);
-        }
-        "ak.message.redact" => {
-            if !object.contains_key("target_event_id") {
-                if let Some(event_id) = object.get("event_id").cloned() {
-                    object.insert("target_event_id".to_owned(), event_id);
-                } else if let Some(target_ref) = object.get("target_ref").and_then(Value::as_str) {
-                    if target_ref.starts_with("ak:event:") {
-                        object.insert(
-                            "target_event_id".to_owned(),
-                            Value::String(target_ref.to_owned()),
-                        );
-                    } else if let Ok(message_id) = MessageId::new(target_ref.to_owned()) {
-                        object.insert(
-                            "target_event_id".to_owned(),
-                            Value::String(message_id.event_id().to_string()),
-                        );
-                    }
-                }
+            if kind == "ak.message.revise" {
+                normalize_message_content(object);
             }
-            object.remove("thread_id");
         }
         _ => {}
     }
@@ -1269,6 +1244,23 @@ fn message_ref_from_event_ref(value: Value) -> Value {
     value
 }
 
+/// Fold any create-Event spelling of a Message target onto the single
+/// registered carrier `message_id` (`common-fields.md` §6.0 retype).
+fn normalize_message_target_carrier(object: &mut serde_json::Map<String, Value>) {
+    if object.contains_key("message_id") {
+        return;
+    }
+    for legacy in ["target_ref", "event_id", "target_event_id", "revision_of"] {
+        if let Some(value) = object.remove(legacy) {
+            object.insert("message_id".to_owned(), message_ref_from_event_ref(value));
+            break;
+        }
+    }
+    for legacy in ["target_ref", "event_id", "target_event_id", "revision_of"] {
+        object.remove(legacy);
+    }
+}
+
 pub(crate) fn message_create_text_payload(strand_id: &str, body: &str) -> Result<Value> {
     message_create_text_payload_for_strand(parse_strand_id(strand_id)?, body)
 }
@@ -1290,9 +1282,7 @@ pub(crate) fn parse_strand_id(strand_id: &str) -> Result<StrandId> {
 pub(crate) fn message_revise_text_payload(target_event_id: &str, body: &str) -> Result<Value> {
     serialize_payload(
         &MessageRevisePayload {
-            message_id: Some(message_id_from_event_id(target_event_id)?),
-            target_ref: None,
-            revision_of: None,
+            message_id: message_id_from_event_id(target_event_id)?,
             track_name: None,
             content: Some(ContentBlock::text(body)),
             encrypted_content: None,
@@ -1307,13 +1297,7 @@ pub(crate) fn message_revise_text_payload(target_event_id: &str, body: &str) -> 
 pub(crate) fn message_redact_payload(target_event_id: &str, reason: Option<&str>) -> Result<Value> {
     serialize_payload(
         &MessageRedactPayload {
-            message_id: Some(message_id_from_event_id(target_event_id)?),
-            target_ref: None,
-            event_id: None,
-            target_event_id: Some(
-                EventId::new(target_event_id.to_owned())
-                    .map_err(|err| anyhow!("invalid message target event_id: {err}"))?,
-            ),
+            message_id: message_id_from_event_id(target_event_id)?,
             track_name: None,
             reason: reason.map(ToOwned::to_owned),
             preserve: None,

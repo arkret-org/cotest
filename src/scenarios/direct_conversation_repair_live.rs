@@ -319,7 +319,7 @@ async fn upload_requester_keypackage(
         "principal_id": actor,
         "device_id": device_id,
         "key_packages": [{
-            "keypackage_id": "ak:mls_keypackage:cotest-direct-repair",
+            "keypackage_id": "keypackage-cotest-direct-repair",
             "keypackage_ref": keypackage_ref,
             "keypackage_digest": arkret_canonical::sha256_digest(bytes),
             "key_package": URL_SAFE_NO_PAD.encode(bytes),

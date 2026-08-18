@@ -107,7 +107,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
-                if audit["redacts"] != target["event_id"] {
+                if audit["redaction_target"] != target["event_id"] {
                     bail!("redaction fixture {} lost target reference", case.name);
                 }
                 record_vector_event(
@@ -115,11 +115,11 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                     &json!({"target": target.clone()}),
                     &json!({
                         "audit_content_present": false,
-                        "redacts": target["event_id"].clone(),
+                        "redaction_target": target["event_id"].clone(),
                     }),
                     &json!({
                         "audit": audit.clone(),
-                        "redacts": audit["redacts"].clone(),
+                        "redaction_target": audit["redaction_target"].clone(),
                     }),
                 );
             }
@@ -141,7 +141,7 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                         case.name
                     );
                 }
-                if redacted["redacts"] != target["event_id"] {
+                if redacted["redaction_target"] != target["event_id"] {
                     bail!("redaction fixture {} lost redaction reference", case.name);
                 }
                 record_vector_event(
@@ -150,13 +150,13 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                     &json!({
                         "content_present": false,
                         "proofs_present": false,
-                        "redacts": target["event_id"].clone(),
+                        "redaction_target": target["event_id"].clone(),
                     }),
                     &json!({
                         "redacted": redacted.clone(),
                         "content_present": redacted.get("content").is_some(),
                         "proofs_present": redacted.get("proofs").is_some(),
-                        "redacts": redacted["redacts"].clone(),
+                        "redaction_target": redacted["redaction_target"].clone(),
                     }),
                 );
             }
@@ -323,33 +323,41 @@ struct PolicyScopeOutcome {
 
 /// Vector `ak.vector.redaction.policy_scope.v1` (conformance §3.3).
 ///
-/// After message -> policy quarantine -> redaction, the projection MUST strip
-/// the redacted content while retaining audit evidence, MUST keep the timeline
-/// position (no physical delete), and MUST retain the quarantine decision and
-/// its `event_id` fingerprint mapping (quarantine is a display constraint, not
-/// a delete).
+/// After message -> moderation quarantine -> redaction, the projection MUST
+/// strip the redacted content while retaining audit evidence, MUST keep the
+/// timeline position (no physical delete), and MUST retain the quarantine
+/// decision and its target mapping (quarantine is a display constraint, not a
+/// delete). Moderation and redaction each address the Message through the one
+/// target carrier their payload class registers.
 fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
-    let message_id = "ak:event:AbTJRA159xoBFUoYTOIMDQve32eQFpWkEb-dThX1wCmA";
+    let message_event_id = "ak:event:AbTJRA159xoBFUoYTOIMDQve32eQFpWkEb-dThX1wCmA";
+    let message_id = "ak:message:AbTJRA159xoBFUoYTOIMDQve32eQFpWkEb-dThX1wCmA";
     let policy_id = "ak:event:AT7Zffi_RUZ2cAwFmu6haQQ20EMcxBP6Cy4u6j-Rka4M";
     let redaction_id = "ak:event:AShdBYxb70La6cHO6cmyp4Dek52Otp3Tshr8pw5HapWi";
 
     let timeline = json!([
         {
-            "event_id": message_id,
+            "event_id": message_event_id,
             "kind": "ak.message.create",
             "content": {"kind": "ak.content.text", "body": "bad link: spam.example/phish"},
         },
         {
             "event_id": policy_id,
-            "kind": "ak.policy.action",
+            "kind": "ak.moderation.decision",
             "actor_id": "ak:did_core:web:policy-bot.example.com",
-            "payload": {"target_id": message_id, "policy_scope": "public", "decision": "quarantine"},
+            "payload": {
+                "target_ref": message_id,
+                "decision": "quarantine",
+                "issuer": "ak:did_core:web:policy-bot.example.com",
+                "request_canonical_digest": "sha256:5f8b3c2ad4e1907664bb2f0c9d1e3a57c48d6b02fe971a35c8d40b7e9a2f6c1d",
+                "action": "quarantine_message",
+            },
         },
         {
             "event_id": redaction_id,
-            "kind": "ak.redaction",
+            "kind": "ak.message.redact",
             "actor_id": "ak:did_core:web:policy-admin.example",
-            "payload": {"target_ref": message_id, "reason": "policy_recall"},
+            "payload": {"message_id": message_id, "reason": "policy_recall"},
         },
     ]);
 
@@ -365,22 +373,22 @@ fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
         );
     }
     let message = &entries[0];
-    if message["event_id"] != json!(message_id) {
+    if message["event_id"] != json!(message_event_id) {
         bail!("policy_scope: redacted event lost its timeline position");
     }
     if message.get("content").is_some() {
         bail!("policy_scope: redacted content is still visible in the projection");
     }
-    if message["redacts"] != json!(message_id) {
-        bail!("policy_scope: stripped audit evidence (redacts reference) missing");
+    if message["redaction_target"] != json!(message_id) {
+        bail!("policy_scope: stripped audit evidence (redaction target) missing");
     }
 
     let policy = &entries[1];
     if policy["payload"]["decision"] != json!("quarantine") {
         bail!("policy_scope: quarantine decision was lost or downgraded to delete");
     }
-    if policy["payload"]["target_id"] != json!(message_id) {
-        bail!("policy_scope: quarantine event_id fingerprint mapping was lost");
+    if policy["payload"]["target_ref"] != json!(message_id) {
+        bail!("policy_scope: quarantine target mapping was lost");
     }
 
     Ok(PolicyScopeOutcome {
@@ -388,16 +396,16 @@ fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
         expected: json!({
             "timeline_len": 3,
             "redacted_content_present": false,
-            "redacts": message_id,
+            "redaction_target": message_id,
             "quarantine_decision": "quarantine",
-            "quarantine_target_id": message_id,
+            "quarantine_target_ref": message_id,
         }),
         actual: json!({
             "timeline_len": entries.len(),
             "redacted_content_present": message.get("content").is_some(),
-            "redacts": message["redacts"].clone(),
+            "redaction_target": message["redaction_target"].clone(),
             "quarantine_decision": policy["payload"]["decision"].clone(),
-            "quarantine_target_id": policy["payload"]["target_id"].clone(),
+            "quarantine_target_ref": policy["payload"]["target_ref"].clone(),
         }),
     })
 }
@@ -407,16 +415,26 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
         .as_array()
         .ok_or_else(|| anyhow!("policy_scope timeline must be an array"))?;
 
-    let mut redactions: HashMap<String, String> = HashMap::new();
+    // `ak.message.redact` addresses the Message through payload.message_id; the
+    // timeline is keyed by the create Event id, which carries the same
+    // 33-octet token (common-fields.md 6.0).
+    let mut redactions: HashMap<String, (String, String)> = HashMap::new();
     for entry in entries {
-        if entry["kind"] == json!("ak.redaction") {
-            let target = entry["payload"]["target_ref"]
+        if entry["kind"] == json!("ak.message.redact") {
+            let target = entry["payload"]["message_id"]
                 .as_str()
-                .ok_or_else(|| anyhow!("redaction event missing payload.target_ref"))?;
+                .ok_or_else(|| anyhow!("redaction event missing payload.message_id"))?;
+            let target_event_id = match target.strip_prefix("ak:message:") {
+                Some(token) => format!("ak:event:{token}"),
+                None => target.to_owned(),
+            };
             let redaction_event_id = entry["event_id"]
                 .as_str()
                 .ok_or_else(|| anyhow!("redaction event missing event_id"))?;
-            redactions.insert(target.to_owned(), redaction_event_id.to_owned());
+            redactions.insert(
+                target_event_id,
+                (target.to_owned(), redaction_event_id.to_owned()),
+            );
         }
     }
 
@@ -426,11 +444,11 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
             .as_str()
             .ok_or_else(|| anyhow!("timeline event missing event_id"))?;
         match redactions.get(event_id) {
-            Some(redaction_event_id) if entry["kind"] != json!("ak.redaction") => {
+            Some((target, redaction_event_id)) if entry["kind"] != json!("ak.message.redact") => {
                 projected.push(json!({
                     "event_id": event_id,
                     "kind": entry["kind"].clone(),
-                    "redacts": event_id,
+                    "redaction_target": target,
                     "redacted_because": redaction_event_id,
                 }));
             }
@@ -688,7 +706,7 @@ fn redact_event(target: &Value, redaction_event_id: &str) -> Result<Value> {
         "event_id": event_id,
         "created_at": created_at,
         "actor_id": actor_id,
-        "redacts": event_id,
+        "redaction_target": event_id,
         "redacted_because": redaction_event_id
     }))
 }
@@ -701,7 +719,7 @@ fn audit_tombstone(redacted: &Value) -> Result<Value> {
         "event_id": object["event_id"],
         "actor_id": object["actor_id"],
         "created_at": object["created_at"],
-        "redacts": object["redacts"],
+        "redaction_target": object["redaction_target"],
         "redaction": true
     }))
 }

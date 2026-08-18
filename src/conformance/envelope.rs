@@ -550,7 +550,6 @@ fn validate_event_envelope(
         "auth_context",
         "seal_basis",
         "payload",
-        "redacts",
         "unsigned",
         "proofs",
         "requirements",

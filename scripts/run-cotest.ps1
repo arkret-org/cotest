@@ -589,23 +589,86 @@ function Invoke-CargoTestInvocation {
 }
 
 function Parse-CotestLog {
+    <#
+    .SYNOPSIS
+    Parse a raw Cargo test log into per-test records plus per-invocation footer
+    counts, then reconcile the two.
+
+    .DESCRIPTION
+    libtest prints an ignored test either as `test <name> ... ignored` or as
+    `test <name> ... ignored, <reason>`. A regex anchored on `ignored$` silently
+    drops every reason-carrying line, which is how a 27-ignored run reported 5.
+
+    The `test result:` footer is the count truth source; the per-test lines
+    supply names and detail. Both are parsed, and the caller MUST treat a
+    mismatch as a report-integrity failure rather than publishing a partial
+    list. `invocation` distinguishes same-named tests across binaries.
+    #>
     param([Parameter(Mandatory = $true)][string]$LogPath)
 
     $tests = New-Object System.Collections.Generic.List[object]
+    $footers = New-Object System.Collections.Generic.List[object]
+    $invocation = "unknown"
+
     foreach ($line in Get-Content $LogPath) {
-        if ($line -match '^test (?<name>.+?) \.\.\. (?<status>ok|FAILED|ignored)$') {
+        if ($line -match '^\s*Running (?<target>.+)$') {
+            $invocation = $Matches.target.Trim()
+            continue
+        }
+        if ($line -match '^\s*Doc-tests (?<target>.+)$') {
+            $invocation = "doc-tests " + $Matches.target.Trim()
+            continue
+        }
+        if ($line -match '^test (?<name>.+?) \.\.\. (?<status>ok|FAILED|ignored)(?:, (?<reason>.*))?$') {
             $status = switch ($Matches.status) {
                 "ok" { "passed" }
                 "FAILED" { "failed" }
                 "ignored" { "ignored" }
             }
             $tests.Add([pscustomobject]@{
-                    name   = $Matches.name
-                    status = $status
+                    name       = $Matches.name
+                    status     = $status
+                    reason     = if ($Matches.ContainsKey("reason") -and $Matches.reason) { $Matches.reason } else { $null }
+                    invocation = $invocation
+                })
+            continue
+        }
+        if ($line -match '^test result: \w+\. (?<passed>\d+) passed; (?<failed>\d+) failed; (?<ignored>\d+) ignored') {
+            $footers.Add([pscustomobject]@{
+                    invocation = $invocation
+                    passed     = [int]$Matches.passed
+                    failed     = [int]$Matches.failed
+                    ignored    = [int]$Matches.ignored
                 })
         }
     }
-    return $tests
+
+    $perTest = [pscustomobject]@{
+        passed  = @($tests | Where-Object { $_.status -eq "passed" }).Count
+        failed  = @($tests | Where-Object { $_.status -eq "failed" }).Count
+        ignored = @($tests | Where-Object { $_.status -eq "ignored" }).Count
+    }
+    $footerTotals = [pscustomobject]@{
+        passed  = ($footers | Measure-Object -Property passed -Sum).Sum
+        failed  = ($footers | Measure-Object -Property failed -Sum).Sum
+        ignored = ($footers | Measure-Object -Property ignored -Sum).Sum
+    }
+    foreach ($field in @("passed", "failed", "ignored")) {
+        if ($null -eq $footerTotals.$field) { $footerTotals.$field = 0 }
+    }
+    $integrity = if (
+        $perTest.passed -eq $footerTotals.passed -and
+        $perTest.failed -eq $footerTotals.failed -and
+        $perTest.ignored -eq $footerTotals.ignored
+    ) { "passed" } else { "failed" }
+
+    return [pscustomobject]@{
+        tests         = $tests
+        footers       = $footers
+        per_test      = $perTest
+        footer_totals = $footerTotals
+        integrity     = $integrity
+    }
 }
 
 function ConvertTo-XmlSafe {
@@ -2138,10 +2201,20 @@ finally {
 }
 
 $finishedAt = Get-Date
-$tests = @(Parse-CotestLog -LogPath $rawLog)
-$passed = @($tests | Where-Object { $_.status -eq "passed" }).Count
-$failed = @($tests | Where-Object { $_.status -eq "failed" }).Count
-$ignored = @($tests | Where-Object { $_.status -eq "ignored" }).Count
+$parsedLog = Parse-CotestLog -LogPath $rawLog
+$tests = @($parsedLog.tests)
+# The `test result:` footers are the count truth source; per-test lines supply
+# names. Publishing counts derived only from per-test lines is exactly how a
+# reason-carrying `ignored` line went missing, so a mismatch fails the run
+# rather than shipping a partial list.
+$passed = $parsedLog.footer_totals.passed
+$failed = $parsedLog.footer_totals.failed
+$ignored = $parsedLog.footer_totals.ignored
+$reportIntegrity = $parsedLog.integrity
+if ($reportIntegrity -ne "passed") {
+    Write-Host "report_integrity=failed: per-test lines ($($parsedLog.per_test.passed)/$($parsedLog.per_test.failed)/$($parsedLog.per_test.ignored)) disagree with Cargo footers ($passed/$failed/$ignored)"
+    $exitCode = 1
+}
 $coverage = Get-CoverageMatrix -RepoRoot $repoRoot
 $e2eCoverage = [pscustomobject]@{
     status          = "not_collected"
@@ -2303,6 +2376,9 @@ $summary = [pscustomobject]@{
     passed               = $passed
     failed               = $failed
     ignored              = $ignored
+    report_integrity     = $reportIntegrity
+    per_test_counts      = $parsedLog.per_test
+    footer_counts        = $parsedLog.footers
     raw_log              = $rawLog
     transcript_path      = $transcriptNdjson
     junit_xml            = $junitXml
