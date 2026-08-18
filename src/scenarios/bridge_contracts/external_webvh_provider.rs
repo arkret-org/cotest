@@ -7,9 +7,7 @@
 //! id, provider entry, resolver policy, trust roots (including its local
 //! identity store's webvh proof-validation policy) and an empty `todos[]`.
 //!
-//! This coverage previously lived in a `starid`-named module and was almost
-//! lost when that service left the workspace. The provider URL below is a
-//! placeholder that is never dialled.
+//! The provider URL below is a placeholder that is never dialled.
 
 use anyhow::Result;
 use reqwest::StatusCode;

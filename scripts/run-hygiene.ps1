@@ -6,6 +6,8 @@ param(
     [switch]$SkipCargoAudit,
     [switch]$SkipE2eTypecheck,
     [switch]$SkipE2eWireTypes,
+    [switch]$SkipFixmeDebt,
+    [switch]$SkipFixmeQuality,
     [switch]$SkipAgentJourneyTests
 )
 
@@ -25,8 +27,13 @@ function Invoke-HygieneCommand {
         [Parameter(Mandatory = $true)][string]$FilePath,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Arguments,
         [Parameter(Mandatory = $true)][string]$RunDir,
-        [Parameter(Mandatory = $true)][string]$RawLog
+        [Parameter(Mandatory = $true)][string]$RawLog,
+        [string]$WorkingDirectory
     )
+
+    if (-not $WorkingDirectory) {
+        $WorkingDirectory = $repoRoot
+    }
 
     $safeLabel = $Label -replace '[^A-Za-z0-9_.-]', '_'
     $stdoutPath = Join-Path $RunDir "$safeLabel.stdout.log"
@@ -40,7 +47,7 @@ function Invoke-HygieneCommand {
 
     $startArgs = @{
         FilePath               = $FilePath
-        WorkingDirectory       = $repoRoot
+        WorkingDirectory       = $WorkingDirectory
         NoNewWindow            = $true
         Wait                   = $true
         PassThru               = $true
@@ -148,6 +155,31 @@ if (-not $SkipE2eWireTypes) {
         Add-Content -Path $rawLog -Value ""
         Add-Content -Path $rawLog -Value "=== e2e-wire-types (skipped) ==="
         Add-Content -Path $rawLog -Value "generator not found at $generator"
+    }
+}
+if (-not $SkipFixmeDebt) {
+    # `fixme-debt.md` is a gitignored local derivative, so nothing in CI can
+    # diff it. Refresh it here instead: the generator was previously manual-only
+    # and the local copy silently went stale (it kept listing suites that had
+    # already been deleted).
+    $fixmeDebtGenerator = Join-Path $scriptDir "generate-fixme-debt.ps1"
+    $pwshPath = Resolve-CommandPath "pwsh"
+    $results.Add((Invoke-HygieneCommand -Label "fixme-debt" -FilePath $pwshPath -Arguments @("-NoProfile", "-File", $fixmeDebtGenerator) -RunDir $runDir -RawLog $rawLog))
+}
+if (-not $SkipFixmeQuality) {
+    # `e2e/scripts/check-fixme-quality.mjs` is the policy gate behind
+    # docs/fixme-promotion-checklist.md (no empty fixme callbacks, required
+    # metadata). It only had an npm alias and no automated caller.
+    $fixmeQuality = Join-Path $repoRoot "e2e\scripts\check-fixme-quality.mjs"
+    if (Test-Path $fixmeQuality) {
+        $nodePath = Resolve-CommandPath "node"
+        # The checker resolves its scan root as `path.resolve("tests")`, so it
+        # must run from e2e/ (same as `npm run check:fixme`).
+        $results.Add((Invoke-HygieneCommand -Label "e2e-fixme-quality" -FilePath $nodePath -Arguments @($fixmeQuality) -RunDir $runDir -RawLog $rawLog -WorkingDirectory (Join-Path $repoRoot "e2e")))
+    } else {
+        Add-Content -Path $rawLog -Value ""
+        Add-Content -Path $rawLog -Value "=== e2e-fixme-quality (skipped) ==="
+        Add-Content -Path $rawLog -Value "checker not found at $fixmeQuality"
     }
 }
 if (-not $SkipAgentJourneyTests) {

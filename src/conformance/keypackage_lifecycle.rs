@@ -1009,7 +1009,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let capabilities_digest = required_str(vector, "capabilities_digest")?;
     let claim_id = required_str(vector, "claim_id")?;
     let intended_realm_id = required_str(vector, "intended_realm_id")?;
-    let requester_did = required_str(vector, "requester_did")?;
+    let requester_actor_id = required_str(vector, "requester_actor_id")?;
     let requester_verification_method = required_str(vector, "requester_verification_method")?;
     let claim_nonce = required_str(vector, "claim_nonce")?;
     let welcome_digest = required_str(vector, "welcome_digest")?;
@@ -1019,17 +1019,20 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     device(requester_device_id)?;
     require_model_generation_ref(vector, "model_generation_ref")?;
     let intended_realm_id = realm(intended_realm_id)?;
-    let requester_did = full_did(requester_did)?;
-    let requester_core_id = arkret_identifiers::project_full_id_to_core_id(&requester_did)?;
     let requester_verification_method = verification_method(requester_verification_method)?;
     let (requester_method_controller, requester_method_fragment) = requester_verification_method
         .as_str()
         .rsplit_once('#')
         .ok_or_else(|| anyhow!("requester verification method omits fragment"))?;
-    if requester_method_controller != requester_did.as_str()
+    // The claim envelope binds `requester_actor_id`, a core id (encryption-and-audit.md:576).
+    // The full DID exists only inside the verification method controller, so derive it there
+    // and prove the two agree instead of carrying a second copy in the vector.
+    let requester_did = full_did(requester_method_controller)?;
+    let requester_core_id = arkret_identifiers::project_full_id_to_core_id(&requester_did)?;
+    if requester_core_id.as_str() != requester_actor_id
         || requester_method_fragment != requester_device_id
     {
-        bail!("requester verification method does not bind requester DID and device");
+        bail!("requester verification method does not bind requester actor id and device");
     }
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 

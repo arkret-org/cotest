@@ -45,7 +45,6 @@ const ONE_LEVEL_REGRANT: NonNullable<CapabilityGrantEventArgs["constraints"]> =
       max_authority_depth: 1,
       authority_regrant_allowed: true,
       authority_scope: "narrowing_only",
-      scope_expansion_allowed: false,
     },
   ];
 
@@ -56,7 +55,6 @@ const NON_REGRANTABLE: NonNullable<CapabilityGrantEventArgs["constraints"]> = [
     max_authority_depth: 0,
     authority_regrant_allowed: false,
     authority_scope: "narrowing_only",
-    scope_expansion_allowed: false,
   },
 ];
 

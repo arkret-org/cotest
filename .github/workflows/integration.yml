@@ -3,11 +3,10 @@ name: integration
 # CT-003 live lane. MLS data-plane and provider live tests are deliberately
 # isolated in controlled.yml behind a protected GitHub environment.
 
-# Cross-project bring-up (P2F.5.2). Builds the upstream services
-# (soland / coauth / floria) from sibling checkouts and runs the cotest
-# harness against them.
+# Cross-project bring-up. Builds the upstream services (soland / coauth /
+# floria) from sibling checkouts and runs the cotest harness against them.
 #
-# IMPORTANT (per `_todos_all.md` §0):
+# IMPORTANT:
 #   * does NOT publish any release artefact, push tags, or bump versions.
 #   * artefacts uploaded here are CI evidence only.
 
@@ -20,7 +19,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  SIBLING_REF: circle-rollout
+  SIBLING_REF: main
 
 jobs:
   joint-bringup:
@@ -62,10 +61,9 @@ jobs:
           repository: ${{ github.repository_owner }}/inkson
           path: inkson
           ref: ${{ env.SIBLING_REF }}
-      # P5.1 — upstream checkout failures MUST hard-fail the job. The previous
-      # `continue-on-error: true` markers were a circle-rollout bootstrap
-      # tolerance; once the sibling repos are on the `circle-rollout` ref the
-      # job has no business green-lighting a partial bringup.
+      # Upstream checkout failures MUST hard-fail the job: no
+      # `continue-on-error: true` here. A partial bringup must never be
+      # green-lighted.
       - uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/soland

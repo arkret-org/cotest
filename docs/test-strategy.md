@@ -10,7 +10,7 @@ asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
   account, space, repo, sync, media, and policy behavior.
 - Multi-server scenarios start two or more real server processes and verify
   federation-facing behavior through public endpoints.
-- Shared lifecycle and actor helpers live in `src/harness.rs`.
+- Shared lifecycle and actor helpers live in `src/harness/`.
 - Reusable fixture builders live in `src/fixtures/`. See the
   [Fixture builders](#fixture-builders) section below for the
   `TestActorBuilder` fluent API that replaces the per-scenario
@@ -500,62 +500,3 @@ is nothing on disk to read. Scripts that already set
 `COTEST_ARTIFACT_DIR=artifacts/runs/cotest/<timestamp>-<profile>` (e.g.
 `run-cotest.ps1`) pick
 up the timeline automatically.
-
-## R3 spec-coverage matrix
-
-R3 introduced new wire surfaces (agent runtime, media token exchange,
-recovery policy/receipt, handle canonicalization). The matrix below maps
-each spec section to the cotest vectors that cover it, and identifies the
-gap-coverage gaps deferred to R4.
-
-| Spec section | Subject | cotest vector(s) | Stage |
-|---|---|---|---|
-| **§7 media binding** — `ak.realm.media_service.foci[]` shape | Realm declares a foci array | `e2e/realm/media_service_foci_round_trip.rs` | Active |
-| **§8 handles** — RFC 8265 preparation + UTS #46 domains + authority-local UTS #39 collision index | Internationalized canonical handles are accepted; rewritable wire values are rejected; skeleton collisions are scoped by authority and namespace | `privacy-security-fixture.json` via `run_privacy_security_fixture_suite` | Active |
-| **§9 agent** — FSM (Active/Paused/Deactivated) + pairing | Pause/resume/deactivate transitions; pairing window expiry; proof verification | `e2e/agent/fsm_transitions.rs`, `e2e/agent/pairing_window_expires.rs`, `e2e/agent/pairing_proof_invalid.rs`, `e2e/agent/verification_method_principal_mismatch.rs` | Active |
-| **§9 agent** — actor-private event kinds | `ak.agent.draft.propose`, `ak.agent.action_request`, `ak.agent.action_{approve,reject}` are reducer_input=false | `e2e/agent/actor_private_events_not_reducer_input.rs` | Active |
-| **§10 call.media** — token exchange | `ak.self.call.media.exchange.issue_token` round-trip; TTL gate; backend type enum reject | `e2e/call_media/token_exchange_round_trip.rs`, `e2e/call_media/token_ttl_exceeded.rs`, `e2e/call_media/unknown_focus_type_rejects.rs` | Active |
-| **§10 call.media** — participant_binding | Canonical-bytes round-trip; issuer_kid validation; identity-string canonical form | `e2e/call_media/participant_binding_canonical.rs`, `e2e/call_media/token_issuer_unauthorised.rs`, `e2e/call_media/participant_identity_unrecognised.rs` | Active |
-| **§11 media binding** — focus/session commit invariants | `session_focus_already_committed` reject; `e2ee_key_source_unauthorised` reject | `e2e/call_media/session_focus_already_committed.rs`, `e2e/call_media/e2ee_key_source_unauthorised.rs` | Active (some stubbed — see below) |
-| **§13 recovery** — policy + receipt | Policy version monotonicity; receipt completeness; proof_kinds dispatch | `e2e/recovery/policy_round_trip.rs`, `e2e/recovery/receipt_emitted_on_complete.rs`, `e2e/recovery/policy_version_monotone.rs` | Active |
-| **§13 recovery** — witness freshness | `recovery_witness_revoke_lagging` reject; per-arm proof verifier | `e2e/recovery/witness_revoke_lagging.rs` (basic shape), `e2e/recovery/per_arm_proof_verifier.rs` (stubbed) | Stubbed |
-| **§14 errors** — strict-reject profile | `accountable_principals.strict_reject` toggle + reject behavior | `e2e/profile/strict_reject_toggle.rs`, `e2e/profile/strict_reject_audit_row.rs` | Active |
-
-### Coverage gaps (deferred)
-
-- **Per-arm recovery proof verification** — `RecoveryProofKind`
-  arms (`DeviceQuorum`, `RecoveryUnlock`, `TrustedRecoveryService`,
-  `PrincipalSigning`) are exercised at the structural level only. The
-  cryptographic verifier per arm is stubbed in cotest because the SDK's
-  verifier is itself a TODO(R3.1). When the SDK verifier lands, the
-  stubbed vectors flip to active.
-- **Live media-backend conformance** — call_media vectors cover protocol
-  shapes and harness-facing behavior, but LiveKit / Mediasoup / Janus /
-  Arkret-native media backend conformance remains gated on R4 and is
-  documented through the current process/compose/docker runtime workflow.
-
-### Vector ↔ error-code map
-
-For each new error code introduced in R3, the canonical vector is:
-
-| Error code | Vector |
-|---|---|
-| `pairing_request_expired` | `e2e/agent/pairing_window_expires.rs` |
-| `proof_invalid` | `e2e/agent/pairing_proof_invalid.rs` |
-| `verification_method_principal_mismatch` | `e2e/agent/verification_method_principal_mismatch.rs` |
-| `agent_paused` | `e2e/agent/fsm_transitions.rs` (subtest: paused_rejects_write) |
-| `agent_deactivated` | `e2e/agent/fsm_transitions.rs` (subtest: deactivated_terminal) |
-| `approval_already_consumed` | `e2e/agent/approval_double_consume.rs` |
-| `sidecar_create_denied` | `e2e/agent/sidecar_denied.rs` |
-| `actor_kind_reducer_managed` | `e2e/agent/actor_kind_reducer_managed.rs` |
-| `focus_mismatch` | `e2e/call_media/focus_mismatch.rs` |
-| `unknown_focus_type` | `e2e/call_media/unknown_focus_type_rejects.rs` |
-| `token_issuer_unauthorised` | `e2e/call_media/token_issuer_unauthorised.rs` |
-| `participant_binding_invalid` | `e2e/call_media/participant_binding_canonical.rs` (negative branch) |
-| `participant_identity_unrecognised` | `e2e/call_media/participant_identity_unrecognised.rs` |
-| `session_focus_already_committed` | `e2e/call_media/session_focus_already_committed.rs` |
-| `e2ee_key_source_unauthorised` | `e2e/call_media/e2ee_key_source_unauthorised.rs` |
-| `recording_artifact_pipeline_bypassed` | `e2e/call_media/recording_pipeline_bypassed.rs` |
-| `focus_unavailable_for_client` | `e2e/call_media/focus_unavailable_for_client.rs` |
-| `recovery_witness_revoke_lagging` | `e2e/recovery/witness_revoke_lagging.rs` |
-| `handle_homograph_forbidden` | `ak.vector.identity.authority_local_skeleton_collision.v1` in `privacy-security-fixture.json` |

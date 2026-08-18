@@ -1,8 +1,8 @@
 name: CI
 
-# cotest local CI (P2F.5). Runs fmt / clippy / test / typos / deny / audit
-# plus the e2e Playwright matrix. Does NOT publish; cotest is `publish=false`
-# and the circle-rollout milestone explicitly bans tag / release work.
+# cotest local CI. Runs fmt / clippy / test / typos / deny / audit plus the
+# e2e Playwright matrix. Does NOT publish: cotest is `publish = false` and no
+# job may create a tag or release.
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
-  SIBLING_REF: circle-rollout
+  SIBLING_REF: main
 
 jobs:
   rust:
@@ -53,8 +53,8 @@ jobs:
         run: cargo fmt --all -- --check
       - name: clippy
         working-directory: cotest
-        # cotest carries TODO scaffolding for the circle-rollout milestone;
-        # treat warnings as errors so drift surfaces before merge.
+        # cotest carries TODO scaffolding for in-flight coverage; treat
+        # warnings as errors so drift surfaces before merge.
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: build (all-features)
         working-directory: cotest
@@ -99,6 +99,13 @@ jobs:
         # arkret-spec checkout is absent (this job checks out cotest only), so
         # the hard gate lives in `scripts/run-hygiene.ps1` and the joint runner.
         run: npm run check:wire-types
+      - name: fixme quality gate
+        working-directory: e2e
+        # Enforces docs/fixme-promotion-checklist.md: no empty `test.fixme`
+        # bodies, and every fixme carries @blocking-on / @user-promise /
+        # @expected-live-by. It previously existed only as an npm alias with no
+        # automated caller.
+        run: npm run check:fixme
 
   typos:
     name: typos

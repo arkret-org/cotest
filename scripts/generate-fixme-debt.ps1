@@ -31,6 +31,14 @@
 # then one `## <feature-id>` section per group (groups sorted lexicographically,
 # entries sorted lexicographically by `file:line`).
 #
+# REFRESH: `fixme-debt.md` is a local, gitignored derivative (.gitignore
+# `/fixme-debt.md`) — it is never committed, so there is nothing for CI to
+# diff against. `scripts/run-hygiene.ps1` runs this generator on every local
+# hygiene pass so the dashboard cannot go stale; the *enforcing* gates are
+# `e2e/scripts/check-fixme-quality.mjs` (fixme metadata/body policy) and
+# `scripts/check_ignore_comments.sh` (Rust `#[ignore]` justification), both of
+# which run in CI.
+#
 # Usage:
 #   pwsh -File scripts/generate-fixme-debt.ps1
 #   pwsh -File scripts/generate-fixme-debt.ps1 -OutputPath some/other/path.md

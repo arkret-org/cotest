@@ -96,7 +96,10 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
             >(json!({
-                "request_id": "ak:request:policy-deny",
+                // `service-operation-dtos.schema.json#/$defs/PolicyCheckRequestBody`
+                // pins `request_id` to `^(?!ak:)`: it is a caller-chosen
+                // correlation id, not a typed Arkret identifier.
+                "request_id": "policy-check-deny-0001",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ak.message.create",
                 "actor_id": bob_core,
@@ -150,7 +153,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
             .json(&serde_json::from_value::<
                 arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
             >(json!({
-                "request_id": "ak:request:policy-allow",
+                "request_id": "policy-check-allow-0001",
                 "request_canonical_digest": REQUEST_HASH,
                 "action": "ak.message.create",
                 "actor_id": bob_core,

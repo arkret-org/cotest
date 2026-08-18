@@ -14,8 +14,8 @@ use arkret_canonical::base64url::base64url_encode;
 use arkret_identifiers::{CallId, CellRef, DeviceId, DidCoreId, DidFullId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::{
-    CallMediaParticipantBinding, CallMediaTokenExchangeOutcome,
-    CallMediaTokenExchangeRequestBody, MediaBackendKind, MediaBackendToken,
+    CallMediaParticipantBinding, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
+    MediaBackendKind, MediaBackendToken,
 };
 use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp};
 use arkret_wire::{BottomKind, LatticeOp, LatticeOpType, ProfileId};

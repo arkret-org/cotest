@@ -8,7 +8,7 @@
 //! [`crate::scenarios::joint_service_smoke`] and will pick up the Circle
 //! strands in phase P5.
 //!
-//! Scenarios (per `_cotest_todos.md` P2F.3.1):
+//! Scenarios:
 //!
 //! 1. [`create_circle`] happy-path Circle round-trip (JSON canonicalisation, state defaults,
 //!    strict-subset accepts the empty case).

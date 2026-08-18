@@ -27,7 +27,7 @@ export type RealmObject = {
     "relation_kind": string;
     "from_kind"?: string;
     "to_kind"?: string;
-    "relation_scope"?: "realm" | "space" | "board" | "global";
+    "relation_scope"?: "realm" | "space" | "board";
     "cardinality": "one_to_one" | "one_to_many" | "many_to_one" | "many_to_many";
     "dedupe_key"?: string[];
     "max_to_per_from"?: number;
@@ -262,7 +262,6 @@ export type CapabilityGrantObject = {
     "authority_path"?: string[];
     "authority_regrant_allowed"?: boolean;
     "authority_scope"?: "narrowing_only" | "same_scope" | "custom";
-    "scope_expansion_allowed"?: boolean;
     "applet_id"?: string;
     "executed_by"?: string;
     "registration_epoch"?: string;
@@ -406,7 +405,6 @@ export type InviteDeliveryRequestBody = {
       "leaves": string[];
     };
     "payload": Record<string, unknown>;
-    "redacts"?: string;
     "unsigned"?: Record<string, unknown>;
     "proofs": Array<{
       "kind": "detached_jws";
@@ -927,7 +925,6 @@ export type EventFederationSubmission = {
       "leaves": string[];
     };
     "payload": Record<string, unknown>;
-    "redacts"?: string;
     "unsigned"?: Record<string, unknown>;
     "proofs": Array<{
       "kind": "detached_jws";

@@ -1,8 +1,22 @@
 #!/usr/bin/env node
 // write-verified-profiles.mjs
 //
-// G4.T3 — link cotest profile suite results back to soland/coauth's
+// Links Conformance Verifier profile-suite results back to soland/coauth's
 // `/server/describe.verified_profiles` slot.
+//
+// MANUAL OPERATOR TOOL — deliberately NOT wired into scripts/run-joint-e2e.ps1.
+// Two properties of the contract make an in-run hook impossible:
+//   1. joint-e2e starts soland/coauth with `*_DEVELOPMENT_MODE=true`
+//      (run-joint-e2e.ps1), and `sync/service-surface.md` §3.0 requires
+//      `verified_profiles=[]` for `development_mode=true`. A dev-mode run can
+//      never legitimately advertise a verified profile.
+//   2. Services read the artifact at STARTUP; this script derives it from the
+//      junit.xml that only exists AFTER the run. Promotion is therefore a
+//      two-phase operator flow: run the suite -> produce the artifact ->
+//      restart the (non-dev-mode) services with the env var pointed at it.
+// Signing also needs the neutral Conformance Verifier key
+// (conformance-suite.md §6.2), which no local dev run holds.
+// See docs/runtime-workflow.md "Verified-profile promotion (manual)".
 //
 // Reads Playwright's `junit.xml` from a joint-e2e artifacts directory, walks
 // the test entries, and — for the small allow-list of strict profile-contract
@@ -115,7 +129,7 @@ function printUsage() {
       '        "artifact_ref": "file:///.../verified-profiles.json",',
       '        "claim_kind": "conformance_verified",',
       '        "verification_run_id": "<run id>",',
-      '        "verifier_did": "did:...",',
+      '        "verifier_service_id": "ak:did_core:...",',
       '        "signature_algorithm": "Ed25519",',
       '        "signature": "<base64url signature>",',
       '        "expires_at": "<RFC3339 optional>"',
@@ -129,7 +143,8 @@ function printUsage() {
       '    in that suite for this run (any failed/skipped/errored test in the',
       '    suite blocks promotion of every profile id it claims).',
       '  - artifact_digest = sha256(canonical JSON of run_id/profile/service/test evidence).',
-      '  - Non-empty verified[] requires COTEST_VERIFIED_PROFILES_ISSUER_DID and',
+      '  - Non-empty verified[] requires',
+      '    COTEST_VERIFIED_PROFILES_VERIFIER_SERVICE_ID (an ak:did_core:* id) and',
       '    either COTEST_VERIFIED_PROFILES_SIGNING_KEY_PEM or',
       '    COTEST_VERIFIED_PROFILES_SIGNING_KEY_PATH. The key must be an Ed25519',
       '    private key accepted by Node crypto.',
@@ -215,11 +230,18 @@ function sha256Hex(s) {
 }
 
 function loadSigningConfig() {
-  const issuerDid = process.env.COTEST_VERIFIED_PROFILES_ISSUER_DID;
-  if (!issuerDid || !issuerDid.startsWith('did:')) {
+  // `service-describe.schema.json#/properties/verified_profiles/items` requires
+  // `verifier_service_id` to be a `did_core_id` (common-ids.schema.json), i.e.
+  // `ak:did_core:*`. The full DID URL signing key is separate and projects to
+  // this value; the operator supplies both. Fail closed rather than minting a
+  // prefix here — a fabricated `ak:` value would be dropped by the Rust loader
+  // (arkret_models_discovery::parse_verified_profiles_artifact) at best.
+  const verifierServiceId =
+    process.env.COTEST_VERIFIED_PROFILES_VERIFIER_SERVICE_ID;
+  if (!verifierServiceId || !verifierServiceId.startsWith('ak:did_core:')) {
     die(
       1,
-      'verified profile promotion requires COTEST_VERIFIED_PROFILES_ISSUER_DID=did:...',
+      'verified profile promotion requires COTEST_VERIFIED_PROFILES_VERIFIER_SERVICE_ID=ak:did_core:...',
     );
   }
 
@@ -241,7 +263,7 @@ function loadSigningConfig() {
 
   try {
     return {
-      issuerDid,
+      verifierServiceId,
       privateKey: createPrivateKey(pem),
       validUntil: process.env.COTEST_VERIFIED_PROFILES_VALID_UNTIL || undefined,
     };
@@ -257,7 +279,7 @@ function signedProfileStatement(entry) {
     verification_run_id: entry.verification_run_id,
     artifact_digest: entry.artifact_digest,
     artifact_ref: entry.artifact_ref,
-    verifier_did: entry.verifier_did,
+    verifier_service_id: entry.verifier_service_id,
     timestamp: entry.timestamp,
   };
   if (entry.expires_at) {
@@ -358,7 +380,7 @@ function main(argv) {
         spec_file: specFile,
         artifact_digest: `sha256:${sha256Hex(hashInput)}`,
         artifact_ref: artifactRef,
-        verifier_did: signingConfig.issuerDid,
+        verifier_service_id: signingConfig.verifierServiceId,
         timestamp: generatedAt,
       };
       if (signingConfig.validUntil) {

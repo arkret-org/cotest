@@ -38,10 +38,10 @@ day Rust work.
 ### Runtime modes
 
 - `process`:
-  `src/harness.rs` starts the SUT with `cargo run --manifest-path <manifest>`.
+  `src/harness/` starts the SUT with `cargo run --manifest-path <manifest>`.
   This is the default mode for local development.
 - `docker`:
-  `src/harness.rs` starts the SUT with `docker run` from `COTEST_SUT_IMAGE`.
+  `src/harness/` starts the SUT with `docker run` from `COTEST_SUT_IMAGE`.
   Multi-server tests create an isolated Docker network so the spawned servers
   share a runtime boundary instead of pretending everything is localhost. This
   is the direct analogue of Complement standing up multiple homeserver
@@ -249,6 +249,35 @@ previous `artifacts/latest/full/coverage-matrix.json` if it exists. Targeted
 runs therefore cannot silently become the next complete-suite baseline. The
 comparison is limited to the selected profile's `required_coverage_profiles`, unless
 `-RequiredCoverageProfiles` is supplied.
+
+### Verified-profile promotion (manual)
+
+`e2e/scripts/write-verified-profiles.mjs` turns a finished run's `junit.xml`
+into the `verified-profiles.json` artifact that soland and coauth read at
+startup (`SOLAND_VERIFIED_PROFILES_ARTIFACT` /
+`COAUTH_VERIFIED_PROFILES_ARTIFACT`, parsed by
+`arkret_models_discovery::parse_verified_profiles_artifact`).
+
+It is a manual operator tool and is intentionally not called by any runner.
+`run-joint-e2e.ps1` starts the services with `*_DEVELOPMENT_MODE=true`, and
+`sync/service-surface.md` §3.0 requires `verified_profiles=[]` in that posture,
+so a joint run can never promote. Signing also requires the neutral Conformance
+Verifier key (`conformance/conformance-suite.md` §6.2).
+
+Promotion is two-phase and deliberately operator-driven:
+
+```powershell
+# 1. run the profile suites, then point the tool at that run directory
+$env:COTEST_VERIFIED_PROFILES_VERIFIER_SERVICE_ID = "ak:did_core:web:<verifier>"
+$env:COTEST_VERIFIED_PROFILES_SIGNING_KEY_PATH    = "<ed25519 private key PEM>"
+node e2e\scripts\write-verified-profiles.mjs artifacts\runs\joint-e2e\<ts>-<profile>
+
+# 2. restart the services WITHOUT development mode, pointing at the artifact
+$env:SOLAND_VERIFIED_PROFILES_ARTIFACT = "<...>\verified-profiles.json"
+```
+
+Refresh it whenever `PROFILE_SUITE_MAP` inside the script or the profile suites
+it names change.
 
 ## Startup and shutdown model
 

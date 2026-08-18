@@ -106,7 +106,8 @@ Recommended entrypoints:
   `artifacts/latest/`.
 - `.\scripts\run-hygiene.ps1` is the local hygiene gate for dependency
   advisories/licensing (`cargo deny check`), spelling drift (`typos`), RustSec
-  vulnerabilities (`cargo audit`), e2e wire/type drift, and the Agent Journey
+  vulnerabilities (`cargo audit`), e2e wire/type drift, `fixme-debt.md`
+  freshness, Playwright fixme quality, and the Agent Journey
   scenario contract. It writes `raw.log`, `summary.json`, `summary.md`, and
   per-tool stdout/stderr logs to `artifacts/hygiene/<timestamp>/`.
 - `.\scripts\demote-test.ps1` is the inverse of `promote-fixme.ps1`: it
@@ -377,6 +378,12 @@ not converted into test skips.
 The platform lane sends a captured authentic provider delivery to a deployed
 bridge. The protected environment supplies the bridge URL, webhook path,
 base64 body, and signature headers; secrets are never committed as fixtures.
+
+Detail: [`docs/test-strategy.md`](docs/test-strategy.md) for the harness model
+and suite map, [`docs/fixme-promotion-checklist.md`](docs/fixme-promotion-checklist.md)
+for promoting a `test.fixme`, and
+[`docs/seed-reproducibility.md`](docs/seed-reproducibility.md) for replaying a
+fuzz finding.
 
 The MLS lane first runs inkson's real OpenMLS vector as a wasm test inside
 headless Chrome, distinguishing never-joined, removed-member, wrong-key, and
@@ -689,9 +696,3 @@ Docker networking, host-side execution, and result formatting, see
 
 The suite is organized by protocol and behavior, not milestone folders.
 
----
-
-<!-- circle-rollout milestone pointer -->
-> **Active milestone tracking** (local-only, gitignored): see
-> `_cotest_todos.md` in the parent `arkret/` directory for the
-> circle-rollout (AKP-0007) work item list and per-stage checkpoints.
