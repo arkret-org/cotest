@@ -513,7 +513,7 @@ function Test-CargoProfileSelection {
 
     return [pscustomobject]@{
         status            = "passed"
-        validated_targets = @($validatedTargets)
+        validated_targets = $validatedTargets.ToArray()
         validated_tests   = $validatedTests
     }
 }
@@ -662,9 +662,14 @@ function Parse-CotestLog {
         $perTest.ignored -eq $footerTotals.ignored
     ) { "passed" } else { "failed" }
 
+    # Publish plain arrays, not the List[object] accumulators. PowerShell 7.6.5
+    # throws `Argument types do not match` on the `@(...)` array subexpression
+    # when the operand is a System.Collections.Generic.List[object], so a caller
+    # writing the idiomatic `@($parsedLog.tests)` would abort the whole report
+    # after every test had already run.
     return [pscustomobject]@{
-        tests         = $tests
-        footers       = $footers
+        tests         = $tests.ToArray()
+        footers       = $footers.ToArray()
         per_test      = $perTest
         footer_totals = $footerTotals
         integrity     = $integrity
@@ -1855,7 +1860,7 @@ function Get-SutDescribeAlignment {
         status             = if ($drifts.Count -eq 0) { "aligned" } else { "drift_detected" }
         server_describe    = $serverDescribe -ne $null
         integration_describe = $integrationDescribe -ne $null
-        drifts             = @($drifts)
+        drifts             = $drifts.ToArray()
     }
 }
 
