@@ -11,7 +11,7 @@ use arkret_identifiers::{DidCoreId, DidFullId, Hash, Hlc, RealmId, project_full_
 use arkret_models_collaboration::events_payloads::{
     RealmSetDefaultStrandPayload, StrandCreatePayload,
 };
-use arkret_models_collaboration::objects::profiles::StrandTrackConfig;
+use arkret_models_collaboration::objects::profiles::StrandTrack;
 use arkret_models_collaboration::objects::strand::Strand;
 use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
 use reqwest::{Client as HttpClient, StatusCode};
@@ -481,10 +481,9 @@ impl TestActorClient {
         );
         let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
         strand.tracks.clear();
-        strand.tracks.insert(
-            "discussion".to_owned(),
-            StrandTrackConfig::discussion_primary(),
-        );
+        strand
+            .tracks
+            .insert("discussion".to_owned(), StrandTrack::discussion_primary());
         let created = self
             .submit_event(
                 realm_id.as_str(),
