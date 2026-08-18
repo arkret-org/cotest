@@ -1634,7 +1634,7 @@ function Get-RegistryCoverageGaps {
         $sourceDirs = @(
             (Join-Path $repoRoot "src/conformance"),
             (Join-Path $repoRoot "src/scenarios"),
-            (Join-Path $repoRoot "src/harness.rs")
+            (Join-Path $repoRoot "src/harness")
         )
         foreach ($dir in $sourceDirs) {
             if (Test-Path $dir -PathType Leaf) {
