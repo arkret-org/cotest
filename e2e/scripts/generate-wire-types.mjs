@@ -190,6 +190,22 @@ function renderType(node, file, indent, depth = 0) {
   ) {
     const merged = mergeAllOf(node.allOf, file, depth);
     if (merged) return renderObject(merged.node, merged.file, indent, depth);
+
+    // Primitive profiles commonly intersect a reusable base (`opaque_id`)
+    // with a second string refinement. They carry no object properties, so
+    // mergeAllOf intentionally has nothing to merge; still preserve the
+    // common primitive instead of silently widening the generated type to
+    // `unknown`. Constraint-only branches render as unknown and can be
+    // ignored because this generator pins wire shapes, not refinements.
+    const concrete = [
+      ...new Set(
+        node.allOf
+          .map((branch) => renderType(branch, file, indent, depth + 1))
+          .filter((part) => part !== "unknown"),
+      ),
+    ];
+    if (concrete.length === 1) return concrete[0];
+    if (concrete.length > 1) return concrete.join(" & ");
   }
 
   for (const key of ["oneOf", "anyOf"]) {

@@ -46,6 +46,9 @@ export type CoauthPasswordAccount = {
   recoveryKey: string;
   initialGrant: DpopBoundGrant;
   initialHolderKey: DpopDeviceKey;
+  /// Original holder-bound bearer retained only so reconciliation tests can
+  /// prove that a consumed register handoff still reads its terminal snapshot.
+  accountHandoffGrant: string;
   pcrGenesisReceipt: Record<string, unknown>;
   principalRegistrationCheckpoint: Record<string, unknown>;
   genesisClaimed?: boolean;
@@ -525,7 +528,7 @@ export async function registerCoauthPasswordAccount(
   const pcrGenesisReceipt = objectRecord(registered.pcr_genesis_receipt);
   const sessionOutcome = objectRecord(registered.session_grant_outcome);
   const registeredPrincipalId = stringValue(registered.principal_id);
-  const grantId = stringValue(sessionOutcome?.grant_id);
+  const grantId = stringValue(sessionOutcome?.session_grant_id);
   const grantJwt = stringValue(sessionOutcome?.session_grant);
   const grantAudience = stringValue(sessionOutcome?.audience);
   const expiresAt = stringValue(sessionOutcome?.expires_at);
@@ -548,7 +551,23 @@ export async function registerCoauthPasswordAccount(
     !expiresAt ||
     !deviceSigningSeed
   ) {
-    throw new Error("canonical account binding returned an incomplete outcome");
+    throw new Error(
+      `canonical account binding returned an incomplete outcome: ${JSON.stringify({
+        registeredPrincipalId,
+        expectedPrincipalId: principalId,
+        receiptState: receipt?.binding_state,
+        receiptPrincipalId: receipt?.principal_id,
+        receiptFullId: receipt?.full_id,
+        expectedFullId: fullDid,
+        hasPcrGenesisReceipt: Boolean(pcrGenesisReceipt),
+        hasSessionOutcome: Boolean(sessionOutcome),
+        hasGrantId: Boolean(grantId),
+        hasGrantJwt: Boolean(grantJwt),
+        grantAudience,
+        expiresAt,
+        hasDeviceSigningSeed: Boolean(deviceSigningSeed),
+      })}`,
+    );
   }
   const eventSigningKey = dpopDeviceKeyFromSeedB64url(deviceSigningSeed);
   const initialGrant: DpopBoundGrant = {
@@ -577,6 +596,7 @@ export async function registerCoauthPasswordAccount(
     recoveryKey: fixture.recovery_key,
     initialGrant,
     initialHolderKey: handoff.deviceKey,
+    accountHandoffGrant: handoff.accountHandoffGrant,
     pcrGenesisReceipt,
     principalRegistrationCheckpoint: {
       ...fixture.checkpoint,

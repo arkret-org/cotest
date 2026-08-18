@@ -44,7 +44,9 @@ export default async function verifyBuildIdentity(config: FullConfig) {
 
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage();
+    const page = await browser.newPage({
+      ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+    });
     await page.goto(baseURL, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(
       () => {
