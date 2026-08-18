@@ -7,7 +7,7 @@ live soland instance.
 
 1. Register Alice; create a public realm she owns.
 2. Project a `ak.realm.media_service` epoch with a single LiveKit focus
-   (`ak:focus:livekit-lhr`, `issuer_kid = did:web:media.example#media-token`,
+   (`livekit-lhr`, `issuer_kid = did:web:media.example#media-token`,
    `e2ee_key_source = mls-exporter`).
 3. Commit the first durable `ak.call.state` for the call, including the
    selected `session_focus`, and exchange signaling through

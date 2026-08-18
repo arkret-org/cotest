@@ -462,14 +462,26 @@ fn validate_durable_effect(
             return;
         };
         let kind = effect.get("kind").and_then(Value::as_str).unwrap_or("");
+        // `api-conventions.md` §2.4.1: every leaf kind carries the same optional
+        // pair, orthogonal to `kind` — `kind:"none"` can have an external durable
+        // effect too. `branched` is a composition node, so the pair belongs on
+        // the branch effect that actually has the side effect and MUST NOT sit on
+        // the top-level node.
+        const CROSS_SERVICE_PAIR: [&str; 2] = ["cross_service_effects", "irreversibility_note"];
         let allowed_keys: &[&str] = match kind {
-            "none" => &["kind", "rationale"],
+            "none" => &[
+                "kind",
+                "rationale",
+                "cross_service_effects",
+                "irreversibility_note",
+            ],
             "event_log" if nested => &[
                 "kind",
                 "event_kinds",
                 "event_kind_source",
                 "event_kind_sources",
                 "event_submission_path",
+                "rationale",
                 "cross_service_effects",
                 "irreversibility_note",
             ],
@@ -478,10 +490,17 @@ fn validate_durable_effect(
                 "event_kinds",
                 "event_kind_source",
                 "event_kind_sources",
+                "rationale",
                 "cross_service_effects",
                 "irreversibility_note",
             ],
-            "actor_private_event" => &["kind", "event_kind"],
+            "actor_private_event" => &[
+                "kind",
+                "event_kind",
+                "rationale",
+                "cross_service_effects",
+                "irreversibility_note",
+            ],
             "branched" if !nested => &["kind", "discriminator", "effect_branches"],
             _ => {
                 failures.push(format!(
@@ -495,6 +514,43 @@ fn validate_durable_effect(
                 failures.push(format!(
                     "{operation_id} durable_effect contains unknown field {key}",
                 ));
+            }
+        }
+        if kind != "branched" {
+            let present = CROSS_SERVICE_PAIR
+                .iter()
+                .filter(|member| effect.contains_key(**member))
+                .count();
+            if present == 1 {
+                failures.push(format!(
+                    "{operation_id} durable_effect declares only one of cross_service_effects / irreversibility_note; the pair MUST co-occur",
+                ));
+            } else if present == 2 {
+                match effect.get("cross_service_effects").and_then(Value::as_array) {
+                    Some(effects)
+                        if !effects.is_empty()
+                            && effects.iter().all(|slug| {
+                                slug.as_str().is_some_and(|slug| !slug.trim().is_empty())
+                            })
+                            && effects
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .collect::<BTreeSet<_>>()
+                                .len()
+                                == effects.len() => {}
+                    _ => failures.push(format!(
+                        "{operation_id} durable_effect.cross_service_effects must be a non-empty, duplicate-free array of non-empty slugs",
+                    )),
+                }
+                if effect
+                    .get("irreversibility_note")
+                    .and_then(Value::as_str)
+                    .is_none_or(|note| note.trim().is_empty())
+                {
+                    failures.push(format!(
+                        "{operation_id} durable_effect.irreversibility_note must be non-empty",
+                    ));
+                }
             }
         }
         match kind {

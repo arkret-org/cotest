@@ -145,7 +145,7 @@ fn fixture_events(
         pair_key: pair_key.clone(),
         mls_generation: 0,
         phase: DirectConversationMlsGenerationPhase::ProvisionalHistorySend,
-        mls_group_id: MlsGroupId::new("ak:mls_group:cotest-direct-repair".to_owned())
+        mls_group_id: MlsGroupId::new("mls-group-cotest-direct-repair".to_owned())
             .map_err(anyhow::Error::msg)?,
         genesis_event_ref: create.event_id.clone(),
         selected_group_state_ref: NonEmptyString::new(strand.event_id.to_string())

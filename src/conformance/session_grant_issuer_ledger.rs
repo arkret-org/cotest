@@ -302,7 +302,8 @@ pub fn run_session_grant_issuer_ledger_reference_model_suite() -> Result<()> {
             ]
     );
     let intent = br#"{"audience":"did:web:service.example","request":"same"}"#;
-    let outcome = br#"{"session_grant_id":"ak:session_grant:fixture","session_grant":"jwt.fixture"}"#;
+    let outcome =
+        br#"{"session_grant_id":"ak:session_grant:fixture","session_grant":"jwt.fixture"}"#;
     let mut ledger = MiniIssuerLedger::default();
     ensure!(
         ledger.issue("proof-1", intent, outcome, 100) == LedgerResult::Outcome(outcome.to_vec())

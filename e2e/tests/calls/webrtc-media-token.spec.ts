@@ -35,7 +35,7 @@ import {
 const SERVICE_ID = "did:web:media.example";
 const ISSUER_KID = `${SERVICE_ID}#media-token`;
 const LIVEKIT_FOCUS: MediaFocusConfig = {
-  focus_id: "ak:focus:livekit-lhr",
+  focus_id: "livekit-lhr",
   type: "livekit",
   issuer_kid: ISSUER_KID,
   connect_url: "wss://livekit.media.example",
@@ -43,7 +43,7 @@ const LIVEKIT_FOCUS: MediaFocusConfig = {
   e2ee_key_source: "mls-exporter",
 };
 const ARKRET_NATIVE_FOCUS: MediaFocusConfig = {
-  focus_id: "ak:focus:arkret-native-reference",
+  focus_id: "arkret-native-reference",
   type: "arkret_native",
   issuer_kid: ISSUER_KID,
   connect_url: "wss://native.media.example",
@@ -189,7 +189,7 @@ test.describe("media token exchange", () => {
       call_id: callId,
       actor_id: alice.did,
       device_id: alice.deviceId,
-      focus_id: "ak:focus:unknown-focus",
+      focus_id: "unknown-focus",
     });
     expect(denied.status()).toBe(409);
     expect(wireErrCode(await denied.json())).toBe("focus_mismatch");

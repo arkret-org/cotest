@@ -178,6 +178,26 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "message_target_exclusive_kind" => {
+                assert_message_target_exclusive_kind()?;
+                record_vector_event(
+                    "redaction.message_target_exclusive_kind",
+                    &json!({
+                        "cross_object_message_target_ref": "ak:message:AVEbR6LJe9T0RIh43YEQxR-vov-d4AbPcHIDId501TNw",
+                        "cross_object_message_id_member": "ak:message:AVEbR6LJe9T0RIh43YEQxR-vov-d4AbPcHIDId501TNw",
+                    }),
+                    &json!({
+                        "cross_object_rejects_message_target_ref": true,
+                        "cross_object_rejects_message_id_member": true,
+                        "message_redact_accepts_message_id": true,
+                    }),
+                    &json!({
+                        "cross_object_rejects_message_target_ref": true,
+                        "cross_object_rejects_message_id_member": true,
+                        "message_redact_accepts_message_id": true,
+                    }),
+                );
+            }
             "policy_scope" => {
                 let outcome = assert_policy_scope_projection()?;
                 record_vector_event(
@@ -219,12 +239,12 @@ pub fn run_redaction_fixture_suite() -> Result<()> {
 
 /// Vector `ak.vector.redaction.space_target_ref_schema.v1` (conformance §3.2.1).
 ///
-/// The redaction object-lifecycle payload schema MUST accept a `ak:space:*`
+/// The cross-object redaction payload class MUST accept a `ak:space:*`
 /// `target_ref` and MUST reject a malformed space ref, so a Space cleanup is
 /// never downgraded to an implementation-private extension by a schema gap.
 fn assert_space_target_ref_schema() -> Result<()> {
     let env = SchemaEnv::load()?;
-    let schema_ref = "schemas/event-payload.schema.json#/$defs/object_lifecycle_payload";
+    let schema_ref = "schemas/event-payload.schema.json#/$defs/cross_object_redaction_payload";
     let validator = env.compile(schema_ref)?;
 
     let accepted = json!({
@@ -238,7 +258,7 @@ fn assert_space_target_ref_schema() -> Result<()> {
             .map(|error| format!("{error}"))
             .unwrap_or_else(|| "<no error reported>".to_string());
         bail!(
-            "space_target_ref_schema: object_lifecycle_payload rejected a ak:space target_ref: {detail}"
+            "space_target_ref_schema: cross_object_redaction_payload rejected a ak:space target_ref: {detail}"
         );
     }
 
@@ -248,7 +268,47 @@ fn assert_space_target_ref_schema() -> Result<()> {
     });
     if validator.is_valid(&malformed) {
         bail!(
-            "space_target_ref_schema: object_lifecycle_payload accepted a malformed ak:space target_ref"
+            "space_target_ref_schema: cross_object_redaction_payload accepted a malformed ak:space target_ref"
+        );
+    }
+
+    Ok(())
+}
+
+/// Vector `ak.vector.redaction.message_target_exclusive_kind.v1`.
+///
+/// A Message reaches `state=redacted` only through the object-scoped
+/// `ak.message.redact`, so the cross-object `ak.redaction` payload class MUST
+/// reject both Message spellings before any cell write
+/// (`common-fields.md` §5.1 Message exemption).
+fn assert_message_target_exclusive_kind() -> Result<()> {
+    let env = SchemaEnv::load()?;
+    let cross =
+        env.compile("schemas/event-payload.schema.json#/$defs/cross_object_redaction_payload")?;
+    let message_redact =
+        env.compile("schemas/event-payload.schema.json#/$defs/message_redact_payload")?;
+
+    let message_id = "ak:message:AVEbR6LJe9T0RIh43YEQxR-vov-d4AbPcHIDId501TNw";
+    for rejected in [
+        json!({"target_ref": message_id}),
+        json!({"message_id": message_id}),
+    ] {
+        if cross.is_valid(&rejected) {
+            bail!(
+                "message_target_exclusive_kind: cross_object_redaction_payload accepted a Message target {rejected}"
+            );
+        }
+    }
+
+    let accepted = json!({"message_id": message_id});
+    if !message_redact.is_valid(&accepted) {
+        let detail = message_redact
+            .iter_errors(&accepted)
+            .next()
+            .map(|error| format!("{error}"))
+            .unwrap_or_else(|| "<no error reported>".to_string());
+        bail!(
+            "message_target_exclusive_kind: message_redact_payload rejected its own Message target: {detail}"
         );
     }
 
@@ -289,7 +349,7 @@ fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
             "event_id": redaction_id,
             "kind": "ak.redaction",
             "actor_id": "ak:did_core:web:policy-admin.example",
-            "payload": {"redacts": message_id, "reason_code": "policy_recall"},
+            "payload": {"target_ref": message_id, "reason": "policy_recall"},
         },
     ]);
 
@@ -350,9 +410,9 @@ fn project_policy_scope_timeline(timeline: &Value) -> Result<Value> {
     let mut redactions: HashMap<String, String> = HashMap::new();
     for entry in entries {
         if entry["kind"] == json!("ak.redaction") {
-            let target = entry["payload"]["redacts"]
+            let target = entry["payload"]["target_ref"]
                 .as_str()
-                .ok_or_else(|| anyhow!("redaction event missing payload.redacts"))?;
+                .ok_or_else(|| anyhow!("redaction event missing payload.target_ref"))?;
             let redaction_event_id = entry["event_id"]
                 .as_str()
                 .ok_or_else(|| anyhow!("redaction event missing event_id"))?;
