@@ -649,6 +649,17 @@ impl TestActorClient {
         subject: &str,
         actions: &[&str],
     ) -> Result<(String, Value)> {
+        self.grant_realm_actions_with_constraints_to(realm_id, subject, actions, Vec::new())
+            .await
+    }
+
+    pub async fn grant_realm_actions_with_constraints_to(
+        &self,
+        realm_id: &str,
+        subject: &str,
+        actions: &[&str],
+        constraints: Vec<arkret_models_collaboration::governance::grant_constraint::GrantConstraint>,
+    ) -> Result<(String, Value)> {
         let issued_at = chrono::Utc::now();
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
@@ -672,7 +683,7 @@ impl TestActorClient {
             capability_action_registry_digest: Some(
                 arkret::current_capability_action_registry_digest()?,
             ),
-            constraints: Vec::new(),
+            constraints,
             issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
                 realm_id: arkret_identifiers::RealmId::new(realm_id.to_owned())?,
                 cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null".to_owned(),

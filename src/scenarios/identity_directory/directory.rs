@@ -2,10 +2,14 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
+use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{actor_core_id, expect_api_error, expect_json, invite_create_payload};
+use crate::harness::{
+    actor_core_id, dispatch_accepted_invite_and_read_token, expect_api_error, expect_json,
+    invite_create_payload,
+};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, seal_current_principal_control_frontier,
     spawn_with_harness_account_authority,
@@ -102,7 +106,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let invite_only_realm_id = realm_id_from(&invite_only_realm, "invite_only")?;
     let secret_realm_id = realm_id_from(&secret_realm, "secret")?;
 
-    let introduction_evidence = json!({"kind": "same_principal_server"});
+    let introduction_evidence = IntroductionEvidence::SamePrincipalServer;
     let invite_expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
     let invite_event = alice
@@ -201,13 +205,28 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     .await?;
 
     let invites = expect_json(bob.get("/_arkret/self/authz/invites"), StatusCode::OK).await?;
-    let invite_token = invites["invites"]
+    let invite_id = invites["invites"]
         .as_array()
         .unwrap()
         .iter()
         .find(|invite| invite["realm_id"].as_str() == Some(invite_only_realm_id.as_str()))
-        .and_then(|invite| invite["join_rule_snapshot"]["invite_token"].as_str())
-        .ok_or_else(|| anyhow!("missing invite token for invite-only Realm: {invites}"))?;
+        .and_then(|invite| invite["id"].as_str())
+        .ok_or_else(|| anyhow!("missing invite for invite-only Realm: {invites}"))?
+        .to_owned();
+    // governance-objects.md §5.3 — the invite token is private delivery
+    // material and MUST NOT appear on the Invite read model; the invitee
+    // receives it through the invite-addressing.md §7 private delivery flow.
+    let invite_event_id = invite_event["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("invite submit outcome omitted event_id: {invite_event}"))?;
+    let invite_token = dispatch_accepted_invite_and_read_token(
+        &alice,
+        &bob,
+        invite_event_id,
+        &invite_id,
+        introduction_evidence,
+    )
+    .await?;
     let invite_only_resolved = expect_json(
         server
             .http()

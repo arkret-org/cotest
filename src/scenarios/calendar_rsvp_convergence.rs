@@ -251,10 +251,23 @@ async fn grant_calendar_actions(
     realm_id: &str,
     bootstrap_seal: &str,
 ) -> Result<Vec<String>> {
+    // `ak.strand.update` is registered field-scoped: the capability-action
+    // registry lists `allowed_write_fields` in its required_constraints, so a
+    // bare grant can never cover it. The scenario only ever writes the
+    // calendar subtree, so the grant names exactly that field.
+    let mut calendar_field_constraint =
+        arkret_models_collaboration::governance::grant_constraint::GrantConstraint::new(
+            arkret_models_collaboration::governance::grant_constraint::GrantConstraintKind::FieldAccess,
+            arkret_models_collaboration::governance::grant_constraint::GrantConstraintEffect::Allow,
+        );
+    calendar_field_constraint.allowed_write_fields =
+        vec!["metadata.fields.calendar".to_owned()];
     let (calendar_grant_id, response) = client
-        .grant_self_realm_actions(
+        .grant_realm_actions_with_constraints_to(
             realm_id,
+            &client.actor,
             &["ak.strand.create", "ak.strand.update", "ak.rsvp.set"],
+            vec![calendar_field_constraint],
         )
         .await?;
     let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]

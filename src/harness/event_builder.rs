@@ -667,6 +667,48 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
 ) -> Result<Value> {
+    let event = prepare_event_submission_with_signing_identity(
+        server,
+        token,
+        actor,
+        realm_id,
+        kind,
+        payload,
+        signing_seed,
+        verification_method,
+    )
+    .await?;
+    let mut body = expect_json(
+        server
+            .http()
+            .post(server.url("/_arkret/self/events"))
+            .bearer_auth(token)
+            .json(&crate::publication::initial_submission(event.clone(), "")?),
+        status,
+    )
+    .await?;
+    if status.is_success() {
+        ensure_submit_event_id(&mut body, &event);
+    }
+    Ok(body)
+}
+
+/// Build the exact signed Event a submit helper would POST, bound to the live
+/// actor frontier and (for Control Moves / DataEvents) the current Seal
+/// frontier, without submitting it. Callers that relay the Event through
+/// another admission surface — the device-pairing gate, for instance — wrap
+/// the result in `publication::initial_submission` themselves.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn prepare_event_submission_with_signing_identity(
+    server: &ArkretServer,
+    token: &str,
+    actor: &str,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    signing_seed: [u8; 32],
+    verification_method: &DidUrl,
+) -> Result<Event> {
     let frontier = expect_json(
         server
             .http()
@@ -735,19 +777,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         }
         refresh_typed_event_proof_with_signing_seed(&mut event, signing_seed)?;
     }
-    let mut body = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/events"))
-            .bearer_auth(token)
-            .json(&crate::publication::initial_submission(event.clone(), "")?),
-        status,
-    )
-    .await?;
-    if status.is_success() {
-        ensure_submit_event_id(&mut body, &event);
-    }
-    Ok(body)
+    Ok(event)
 }
 
 async fn realm_seal_frontier_for(

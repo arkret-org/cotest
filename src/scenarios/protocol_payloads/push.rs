@@ -35,12 +35,21 @@ async fn register_device(server: &ArkretServer, token: &str) -> Result<String> {
     )
     .await?;
     assert_eq!(push["ok"], true);
-    // The registration returns the device's derived push target pseudonym; the
-    // blind wakeup routes by that target so the registered device is matched.
-    Ok(push["registration_id"]
+    // push-notifications.md §3.1 closes the register-device response to
+    // `ok` / `registration_id` / `expires_at`: the HMAC-derived push target
+    // pseudonym is service-private and never crosses the wire. soland spells
+    // the gateway-local `registration_id` from the same pairwise tag as the
+    // `ak:pseudonym:push:*` target (interop/push.rs `push_registration_id`),
+    // so this harness — which drives both the registering client and the
+    // notify-calling sync surface against the same deployment — re-spells the
+    // target from the returned handle.
+    let registration_id = push["registration_id"]
         .as_str()
-        .expect("register-device must return a registration_id")
-        .to_owned())
+        .expect("register-device must return a registration_id");
+    let tag = registration_id
+        .strip_prefix("push_registration:")
+        .expect("registration_id must carry the shared pairwise tag");
+    Ok(format!("ak:pseudonym:push:{tag}"))
 }
 
 async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Result<()> {

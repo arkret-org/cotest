@@ -40,7 +40,10 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "scope": realm_id,
                 "subject_ref": bob.actor,
                 "policy_kind": "ak.message.create",
-                "effect": "hard_deny",
+                // Rule effects are the spec four-value `policy_effect` closed
+                // set (allow/deny/quarantine/require_review); `deny` surfaces
+                // as the `hard_deny` decision on the policy/check path.
+                "effect": "deny",
                 "actions": ["ak.message.create"],
                 // Realm-scoped resource: soland matches resource.kind against the
                 // request source.service_kind, so constrain on realm_id only.
@@ -54,8 +57,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert!(policy_id.starts_with("ak:policy:"));
     assert_eq!(policy["owner"], alice_core);
 
-    // Negative vector: `deny` is not a registered wire effect
-    // (v1 enum is allow/soft_deny/hard_deny/quarantine/require_review).
+    // Negative vector: `hard_deny` is a Policy Server *decision* verb, not a
+    // registered rule effect (v1 enum is allow/deny/quarantine/require_review).
     expect_api_error(
         alice
             .post("/_soland/self/policies")
@@ -63,12 +66,12 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "scope": realm_id,
                 "subject_ref": bob.actor,
                 "policy_kind": "ak.message.create",
-                "effect": "deny",
+                "effect": "hard_deny",
                 "actions": ["ak.message.create"],
                 "resource": {"kind": "realm", "realm_id": realm_id}
             }))),
-        StatusCode::BAD_REQUEST,
-        "param_invalid",
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
     )
     .await?;
 
@@ -85,7 +88,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(fetched["payload"]["effect"], "hard_deny");
+    assert_eq!(fetched["payload"]["effect"], "deny");
 
     expect_api_error(
         bob.get(&format!("/_soland/self/policies/{policy_id}")),
@@ -140,7 +143,7 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "scope": realm_id,
                 "subject_ref": bob.actor,
                 "policy_kind": "ak.message.create",
-                "effect": "hard_deny",
+                "effect": "deny",
                 "actions": ["ak.message.create"],
                 "resource": {"kind": "realm", "realm_id": realm_id},
                 "obligations": [{"kind": "audit", "channel": "mod-log"}],

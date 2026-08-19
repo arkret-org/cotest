@@ -4,7 +4,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::{ArkretServer, expect_json, expect_status};
 use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionServer};
 use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
@@ -90,25 +90,23 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     )
     .await?;
     assert_eq!(push["ok"], true);
-    // soland derives the push registration_id as an unlinkable pseudonym —
-    // `ak:pseudonym:push:<base64url(HMAC)>` (push.rs `derive_push_target_id`)
-    // — rather than the linkable `ak:push:{device_id}`. The HMAC tag is keyed
-    // and salt-epoch-bound, so it is not predictable from the request; assert
-    // the pseudonym shape instead of an exact value.
+    // soland derives the registration_id as an unlinkable, salt-epoch-bound
+    // handle spelled from the same pairwise HMAC tag as the push target
+    // pseudonym (push.rs `push_registration_id`). The tag is keyed, so it is
+    // not predictable from the request. The wire member is closed by
+    // `push-operations.schema.json#/$defs/registration_id` as an
+    // opaque_correlation carrier outside the `ak:` typed-ID namespace; assert
+    // that shape instead of an exact value.
     let registration_id = push["registration_id"]
         .as_str()
         .expect("registration_id must be a string");
-    let pseudonym_body = registration_id
-        .strip_prefix("ak:pseudonym:push:")
-        .unwrap_or_else(|| {
-            panic!("registration_id must be a push pseudonym, got: {registration_id}")
-        });
     assert!(
-        !pseudonym_body.is_empty()
-            && pseudonym_body
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
-        "push pseudonym body must be non-empty base64url: {registration_id}"
+        (1..=128).contains(&registration_id.len())
+            && !registration_id.starts_with("ak:")
+            && registration_id.bytes().all(|b| {
+                b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-')
+            }),
+        "registration_id must match the opaque_correlation profile, got: {registration_id}"
     );
 
     let requests = coauth.requests();
@@ -121,32 +119,40 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
 
     // Negative: the same grant presented with a DPoP proof from a different
     // holder key fails closed — the proof thumbprint no longer matches the
-    // grant's `cnf.jkt`.
+    // grant's `cnf.jkt`. api-conventions.md §3.3 fails every presentation check
+    // closed as `unauthenticated`.
     let wrong_holder_key = ed25519_dalek::SigningKey::from_bytes(&[0xd9; 32]);
     let wrong_dpop = arkret_signatures::build_dpop_proof(
         &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&grant_jwt),
         &wrong_holder_key,
     )?;
-    let response = server
-        .http()
-        .post(&push_url)
-        .bearer_auth(&grant_jwt)
-        .header("DPoP", &wrong_dpop.header_value)
-        .json(&push_body)
-        .send()
-        .await?;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    // Both negatives must ride the harness send boundary (`expect_status` →
+    // `send_recorded` → `canonicalize_protocol_json_body`): a raw `.send()`
+    // would put the typed struct's declaration-order bytes on the wire, which
+    // the canonical-body hoop rightly rejects as `schema_violation` before the
+    // §3.3 presentation check ever runs.
+    expect_status(
+        server
+            .http()
+            .post(&push_url)
+            .bearer_auth(&grant_jwt)
+            .header("DPoP", &wrong_dpop.header_value)
+            .json(&push_body),
+        StatusCode::UNAUTHORIZED,
+    )
+    .await?;
 
     // Negative: a grant-shaped bearer without a DPoP proof is not a §3.3
     // presentation at all.
-    let response = server
-        .http()
-        .post(&push_url)
-        .bearer_auth(&grant_jwt)
-        .json(&push_body)
-        .send()
-        .await?;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    expect_status(
+        server
+            .http()
+            .post(&push_url)
+            .bearer_auth(&grant_jwt)
+            .json(&push_body),
+        StatusCode::UNAUTHORIZED,
+    )
+    .await?;
 
     Ok(())
 }

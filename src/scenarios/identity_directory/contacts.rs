@@ -1,11 +1,12 @@
 use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
+use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    account_subscribe_delta_from_text, expect_audit_action, expect_json, expect_response,
-    expect_status, invite_create_payload,
+    account_subscribe_delta_from_text, dispatch_accepted_invite_and_read_token,
+    expect_audit_action, expect_json, expect_response, expect_status, invite_create_payload,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, seal_current_principal_control_frontier,
@@ -55,7 +56,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         }))
         .await?;
     let invite_realm_id = invite_realm["realm_id"].as_str().unwrap().to_owned();
-    let introduction_evidence = json!({"kind": "same_principal_server"});
+    let introduction_evidence = IntroductionEvidence::SamePrincipalServer;
     let invite_expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
     let invite_event = alice
@@ -85,9 +86,28 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         serde_json::to_string_pretty(&invites)?
     );
     assert_eq!(invites["invites"][0]["realm_id"], invite_realm_id);
-    let invite_token = invites["invites"][0]["join_rule_snapshot"]["invite_token"]
+    // governance-objects.md §5.3 — the invite token is private delivery
+    // material and MUST NOT appear on the Invite read model; the invitee
+    // receives it through the invite-addressing.md §7 private delivery flow.
+    assert!(
+        invites["invites"][0].get("invite_token").is_none(),
+        "invite read model must not surface the private delivery token: {invites}"
+    );
+    let invite_id = invites["invites"][0]["id"]
         .as_str()
-        .unwrap();
+        .ok_or_else(|| anyhow!("invite list entry omitted its id: {invites}"))?
+        .to_owned();
+    let invite_event_id = invite_event["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("invite submit outcome omitted event_id: {invite_event}"))?;
+    let invite_token = dispatch_accepted_invite_and_read_token(
+        &alice,
+        &bob,
+        invite_event_id,
+        &invite_id,
+        introduction_evidence,
+    )
+    .await?;
 
     expect_status(
         server

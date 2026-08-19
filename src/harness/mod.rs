@@ -5,6 +5,7 @@
 //! - [`client`]: [`TestActorClient`] and its request helpers.
 //! - [`assertions`]: HTTP assertion family and the recording/transcript machinery.
 //! - [`event_builder`]: token-based event constructors and account helpers.
+//! - [`invite_delivery`]: private invite dispatch / credential read-back helpers.
 //! - [`proof`]: canonical event digest / proof refresh.
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,6 +16,7 @@ use serde_json::{Value, json};
 mod assertions;
 mod client;
 mod event_builder;
+mod invite_delivery;
 mod principal;
 mod proof;
 mod server;
@@ -37,10 +39,12 @@ pub use event_builder::{
     register_account_with_localpart, register_event_signing_identity, send_message, submit_event,
     submit_event_with_signing_seed_and_verification_method,
 };
+pub use invite_delivery::dispatch_accepted_invite_and_read_token;
 pub(crate) use event_builder::{
     event_envelope_with_chain, invite_create_payload, member_join_payload_value,
     member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
     message_redact_payload, message_revise_text_payload, parse_strand_id,
+    prepare_event_submission_with_signing_identity,
 };
 pub use principal::ProvisionedTestPrincipal;
 pub use proof::{

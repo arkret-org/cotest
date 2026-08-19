@@ -18,6 +18,12 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
+use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
+use arkret_models_collaboration::http_bodies::{
+    AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingNonce,
+    DevicePairingStageOutcome, DevicePairingStageRequestBody,
+    UnsignedDevicePairingTargetAttestation,
+};
 use arkret_models_crypto::{
     AlgorithmKeyRecords, KeyOperationSignature, KeysUploadRequestBody, KeysUploadUnsignedRequest,
     keys_upload_signing_input,
@@ -25,6 +31,10 @@ use arkret_models_crypto::{
 use arkret_models_identity::{
     IdentityBindingPurpose, PCR_GENESIS_UNIT_KINDS, UnsignedIdentityCreationControlProof,
     UnsignedIdentityCreationControlProofBody,
+};
+use arkret_signatures::device_pairing::{
+    ServerDevicePairingChallenge, sign_device_pairing_target_attestation,
+    sign_server_device_pairing_challenge,
 };
 use arkret_signatures::http_signature::{
     Component, SignedRequestParts, canonical_message, format_signature_input_component_list,
@@ -284,14 +294,9 @@ pub async fn bootstrap_registered_actor(
                 .to_owned(),
             server.service_id().clone(),
         );
-        let authorize_event_id = authorize_additional_principal_device(
-            server,
-            &token,
-            &founding,
-            &device_id,
-            &device_key,
-        )
-        .await?;
+        let authorize_event_id =
+            authorize_additional_principal_device(server, &founding, &device_id, &device_key)
+                .await?;
         register_event_signing_identity(
             actor,
             device_key.to_bytes(),
@@ -358,11 +363,13 @@ pub async fn bootstrap_registered_actor(
 }
 
 /// Admit an additional device of an already-provisioned principal into its PCR
-/// through an accepted-device `ak.device.authorize` Control Move authored by
-/// the founding device.
+/// through the §2.1 server-mediated pairing gate (`ak.gate.account.command.
+/// pair_device`): the candidate stages its key at the open short-link surface
+/// and signs the pairing challenge, then the founding device authors the
+/// accepted-device `ak.device.authorize` Control Move whose `device_signature`
+/// is the §5.2.2 target attestation bound to that challenge transcript.
 async fn authorize_additional_principal_device(
     server: &ArkretServer,
-    token: &str,
     founding: &ProvisionedTestPrincipal,
     device_id: &str,
     device_signing_key: &SigningKey,
@@ -381,11 +388,68 @@ async fn authorize_additional_principal_device(
         NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1")
             .map_err(anyhow::Error::msg)?,
     ];
-    let mut payload = DeviceAuthorizePayload {
+
+    // §2.1 stage: the account-less candidate publishes its key plus a client
+    // nonce and receives the short-link handle and server challenge fields.
+    let new_device_pubkey = PublicKey {
+        kty: NonEmptyString::new("OKP").map_err(anyhow::Error::msg)?,
+        kid: NonEmptyString::new(device_id.to_owned()).map_err(anyhow::Error::msg)?,
+        algorithm: NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?,
+        key: Base64UrlString::new(
+            URL_SAFE_NO_PAD.encode(device_signing_key.verifying_key().to_bytes()),
+        )
+        .map_err(anyhow::Error::msg)?,
+        key_digest: None,
+    };
+    let nonce_seed = Sha256::digest(
+        format!("cotest:device-pairing-nonce:{actor}:{device_id}").as_bytes(),
+    );
+    let client_nonce = DevicePairingNonce::new(URL_SAFE_NO_PAD.encode(&nonce_seed[..16]))
+        .map_err(anyhow::Error::msg)?;
+    let stage = serde_json::from_value::<DevicePairingStageOutcome>(
+        expect_json(
+            server
+                .http()
+                .post(server.url("/_arkret/open/device-pairing/requests"))
+                .json(&DevicePairingStageRequestBody {
+                    new_device_pubkey: new_device_pubkey.clone(),
+                    client_nonce: client_nonce.clone(),
+                    display_name: None,
+                    device_metadata: None,
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+
+    // §2.1.2: the candidate proves possession of its fresh key over the exact
+    // server-mediated challenge transcript.
+    let challenge = ServerDevicePairingChallenge::from_stage(client_nonce, &stage);
+    let challenge_proof = sign_server_device_pairing_challenge(
+        &new_device_pubkey,
+        &challenge,
+        device_signing_key,
+    )?;
+
+    // §5.2.2: the accepted-device possession attestation binds only the
+    // target's own key material and the challenge transcript digest; the
+    // authorizing device's Event proof carries the remaining payload fields.
+    let attestation = sign_device_pairing_target_attestation(
+        UnsignedDevicePairingTargetAttestation::new(
+            new_device_id.clone(),
+            arkret_wire::DidKey::new(device_public_key.as_str().to_owned())
+                .map_err(anyhow::Error::msg)?,
+            hpke_key.clone(),
+            algorithms.clone(),
+            challenge_proof.transcript_digest.clone(),
+        )?,
+        device_signing_key,
+    )?;
+    let payload = DeviceAuthorizePayload {
         principal_id: founding.core_id.clone(),
         device_id: new_device_id,
         device_public_key,
-        hpke_key,
+        hpke_key: hpke_key.clone(),
         algorithms,
         device_key_algorithm: Some(NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?),
         authorized_by: DeviceOrPrincipalRef::DeviceId(founding.device_id.clone()),
@@ -393,35 +457,48 @@ async fn authorize_additional_principal_device(
         not_before: created_at,
         expires_at: None,
         authorization_binding_kind: DeviceAuthorizationBindingKind::AcceptedDevice,
-        device_signature: SignatureMaterial::NonEmptyString(
-            NonEmptyString::new("pending").map_err(anyhow::Error::msg)?,
-        ),
+        device_signature: attestation.device_signature.clone(),
         recovery_session_id: None,
     };
-    payload.device_signature = SignatureMaterial::NonEmptyString(
-        NonEmptyString::new(
-            URL_SAFE_NO_PAD.encode(
-                device_signing_key
-                    .sign(&payload.device_possession_signature_input()?)
-                    .to_bytes(),
-            ),
-        )
-        .map_err(anyhow::Error::msg)?,
-    );
-    let body = crate::harness::submit_event(
+
+    // The gate authenticates the authorizing device, so the exact Event is
+    // authored over a founding-device session and relayed verbatim.
+    let founding_token = dev_login(server, actor, founding.device_id.as_str()).await?;
+    let founding_method = crate::fixture_did_url(format!("{actor}#{}", founding.device_id));
+    let authorize_event = crate::harness::prepare_event_submission_with_signing_identity(
         server,
-        token,
+        &founding_token,
         actor,
         founding.pcr_realm_id.as_str(),
         arkret_wire::EventKind::DeviceAuthorize.as_str(),
         serde_json::to_value(&payload)?,
-        StatusCode::OK,
+        founding.device_signing_key.to_bytes(),
+        &founding_method,
     )
     .await?;
-    let event_id = body["event_id"]
-        .as_str()
-        .context("accepted additional-device authorization omitted its Event id")?;
-    Ok(arkret_identifiers::EventId::new(event_id.to_owned())?)
+    let outcome = serde_json::from_value::<AccountDevicePairOutcome>(
+        expect_json(
+            server
+                .http()
+                .post(server.url("/_arkret/gate/account/device-pair"))
+                .bearer_auth(&founding_token)
+                .json(&AccountDevicePairRequestBody {
+                    pairing_code: stage.pairing_code.clone(),
+                    new_device_pubkey,
+                    hpke_key,
+                    device_signature: attestation.device_signature.clone(),
+                    challenge_proof,
+                    authorize_event: crate::publication::initial_submission(authorize_event, "")?,
+                    display_name: None,
+                    device_metadata: None,
+                    device_pairing_request_id: Some(stage.device_pairing_request_id.clone()),
+                    challenge_transcript: None,
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    Ok(outcome.authorized_event_ref)
 }
 
 /// Publish the current device-signed successor Seal for every accepted Event

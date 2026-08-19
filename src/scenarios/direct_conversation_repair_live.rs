@@ -498,7 +498,7 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
             requester_device.as_str(),
         )
         .await?;
-    let recipient_client = target
+    let _recipient_client = target
         .register_client(
             recipient_full.as_str(),
             "repair-recipient",
