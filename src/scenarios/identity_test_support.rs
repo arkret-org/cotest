@@ -745,7 +745,7 @@ async fn bootstrap_test_device_authorization(
             arkret_canonical::DigestSuite::Sha256,
         )?,
     };
-    let mut create = build_self_principal_pcr_create(
+    let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal_actor_id.clone(),
             principal_server_id: server.service_id().clone(),

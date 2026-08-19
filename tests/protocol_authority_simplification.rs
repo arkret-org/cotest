@@ -21,7 +21,7 @@ fn producer_event() -> Event {
         "discussion",
         ContentBlock::text("authority simplification"),
     );
-    let mut event = TypedEventDraft::<event_spec::MessageCreate>::new(
+    let event = TypedEventDraft::<event_spec::MessageCreate>::new(
         ScopeRef::Realm {
             realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir")
                 .unwrap(),

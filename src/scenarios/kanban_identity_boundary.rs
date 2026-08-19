@@ -31,9 +31,16 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     let server = group.server(0);
     let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-kanban-id")?;
     let alice = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-00000000ka01")
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-00000000ab01")
         .await?;
     let realm_id = create_test_realm(&alice, "Kanban Identity Boundary").await?;
+    // The typed builders resolve the envelope `principal_server_id` from the
+    // client's selected Principal Server, exactly as the real app does at
+    // sign-in.
+    inkson::operation::set_authoring_principal_server_id(Some(
+        arkret::DidCoreId::new(alice.service_id().to_owned())
+            .map_err(|error| anyhow!("service DID core id: {error}"))?,
+    ));
 
     // ---- board, then list: each id exists only once its create is accepted --
     let board = inkson::operation::ak_ops::space_create(
@@ -147,19 +154,21 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
             "the backfill row must echo the producer's holder-local alias verbatim"
         );
     }
-    let creates_in_realm = rows
-        .iter()
-        .filter(|row| {
-            matches!(
-                row["kind"].as_str(),
-                Some("ak.space.create") | Some("ak.strand.create")
-            )
-        })
-        .count();
-    assert_eq!(
-        creates_in_realm, 3,
-        "the realm must hold exactly the three creates this scenario authored"
-    );
+    // No second object materialized for any of the three writes: nothing else
+    // in the realm carries their holder-local aliases.
+    for operation in [&board, &list, &card] {
+        let alias_rows = rows
+            .iter()
+            .filter(|row| {
+                row["unsigned"]["local_operation_idempotency_alias"].as_str()
+                    == Some(operation.local_operation_id().as_str())
+            })
+            .count();
+        assert_eq!(
+            alias_rows, 1,
+            "each user operation must appear exactly once in the backfill"
+        );
+    }
 
     // ---- the card's payload names the accepted containers -------------------
     let card_row = rows

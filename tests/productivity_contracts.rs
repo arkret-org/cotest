@@ -245,8 +245,8 @@ use arkret_crypto::account_data_crypto::{
 use arkret_event_draft::TypedEventDraft;
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
 use arkret_wire::{
-    DidCoreId, DidFullId, DidUrl, Event, Hash, Hlc, ProducerEventProof, ScopeRef, StrandId,
-    event_spec, project_full_id_to_core_id,
+    DidCoreId, DidFullId, DidUrl, Hash, Hlc, ProducerEventProof, ScopeRef, StrandId, event_spec,
+    project_full_id_to_core_id,
 };
 use chrono::{TimeZone as _, Utc};
 use garth::queued_record::{

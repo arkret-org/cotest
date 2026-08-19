@@ -1186,7 +1186,7 @@ fn sign_prepared_draft(
     signer: &Ed25519PayloadSigner,
     verification_method: &DidUrl,
 ) -> SidecarModelResult<Event> {
-    let mut event = decode_prepared_event(draft)?;
+    let event = decode_prepared_event(draft)?;
     let before = arkret_canonical::canonical_json_bytes(
         &event
             .digest_payload()
