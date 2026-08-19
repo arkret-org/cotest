@@ -340,7 +340,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     .map_err(|error| anyhow!("inkson invite_cancel builder: {error}"))?
     .build_sdk_event(alice.service_id())
     .map_err(|error| anyhow!("inkson invite_cancel event: {error}"))?;
-    let inkson_payload = serde_json::to_value(&inkson_cancel.payload)?;
+    let inkson_payload = serde_json::to_value(inkson_cancel.payload())?;
     assert_eq!(
         inkson_payload["invitee"].as_str(),
         Some(bob_core_id.as_str()),

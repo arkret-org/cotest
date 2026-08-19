@@ -21,7 +21,7 @@ fn producer_event() -> Event {
         "discussion",
         ContentBlock::text("authority simplification"),
     );
-    let mut event = TypedEventDraft::<event_spec::MessageCreate>::new(
+    let event = TypedEventDraft::<event_spec::MessageCreate>::new(
         ScopeRef::Realm {
             realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir")
                 .unwrap(),
@@ -38,7 +38,8 @@ fn producer_event() -> Event {
     )
     .unwrap();
     let digest = Hash::new(event.event_digest().unwrap()).unwrap();
-    event.proofs.push(
+    let mut event = event;
+    event.attach_proof(
         ProducerEventProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
@@ -51,7 +52,7 @@ fn producer_event() -> Event {
         }
         .into(),
     );
-    event
+    event.into_event()
 }
 
 fn accept(mut event: Event) -> Event {

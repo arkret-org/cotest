@@ -39,13 +39,13 @@ pub use event_builder::{
     register_account_with_localpart, register_event_signing_identity, send_message, submit_event,
     submit_event_with_signing_seed_and_verification_method,
 };
-pub use invite_delivery::dispatch_accepted_invite_and_read_token;
 pub(crate) use event_builder::{
     event_envelope_with_chain, invite_create_payload, member_join_payload_value,
     member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
     message_redact_payload, message_revise_text_payload, parse_strand_id,
     prepare_event_submission_with_signing_identity,
 };
+pub use invite_delivery::dispatch_accepted_invite_and_read_token;
 pub use principal::ProvisionedTestPrincipal;
 pub use proof::{
     attach_signal_proof, attach_signal_proof_value, refresh_typed_event_proof,

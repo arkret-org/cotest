@@ -47,6 +47,7 @@ fn message_event() -> Event {
         .unwrap()
         .author(7, Hlc::new(HLC).unwrap(), created_at())
         .unwrap()
+        .into_event()
 }
 
 #[test]

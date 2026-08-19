@@ -103,9 +103,9 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     assert!(
         (1..=128).contains(&registration_id.len())
             && !registration_id.starts_with("ak:")
-            && registration_id.bytes().all(|b| {
-                b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-')
-            }),
+            && registration_id
+                .bytes()
+                .all(|b| { b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-') }),
         "registration_id must match the opaque_correlation profile, got: {registration_id}"
     );
 

@@ -401,9 +401,8 @@ async fn authorize_additional_principal_device(
         .map_err(anyhow::Error::msg)?,
         key_digest: None,
     };
-    let nonce_seed = Sha256::digest(
-        format!("cotest:device-pairing-nonce:{actor}:{device_id}").as_bytes(),
-    );
+    let nonce_seed =
+        Sha256::digest(format!("cotest:device-pairing-nonce:{actor}:{device_id}").as_bytes());
     let client_nonce = DevicePairingNonce::new(URL_SAFE_NO_PAD.encode(&nonce_seed[..16]))
         .map_err(anyhow::Error::msg)?;
     let stage = serde_json::from_value::<DevicePairingStageOutcome>(
@@ -425,11 +424,8 @@ async fn authorize_additional_principal_device(
     // §2.1.2: the candidate proves possession of its fresh key over the exact
     // server-mediated challenge transcript.
     let challenge = ServerDevicePairingChallenge::from_stage(client_nonce, &stage);
-    let challenge_proof = sign_server_device_pairing_challenge(
-        &new_device_pubkey,
-        &challenge,
-        device_signing_key,
-    )?;
+    let challenge_proof =
+        sign_server_device_pairing_challenge(&new_device_pubkey, &challenge, device_signing_key)?;
 
     // §5.2.2: the accepted-device possession attestation binds only the
     // target's own key material and the challenge transcript digest; the
@@ -749,7 +745,7 @@ async fn bootstrap_test_device_authorization(
             arkret_canonical::DigestSuite::Sha256,
         )?,
     };
-    let mut create = build_self_principal_pcr_create(
+    let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal_actor_id.clone(),
             principal_server_id: server.service_id().clone(),
@@ -779,6 +775,9 @@ async fn bootstrap_test_device_authorization(
         root_did,
         root_verification_method.clone(),
     );
+    // `build_self_principal_pcr_create` already finalized the genesis; the
+    // signer verifies that identity instead of re-deriving one.
+    let mut create = create;
     arkret::signatures::sign_event(
         &mut create,
         &root_signer,
@@ -799,13 +798,17 @@ async fn bootstrap_test_device_authorization(
     )?;
     authorize.created_at = created_at;
     authorize.prev_refs = vec![create.event_id.clone()];
-    authorize.refresh_content_bound_identity()?;
     let device_method = crate::fixture_did_url(format!("{actor}#{device_id}"));
     let device_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         device_signing_key.to_bytes(),
         principal.clone(),
         device_method.clone(),
     );
+    let mut authorize = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        authorize,
+        arkret::canonical::DigestSuite::Sha256,
+    )
+    .map_err(|error| anyhow::anyhow!("fixture envelope failed to finalize: {error}"))?;
     arkret::signatures::sign_event(
         &mut authorize,
         &device_signer,
@@ -814,8 +817,8 @@ async fn bootstrap_test_device_authorization(
     )?;
     let authorize_event_id = authorize.event_id.clone();
     let unit = build_self_principal_pcr_genesis_unit(
-        create,
-        authorize,
+        create.into_event(),
+        authorize.into_event(),
         &crate::publication::project_cells,
     )?;
     let validated_inception = validate_principal_inception_operation(&prepared.submit_body)?;

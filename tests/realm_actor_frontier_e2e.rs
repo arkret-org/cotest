@@ -81,7 +81,8 @@ fn bind_seal_ref(
     event.auth_context = Some(arkret_wire::AuthContext {
         actor_id: arkret_identifiers::DidCoreId::from(
             arkret_identifiers::project_full_id_to_core_id(
-                &arkret_identifiers::DidFullId::new(actor.to_owned()).map_err(anyhow::Error::msg)?,
+                &arkret_identifiers::DidFullId::new(actor.to_owned())
+                    .map_err(anyhow::Error::msg)?,
             )?,
         ),
         key_id: cotest::harness::auth_context_key_id(
@@ -168,12 +169,22 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         },
     )
     .await?;
-    let realm_a =
-        create_realm_with_signing_seed(&server, &token, actor, "Frontier Realm A", signing_seed(actor))
-            .await?;
-    let realm_b =
-        create_realm_with_signing_seed(&server, &token, actor, "Frontier Realm B", signing_seed(actor))
-            .await?;
+    let realm_a = create_realm_with_signing_seed(
+        &server,
+        &token,
+        actor,
+        "Frontier Realm A",
+        signing_seed(actor),
+    )
+    .await?;
+    let realm_b = create_realm_with_signing_seed(
+        &server,
+        &token,
+        actor,
+        "Frontier Realm B",
+        signing_seed(actor),
+    )
+    .await?;
 
     let basis_a = frontier(&server, &token, actor, &realm_a).await?;
     let basis_b = frontier(&server, &token, actor, &realm_b).await?;
@@ -227,7 +238,11 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         siblings.frontier_event_ids.clone(),
         signing_seed(actor),
     );
-    bind_seal_ref(&mut merge, actor, &seal_basis(&server, &token, &realm_a).await?)?;
+    bind_seal_ref(
+        &mut merge,
+        actor,
+        &seal_basis(&server, &token, &realm_a).await?,
+    )?;
     let exact_body = submission_bytes(&merge)?;
     let lost = submit_bytes(&server, &token, exact_body.clone()).await?;
     assert_eq!(lost.status(), StatusCode::OK);
@@ -261,7 +276,11 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         basis_a.frontier_event_ids,
         signing_seed(actor),
     );
-    bind_seal_ref(&mut stale, actor, &seal_basis(&server, &token, &realm_a).await?)?;
+    bind_seal_ref(
+        &mut stale,
+        actor,
+        &seal_basis(&server, &token, &realm_a).await?,
+    )?;
     let stale_response = submit_bytes(&server, &token, submission_bytes(&stale)?).await?;
     assert_eq!(stale_response.status(), StatusCode::CONFLICT);
     let conflict: Value = stale_response.json().await?;
@@ -303,9 +322,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     expect_json(
         server
             .http()
-            .get(server.url(&format!(
-                "/_arkret/self/events/{replacement_event_id}"
-            )))
+            .get(server.url(&format!("/_arkret/self/events/{replacement_event_id}")))
             .bearer_auth(&token),
         StatusCode::OK,
     )

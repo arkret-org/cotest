@@ -1186,11 +1186,16 @@ fn sign_prepared_draft(
     signer: &Ed25519PayloadSigner,
     verification_method: &DidUrl,
 ) -> SidecarModelResult<Event> {
-    let mut event = decode_prepared_event(draft)?;
+    let event = decode_prepared_event(draft)?;
     let before = arkret_canonical::canonical_json_bytes(
         &event
             .digest_payload()
             .map_err(|_| SidecarModelError::DraftMismatch)?,
+    )
+    .map_err(|_| SidecarModelError::DraftMismatch)?;
+    let mut event = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        event,
+        arkret::canonical::DigestSuite::Sha256,
     )
     .map_err(|_| SidecarModelError::DraftMismatch)?;
     sign_event(
@@ -1217,7 +1222,7 @@ fn sign_prepared_draft(
         .ok_or(SidecarModelError::ProofMismatch)?;
     verify_ed25519_detached_jws_proof(proof, &before, &event.actor_id, &public_key)
         .map_err(|_| SidecarModelError::ProofMismatch)?;
-    Ok(event)
+    Ok(event.into_event())
 }
 
 fn validate_signed_draft(

@@ -466,17 +466,10 @@ fn build_pcr_genesis_unit(
         root_did,
         root_verification_method.clone(),
     );
-    let digest_suite = serde_json::from_value::<arkret::RealmCreatePayload>(
-        serde_json::to_value(&create.payload).context("serialize PCR genesis payload")?,
-    )
-    .context("decode Principal Control Realm genesis digest suite")?
-    .object
-    .digest_algorithm;
-    arkret::signatures::sign_event_with_digest_suite(
+    arkret::signatures::sign_event(
         &mut create,
         &root_signer,
         &root_verification_method,
-        digest_suite,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .context("sign the PCR genesis Event with the identity root")?;
@@ -518,8 +511,8 @@ fn build_pcr_genesis_unit(
             .map_err(|error| error.to_string())
     })?;
     Ok((
-        create,
-        authorize,
+        create.into_event(),
+        authorize.into_event(),
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(device_seed),
     ))
 }
