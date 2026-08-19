@@ -81,13 +81,22 @@ pub fn refresh_typed_event_proof_with_signing_seed(
         signer_did,
         verification_method.clone(),
     );
+    // The old signer re-derived the identity as it signed; the new one verifies
+    // it, so the re-derivation the mutation made necessary is explicit here.
+    let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        event.clone(),
+        arkret::canonical::DigestSuite::Sha256,
+    )
+    .map_err(|error| anyhow!("mutated fixture failed to finalize: {error}"))?;
     arkret::signatures::sign_event(
-        event,
+        &mut authored,
         &signer,
         &verification_method,
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
-    .with_context(|| format!("SDK Event signer rejected {}", event.event_id))
+    .with_context(|| format!("SDK Event signer rejected {}", authored.event_id()))?;
+    *event = authored.into_event();
+    Ok(())
 }
 
 /// Re-sign a typed Event through the registered cotest identity.

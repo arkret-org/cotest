@@ -288,7 +288,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         &crate::publication::project_cells,
     )?;
     let create = with_proof(
-        create,
+        create.into_event(),
         &crate::fixture_did_url(
             "did:key:z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ#z6MkvMW3tjuvW6PqYiX8dLRNwZWyGhxe3biRDjA4ZPiBaFaJ",
         ),

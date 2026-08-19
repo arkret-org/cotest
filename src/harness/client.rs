@@ -249,7 +249,7 @@ impl TestActorClient {
         if Hash::new(event.event_digest()?)? != draft.event_digest {
             return Err(anyhow!("signing changed the prepared Contact Event digest"));
         }
-        Ok(event)
+        Ok(event.into_event())
     }
 
     /// Read the Realm Seal frontier, waiting out the control-seal coordinator.
@@ -658,7 +658,9 @@ impl TestActorClient {
         realm_id: &str,
         subject: &str,
         actions: &[&str],
-        constraints: Vec<arkret_models_collaboration::governance::grant_constraint::GrantConstraint>,
+        constraints: Vec<
+            arkret_models_collaboration::governance::grant_constraint::GrantConstraint,
+        >,
     ) -> Result<(String, Value)> {
         let issued_at = chrono::Utc::now();
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {

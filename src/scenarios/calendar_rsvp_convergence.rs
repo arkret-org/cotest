@@ -71,7 +71,9 @@ fn inkson_rsvp_payload(
         .cloned()
         .map(arkret_identifiers::Hash::new)
         .collect::<Result<Vec<_>, _>>()?;
-    let event = inkson::calendar::build_calendar_rsvp_event(
+    // The RSVP is a write: its payload is settled before authoring, and the
+    // submit path positions it on the actor chain.
+    let operation = inkson::calendar::build_calendar_rsvp_event(
         realm_id,
         actor_id,
         strand_id,
@@ -79,10 +81,8 @@ fn inkson_rsvp_payload(
         None,
         &calendar_fields,
         basis,
-        0,
-        arkret_identifiers::Hlc::new("01970e589d21-0000-a13f9c2e")?,
     )?;
-    Ok(serde_json::to_value(event.payload)?)
+    Ok(serde_json::to_value(operation.payload())?)
 }
 
 /// Reads the schedule revision frontier and the live RSVP heads.
@@ -260,8 +260,7 @@ async fn grant_calendar_actions(
             arkret_models_collaboration::governance::grant_constraint::GrantConstraintKind::FieldAccess,
             arkret_models_collaboration::governance::grant_constraint::GrantConstraintEffect::Allow,
         );
-    calendar_field_constraint.allowed_write_fields =
-        vec!["metadata.fields.calendar".to_owned()];
+    calendar_field_constraint.allowed_write_fields = vec!["metadata.fields.calendar".to_owned()];
     let (calendar_grant_id, response) = client
         .grant_realm_actions_with_constraints_to(
             realm_id,

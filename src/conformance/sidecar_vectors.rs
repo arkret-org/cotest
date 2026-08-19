@@ -1193,6 +1193,11 @@ fn sign_prepared_draft(
             .map_err(|_| SidecarModelError::DraftMismatch)?,
     )
     .map_err(|_| SidecarModelError::DraftMismatch)?;
+    let mut event = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        event,
+        arkret::canonical::DigestSuite::Sha256,
+    )
+    .map_err(|_| SidecarModelError::DraftMismatch)?;
     sign_event(
         &mut event,
         signer,
@@ -1217,7 +1222,7 @@ fn sign_prepared_draft(
         .ok_or(SidecarModelError::ProofMismatch)?;
     verify_ed25519_detached_jws_proof(proof, &before, &event.actor_id, &public_key)
         .map_err(|_| SidecarModelError::ProofMismatch)?;
-    Ok(event)
+    Ok(event.into_event())
 }
 
 fn validate_signed_draft(

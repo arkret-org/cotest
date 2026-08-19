@@ -38,7 +38,8 @@ fn producer_event() -> Event {
     )
     .unwrap();
     let digest = Hash::new(event.event_digest().unwrap()).unwrap();
-    event.proofs.push(
+    let mut event = event;
+    event.attach_proof(
         ProducerEventProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
@@ -51,7 +52,7 @@ fn producer_event() -> Event {
         }
         .into(),
     );
-    event
+    event.into_event()
 }
 
 fn accept(mut event: Event) -> Event {

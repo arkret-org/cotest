@@ -1058,6 +1058,11 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor_full_id,
         verification_method.to_owned(),
     );
+    let mut event = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        event,
+        arkret::canonical::DigestSuite::Sha256,
+    )
+    .expect("cotest fixture envelope finalizes");
     arkret::signatures::sign_event(
         &mut event,
         &signer,
@@ -1065,6 +1070,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .expect("SDK Event signer accepts cotest envelope");
+    let event = event.into_event();
     event
 }
 

@@ -346,7 +346,7 @@ fn scheduled_send_plan_plaintext_matches_spec_schema() {
     );
 }
 
-fn scheduled_send_signed_event(body: &str) -> Event {
+fn scheduled_send_signed_event(body: &str) -> arkret_wire::AuthoredEvent {
     let mut event = TypedEventDraft::<event_spec::MessageCreate>::new(
         ScopeRef::Realm {
             realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir")
@@ -364,7 +364,7 @@ fn scheduled_send_signed_event(body: &str) -> Event {
     )
     .unwrap();
     let digest = Hash::new(event.event_digest().unwrap()).unwrap();
-    event.proofs.push(
+    event.attach_proof(
         ProducerEventProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
@@ -442,7 +442,7 @@ fn scheduled_send_dispatch_freezes_content_bound_identities_and_bytes() {
 
     // Dispatch refuses an envelope that was never signed.
     let mut unsigned = scheduled_send_signed_event("unsigned");
-    unsigned.proofs.clear();
+    unsigned.clear_proofs();
     assert!(
         QueuedSdkEvent::scheduled_authored(
             ScheduledSendId::new(SCHEDULED_SEND_ID).unwrap(),

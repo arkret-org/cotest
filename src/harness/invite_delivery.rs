@@ -102,7 +102,9 @@ async fn resolve_accepted_event(
         .as_array()
         .and_then(|events| events.first())
         .cloned()
-        .ok_or_else(|| anyhow::anyhow!("accepted invite Event {event_id} did not resolve: {resolved}"))?;
+        .ok_or_else(|| {
+            anyhow::anyhow!("accepted invite Event {event_id} did not resolve: {resolved}")
+        })?;
     serde_json::from_value(event).context("resolved invite Event is not a wire Event")
 }
 
@@ -132,7 +134,9 @@ async fn dispatch_invite(
         idempotency_key,
     );
     let dispatched = expect_json(
-        inviter.post("/_arkret/self/invites/dispatch").json(&delivery),
+        inviter
+            .post("/_arkret/self/invites/dispatch")
+            .json(&delivery),
         StatusCode::OK,
     )
     .await?;
@@ -148,11 +152,7 @@ async fn dispatch_invite(
 /// list surface (`ak.self.account_data.read.list`) returns every non-internal
 /// cell without the single-key registration gate.
 async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str) -> Result<String> {
-    let listed = expect_json(
-        invitee.get("/_arkret/self/account_data"),
-        StatusCode::OK,
-    )
-    .await?;
+    let listed = expect_json(invitee.get("/_arkret/self/account_data"), StatusCode::OK).await?;
     let entries = listed["entries"].as_array().cloned().unwrap_or_default();
     let cell = entries
         .iter()
