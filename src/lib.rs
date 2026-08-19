@@ -78,8 +78,6 @@ pub mod publication;
 pub mod scenarios;
 pub mod transcripts;
 
-pub const HARNESS_NAME: &str = "cotest";
-
 /// Build a deterministic, suite-tagged Event identity for fixtures that refer
 /// to an Event but do not carry that Event's envelope.
 ///

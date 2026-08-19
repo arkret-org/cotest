@@ -28,15 +28,14 @@ pub use assertions::{
 };
 pub use client::TestActorClient;
 pub use event_builder::{
-    add_member, add_member_with_signing_seed, auth_context_key_id, create_realm,
-    create_realm_with_signing_seed, default_event_verification_method, dev_login,
-    device_message_send_request, encrypted_envelope, event_envelope,
-    event_envelope_at_frontier_with_signing_seed, event_envelope_with_preconditions,
-    event_envelope_with_signing_seed, event_envelope_with_signing_seed_and_verification_method,
-    head_eq_precondition, moderation_report_request, realm_bootstrap_event_batch,
+    add_member, auth_context_key_id, create_realm, create_realm_with_signing_seed,
+    default_event_verification_method, dev_login, device_message_send_request, encrypted_envelope,
+    event_envelope, event_envelope_at_frontier_with_signing_seed, event_envelope_with_signing_seed,
+    event_envelope_with_signing_seed_and_verification_method, head_eq_precondition,
+    moderation_report_request, realm_bootstrap_event_batch,
     realm_bootstrap_event_batch_with_signing_seed, register_account,
     register_account_with_localpart, register_event_signing_identity, send_message, submit_event,
-    submit_event_with_signing_seed, submit_event_with_signing_seed_and_verification_method,
+    submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
     event_envelope_with_chain, invite_create_payload, member_join_payload_value,
@@ -45,8 +44,7 @@ pub(crate) use event_builder::{
 };
 pub use principal::ProvisionedTestPrincipal;
 pub use proof::{
-    attach_signal_proof, attach_signal_proof_value, refresh_event_proof,
-    refresh_event_proof_with_signing_seed, refresh_typed_event_proof,
+    attach_signal_proof, attach_signal_proof_value, refresh_typed_event_proof,
     refresh_typed_event_proof_with_signing_seed,
 };
 pub use server::{ArkretServer, TestServerGroup};

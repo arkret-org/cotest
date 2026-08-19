@@ -14,10 +14,7 @@ asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
 - Reusable fixture builders live in `src/fixtures/`. See the
   [Fixture builders](#fixture-builders) section below for the
   `TestActorBuilder` fluent API that replaces the per-scenario
-  `register_account` + `dev_login` + `create_realm` boilerplate.
-- The same module hosts [`EventTimeline`](#failure-event-timeline) — a
-  rendered view of the harness's `transcript.ndjson` that panic hooks dump to
-  stderr when a scenario assertion fails.
+  `register_account` + `dev_login` boilerplate.
 - Scenario logic lives in `src/scenarios/`; `tests/` stays as thin wrappers so
   the project remains the test harness, not a pile of ad hoc integration files.
 - The harness now supports both local process spawning and Docker-backed SUT
@@ -438,13 +435,12 @@ wrapper level as well.
 ## Fixture builders
 
 `src/fixtures/builders.rs` exposes `TestActorBuilder`, a fluent fixture for
-the common "register actor + login + pre-seed spaces" preamble. Replaces:
+the common "register actor + login" preamble. Replaces:
 
 ```rust
 let bob = server
     .register_client("did:web:bob.example", "@bob", "dev_bob")
     .await?;
-let bob_realm = bob.create_realm("Some Space").await?;
 ```
 
 with:
@@ -453,50 +449,23 @@ with:
 let bob = TestActorBuilder::new(&server, "@bob")
     .with_did("did:web:bob.example")
     .with_device("dev_bob")
-    .with_realm("Some Space")
     .create()
     .await?;
-let bob_realm = bob.first_realm().expect("seeded realm");
 let bob_client = bob.client(); // reuse existing TestActorClient API
 ```
 
 Defaults the builder applies when fields are omitted:
 
-- DID: `did:web:<bare-handle>.example` (handle's leading `@` stripped)
+- DID: the deterministic harness DID for the bare handle scoped to the
+  server's service full id (handle's leading `@` stripped)
 - primary device id: `dev_<bare-handle>`
-- spaces: none (`with_realm` is opt-in)
-- `with_key_package(n)` records the requested KeyPackage count on the
-  returned `TestActor` for scenarios that want to assert provisioning shape;
-  the harness does not yet expose a publish endpoint, so no MLS key material
-  is produced.
 
-`with_device` can be called multiple times: the first call sets the primary
-device id, additional calls populate `TestActor.additional_devices` for
-scenarios that want to drive multi-device strands. Scenarios that need a
-working second-device client should call
-`server.demo_client(&actor.did, &device_label)` against the recorded labels.
+`with_device` sets the primary device label; the first call wins. Scenarios
+that need real per-device clients call `server.demo_client(did, device_id)`
+directly.
 
-Two scenarios currently use the builder as a worked example:
-`src/scenarios/events_backfill.rs` and `src/scenarios/interaction_models.rs`.
-Other scenarios continue to use `register_client` / `demo_client` directly —
-migration is incremental and orthogonal to scenario logic.
-
-## Failure event timeline
-
-`src/fixtures/timeline.rs` exposes `EventTimeline`, a pretty-printable view
-of the redacted ndjson transcript the harness writes via
-`COTEST_TRANSCRIPT_PATH` / `COTEST_ARTIFACT_DIR`. Each row renders sender,
-op_id (event_id or fallback HTTP request line), kind, status, depends-on
-frontier (the `prev_refs` array on the event envelope), and payload digest.
-
-`install_failure_dump_hook()` chains a panic hook that loads the transcript
-from the env vars above and writes the rendered timeline to stderr before
-delegating to the previously-installed hook. The hook is idempotent; scenario
-entry points can call it unconditionally without leaking handlers.
-
-When the harness is not configured with a transcript path the hook is a
-no-op — the install still succeeds but no timeline is rendered, since there
-is nothing on disk to read. Scripts that already set
-`COTEST_ARTIFACT_DIR=artifacts/runs/cotest/<timestamp>-<profile>` (e.g.
-`run-cotest.ps1`) pick
-up the timeline automatically.
+Scenarios currently using the builder as worked examples:
+`src/scenarios/events_backfill.rs` and
+`src/scenarios/account_subscribe_long_poll.rs`. Other scenarios continue to
+use `register_client` / `demo_client` directly — migration is incremental and
+orthogonal to scenario logic.

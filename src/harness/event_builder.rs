@@ -610,28 +610,6 @@ pub async fn add_member(
     Ok(())
 }
 
-pub async fn add_member_with_signing_seed(
-    server: &ArkretServer,
-    token: &str,
-    actor: &str,
-    realm_id: &str,
-    member: &str,
-    signing_seed: [u8; 32],
-) -> Result<()> {
-    submit_event_with_signing_seed(
-        server,
-        token,
-        actor,
-        realm_id,
-        "ak.member.state",
-        member_join_payload(realm_id, member),
-        StatusCode::OK,
-        signing_seed,
-    )
-    .await?;
-    Ok(())
-}
-
 pub async fn send_message(
     server: &ArkretServer,
     token: &str,
@@ -673,31 +651,6 @@ pub async fn submit_event(
         status,
         signing_seed,
         &verification_method,
-    )
-    .await
-}
-
-#[allow(clippy::too_many_arguments)]
-pub async fn submit_event_with_signing_seed(
-    server: &ArkretServer,
-    token: &str,
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    status: StatusCode,
-    signing_seed: [u8; 32],
-) -> Result<Value> {
-    submit_event_with_signing_seed_and_verification_method(
-        server,
-        token,
-        actor,
-        realm_id,
-        kind,
-        payload,
-        status,
-        signing_seed,
-        &default_event_verification_method(actor),
     )
     .await
 }
@@ -839,35 +792,6 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -
         payload,
         signing_seed,
         &verification_method,
-    )
-}
-
-/// A caller-signed Control Move that carries its own `head_eq` guard.
-///
-/// A precondition is signed content, so a surface that requires one -- the
-/// policy-server writes, for instance -- can only get it from the caller. The
-/// service used to read the settled value and attach the guard itself, which is
-/// the co-signing `key-management.md` section 411 forbids.
-pub fn event_envelope_with_preconditions(
-    actor: &str,
-    realm_id: &str,
-    kind: &str,
-    payload: Value,
-    preconditions: Vec<arkret_wire::cba::Precondition>,
-) -> Event {
-    let (signing_seed, verification_method) = event_signing_identity(actor);
-    event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
-        actor,
-        realm_id,
-        kind,
-        payload,
-        None,
-        Vec::new(),
-        signing_seed,
-        &verification_method,
-        None,
-        Vec::new(),
-        preconditions,
     )
 }
 

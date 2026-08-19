@@ -162,10 +162,8 @@ pub use blob_stream_aead::{
     run_stream_aead_scheme_closure_vector, run_stream_aead_truncation_rejected_vector,
 };
 pub use call_signal::{
-    ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite,
-    run_outer_metadata_minimal_vector as run_call_signal_outer_metadata_minimal_vector,
-    run_plaintext_closed_schema_vector, run_proof_detached_jws_vector, run_seq_monotonic_vector,
-    run_signal_kind_enum_vector,
+    ALL_CALL_SIGNAL_VECTOR_IDS, run_call_signal_vector_suite, run_plaintext_closed_schema_vector,
+    run_proof_detached_jws_vector, run_seq_monotonic_vector, run_signal_kind_enum_vector,
 };
 pub use call_state_core::{
     ALL_CALL_STATE_CORE_VECTOR_IDS, run_call_state_core_fixture_suite,

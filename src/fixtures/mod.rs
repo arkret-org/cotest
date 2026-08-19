@@ -11,8 +11,6 @@
 
 pub mod builders;
 pub mod scaffold;
-pub mod timeline;
 
 pub use builders::TestActorBuilder;
 pub use scaffold::{MultiScaffold, TestScaffold};
-pub use timeline::{EventTimeline, TimelineEntry, install_failure_dump_hook};

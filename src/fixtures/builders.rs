@@ -14,15 +14,14 @@
 //! let alice = TestActorBuilder::new(&server, "@alice")
 //!     .with_did(&alice_did)
 //!     .with_device("ak:device:01904100-0000-7000-8000-0000000000a1")
-//!     .with_realm("Some Realm")
 //!     .create()
 //!     .await?;
-//! let realm_id = alice.first_realm().expect("seeded one realm");
+//! let realm_id = alice.client().create_realm("Some Realm").await?;
 //! ```
 //!
 //! The builder owns the small bits of repetitive logic — handle/DID
-//! derivation, default device naming, seeded-space tracking — so scenarios
-//! can focus on the behaviour under test instead of plumbing.
+//! derivation and default device naming — so scenarios can focus on the
+//! behaviour under test instead of plumbing.
 //!
 //! ## Design notes
 //!
@@ -39,16 +38,6 @@ use anyhow::{Context, Result};
 use crate::harness::{ArkretServer, TestActorClient};
 use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
-/// Tracks the realms a scenario asked the builder to create as part of the
-/// fixture preamble. Each entry stores the original requested name and the
-/// allocated `ak:realm:...` id so scenarios can route follow-up assertions to
-/// the right realm without re-querying the server.
-#[derive(Debug, Clone)]
-pub struct SeededRealm {
-    pub name: String,
-    pub realm_id: String,
-}
-
 /// The fully-realised actor fixture returned by [`TestActorBuilder::create`].
 ///
 /// Wraps the raw [`TestActorClient`] with the metadata the builder collected
@@ -64,7 +53,6 @@ pub struct TestActor {
     pub handle: String,
     pub did: String,
     pub primary_device_id: String,
-    pub realms: Vec<SeededRealm>,
     pub client: TestActorClient,
 }
 
@@ -74,7 +62,6 @@ impl fmt::Debug for TestActor {
             .field("handle", &self.handle)
             .field("did", &self.did)
             .field("primary_device_id", &self.primary_device_id)
-            .field("realms", &self.realms)
             .field("client", &"<TestActorClient>")
             .finish()
     }
@@ -85,21 +72,6 @@ impl TestActor {
     /// requests against the server they were registered with.
     pub fn client(&self) -> &TestActorClient {
         &self.client
-    }
-
-    /// Convenience accessor that returns the `ak:realm:...` id of the first
-    /// realm the builder seeded, if any.
-    pub fn first_realm(&self) -> Option<&str> {
-        self.realms.first().map(|seeded| seeded.realm_id.as_str())
-    }
-
-    /// Lookup a seeded realm by the original name passed to
-    /// [`TestActorBuilder::with_realm`].
-    pub fn realm_by_name(&self, name: &str) -> Option<&str> {
-        self.realms
-            .iter()
-            .find(|seeded| seeded.name == name)
-            .map(|seeded| seeded.realm_id.as_str())
     }
 }
 
@@ -115,7 +87,6 @@ pub struct TestActorBuilder<'a> {
     handle: String,
     did: Option<String>,
     primary_device: Option<String>,
-    realms: Vec<String>,
 }
 
 impl<'a> TestActorBuilder<'a> {
@@ -133,7 +104,6 @@ impl<'a> TestActorBuilder<'a> {
             handle,
             did: None,
             primary_device: None,
-            realms: Vec::new(),
         }
     }
 
@@ -155,18 +125,8 @@ impl<'a> TestActorBuilder<'a> {
         self
     }
 
-    /// Pre-seed a realm owned by this actor.
-    ///
-    /// Realms are created in the order they are declared. The allocated
-    /// `ak:realm:...` ids are returned on the resulting [`TestActor`] via
-    /// `actor.realms` or `actor.first_realm()` / `actor.realm_by_name(...)`.
-    pub fn with_realm(mut self, name: &str) -> Self {
-        self.realms.push(name.to_owned());
-        self
-    }
-
-    /// Drive the builder to completion: register the actor against the server,
-    /// open the primary session, and seed any declared spaces.
+    /// Drive the builder to completion: register the actor against the server
+    /// and open the primary session.
     pub async fn create(self) -> Result<TestActor> {
         let bare_handle = self
             .handle
@@ -200,23 +160,10 @@ impl<'a> TestActorBuilder<'a> {
                 )
             })?;
 
-        let mut seeded = Vec::with_capacity(self.realms.len());
-        for name in &self.realms {
-            let realm_id = client
-                .create_realm(name)
-                .await
-                .with_context(|| format!("TestActorBuilder: create_realm({name}) failed"))?;
-            seeded.push(SeededRealm {
-                name: name.clone(),
-                realm_id,
-            });
-        }
-
         Ok(TestActor {
             handle: display_handle,
             did,
             primary_device_id: crate::harness::canonical_device_id(&primary_device),
-            realms: seeded,
             client,
         })
     }

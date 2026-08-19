@@ -17,6 +17,7 @@ pub(crate) fn canonical_event_digest(event: &Value) -> Result<String> {
         .with_context(|| format!("Event fixture {label} is not canonicalizable"))
 }
 
+#[cfg(test)]
 fn event_value_with_parseable_proof_digests(event: &Value) -> Value {
     let mut typed_value = event.clone();
     if let Value::Object(object) = &mut typed_value {
@@ -59,55 +60,6 @@ fn controller_full_id(
         .ok_or_else(|| anyhow!("verification method has no controller fragment"))?;
     arkret_identifiers::DidFullId::new(controller.to_owned())
         .map_err(|error| anyhow!("invalid verification-method controller: {error}"))
-}
-
-/// Re-sign a mutated cotest Event through the SDK's canonical Event-proof
-/// transcript using the SDK's deterministic development identity.
-pub fn refresh_event_proof(event: &mut Value) -> Result<()> {
-    let label = event_fixture_label(event);
-    let verification_method = event_proof_verification_method(event, &label)?;
-    let signer = event
-        .get("executed_by")
-        .and_then(Value::as_str)
-        .or_else(|| event.get("actor_id").and_then(Value::as_str))
-        .ok_or_else(|| anyhow!("Event fixture {label} lacks a signer DID"))?;
-    let signing_seed =
-        super::event_builder::registered_event_signing_seed(signer, &verification_method)
-            .unwrap_or_else(|| {
-                arkret::signatures::development_signing_key_seed(&verification_method)
-            });
-    refresh_event_proof_with_signing_seed(event, signing_seed)
-}
-
-/// Re-sign a mutated Event with an explicitly provisioned fixture key. Formal
-/// DID-history E2E tests use this for their registered controller key.
-pub fn refresh_event_proof_with_signing_seed(
-    event: &mut Value,
-    signing_seed: [u8; 32],
-) -> Result<()> {
-    let label = event_fixture_label(event);
-    let verification_method = event_proof_verification_method(event, &label)?;
-    let mut typed: arkret_wire::Event =
-        serde_json::from_value(event_value_with_parseable_proof_digests(event))
-            .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
-    let signer_did = controller_full_id(&verification_method)?;
-    let created_at = typed.created_at;
-    typed.proofs.clear();
-    let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
-        signing_seed,
-        signer_did,
-        verification_method.clone(),
-    );
-    arkret::signatures::sign_event(
-        &mut typed,
-        &signer,
-        &verification_method,
-        arkret::signatures::SignEventOptions::new().with_created_at(created_at),
-    )
-    .with_context(|| format!("SDK Event signer rejected fixture {label}"))?;
-    *event = serde_json::to_value(typed)
-        .with_context(|| format!("SDK Event fixture {label} failed to serialize"))?;
-    Ok(())
 }
 
 /// Re-sign an SDK Event after changing typed fields.
@@ -159,23 +111,7 @@ pub fn refresh_typed_event_proof(event: &mut arkret_wire::Event) -> Result<()> {
     refresh_typed_event_proof_with_signing_seed(event, signing_seed)
 }
 
-/// `proofs[0].verification_method` as the SDK's `DidUrl`.
-///
-/// A fixture carrying a bare DID here fails loudly at this boundary rather
-/// than being widened into the wire type: `zh/identity/did-usage-and-verification.md`
-/// §2.2 requires a `#fragment`, so a bare value is a fixture bug.
-fn event_proof_verification_method(event: &Value, label: &str) -> Result<arkret_wire::DidUrl> {
-    let raw = event
-        .pointer("/proofs/0/verification_method")
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("Event fixture {label} lacks proofs[0].verification_method"))?;
-    arkret_wire::DidUrl::new(raw).map_err(|error| {
-        anyhow!(
-            "Event fixture {label} proofs[0].verification_method {raw:?} is not a DID URL: {error}"
-        )
-    })
-}
-
+#[cfg(test)]
 fn event_fixture_label(event: &Value) -> String {
     event
         .get("event_id")
