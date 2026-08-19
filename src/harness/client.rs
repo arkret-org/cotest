@@ -45,6 +45,11 @@ pub struct TestActorClient {
     /// scenarios clone the client freely and the controller does not change.
     pub(super) controlled_realms:
         std::sync::Arc<std::sync::Mutex<std::collections::BTreeSet<String>>>,
+    /// The typed §5.1 provisioning behind this session when the client came
+    /// from the canonical actor bootstrap (`demo_client` / `register_client`).
+    /// `None` only for explicitly opted-out negative fixtures and raw
+    /// token-carrier clients.
+    pub principal: Option<super::ProvisionedTestPrincipal>,
     /// Exact accepted default-Strand coordinates for Realms created by this
     /// harness actor. Realm and Strand ids are independent Event-derived
     /// identities, so callers must consume this carrier rather than retype.

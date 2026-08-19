@@ -43,8 +43,7 @@ use tempfile::TempDir;
 
 use crate::harness::{NonProtocolTestBody, TestServerGroup, canonical_device_id, expect_json};
 use crate::scenarios::identity_test_support::{
-    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_full_id,
-    authorize_device_public_key_with_event_id, harness_account_authority_id,
+    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_full_id, harness_account_authority_id,
 };
 
 const INSTALL_PATH: &str = "/_arkret/_conformance/direct-repair/install";
@@ -492,8 +491,6 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
     let requester_device = DeviceId::new(canonical_device_id("repair-requester-device"))?;
     let recipient_device_a = DeviceId::new(canonical_device_id("repair-recipient-a"))?;
     let recipient_device_b = DeviceId::new(canonical_device_id("repair-recipient-b"))?;
-    let requester_key = SigningKey::from_bytes(&[0x71; 32]);
-    let recipient_key = SigningKey::from_bytes(&[0x72; 32]);
     let requester_client = source
         .register_client(
             requester_full.as_str(),
@@ -508,22 +505,12 @@ pub async fn run_direct_conversation_repair_live() -> Result<()> {
             recipient_device_a.as_str(),
         )
         .await?;
-    let requester_authorize = authorize_device_public_key_with_event_id(
-        source,
-        &requester_client.token,
-        requester_full.as_str(),
-        requester_device.as_str(),
-        &requester_key,
-    )
-    .await?;
-    authorize_device_public_key_with_event_id(
-        target,
-        &recipient_client.token,
-        recipient_full.as_str(),
-        recipient_device_a.as_str(),
-        &recipient_key,
-    )
-    .await?;
+    let requester_principal = requester_client
+        .principal
+        .as_ref()
+        .context("requester client carries its provisioned principal")?;
+    let requester_key = requester_principal.device_signing_key.clone();
+    let requester_authorize = requester_principal.founding_authorize_event_id.clone();
     install_device(
         target,
         &recipient,

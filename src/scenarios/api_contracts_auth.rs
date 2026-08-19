@@ -1,13 +1,11 @@
 use anyhow::Result;
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::fixtures::TestScaffold;
 use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json, expect_status};
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
 
 pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
@@ -162,26 +160,10 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    authorize_device_public_key(
-        &server,
-        &alice.token,
-        &alice.actor,
-        &alice.device_id,
-        &SigningKey::from_bytes(&[0xa1; 32]),
-    )
-    .await?;
     let bob_actor = actor_did_for_service_full_id(server.service_full_id(), "bob-contact")?;
     let bob = server
         .demo_client(&bob_actor, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;
-    authorize_device_public_key(
-        &server,
-        &bob.token,
-        &bob.actor,
-        &bob.device_id,
-        &SigningKey::from_bytes(&[0xb0; 32]),
-    )
-    .await?;
 
     let self_request = alice.contact_request_prepare(&alice.actor)?;
     match alice.sdk().contacts_request(&self_request).await {

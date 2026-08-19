@@ -224,17 +224,24 @@ test.describe("account states", () => {
     await issueDevSession(request, alice);
   });
 
-  test("user-initiated deactivate revokes tokens, hides directory row, and leaves messages visible", async ({
+  test("admin-initiated deactivate revokes tokens, hides directory row, and leaves messages visible", async ({
     request,
   }) => {
+    // soland task 2335 (方案 A): the self-service `/_soland/self/account/deactivate`
+    // route was removed — account-lifecycle.md §10 assigns deactivation
+    // initiation to the admin/support surface
+    // (`/_soland/admin/accounts/{did}/deactivate`).
     const alice = uniqueUser("s28-deactivate-alice");
     const bob = uniqueUser("s28-deactivate-bob");
+    const admin = uniqueUser("s28-deactivate-admin");
     await Promise.all([
       ensureRegistered(request, alice),
       ensureRegistered(request, bob),
+      ensureRegistered(request, admin),
     ]);
     const aliceToken = await issueDevSession(request, alice);
     const bobToken = await issueDevSession(request, bob);
+    const adminToken = await issueDevSession(request, admin);
     const realmId = await createSharedRealmViaApi(
       request,
       alice,
@@ -251,9 +258,10 @@ test.describe("account states", () => {
     });
 
     const deactivate = await request.post(
-      `${solandBaseUrl()}/_soland/self/account/deactivate`,
+      `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/deactivate`,
       {
-        headers: authHeaders(aliceToken),
+        headers: authHeaders(adminToken),
+        data: { reason: "user_requested_via_support" },
       },
     );
     expect(deactivate.status()).toBe(200);
@@ -310,6 +318,14 @@ test.describe("account states", () => {
   test("erasure moves account to erasure_pending state and audit snapshot records the transition", async ({
     request,
   }) => {
+    test.skip(
+      true,
+      "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
+        "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
+        "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
+        "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
+        "(spec-open 2026-08-18-2326)",
+    );
     const alice = uniqueUser("s28-erased-alice");
     const bob = uniqueUser("s28-erased-bob");
     await Promise.all([

@@ -7,15 +7,14 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{NonProtocolTestBody, TestServerGroup, expect_api_error, expect_json};
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-applet").await?;
     let server = group.server(0);
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-applet")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = alice.create_realm("Applet Surface Realm").await?;
 
@@ -76,11 +75,9 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
 pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-agent").await?;
     let server = group.server(0);
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-agent")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = alice.create_realm("Agent Surface Realm").await?;
 

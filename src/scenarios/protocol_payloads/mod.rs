@@ -28,7 +28,6 @@
 
 use anyhow::{Context, Result};
 
-use crate::harness::dev_login;
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
@@ -49,15 +48,13 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
     .await?;
     let actor_id =
         actor_did_for_service_full_id(server.service_full_id(), "protocol-payloads-alice")?;
-    let token = dev_login(
-        &server,
-        &actor_id,
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-    )
-    .await?;
+    let client = server
+        .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let token = client.token.clone();
 
     let (actor, adapter_realm_id, adapter_message_event_id) =
-        events_keys_setup::run(&server, &token, &actor_id)
+        events_keys_setup::run(&server, &client)
             .await
             .context("protocol payload event/key setup")?;
     device_messages::run(&server, &token, &actor_id)

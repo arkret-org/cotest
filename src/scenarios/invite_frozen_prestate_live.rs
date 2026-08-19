@@ -240,13 +240,19 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     let server = group.server(0);
     let alice = server
         .demo_client(
-            "did:web:alice-invite-frozen.example",
+            &crate::scenarios::identity_test_support::actor_did_for_service_full_id(
+                server.service_full_id(),
+                "alice-invite-frozen",
+            )?,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
     let bob = server
         .register_client(
-            "did:web:bob-invite-frozen.example",
+            &crate::scenarios::identity_test_support::actor_did_for_service_full_id(
+                server.service_full_id(),
+                "bob-invite-frozen",
+            )?,
             "bob-invite-frozen",
             "ak:device:01904100-0000-7000-8000-0000000000b1",
         )

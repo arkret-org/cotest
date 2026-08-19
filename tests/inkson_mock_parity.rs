@@ -6,11 +6,9 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
-use cotest::harness::{
-    ArkretServer, events_frontier_request_body, expect_json, query_method, register_account,
-};
+use cotest::harness::{ArkretServer, events_frontier_request_body, expect_json, query_method};
 use cotest::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key,
+    ActorBootstrapRegistration, actor_did_for_service_full_id, bootstrap_registered_actor,
     spawn_with_harness_account_authority,
 };
 use reqwest::Method;
@@ -19,7 +17,6 @@ use serde_json::{Map, Value, json};
 use serial_test::serial;
 
 const MOCK_PARITY_ALICE_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
-const MOCK_PARITY_ALICE_SIGNING_SEED: [u8; 32] = [0x5f; 32];
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
@@ -111,6 +108,7 @@ struct TemplateContext {
     alice_did: String,
     alice_core_id: String,
     alice_token: String,
+    alice_device_signing_key: ed25519_dalek::SigningKey,
     service_id: String,
     realm_id: String,
     space_id: String,
@@ -131,25 +129,20 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
 
     let server = spawn_with_harness_account_authority("inkson-mock-parity", &[]).await?;
     let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-mock-parity")?;
-    let alice_token = register_account(
+    let (principal, alice_token) = bootstrap_registered_actor(
         &server,
         &alice_did,
-        "@alice-mock-parity",
         MOCK_PARITY_ALICE_DEVICE_ID,
-    )
-    .await?;
-    authorize_device_public_key(
-        &server,
-        &alice_token,
-        &alice_did,
-        MOCK_PARITY_ALICE_DEVICE_ID,
-        &ed25519_dalek::SigningKey::from_bytes(&MOCK_PARITY_ALICE_SIGNING_SEED),
+        ActorBootstrapRegistration::Account {
+            handle: "@alice-mock-parity",
+        },
     )
     .await?;
     let mut ctx = TemplateContext {
-        alice_core_id: cotest::harness::actor_core_id(&alice_did)?.to_string(),
+        alice_core_id: principal.core_id.to_string(),
         alice_did,
         alice_token,
+        alice_device_signing_key: principal.device_signing_key,
         service_id: server.service_id().to_string(),
         realm_id: String::new(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
@@ -242,6 +235,7 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_core_id: "ak:did_core:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
+        alice_device_signing_key: ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         service_id: "ak:did_core:web:soland.mock-parity-smoke.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
@@ -264,6 +258,7 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_core_id: "ak:did_core:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
+        alice_device_signing_key: ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         service_id: "ak:did_core:web:soland.mock-parity-gate.local".to_owned(),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
@@ -810,7 +805,7 @@ fn render_body(
             });
             cotest::harness::attach_signal_proof_value(
                 &mut envelope,
-                &ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
+                &ctx.alice_device_signing_key,
             );
             Some(envelope)
         }
@@ -851,9 +846,9 @@ fn render_str(value: &str, ctx: &TemplateContext) -> String {
 ///
 /// The create payload carries no object id, so the Realm id is a function of
 /// the genesis Event and is only knowable once the batch is built. It is
-/// deterministic here because the signing seed, title and timestamps are fixed,
-/// which is what lets the template context name the Realm before the batch is
-/// submitted.
+/// deterministic here because the device signing key, title and timestamps are
+/// fixed, which is what lets the template context name the Realm before the
+/// batch is submitted.
 fn realm_bootstrap_batch(
     ctx: &TemplateContext,
     _realm_id: &str,
@@ -876,7 +871,7 @@ fn realm_bootstrap_batch(
         cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
             &ctx.alice_did,
             draft,
-            MOCK_PARITY_ALICE_SIGNING_SEED,
+            ctx.alice_device_signing_key.to_bytes(),
             &cotest::fixture_did_url(format!("{}#{MOCK_PARITY_ALICE_DEVICE_ID}", ctx.alice_did)),
         )?;
     let request = arkret_wire::EventsSubmitBatchRequestBody {
@@ -1055,10 +1050,7 @@ async fn prepare_live_publication_body(
         let mut envelope = body.context("Signal template omitted its request body")?;
         let seal_ref = wait_for_realm_seal(server, ctx, &ctx.realm_id).await?;
         envelope["seal_ref"] = Value::String(seal_ref);
-        cotest::harness::attach_signal_proof_value(
-            &mut envelope,
-            &ed25519_dalek::SigningKey::from_bytes(&MOCK_PARITY_ALICE_SIGNING_SEED),
-        );
+        cotest::harness::attach_signal_proof_value(&mut envelope, &ctx.alice_device_signing_key);
         return Ok(Some(envelope));
     }
     if !matches!(

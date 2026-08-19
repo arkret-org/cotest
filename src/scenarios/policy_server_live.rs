@@ -23,6 +23,7 @@ use crate::harness::{
     ArkretServer, CanonicalJsonBody, TestActorClient, TestServerGroup, events_query_for_realm,
     expect_json, head_eq_precondition,
 };
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 /// The one cell every `ak.realm.policy_server` write moves.
 const POLICY_SERVER_CELL: &str = "ak:cell:ak.component.realm.policy_server.v1:null";
@@ -209,7 +210,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     let server = group.server(0);
     let alice = server
         .demo_client(
-            "did:web:alice-policy-live.example",
+            &actor_did_for_service_full_id(server.service_full_id(), "alice-policy-live")?,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
@@ -363,7 +364,7 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
             .await?;
     let alice = server
         .demo_client(
-            "did:web:alice-policy-restart.example",
+            &actor_did_for_service_full_id(server.service_full_id(), "alice-policy-restart")?,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;

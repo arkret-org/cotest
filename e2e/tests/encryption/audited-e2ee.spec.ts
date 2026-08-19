@@ -264,9 +264,15 @@ async function fileModerationReport(
     ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
     : undefined;
   const verificationMethod = String(proof?.verification_method ?? "");
+  // `auth_context.key_id` is an opaque local key label, not the
+  // verification-method fragment itself: strip the typed-id `ak:` sigil
+  // (same mapping as `eventAuthContext` in soland-api.ts).
+  const keyIdFragment = verificationMethod.split("#").at(-1) ?? verificationMethod;
   reportEvent.auth_context = {
     actor_id: setup.reporterDid,
-    key_id: verificationMethod.split("#").at(-1) ?? verificationMethod,
+    key_id: keyIdFragment.startsWith("ak:")
+      ? keyIdFragment.slice(3)
+      : keyIdFragment,
     key_epoch: 0,
   };
   refreshEventEnvelopeProof(reportEvent, verificationMethod);

@@ -6,7 +6,7 @@
 - `active → soft_logged_out`(用户点登出;当前 session grant 失效)
 - `active → locked`(security 检测;session grant revoke,refresh MAY fail)
 - `active → suspended`(governance;新 session grant 拒发)
-- `active → deactivated`(用户或 admin;所有 session grant revoke,device revoked)
+- `active → deactivated`(admin/support 发起;所有 session grant revoke,device revoked)
 
 每个 transition 都要进 audit log,可观察的 effect 要在 client 行为 + API 响应中体现。
 
@@ -59,10 +59,10 @@
 17. alice 试发消息 → 401(grant 过期后)
 18. 30 天后或 admin unsuspend → state 回 `active`
 
-### Phase E — Deactivate(用户或 admin)
+### Phase E — Deactivate(admin/support)
 
-19. alice 进 `/settings/account` → "Deactivate my account"
-20. 提交 `POST /_soland/self/account/deactivate`(可能需要密码)
+19. alice 经 support 渠道申请停用账号(soland task 2335 方案 A 起无自助 deactivate 路由;`account-lifecycle.md` §10 把发起权划给 admin/support 面)
+20. admin 提交 `POST /_soland/admin/accounts/<alice.did>/deactivate { reason }`
 21. coauth 把所有 session grant revoke;所有 device 标 `revoked`
 22. 断言:`/_soland/self/account/me` 永久 401
 23. 断言:account state = `deactivated`
@@ -78,8 +78,8 @@
 
 ## Implementation notes
 
-- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/_soland/self/account/deactivate`、`/account/me.state` 与 `org.arkret.soland.account.state_change` audit 已覆盖。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
-- **inkson 缺口**:`/settings/account` 的 deactivate 按钮 + 确认;UI 在 locked 状态下的 fallback 屏
+- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/account/me.state` 与 `org.arkret.soland.account.state_change` audit 已覆盖;自助擦除入口为 `POST /_arkret/self/account/erasure-requests`(仅 durable 记录意图,执行链见 governance/gdpr-audit-retention)。已移除的私有轨 `/_soland/self/account/deactivate`、`/_soland/self/account/erase` 不再存在,不得引用。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
+- **inkson 缺口**:UI 在 locked 状态下的 fallback 屏(deactivate 发起已移至 admin/support 面,无自助按钮入口)
 
 ## 总耗时预估
 

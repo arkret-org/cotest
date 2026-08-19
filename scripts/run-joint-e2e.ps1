@@ -18,6 +18,15 @@
 
     Both profiles share the same service-startup, preflight, and reporting
     code paths. Only the Playwright invocation step branches on the profile.
+
+    Runner-owned process-mode services publish their public identity through a
+    managed TLS reverse proxy (0530-C): the processes keep plain loopback
+    listeners, while public base URLs, issuers and minted service DIDs use
+    stable `https://<service>.local.host:<port>` names. The run-scoped CA is
+    installed into the current user's Root store and reverted at teardown; the
+    exact host names are registered in the system hosts file for the duration
+    of the run. Caller-owned URLs (-SolandBaseUrl / -CoauthBaseUrl /
+    -SolandCommand / docker runtime) bypass this topology unchanged.
 #>
 [CmdletBinding()]
 param(
@@ -640,6 +649,7 @@ function Invoke-JointE2ePreflight {
         [string]$InksonCommand,
         [bool]$WillStartDefaultInkson = $false,
         [string]$InksonStaticIndex,
+        [bool]$JointTlsTopology = $false,
         [string]$JsonPath,
         [string]$MarkdownPath
     )
@@ -841,6 +851,44 @@ function Invoke-JointE2ePreflight {
         }
     }
 
+    if ($JointTlsTopology) {
+        # 0530-C static gates for the HTTPS identity topology. The dynamic
+        # proofs (DNS answers, CA/SAN, did.jsonl history, negative probes) run
+        # in Assert-JointTlsTopology once the services are up; here we only
+        # check that the host environment can host the topology at all.
+        $caddy = Find-CommandPath @("caddy.exe", "caddy")
+        if ($caddy) {
+            Add-PreflightResult $results "tls proxy (caddy)" "pass" $caddy
+        } else {
+            Add-PreflightResult $results "tls proxy (caddy)" "fail" "caddy is required for the joint TLS identity topology"
+        }
+        $openssl = Find-CommandPath @("openssl.exe", "openssl")
+        if ($openssl) {
+            Add-PreflightResult $results "tls assets (openssl)" "pass" $openssl
+        } else {
+            Add-PreflightResult $results "tls assets (openssl)" "fail" "openssl is required to mint the joint CA and server certificates"
+        }
+        $certutil = Find-CommandPath @("certutil.exe")
+        if ($certutil) {
+            Add-PreflightResult $results "ca trust store (certutil)" "pass" $certutil
+        } else {
+            Add-PreflightResult $results "ca trust store (certutil)" "fail" "certutil is required to install the run-scoped CA into the user Root store"
+        }
+        $hostsPath = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
+        try {
+            $hostsStream = [System.IO.File]::Open(
+                $hostsPath,
+                [System.IO.FileMode]::Append,
+                [System.IO.FileAccess]::Write,
+                [System.IO.FileShare]::ReadWrite
+            )
+            $hostsStream.Close()
+            Add-PreflightResult $results "hosts file writable" "pass" $hostsPath
+        } catch {
+            Add-PreflightResult $results "hosts file writable" "fail" "$hostsPath is not writable: $($_.Exception.Message). One-time elevated fix: icacls $hostsPath /grant `"$($env:USERNAME):(M)`""
+        }
+    }
+
     if ($JsonPath) {
         $results | ConvertTo-Json -Depth 6 | Set-Content -Path $JsonPath -Encoding UTF8
     }
@@ -971,6 +1019,292 @@ function Write-DotEnvFile {
         $lines,
         [System.Text.UTF8Encoding]::new($false)
     )
+}
+
+# ── Joint TLS identity topology (0530-C) ─────────────────────
+# Runner-owned services keep their plain loopback listeners, but their public
+# base URLs — and therefore the service `did:webvh` they mint — are stable
+# HTTPS names (`<service>.local.host:<tls port>`) fronted by one managed Caddy
+# reverse proxy. A run-scoped self-signed CA is installed into the current
+# user's Root store so the services (rustls platform-verifier), the runner
+# itself (.NET/Schannel), and the Chromium-based test browser all verify the
+# same chain; Node helpers read it through NODE_EXTRA_CA_CERTS. Every
+# machine-level foothold (hosts entries, CA trust, key files) is reverted in
+# the finally block unless -KeepServices is set.
+
+function New-JointTlsAssets {
+    param(
+        [Parameter(Mandatory = $true)][string]$Directory,
+        [Parameter(Mandatory = $true)][string[]]$DnsNames,
+        [Parameter(Mandatory = $true)][string]$RunLabel
+    )
+
+    $openssl = Find-CommandPath @("openssl.exe", "openssl")
+    if (-not $openssl) {
+        throw "openssl is required to mint the joint TLS topology certificates"
+    }
+    $null = New-Item -ItemType Directory -Force -Path $Directory
+    $caName = "cotest-joint-e2e-ca-$RunLabel"
+    $caKey = Join-Path $Directory "ca.key"
+    $caPem = Join-Path $Directory "ca.pem"
+    & $openssl req -x509 -newkey rsa:2048 -keyout $caKey -out $caPem -days 2 -nodes `
+        -subj "/CN=$caName" `
+        -addext "basicConstraints=critical,CA:TRUE" `
+        -addext "keyUsage=critical,keyCertSign,cRLSign"
+    if ($LASTEXITCODE -ne 0) {
+        throw "openssl CA generation failed (exit $LASTEXITCODE)"
+    }
+
+    $serverKey = Join-Path $Directory "server.key"
+    $serverCsr = Join-Path $Directory "server.csr"
+    $serverPem = Join-Path $Directory "server.pem"
+    $sanFile = Join-Path $Directory "server-san.cnf"
+    $sanLines = @(
+        "[req_ext]",
+        "basicConstraints=critical,CA:FALSE",
+        "keyUsage=critical,digitalSignature,keyEncipherment",
+        "extendedKeyUsage=serverAuth",
+        "subjectAltName=" + (($DnsNames | ForEach-Object { "DNS:$_" }) -join ",")
+    )
+    [System.IO.File]::WriteAllLines($sanFile, $sanLines, [System.Text.UTF8Encoding]::new($false))
+    & $openssl req -newkey rsa:2048 -keyout $serverKey -out $serverCsr -nodes `
+        -subj "/CN=$($DnsNames[0])"
+    if ($LASTEXITCODE -ne 0) {
+        throw "openssl server key generation failed (exit $LASTEXITCODE)"
+    }
+    & $openssl x509 -req -in $serverCsr -CA $caPem -CAkey $caKey -CAcreateserial `
+        -out $serverPem -days 2 -extfile $sanFile -extensions req_ext
+    if ($LASTEXITCODE -ne 0) {
+        throw "openssl server certificate signing failed (exit $LASTEXITCODE)"
+    }
+    Remove-Item -LiteralPath $serverCsr -ErrorAction SilentlyContinue
+
+    return [pscustomobject]@{
+        CaPemPath     = $caPem
+        CaKeyPath     = $caKey
+        ServerPemPath = $serverPem
+        ServerKeyPath = $serverKey
+        CaSubjectName = $caName
+    }
+}
+
+function Install-JointCaTrust {
+    param([Parameter(Mandatory = $true)][string]$CaPemPath)
+
+    # Current-user Root store: no elevation needed, honoured by Schannel and by
+    # rustls-platform-verifier, and silent (no import-wizard prompt).
+    & certutil -user -addstore Root $CaPemPath | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "certutil -user -addstore Root failed for $CaPemPath (exit $LASTEXITCODE)"
+    }
+}
+
+function Remove-JointCaTrust {
+    param([Parameter(Mandatory = $true)][string]$CaSubjectName)
+
+    & certutil -user -delstore Root $CaSubjectName | Out-Null
+}
+
+function Install-JointLoopbackHosts {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Hosts,
+        [Parameter(Mandatory = $true)][string]$Marker
+    )
+
+    $hostsPath = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
+    $existing = [System.IO.File]::ReadAllText($hostsPath)
+    if ($existing.Contains("# $Marker begin")) {
+        throw "hosts marker '$Marker' is already present; a previous run did not clean up"
+    }
+    $lines = @("", "# $Marker begin")
+    foreach ($hostName in $Hosts) {
+        $lines += "127.0.0.1`t$hostName"
+    }
+    $lines += "# $Marker end"
+    try {
+        [System.IO.File]::AppendAllText(
+            $hostsPath,
+            ($lines -join [Environment]::NewLine) + [Environment]::NewLine
+        )
+    } catch {
+        throw "joint TLS topology: cannot register loopback hosts in $hostsPath ($($_.Exception.Message)). One-time elevated fix: icacls $hostsPath /grant `"$($env:USERNAME):(M)`""
+    }
+}
+
+function Remove-JointLoopbackHosts {
+    param([Parameter(Mandatory = $true)][string]$Marker)
+
+    $hostsPath = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
+    $existing = [System.IO.File]::ReadAllText($hostsPath)
+    $escaped = [regex]::Escape($Marker)
+    $pattern = "(?ms)\r?\n?# $escaped begin.*?# $escaped end\r?\n?"
+    $patched = [regex]::Replace($existing, $pattern, "")
+    if ($patched -ne $existing) {
+        [System.IO.File]::WriteAllText($hostsPath, $patched)
+    }
+}
+
+function Write-JointCaddyConfig {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][int]$TlsPort,
+        [Parameter(Mandatory = $true)][object[]]$Routes,
+        [Parameter(Mandatory = $true)][string]$CertificatePath,
+        [Parameter(Mandatory = $true)][string]$KeyPath
+    )
+
+    $certificate = $CertificatePath -replace '\\', '/'
+    $key = $KeyPath -replace '\\', '/'
+    $lines = @(
+        "{",
+        "`tadmin off",
+        "`tauto_https disable_redirects",
+        "}",
+        ""
+    )
+    foreach ($route in $Routes) {
+        $lines += "https://$($route.Host):$TlsPort {"
+        $lines += "`ttls $certificate $key"
+        $lines += "`treverse_proxy 127.0.0.1:$($route.BackendPort)"
+        $lines += "}"
+        $lines += ""
+    }
+    [System.IO.File]::WriteAllLines($Path, $lines, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Get-WebvhLogUrlFromDid {
+    param([Parameter(Mandatory = $true)][string]$Did)
+
+    # Mirror the SDK's did:webvh URL derivation:
+    # did:webvh:<scid>:<percent-encoded authority>[:<path segment>...]
+    $segments = $Did -split ":"
+    if ($segments.Count -lt 4 -or $segments[0] -ne "did" -or $segments[1] -ne "webvh") {
+        throw "not an authority-bearing did:webvh: $Did"
+    }
+    $authority = [System.Uri]::UnescapeDataString($segments[3])
+    $path = ""
+    if ($segments.Count -gt 4) {
+        $path = ($segments[4..($segments.Count - 1)] -join "/") + "/"
+    }
+    return "https://$authority/$($path)did.jsonl"
+}
+
+function Assert-JointTlsTopology {
+    param(
+        [Parameter(Mandatory = $true)][int]$TlsPort,
+        [Parameter(Mandatory = $true)][string[]]$TrustedHosts,
+        [Parameter(Mandatory = $true)][string]$UnregisteredProbeHost,
+        [Parameter(Mandatory = $true)][string]$CotestWireBin,
+        [Parameter(Mandatory = $true)][string]$EvidenceDir,
+        [Parameter(Mandatory = $true)][object[]]$Services
+    )
+
+    $null = New-Item -ItemType Directory -Force -Path $EvidenceDir
+
+    # 1. Every topology name — including the unregistered negative probe —
+    #    resolves wholly to loopback. One non-loopback answer fails the run
+    #    before any business test starts.
+    foreach ($hostName in ($TrustedHosts + $UnregisteredProbeHost)) {
+        $answers = [System.Net.Dns]::GetHostAddresses($hostName)
+        if (-not $answers -or $answers.Count -eq 0) {
+            throw "joint TLS topology: $hostName returned no DNS answer"
+        }
+        foreach ($answer in $answers) {
+            $isLoopback = (
+                $answer.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
+                $answer.GetAddressBytes()[0] -eq 127
+            ) -or ($answer.ToString() -eq "::1")
+            if (-not $isLoopback) {
+                throw "joint TLS topology: $hostName resolved to non-loopback address $answer"
+            }
+        }
+    }
+
+    foreach ($hostName in $TrustedHosts) {
+        # 2a. A real verified HTTPS fetch: chain trust, hostname binding and the
+        #     proxy route are all exercised by the platform verifier here.
+        $healthUrl = "https://${hostName}:$TlsPort/health"
+        try {
+            $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        } catch {
+            throw "joint TLS topology: verified HTTPS fetch $healthUrl failed: $($_.Exception.Message)"
+        }
+        if ($response.StatusCode -ne 200) {
+            throw "joint TLS topology: $healthUrl returned HTTP $($response.StatusCode)"
+        }
+
+        # 2b. The served certificate must carry this exact host in its SAN.
+        $tcp = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $tcp.Connect($hostName, $TlsPort)
+            $acceptAll = { param($sender, $cert, $chain, $errors) return $true }
+            $ssl = [System.Net.Security.SslStream]::new($tcp.GetStream(), $false, $acceptAll)
+            $ssl.AuthenticateAsClient($hostName)
+            $remote = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
+            $san = $remote.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.17" } | Select-Object -First 1
+            $sanText = if ($san) { $san.Format($false) } else { "" }
+            if ($sanText -notmatch [regex]::Escape($hostName)) {
+                throw "joint TLS topology: served certificate SAN '$sanText' does not cover $hostName"
+            }
+        } finally {
+            $tcp.Close()
+        }
+    }
+
+    # 3. Each service DID's did.jsonl is read over verified HTTPS and its
+    #    history is verified independently by cotest-wire (not by the service
+    #    that published it).
+    foreach ($service in $Services) {
+        $did = [string]$service.ServiceFullId
+        $logUrl = Get-WebvhLogUrlFromDid -Did $did
+        $logPath = Join-Path $EvidenceDir "$($service.Name)-did.jsonl"
+        try {
+            $logResponse = Invoke-WebRequest -Uri $logUrl -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+        } catch {
+            throw "joint TLS topology: cannot read $logUrl over HTTPS: $($_.Exception.Message)"
+        }
+        [System.IO.File]::WriteAllText($logPath, [string]$logResponse.Content, [System.Text.UTF8Encoding]::new($false))
+        $verifyInput = [pscustomobject]@{ did = $did; log_path = $logPath; profile = "service" } | ConvertTo-Json -Compress
+        $verifyOutput = $verifyInput | & $CotestWireBin "webvh-verify-log" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "joint TLS topology: history verification failed for $did : $($verifyOutput -join ' ')"
+        }
+        $verified = $verifyOutput | ConvertFrom-Json
+        if (-not $verified.verified) {
+            throw "joint TLS topology: cotest-wire did not verify $did"
+        }
+    }
+
+    # 4a. HTTP downgrade: the proxy terminates TLS only, so a plain-HTTP
+    #     request on the same authority must never reach a backend.
+    $downgradeUrl = "http://$($TrustedHosts[0]):$TlsPort/health"
+    $downgradeRejected = $false
+    try {
+        $null = Invoke-WebRequest -Uri $downgradeUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+    } catch {
+        $downgradeRejected = $true
+    }
+    if (-not $downgradeRejected) {
+        throw "joint TLS topology: HTTP downgrade $downgradeUrl unexpectedly succeeded"
+    }
+
+    # 4b. An unregistered loopback host has no proxy site and no trust-anchor
+    #     entry, even though its DNS answer is loopback.
+    $unregisteredUrl = "https://${UnregisteredProbeHost}:$TlsPort/health"
+    $unregisteredRejected = $false
+    try {
+        $null = Invoke-WebRequest -Uri $unregisteredUrl -UseBasicParsing -TimeoutSec 5 -ErrorAction Stop
+    } catch {
+        $unregisteredRejected = $true
+    }
+    if (-not $unregisteredRejected) {
+        throw "joint TLS topology: unregistered host $unregisteredUrl unexpectedly succeeded"
+    }
+    # 4c. A mixed public+loopback DNS answer cannot be staged from the runner
+    #     without owning DNS; that rejection is pinned by coauth's
+    #     `configured_trusted_hosts_are_the_only_loopback_widening` unit test.
+
+    Write-Host "Joint TLS topology verified: $($TrustedHosts -join ', ') on port $TlsPort"
 }
 
 $script:ContainerHostGatewayIpv4 = $null
@@ -2052,9 +2386,41 @@ $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
 $null = New-Item -ItemType Directory -Force -Path $screenshotDir
 $null = New-Item -ItemType Directory -Force -Path $visualBaselineDir
 
+# 0530-C: decide the public-identity topology before any base URL is minted.
+# Runner-owned process-mode services keep plain loopback listeners but publish
+# stable HTTPS names fronted by the managed TLS proxy; caller-owned or
+# docker-runtime lanes keep their existing URLs unchanged.
+$jointTlsProcessSoland = (-not $SolandCommand -and -not $SolandBaseUrl -and $SolandRuntime -eq "process")
+$jointTlsCoauth = ($StartCoauth -and -not $CoauthBaseUrl)
+$jointTlsEnabled = $jointTlsProcessSoland -or $jointTlsCoauth
+$jointTlsPort = $null
+$solandPublicHost = $null
+$solandBetaPublicHost = $null
+$coauthPublicHost = $null
+$jointTlsAssets = $null
+$jointTlsHostNames = @()
+$jointTlsHostsMarker = "cotest-joint-e2e $timestamp"
+$jointTlsUnregisteredProbeHost = "unregistered.local.host"
+if ($jointTlsEnabled) {
+    $jointTlsPort = Get-FreeTcpPort
+    if ($jointTlsProcessSoland) {
+        $solandPublicHost = if ($DualSoland) { "soland-alpha.local.host" } else { "soland.local.host" }
+        if ($DualSoland) {
+            $solandBetaPublicHost = "soland-beta.local.host"
+        }
+    }
+    if ($jointTlsCoauth) {
+        $coauthPublicHost = "coauth.local.host"
+    }
+}
+
 if (-not $SolandBaseUrl) {
     $solandPort = Get-FreeTcpPort
-    $SolandBaseUrl = "http://127.0.0.1:$solandPort"
+    if ($solandPublicHost) {
+        $SolandBaseUrl = "https://${solandPublicHost}:$jointTlsPort"
+    } else {
+        $SolandBaseUrl = "http://127.0.0.1:$solandPort"
+    }
 } else {
     $solandPort = $null
 }
@@ -2065,7 +2431,11 @@ if ($DualSoland) {
         throw "-DualSoland is incompatible with -SolandCommand; the harness must generate both soland invocations."
     }
     $solandBetaPort = Get-FreeTcpPort
-    $solandBetaBaseUrl = "http://127.0.0.1:$solandBetaPort"
+    if ($solandBetaPublicHost) {
+        $solandBetaBaseUrl = "https://${solandBetaPublicHost}:$jointTlsPort"
+    } else {
+        $solandBetaBaseUrl = "http://127.0.0.1:$solandBetaPort"
+    }
 }
 if ($SolandRuntime -eq "docker" -and $SolandCommand) {
     throw "-SolandRuntime docker is incompatible with -SolandCommand; omit -SolandCommand so the harness can start the image."
@@ -2147,10 +2517,16 @@ if ($DualCoauth -and -not $StartCoauth) {
 if ($StartCoauth -and -not $CoauthBaseUrl) {
     $coauthPort = Get-FreeTcpPort
     # WebAuthn RP IDs are effective domains. An IP-literal origin has no
-    # effective domain in url/webauthn-rs, while localhost is the standard
-    # secure-context exception for loopback development. Keep the listener
-    # bound to 127.0.0.1 below, but advertise a WebAuthn-valid public origin.
-    $CoauthBaseUrl = "http://localhost:$coauthPort"
+    # effective domain in url/webauthn-rs. Under the joint TLS topology the
+    # listener stays bound to 127.0.0.1 while the advertised public origin is
+    # the real HTTPS name fronted by the proxy — an effective domain by
+    # construction. The fallback keeps the localhost secure-context exception
+    # for loopback development.
+    if ($coauthPublicHost) {
+        $CoauthBaseUrl = "https://${coauthPublicHost}:$jointTlsPort"
+    } else {
+        $CoauthBaseUrl = "http://localhost:$coauthPort"
+    }
 } else {
     $coauthPort = $null
 }
@@ -2601,6 +2977,7 @@ try {
             -InksonCommand $InksonCommand `
             -WillStartDefaultInkson $willStartDefaultInkson `
             -InksonStaticIndex $inksonStaticIndex `
+            -JointTlsTopology ([bool]$jointTlsEnabled) `
             -JsonPath $preflightJson `
             -MarkdownPath $preflightMd
     }
@@ -2628,6 +3005,70 @@ try {
             throw "run-scoped inkson bundle unexpectedly embeds Dioxus devtools: $runtimeWasm"
         }
         $inksonStaticRoot = $inksonRuntimeRoot
+    }
+
+    # 0530-C: stand up the HTTPS identity front before any owned service
+    # starts, so readiness probes, service-to-service calls and the browser all
+    # traverse the real TLS path from the first request. The run-scoped CA is
+    # trusted by the current user's Root store (services + runner + browser)
+    # and by Node helpers through NODE_EXTRA_CA_CERTS.
+    $jointTlsAssets = $null
+    $jointTlsDir = $null
+    if ($jointTlsEnabled) {
+        $jointTlsDir = Join-Path $jointDir "tls"
+        $jointTlsHostNames = @($solandPublicHost, $solandBetaPublicHost, $coauthPublicHost) | Where-Object { $_ }
+        $jointTlsAssets = New-JointTlsAssets `
+            -Directory $jointTlsDir `
+            -DnsNames $jointTlsHostNames `
+            -RunLabel $timestamp
+        Install-JointLoopbackHosts `
+            -Hosts ($jointTlsHostNames + $jointTlsUnregisteredProbeHost) `
+            -Marker $jointTlsHostsMarker
+        Install-JointCaTrust -CaPemPath $jointTlsAssets.CaPemPath
+        $env:NODE_EXTRA_CA_CERTS = $jointTlsAssets.CaPemPath
+
+        $jointTlsRoutes = @()
+        if ($solandPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $solandPublicHost; BackendPort = $solandPort }
+        }
+        if ($solandBetaPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $solandBetaPublicHost; BackendPort = $solandBetaPort }
+        }
+        if ($coauthPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $coauthPublicHost; BackendPort = $coauthPort }
+        }
+        $caddyfilePath = Join-Path $jointTlsDir "Caddyfile"
+        Write-JointCaddyConfig `
+            -Path $caddyfilePath `
+            -TlsPort $jointTlsPort `
+            -Routes $jointTlsRoutes `
+            -CertificatePath $jointTlsAssets.ServerPemPath `
+            -KeyPath $jointTlsAssets.ServerKeyPath
+        $caddyBinary = Find-CommandPath @("caddy.exe", "caddy")
+        if (-not $caddyBinary) {
+            throw "caddy is required for the joint TLS identity topology"
+        }
+        $caddyCommand = "& {0} run --config {1} --adapter caddyfile" -f `
+            (Quote-PsLiteral $caddyBinary), (Quote-PsLiteral $caddyfilePath)
+        $managedServices.Add((Start-ManagedCommand -Name "tls-proxy" -Command $caddyCommand -WorkingDirectory $jointTlsDir -LogDirectory $serviceLogDir))
+        # Only the listener is provable at this point; the backends start below
+        # and the full topology is asserted after every service is ready.
+        $tlsDeadline = (Get-Date).AddSeconds(30)
+        $tlsListening = $false
+        while ((Get-Date) -lt $tlsDeadline) {
+            try {
+                $tlsProbe = [System.Net.Sockets.TcpClient]::new()
+                $tlsProbe.Connect("127.0.0.1", $jointTlsPort)
+                $tlsProbe.Close()
+                $tlsListening = $true
+                break
+            } catch {
+                Start-Sleep -Milliseconds 250
+            }
+        }
+        if (-not $tlsListening) {
+            throw "joint TLS topology: Caddy did not open 127.0.0.1:$jointTlsPort; see $serviceLogDir\tls-proxy.stderr.log"
+        }
     }
 
     # Start mock services first so coauth/soland configurations can reference them.
@@ -2818,13 +3259,20 @@ try {
         # closed on that one too and demands `COAUTH_ALLOW_INSECURE_PASSWORD_BOOTSTRAP`;
         # without it coauth panics on boot ("password-bootstrap scaffold is for dev/test
         # only") and the whole joint suite never starts.
-        # Coauth's production client is HTTPS/public-egress only. The joint stack
-        # intentionally binds every dependency to loopback over HTTP, so enable
-        # the debug-only, loopback-only transport seam alongside test endpoints.
-        $CoauthCommand = "& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
+        # Coauth's production client is HTTPS/public-egress only. The joint
+        # services still bind plain loopback listeners behind the TLS proxy, so
+        # enable the debug-only, loopback-only transport seam alongside test
+        # endpoints. Under the 0530-C topology the public origin itself is
+        # HTTPS, so coauth additionally receives SSL_CERT_FILE: its outbound
+        # client merges the run-scoped CA into the verified root set.
+        $coauthCaPrefix = ""
+        if ($coauthPublicHost -and $jointTlsAssets) {
+            $coauthCaPrefix = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); "
+        }
+        $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
         if ($DualCoauth) {
-            $CoauthSecondaryCommand = "& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
+            $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
         }
     }
 
@@ -3241,6 +3689,30 @@ try {
             $env:COTEST_WIRE_BIN = $preparedWireBinary
         }
     }
+
+    # 0530-C: prove the HTTPS identity topology before any business test runs.
+    # A failure here is a topology defect, not a product regression, so it must
+    # not be allowed to masquerade as 94 misleading testcase failures.
+    if ($jointTlsEnabled) {
+        if (-not $env:COTEST_WIRE_BIN) {
+            throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
+        }
+        $jointTlsServices = @()
+        if ($solandPublicHost -and $SolandServiceFullId) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland"; ServiceFullId = $SolandServiceFullId }
+        }
+        if ($solandBetaPublicHost -and $SolandBetaServiceFullId) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-beta"; ServiceFullId = $SolandBetaServiceFullId }
+        }
+        Assert-JointTlsTopology `
+            -TlsPort $jointTlsPort `
+            -TrustedHosts $jointTlsHostNames `
+            -UnregisteredProbeHost $jointTlsUnregisteredProbeHost `
+            -CotestWireBin $env:COTEST_WIRE_BIN `
+            -EvidenceDir (Join-Path $jointDir "tls-preflight") `
+            -Services $jointTlsServices
+    }
+
     $env:COTEST_JOINT_RUN_DIR = $jointDir
     $env:COTEST_UI_SCREENSHOT_DIR = $screenshotDir
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
@@ -3476,8 +3948,10 @@ try {
     # (e2e/helpers/did-host.ts, src/scenarios/_helpers/did_host.rs) only. The
     # services under test cannot currently be pointed at this host — soland /
     # teabay / the SDK derive the DID-document URL from the DID string itself
-    # (hardcoded https + an SSRF guard that rejects loopback), with no
-    # resolver-base-URL or host-override env. See the DID-P1-C01 report.
+    # and judge egress per request against configured trust anchors (0530-C:
+    # joint services resolve through the TLS-fronted `<service>.local.host`
+    # names, not this mock), with no resolver-base-URL or host-override env.
+    # See the DID-P1-C01 report.
     if ($mockDidHostBaseUrl) {
         $env:COTEST_MOCK_DID_HOST_BASE_URL = $mockDidHostBaseUrl
         $env:COTEST_MOCK_DID_HOST_AUTHORITY = $MockDidHostAuthority
@@ -3571,6 +4045,15 @@ try {
             } else {
                 $null
             }
+        }
+        tls_proxy = if ($jointTlsEnabled) {
+            [ordered]@{
+                port = $jointTlsPort
+                hosts = @($jointTlsHostNames)
+                ca_subject = if ($jointTlsAssets) { $jointTlsAssets.CaSubjectName } else { $null }
+            }
+        } else {
+            $null
         }
         isolation = [ordered]@{
             distinct_principal_server_processes = [bool]($DualSoland -and $alphaRuntimeInstance -and $betaRuntimeInstance -and $alphaRuntimeInstance -ne $betaRuntimeInstance)
@@ -3700,6 +4183,25 @@ finally {
                 Write-Host "postgres dump: $postgresDump"
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralPostgres.ContainerName
+        }
+        if ($jointTlsEnabled) {
+            # 0530-C: revert every machine-level foothold of the TLS topology
+            # (hosts entries, user Root CA, key files). Best-effort: a cleanup
+            # failure must not mask the run's own exit code.
+            try {
+                Remove-JointLoopbackHosts -Marker $jointTlsHostsMarker
+            } catch {
+                Write-Warning "joint TLS topology: failed to remove hosts entries ($jointTlsHostsMarker): $($_.Exception.Message)"
+            }
+            if ($jointTlsAssets) {
+                try {
+                    Remove-JointCaTrust -CaSubjectName $jointTlsAssets.CaSubjectName
+                } catch {
+                    Write-Warning "joint TLS topology: failed to remove CA trust ($($jointTlsAssets.CaSubjectName)): $($_.Exception.Message)"
+                }
+                Remove-Item -LiteralPath $jointTlsAssets.CaKeyPath, $jointTlsAssets.ServerKeyPath -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item Env:NODE_EXTRA_CA_CERTS -ErrorAction SilentlyContinue
         }
     }
 }

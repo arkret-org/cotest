@@ -1193,7 +1193,68 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   };
 }
 
+// In-flight canonical provisioning per (server, user name). The first
+// `ensureRegistered` call for a user drives the co-located coauth account +
+// PCR genesis once; concurrent and repeat callers share the same promise.
+const provisionedPrincipals = new Map<string, Promise<void>>();
+
 export async function ensureRegistered(
+  request: APIRequestContext,
+  user: JointUser,
+  opts: { server?: SolandKey } = {},
+) {
+  // When coauth is reachable, registration goes through the canonical
+  // co-located provisioning (account → PCR genesis → verified binding) instead
+  // of the bare gate register, so the principal exists with its real DID
+  // document, founding device authorization, and bootstrap Seal. The caller's
+  // `user` is rebound to the account-bound identity the ceremony returns.
+  const coauth = coauthBaseUrl();
+  if (coauth) {
+    const key = `${opts.server ?? "default"}${user.name}`;
+    let provisioning = provisionedPrincipals.get(key);
+    if (!provisioning) {
+      provisioning = (async () => {
+        const accountRequest = await playwrightRequest.newContext({
+          ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+        });
+        try {
+          const account = await registerCoauthPasswordAccount(
+            accountRequest,
+            coauth,
+            {
+              password: "1amTester!",
+              server: opts.server,
+            },
+          );
+          const session = await createDpopUserSessionForAccount(
+            accountRequest,
+            user.name,
+            account,
+            { server: opts.server, coauthBase: coauth },
+          );
+          if (!session) {
+            throw new Error(
+              `ensureRegistered: canonical provisioning returned no session for ${user.name}`,
+            );
+          }
+          user.did = session.user.did;
+          user.fullDid = session.user.fullDid;
+          user.deviceId = session.user.deviceId;
+          user.handle = session.user.handle;
+          user.displayName = session.user.displayName;
+        } finally {
+          await accountRequest.dispose();
+        }
+      })();
+      provisionedPrincipals.set(key, provisioning);
+    }
+    await provisioning;
+    return;
+  }
+  await ensureRegisteredRaw(request, user, opts);
+}
+
+async function ensureRegisteredRaw(
   request: APIRequestContext,
   user: JointUser,
   opts: { server?: SolandKey } = {},
@@ -1372,7 +1433,7 @@ export async function createDpopUserSessionForAccount(
     handle: `@${account.handle}`,
     displayName: account.displayName,
   };
-  await ensureRegistered(request, user, { server: opts.server });
+  await ensureRegisteredRaw(request, user, { server: opts.server });
   const eventSigningSeedB64url = dpopDeviceSeedB64url(eventSigningKey);
   registerEventSigner({
     actorDid: user.did,

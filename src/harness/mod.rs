@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 mod assertions;
 mod client;
 mod event_builder;
+mod principal;
 mod proof;
 mod server;
 mod wire_body;
@@ -34,14 +35,15 @@ pub use event_builder::{
     event_envelope_with_signing_seed, event_envelope_with_signing_seed_and_verification_method,
     head_eq_precondition, moderation_report_request, realm_bootstrap_event_batch,
     realm_bootstrap_event_batch_with_signing_seed, register_account,
-    register_event_signing_identity, send_message, submit_event, submit_event_with_signing_seed,
-    submit_event_with_signing_seed_and_verification_method,
+    register_account_with_localpart, register_event_signing_identity, send_message, submit_event,
+    submit_event_with_signing_seed, submit_event_with_signing_seed_and_verification_method,
 };
 pub(crate) use event_builder::{
     event_envelope_with_chain, invite_create_payload, member_join_payload_value,
     member_transition_payload, message_create_text_payload, message_create_text_payload_for_strand,
     message_redact_payload, message_revise_text_payload, parse_strand_id,
 };
+pub use principal::ProvisionedTestPrincipal;
 pub use proof::{
     attach_signal_proof, attach_signal_proof_value, refresh_event_proof,
     refresh_event_proof_with_signing_seed, refresh_typed_event_proof,
@@ -52,27 +54,6 @@ pub(crate) use server::{ReservedPort, reserve_port};
 pub use wire_body::{CanonicalJsonBody, NonProtocolTestBody, wire_negative_from_sdk};
 
 static NEXT_EVENT_SEQ: AtomicU64 = AtomicU64::new(1);
-
-/// The placeholder SCID used by fixture `did:webvh` identifiers.
-///
-/// `did:webvh` is the v1 core default method for both service and principal
-/// DIDs (identity-did.md); the fixture SCID form matches the spec conformance
-/// vectors and the e2e side's `uniqueUser()` / `env.ts` migration
-/// (`did:webvh:z6mkfixture:<host>`). Live scenarios rely on soland's dev mode
-/// not performing online SCID resolution — these fixture DIDs have no real
-/// `did.jsonl`. `did:web` is reserved for explicit no-history / negative
-/// fixtures only.
-pub(crate) const FIXTURE_WEBVH_SCID: &str = "z6mkfixture";
-
-/// Build a fixture `did:webvh:<scid>:<host>` DID for `host`.
-///
-/// `host` is the DID's HTTP authority (e.g. `soland.cotest.local`,
-/// `alice.example`). soland derives the federation trust domain from the host
-/// segment that follows the SCID, so callers pass the bare host and the SCID is
-/// supplied here.
-pub(crate) fn fixture_webvh_did(host: &str) -> String {
-    format!("did:webvh:{FIXTURE_WEBVH_SCID}:{host}")
-}
 
 pub fn query_method() -> reqwest::Method {
     reqwest::Method::from_bytes(b"QUERY").expect("QUERY is a valid HTTP method")

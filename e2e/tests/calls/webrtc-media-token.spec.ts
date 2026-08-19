@@ -9,6 +9,11 @@
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
+  solandBaseUrl,
+  solandServiceFullId,
+  solandServiceId,
+} from "../../helpers/env";
+import {
   addRealmMemberApi,
   createRealmApi,
   wireErrCode,
@@ -32,23 +37,31 @@ import {
   type MediaFocusConfig,
 } from "../../helpers/webrtc";
 
-const SERVICE_ID = "did:web:media.example";
-const ISSUER_KID = `${SERVICE_ID}#media-token`;
+// The media service the Realm epoch names is this deployment itself:
+// media-service-binding.md §3 anchors every issued issuer_kid /
+// service_signature.kid on the cell's service_id, and the joint runner leaves
+// SOLAND_MEDIA_ISSUER_KID unset, so the deployment default signing key is
+// `<service full id>#media-1`. The LiveKit JWT `iss` is instead the
+// runner-configured SOLAND_LIVEKIT_API_KEY, a backend credential that never
+// enters the Realm cell.
+const SERVICE_ID = solandServiceId();
+const ISSUER_KID = `${solandServiceFullId()}#media-1`;
+const LIVEKIT_API_KEY = "did:web:media.example#media-token";
+// token_endpoint origin must equal the deployment's public base URL —
+// soland refuses to mint for a focus whose token endpoint names another
+// service (media-service-binding.md §2.1 trust root).
+const MEDIA_TOKEN_ENDPOINT = `${solandBaseUrl()}/_arkret/self/rtc/token`;
 const LIVEKIT_FOCUS: MediaFocusConfig = {
   focus_id: "livekit-lhr",
-  type: "livekit",
-  issuer_kid: ISSUER_KID,
+  focus_kind: "livekit",
+  token_endpoint: MEDIA_TOKEN_ENDPOINT,
   connect_url: "wss://livekit.media.example",
-  ttl_seconds: 300,
-  e2ee_key_source: "mls-exporter",
 };
 const ARKRET_NATIVE_FOCUS: MediaFocusConfig = {
   focus_id: "arkret-native-reference",
-  type: "arkret_native",
-  issuer_kid: ISSUER_KID,
+  focus_kind: "arkret_native",
+  token_endpoint: MEDIA_TOKEN_ENDPOINT,
   connect_url: "wss://native.media.example",
-  ttl_seconds: 300,
-  e2ee_key_source: "mls-exporter",
 };
 
 test.describe.configure({ mode: "serial" });
@@ -110,9 +123,10 @@ test.describe("media token exchange", () => {
 
     // LiveKit JWT claim shape (bindings/livekit.md §2/§5).
     const claims = decodeLiveKitToken(body.backend_token as string);
-    // iss = LiveKit API Key; soland requires it to equal the realm focus
-    // issuer_kid, so it equals ISSUER_KID here.
-    expect(claims.iss).toBe(ISSUER_KID);
+    // iss = LiveKit API Key (SOLAND_LIVEKIT_API_KEY in the joint runner) —
+    // deployment configuration, deliberately distinct from the Realm-anchored
+    // ISSUER_KID that signs the participant_binding.
+    expect(claims.iss).toBe(LIVEKIT_API_KEY);
     expect(claims.sub).toBe(body.participant_identity);
     // exp/iat are NumericDate (Unix epoch seconds); exp MUST be within 600s
     // of iat (media-service-binding.md §3 TTL ceiling).

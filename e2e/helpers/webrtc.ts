@@ -758,19 +758,26 @@ export { authHeaders };
 export const PARTICIPANT_BINDING_SCHEME = "ak.media.participant_binding.v1";
 export const MEDIA_TOKEN_TTL_MAX_SECS = 600;
 
+// Closed `media_service_focus` shape (event-payload.schema.json:10721-10726,
+// media-service-binding.md §2): required focus_id / focus_kind /
+// token_endpoint / connect_url, additionalProperties false. Issuance
+// configuration (issuer_kid, audience, TTL, e2ee key source) is deployment
+// configuration of the issuing service, never Realm cell state.
 export interface MediaFocusConfig {
   focus_id: string;
-  type: string;
-  issuer_kid: string;
+  focus_kind: string;
+  token_endpoint: string;
   connect_url: string;
-  ttl_seconds?: number;
-  e2ee_key_source?: string;
 }
 
 /**
  * Project a `ak.realm.media_service` epoch onto the realm so the token issuer
- * can resolve `service_id`, `issuer_kids`, and `foci[]`. The `service_id` is
- * derived from each focus `issuer_kid` (`<service_id>#<key>`).
+ * can resolve `service_id` and `foci[]`. `service_id` anchors every issued
+ * `participant_binding.issuer_kid` / `service_signature.kid`
+ * (media-service-binding.md §3): the deployment's media signing key
+ * (`SOLAND_MEDIA_ISSUER_KID`, default `<service full id>#media-1`) must
+ * project onto it, and each focus `token_endpoint` origin must be this
+ * deployment's public base URL, or issuance fails closed.
  */
 export async function configureMediaService(
   request: APIRequestContext,
@@ -822,7 +829,7 @@ export interface MediaServiceSignature {
 
 export interface MediaTokenExchangeResult {
   focus_id: string;
-  type: string;
+  backend_kind: string;
   connect_url: string;
   backend_token: string;
   participant_identity: string;

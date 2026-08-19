@@ -32,21 +32,38 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("GDPR / audit / retention", () => {
-  test("export and erase endpoints surface probe", async ({ request }) => {
+  test("removed export/erase rails stay 404; the §8.1 erasure-request intake resolves fail-closed", async ({ request }) => {
     const alice = uniqueUser("s27-probe");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
+    // The incomplete product-private export rail and the product-private erase
+    // rail were intentionally removed — no compatibility shim, so both must
+    // stay 404.
     const exportProbe = await request.get(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(exportProbe.status()).toBeLessThan(500);
+    expect(exportProbe.status()).toBe(404);
 
     const eraseProbe = await request.post(`${solandBaseUrl()}/_soland/self/account/erase`, {
       headers: { authorization: `Bearer ${token}` },
       data: {},
     });
-    expect(eraseProbe.status()).toBeLessThan(500);
+    expect(eraseProbe.status()).toBe(404);
+
+    // The current self-erasure surface is the spec entry point
+    // (account-lifecycle.md §8.1 ak.self.account.command.request_erasure). It
+    // records the intent durably and is fail-closed on fresh high-risk
+    // authentication, so a bare probe is refused — but the route MUST resolve.
+    const erasureRequestProbe = await request.post(
+      `${solandBaseUrl()}/_arkret/self/account/erasure-requests`,
+      {
+        headers: { authorization: `Bearer ${token}` },
+        data: {},
+      },
+    );
+    expect(erasureRequestProbe.status()).not.toBe(404);
+    expect(erasureRequestProbe.status()).toBeLessThan(500);
   });
 
   test("GDPR export returns a JSON bundle containing account/profile/realms/devices/audit_log facets", async ({
@@ -83,6 +100,14 @@ test.describe("GDPR / audit / retention", () => {
   test("alice erases account → /account/me returns 401 account_erased on subsequent calls", async ({
     request,
   }) => {
+    test.skip(
+      true,
+      "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
+        "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
+        "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
+        "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
+        "(spec-open 2026-08-18-2326)",
+    );
     // spec: identity/account-lifecycle.md §3 — erasure pseudonymizes
     // PII, revokes devices, and flips the actor into a permanent
     // `erasure_pending` state. Subsequent authenticated requests return 401
@@ -114,6 +139,14 @@ test.describe("GDPR / audit / retention", () => {
   test("after erasure, directory search no longer finds alice; her account row shows the [user erased] placeholder", async ({
     request,
   }) => {
+    test.skip(
+      true,
+      "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
+        "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
+        "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
+        "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
+        "(spec-open 2026-08-18-2326)",
+    );
     // spec: identity/account-lifecycle.md §3 + discovery/profiles-presence.md.
     const stamp = Date.now();
     const alice = uniqueUser(`s27-vanish-alice-${stamp}`);
@@ -170,6 +203,14 @@ test.describe("GDPR / audit / retention", () => {
   test("audit log contains org.arkret.soland.audit.erasure_initiated and ak.audit.erasure_receipt entries", async ({
     request,
   }) => {
+    test.skip(
+      true,
+      "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
+        "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
+        "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
+        "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
+        "(spec-open 2026-08-18-2326)",
+    );
     // spec: account-lifecycle.md §3 — every erasure lifecycle event MUST
     // appear in the actor's audit log. Account export coverage is separately
     // skipped until the complete data-portability workflow replaces the
@@ -293,6 +334,14 @@ test.describe("GDPR / audit / retention", () => {
     async ({ request }) => {
       // spec: identity/account-lifecycle.md §8 + federation reconciliation:
       // erasure receipt MUST fan out to remote servers that hold actor events.
+      test.skip(
+        true,
+        "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
+          "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
+          "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
+          "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
+          "(spec-open 2026-08-18-2326)",
+      );
       test.skip(!hasDualSoland(), "requires DualSoland runner topology");
 
       const stamp = Date.now();

@@ -25,11 +25,10 @@ use crate::harness::{
     ArkretServer, dev_login, event_envelope, expect_json, message_create_text_payload,
 };
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres};
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 const TEST_NAME: &str = "chaos-midwrite";
-const ACTOR_DID: &str = "did:web:chaos-midwrite.cotest.local";
 const DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-00000000c0de";
-const SERVICE_ID: &str = "did:web:chaos-midwrite.cotest.local";
 const REALM_ID: &str = "ak:realm:AXhEXYzI8s81aVQ7eAb57jW3tjFK7CwkJZsKbptGq25n";
 
 pub async fn chaos_kill_midwrite_run() -> Result<()> {
@@ -40,7 +39,21 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
         return Ok(());
     };
 
-    let event = chaos_message_event();
+    // Probe spawn: the deterministic did:webvh principal derives from the
+    // durable service identity, so provision the principal and author the
+    // chaos Event here; the chaos-run spawn below then learns the operation id
+    // up front. Durable identity survives the probe (the next spawn retains it
+    // with a registration-key drift warning), and the probe's canonical
+    // bootstrap replays against the durable database on every later spawn.
+    let (actor_did, event) = {
+        let probe = ArkretServer::spawn_with_database_url(TEST_NAME, &database.url, &[]).await?;
+        let actor_did = actor_did_for_service_full_id(probe.service_full_id(), "chaos-midwrite")?;
+        probe
+            .register_client(&actor_did, "@chaos_midwrite", DEVICE_ID)
+            .await?;
+        let event = chaos_message_event(&actor_did);
+        (actor_did, event)
+    };
     let submission = crate::publication::initial_submission(event.clone(), "")?;
     let operation_id = operation_id_from_event(&event)?;
 
@@ -56,7 +69,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     )
     .await?;
     let alice = server
-        .register_client(ACTOR_DID, "@chaos_midwrite", DEVICE_ID)
+        .register_client(&actor_did, "@chaos_midwrite", DEVICE_ID)
         .await?;
     alice
         .create_realm_with(json!({
@@ -67,10 +80,10 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
             "discoverability": "public",
             "join_rule": "public",
             "history_visibility": "world_readable",
-            "plaintext_visible_services": [SERVICE_ID]
+            "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
-    let token = dev_login(&server, ACTOR_DID, DEVICE_ID).await?;
+    let token = dev_login(&server, &actor_did, DEVICE_ID).await?;
 
     let mut tasks = JoinSet::new();
     tasks.spawn({
@@ -97,7 +110,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
         &[("SOLAND_ENABLE_CONFORMANCE_ENDPOINTS", "1")],
     )
     .await?;
-    let token = dev_login(&server, ACTOR_DID, DEVICE_ID).await?;
+    let token = dev_login(&server, &actor_did, DEVICE_ID).await?;
     let before_retry = server.diagnostic_operation_query(&operation_id).await?;
     assert_no_partial_state(&before_retry)?;
 
@@ -140,9 +153,9 @@ impl ChaosDatabase {
     }
 }
 
-fn chaos_message_event() -> arkret_wire::Event {
+fn chaos_message_event(actor_did: &str) -> arkret_wire::Event {
     event_envelope(
-        ACTOR_DID,
+        actor_did,
         REALM_ID,
         "ak.message.create",
         message_create_text_payload(

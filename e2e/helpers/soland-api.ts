@@ -111,9 +111,17 @@ export function registerEventSigner(args: {
       "registerEventSigner requires a full-DID verification method for a core actor id",
     );
   }
+  const previous = registeredEventSigners.get(args.actorDid);
   const signer = {
     verificationMethod,
-    signingSeedB64url: args.signingSeedB64url,
+    // A seed-less re-registration (e.g. dev-login after the canonical
+    // provisioning already registered the real device signer) must not clobber
+    // the seed of an existing registration for the same verification method.
+    signingSeedB64url:
+      args.signingSeedB64url ??
+      (previous?.verificationMethod === verificationMethod
+        ? previous.signingSeedB64url
+        : undefined),
   };
   registeredEventSigners.set(args.actorDid, signer);
   registeredEventSigners.set(actorId, signer);
@@ -397,6 +405,35 @@ export function projectFullDidToCoreId(fullDid: string): string {
 
 export function canonicalDidCoreId(did: string): string {
   return did.startsWith("ak:did_core:") ? did : projectFullDidToCoreId(did);
+}
+
+// Default stand-in federation source for helpers that do not impersonate one
+// of the configured local servers. Aligned with the typed
+// `ProvisionedTestPrincipal` bootstrap: did:webvh is the v1 core default
+// service method (identity-did.md) and did:web is reserved for explicit
+// no-history / negative fixtures, so the retired `did:web:cotest-peer.example`
+// default no longer resolves. The `source-service-id` header carries the
+// projected core id (soland parses it as a `DidCoreId`); the Signature-Input
+// keyid must be the full DID URL whose controller projects back to it.
+const COTEST_PEER_FIXTURE_FULL_DID = "did:webvh:z6mkpeer:cotest-peer.example";
+const COTEST_PEER_FIXTURE_CORE_ID = projectFullDidToCoreId(
+  COTEST_PEER_FIXTURE_FULL_DID,
+);
+
+// Inverse spelling of projectFullDidToCoreId for harness-synthetic services:
+// a federation Signature-Input keyid must be a DID URL whose controller
+// projects to the Source-Service-ID core id (soland federation signature.rs
+// validate_signature_input), even though the header itself carries the core
+// id. Only the did:web adapter and the named did:webvh fixtures have a unique
+// inverse spelling.
+function serviceCoreIdToDid(serviceId: string): string {
+  if (serviceId.startsWith("ak:did_core:web:")) {
+    return `did:web:${serviceId.slice("ak:did_core:web:".length)}`;
+  }
+  if (serviceId === COTEST_PEER_FIXTURE_CORE_ID) {
+    return COTEST_PEER_FIXTURE_FULL_DID;
+  }
+  return serviceId;
 }
 
 export function singleDidNotaryFromFullDid(
@@ -819,10 +856,11 @@ export async function addRealmMemberApi(
 // so a revision clears every component it omits, and restating a component
 // this helper never wrote would be inventing a value — `content_scheme` has a
 // one-way ratchet in the reducer, so an invented one risks a downgrade
-// rejection that presents as an unrelated join-policy failure. `writeJoinPolicy`
-// is the only `ak.realm.policy_bundle` producer in this suite (`createRealmApi`
-// writes none), so there is no prior component set to carry forward. A caller
-// that starts writing other components must restate them here.
+// rejection that presents as an unrelated join-policy failure. The
+// `createRealmApi` genesis already occupies `policy_revision: 1`
+// (`federation_policy` + encryption floors) and the reducer enforces strict
+// prev+1, so revisions here start at 2 (see `nextJoinPolicyRevision`). A
+// caller that starts writing other components must restate them here.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
   token: string,
@@ -1249,14 +1287,17 @@ const joinPolicyDigestCache = new Map<string, string>();
 // dimension: a stateless constant makes the second write of a Realm a repeat of
 // the first, and the register has no way to order them. The helper therefore
 // has to hold this per (server, realm) rather than derive it from the payload.
+// The `createRealmApi` genesis already occupies `policy_revision: 1`
+// (soland-api.ts pushBootstrapEvent) and the reducer enforces strict prev+1
+// (apply_realm_policy.rs), so the first post-genesis write is revision 2.
 const joinPolicyRevisionCache = new Map<string, number>();
 
-function nextJoinPolicyRevision(
+export function nextJoinPolicyRevision(
   server: SolandKey | undefined,
   realmId: string,
 ): number {
   const key = joinWorkflowKey(server, realmId);
-  const next = (joinPolicyRevisionCache.get(key) ?? 0) + 1;
+  const next = (joinPolicyRevisionCache.get(key) ?? 1) + 1;
   joinPolicyRevisionCache.set(key, next);
   return next;
 }
@@ -3427,13 +3468,20 @@ function eventAuthContext(
   actorDid: string,
   verificationMethod: string,
 ): Record<string, unknown> {
+  // `auth_context.key_id` is an opaque local key label
+  // (`event-envelope.schema.json` closes it over `^(?!ak:)[A-Za-z0-9._:-]{1,128}$`),
+  // decoupled from the verification-method fragment: the fragment may stay a
+  // typed device id, but the `ak:` sigil is stripped before it becomes a key_id
+  // (same fragment→key_id mapping as inkson `event_submit.rs` and soland
+  // `cba_basis.rs`).
   const fragmentIndex = verificationMethod.indexOf("#");
+  const fragment =
+    fragmentIndex >= 0
+      ? verificationMethod.slice(fragmentIndex + 1)
+      : verificationMethod;
   return {
     actor_id: actorDid,
-    key_id:
-      fragmentIndex >= 0
-        ? verificationMethod.slice(fragmentIndex + 1)
-        : verificationMethod,
+    key_id: fragment.startsWith("ak:") ? fragment.slice(3) : fragment,
     key_epoch: 0,
   };
 }
@@ -3986,7 +4034,7 @@ export async function queryPeerEventsApi(
     after: opts.after,
   });
   const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events`;
-  const sourceDid = opts.sourceDid ?? "did:web:cotest-peer.example";
+  const sourceDid = opts.sourceDid ?? COTEST_PEER_FIXTURE_CORE_ID;
   const destinationDid = solandServiceId(opts.server);
   const response = await request.fetch(targetUri, {
     method: "QUERY",
@@ -4014,7 +4062,7 @@ export async function peerEventFrontierApi(
 ) {
   const body = { realm_id: realmId };
   const targetUri = `${solandBaseUrl(opts.server)}/_arkret/peer/events/frontier`;
-  const sourceDid = opts.sourceDid ?? "did:web:cotest-peer.example";
+  const sourceDid = opts.sourceDid ?? COTEST_PEER_FIXTURE_CORE_ID;
   const destinationDid = solandServiceId(opts.server);
   const response = await request.fetch(targetUri, {
     method: "QUERY",
@@ -4263,7 +4311,7 @@ function signedFederationPushHeaders(
   const sourceKey = (["default", "alpha", "beta"] as SolandKey[]).find(
     (key) => solandServiceId(key) === sourceDid,
   );
-  const keyid = `${sourceKey ? solandServiceFullId(sourceKey) : sourceDid}#federation-fanout-key`;
+  const keyid = `${sourceKey ? solandServiceFullId(sourceKey) : serviceCoreIdToDid(sourceDid)}#federation-fanout-key`;
   const idempotencyComponent = opts.idempotencyKey ? ' "idempotency-key"' : "";
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "source-service-id" ` +
@@ -4381,7 +4429,9 @@ function trustDomainFromServiceId(serviceId: string): string {
   const locationDid = localKey ? solandServiceFullId(localKey) : serviceId;
   const webHost = locationDid.startsWith("did:web:")
     ? locationDid.slice("did:web:".length).split(":")[0]
-    : undefined;
+    : locationDid.startsWith("ak:did_core:web:")
+      ? locationDid.slice("ak:did_core:web:".length).split(":")[0]
+      : undefined;
   const webvhHost = locationDid.startsWith("did:webvh:")
     ? locationDid.slice("did:webvh:".length).split(":")[1]
     : undefined;

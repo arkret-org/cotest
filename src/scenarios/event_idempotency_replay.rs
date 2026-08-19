@@ -8,15 +8,14 @@ use crate::harness::{
     message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
     parse_strand_id,
 };
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<()> {
     let group = TestServerGroup::single("event-idempotency-replay").await?;
     let server = group.server(0);
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-replay")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = create_test_realm(&alice, "Event Idempotency Replay").await?;
     let event = alice
@@ -76,11 +75,9 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
 pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let group = TestServerGroup::single("event-idempotency-edit-redact").await?;
     let server = group.server(0);
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-edit-redact")?;
     let alice = server
-        .demo_client(
-            "did:web:alice-edit-redact.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let realm_id = create_test_realm(&alice, "Event Idempotency Edit Redact").await?;
     let create_event = alice

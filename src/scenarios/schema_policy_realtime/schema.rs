@@ -3,12 +3,14 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, NonProtocolTestBody, expect_api_error};
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 pub async fn schema_registry_lifecycle_and_visibility_work() -> Result<()> {
     let server = ArkretServer::spawn("schema-registry").await?;
+    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "alice-schema")?;
     let alice = server
         .demo_client(
-            "did:web:alice.example",
+            &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;

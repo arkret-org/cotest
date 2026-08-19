@@ -10,17 +10,22 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{TestServerGroup, expect_api_error, expect_json};
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
-const ACTOR: &str = "did:web:security-transaction-live.example";
 const DEVICE: &str = "ak:device:01975510-0000-7000-8000-0000000000b1";
 const TRANSACTION: &str = "ak:transaction:01975510-0000-7000-8000-0000000000b2";
-const PCR_REALM: &str = "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19";
 
 pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<()> {
     let group = TestServerGroup::single("security-transaction-live-create").await?;
     let server = group.server(0);
-    let client = server.demo_client(ACTOR, DEVICE).await?;
-    let request = rotation_create_request(server.service_id())?;
+    let actor = actor_did_for_service_full_id(server.service_full_id(), "security-transaction")?;
+    let client = server.demo_client(&actor, DEVICE).await?;
+    let pcr_realm = client
+        .principal
+        .as_ref()
+        .map(|principal| principal.pcr_realm_id.as_str().to_owned())
+        .ok_or_else(|| anyhow::anyhow!("client carries its provisioned principal"))?;
+    let request = rotation_create_request(server.service_id(), &actor, &pcr_realm)?;
 
     let first = expect_json(
         client
@@ -72,12 +77,16 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
     Ok(())
 }
 
-fn rotation_create_request(service_id: &DidCoreId) -> Result<SecurityTransactionCreateRequest> {
+fn rotation_create_request(
+    service_id: &DidCoreId,
+    actor: &str,
+    pcr_realm: &str,
+) -> Result<SecurityTransactionCreateRequest> {
     let coordinator = service_id.clone();
-    let principal = DidFullId::new(ACTOR.to_owned())?;
+    let principal = DidFullId::new(actor.to_owned())?;
     let principal_id = DidCoreId::from(arkret_wire::project_full_id_to_core_id(&principal)?);
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
-    let revoke_submission = event_submission(&principal, "ak.device.revoke")?;
+    let revoke_submission = event_submission(&principal, pcr_realm, "ak.device.revoke")?;
     let revoke_event_id = revoke_submission.event.event_id.clone();
     let revoke_unit = event_unit(&coordinator, revoke_submission)?;
     let rotations = [
@@ -85,7 +94,7 @@ fn rotation_create_request(service_id: &DidCoreId) -> Result<SecurityTransaction
         (BackupRotationKind::MlsHistory, "d"),
     ]
     .into_iter()
-    .map(|(kind, suffix)| rotation_plan(&coordinator, &principal, kind, suffix))
+    .map(|(kind, suffix)| rotation_plan(&coordinator, &principal, pcr_realm, kind, suffix))
     .collect::<Result<Vec<_>>>()?;
     Ok(SecurityTransactionCreateRequest::SecurityRotation(
         SecurityRotationTransactionCreateRequest::from_prepared_rotations(
@@ -103,10 +112,12 @@ fn rotation_create_request(service_id: &DidCoreId) -> Result<SecurityTransaction
 fn rotation_plan(
     coordinator: &DidCoreId,
     principal: &DidFullId,
+    pcr_realm: &str,
     kind: BackupRotationKind,
     suffix: &str,
 ) -> Result<BackupRotationPlan> {
-    let active_series_submission = event_submission(principal, "ak.key_backup.active_series")?;
+    let active_series_submission =
+        event_submission(principal, pcr_realm, "ak.key_backup.active_series")?;
     let active_series_event_id = active_series_submission.event.event_id.clone();
     let binding = BackupRotationBinding {
         backup_kind: kind,
@@ -164,10 +175,14 @@ fn event_unit(
     )?)
 }
 
-fn event_submission(principal: &DidFullId, kind: &str) -> Result<EventInitialSubmission> {
+fn event_submission(
+    principal: &DidFullId,
+    pcr_realm: &str,
+    kind: &str,
+) -> Result<EventInitialSubmission> {
     // The live fixture uses an already accepted event-derived PCR coordinate;
     // it must never reconstruct one from the principal DID.
-    let realm_id = arkret_wire::RealmId::new(PCR_REALM.to_owned())?;
+    let realm_id = arkret_wire::RealmId::new(pcr_realm.to_owned())?;
     let scope_ref = ScopeRef::Realm {
         realm_id: realm_id.clone(),
     };

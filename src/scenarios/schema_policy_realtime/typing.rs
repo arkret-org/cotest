@@ -1,18 +1,17 @@
 use anyhow::Result;
-use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
 use crate::harness::actor_core_id;
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("typing-push-rules", &[]).await?;
+    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "alice-typing")?;
     let alice = server
         .demo_client(
-            "did:web:alice.example",
+            &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
@@ -24,15 +23,6 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    let bob_device_key = SigningKey::from_bytes(&[0xb0; 32]);
-    authorize_device_public_key(
-        &server,
-        &bob.token,
-        &bob.actor,
-        &bob.device_id,
-        &bob_device_key,
-    )
-    .await?;
 
     let realm_id = alice.create_realm("Typing And Push Realm").await?;
     alice.add_member(&realm_id, &bob).await?;

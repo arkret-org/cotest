@@ -22,8 +22,11 @@ use url::Url;
 use super::assertions::expect_json;
 use super::canonical_device_id;
 use super::client::TestActorClient;
-use super::event_builder::{
-    dev_login, register_account, register_account_with_localpart, register_event_signing_identity,
+use super::event_builder::{dev_login, register_account, register_event_signing_identity};
+use super::principal::ProvisionedTestPrincipal;
+use crate::scenarios::identity_test_support::{
+    ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN, bootstrap_registered_actor,
+    harness_account_authority_id,
 };
 
 const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
@@ -81,6 +84,27 @@ fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
     let mut seed = [0_u8; 32];
     seed.copy_from_slice(&digest);
     (BASE64_STANDARD.encode(seed), seed)
+}
+
+/// Every cotest SUT trusts the harness-owned Account Authority identity so the
+/// canonical actor bootstrap can relay PCR genesis units no matter which spawn
+/// path produced the process. Callers that wire a real Account Authority
+/// (joint stack, durable federation lives) keep their own values.
+fn harness_account_authority_env(has: impl Fn(&str) -> bool) -> Vec<(String, String)> {
+    let mut env = Vec::new();
+    if !has("SOLAND_ACCOUNT_AUTHORITY_URL") {
+        env.push((
+            "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
+            HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
+        ));
+    }
+    if !has("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID") {
+        env.push((
+            "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
+            harness_account_authority_id().to_string(),
+        ));
+    }
+    env
 }
 
 impl ArkretServer {
@@ -195,6 +219,11 @@ impl ArkretServer {
                     DURABLE_TEST_KEYSTORE_MASTER_KEY,
                 );
         }
+        for (key, value) in
+            harness_account_authority_env(|key| extra_env.iter().any(|(k, _)| *k == key))
+        {
+            command.env(key, value);
+        }
         for &(key, value) in extra_env {
             command.env(key, value);
         }
@@ -294,6 +323,11 @@ impl ArkretServer {
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
+        for (key, value) in
+            harness_account_authority_env(|key| extra_env.iter().any(|(k, _)| *k == key))
+        {
+            command.env(key, value);
+        }
         for &(key, value) in extra_env {
             command.env(key, value);
         }
@@ -389,6 +423,11 @@ impl ArkretServer {
             ))
             .arg("--env")
             .arg("SOLAND_BLOB_ROOT=/tmp/soland-blobs");
+        for (key, value) in
+            harness_account_authority_env(|key| extra_env.iter().any(|(k, _)| *k == key))
+        {
+            command.arg("--env").arg(format!("{key}={value}"));
+        }
         for &(key, value) in extra_env {
             command.arg("--env").arg(format!("{key}={value}"));
         }
@@ -558,6 +597,11 @@ impl ArkretServer {
                     DURABLE_TEST_KEYSTORE_MASTER_KEY,
                 );
         }
+        for (key, value) in
+            harness_account_authority_env(|key| config.extra_env.iter().any(|(k, _)| k == key))
+        {
+            command.env(key, value);
+        }
         for (key, value) in &config.extra_env {
             command.env(key, value);
         }
@@ -644,7 +688,35 @@ impl ArkretServer {
         expect_json(self.http().get(url), StatusCode::OK).await
     }
 
+    /// Canonical actor provisioning: register (when requested), open the dev
+    /// session, and atomically install the §5.1 PCR genesis unit so the
+    /// founding device holds an accepted `ak.device.authorize`.
     pub async fn demo_client(&self, actor: &str, device_id: &str) -> Result<TestActorClient> {
+        let (principal, token) = bootstrap_registered_actor(
+            self,
+            actor,
+            device_id,
+            ActorBootstrapRegistration::DevLogin,
+        )
+        .await?;
+        let client = self.actor_client(
+            actor,
+            &principal.device_id.as_str().to_owned(),
+            token,
+            Some(principal.clone()),
+        )?;
+        client.track_controlled_realm(&principal.pcr_realm_id);
+        Ok(client)
+    }
+
+    /// Explicit opt-out for negative fixtures: a session whose device never
+    /// receives the §5.1 founding authorization. Durable writes from this
+    /// device fail closed with `device_unauthorized` by design.
+    pub async fn demo_client_without_device_authorization(
+        &self,
+        actor: &str,
+        device_id: &str,
+    ) -> Result<TestActorClient> {
         let device_id = canonical_device_id(device_id);
         let token = dev_login(self, actor, &device_id).await?;
         let verification_method =
@@ -655,7 +727,7 @@ impl ArkretServer {
             verification_method.as_str().to_owned(),
             self.service_id.clone(),
         );
-        self.actor_client(actor, &device_id, token)
+        self.actor_client(actor, &device_id, token, None)
     }
 
     pub async fn register_client(
@@ -664,8 +736,33 @@ impl ArkretServer {
         handle: &str,
         device_id: &str,
     ) -> Result<TestActorClient> {
+        let (principal, token) = bootstrap_registered_actor(
+            self,
+            did,
+            device_id,
+            ActorBootstrapRegistration::Account { handle },
+        )
+        .await?;
+        let client = self.actor_client(
+            did,
+            &principal.device_id.as_str().to_owned(),
+            token,
+            Some(principal.clone()),
+        )?;
+        client.track_controlled_realm(&principal.pcr_realm_id);
+        Ok(client)
+    }
+
+    /// Explicit opt-out for negative fixtures: account registration plus a
+    /// session, but no §5.1 founding device authorization.
+    pub async fn register_client_without_device_authorization(
+        &self,
+        did: &str,
+        handle: &str,
+        device_id: &str,
+    ) -> Result<TestActorClient> {
         let token = register_account(self, did, handle, device_id).await?;
-        self.actor_client(did, &canonical_device_id(device_id), token)
+        self.actor_client(did, &canonical_device_id(device_id), token, None)
     }
 
     pub fn client_with_token(
@@ -674,7 +771,7 @@ impl ArkretServer {
         device_id: &str,
         token: String,
     ) -> Result<TestActorClient> {
-        self.actor_client(actor, &canonical_device_id(device_id), token)
+        self.actor_client(actor, &canonical_device_id(device_id), token, None)
     }
 
     /// Register account-first, then publish a primary localpart through the
@@ -686,10 +783,24 @@ impl ArkretServer {
         localpart: &str,
         device_id: &str,
     ) -> Result<TestActorClient> {
-        let token =
-            register_account_with_localpart(self, did, display_handle, localpart, device_id)
-                .await?;
-        self.actor_client(did, &canonical_device_id(device_id), token)
+        let (principal, token) = bootstrap_registered_actor(
+            self,
+            did,
+            device_id,
+            ActorBootstrapRegistration::AccountWithLocalpart {
+                handle: display_handle,
+                localpart,
+            },
+        )
+        .await?;
+        let client = self.actor_client(
+            did,
+            &principal.device_id.as_str().to_owned(),
+            token,
+            Some(principal.clone()),
+        )?;
+        client.track_controlled_realm(&principal.pcr_realm_id);
+        Ok(client)
     }
 
     pub(crate) fn account_localpart_request(&self, did: &str) -> Result<reqwest::RequestBuilder> {
@@ -704,7 +815,13 @@ impl ArkretServer {
             .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER))
     }
 
-    fn actor_client(&self, actor: &str, device_id: &str, token: String) -> Result<TestActorClient> {
+    fn actor_client(
+        &self,
+        actor: &str,
+        device_id: &str,
+        token: String,
+        principal: Option<ProvisionedTestPrincipal>,
+    ) -> Result<TestActorClient> {
         // Harness-only: actor clients talk to the same loopback SUT created
         // above, so insecure localhost TLS is acceptable for test traffic.
         let sdk = SdkClient::builder(self.base_url())
@@ -721,6 +838,7 @@ impl ArkretServer {
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             token,
+            principal,
             controlled_realms: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::BTreeSet::new(),
             )),

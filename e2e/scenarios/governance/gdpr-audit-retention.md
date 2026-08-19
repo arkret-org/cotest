@@ -30,8 +30,10 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 
 ### Phase B — alice 导出 GDPR 数据
 
+> **当前阻塞（2026-08-19）**：不完整的产品私有 export 轨 `GET /_soland/self/account/export` 已被有意移除（无兼容 shim），Phase B 待完整 data-portability 工作流落地后重建；对应 e2e 用例已显式 skip。
+
 2. alice 进 `/settings/account` → "Export my data"
-3. inkson 调 `GET /_soland/self/account/export`
+3. inkson 调 spec 定义的数据导出入口（原私有轨 `GET /_soland/self/account/export` 已移除，不得引用）
 4. soland 异步生成 zip 包(可能 base64 inline 或返回 download URL)
 5. 断言:返回 200 + `export_id` + (可选)`download_url`
 6. alice 下载并解压 → 内含 JSON:`{ account: { did, handle, profile }, spaces: [...], messages: [...], devices: [...], audit_log: [...] }`
@@ -40,8 +42,8 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase C — alice 触发 erasure
 
 8. alice 进 `/settings/account` → "Erase my account"
-9. 确认对话框 → 提交 `POST /_soland/self/account/erase`,可能要二次密码确认
-10. soland 返回 `state="erased"`，并在响应中带 `ak.schema.erasure_receipt.v1`
+9. 确认对话框 → 走 spec 定义的自助擦除入口 `ak.self.account.command.request_erasure`（`identity/account-lifecycle.md` §8.1）；soland 受理面为 `POST /_arkret/self/account/erasure-requests`（鉴权 + durable 记录意图）。**已移除的私有轨 `/_soland/self/account/erase` 不再存在，不得引用**
+10. Account Authority 签发 `erasure_pending` AccountStatusRecord → `ak.peer.account_status.command.submit` → 异步 durable execution → `ak.peer.erasure_receipt.command.submit` 验收，soland 返回 `ak.schema.erasure_receipt.v1`
 11. soland 后台任务执行:
     - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)
     - 删除 alice 的 E2EE secret material（device keys 与 MLS backup keys 安全销毁，后续无法解密）
@@ -49,6 +51,13 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
     - 把 alice 的 devices 全 revoke
     - 把 alice 的 profile 改成 anonymized `did:web:erased-<hash>`(或保留 DID 但 profile 空)
 12. 断言:alice 的 session token 立刻失效
+
+> **当前阻塞（2026-08-19）**：入口已定义且 soland 受理面已实现（`arkret-work` 任务
+> `2026-08-18-2224-soland-self-erasure-request-endpoint.md`），但受理面只做到「鉴权 + durable
+> 记录意图」；「触发 Account Authority 签发 `erasure_pending` record」尚无 wire 承载，阻塞于
+> spec-open `2026-08-18-2325-self-erasure-intent-has-no-channel-to-the-account-authority.md` 与
+> `2026-08-18-2326-session-grant-introspection-carries-no-authentication-freshness.md`。
+> 对应 e2e 用例（`gdpr-audit-retention.spec.ts` 的 erase 用例）已显式 skip。
 
 ### Phase D — bob 视角验证 erasure
 

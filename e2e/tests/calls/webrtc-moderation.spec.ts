@@ -18,6 +18,7 @@
 // with `call_participant_removed`.
 
 import { expect, test } from "@playwright/test";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { wireErrCode } from "../../helpers/soland-api";
 import {
   CAP_CALL_JOIN,
@@ -37,15 +38,15 @@ import {
   type MediaFocusConfig,
 } from "../../helpers/webrtc";
 
-const SERVICE_ID = "did:web:media.example";
-const ISSUER_KID = `${SERVICE_ID}#media-token`;
+// The media service the Realm epoch names is this deployment itself
+// (media-service-binding.md §3 anchoring); token_endpoint origin must equal
+// the deployment's public base URL or soland refuses to mint.
+const SERVICE_ID = solandServiceId();
 const LIVEKIT_FOCUS: MediaFocusConfig = {
   focus_id: "livekit-lhr",
-  type: "livekit",
-  issuer_kid: ISSUER_KID,
+  focus_kind: "livekit",
+  token_endpoint: `${solandBaseUrl()}/_arkret/self/rtc/token`,
   connect_url: "wss://livekit.media.example",
-  ttl_seconds: 300,
-  e2ee_key_source: "mls-exporter",
 };
 
 test.describe.configure({ mode: "serial" });

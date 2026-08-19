@@ -28,6 +28,7 @@ import {
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
+  nextJoinPolicyRevision,
   prepareSignedEventCbaApi,
   rawSubmitSignedEventApi,
   refreshEventEnvelopeProof,
@@ -473,7 +474,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     // .verificationMethod points to a keyAgreement HPKE VM, domain=mls_history,
     // domain-separated from identity backup HPKE (identity-did.md §8.3). The live
     // helper for this is a inkson/soland concern (publishRrkServiceEntry).
-    const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
+    const rrkVm = `${orgRrk.fullDid}#realm-history-recovery-1`;
 
     const realmId = typedId("realm");
     const durabilityPolicy = {
@@ -656,7 +657,7 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
     );
     const { user: dave } = await registeredSession(request, "rrk-b-dave");
 
-    const rrkVm = `${orgRrk.did}#realm-history-recovery-1`;
+    const rrkVm = `${orgRrk.fullDid}#realm-history-recovery-1`;
     const realmId = typedId("realm");
     const realmCreate = realmCreateEnvelope({
       ownerDid: alice.did,
@@ -837,14 +838,17 @@ test.describe("Realm Recovery Key (RRK) history durability", () => {
       realmId,
       kind: "ak.realm.policy_bundle",
       payload: {
-        policy_revision: 1,
+        // The createRealmApi genesis already occupies policy_revision 1; the
+        // reducer enforces strict prev+1, so a rollback would mask the
+        // durability_scheme_incompatible branch this negative case targets.
+        policy_revision: nextJoinPolicyRevision(undefined, realmId),
         durability_policy: {
           mode: "org_recovery_key",
           recovery_recipients: [
             recoveryRecipient({
               recipientId: "org-primary",
               principalId: orgRrk.did,
-              rrkVerificationMethod: `${orgRrk.did}#realm-history-recovery-1`,
+              rrkVerificationMethod: `${orgRrk.fullDid}#realm-history-recovery-1`,
             }),
           ],
         },

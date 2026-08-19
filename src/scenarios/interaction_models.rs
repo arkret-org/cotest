@@ -1,6 +1,5 @@
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{EventId, MessageId, ReadCursorId};
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -9,8 +8,7 @@ use crate::harness::{
     message_redact_payload, message_revise_text_payload, next_typed_id,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
@@ -19,15 +17,6 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
-    authorize_device_public_key(
-        &server,
-        &alice.token,
-        &alice.actor,
-        &alice.device_id,
-        &alice_device_key,
-    )
-    .await?;
 
     let bob_did = actor_did_for_service_full_id(server.service_full_id(), "interaction-bob")?;
     let bob = server
@@ -37,14 +26,6 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    authorize_device_public_key(
-        &server,
-        &bob.token,
-        &bob.actor,
-        &bob.device_id,
-        &SigningKey::from_bytes(&[0xb0; 32]),
-    )
-    .await?;
 
     let carol_did = actor_did_for_service_full_id(server.service_full_id(), "interaction-carol")?;
     let carol = server
@@ -54,14 +35,6 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             "ak:device:01904100-0000-7000-8000-000000000ca0",
         )
         .await?;
-    authorize_device_public_key(
-        &server,
-        &carol.token,
-        &carol.actor,
-        &carol.device_id,
-        &SigningKey::from_bytes(&[0xca; 32]),
-    )
-    .await?;
 
     let dave_did = actor_did_for_service_full_id(server.service_full_id(), "interaction-dave")?;
     let dave = server
@@ -71,14 +44,6 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             "ak:device:01904100-0000-7000-8000-000000000da0",
         )
         .await?;
-    authorize_device_public_key(
-        &server,
-        &dave.token,
-        &dave.actor,
-        &dave.device_id,
-        &SigningKey::from_bytes(&[0xda; 32]),
-    )
-    .await?;
 
     let realm_id = alice.create_realm("Interaction Model Realm").await?;
     let strand_id = alice.default_strand_id(&realm_id)?;

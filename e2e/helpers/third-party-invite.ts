@@ -19,8 +19,8 @@ import {
   type KeyObject,
 } from "node:crypto";
 import {
+  canonicalDidCoreId,
   canonicalJson,
-  canonicalTimestamp,
   sha256CanonicalJson,
 } from "./soland-api";
 import {
@@ -44,14 +44,25 @@ export type DidKeyIdentity = {
 };
 
 export type ThirdPartyInviteCell = {
-  inviteId: string;
+  // Event-derived-id contract (event-kind-registry.json declares
+  // `id_source="event_derived"` for `ak.invite.third_party`): the Invite id is
+  // a retype of the accepted Event id, so it only exists once the invite
+  // Event is accepted — the submit helper fills it in.
+  inviteId?: string;
   realmId: string;
-  inviter: string;
   expiresAt: string;
   tokenCommitment: string;
   thirdPartyInvite: Record<string, unknown>;
-  joinRuleSnapshot: Record<string, unknown>;
 };
+
+function cellInviteId(cell: ThirdPartyInviteCell): string {
+  if (!cell.inviteId) {
+    throw new Error(
+      "invite id is a retype of the accepted ak.invite.third_party Event id; submit the invite Event before building claim proofs",
+    );
+  }
+  return cell.inviteId;
+}
 
 // Mint a fresh `did:key` Ed25519 identity. The single verification method is
 // `did:key:<mb>#<mb>`, exactly what DidKeyResolver synthesizes. The multibase
@@ -82,13 +93,15 @@ function transcriptBytes(domain: string, transcript: unknown): Buffer {
 }
 
 // `sha256:` + canonical_sha256({expires_at, invite_id, realm_id,
-// third_party_invite}) — soland invite_record_digest. `expires_at` is the
+// third_party_invite}) — soland invite_record_digest
+// (projection.rs invite_claim_proof_context). `invite_id` is the
+// Event-derived retype of the accepted invite Event; `expires_at` is the
 // rfc3339-seconds form stored on the invite cell, which for events submitted
 // through `ak.invite.third_party` is exactly the `expires_at` the test wrote.
 function inviteRecordDigest(cell: ThirdPartyInviteCell): string {
   return `sha256:${sha256CanonicalJson({
     expires_at: cell.expiresAt,
-    invite_id: cell.inviteId,
+    invite_id: cellInviteId(cell),
     realm_id: cell.realmId,
     third_party_invite: cell.thirdPartyInvite,
   })}`;
@@ -98,59 +111,45 @@ function inviteRecordDigest(cell: ThirdPartyInviteCell): string {
 // controls (so the claim transcripts can be reconstructed byte-for-byte). The
 // commitment is `sha256:<hex>` over an opaque per-invite secret — the plaintext
 // 3PID never appears, satisfying the privacy invariant.
+//
+// The payload is the closed `invite_third_party_create_payload` form
+// (event-payload.schema.json: required ["third_party_invite", "expires_at"],
+// additionalProperties false): the Invite id derives from the accepted Event
+// id and MUST NOT be carried, so no invite/invite_id field exists here.
 export function buildThirdPartyInvitePayload(args: {
-  inviteId: string;
   realmId: string;
-  inviter: string;
   verificationService: DidKeyIdentity;
   tokenCommitment: string;
   tokenSaltId?: string;
   expiresAt: string;
-  createdAt?: string;
-  joinRule?: string;
-  role?: string;
   displayNameHint?: string;
 }): { payload: Record<string, unknown>; cell: ThirdPartyInviteCell } {
-  const joinRuleSnapshot: Record<string, unknown> = {
-    join_rule: args.joinRule ?? "invite",
-    role: args.role ?? "member",
-  };
   const thirdPartyInvite: Record<string, unknown> = {
     oob_code_kind: "offline_token",
     token_commitment: args.tokenCommitment,
     token_salt_id: args.tokenSaltId ?? "salt-3pid-e2e-001",
     token_entropy_bits: 128,
-    verification_service_id: args.verificationService.did,
+    // invite.schema.json types this as did_core_id, and soland compares it
+    // byte-for-byte against the Realm allowlist and the binding_proof's
+    // verification_service_id, so every carrier uses the core-id spelling.
+    verification_service_id: canonicalDidCoreId(args.verificationService.did),
     verification_public_key: args.verificationService.verificationMethod,
     max_claims: 1,
   };
   if (args.displayNameHint) {
     thirdPartyInvite.display_name_hint = args.displayNameHint;
   }
-  const createdAt = args.createdAt ?? canonicalTimestamp();
   const payload = {
-    invite: {
-      id: args.inviteId,
-      schema: "ak.schema.invite.v1",
-      realm_id: args.realmId,
-      inviter: args.inviter,
-      third_party_invite: thirdPartyInvite,
-      join_rule_snapshot: joinRuleSnapshot,
-      state: "pending",
-      expires_at: args.expiresAt,
-      created_at: createdAt,
-    },
+    third_party_invite: thirdPartyInvite,
+    expires_at: args.expiresAt,
   };
   return {
     payload,
     cell: {
-      inviteId: args.inviteId,
       realmId: args.realmId,
-      inviter: args.inviter,
       expiresAt: args.expiresAt,
       tokenCommitment: args.tokenCommitment,
       thirdPartyInvite,
-      joinRuleSnapshot,
     },
   };
 }
@@ -166,8 +165,9 @@ export function signBindingProof(args: {
   claimNonce: string;
   bindingExpiresAt: string;
 }): Record<string, unknown> {
+  const serviceId = canonicalDidCoreId(args.verificationService.did);
   const unsigned = {
-    verification_service_id: args.verificationService.did,
+    verification_service_id: serviceId,
     verification_method: args.verificationService.verificationMethod,
     subject_id: args.subjectId,
     realm_id: args.cell.realmId,
@@ -180,11 +180,11 @@ export function signBindingProof(args: {
     binding_proof: unsigned,
     claim_nonce: args.claimNonce,
     invite_digest: inviteRecordDigest(args.cell),
-    invite_id: args.cell.inviteId,
+    invite_id: cellInviteId(args.cell),
     realm_id: args.cell.realmId,
     subject_id: args.subjectId,
     token_commitment: args.cell.tokenCommitment,
-    verification_service_id: args.verificationService.did,
+    verification_service_id: serviceId,
   });
   return {
     ...unsigned,
@@ -209,11 +209,11 @@ export function signSubjectProof(args: {
     audience: INVITE_AUDIENCE,
     binding_proof_digest: bindingDigest,
     claim_nonce: args.claimNonce,
-    invite_id: args.cell.inviteId,
+    invite_id: cellInviteId(args.cell),
     realm_id: args.cell.realmId,
     subject_id: args.subject.did,
     token_commitment: args.cell.tokenCommitment,
-    verification_service_id: args.verificationServiceId,
+    verification_service_id: canonicalDidCoreId(args.verificationServiceId),
   });
   return {
     verification_method: args.subject.verificationMethod,
@@ -237,7 +237,7 @@ export function buildClaimPayload(args: {
   subjectProof: Record<string, unknown>;
 }): Record<string, unknown> {
   return {
-    invite_id: args.cell.inviteId,
+    invite_id: cellInviteId(args.cell),
     subject_id: args.subjectId,
     token_commitment: args.cell.tokenCommitment,
     claim_nonce: args.claimNonce,

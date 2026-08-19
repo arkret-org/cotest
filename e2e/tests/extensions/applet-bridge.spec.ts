@@ -623,8 +623,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const sourceServiceId =
       args.sourceServiceId ?? "did:web:applet-bridge.joint-e2e.local";
     const realmId = args.realmId ?? typedId("realm");
+    // Event actor_id is typed did_core_id; did:web is reserved for the
+    // no-history service profile (spec index.md), so even negative cases use a
+    // core-id actor (signature-layer rejection precedes actor validation).
     const actorDid =
-      args.actorDid ?? `did:web:bot-applet-${args.stamp}.joint-e2e.local`;
+      args.actorDid ??
+      `ak:did_core:web:bot-applet-${args.stamp}.joint-e2e.local`;
     const unidentified = {
       kind: "ak.message.create",
       realm_id: realmId,

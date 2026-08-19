@@ -120,6 +120,15 @@ struct PrincipalSuccessorSealInput {
     device_signing_seed_b64url: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct WebvhVerifyLogInput {
+    did: String,
+    log_path: String,
+    /// `service` selects the generic chain profile that admits service
+    /// authority keys; anything else keeps the human-principal profile.
+    profile: Option<String>,
+}
+
 fn main() -> Result<()> {
     let command = std::env::args().nth(1).context("missing command")?;
     let input = read_stdin_json()?;
@@ -135,6 +144,7 @@ fn main() -> Result<()> {
         "principal-control-realm-id" => principal_control_realm(input)?,
         "webvh-placeholder-did" => webvh_placeholder_did_command(input)?,
         "webvh-genesis" => webvh_genesis(input)?,
+        "webvh-verify-log" => webvh_verify_log(input)?,
         "account-handoff-outcome" => account_handoff_outcome(input)?,
         "account-handoff-request" => account_handoff_request(input)?,
         "principal-registration-fixture" => principal_registration_fixture(input)?,
@@ -536,6 +546,34 @@ fn webvh_placeholder_did_command(input: Value) -> Result<Value> {
     Ok(json!({
         "method_authority": method_authority,
         "did": arkret::webvh::skeleton::webvh_placeholder_did(&method_authority, &input.local_id),
+    }))
+}
+
+/// Verify one fetched `did:webvh` history (`did.jsonl`) against its DID.
+///
+/// The joint runner's TLS-topology preflight uses this as an independent
+/// third-party check: the bytes come from an HTTPS fetch through the managed
+/// reverse proxy, and the chain proof runs here rather than inside the service
+/// that published the log. `profile = "service"` selects the generic chain
+/// verifier (`verify_did_webvh_v1_chain_bytes`), which admits service
+/// authority keys; the default keeps the human-principal profile
+/// (`verify_did_webvh_v1_log_bytes`).
+fn webvh_verify_log(input: Value) -> Result<Value> {
+    let input: WebvhVerifyLogInput =
+        serde_json::from_value(input).context("parse webvh verify-log input")?;
+    let did = DidFullId::new(input.did).context("parse webvh DID")?;
+    let bytes = std::fs::read(&input.log_path)
+        .with_context(|| format!("read webvh log {}", input.log_path))?;
+    let verified = match input.profile.as_deref() {
+        Some("service") => arkret_identity::verify_did_webvh_v1_chain_bytes(&did, &bytes)
+            .context("verify did:webvh service chain")?,
+        _ => arkret_identity::verify_did_webvh_v1_log_bytes(&did, &bytes)
+            .context("verify did:webvh log")?,
+    };
+    Ok(json!({
+        "verified": true,
+        "head_version_id": verified.head_version_id,
+        "entry_count": verified.entries.len(),
     }))
 }
 

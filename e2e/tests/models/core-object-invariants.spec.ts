@@ -24,6 +24,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
@@ -93,10 +94,17 @@ async function fetchRealmSealBasis(
   token: string,
   realmId: string,
 ): Promise<RealmSealBasis> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token) },
-  );
+  // `ak.self.events.read.frontier` registers a QUERY binding only
+  // (service-http-binding.md); a GET falls through to `events/{event_id}`.
+  const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+  const response = await request.fetch(frontierUrl, {
+    method: "QUERY",
+    headers: {
+      ...authHeaders(token, "QUERY", frontierUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ realm_id: realmId }),
+  });
   const body = (await response.json()) as {
     frontier?: {
       kind?: unknown;

@@ -279,7 +279,10 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
 
     for (const data of rejectVectors) {
-      const resp = await request.post(`${conformanceBaseUrl()}/query`, { data });
+      const resp = await request.post(`${conformanceBaseUrl()}/query`, {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson(data),
+      });
       expect(resp.status(), data.vector_id).toBeGreaterThanOrEqual(400);
       const body = await resp.json();
       expect(["query_schema_violation", "schema_violation"]).toContain(wireErrCode(body));
@@ -311,7 +314,10 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     ];
 
     for (const data of rejectVectors) {
-      const resp = await request.post(`${conformanceBaseUrl()}/query`, { data });
+      const resp = await request.post(`${conformanceBaseUrl()}/query`, {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson(data),
+      });
       expect(resp.status(), data.vector_id).toBeGreaterThanOrEqual(400);
       const body = await resp.json();
       expect(["scalability_limit_exceeded", "payload_too_large", "quota_exceeded"]).toContain(
@@ -409,11 +415,12 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
     // distinguish "endpoint absent" (404) from "endpoint present but stubbed
     // / rejecting / requiring auth" (anything else).
     const probe = await request.post(`${conformanceBaseUrl()}/snapshot`, {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         vector_id: "ak.vector.snapshot.surface_probe.v1",
         manifest: {},
         chunks: [],
-      },
+      }),
     });
     expect(
       probe.status(),

@@ -420,7 +420,7 @@ test.describe("conformance encoding vectors", () => {
     expect(orderedHlcs).toEqual(v.expected_ascending);
   });
 
-  test("§1.3 HLC logical overflow returns 4xx hlc_logical_overflow", async ({
+  test("§1.3 HLC logical overflow returns 503 hlc_logical_overflow", async ({
     request,
   }) => {
     const vector = vectorById("ak.vector.encoding.hlc_logical_overflow.v1");
@@ -433,13 +433,16 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/hlc-merge`,
       {
+        headers: { "content-type": "application/json" },
         // Vector_id contains `logical_overflow` which trips soland's reject
         // branch — clocks list is irrelevant to the reject dispatch.
-        data: { vector_id: v.vector_id, clocks: [] },
+        data: canonicalJson({ vector_id: v.vector_id, clocks: [] }),
       },
     );
-    expect(resp.status()).toBeGreaterThanOrEqual(400);
-    expect(resp.status()).toBeLessThan(500);
+    // error-code-registry.json registers hlc_logical_overflow with
+    // http_status 503 (retryable: the producer could not allocate a fresh
+    // logical counter within the current millisecond).
+    expect(resp.status()).toBe(503);
     const body = await resp.json();
     expect(wireErrCode(body)).toBe("hlc_logical_overflow");
     expect(body.ordered).toBeUndefined();
@@ -470,7 +473,10 @@ test.describe("conformance encoding vectors", () => {
 
     const respA = await request.post(
       `${conformanceBaseUrl()}/cursor`,
-      { data: { vector_id: v.vector_id, events, reduce_round: 1 } },
+      {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({ vector_id: v.vector_id, events, reduce_round: 1 }),
+      },
     );
     expect(respA.status()).toBe(200);
     const bodyA = await respA.json();
@@ -479,11 +485,12 @@ test.describe("conformance encoding vectors", () => {
     const respB = await request.post(
       `${conformanceBaseUrl()}/cursor`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: v.vector_id,
           events: shuffled,
           reduce_round: 2,
-        },
+        }),
       },
     );
     expect(respB.status()).toBe(200);
@@ -523,11 +530,12 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/envelope`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: v.vector_id,
           envelope: v.payload_metadata,
           ciphertext_base64url: v.ciphertext_base64url,
-        },
+        }),
       },
     );
     expect(resp.status()).toBe(200);
@@ -538,11 +546,12 @@ test.describe("conformance encoding vectors", () => {
     const resp2 = await request.post(
       `${conformanceBaseUrl()}/envelope`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: v.vector_id,
           envelope: v.payload_metadata,
           ciphertext_base64url: v.ciphertext_base64url,
-        },
+        }),
       },
     );
     const body2 = await resp2.json();
@@ -586,12 +595,13 @@ test.describe("conformance encoding vectors", () => {
     const ownerResp = await request.post(
       `${conformanceBaseUrl()}/redact`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: "ak.vector.redaction.owner_view.synthetic.v1",
           event,
           redaction,
           viewer_did: ownerDid,
-        },
+        }),
       },
     );
     expect(ownerResp.status()).toBe(200);
@@ -605,12 +615,13 @@ test.describe("conformance encoding vectors", () => {
     const guestResp = await request.post(
       `${conformanceBaseUrl()}/redact`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: "ak.vector.redaction.guest_view.synthetic.v1",
           event,
           redaction,
           viewer_did: guestDid,
-        },
+        }),
       },
     );
     expect(guestResp.status()).toBe(200);
@@ -651,11 +662,12 @@ test.describe("conformance encoding vectors", () => {
     const resp = await request.post(
       `${conformanceBaseUrl()}/erase-receipt`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: c.vector_id ?? "ak.vector.redaction.hard_erasure_receipt.v1",
           event,
           receipt,
-        },
+        }),
       },
     );
     expect(resp.status()).toBe(200);
@@ -693,11 +705,12 @@ test.describe("conformance encoding vectors", () => {
     const blockedResp = await request.post(
       `${conformanceBaseUrl()}/erase-receipt`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: c.vector_id ?? "ak.vector.redaction.hard_erasure_receipt.v1",
           event,
           receipt: blockedReceipt,
-        },
+        }),
       },
     );
     expect(blockedResp.status()).toBe(200);
@@ -733,7 +746,8 @@ test.describe("conformance encoding vectors", () => {
     const guestResp = await request.post(
       `${conformanceBaseUrl()}/redact`,
       {
-        data: {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
           vector_id: c.vector_id ?? "ak.vector.redaction.snapshot_pruning_stub.v1",
           event,
           redaction: {
@@ -742,7 +756,7 @@ test.describe("conformance encoding vectors", () => {
             reason: receipt.reason,
           },
           viewer_did: "did:web:guest.example",
-        },
+        }),
       },
     );
     expect(guestResp.status()).toBe(200);

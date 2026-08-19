@@ -1,8 +1,7 @@
 use std::collections::BTreeSet;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -11,8 +10,8 @@ use crate::harness::{
     member_transition_payload,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_test_client_device,
-    seal_current_principal_control_frontier, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+    spawn_with_harness_account_authority,
 };
 
 const BOB_HANDLE: &str = "@collab-bob";
@@ -23,7 +22,12 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    authorize_test_client_device(&server, &alice, &SigningKey::from_bytes(&[0xa1; 32])).await?;
+    let alice_device_key = alice
+        .principal
+        .as_ref()
+        .context("alice carries her provisioned principal")?
+        .device_signing_key
+        .clone();
     let bob_did = actor_did_for_service_full_id(server.service_full_id(), "collab-bob")?;
     let bob = server
         .register_client_with_localpart(
@@ -33,7 +37,12 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    authorize_test_client_device(&server, &bob, &SigningKey::from_bytes(&[0xb0; 32])).await?;
+    let bob_device_key = bob
+        .principal
+        .as_ref()
+        .context("bob carries his provisioned principal")?
+        .device_signing_key
+        .clone();
 
     let alice_core_id = crate::harness::actor_core_id(&alice.actor)?;
     let bob_full_id = arkret_identifiers::DidFullId::new(bob.actor.clone())?;
@@ -102,9 +111,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         request_receipt.core.peer.contact_actor_id().as_str(),
         bob_core_id.as_str()
     );
-    seal_current_principal_control_frontier(&alice, &SigningKey::from_bytes(&[0xa1; 32])).await?;
+    seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
     bob.accept_contact(request_receipt).await?;
-    seal_current_principal_control_frontier(&bob, &SigningKey::from_bytes(&[0xb0; 32])).await?;
+    seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let visible_bob = expect_json(
         alice

@@ -1,6 +1,5 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -9,8 +8,8 @@ use crate::harness::{
     expect_status, invite_create_payload,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_test_client_device,
-    seal_current_principal_control_frontier, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+    spawn_with_harness_account_authority,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
@@ -19,8 +18,12 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
-    authorize_test_client_device(&server, &alice, &alice_device_key).await?;
+    let alice_device_key = alice
+        .principal
+        .as_ref()
+        .context("alice carries her provisioned principal")?
+        .device_signing_key
+        .clone();
     let bob_did = actor_did_for_service_full_id(server.service_full_id(), "directory-bob")?;
     let bob = server
         .register_client(
@@ -29,8 +32,12 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    let bob_device_key = SigningKey::from_bytes(&[0xb0; 32]);
-    authorize_test_client_device(&server, &bob, &bob_device_key).await?;
+    let bob_device_key = bob
+        .principal
+        .as_ref()
+        .context("bob carries his provisioned principal")?
+        .device_signing_key
+        .clone();
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
     seal_current_principal_control_frontier(&alice, &alice_device_key).await?;

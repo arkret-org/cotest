@@ -1,3 +1,6 @@
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{LazyLock, Mutex};
+
 use anyhow::{Context, Result};
 use arkret_bootstrap::{
     DID_INCEPTION_REF_ROLE, SelfPrincipalPcrCreateInput, build_self_principal_bootstrap_seal,
@@ -41,7 +44,11 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
 
-use crate::harness::{ArkretServer, TestActorClient, expect_json};
+use crate::harness::{
+    ArkretServer, ProvisionedTestPrincipal, TestActorClient, canonical_device_id, dev_login,
+    expect_json, register_account, register_account_with_localpart,
+    register_event_signing_identity,
+};
 
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
@@ -163,55 +170,258 @@ fn test_principal_root_key_seed(actor: &str) -> Result<[u8; 32]> {
     Ok(test_principal_root_seed(&host, &local_id))
 }
 
-pub async fn authorize_device_public_key(
-    server: &ArkretServer,
-    token: &str,
-    actor: &str,
-    device_id: &str,
-    device_signing_key: &SigningKey,
-) -> Result<()> {
-    authorize_device_public_key_with_event_id(server, token, actor, device_id, device_signing_key)
-        .await?;
-    Ok(())
+/// Deterministic founding device signing key for a provisioned test principal.
+///
+/// The seed matches the development event-signing key of the device's
+/// verification method, so Event proofs and the `ak.device.authorize` binding
+/// name the same key.
+pub fn founding_device_signing_key(actor: &str, device_id: &str) -> SigningKey {
+    let method = crate::fixture_did_url(format!("{actor}#{device_id}"));
+    SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(&method))
 }
 
-pub async fn authorize_test_client_device(
+/// How the canonical actor bootstrap opens its first session.
+pub enum ActorBootstrapRegistration<'a> {
+    /// Bare dev-login session (no account row).
+    DevLogin,
+    /// Account registration through the embedded WebVH registration gate.
+    Account { handle: &'a str },
+    /// Account registration plus a primary localpart publication.
+    AccountWithLocalpart { handle: &'a str, localpart: &'a str },
+}
+
+struct PrincipalBootstrapRecord {
+    founding: ProvisionedTestPrincipal,
+    /// Additional devices authorized after genesis: device id -> (device
+    /// signing key, accepted `ak.device.authorize` Event id).
+    additional_devices: BTreeMap<String, (SigningKey, arkret_identifiers::EventId)>,
+}
+
+/// Process-local record of principals whose §5.1 genesis unit was already
+/// relayed to a given service identity. Keyed by the durable service id (stable
+/// across external restarts and chaos respawns on retained storage) so a
+/// restarted service replays without a second genesis — the control proof's
+/// `issued_at` makes a byte-fresh relay fail `validate_against`, so replay must
+/// be skipped wholesale — while a distinct service id always bootstraps its own
+/// principals.
+static PROVISIONED_PRINCIPALS: LazyLock<
+    Mutex<HashMap<(String, String), PrincipalBootstrapRecord>>,
+> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Atomically provision a self-sovereign test principal: deterministic
+/// `did:webvh` inception, requested registration/session, and the closed
+/// §5.1 PCR genesis unit (`ak.realm.create` purpose=principal_control +
+/// `registration_anchor` `ak.device.authorize`) with its bootstrap Seal.
+///
+/// Scenarios MUST NOT hand-assemble principal DIDs, PCR ids, or authorization
+/// Event ids; they consume the returned typed handles. Negative fixtures that
+/// need an unauthorized device use the explicitly named opt-out entry points
+/// on [`ArkretServer`] instead.
+pub async fn bootstrap_registered_actor(
     server: &ArkretServer,
-    client: &TestActorClient,
-    device_signing_key: &SigningKey,
-) -> Result<()> {
-    let prepared = install_test_principal_control_document(server, &client.actor).await?;
+    actor: &str,
+    device_id: &str,
+    registration: ActorBootstrapRegistration<'_>,
+) -> Result<(ProvisionedTestPrincipal, String)> {
+    let device_id = canonical_device_id(device_id);
+    let device_key = founding_device_signing_key(actor, &device_id);
+    let device_method = crate::fixture_did_url(format!("{actor}#{device_id}"));
+    let token = match registration {
+        ActorBootstrapRegistration::DevLogin => dev_login(server, actor, &device_id).await?,
+        ActorBootstrapRegistration::Account { handle } => {
+            register_account(server, actor, handle, &device_id).await?
+        }
+        ActorBootstrapRegistration::AccountWithLocalpart { handle, localpart } => {
+            register_account_with_localpart(server, actor, handle, localpart, &device_id).await?
+        }
+    };
+    let key = (server.service_id().as_str().to_owned(), actor.to_owned());
+    let cached = PROVISIONED_PRINCIPALS
+        .lock()
+        .expect("provisioned principal lock")
+        .get(&key)
+        .map(|record| {
+            (
+                record.founding.clone(),
+                record.additional_devices.get(&device_id).cloned(),
+            )
+        });
+    if let Some((founding, additional)) = cached {
+        if device_id == founding.device_id.as_str() {
+            register_event_signing_identity(
+                actor,
+                founding.device_signing_key.to_bytes(),
+                device_method.as_str().to_owned(),
+                server.service_id().clone(),
+            );
+            return Ok((founding, token));
+        }
+        if let Some((additional_key, authorize_event_id)) = additional {
+            register_event_signing_identity(
+                actor,
+                additional_key.to_bytes(),
+                device_method.as_str().to_owned(),
+                server.service_id().clone(),
+            );
+            return Ok((
+                ProvisionedTestPrincipal {
+                    device_id: DeviceId::new(device_id.clone())?,
+                    device_signing_key: additional_key,
+                    founding_authorize_event_id: authorize_event_id,
+                    ..founding
+                },
+                token,
+            ));
+        }
+        // A second device of an already-provisioned principal is authorized by
+        // the founding device through an accepted-device `ak.device.authorize`
+        // in the PCR (device-lifecycle.md section 5.2).
+        register_event_signing_identity(
+            actor,
+            founding.device_signing_key.to_bytes(),
+            crate::fixture_did_url(format!("{actor}#{}", founding.device_id))
+                .as_str()
+                .to_owned(),
+            server.service_id().clone(),
+        );
+        let authorize_event_id = authorize_additional_principal_device(
+            server,
+            &token,
+            &founding,
+            &device_id,
+            &device_key,
+        )
+        .await?;
+        register_event_signing_identity(
+            actor,
+            device_key.to_bytes(),
+            device_method.as_str().to_owned(),
+            server.service_id().clone(),
+        );
+        PROVISIONED_PRINCIPALS
+            .lock()
+            .expect("provisioned principal lock")
+            .get_mut(&key)
+            .expect("provisioned principal record persists")
+            .additional_devices
+            .insert(
+                device_id.clone(),
+                (device_key.clone(), authorize_event_id.clone()),
+            );
+        return Ok((
+            ProvisionedTestPrincipal {
+                device_id: DeviceId::new(device_id)?,
+                device_signing_key: device_key,
+                founding_authorize_event_id: authorize_event_id,
+                ..founding
+            },
+            token,
+        ));
+    }
+    let prepared = install_test_principal_control_document(server, actor).await?;
     let bootstrap = bootstrap_test_device_authorization(
         server,
-        &client.token,
-        &client.actor,
-        &client.device_id,
-        device_signing_key,
+        &token,
+        actor,
+        &device_id,
+        &device_key,
         &prepared,
     )
     .await?;
-    client.track_controlled_realm(&bootstrap.pcr_realm_id);
-    Ok(())
+    register_event_signing_identity(
+        actor,
+        device_key.to_bytes(),
+        device_method.as_str().to_owned(),
+        server.service_id().clone(),
+    );
+    let full_id = DidFullId::new(actor.to_owned())?;
+    let principal = ProvisionedTestPrincipal {
+        core_id: project_full_id_to_core_id(&full_id)?,
+        full_id,
+        device_id: DeviceId::new(device_id)?,
+        device_signing_key: device_key,
+        root_key_seed: test_principal_root_key_seed(actor)?,
+        pcr_realm_id: bootstrap.pcr_realm_id,
+        founding_authorize_event_id: bootstrap.authorize_event_id,
+    };
+    PROVISIONED_PRINCIPALS
+        .lock()
+        .expect("provisioned principal lock")
+        .insert(
+            key,
+            PrincipalBootstrapRecord {
+                founding: principal.clone(),
+                additional_devices: BTreeMap::new(),
+            },
+        );
+    Ok((principal, token))
 }
 
-pub async fn authorize_device_public_key_with_event_id(
+/// Admit an additional device of an already-provisioned principal into its PCR
+/// through an accepted-device `ak.device.authorize` Control Move authored by
+/// the founding device.
+async fn authorize_additional_principal_device(
     server: &ArkretServer,
     token: &str,
-    actor: &str,
+    founding: &ProvisionedTestPrincipal,
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<arkret_identifiers::EventId> {
-    let prepared = install_test_principal_control_document(server, actor).await?;
-    Ok(bootstrap_test_device_authorization(
+    let actor = founding.full_id.as_str();
+    let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
+        .with_timezone(&chrono::Utc);
+    let new_device_id = DeviceId::new(device_id.to_owned())?;
+    let device_multibase =
+        ed25519_pubkey_to_did_key_multibase(&device_signing_key.verifying_key().to_bytes());
+    let device_public_key =
+        NonEmptyString::new(format!("did:key:{device_multibase}")).map_err(anyhow::Error::msg)?;
+    let hpke_key = NonEmptyString::new(format!("z6LSCotestFederationHpkeKey:{device_id}"))
+        .map_err(anyhow::Error::msg)?;
+    let algorithms = vec![
+        NonEmptyString::new("ak.hpke_x25519_aead_chacha20poly1305.v1")
+            .map_err(anyhow::Error::msg)?,
+    ];
+    let mut payload = DeviceAuthorizePayload {
+        principal_id: founding.core_id.clone(),
+        device_id: new_device_id,
+        device_public_key,
+        hpke_key,
+        algorithms,
+        device_key_algorithm: Some(NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?),
+        authorized_by: DeviceOrPrincipalRef::DeviceId(founding.device_id.clone()),
+        scopes: None,
+        not_before: created_at,
+        expires_at: None,
+        authorization_binding_kind: DeviceAuthorizationBindingKind::AcceptedDevice,
+        device_signature: SignatureMaterial::NonEmptyString(
+            NonEmptyString::new("pending").map_err(anyhow::Error::msg)?,
+        ),
+        recovery_session_id: None,
+    };
+    payload.device_signature = SignatureMaterial::NonEmptyString(
+        NonEmptyString::new(
+            URL_SAFE_NO_PAD.encode(
+                device_signing_key
+                    .sign(&payload.device_possession_signature_input()?)
+                    .to_bytes(),
+            ),
+        )
+        .map_err(anyhow::Error::msg)?,
+    );
+    let body = crate::harness::submit_event(
         server,
         token,
         actor,
-        device_id,
-        device_signing_key,
-        &prepared,
+        founding.pcr_realm_id.as_str(),
+        arkret_wire::EventKind::DeviceAuthorize.as_str(),
+        serde_json::to_value(&payload)?,
+        StatusCode::OK,
     )
-    .await?
-    .authorize_event_id)
+    .await?;
+    let event_id = body["event_id"]
+        .as_str()
+        .context("accepted additional-device authorization omitted its Event id")?;
+    Ok(arkret_identifiers::EventId::new(event_id.to_owned())?)
 }
 
 /// Publish the current device-signed successor Seal for every accepted Event
@@ -472,7 +682,7 @@ async fn bootstrap_test_device_authorization(
                 method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,
                 version_id: prepared.version_id.clone(),
             },
-            genesis_salt: arkret_wire::GenesisSalt::generate()?,
+            genesis_salt: test_principal_genesis_salt(&host, &local_id, device_id.as_str())?,
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             founding_device_descriptor: descriptor,
@@ -791,6 +1001,22 @@ fn test_principal_inception(host: &str, local_id: &str) -> Result<PreparedPrinci
 
 fn test_principal_root_seed(host: &str, local_id: &str) -> [u8; 32] {
     Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into()
+}
+
+/// Deterministic PCR genesis salt per principal/device. Re-provisioning the
+/// same actor on a durable server rebuilds the byte-identical genesis unit, so
+/// the relay replays the original receipt instead of admitting a second PCR.
+fn test_principal_genesis_salt(
+    host: &str,
+    local_id: &str,
+    device_id: &str,
+) -> Result<arkret_wire::GenesisSalt> {
+    let digest = Sha256::digest(
+        format!("cotest:webvh:genesis-salt:{host}:{local_id}:{device_id}").as_bytes(),
+    );
+    Ok(arkret_wire::GenesisSalt::new(
+        URL_SAFE_NO_PAD.encode(digest),
+    )?)
 }
 
 /// Extract the DID method authority while retaining an encoded local port.

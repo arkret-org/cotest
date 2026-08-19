@@ -9,16 +9,18 @@ import { mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalDidCoreId,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
+  nextJoinPolicyRevision,
   prepareSignedEventCbaApi,
   projectFullDidToCoreId,
   registerEventSigner,
+  retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
-  typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -180,7 +182,10 @@ async function submitSelfEvent(
 }
 
 // Seed the Realm policy components cell with the verification-service allowlist
-// the reducer re-checks (third-party-invites.md §2.1 Allowlist MUST).
+// the reducer re-checks (third-party-invites.md §2.1 Allowlist MUST). The
+// allowlist entries are did_core_id and compared byte-for-byte against the
+// payload's verification_service_id, so the full DID is projected first. The
+// createRealmApi genesis already occupies policy_revision 1.
 async function allowlistVerificationService(
   request: APIRequestContext,
   token: string,
@@ -196,8 +201,10 @@ async function allowlistVerificationService(
       realmId,
       kind: "ak.realm.policy_bundle",
       payload: {
-        policy_revision: 1,
-        allowed_third_party_invite_verification_service_ids: [serviceId],
+        policy_revision: nextJoinPolicyRevision(undefined, realmId),
+        allowed_third_party_invite_verification_service_ids: [
+          canonicalDidCoreId(serviceId),
+        ],
       },
     }),
     { context: `allowlist verification service ${serviceId}` },
@@ -211,17 +218,20 @@ async function submitThirdPartyInvite(
   cell: ThirdPartyInviteCell,
   payload: Record<string, unknown>,
 ): Promise<SelfEventsOutcome> {
-  const outcome = await submitSelfEvent(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: ownerDid,
-      realmId: cell.realmId,
-      kind: "ak.invite.third_party",
-      schemaId: "ak.schema.event.v1",
-      payload,
-    }),
-  );
+  const envelope = signedEventEnvelope({
+    actorDid: ownerDid,
+    realmId: cell.realmId,
+    kind: "ak.invite.third_party",
+    schemaId: "ak.schema.event.v1",
+    payload,
+  });
+  const outcome = await submitSelfEvent(request, token, envelope);
+  if (outcome.accepted.length > 0) {
+    // Event-derived-id contract: the Invite id is a retype of the accepted
+    // Event id (apply_invites.rs InviteId::from_event_id) and is never
+    // carried in the payload, so the cell learns it only now.
+    cell.inviteId = retypeEventDerivedId(outcome.accepted[0], "invite");
+  }
   return outcome;
 }
 
@@ -301,9 +311,7 @@ test.describe("third-party invite", () => {
       new Date(Date.now() + (opts.expiresInMs ?? 60 * 60_000)),
     );
     const { payload, cell } = buildThirdPartyInvitePayload({
-      inviteId: typedId("invite"),
       realmId,
-      inviter: alice.did,
       verificationService,
       tokenCommitment: tokenCommitment(`${opts.fixtureNonce}-${alice.did}`),
       expiresAt,

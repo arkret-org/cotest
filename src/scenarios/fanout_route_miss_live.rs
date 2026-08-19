@@ -18,17 +18,12 @@ use arkret_models_identity::delivery_binding::{
 use arkret_models_identity::{ServiceResolutionCarrier, ServiceResolutionRecord};
 use arkret_wire::{DidCoreId, DidFullId, Event, EventId, EventKind, Hash};
 use chrono::Utc;
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{
-    TestActorClient, TestServerGroup, default_event_verification_method, expect_json,
-    member_join_payload,
-};
+use crate::harness::{TestActorClient, TestServerGroup, expect_json, member_join_payload};
 use crate::scenarios::identity_test_support::{
-    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_full_id, authorize_test_client_device,
-    harness_account_authority_id,
+    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_full_id, harness_account_authority_id,
 };
 
 const INSTALL_PATH: &str = "/_arkret/_conformance/realm-fixture/install";
@@ -111,28 +106,10 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         .server(0)
         .register_client(&alice_did, "fanout-alice", ALICE_DEVICE)
         .await?;
-    let alice_method = default_event_verification_method(&alice_did);
-    authorize_test_client_device(
-        group.server(0),
-        &alice,
-        &SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
-            &alice_method,
-        )),
-    )
-    .await?;
     let bob = group
         .server(1)
         .register_client(&bob_did, "fanout-bob", BOB_DEVICE)
         .await?;
-    let bob_method = default_event_verification_method(&bob_did);
-    authorize_test_client_device(
-        group.server(1),
-        &bob,
-        &SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
-            &bob_method,
-        )),
-    )
-    .await?;
     let target_record = current_service_record(group.server(1)).await?;
     let bootstrap = alice
         .create_realm_bootstrap_with(json!({

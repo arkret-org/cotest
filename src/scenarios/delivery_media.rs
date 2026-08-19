@@ -1,29 +1,34 @@
-use anyhow::{Result, anyhow};
-use ed25519_dalek::SigningKey;
+use anyhow::{Context, Result, anyhow};
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ArkretServer, TestActorClient, dev_login, device_message_send_request, encrypted_envelope,
+    ArkretServer, TestActorClient, device_message_send_request, encrypted_envelope,
     expect_api_error, expect_indistinguishable_api_errors, expect_json, expect_response,
-    expect_text, register_account,
+    expect_text,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key, signed_keys_upload_body,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, signed_keys_upload_body, spawn_with_harness_account_authority,
 };
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = spawn_with_harness_account_authority("delivery-keys", &[]).await?;
     let alice_did = actor_did_for_service_full_id(server.service_full_id(), "delivery-alice")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
-    let token = register_account(&server, &alice_did, "@delivery-alice", alice_device).await?;
+    let alice = server
+        .register_client(&alice_did, "@delivery-alice", alice_device)
+        .await?;
+    let token = alice.token.clone();
 
-    // soland binds keys/upload to the authoritative device key (the device must
-    // be authorized, and the upload carries an Ed25519 signature over the
-    // canonical body). Authorize Alice's device up front.
-    let device_key = SigningKey::from_bytes(&[0x7a; 32]);
-    authorize_device_public_key(&server, &token, &alice_did, alice_device, &device_key).await?;
+    // soland binds keys/upload to the authoritative device key: the canonical
+    // bootstrap authorized Alice's founding device, whose deterministic
+    // signing key signs the upload body.
+    let device_key = alice
+        .principal
+        .as_ref()
+        .context("alice carries her provisioned principal")?
+        .device_signing_key
+        .clone();
 
     expect_api_error(
         server
@@ -140,12 +145,10 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
 
 pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Result<()> {
     let server = ArkretServer::spawn("device-delivery").await?;
-    let token = dev_login(
-        &server,
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-    )
-    .await?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "delivery-to-device")?;
+    let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    let alice = server.demo_client(&alice_did, alice_device).await?;
+    let token = alice.token.clone();
 
     expect_api_error(
         server
@@ -175,8 +178,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     let expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
     let request = device_message_send_request(
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
+        &alice_did,
+        alice_device,
         "ak:device_message:0196419b-0000-7000-8000-00000000d201",
         "ak.mls.application",
         encrypted_envelope("ak.mls.application", "opaque-to-device"),
@@ -192,11 +195,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         StatusCode::OK,
     )
     .await?;
-    let alice_core_id = crate::harness::actor_core_id("did:web:alice.example")?;
-    assert_eq!(
-        send["delivered"][alice_core_id][0],
-        "ak:device:01904100-0000-7000-8000-0000000000a1"
-    );
+    let alice_core_id = crate::harness::actor_core_id(&alice_did)?;
+    assert_eq!(send["delivered"][alice_core_id][0], alice_device);
 
     let duplicate = expect_json(
         server
@@ -323,22 +323,22 @@ pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest
 
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let server = ArkretServer::spawn("blob-media").await?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-blob")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-blob")?;
     let bob = server
         .register_client(
-            "did:web:bob-blob.example",
+            &bob_did,
             "@bob-blob",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
+    let carol_did = actor_did_for_service_full_id(server.service_full_id(), "carol-blob")?;
     let carol = server
         .register_client(
-            "did:web:carol-blob.example",
+            &carol_did,
             "@carol-blob",
             "ak:device:01904100-0000-7000-8000-000000000ca0",
         )
@@ -465,24 +465,20 @@ async fn create_blob_access_realm(
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("push-moderation").await?;
-    let alice = dev_login(
-        &server,
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-    )
-    .await?;
-    let bob = register_account(
-        &server,
-        "did:web:bob-delivery.example",
-        "@bob-delivery",
-        "ak:device:01904100-0000-7000-8000-0000000000b0",
-    )
-    .await?;
-    let alice_client = server.client_with_token(
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-        alice.clone(),
-    )?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-moderation")?;
+    let alice_client = server
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let alice = alice_client.token.clone();
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-delivery")?;
+    let bob = server
+        .register_client(
+            &bob_did,
+            "@bob-delivery",
+            "ak:device:01904100-0000-7000-8000-0000000000b0",
+        )
+        .await?
+        .token;
     let moderation_realm_create = alice_client
         .create_realm_with(json!({
             "title": "Moderation edge fixture",

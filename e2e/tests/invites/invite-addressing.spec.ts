@@ -15,6 +15,7 @@ import {
   acceptedInviteDeliveryBodyApi,
   advanceEnvelopeToActorFrontier,
   canonicalServiceResolution,
+  canonicalJson,
   canonicalTimestamp,
   authHeaders,
   createRealmApi,
@@ -170,7 +171,7 @@ test.describe("invite addressing", () => {
   // `ak.self.invites.command.dispatch` (§7), covered below.
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
     const recipientServiceId = solandServiceId();
-    const invitee = "did:web:cotest-invitee.example";
+    const invitee = "ak:did_core:web:cotest-invitee.example";
     const introductionEvidence = { kind: "explicit_address" } as const;
     const inviteDeliveryTarget = {
       recipient_service_id: recipientServiceId,
@@ -205,7 +206,7 @@ test.describe("invite addressing", () => {
         idempotency_key: `cotest-peer-invite-${Date.now()}`,
       },
       {
-        origin: "did:web:cotest-source.example",
+        origin: "ak:did_core:web:cotest-source.example",
         destination: recipientServiceId,
       },
     );
@@ -230,12 +231,12 @@ test.describe("invite addressing", () => {
 
     const issueStarted = Date.now();
     const issue = await request.post(issueUrl, {
-      headers: selfHeaders,
-      data: {
+      headers: { ...selfHeaders, "content-type": "application/json" },
+      data: canonicalJson({
         ttl_seconds: 60,
         one_time_use: false,
         display_hint: { display_name_hint: "Cotest locator" },
-      },
+      }),
     });
     expect(issue.status(), await issue.text()).toBe(200);
     expect(issue.headers()["cache-control"]).toBe("private, no-store");
@@ -344,24 +345,24 @@ test.describe("invite addressing", () => {
     }
 
     const oneTimeIssue = await request.post(issueUrl, {
-      headers: selfHeaders,
-      data: {
+      headers: { ...selfHeaders, "content-type": "application/json" },
+      data: canonicalJson({
         ttl_seconds: 120,
         one_time_use: false,
         display_hint: { display_name_hint: "Clear me" },
-      },
+      }),
     });
     expect(oneTimeIssue.status(), await oneTimeIssue.text()).toBe(200);
     const beforeOneTime =
       (await oneTimeIssue.json()) as InviteLocatorIssueOutcome;
     const oneTimeRotate = await request.post(rotateUrl, {
-      headers: selfHeaders,
-      data: {
+      headers: { ...selfHeaders, "content-type": "application/json" },
+      data: canonicalJson({
         locator_id: beforeOneTime.locator_id,
         ttl_seconds: 60,
         one_time_use: true,
         display_hint: null,
-      },
+      }),
     });
     expect(oneTimeRotate.status(), await oneTimeRotate.text()).toBe(200);
     const oneTime = (await oneTimeRotate.json()) as InviteLocatorIssueOutcome;

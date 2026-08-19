@@ -27,50 +27,47 @@
 //! Status: real test, runs against the in-process soland harness.
 //!
 //! No external prerequisites — soland's `/_arkret/self/device_messages` POST and
-//! GET endpoints are wired in dev mode and the harness already supports
-//! `dev_login` with per-device-id session issuance, so multi-device wiring
-//! is straightforward.
+//! GET endpoints are wired in dev mode and the harness typed bootstrap issues
+//! per-device-id sessions, so multi-device wiring is straightforward.
 
 use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    ArkretServer, dev_login, device_message_send_request, encrypted_envelope, expect_api_error,
-    expect_json,
+    ArkretServer, device_message_send_request, encrypted_envelope, expect_api_error, expect_json,
 };
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 /// CT-10 scenario probe — see module docs for the 10-step walk-through.
 pub async fn to_device_offline_ordering_run() -> Result<()> {
     let server = ArkretServer::spawn("to-device-offline-ordering").await?;
 
     // ── Setup: alice (sender), bob (recipient, single device).
-    let alice_token = dev_login(
-        &server,
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-    )
-    .await?;
-    let bob_did = "did:web:bob-offline-ordering.example";
+    let alice_did =
+        actor_did_for_service_full_id(server.service_full_id(), "offline-ordering-alice")?;
+    let alice = server
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
+    let alice_token = alice.token.clone();
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-offline-ordering")?;
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000ba";
-    let bob_token = dev_login(&server, bob_did, bob_device).await?;
+    let bob = server.demo_client(&bob_did, bob_device).await?;
+    let bob_token = bob.token.clone();
     // Sanity: alice can also log in on a separate device id so the
     // sender's session is a separate row from the recipient's. (Not
     // strictly required by the scenario, but mirrors the implementor's
     // hint of "two devices for alice and one for bob".)
-    let _alice_token_b = dev_login(
-        &server,
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000ab",
-    )
-    .await?;
+    let _alice_device_b = server
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000ab")
+        .await?;
 
     // ── Step 2: alice sends msg 1 to bob's device.
     send_to_device(
         &server,
         &alice_token,
         DeviceMessageRequest {
-            recipient: bob_did,
+            recipient: &bob_did,
             device_id: bob_device,
             device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c101",
             idempotency_key: "ct10-msg-1",
@@ -100,7 +97,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         &server,
         &alice_token,
         DeviceMessageRequest {
-            recipient: bob_did,
+            recipient: &bob_did,
             device_id: bob_device,
             device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
             idempotency_key: "ct10-msg-2",
@@ -113,7 +110,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         &server,
         &alice_token,
         DeviceMessageRequest {
-            recipient: bob_did,
+            recipient: &bob_did,
             device_id: bob_device,
             device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c103",
             idempotency_key: "ct10-msg-3",
@@ -164,7 +161,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
         &server,
         &alice_token,
         DeviceMessageRequest {
-            recipient: bob_did,
+            recipient: &bob_did,
             device_id: bob_device,
             device_message_id: "ak:device_message:0196419b-0000-7000-8000-00000000c102",
             idempotency_key: "ct10-msg-2-replay",
@@ -183,7 +180,7 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     }
 
     let conflicting = device_message_send_request(
-        bob_did,
+        &bob_did,
         bob_device,
         "ak:device_message:0196419b-0000-7000-8000-00000000c102",
         "ak.mls.application",

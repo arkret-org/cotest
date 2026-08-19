@@ -4,7 +4,7 @@
 //!
 //! ```ignore
 //! let server = ArkretServer::spawn("my-scenario").await?;
-//! let alice = server.register_client("did:webvh:z6mkfixture:alice.example", "@alice", "ak:device:01904100-0000-7000-8000-0000000000a1").await?;
+//! let alice = server.register_client(&alice_did, "@alice", "ak:device:01904100-0000-7000-8000-0000000000a1").await?;
 //! let realm_id = alice.create_realm("Some Realm").await?;
 //! ```
 //!
@@ -12,7 +12,7 @@
 //!
 //! ```ignore
 //! let alice = TestActorBuilder::new(&server, "@alice")
-//!     .with_did("did:webvh:z6mkfixture:alice.example")
+//!     .with_did(&alice_did)
 //!     .with_device("ak:device:01904100-0000-7000-8000-0000000000a1")
 //!     .with_realm("Some Realm")
 //!     .create()
@@ -36,7 +36,8 @@ use std::fmt;
 
 use anyhow::{Context, Result};
 
-use crate::harness::{ArkretServer, TestActorClient, fixture_webvh_did};
+use crate::harness::{ArkretServer, TestActorClient};
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 /// Tracks the realms a scenario asked the builder to create as part of the
 /// fixture preamble. Each entry stores the original requested name and the
@@ -122,8 +123,9 @@ impl<'a> TestActorBuilder<'a> {
     ///
     /// `handle` accepts either the bare nickname (`alice`) or the leading-`@`
     /// form (`@alice`) — both shapes appear in existing scenarios. The default
-    /// DID is derived as `did:webvh:z6mkfixture:<bare-handle>.example` and the
-    /// default primary device id as `dev_<bare-handle>`, both overridable.
+    /// DID is the deterministic harness DID for `bare-handle` scoped to the
+    /// server's service full id, and the default primary device id is
+    /// `dev_<bare-handle>`, both overridable.
     pub fn new(server: &'a ArkretServer, handle: &str) -> Self {
         let handle = handle.to_owned();
         Self {
@@ -135,8 +137,8 @@ impl<'a> TestActorBuilder<'a> {
         }
     }
 
-    /// Override the DID. By default the builder derives
-    /// `did:webvh:z6mkfixture:<bare-handle>.example` from the handle.
+    /// Override the DID. By default the builder derives the deterministic
+    /// harness DID for the bare handle scoped to the server's service full id.
     pub fn with_did(mut self, did: &str) -> Self {
         self.did = Some(did.to_owned());
         self
@@ -171,10 +173,10 @@ impl<'a> TestActorBuilder<'a> {
             .strip_prefix('@')
             .unwrap_or(&self.handle)
             .to_owned();
-        let did = self
-            .did
-            .clone()
-            .unwrap_or_else(|| fixture_webvh_did(&format!("{bare_handle}.example")));
+        let did = match self.did.clone() {
+            Some(did) => did,
+            None => actor_did_for_service_full_id(self.server.service_full_id(), &bare_handle)?,
+        };
         let primary_device = self
             .primary_device
             .clone()
@@ -229,23 +231,15 @@ mod tests {
 
     #[test]
     fn defaults_derive_did_and_device_from_handle() {
-        use crate::harness::{canonical_device_id, fixture_webvh_did};
+        use crate::harness::canonical_device_id;
 
         // Build the spec without driving create() so we can assert the
-        // derivations the builder applies. We use a dummy server reference
-        // by leaking a never-spawned ArkretServer through a builder method
-        // that does not touch it — `with_*` methods are all pure setters.
-        //
-        // Note: we cannot construct a ArkretServer in a unit test, so we
-        // instead verify the derivation logic directly via the same helpers
-        // create() uses.
+        // derivations the builder applies. The default DID derivation needs a
+        // live server's service full id, so it is covered by scenario-level
+        // tests; here we pin the handle strip and the device derivation.
         let raw = "@alice";
         let bare = raw.strip_prefix('@').unwrap_or(raw);
         assert_eq!(bare, "alice");
-        assert_eq!(
-            fixture_webvh_did(&format!("{bare}.example")),
-            "did:webvh:z6mkfixture:alice.example"
-        );
         assert_eq!(
             canonical_device_id(&format!("dev_{bare}")),
             "ak:device:01904100-0000-7000-8000-0000000000a1"

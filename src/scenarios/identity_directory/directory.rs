@@ -1,15 +1,14 @@
 use std::collections::BTreeSet;
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{actor_core_id, expect_api_error, expect_json, invite_create_payload};
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_test_client_device,
-    seal_current_principal_control_frontier, spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+    spawn_with_harness_account_authority,
 };
 
 /// Extract the `realm_id` string from a `create_realm` response, turning a
@@ -28,8 +27,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
-    authorize_test_client_device(&server, &alice, &alice_device_key).await?;
+    let alice_device_key = alice
+        .principal
+        .as_ref()
+        .context("alice carries her provisioned principal")?
+        .device_signing_key
+        .clone();
     // Register account-first, then publish bob's primary localpart through the
     // authenticated localpart lifecycle. Soland derives the canonical handle
     // domain and signed handle claim from that binding.
@@ -42,8 +45,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    let bob_device_key = SigningKey::from_bytes(&[0xb0; 32]);
-    authorize_test_client_device(&server, &bob, &bob_device_key).await?;
+    let bob_device_key = bob
+        .principal
+        .as_ref()
+        .context("bob carries his provisioned principal")?
+        .device_signing_key
+        .clone();
     let service_host = server
         .base_url()
         .host_str()

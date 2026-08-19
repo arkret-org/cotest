@@ -60,6 +60,7 @@ arkret-canonical = {workspace = true}
 garth = {workspace = true}
 arkret-hlc = {workspace = true}
 arkret-identifiers = {workspace = true}
+arkret-identity = {workspace = true}
 arkret-lattice-registry = {workspace = true}
 arkret-state = {workspace = true}
 arkret-crypto = {workspace = true,features = ["blob-aead", "secret-share"]}
@@ -140,6 +141,7 @@ arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
 arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
 inkson = {path = "../inkson"}
 arkret-identifiers = {path = "../arkret-rust-sdk/crates/identifiers"}
+arkret-identity = {path = "../arkret-rust-sdk/crates/identity"}
 arkret-lattice-registry = {path = "../arkret-rust-sdk/crates/lattice-registry"}
 arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration"}
 arkret-models-crypto = {path = "../arkret-rust-sdk/crates/models-crypto"}

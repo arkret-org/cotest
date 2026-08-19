@@ -1,5 +1,4 @@
 use anyhow::Result;
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -7,8 +6,7 @@ use crate::harness::{
     TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status, submit_event,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_device_public_key,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
@@ -20,19 +18,11 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
-    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
-    authorize_device_public_key(
-        &server,
-        &alice.token,
-        &alice.actor,
-        &alice.device_id,
-        &alice_device_key,
-    )
-    .await?;
     let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "authz-bob")?;
     let bob = server
         .register_client(
-            "did:web:bob-authz.example",
+            &bob_did,
             "@bob-authz",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
@@ -311,15 +301,6 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-a11ce0000001",
         )
         .await?;
-    let alice_device_key = SigningKey::from_bytes(&[0xa1; 32]);
-    authorize_device_public_key(
-        &server,
-        &alice.token,
-        &alice.actor,
-        &alice.device_id,
-        &alice_device_key,
-    )
-    .await?;
     let alice_core_id = actor_core_id(&alice.actor)?;
 
     // client-sync.md: the account subscribe surface is read-only — there is no

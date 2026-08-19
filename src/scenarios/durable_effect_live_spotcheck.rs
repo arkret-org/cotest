@@ -28,6 +28,7 @@ use crate::harness::{
     CanonicalJsonBody, TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
     moderation_report_request,
 };
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 use crate::transcripts::record_vector_event;
 
 const OPERATION_REGISTRY_REF: &str = "registry/operation-registry.json";
@@ -156,15 +157,15 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let registry = load_operation_registry()?;
     let group = TestServerGroup::single("durable-effect-spotcheck").await?;
     let server = group.server(0);
+    let alice_did =
+        actor_did_for_service_full_id(server.service_full_id(), "alice-durable-effect")?;
     let alice = server
-        .demo_client(
-            "did:web:alice-durable-effect.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-durable-effect")?;
     let bob = server
         .register_client(
-            "did:web:bob-durable-effect.example",
+            &bob_did,
             "bob-durable-effect",
             "ak:device:01904100-0000-7000-8000-0000000000b1",
         )

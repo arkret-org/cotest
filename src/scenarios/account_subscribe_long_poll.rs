@@ -12,31 +12,20 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, anyhow};
 use base64::Engine as _;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    ArkretServer, TestActorClient, account_subscribe_delta_from_text, actor_core_id,
-    default_event_verification_method, events_frontier_request_body, eventually,
+    account_subscribe_delta_from_text, actor_core_id, events_frontier_request_body, eventually,
     expect_account_subscribe_delta, expect_account_subscribe_realm_delta, invite_create_payload,
     message_create_text_payload,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, authorize_test_client_device,
-    spawn_with_harness_account_authority,
+    actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
 
 const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
-
-async fn authorize_subscribe_client(server: &ArkretServer, client: &TestActorClient) -> Result<()> {
-    let verification_method = default_event_verification_method(&client.actor);
-    let signing_key = SigningKey::from_bytes(&arkret::signatures::development_signing_key_seed(
-        &verification_method,
-    ));
-    authorize_test_client_device(server, client, &signing_key).await
-}
 
 pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
     let server_owner =
@@ -53,7 +42,6 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-00000000b501",
         )
         .await?;
-    authorize_subscribe_client(server, &alice).await?;
     let bob = server
         .register_client(
             &bob_did,
@@ -61,7 +49,6 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-00000000b502",
         )
         .await?;
-    authorize_subscribe_client(server, &bob).await?;
     let realm_id = alice.create_realm("Wait-For Barrier Realm").await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
 
@@ -148,7 +135,6 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    authorize_subscribe_client(server, &alice).await?;
     let realm_id = alice.create_realm("Quiet Incremental Realm").await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
     alice
@@ -213,7 +199,6 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    authorize_subscribe_client(server, &alice).await?;
     let realm_id = alice.create_realm("Long-Poll Recovery Realm").await?;
     let strand_id = alice.default_strand_id(&realm_id)?;
     alice
@@ -290,14 +275,12 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    authorize_subscribe_client(server, &alice).await?;
     let bob = TestActorBuilder::new(server, "@bob-sync")
         .with_did(&bob_did)
         .with_device("ak:device:01904100-0000-7000-8000-0000000000b1")
         .create()
         .await?;
     let bob_client = bob.client();
-    authorize_subscribe_client(server, bob_client).await?;
 
     let created = alice
         .create_realm_with(serde_json::json!({
@@ -500,14 +483,12 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    authorize_subscribe_client(server, &alice).await?;
     let bob = TestActorBuilder::new(server, "@bob-cancel")
         .with_did(&bob_did)
         .with_device("ak:device:01904100-0000-7000-8000-0000000000b2")
         .create()
         .await?;
     let bob_client = bob.client();
-    authorize_subscribe_client(server, bob_client).await?;
     let realm_id = alice.create_realm("Cancelled Invite Realm").await?;
     let invite_id = create_invite_now(&alice, &realm_id, bob_client).await?;
 

@@ -4,7 +4,7 @@
 //! device-key bundle and exercising `/_arkret/self/keys/{query,claim}` to confirm
 //! the upload is visible.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 use serde_json::json;
@@ -13,25 +13,25 @@ use crate::harness::{
     ArkretServer, TestActorClient, expect_json, message_create_text_payload_for_strand,
     parse_strand_id,
 };
-use crate::scenarios::identity_test_support::{
-    authorize_device_public_key, signed_keys_upload_body,
-};
+use crate::scenarios::identity_test_support::signed_keys_upload_body;
 
 const KEYS_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
 
 pub async fn run(
     server: &ArkretServer,
-    token: &str,
-    actor_id: &str,
+    client: &TestActorClient,
 ) -> Result<(TestActorClient, String, String)> {
-    // keys/upload verifies its typed request signature against the accepted
-    // device projection. Publish the principal device directory before
-    // authorizing the device; the adapter realm/message then continue at actor
-    // sequence 3/4.
-    let device_key = SigningKey::from_bytes(&[0x7a; 32]);
-    authorize_device_public_key(server, token, actor_id, KEYS_DEVICE_ID, &device_key).await?;
-    let (actor, realm_id, message_event_id) = submit_adapter_event(server, token, actor_id).await?;
-    upload_and_inspect_keys(server, token, actor_id, &device_key).await?;
+    // The bootstrap already authorized the founding device; sign the upload
+    // with its provisioned key.
+    let device_key = client
+        .principal
+        .as_ref()
+        .context("client carries its provisioned principal")?
+        .device_signing_key
+        .clone();
+    let (actor, realm_id, message_event_id) =
+        submit_adapter_event(server, &client.token, &client.actor).await?;
+    upload_and_inspect_keys(server, &client.token, &client.actor, &device_key).await?;
     Ok((actor, realm_id, message_event_id))
 }
 

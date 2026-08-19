@@ -5,23 +5,23 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{
-    ArkretServer, add_member, create_realm, dev_login, expect_api_error, expect_json,
+    ArkretServer, add_member, create_realm, expect_api_error, expect_json,
     member_join_payload_value, message_create_text_payload,
 };
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
     // CT-12: scaffold-driven, parallel-safe.
     let scaffold = crate::fixtures::TestScaffold::fresh("space-permissions").await?;
     let server = scaffold.server();
-    let alice = dev_login(
-        server,
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-    )
-    .await?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "space-alice")?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-space")?;
+    let alice = server
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
+        .await?;
     let bob = server
         .register_client(
-            "did:web:bob-space.example",
+            &bob_did,
             "@bob-space",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
@@ -36,18 +36,12 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
     )
     .await?;
 
-    let realm_id =
-        create_realm(server, &alice, "did:web:alice.example", "Permission Space").await?;
-    let alice_client = server.client_with_token(
-        "did:web:alice.example",
-        "ak:device:01904100-0000-7000-8000-0000000000a1",
-        alice.clone(),
-    )?;
-    let mut unauthorized_join = alice_client
+    let realm_id = create_realm(server, &alice.token, &alice_did, "Permission Space").await?;
+    let mut unauthorized_join = alice
         .author_event(
             &realm_id,
             "ak.member.state",
-            member_join_payload_value(&realm_id, "did:web:bob-space.example")?,
+            member_join_payload_value(&realm_id, &bob_did)?,
         )
         .await?;
     rebind_authored_event(&mut unauthorized_join, &bob.actor)?;
@@ -77,7 +71,7 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
         server
             .http()
             .delete(server.url(&format!("/_soland/self/spaces/{realm_id}")))
-            .bearer_auth(&alice),
+            .bearer_auth(&alice.token),
         StatusCode::NOT_FOUND,
         "unrecognized_endpoint",
     )
@@ -88,15 +82,14 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
 
 pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Result<()> {
     let server = ArkretServer::spawn("space-visibility").await?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "visible-alice")?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-visible")?;
     let alice = server
-        .demo_client(
-            "did:web:alice.example",
-            "ak:device:01904100-0000-7000-8000-0000000000a1",
-        )
+        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let bob = server
         .register_client(
-            "did:web:bob-visible.example",
+            &bob_did,
             "@bob-visible",
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
@@ -158,14 +151,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     .await?;
 
     let pre_member_seal = current_seal_id(&alice, &realm_id).await?;
-    add_member(
-        &server,
-        &alice.token,
-        "did:web:alice.example",
-        &realm_id,
-        "did:web:bob-visible.example",
-    )
-    .await?;
+    add_member(&server, &alice.token, &alice_did, &realm_id, &bob_did).await?;
     await_seal_advance(&alice, &realm_id, &pre_member_seal).await?;
     alice
         .grant_realm_actions_to_client(&realm_id, &bob, &["ak.message.create"])

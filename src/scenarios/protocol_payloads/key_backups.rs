@@ -39,7 +39,7 @@ use crate::harness::{ArkretServer, expect_json, wire_negative_from_sdk};
 
 pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
-/// Must match the device id minted by `dev_login` in
+/// Must match the device id minted by the typed bootstrap in
 /// [`super::events_keys_device_blob_push_and_moderation_surfaces_work`]: the
 /// unlock proof binds `requesting_device_id` to the authenticated session
 /// device.

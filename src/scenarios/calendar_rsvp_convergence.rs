@@ -23,9 +23,10 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{ArkretServer, TestActorClient, actor_core_id, eventually, expect_json};
+use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
-const ALICE_DID: &str = "did:web:cotest-rsvp-alice.example";
-const BOB_DID: &str = "did:web:cotest-rsvp-bob.example";
+const ALICE_LOCAL: &str = "cotest-rsvp-alice";
+const BOB_LOCAL: &str = "cotest-rsvp-bob";
 /// The Strand id of a create the server has accepted.
 ///
 /// A Strand is an event-derived kind: its id is `retype(event_id)` of its own
@@ -40,7 +41,7 @@ fn created_strand_id(submitted: &Value) -> Result<String> {
     Ok(arkret_identifiers::StrandId::from_event_id(&event_id).to_string())
 }
 
-fn calendar_subtree() -> Result<Value> {
+fn calendar_subtree(alice_did: &str, bob_did: &str) -> Result<Value> {
     Ok(json!({
         "start": "2026-06-22T09:00:00",
         "end": "2026-06-22T10:00:00",
@@ -50,8 +51,8 @@ fn calendar_subtree() -> Result<Value> {
         "status": "confirmed",
         "recurrence": {"frequency": "weekly", "count": 10},
         "attendees": [
-            {"actor_id": actor_core_id(ALICE_DID)?, "role": "organizer"},
-            {"actor_id": actor_core_id(BOB_DID)?, "role": "required"}
+            {"actor_id": actor_core_id(alice_did)?, "role": "organizer"},
+            {"actor_id": actor_core_id(bob_did)?, "role": "required"}
         ]
     }))
 }
@@ -62,8 +63,9 @@ fn inkson_rsvp_payload(
     actor_id: &str,
     status: &str,
     basis: &[String],
+    attendees: (&str, &str),
 ) -> Result<Value> {
-    let calendar_fields = serde_json::from_value(calendar_subtree()?)?;
+    let calendar_fields = serde_json::from_value(calendar_subtree(attendees.0, attendees.1)?)?;
     let basis = basis
         .iter()
         .cloned()
@@ -306,26 +308,30 @@ async fn submit_prepared_event(
 }
 
 pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()> {
-    let alice_core_id = actor_core_id(ALICE_DID)?;
-    let bob_core_id = actor_core_id(BOB_DID)?;
     let server = ArkretServer::spawn("calendar-rsvp-convergence").await?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), ALICE_LOCAL)?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), BOB_LOCAL)?;
+    let alice_did = alice_did.as_str();
+    let bob_did = bob_did.as_str();
+    let alice_core_id = actor_core_id(alice_did)?;
+    let bob_core_id = actor_core_id(bob_did)?;
     let alice = server
         .register_client(
-            ALICE_DID,
+            alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000c1",
         )
         .await?;
     let alice_second_device = server
         .register_client(
-            ALICE_DID,
+            alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000c2",
         )
         .await?;
     let bob = server
         .register_client(
-            BOB_DID,
+            bob_did,
             "@cotest-rsvp-bob",
             "ak:device:01904100-0000-7000-8000-0000000000b1",
         )
@@ -351,7 +357,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let calendar_grant_refs = grant_calendar_actions(&alice, &realm_id, &member_seal).await?;
     let alice_grant_seal = current_seal(&alice, &realm_id).await?;
     let bob_grant_refs =
-        grant_calendar_rsvp_to(&alice, &realm_id, BOB_DID, &alice_grant_seal).await?;
+        grant_calendar_rsvp_to(&alice, &realm_id, bob_did, &alice_grant_seal).await?;
 
     // Activation is one canonical pair: the schema ref plus the calendar
     // namespace. A lone ref or a lone subtree is calendar_activation_mismatch.
@@ -366,7 +372,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Weekly sync",
-                        "fields": {"calendar": calendar_subtree()?}
+                        "fields": {"calendar": calendar_subtree(alice_did, bob_did)?}
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
                     "created_by": alice_core_id,
@@ -427,7 +433,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     bob.submit_event_with_causal_refs(
         &realm_id,
         "ak.rsvp.set",
-        inkson_rsvp_payload(&realm_id, &strand_id, BOB_DID, "accepted", &frontier)?,
+        inkson_rsvp_payload(
+            &realm_id,
+            &strand_id,
+            bob_did,
+            "accepted",
+            &frontier,
+            (alice_did, bob_did),
+        )?,
         frontier.clone(),
         bob_grant_refs,
     )
@@ -445,7 +458,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "accepted",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             frontier.clone(),
             calendar_grant_refs.clone(),
         )
@@ -454,7 +474,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "declined", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "declined",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             frontier.clone(),
             calendar_grant_refs.clone(),
         )
@@ -488,7 +515,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "ak.rsvp.set",
             // The entry basis stays the schedule frontier; the extra causal
             // edges are what dominate the earlier RSVP heads.
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "tentative", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "tentative",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             resolving_basis,
             calendar_grant_refs.clone(),
         )
@@ -518,7 +552,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "accepted",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             next_pair_basis.clone(),
             calendar_grant_refs.clone(),
         )
@@ -527,7 +568,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "declined", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "declined",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             next_pair_basis,
             calendar_grant_refs.clone(),
         )
@@ -554,7 +602,14 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "tentative", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "tentative",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             final_resolution_basis,
             calendar_grant_refs,
         )
@@ -574,7 +629,6 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 /// available; environments without either Postgres source report an explicit
 /// live-row skip while the always-on in-memory convergence scenario still runs.
 pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
-    let alice_core_id = actor_core_id(ALICE_DID)?;
     let configured_database = std::env::var("COTEST_SOLAND_DATABASE_URL")
         .ok()
         .filter(|url| !url.trim().is_empty());
@@ -609,16 +663,21 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     ];
     let mut server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), ALICE_LOCAL)?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), BOB_LOCAL)?;
+    let alice_did = alice_did.as_str();
+    let bob_did = bob_did.as_str();
+    let alice_core_id = actor_core_id(alice_did)?;
     let alice = server
         .register_client(
-            ALICE_DID,
+            alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000d1",
         )
         .await?;
     let alice_second_device = server
         .register_client(
-            ALICE_DID,
+            alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000d2",
         )
@@ -649,7 +708,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Durable weekly sync",
-                        "fields": {"calendar": calendar_subtree()?}
+                        "fields": {"calendar": calendar_subtree(alice_did, bob_did)?}
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
                     "created_by": alice_core_id,
@@ -666,7 +725,14 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "accepted",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             frontier.clone(),
             grants.clone(),
         )
@@ -675,7 +741,14 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .author_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "declined", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "declined",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             frontier.clone(),
             grants.clone(),
         )
@@ -693,10 +766,10 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let mut server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
     let alice = server
-        .demo_client(ALICE_DID, "ak:device:01904100-0000-7000-8000-0000000000d1")
+        .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
     let alice_second_device = server
-        .demo_client(ALICE_DID, "ak:device:01904100-0000-7000-8000-0000000000d2")
+        .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d2")
         .await?;
     let restarted_strand = read_strand(&alice, &strand_id).await?;
     let heads = heads_for(&restarted_strand, &alice_core_id);
@@ -721,7 +794,14 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .submit_event_with_causal_refs(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "tentative", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "tentative",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
             resolution_basis,
             grants,
         )
@@ -731,7 +811,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
     let alice = server
-        .demo_client(ALICE_DID, "ak:device:01904100-0000-7000-8000-0000000000d1")
+        .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
     let heads = heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id);
     if heads.len() != 1 || head_statuses(&heads) != vec!["tentative".to_owned()] {
@@ -751,11 +831,15 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
 /// reached `ak.component.calendar.rsvp.v1` and the response silently did not
 /// converge.
 pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
-    let alice_core_id = actor_core_id(ALICE_DID)?;
     let server = ArkretServer::spawn("calendar-rsvp-effectless").await?;
+    let alice_did = actor_did_for_service_full_id(server.service_full_id(), ALICE_LOCAL)?;
+    let bob_did = actor_did_for_service_full_id(server.service_full_id(), BOB_LOCAL)?;
+    let alice_did = alice_did.as_str();
+    let bob_did = bob_did.as_str();
+    let alice_core_id = actor_core_id(alice_did)?;
     let alice = server
         .register_client(
-            ALICE_DID,
+            alice_did,
             "@cotest-rsvp-alice",
             "ak:device:01904100-0000-7000-8000-0000000000c3",
         )
@@ -786,7 +870,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Weekly sync",
-                        "fields": {"calendar": calendar_subtree()?}
+                        "fields": {"calendar": calendar_subtree(alice_did, bob_did)?}
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
                     "created_by": alice_core_id,
@@ -805,7 +889,14 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
         .author_event(
             &realm_id,
             "ak.rsvp.set",
-            inkson_rsvp_payload(&realm_id, &strand_id, ALICE_DID, "accepted", &frontier)?,
+            inkson_rsvp_payload(
+                &realm_id,
+                &strand_id,
+                alice_did,
+                "accepted",
+                &frontier,
+                (alice_did, bob_did),
+            )?,
         )
         .await?;
     let submission = crate::publication::initial_submission(event, "")?;
