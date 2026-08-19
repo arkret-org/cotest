@@ -181,11 +181,19 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     returningUser.fullDid = account.fullDid;
     const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
+    let firstDeviceId = "";
     try {
       // 2. First login (new user).
       await test.step("new user signs in and reaches the app", async () => {
         await jointPage.gotoLogin();
         await serverLoginViaCoauth(page, account);
+        firstDeviceId = await page.evaluate(() => {
+          const config = JSON.parse(
+            window.localStorage.getItem("inkson.config.v1") ?? "{}",
+          ) as { device_id?: string };
+          return config.device_id ?? "";
+        });
+        expect(firstDeviceId, "first login must persist its device id").not.toBe("");
       });
 
       // 3. Session persists across a full reload — the core "reload bounces to
@@ -208,6 +216,18 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       // 5. Returning-user login (same account, no re-registration).
       await test.step("returning user signs back in", async () => {
         await serverLoginViaCoauth(page, account);
+        expect(new URL(page.url()).pathname).not.toBe("/onboarding");
+        await expect(page.getByTestId("root-anchored-device-recovery")).toHaveCount(0);
+        const returningDeviceId = await page.evaluate(() => {
+          const config = JSON.parse(
+            window.localStorage.getItem("inkson.config.v1") ?? "{}",
+          ) as { device_id?: string };
+          return config.device_id ?? "";
+        });
+        expect(
+          returningDeviceId,
+          "hard re-login must preserve the durable device identity",
+        ).toBe(firstDeviceId);
       });
     } finally {
       await jointPage.close();
