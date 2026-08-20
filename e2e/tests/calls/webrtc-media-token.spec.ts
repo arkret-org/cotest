@@ -44,25 +44,28 @@ import {
 // `<service full id>#media-1`. The LiveKit JWT `iss` is instead the
 // runner-configured SOLAND_LIVEKIT_API_KEY, a backend credential that never
 // enters the Realm cell.
-const SERVICE_ID = solandServiceId();
-const ISSUER_KID = `${solandServiceFullId()}#media-1`;
+// These stay lazy functions: the joint preflight lists Playwright tests with
+// no services up, so env reads must not run at module load.
+const serviceId = (): string => solandServiceId();
+const issuerKid = (): string => `${solandServiceFullId()}#media-1`;
 const LIVEKIT_API_KEY = "did:web:media.example#media-token";
 // token_endpoint origin must equal the deployment's public base URL —
 // soland refuses to mint for a focus whose token endpoint names another
 // service (media-service-binding.md §2.1 trust root).
-const MEDIA_TOKEN_ENDPOINT = `${solandBaseUrl()}/_arkret/self/rtc/token`;
-const LIVEKIT_FOCUS: MediaFocusConfig = {
+const mediaTokenEndpoint = (): string =>
+  `${solandBaseUrl()}/_arkret/self/rtc/token`;
+const livekitFocus = (): MediaFocusConfig => ({
   focus_id: "livekit-lhr",
   focus_kind: "livekit",
-  token_endpoint: MEDIA_TOKEN_ENDPOINT,
+  token_endpoint: mediaTokenEndpoint(),
   connect_url: "wss://livekit.media.example",
-};
-const ARKRET_NATIVE_FOCUS: MediaFocusConfig = {
+});
+const arkretNativeFocus = (): MediaFocusConfig => ({
   focus_id: "arkret-native-reference",
   focus_kind: "arkret_native",
-  token_endpoint: MEDIA_TOKEN_ENDPOINT,
+  token_endpoint: mediaTokenEndpoint(),
   connect_url: "wss://native.media.example",
-};
+});
 
 test.describe.configure({ mode: "serial" });
 
@@ -77,7 +80,7 @@ test.describe("media token exchange", () => {
       call_id: callId,
       actor_id: alice.did,
       device_id: alice.deviceId,
-      focus_id: LIVEKIT_FOCUS.focus_id,
+      focus_id: livekitFocus().focus_id,
       desired_media: { audio: true, video: true, screen: false },
     });
     expect(response.status(), await response.text()).toBe(200);
@@ -85,9 +88,9 @@ test.describe("media token exchange", () => {
 
     // Outcome shape (CallMediaTokenExchangeOutcome). The backend kind is
     // The canonical CallMediaTokenExchangeOutcome field is `backend_kind`.
-    expect(body.focus_id).toBe(LIVEKIT_FOCUS.focus_id);
+    expect(body.focus_id).toBe(livekitFocus().focus_id);
     expect(body.backend_kind).toBe("livekit");
-    expect(body.connect_url).toBe(LIVEKIT_FOCUS.connect_url);
+    expect(body.connect_url).toBe(livekitFocus().connect_url);
     expect(typeof body.backend_token).toBe("string");
     // participant_identity is a fresh `ak:rtc_participant:<uuidv7>` handle.
     expect(body.participant_identity).toMatch(
@@ -98,10 +101,10 @@ test.describe("media token exchange", () => {
     // both `issued_at` and `expires_at` (media-service-binding.md §3).
     const binding = body.participant_binding as Record<string, unknown>;
     expect(binding.scheme).toBe(PARTICIPANT_BINDING_SCHEME);
-    expect(binding.issuer_kid).toBe(ISSUER_KID);
+    expect(binding.issuer_kid).toBe(issuerKid());
     expect(binding.realm_id).toBe(realmId);
     expect(binding.call_id).toBe(callId);
-    expect(binding.focus_id).toBe(LIVEKIT_FOCUS.focus_id);
+    expect(binding.focus_id).toBe(livekitFocus().focus_id);
     expect(binding.actor_id).toBe(alice.did);
     expect(binding.device_id).toBe(alice.deviceId);
     expect(binding.participant_identity).toBe(body.participant_identity);
@@ -116,7 +119,7 @@ test.describe("media token exchange", () => {
     // service_signature is a typed { kid, sig } object: kid is the realm
     // media-service anchor (`did:...#...`), sig is the detached signature.
     const serviceSignature = body.service_signature as Record<string, unknown>;
-    expect(serviceSignature.kid).toBe(ISSUER_KID);
+    expect(serviceSignature.kid).toBe(issuerKid());
     expect(serviceSignature.kid).toMatch(/^did:[^#]+#.+$/);
     expect(typeof serviceSignature.sig).toBe("string");
     expect((serviceSignature.sig as string).length).toBeGreaterThan(0);
@@ -125,7 +128,7 @@ test.describe("media token exchange", () => {
     const claims = decodeLiveKitToken(body.backend_token as string);
     // iss = LiveKit API Key (SOLAND_LIVEKIT_API_KEY in the joint runner) —
     // deployment configuration, deliberately distinct from the Realm-anchored
-    // ISSUER_KID that signs the participant_binding.
+    // issuerKid() that signs the participant_binding.
     expect(claims.iss).toBe(LIVEKIT_API_KEY);
     expect(claims.sub).toBe(body.participant_identity);
     // exp/iat are NumericDate (Unix epoch seconds); exp MUST be within 600s
@@ -138,13 +141,13 @@ test.describe("media token exchange", () => {
     const expectedRoom = expectedLiveKitRoom(
       realmId,
       callId,
-      LIVEKIT_FOCUS.focus_id,
+      livekitFocus().focus_id,
     );
     expect(video.room).toBe(expectedRoom);
     // LiveKit room name MUST NOT leak raw protocol identifiers.
     expect(video.room).not.toContain(callId);
     expect(video.room).not.toContain(realmId);
-    expect(video.room).not.toContain(LIVEKIT_FOCUS.focus_id);
+    expect(video.room).not.toContain(livekitFocus().focus_id);
     expect(video.roomJoin).toBe(true);
     expect(video.canPublish).toBe(true);
     expect(video.canSubscribe).toBe(true);
@@ -165,19 +168,19 @@ test.describe("media token exchange", () => {
       call_id: callId,
       actor_id: alice.did,
       device_id: alice.deviceId,
-      focus_id: ARKRET_NATIVE_FOCUS.focus_id,
+      focus_id: arkretNativeFocus().focus_id,
       desired_media: { audio: true, video: true, screen: false },
     });
     expect(response.status(), await response.text()).toBe(200);
     const body = await response.json();
     expect(body.backend_kind).toBe("arkret_native");
-    expect(body.connect_url).toBe(ARKRET_NATIVE_FOCUS.connect_url);
+    expect(body.connect_url).toBe(arkretNativeFocus().connect_url);
 
     const token = decodeArkretNativeToken(body.backend_token);
-    expect(token.kid).toBe(ISSUER_KID);
+    expect(token.kid).toBe(issuerKid());
     expect(token.sig.length).toBeGreaterThan(0);
     expect(token.payload.call_id).toBe(callId);
-    expect(token.payload.focus_id).toBe(ARKRET_NATIVE_FOCUS.focus_id);
+    expect(token.payload.focus_id).toBe(arkretNativeFocus().focus_id);
     expect(token.payload.participant_identity).toBe(body.participant_identity);
     expect(token.payload.media).toEqual({
       audio: true,
@@ -231,7 +234,7 @@ test.describe("media token exchange", () => {
       call_id: callId,
       actor_id: member.did,
       device_id: member.deviceId,
-      focus_id: LIVEKIT_FOCUS.focus_id,
+      focus_id: livekitFocus().focus_id,
     });
     expect(denied.status()).toBe(403);
     expect(wireErrCode(await denied.json())).toBe("capability_denied");
@@ -250,7 +253,7 @@ test.describe("media token exchange", () => {
       call_id: callId,
       actor_id: member.did,
       device_id: member.deviceId,
-      focus_id: LIVEKIT_FOCUS.focus_id,
+      focus_id: livekitFocus().focus_id,
     });
     expect(admitted.status(), await admitted.text()).toBe(200);
     const body = await admitted.json();
@@ -277,8 +280,8 @@ async function setupMediaCall(request: APIRequestContext): Promise<{
     aliceToken,
     realmId,
     alice.did,
-    SERVICE_ID,
-    [LIVEKIT_FOCUS, ARKRET_NATIVE_FOCUS],
+    serviceId(),
+    [livekitFocus(), arkretNativeFocus()],
   );
 
   // Token exchange is decoupled from any prior signaling session

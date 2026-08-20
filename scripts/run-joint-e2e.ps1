@@ -1059,12 +1059,16 @@ function New-JointTlsAssets {
     $serverCsr = Join-Path $Directory "server.csr"
     $serverPem = Join-Path $Directory "server.pem"
     $sanFile = Join-Path $Directory "server-san.cnf"
+    # PowerShell 7.6.5 splits `"subjectAltName=" + (<pipeline> -join ",")` into
+    # two array elements when written inline in the array literal; bind the
+    # string first (same class of regression as run-cotest's Parse-CotestLog).
+    $subjectAltNameLine = "subjectAltName=" + (($DnsNames | ForEach-Object { "DNS:$_" }) -join ",")
     $sanLines = @(
         "[req_ext]",
         "basicConstraints=critical,CA:FALSE",
         "keyUsage=critical,digitalSignature,keyEncipherment",
         "extendedKeyUsage=serverAuth",
-        "subjectAltName=" + (($DnsNames | ForEach-Object { "DNS:$_" }) -join ",")
+        $subjectAltNameLine
     )
     [System.IO.File]::WriteAllLines($sanFile, $sanLines, [System.Text.UTF8Encoding]::new($false))
     & $openssl req -newkey rsa:2048 -keyout $serverKey -out $serverCsr -nodes `

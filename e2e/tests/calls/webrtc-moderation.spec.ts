@@ -41,13 +41,15 @@ import {
 // The media service the Realm epoch names is this deployment itself
 // (media-service-binding.md §3 anchoring); token_endpoint origin must equal
 // the deployment's public base URL or soland refuses to mint.
-const SERVICE_ID = solandServiceId();
-const LIVEKIT_FOCUS: MediaFocusConfig = {
+// These stay lazy functions: the joint preflight lists Playwright tests with
+// no services up, so env reads must not run at module load.
+const serviceId = (): string => solandServiceId();
+const livekitFocus = (): MediaFocusConfig => ({
   focus_id: "livekit-lhr",
   focus_kind: "livekit",
   token_endpoint: `${solandBaseUrl()}/_arkret/self/rtc/token`,
   connect_url: "wss://livekit.media.example",
-};
+});
 
 test.describe.configure({ mode: "serial" });
 
@@ -217,8 +219,8 @@ test.describe("call moderation (spec wire)", () => {
       aliceToken,
       realmId,
       alice.did,
-      SERVICE_ID,
-      [LIVEKIT_FOCUS],
+      serviceId(),
+      [livekitFocus()],
     );
     // bob needs ak.call.join to exchange a token before the ban.
     await grantCallCapability(
@@ -243,7 +245,7 @@ test.describe("call moderation (spec wire)", () => {
       call_id: callId,
       actor_id: bob.did,
       device_id: bob.deviceId,
-      focus_id: LIVEKIT_FOCUS.focus_id,
+      focus_id: livekitFocus().focus_id,
     });
     expect(preBan.status(), await preBan.text()).toBe(200);
 
@@ -265,7 +267,7 @@ test.describe("call moderation (spec wire)", () => {
             call_id: callId,
             actor_id: bob.did,
             device_id: bob.deviceId,
-            focus_id: LIVEKIT_FOCUS.focus_id,
+            focus_id: livekitFocus().focus_id,
           });
           postBanBody = await response.json();
           return response.status();
