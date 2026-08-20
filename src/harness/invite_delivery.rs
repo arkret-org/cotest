@@ -2,25 +2,25 @@
 //!
 //! `governance-objects.md` §5.3 keeps the invite token off the Invite read
 //! model: it is transport material delivered on the holder-private
-//! account-data cell `ak.account.invite_delivery` (spec registration pending,
-//! arkret-work spec-gap 0448). The conforming client flow is: the holder opts
+//! account-data cell `ak.account.invite_delivery` (registered as
+//! `arkret_wire::AccountDataKey::ACCOUNT_INVITE_DELIVERY`, wire schema
+//! `ak.schema.invite_delivery.v1`). The conforming client flow is: the holder
+//! opts
 //! the introduction kind into its receive-policy allowlist (§5), the inviter
 //! dispatches the already-accepted `ak.invite.create` (§7), and the invitee
 //! reads the credential back from its own account-data list.
 
 use anyhow::{Context, Result, bail};
 use arkret_models_collaboration::governance::invite_addressing::{
-    IntroductionEvidence, InviteAddress, InviteDeliveryRequestBody, InviteReceivePolicy,
+    IntroductionEvidence, InviteAddress, InviteDelivery, InviteDeliveryRequestBody,
+    InviteReceivePolicy,
 };
 use arkret_models_collaboration::http_bodies::EventsResolveRequestBody;
 use arkret_models_identity::ServiceResolutionCarrier;
+use arkret_wire::AccountDataKey;
 use reqwest::StatusCode;
 
 use super::{TestActorClient, actor_core_id, expect_json};
-
-/// Account-data key the Principal Server writes delivered invite credentials
-/// under. Server-owned: clients never write this key.
-const INVITE_DELIVERY_ACCOUNT_DATA_KEY: &str = "ak.account.invite_delivery";
 
 /// Run the §7 client dispatch for an already-accepted `ak.invite.create` on a
 /// same-service target and read the delivered invite token back from the
@@ -154,18 +154,21 @@ async fn dispatch_invite(
 async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str) -> Result<String> {
     let listed = expect_json(invitee.get("/_arkret/self/account_data"), StatusCode::OK).await?;
     let entries = listed["entries"].as_array().cloned().unwrap_or_default();
-    let cell = entries
-        .iter()
-        .find(|entry| entry["account_data_key"].as_str() == Some(INVITE_DELIVERY_ACCOUNT_DATA_KEY));
-    let token = cell
-        .and_then(|entry| entry["content"]["entries"].as_array())
-        .and_then(|cell_entries| {
-            cell_entries
-                .iter()
-                .find(|entry| entry["invite_id"].as_str() == Some(invite_id))
-        })
-        .and_then(|entry| entry["invite_token"].as_str())
-        .map(str::to_owned);
+    let cell = entries.iter().find(|entry| {
+        entry["account_data_key"].as_str() == Some(AccountDataKey::ACCOUNT_INVITE_DELIVERY)
+    });
+    let token = match cell {
+        Some(cell) => {
+            let delivery: InviteDelivery = serde_json::from_value(cell["content"].clone())
+                .context("invite_delivery account-data cell is not an InviteDelivery")?;
+            delivery
+                .entries
+                .into_iter()
+                .find(|entry| entry.invite_id.as_str() == invite_id)
+                .map(|entry| entry.invite_token)
+        }
+        None => None,
+    };
     token.ok_or_else(|| {
         anyhow::anyhow!(
             "no delivered invite credential for {invite_id} in the invitee account-data list: {}",

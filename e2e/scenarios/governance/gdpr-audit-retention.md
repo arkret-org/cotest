@@ -52,11 +52,12 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
     - 把 alice 的 profile 改成 anonymized `did:web:erased-<hash>`(或保留 DID 但 profile 空)
 12. 断言:alice 的 session token 立刻失效
 
-> **当前阻塞（2026-08-19）**：入口已定义且 soland 受理面已实现（`arkret-work` 任务
-> `2026-08-18-2224-soland-self-erasure-request-endpoint.md`），但受理面只做到「鉴权 + durable
-> 记录意图」；「触发 Account Authority 签发 `erasure_pending` record」尚无 wire 承载，阻塞于
-> spec-open `2026-08-18-2325-self-erasure-intent-has-no-channel-to-the-account-authority.md` 与
-> `2026-08-18-2326-session-grant-introspection-carries-no-authentication-freshness.md`。
+> **当前阻塞（2026-08-19 更新）**：两条协议缺口已裁决闭合（选项 b，入口整体移归 Account
+> Authority，见 spec-done `2026-08-18-2325-self-erasure-intent-has-no-channel-to-the-account-authority.md`
+> 与 `2026-08-18-2326-session-grant-introspection-carries-no-authentication-freshness.md`）；
+> soland 旧受理面已移除。erase 用例端到端驱动现阻塞于 coauth 实现 gate 面入口
+> `ak.gate.account.command.request_erasure`（`arkret-work` 任务
+> `2026-08-19-2212-coauth-self-erasure-gate-endpoint.md`）。
 > 对应 e2e 用例（`gdpr-audit-retention.spec.ts` 的 erase 用例）已显式 skip。
 
 ### Phase D — bob 视角验证 erasure

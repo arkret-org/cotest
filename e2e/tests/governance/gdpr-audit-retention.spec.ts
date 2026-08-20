@@ -103,10 +103,10 @@ test.describe("GDPR / audit / retention", () => {
     test.skip(
       true,
       "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
-        "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
-        "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
-        "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
-        "(spec-open 2026-08-18-2326)",
+        "moved to the Account Authority gate face (account-lifecycle.md §8.1 " +
+        "ak.gate.account.command.request_erasure, POST /_arkret/gate/account/erasure-requests); the spec " +
+        "questions closed (spec-done 2026-08-18-2325/2326) — blocked on the coauth gate-face " +
+        "implementation (arkret-work work/active/2026-08-19-2212)",
     );
     // spec: identity/account-lifecycle.md §3 — erasure pseudonymizes
     // PII, revokes devices, and flips the actor into a permanent
@@ -142,10 +142,10 @@ test.describe("GDPR / audit / retention", () => {
     test.skip(
       true,
       "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
-        "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
-        "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
-        "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
-        "(spec-open 2026-08-18-2326)",
+        "moved to the Account Authority gate face (account-lifecycle.md §8.1 " +
+        "ak.gate.account.command.request_erasure, POST /_arkret/gate/account/erasure-requests); the spec " +
+        "questions closed (spec-done 2026-08-18-2325/2326) — blocked on the coauth gate-face " +
+        "implementation (arkret-work work/active/2026-08-19-2212)",
     );
     // spec: identity/account-lifecycle.md §3 + discovery/profiles-presence.md.
     const stamp = Date.now();
@@ -206,10 +206,10 @@ test.describe("GDPR / audit / retention", () => {
     test.skip(
       true,
       "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
-        "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
-        "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
-        "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
-        "(spec-open 2026-08-18-2326)",
+        "moved to the Account Authority gate face (account-lifecycle.md §8.1 " +
+        "ak.gate.account.command.request_erasure, POST /_arkret/gate/account/erasure-requests); the spec " +
+        "questions closed (spec-done 2026-08-18-2325/2326) — blocked on the coauth gate-face " +
+        "implementation (arkret-work work/active/2026-08-19-2212)",
     );
     // spec: account-lifecycle.md §3 — every erasure lifecycle event MUST
     // appear in the actor's audit log. Account export coverage is separately
@@ -337,10 +337,10 @@ test.describe("GDPR / audit / retention", () => {
       test.skip(
         true,
         "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
-          "(account-lifecycle.md §8.1 ak.self.account.command.request_erasure, soland intake at " +
-          "/_arkret/self/account/erasure-requests) only records the intent durably — blocked on the " +
-          "Account Authority issuance channel (spec-open 2026-08-18-2325) and authentication freshness " +
-          "(spec-open 2026-08-18-2326)",
+          "moved to the Account Authority gate face (account-lifecycle.md §8.1 " +
+          "ak.gate.account.command.request_erasure, POST /_arkret/gate/account/erasure-requests); the spec " +
+          "questions closed (spec-done 2026-08-18-2325/2326) — blocked on the coauth gate-face " +
+          "implementation (arkret-work work/active/2026-08-19-2212)",
       );
       test.skip(!hasDualSoland(), "requires DualSoland runner topology");
 

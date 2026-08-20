@@ -4,7 +4,7 @@
 //! wakeup to two devices to confirm the unregistered one comes back with a
 //! `rejected` gateway_status while the registered one is accepted.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -34,22 +34,15 @@ async fn register_device(server: &ArkretServer, token: &str) -> Result<String> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(push["ok"], true);
-    // push-notifications.md §3.1 closes the register-device response to
-    // `ok` / `registration_id` / `expires_at`: the HMAC-derived push target
-    // pseudonym is service-private and never crosses the wire. soland spells
-    // the gateway-local `registration_id` from the same pairwise tag as the
-    // `ak:pseudonym:push:*` target (interop/push.rs `push_registration_id`),
-    // so this harness — which drives both the registering client and the
-    // notify-calling sync surface against the same deployment — re-spells the
-    // target from the returned handle.
-    let registration_id = push["registration_id"]
-        .as_str()
-        .expect("register-device must return a registration_id");
-    let tag = registration_id
-        .strip_prefix("push_registration:")
-        .expect("registration_id must carry the shared pairwise tag");
-    Ok(format!("ak:pseudonym:push:{tag}"))
+    // push-notifications.md §3.1 requires the register-device response to
+    // return the server-derived `push_target_id`; the harness uses that value
+    // verbatim as the notify target and never re-spells it from the
+    // gateway-local `registration_id`.
+    let outcome: arkret_models_integration::PushRegisterDeviceOutcome =
+        serde_json::from_value(push)
+            .context("register-device response is not a PushRegisterDeviceOutcome")?;
+    assert!(outcome.ok);
+    Ok(outcome.push_target_id)
 }
 
 async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Result<()> {

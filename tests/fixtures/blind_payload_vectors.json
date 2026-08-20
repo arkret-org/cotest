@@ -52,15 +52,6 @@
           "counts": { "unread": 4 }
         }
       }
-    },
-    {
-      "name": "bare_base64url_push_target_id",
-      "payload": {
-        "notification": {
-          "push_target_id": "abcdefghijklmnopqrstuv",
-          "wakeup_kind": "message"
-        }
-      }
     }
   ],
   "negative_cases": [
@@ -430,6 +421,17 @@
       "payload": {
         "notification": {
           "push_target_id": "ak:device:01HYZ8Z000000000000000",
+          "wakeup_kind": "message"
+        }
+      }
+    },
+    {
+      "name": "rejects_bare_base64url_push_target_id",
+      "expected_reason_code": "invalid_field_value",
+      "expected_field_path": "push_target_id",
+      "payload": {
+        "notification": {
+          "push_target_id": "abcdefghijklmnopqrstuv",
           "wakeup_kind": "message"
         }
       }

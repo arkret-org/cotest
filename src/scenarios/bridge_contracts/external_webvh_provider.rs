@@ -113,5 +113,7 @@ fn local_trust_root_has_webvh_validation(root: &Value) -> bool {
         && root["proof_verification"]["controller_proof"] == "eddsa-jcs-2022"
         && root["proof_verification"]["webvh_log_chain"] == "required"
         && root["proof_verification"]["webvh_scid"] == "required"
-        && root["proof_verification"]["webvh_witness_quorum"] == "required_when_policy_present"
+        // soland cannot verify witness evidence, so it declares the quorum
+        // policy fail-closed as `unsupported` instead of claiming enforcement.
+        && root["proof_verification"]["webvh_witness_quorum"] == "unsupported"
 }
