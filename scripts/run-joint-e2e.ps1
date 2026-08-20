@@ -1275,7 +1275,12 @@ function Assert-JointTlsTopology {
         } catch {
             throw "joint TLS topology: cannot read $logUrl over HTTPS: $($_.Exception.Message)"
         }
-        [System.IO.File]::WriteAllText($logPath, [string]$logResponse.Content, [System.Text.UTF8Encoding]::new($false))
+        $logContent = $logResponse.Content
+        if ($logContent -is [byte[]]) {
+            [System.IO.File]::WriteAllBytes($logPath, $logContent)
+        } else {
+            [System.IO.File]::WriteAllText($logPath, [string]$logContent, [System.Text.UTF8Encoding]::new($false))
+        }
         $verifyInput = [pscustomobject]@{ did = $did; log_path = $logPath; profile = "service" } | ConvertTo-Json -Compress
         $verifyOutput = $verifyInput | & $CotestWireBin "webvh-verify-log" 2>&1
         if ($LASTEXITCODE -ne 0) {

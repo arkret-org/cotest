@@ -2,13 +2,7 @@
 // the URL is /realms/<id>/settings/<section> on a fresh navigation?
 
 import { expect, test } from "@playwright/test";
-import {
-  ensureRegistered,
-  issueDevSession,
-  openUserPage,
-  uniqueUser,
-} from "../../helpers/users";
-import { createRealmApi } from "../../helpers/soland-api";
+import { openDpopUserPage } from "../../helpers/users";
 
 test.describe("admin section route", () => {
   test("realm-admin-active-section reflects route on fresh nav", async ({
@@ -16,19 +10,24 @@ test.describe("admin section route", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser("admin-probe");
-    await ensureRegistered(request, alice);
-    const aliceToken = await issueDevSession(request, alice);
-    const alicePage = await openUserPage(browser, alice, {
-      sessionCredential: aliceToken,
-    });
+    // inkson intentionally discards token-only sessions after secure-store
+    // bootstrap (secure_store_effects.rs), so the old dev-bearer injection
+    // bounces back to Sign in. The supported UI entry is the full grant+DPoP
+    // session injection used by every other UI flow.
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      `admin-probe-${stamp}`,
+    );
+    expect(aliceFlow, "DPoP session provisioning").toBeTruthy();
+    const alicePage = aliceFlow!.page;
 
     try {
-      const realmId = await createRealmApi(request, aliceToken, {
+      const realmId = await alicePage.createRealm({
         title: `Admin section probe ${stamp}`,
         discoverability: "listed",
-        default_join_rule: "invite",
-        ownerDid: alice.did,
+        joinRule: "invite",
+        encryptionProfile: "none",
       });
 
       // Land directly on the access admin section via hard navigation (no tab
