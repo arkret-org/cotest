@@ -48,8 +48,6 @@ import {
 } from "../../helpers/real-oidc-login";
 import { assertJointStackNotRequired } from "../../helpers/users";
 
-test.describe.configure({ mode: "serial" });
-
 test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
   const coauth = coauthBaseUrl();
   const optIn = optionalEnv("COTEST_REAL_OIDC_LOGIN");
@@ -153,7 +151,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     }
   });
 
-  test("register → login → reload persists → logout → returning login", async ({
+  test("register → login → reload persists → logout → returning login @returning-login-gate", async ({
     browser,
     request,
   }) => {

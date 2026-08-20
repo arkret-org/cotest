@@ -4,10 +4,13 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_wire::{
-    DEVICE_REVOCATION_DENIED_ACTIONS, DeviceRevocationGateActionClass,
+    AcceptedDevicePossessionProof, AcceptedDevicePossessionProofContext,
+    AcceptedDevicePossessionVerification, AcceptedDeviceRefreshPossessionPurpose, Base64UrlString,
+    DEVICE_REVOCATION_DENIED_ACTIONS, DeviceId, DeviceRevocationGateActionClass,
     DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody,
     DeviceRevocationGateDecision, DeviceRevocationGateDecisionReceipt, DidCoreId, DidUrl, EventId,
-    Hash, PrincipalAuthorityKey, UnsignedDeviceRevocationGateDecisionReceipt,
+    Hash, PrincipalAuthorityKey, SessionGrantId, UnsignedAcceptedDeviceRefreshPossessionProof,
+    UnsignedDeviceRevocationGateDecisionReceipt,
 };
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
 use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _};
@@ -228,22 +231,56 @@ fn request(
 ) -> Result<DeviceRevocationGateCheckRequestBody> {
     let expected_event_id =
         "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e".parse::<EventId>()?;
-    let (expected_device_authorize_event_id, expected_device_generation_ref) =
-        if action_class == DeviceRevocationGateActionClass::SessionGrantIssue {
-            (None, None)
+    let (expected_device_authorize_event_id, expected_device_generation_ref) = if matches!(
+        action_class,
+        DeviceRevocationGateActionClass::SessionGrantIssue
+            | DeviceRevocationGateActionClass::ReturningSessionGrantIssue
+    ) {
+        (None, None)
+    } else {
+        (Some(expected_event_id), Some(7))
+    };
+    let principal_id = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
+    let device_id: DeviceId = "ak:device:0196419b-0000-7000-8000-000000000001".parse()?;
+    let intent_digest = hash(intent)?;
+    let accepted_device_possession_proof =
+        if action_class == DeviceRevocationGateActionClass::SessionGrantRefresh {
+            Some(AcceptedDevicePossessionProof::Refresh(
+                UnsignedAcceptedDeviceRefreshPossessionProof {
+                    context: AcceptedDevicePossessionProofContext::V1,
+                    purpose: AcceptedDeviceRefreshPossessionPurpose::SessionGrantRefresh,
+                    predecessor_session_grant_id: SessionGrantId::from_issuance_digest(
+                        arkret_canonical::sha256_bytes(b"fixture predecessor"),
+                    ),
+                    principal_id: principal_id.clone(),
+                    device_id: device_id.clone(),
+                    audience: DidCoreId::new("ak:did_core:web:ps.example")?,
+                    holder_jkt: "A".repeat(43),
+                    session_intent_digest: intent_digest.clone(),
+                    issued_at: at(0)?,
+                    expires_at: at(0)? + Duration::minutes(5),
+                    verification_method: DidUrl::new("did:webvh:z6mkfixture#device-key-1")
+                        .map_err(anyhow::Error::msg)?,
+                }
+                .attach_signature(
+                    Base64UrlString::new(arkret_canonical::base64url_encode([0x5a; 64]))
+                        .map_err(anyhow::Error::msg)?,
+                )?,
+            ))
         } else {
-            (Some(expected_event_id), Some(7))
+            None
         };
     Ok(DeviceRevocationGateCheckRequestBody {
         principal_authority: PrincipalAuthorityKey::new(
-            DidCoreId::new("ak:did_core:webvh:z6mkfixture")?,
+            principal_id,
             DidCoreId::new("ak:did_core:web:ps.example")?,
         ),
-        device_id: "ak:device:0196419b-0000-7000-8000-000000000001".parse()?,
+        device_id,
         expected_device_authorize_event_id,
         expected_device_generation_ref,
         action_class,
-        intent_digest: hash(intent)?,
+        intent_digest,
+        accepted_device_possession_proof,
         requested_at: at(0)?,
     })
 }
@@ -261,6 +298,15 @@ fn signed_receipt(
         } else {
             (None, None)
         };
+    let accepted_device_possession_verification =
+        if let Some(proof) = request.accepted_device_possession_proof.as_ref() {
+            Some(AcceptedDevicePossessionVerification {
+                proof_digest: proof.proof_digest()?,
+                verification_method: proof.verification_method().clone(),
+            })
+        } else {
+            None
+        };
     let unsigned = UnsignedDeviceRevocationGateDecisionReceipt {
         principal_authority: request.principal_authority.clone(),
         device_id: request.device_id.clone(),
@@ -268,6 +314,7 @@ fn signed_receipt(
         target_device_generation_ref,
         action_class: request.action_class,
         intent_digest: request.intent_digest.clone(),
+        accepted_device_possession_verification,
         decision,
         linearization_seq: 9,
         linearized_at: at(1)?,

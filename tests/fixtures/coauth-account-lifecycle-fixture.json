@@ -4,8 +4,8 @@
   "service": "coauth",
   "cases": [
     {
-      "name": "local_oidc_provider_callback_issues_session_grant",
-      "phase": "oidc_callback_session_grant",
+      "name": "local_oidc_provider_callback_issues_account_handoff",
+      "phase": "oidc_callback_account_handoff",
       "expect": "pass",
       "idp": {
         "kind": "local_oidc_provider",
@@ -40,7 +40,7 @@
       },
       "operations": [
         "oidc_authorization_callback",
-        "session_grant_issue"
+        "account_handoff_exchange"
       ],
       "fallbacks": [
         "none"
@@ -48,10 +48,11 @@
       "observed": {
         "callback_status": 302,
         "dev_or_password_fallback_used": false,
-        "session_grant": {
+        "account_handoff": {
           "active": true,
-          "scope": "urn:arkret:principal-server:session.bind",
-          "audience": "did:web:soland.local"
+          "grant_exchange": {
+            "kind": "account_handoff"
+          }
         }
       }
     },

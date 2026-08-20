@@ -31,7 +31,7 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
   const coauth = coauthBaseUrl();
   const optIn = optionalEnv("COTEST_REAL_OIDC_LOGIN");
 
-  test("real OIDC hard re-login rotates cnf.jkt without rotating the device event signer", async ({
+  test("real OIDC hard re-login rotates cnf.jkt without rotating the device event signer @returning-device-key-gate", async ({
     browser,
     request,
   }) => {
@@ -248,7 +248,7 @@ function observeSessionGrants(page: Page) {
   const seen: CapturedGrant[] = [];
   page.on("request", (request) => {
     const authorization = request.headers().authorization;
-    const jwt = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+    const jwt = authorization?.match(/^DPoP\s+(.+)$/i)?.[1];
     if (!jwt) return;
     const jkt = grantJkt(jwt);
     if (!jkt) return;

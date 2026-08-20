@@ -227,7 +227,10 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "service_account_id": "alice-session-grant",
             "device_id": binding.device_id,
             "audience": audience,
-            "scopes": ["urn:arkret:principal-server:session.bind"],
+            "scopes": [
+                "ak.self.account.read.describe",
+                "ak.self.events.read.scan"
+            ],
             "expires_at": arkret_canonical::format_timestamp_canonical(
                 chrono::Utc::now() + chrono::Duration::minutes(10)
             ),

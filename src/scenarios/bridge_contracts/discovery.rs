@@ -6,6 +6,23 @@ use crate::harness::{ArkretServer, expect_json};
 pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     let server = ArkretServer::spawn("bridge-contracts").await?;
 
+    let describe = expect_json(
+        server.http().get(server.url("/_arkret/describe")),
+        StatusCode::OK,
+    )
+    .await?;
+    let oidc = describe["auth_metadata"]["methods"]
+        .as_array()
+        .and_then(|methods| methods.iter().find(|method| method["method"] == "oidc"))
+        .expect("configured principal server must advertise OIDC");
+    assert_eq!(
+        oidc["grant_exchange"],
+        serde_json::json!({
+            "kind": "account_handoff"
+        })
+    );
+    assert!(oidc.get("proof_kind").is_none());
+
     let integration = expect_json(
         server
             .http()
@@ -65,7 +82,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     );
     assert_eq!(
         auth_bridge["auth"]["session_grant_presentation"],
-        "Authorization: Bearer <ak.session.grant> with a DPoP proof on /_arkret/self/*"
+        "Authorization: DPoP <ak.session.grant> with a DPoP proof on /_arkret/self/*"
     );
     assert_eq!(
         auth_bridge["push"]["register_device_path"],

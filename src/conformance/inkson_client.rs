@@ -13,7 +13,7 @@ const REQUIRED_TARGET_PROFILES: &[&str] =
     &["ak.profile.full_client.v1", "ak.profile.e2ee_client.v1"];
 
 const REQUIRED_STRANDS: &[&str] = &[
-    "oidc_session_grant",
+    "oidc_account_handoff_session_grant",
     "secure_store_handoff",
     "device_verification",
     "e2ee_fail_closed",
@@ -133,8 +133,12 @@ fn validate_runnable_harness<'a>(
         }
         let operations = string_set(path, "operations")?;
         match name {
-            "oidc_session_grant" => {
-                for operation in ["oidc_callback", "issue_session_grant"] {
+            "oidc_account_handoff_session_grant" => {
+                for operation in [
+                    "oidc_callback",
+                    "exchange_account_handoff",
+                    "issue_human_session_grant",
+                ] {
                     if !operations.contains(operation) {
                         bail!("runnable_harness {name} missing operation {operation}");
                     }
@@ -182,12 +186,26 @@ fn validate_case_shape(
     case: &Value,
 ) -> Result<()> {
     match strand {
-        "oidc_session_grant" => {
+        "oidc_account_handoff_session_grant" => {
             require_profile(profile, "ak.profile.full_client.v1", name)?;
             require_expect(expect, "pass", name)?;
             require_operation(case, "oidc_callback")?;
-            require_operation(case, "issue_session_grant")?;
-            require_non_empty(case, "/observed/session_grant_token_type", name)?;
+            require_operation(case, "exchange_account_handoff")?;
+            require_operation(case, "issue_human_session_grant")?;
+            if case
+                .pointer("/observed/session_grant_authorization_scheme")
+                .and_then(Value::as_str)
+                != Some("DPoP")
+            {
+                bail!("{name} must present the session grant with Authorization: DPoP");
+            }
+            if case
+                .pointer("/observed/accepted_device_possession_proof")
+                .and_then(Value::as_bool)
+                != Some(true)
+            {
+                bail!("{name} must author an accepted-device possession proof");
+            }
             if case
                 .pointer("/observed/dev_login_used")
                 .and_then(Value::as_bool)

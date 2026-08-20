@@ -735,9 +735,8 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Auth/session proof vectors promoted to spec artifacts. Asserts DID
-    /// proof replay bounds, session grant audience binding, and
-    /// sender-constrained PoP behavior.
+    /// Auth/session proof vectors promoted to spec artifacts. Asserts session
+    /// grant audience binding and sender-constrained PoP behavior.
     auth_session_proof_fixture_suite_matches_reference_semantics,
     "auth_session_proof_fixture",
     cotest::conformance::run_auth_session_proof_fixture_suite,

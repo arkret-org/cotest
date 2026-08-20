@@ -178,7 +178,6 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             .context("parse founding device id")?,
         session_public_key: input.initial_session.session_public_key,
         audience: input.initial_session.audience,
-        requested_scope: arkret::STANDARD_INITIAL_SESSION_GRANT_OPERATIONS.to_vec(),
     };
     initial_session.validate()?;
     let endpoint =

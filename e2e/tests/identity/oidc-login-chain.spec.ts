@@ -73,8 +73,12 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     expect(authMetadata, `describe.auth_metadata missing: ${raw}`).toBeTruthy();
 
     // ── OIDC method with a usable client_id ────────────────────────────────
-    const methods: Array<{ method: string; client_id?: string; issuer?: string }> =
-      authMetadata.methods ?? [];
+    const methods: Array<{
+      method: string;
+      client_id?: string;
+      issuer?: string;
+      grant_exchange?: { kind?: string };
+    }> = authMetadata.methods ?? [];
     const oidc = methods.find((m) => m.method === "oidc");
     expect(
       oidc,
@@ -90,6 +94,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     if (expectedClientId) {
       expect(oidc!.client_id).toBe(expectedClientId);
     }
+    expect(oidc!.grant_exchange).toEqual({ kind: "account_handoff" });
 
     // ── Account Authority pinned to the Auth Server origin ─────────────────
     // The client POSTs session-grants to the Account Authority and DPoP-binds
@@ -155,7 +160,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     // the body is `{ active_policy: null }`.
     const dpop = mintDpopProof({ deviceKey, method: "GET", url, grantJwt: grant.grantJwt });
     const ok = await request.get(url, {
-      headers: { authorization: `Bearer ${grant.grantJwt}`, dpop },
+      headers: { authorization: `DPoP ${grant.grantJwt}`, dpop },
     });
     const okBody = await ok.text();
     expect(ok.status(), `root-path recovery-policy with grant+DPoP returned ${ok.status()}: ${okBody}`).toBe(

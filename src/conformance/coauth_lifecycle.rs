@@ -10,7 +10,7 @@ const FIXTURE: &str = "coauth-account-lifecycle-fixture.json";
 const FIXTURE_PROFILE: &str = "ak.profile.coauth_account_lifecycle_vectors.v1";
 
 const REQUIRED_PHASES: &[&str] = &[
-    "oidc_callback_session_grant",
+    "oidc_callback_account_handoff",
     "account_did_binding",
     "device_revoke_account_status_lifecycle",
     "policy_dry_run_audit",
@@ -62,11 +62,11 @@ pub fn run_coauth_account_lifecycle_fixture_suite() -> Result<()> {
 
 fn validate_phase(name: &str, phase: &str, expect: &str, case: &Value) -> Result<()> {
     match phase {
-        "oidc_callback_session_grant" => {
+        "oidc_callback_account_handoff" => {
             require_expect(name, expect, "pass")?;
             require_local_oidc_provider(name, case)?;
             require_operation(case, "oidc_authorization_callback")?;
-            require_operation(case, "session_grant_issue")?;
+            require_operation(case, "account_handoff_exchange")?;
             if case
                 .pointer("/observed/callback_status")
                 .and_then(Value::as_u64)
@@ -75,11 +75,21 @@ fn validate_phase(name: &str, phase: &str, expect: &str, case: &Value) -> Result
                 bail!("{name} must model a successful OIDC callback redirect");
             }
             if case
-                .pointer("/observed/session_grant/active")
+                .pointer("/observed/account_handoff/active")
                 .and_then(Value::as_bool)
                 != Some(true)
             {
-                bail!("{name} must issue an active session grant");
+                bail!("{name} must issue an active account handoff");
+            }
+            if case
+                .pointer("/observed/account_handoff/grant_exchange/kind")
+                .and_then(Value::as_str)
+                != Some("account_handoff")
+            {
+                bail!("{name} must advertise the closed account_handoff exchange kind");
+            }
+            if case.pointer("/observed/session_grant").is_some() {
+                bail!("{name} OIDC callback must not issue a session grant directly");
             }
             assert_no_silent_fallback(name, case)?;
         }

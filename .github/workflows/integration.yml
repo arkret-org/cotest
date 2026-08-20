@@ -130,15 +130,17 @@ jobs:
           npx playwright install --with-deps chromium
       - name: install dioxus cli
         run: cargo install dioxus-cli --version 0.7.9 --locked
-      - name: terminal-auth UI logout live lane
+      - name: real OIDC returning-login and device-key non-skip lane
         working-directory: cotest
         shell: pwsh
         run: >
           ./scripts/run-joint-e2e.ps1
           -StartCoauth
           -RunProfile joint-smoke
-          -PlaywrightProject chromium
-          -Grep 'terminal auth loss|transient self-path failure'
+          -PlaywrightProject joint-inkson
+          -Grep '@returning-login-gate|@returning-device-key-gate'
+          -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts'
+          -ForbidSkippedTests
           -SkipNpmInstall
           -SkipBrowserInstall
           -StartupTimeoutSeconds 900

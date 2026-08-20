@@ -847,7 +847,7 @@ function collectSessionGrantHolderProofTrace(
     }
     const headers = request.headers();
     const authorization = headers.authorization ?? "";
-    if (!/^Bearer\s+\S+/.test(authorization)) {
+    if (!/^DPoP\s+\S+/.test(authorization)) {
       return;
     }
     const postData = request.postData() ?? "";
@@ -858,7 +858,7 @@ function collectSessionGrantHolderProofTrace(
       hasDpop: Boolean(headers.dpop),
       missingDpop: !headers.dpop,
       authorization,
-      grantJwt: authorization.replace(/^Bearer\s+/i, ""),
+      grantJwt: authorization.replace(/^DPoP\s+/i, ""),
       postData,
     };
     trace.authorizedSelfRequests.push(hit);

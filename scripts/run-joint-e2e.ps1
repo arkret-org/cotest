@@ -142,6 +142,14 @@ param(
     [string]$RunProfile,
     [string]$PlaywrightProject = "chrome",
     [string]$Grep,
+    # Comma-separated canonical scenario keys which must occur in junit.xml.
+    # This turns a stale grep/project selector into a hard gate failure instead
+    # of accepting a different matching test (or no test) as coverage.
+    [string]$RequireScenario,
+    # Dedicated release lanes use this when every selected live test is a hard
+    # requirement. Ordinary broad joint runs may still contain attributed,
+    # topology-dependent skips and therefore do not enable it by default.
+    [switch]$ForbidSkippedTests,
     # Run a non-Playwright driver while the managed stack is alive. This is
     # used by agent-journeys so the browser agent can operate the real stack
     # while this runner retains lifecycle ownership and deterministic cleanup.
@@ -4624,6 +4632,48 @@ if (-not (Test-Path $junitPath)) {
     $scenarioLines += "No drift - junit totals align with static-source counts."
 }
 
+$requiredScenarios = @(
+    $RequireScenario -split "," |
+        ForEach-Object { $_.Trim() -replace '\\', '/' } |
+        Where-Object { $_ }
+)
+$selectionGateFailures = New-Object System.Collections.Generic.List[string]
+if ($requiredScenarios.Count -gt 0 -or $ForbidSkippedTests) {
+    if ($junitParseError) {
+        $selectionGateFailures.Add("junit evidence unavailable: $junitParseError") | Out-Null
+    } else {
+        $observedCases = $totals.passed + $totals.failed + $totals.skipped + $totals.fixme
+        if ($observedCases -eq 0) {
+            $selectionGateFailures.Add("Playwright selected zero tests") | Out-Null
+        }
+        foreach ($requiredScenario in $requiredScenarios) {
+            if (-not $junitByScenario.ContainsKey($requiredScenario)) {
+                $selectionGateFailures.Add("required scenario was not selected: $requiredScenario") | Out-Null
+                continue
+            }
+            $scenarioTotal = @($junitByScenario[$requiredScenario].cases).Count
+            if ($scenarioTotal -eq 0) {
+                $selectionGateFailures.Add("required scenario selected zero testcases: $requiredScenario") | Out-Null
+            }
+        }
+        if ($ForbidSkippedTests -and $totals.skipped -gt 0) {
+            $selectionGateFailures.Add("selected live tests skipped: $($totals.skipped)") | Out-Null
+        }
+    }
+}
+if ($selectionGateFailures.Count -gt 0) {
+    $exitCode = 1
+}
+$scenarioLines += ""
+$scenarioLines += "## selection gate"
+$scenarioLines += ""
+$scenarioLines += "- required scenarios: $(if ($requiredScenarios.Count -gt 0) { $requiredScenarios -join ', ' } else { '-' })"
+$scenarioLines += "- skipped tests forbidden: $([bool]$ForbidSkippedTests)"
+$scenarioLines += "- status: $(if ($selectionGateFailures.Count -eq 0) { 'passed' } else { 'failed' })"
+foreach ($failure in $selectionGateFailures) {
+    $scenarioLines += "- failure: $failure"
+}
+
 $scenarioLines | Set-Content -Path $scenariosReport -Encoding UTF8
 
 # Failure report: one structured fingerprint per FINAL failure, plus the
@@ -4846,6 +4896,9 @@ $summary = [pscustomobject]@{
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
     run_profile = if ($RunProfile) { $RunProfile } else { "custom" }
     playwright_projects = $playwrightProjects -join ","
+    required_scenarios = $requiredScenarios
+    forbid_skipped_tests = [bool]$ForbidSkippedTests
+    selection_gate_failures = $selectionGateFailures.ToArray()
     started_at = $startedAt.ToString("o")
     finished_at = $finishedAt.ToString("o")
     duration_seconds = [Math]::Round(($finishedAt - $startedAt).TotalSeconds, 2)
@@ -4919,6 +4972,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - status: $($summary.status)
 - run_profile: $($summary.run_profile)
 - playwright_projects: $($summary.playwright_projects)
+- required_scenarios: $($requiredScenarios -join ",")
+- forbid_skipped_tests: $($summary.forbid_skipped_tests)
+- selection_gate_failures: $(@($summary.selection_gate_failures) -join "; ")
 - started_at: $($summary.started_at)
 - finished_at: $($summary.finished_at)
 - duration_seconds: $($summary.duration_seconds)

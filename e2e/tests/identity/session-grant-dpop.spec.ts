@@ -20,7 +20,7 @@ test.describe("Standard session grant DPoP boundary @fully-implemented", () => {
 
     const accepted = await request.get(url, {
       headers: {
-        authorization: `Bearer ${grant.grantJwt}`,
+        authorization: `DPoP ${grant.grantJwt}`,
         dpop: mintDpopProof({
           deviceKey: account.initialHolderKey,
           method: "GET",
@@ -34,7 +34,7 @@ test.describe("Standard session grant DPoP boundary @fully-implemented", () => {
     const wrongKey = generateDpopDeviceKey();
     const rejected = await request.get(url, {
       headers: {
-        authorization: `Bearer ${grant.grantJwt}`,
+        authorization: `DPoP ${grant.grantJwt}`,
         dpop: mintDpopProof({
           deviceKey: wrongKey,
           method: "GET",
@@ -55,7 +55,7 @@ test.describe("Standard session grant DPoP boundary @fully-implemented", () => {
 
     const wrongHtu = await request.get(url, {
       headers: {
-        authorization: `Bearer ${grant.grantJwt}`,
+        authorization: `DPoP ${grant.grantJwt}`,
         dpop: mintDpopProof({
           deviceKey: account.initialHolderKey,
           method: "GET",
@@ -67,8 +67,21 @@ test.describe("Standard session grant DPoP boundary @fully-implemented", () => {
     expect([401, 403]).toContain(wrongHtu.status());
 
     const missing = await request.get(url, {
-      headers: { authorization: `Bearer ${grant.grantJwt}` },
+      headers: { authorization: `DPoP ${grant.grantJwt}` },
     });
     expect([401, 403]).toContain(missing.status());
+
+    const wrongScheme = await request.get(url, {
+      headers: {
+        authorization: `Bearer ${grant.grantJwt}`,
+        dpop: mintDpopProof({
+          deviceKey: account.initialHolderKey,
+          method: "GET",
+          url,
+          grantJwt: grant.grantJwt,
+        }),
+      },
+    });
+    expect([401, 403]).toContain(wrongScheme.status());
   });
 });

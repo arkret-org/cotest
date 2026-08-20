@@ -92,6 +92,12 @@ jobs:
       - name: typecheck
         working-directory: e2e
         run: npm run typecheck
+      - name: identity CI selection gate
+        shell: pwsh
+        # Proves the workflow selectors resolve to the two real joint-inkson
+        # cases. The live lanes additionally require JUnit evidence and reject
+        # runtime skips, so static discovery cannot become a false green.
+        run: ./scripts/tests/identity-ci-selection.tests.ps1
       - name: spec wire-type drift
         working-directory: e2e
         # Regenerates the committed mirrors of the closed arkret-spec object
@@ -268,6 +274,13 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
+          repository: ${{ github.repository_owner }}/coauth
+          path: coauth
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+
+      - uses: actions/checkout@v4
+        with:
           repository: ${{ github.repository_owner }}/soland
           path: soland
           ref: ${{ env.SIBLING_REF }}
@@ -284,6 +297,7 @@ jobs:
           workspaces: |
             cotest
             soland
+            coauth
       - name: Build soland Docker image
         working-directory: cotest
         shell: pwsh
@@ -293,19 +307,21 @@ jobs:
         run: |
           npm ci || npm install
           npx playwright install --with-deps ${{ matrix.project }}
-      - name: Run Docker-image Playwright smoke
+      - name: Run real OIDC returning-login merge gate
         working-directory: cotest
         shell: pwsh
         run: >
           ./scripts/run-joint-e2e.ps1
           -SolandRuntime docker
           -SolandImage cotest-soland:pr-${{ github.run_id }}
-          -SkipInkson
+          -StartCoauth
           -SkipNpmInstall
           -SkipBrowserInstall
           -RunProfile joint-smoke
-          -PlaywrightProject ${{ matrix.project }}
-          -Grep "soland /_arkret/describe"
+          -PlaywrightProject joint-inkson
+          -Grep "@returning-login-gate"
+          -RequireScenario "identity/oidc-login-flow.spec.ts"
+          -ForbidSkippedTests
 
       # PR is the contract/deterministic lane. Tests tagged @mls-data-plane or
       # @platform-live are reserved for controlled.yml and must not be added to

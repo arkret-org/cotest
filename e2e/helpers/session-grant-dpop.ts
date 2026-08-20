@@ -5,7 +5,7 @@
 //
 // Under ②, the Principal Server (soland) does not mint a second local
 // credential. A client accesses `/_arkret/self/*` by presenting
-// `Authorization: Bearer <ak.session.grant>` plus a per-request DPoP proof
+// `Authorization: DPoP <ak.session.grant>` plus a per-request DPoP proof
 // bound to the request (`htm`/`htu`/`ath`). soland verifies the DPoP against
 // the grant's `cnf.jkt` (RFC 7638 JWK SHA-256 thumbprint) obtained via
 // session-grant introspection at coauth.
@@ -74,9 +74,8 @@ export type MintDpopGrantOpts = {
   /// Audience the grant is bound to. MUST equal the target soland service DID,
   /// because soland rejects a grant whose audience is not its own service_id.
   audience?: string;
-  /// Scopes to bake into the grant. Defaults (applied server-side) carry the
-  /// principal-server session.bind scope + a `urn:arkret:client:device:<id>`
-  /// scope, which is exactly what the self-path requires.
+  /// Operation scopes to bake into the grant. Human-device identity is carried
+  /// by the typed holder/device binding, never encoded as an OAuth scope.
   scopes?: string[];
   server?: SolandKey;
 };
@@ -232,7 +231,7 @@ export function mintDpopProof(args: {
 }
 
 /// Build the full header set for a real grant + DPoP request to a soland
-/// `/_arkret/self/*` (or `/root/`) endpoint: `Authorization: Bearer <grant>`, a
+/// `/_arkret/self/*` (or `/root/`) endpoint: `Authorization: DPoP <grant>`, a
 /// request-bound `DPoP` proof. `deviceKey` MUST be the key the grant is bound
 /// to (`cnf.jkt`).
 export function selfPathGrantHeaders(args: {
@@ -248,7 +247,7 @@ export function selfPathGrantHeaders(args: {
     grantJwt: args.grantJwt,
   });
   return {
-    authorization: `Bearer ${args.grantJwt}`,
+    authorization: `DPoP ${args.grantJwt}`,
     dpop,
   };
 }

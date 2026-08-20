@@ -250,8 +250,6 @@ export async function registerUnboundCoauthPasswordAccount(
 async function authorizeWithCurrentAccount(
   request: APIRequestContext,
   coauthBase: string,
-  audience: string,
-  deviceId: string,
 ): Promise<OidcAuthorization> {
   const discovery = await responseJsonRecord(
     await request.get(`${coauthBase}/.well-known/openid-configuration`),
@@ -274,13 +272,9 @@ async function authorizeWithCurrentAccount(
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("client_id", clientId);
   authorize.searchParams.set("redirect_uri", redirectUri);
-  authorize.searchParams.set(
-    "scope",
-    `openid urn:arkret:client:device:${deviceId}`,
-  );
+  authorize.searchParams.set("scope", "openid");
   authorize.searchParams.set("state", state);
   authorize.searchParams.set("nonce", nonce);
-  authorize.searchParams.set("resource", audience);
   authorize.searchParams.set("code_challenge_method", "S256");
   authorize.searchParams.set("code_challenge", codeChallenge);
 
@@ -376,8 +370,6 @@ export async function createCanonicalAccountHandoff(
   const authorization = await authorizeWithCurrentAccount(
     request,
     coauthBase,
-    args.audience,
-    args.deviceId,
   );
   const requestId = typedId("request");
   const body = cotestWire<Record<string, unknown>>("account-handoff-request", {

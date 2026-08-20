@@ -72,7 +72,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         "app_id": "inkson"
     }))?;
 
-    // §3.3 presentation: `Authorization: Bearer <grant jwt>` plus a
+    // §3.3 presentation: `Authorization: DPoP <grant jwt>` plus a
     // sender-constrained DPoP proof bound to the grant (`ath`) and to this
     // exact request target (`htm`/`htu`).
     let dpop = arkret_signatures::build_dpop_proof(
@@ -83,7 +83,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         server
             .http()
             .post(&push_url)
-            .bearer_auth(&grant_jwt)
+            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
             .header("DPoP", &dpop.header_value)
             .json(&push_body),
         StatusCode::OK,
@@ -135,7 +135,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         server
             .http()
             .post(&push_url)
-            .bearer_auth(&grant_jwt)
+            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
             .header("DPoP", &wrong_dpop.header_value)
             .json(&push_body),
         StatusCode::UNAUTHORIZED,

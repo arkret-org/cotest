@@ -4,10 +4,11 @@ use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
 use arkret_identifiers::{DeviceId, DidCoreId, Hash, SessionGrantId};
 use arkret_models_collaboration::session_grant_bodies::{
-    SessionGrantOutcome, SessionGrantRequestBody,
+    SessionGrantOutcome, SessionGrantRefreshRequestBody, SessionGrantRequestBody,
+    human_session_grant_intent_digest, session_grant_refresh_request_digest,
 };
-use arkret_models_identity::session_credential::{
-    CanonicalSessionPublicJwk, SessionGrantProofKind,
+use arkret_models_identity::{
+    CanonicalSessionPublicJwk, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
@@ -22,17 +23,12 @@ use super::schema_validation_fixture::SchemaEnv;
 
 pub const VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING: &str =
     "ak.vector.auth.session_grant_audience_binding.v1";
-pub const VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF: &str = "ak.vector.auth.soft_logout_did_proof.v1";
-pub const VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW: &str =
-    "ak.vector.identity.did_proof_replay_window.v1";
 pub const VECTOR_ID_SESSION_POP_PRESENTATION: &str = "ak.vector.session.pop_presentation.v1";
 pub const VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED: &str =
     "ak.vector.session.bare_bearer_rejected_protected.v1";
 
 pub const ALL_AUTH_SESSION_PROOF_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING,
-    VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF,
-    VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW,
     VECTOR_ID_SESSION_POP_PRESENTATION,
     VECTOR_ID_SESSION_BARE_BEARER_REJECTED_PROTECTED,
 ];
@@ -113,13 +109,6 @@ fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
         .ok_or_else(|| anyhow!("case missing expected.{field}"))
 }
 
-fn expected_u64(value: &Value, field: &str) -> Result<u64> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("case missing u64 expected.{field}"))
-}
-
 fn required_u64(value: &Value, field: &str) -> Result<u64> {
     value
         .get(field)
@@ -161,10 +150,6 @@ fn device(value: &str) -> Result<DeviceId> {
     DeviceId::new(value.to_owned()).map_err(Into::into)
 }
 
-fn digest_value(value: &Value) -> Result<Hash> {
-    Hash::new(canonical::canonical_sha256(value)?).map_err(Into::into)
-}
-
 fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
     let env = SchemaEnv::load()?;
     let validator = env.compile(schema_ref)?;
@@ -179,32 +164,33 @@ fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn session_grant_binding_payload(vector: &Value, audience: &str) -> Result<Value> {
-    Ok(json!({
-        "principal_id": required_str(vector, "principal_id")?,
-        "device_id": required_str(vector, "device_id")?,
-        "requested_scope": required_string_array(vector, "requested_scope")?,
-        "audience": audience
-    }))
-}
-
 fn session_grant_request_value(
     vector: &Value,
     audience: &str,
-    expires_at: DateTime<Utc>,
-    request_canonical_digest: &Hash,
+    session_intent_digest: &Hash,
 ) -> Result<Value> {
+    let issued_at = parse_time(required_str(vector, "issued_at")?)?;
+    let expires_at = parse_time(required_str(vector, "expires_at")?)?;
     Ok(json!({
+        "request_id": required_str(vector, "request_id")?,
         "principal_id": required_str(vector, "principal_id")?,
         "device_id": required_str(vector, "device_id")?,
-        "requested_scope": required_string_array(vector, "requested_scope")?,
-        "proof": {
-            "proof_kind": "did_bound_signature",
-            "challenge": required_str(vector, "challenge")?,
-            "request_canonical_digest": request_canonical_digest.as_str(),
+        "audience": audience,
+        "accepted_device_possession_proof": {
+            "context": "ak.session-grant-accepted-device-possession-proof-v1",
+            "purpose": "session_grant_issue",
+            "request_id": required_str(vector, "request_id")?,
+            "account_subject": required_str(vector, "account_subject")?,
+            "account_handoff_grant_digest": required_str(vector, "account_handoff_grant_digest")?,
+            "principal_id": required_str(vector, "principal_id")?,
+            "device_id": required_str(vector, "device_id")?,
             "audience": audience,
+            "holder_jkt": required_str(vector, "holder_jkt")?,
+            "session_intent_digest": session_intent_digest,
+            "issued_at": arkret_canonical::format_timestamp_canonical(issued_at),
             "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
-            "signature": "detached-proof-placeholder"
+            "verification_method": required_str(vector, "verification_method")?,
+            "signature": arkret_canonical::base64url_encode([0x5a; 64])
         }
     }))
 }
@@ -216,37 +202,41 @@ fn parse_session_grant_request(value: Value) -> Result<SessionGrantRequestBody> 
 
 fn issue_session_grant(
     request: &SessionGrantRequestBody,
-    expected_digest: &Hash,
     target_audience: &str,
     server_max_ttl: Duration,
     now: DateTime<Utc>,
 ) -> std::result::Result<SessionGrantOutcome, &'static str> {
-    if request.proof.proof_kind != SessionGrantProofKind::DidBoundSignature {
+    let SessionGrantRequestBody::Human(request) = request else {
         return Err(arkret_wire::ReasonCode::PROOF_INVALID);
-    }
-    if request.proof.audience.as_str() != target_audience {
+    };
+    if request.audience.as_str() != target_audience {
         return Err(arkret_wire::ErrorCode::AUDIENCE_MISMATCH);
     }
-    if &request.proof.request_canonical_digest != expected_digest {
+    if request.validate().is_err() {
         return Err(arkret_wire::ReasonCode::PROOF_INVALID);
     }
 
-    let requested_expires_at = request.proof.expires_at.unwrap_or(now + server_max_ttl);
-    let expires_at = requested_expires_at.min(now + server_max_ttl);
     Ok(SessionGrantOutcome {
         principal_id: request.principal_id.clone(),
-        device_id: request.device_id.clone(),
+        device_id: Some(request.device_id.clone()),
         session_grant: "ak.session.grant.test".to_owned(),
-        expires_at,
+        expires_at: now + server_max_ttl,
         session_grant_id: SessionGrantId::from_issuance_digest(canonical::sha256_bytes(
-            expected_digest.as_str().as_bytes(),
+            request
+                .accepted_device_possession_proof
+                .session_intent_digest
+                .as_str()
+                .as_bytes(),
         )),
         session_public_key: CanonicalSessionPublicJwk::new(
             r#"{"crv":"Ed25519","kty":"OKP","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}"#,
         )
         .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
-        audience: request.proof.audience.clone(),
-        granted_scope: request.requested_scope.clone(),
+        audience: request.audience.clone(),
+        granted_scope: STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
+            .iter()
+            .map(|operation| operation.as_str().to_owned())
+            .collect(),
         scope_details: None,
     })
 }
@@ -259,104 +249,85 @@ fn development_mode_verified_profiles(attempted: &[String]) -> Vec<String> {
         .collect()
 }
 
-#[derive(Clone)]
-struct MiniDidProofChallenge {
-    challenge: String,
-    audience: String,
-    origin: String,
-    issued_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
-    used: bool,
-}
+fn validate_closed_human_session_shapes() -> Result<()> {
+    let principal_id = did("ak:did_core:webvh:z6mkfixture")?;
+    let device_id = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
+    let audience = did("ak:did_core:webvh:z6mkfixtureserviceexample")?;
+    let predecessor = SessionGrantId::from_issuance_digest(canonical::sha256_bytes(b"previous"));
+    let holder_jkt = "ERERERERERERERERERERERERERERERERERERERERERE";
+    let intent = session_grant_refresh_request_digest(
+        "grant.jwt.fixture",
+        &predecessor,
+        &principal_id,
+        &device_id,
+        &audience,
+        holder_jkt,
+    )?;
+    let mut refresh = json!({
+        "grant_jwt": "grant.jwt.fixture",
+        "audience": audience,
+        "device_id": device_id,
+        "accepted_device_possession_proof": {
+            "context": "ak.session-grant-accepted-device-possession-proof-v1",
+            "purpose": "session_grant_refresh",
+            "predecessor_session_grant_id": predecessor,
+            "principal_id": principal_id,
+            "device_id": device_id,
+            "audience": audience,
+            "holder_jkt": holder_jkt,
+            "session_intent_digest": intent,
+            "issued_at": "2026-06-19T00:00:00.000Z",
+            "expires_at": "2026-06-19T00:05:00.000Z",
+            "verification_method": "did:webvh:z6mkfixture:alice.example#device-key-1",
+            "signature": canonical::base64url_encode([0x5a; 64])
+        }
+    });
+    let parsed: SessionGrantRefreshRequestBody = serde_json::from_value(refresh.clone())?;
+    parsed.validate()?;
 
-#[derive(Clone)]
-struct MiniDidProof {
-    principal_id: String,
-    device_id: Option<String>,
-    audience: String,
-    origin: String,
-    challenge: String,
-    request_canonical_digest: Hash,
-    issued_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
-    covered_fields: Vec<String>,
-    signature_valid: bool,
-}
+    refresh["legacy_open_proof"] = json!({ "signature": "placeholder" });
+    if serde_json::from_value::<SessionGrantRefreshRequestBody>(refresh).is_ok() {
+        bail!("legacy open refresh proof object was accepted");
+    }
 
-fn did_proof_request_digest(value: &Value) -> Result<Hash> {
-    digest_value(value)
-}
+    let request_id = "ak:request:0196419b-0000-7000-8000-000000000002".parse()?;
+    let issue_intent = human_session_grant_intent_digest(
+        &request_id,
+        &principal_id,
+        &device_id,
+        &audience,
+        holder_jkt,
+    )?;
+    let mut issue = json!({
+        "request_id": request_id,
+        "principal_id": principal_id,
+        "device_id": device_id,
+        "audience": audience,
+        "accepted_device_possession_proof": {
+            "context": "ak.session-grant-accepted-device-possession-proof-v1",
+            "purpose": "session_grant_issue",
+            "request_id": request_id,
+            "account_subject": format!("sha256:{}", "a".repeat(64)),
+            "account_handoff_grant_digest": format!("sha256:{}", "b".repeat(64)),
+            "principal_id": principal_id,
+            "device_id": device_id,
+            "audience": audience,
+            "holder_jkt": holder_jkt,
+            "session_intent_digest": issue_intent,
+            "issued_at": "2026-06-19T00:00:00.000Z",
+            "expires_at": "2026-06-19T00:05:00.000Z",
+            "verification_method": "did:webvh:z6mkfixture:alice.example#device-key-1",
+            "signature": canonical::base64url_encode([0x5a; 64])
+        }
+    });
+    let parsed: SessionGrantRequestBody = serde_json::from_value(issue.clone())?;
+    parsed.validate()?;
 
-fn require_covered_fields(proof: &MiniDidProof, required: &[String]) -> bool {
-    required
-        .iter()
-        .all(|required| proof.covered_fields.iter().any(|field| field == required))
-}
-
-struct DidProofValidation<'a> {
-    expected_principal_id: &'a str,
-    expected_device_id: Option<&'a str>,
-    expected_request_digest: &'a Hash,
-    required_fields: &'a [String],
-    now: DateTime<Utc>,
-    max_window: Duration,
-    skew: Duration,
-}
-
-fn validate_did_proof(
-    challenge: &mut MiniDidProofChallenge,
-    proof: &MiniDidProof,
-    validation: &DidProofValidation<'_>,
-) -> std::result::Result<(), &'static str> {
-    if !proof.signature_valid
-        || proof.principal_id != validation.expected_principal_id
-        || validation.expected_device_id.is_some()
-            && proof.device_id.as_deref() != validation.expected_device_id
-        || !require_covered_fields(proof, validation.required_fields)
-        || &proof.request_canonical_digest != validation.expected_request_digest
-        || proof.challenge != challenge.challenge
-    {
-        return Err(arkret_wire::ReasonCode::PROOF_INVALID);
+    issue["requested_scope"] = json!(["ak.self.events.write"]);
+    if serde_json::from_value::<SessionGrantRequestBody>(issue).is_ok() {
+        bail!("human session issue accepted caller-controlled requested_scope");
     }
-    if challenge.used {
-        return Err(arkret_wire::ReasonCode::PROOF_INVALID);
-    }
-    if proof.audience != challenge.audience || proof.origin != challenge.origin {
-        return Err(arkret_wire::ErrorCode::AUDIENCE_MISMATCH);
-    }
-    if proof.issued_at != challenge.issued_at || proof.expires_at != challenge.expires_at {
-        return Err(arkret_wire::ReasonCode::DID_PROOF_REPLAY_WINDOW_EXCEEDED);
-    }
-    if proof.expires_at - proof.issued_at > validation.max_window
-        || proof.issued_at > validation.now + validation.skew
-        || validation.now > proof.expires_at
-        || validation.now - proof.issued_at > validation.max_window + validation.skew
-    {
-        return Err(arkret_wire::ReasonCode::DID_PROOF_REPLAY_WINDOW_EXCEEDED);
-    }
-    challenge.used = true;
     Ok(())
-}
-
-fn proof_from_case(
-    vector: &Value,
-    request_digest: &Hash,
-    issued_at: DateTime<Utc>,
-    expires_at: DateTime<Utc>,
-    covered_fields: Vec<String>,
-) -> Result<MiniDidProof> {
-    Ok(MiniDidProof {
-        principal_id: required_str(vector, "principal_id")?.to_owned(),
-        device_id: Some(required_str(vector, "device_id")?.to_owned()),
-        audience: required_str(vector, "audience")?.to_owned(),
-        origin: required_str(vector, "origin")?.to_owned(),
-        challenge: required_str(vector, "challenge")?.to_owned(),
-        request_canonical_digest: request_digest.clone(),
-        issued_at,
-        expires_at,
-        covered_fields,
-        signature_valid: true,
-    })
 }
 
 #[derive(Clone)]
@@ -533,32 +504,35 @@ pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
     let vector = case(&fixture, VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING)?;
     let now = parse_time("2026-06-19T00:00:00.000Z")?;
     let target_audience = required_str(vector, "target_audience")?;
-    let binding = session_grant_binding_payload(vector, target_audience)?;
-    let expected_digest = digest_value(&binding)?;
     let server_max_ttl = Duration::seconds(required_u64(vector, "server_max_ttl_seconds")? as i64);
-    let requested_ttl = Duration::seconds(required_u64(vector, "requested_ttl_seconds")? as i64);
 
-    did(required_str(vector, "principal_id")?)?;
-    device(required_str(vector, "device_id")?)?;
+    let principal_id = did(required_str(vector, "principal_id")?)?;
+    let device_id = device(required_str(vector, "device_id")?)?;
+    let request_id = required_str(vector, "request_id")?.parse()?;
+    let holder_jkt = required_str(vector, "holder_jkt")?;
+    let target = did(target_audience)?;
+    let expected_digest = human_session_grant_intent_digest(
+        &request_id,
+        &principal_id,
+        &device_id,
+        &target,
+        holder_jkt,
+    )?;
 
-    let mismatched_digest = digest_value(&session_grant_binding_payload(
-        vector,
-        required_str(vector, "mismatched_audience")?,
-    )?)?;
+    let mismatched_audience = required_str(vector, "mismatched_audience")?;
+    let mismatched_digest = human_session_grant_intent_digest(
+        &request_id,
+        &principal_id,
+        &device_id,
+        &did(mismatched_audience)?,
+        holder_jkt,
+    )?;
     let mismatched_request = parse_session_grant_request(session_grant_request_value(
         vector,
-        required_str(vector, "mismatched_audience")?,
-        now + server_max_ttl,
+        mismatched_audience,
         &mismatched_digest,
     )?)?;
-    if issue_session_grant(
-        &mismatched_request,
-        &expected_digest,
-        target_audience,
-        server_max_ttl,
-        now,
-    )
-    .err()
+    if issue_session_grant(&mismatched_request, target_audience, server_max_ttl, now).err()
         != Some(expected_str(vector, "audience_mismatch_reason")?)
     {
         bail!("audience-mismatched session grant proof was not rejected");
@@ -567,12 +541,10 @@ pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
     let invalid_binding_request = parse_session_grant_request(session_grant_request_value(
         vector,
         target_audience,
-        now + server_max_ttl,
         &mismatched_digest,
     )?)?;
     if issue_session_grant(
         &invalid_binding_request,
-        &expected_digest,
         target_audience,
         server_max_ttl,
         now,
@@ -580,210 +552,27 @@ pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
     .err()
         != Some(expected_str(vector, "invalid_binding_reason")?)
     {
-        bail!("session grant request digest mismatch was not rejected");
+        bail!("accepted-device proof with a mismatched session intent was not rejected");
     }
 
-    let long_ttl_request = parse_session_grant_request(session_grant_request_value(
+    let request = parse_session_grant_request(session_grant_request_value(
         vector,
         target_audience,
-        now + requested_ttl,
         &expected_digest,
     )?)?;
-    let outcome = issue_session_grant(
-        &long_ttl_request,
-        &expected_digest,
-        target_audience,
-        server_max_ttl,
-        now,
-    )
-    .map_err(|reason| anyhow!("valid session grant unexpectedly rejected: {reason}"))?;
+    let outcome = issue_session_grant(&request, target_audience, server_max_ttl, now)
+        .map_err(|reason| anyhow!("valid session grant unexpectedly rejected: {reason}"))?;
     let outcome_value = serde_json::to_value(&outcome)?;
     schema_valid(SESSION_GRANT_OUTCOME_SCHEMA, &outcome_value)?;
-    if expected_str(vector, "ttl_behavior")? != "clamp_to_server_max"
+    if expected_str(vector, "ttl_behavior")? != "issuer_fixed"
         || outcome.expires_at != now + server_max_ttl
     {
-        bail!("session grant TTL was not clamped to the server hard maximum");
+        bail!("human session grant TTL was not issuer-owned");
     }
 
     let attempted = required_string_array(vector, "attempted_verified_profiles")?;
     if !development_mode_verified_profiles(&attempted).is_empty() {
         bail!("development mode advertised a verified auth server profile");
-    }
-    Ok(())
-}
-
-pub fn run_auth_soft_logout_did_proof_vector() -> Result<()> {
-    let fixture = auth_session_proof_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_AUTH_SOFT_LOGOUT_DID_PROOF)?;
-    let mut session_state = "soft_logged_out";
-    let holder_key_available = true;
-    if holder_key_available && session_state == "soft_logged_out" {
-        let reason = arkret_wire::ErrorCode::DID_PROOF_REQUIRED;
-        if reason != expected_str(vector, "holder_only_reason")? {
-            bail!("soft logout holder-only reason drifted");
-        }
-    }
-
-    let now = parse_time("2026-06-19T00:00:00.000Z")?;
-    let expires_at =
-        now + Duration::seconds(expected_u64(vector, "max_replay_window_seconds")? as i64);
-    let request_digest = did_proof_request_digest(
-        vector
-            .get("request")
-            .ok_or_else(|| anyhow!("soft logout vector missing request"))?,
-    )?;
-    let mut challenge = MiniDidProofChallenge {
-        challenge: required_str(vector, "challenge")?.to_owned(),
-        audience: required_str(vector, "audience")?.to_owned(),
-        origin: required_str(vector, "origin")?.to_owned(),
-        issued_at: now,
-        expires_at,
-        used: false,
-    };
-    let required_fields = required_string_array(vector, "proof_required_fields")?;
-    let proof = proof_from_case(
-        vector,
-        &request_digest,
-        now,
-        expires_at,
-        required_fields.clone(),
-    )?;
-    let validation = DidProofValidation {
-        expected_principal_id: required_str(vector, "principal_id")?,
-        expected_device_id: Some(required_str(vector, "device_id")?),
-        expected_request_digest: &request_digest,
-        required_fields: &required_fields,
-        now,
-        max_window: Duration::seconds(expected_u64(vector, "max_replay_window_seconds")? as i64),
-        skew: Duration::seconds(300),
-    };
-    validate_did_proof(&mut challenge, &proof, &validation)
-        .map_err(|reason| anyhow!("soft logout proof rejected: {reason}"))?;
-    session_state = "active";
-    if session_state != expected_str(vector, "proof_restores_state")? {
-        bail!("soft logout proof did not restore the session to active");
-    }
-    Ok(())
-}
-
-pub fn run_identity_did_proof_replay_window_vector() -> Result<()> {
-    let fixture = auth_session_proof_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_IDENTITY_DID_PROOF_REPLAY_WINDOW)?;
-    let issued_at = parse_time(required_str(vector, "issued_at")?)?;
-    let expires_at = parse_time(required_str(vector, "expires_at")?)?;
-    let max_window = Duration::seconds(required_u64(vector, "max_replay_window_seconds")? as i64);
-    let skew = Duration::seconds(required_u64(vector, "skew_seconds")? as i64);
-    let request_digest = digest_value(&json!({
-        "purpose": required_str(vector, "purpose")?,
-        "principal_id": required_str(vector, "principal_id")?,
-        "device_id": required_str(vector, "device_id")?,
-        "audience": required_str(vector, "audience")?,
-        "origin": required_str(vector, "origin")?,
-        "challenge": required_str(vector, "challenge")?
-    }))?;
-    let covered_fields = vec![
-        "principal_id".to_owned(),
-        "device_id".to_owned(),
-        "audience".to_owned(),
-        "origin".to_owned(),
-        "challenge".to_owned(),
-        "request_canonical_digest".to_owned(),
-        "issued_at".to_owned(),
-        "expires_at".to_owned(),
-    ];
-    let mut challenge = MiniDidProofChallenge {
-        challenge: required_str(vector, "challenge")?.to_owned(),
-        audience: required_str(vector, "audience")?.to_owned(),
-        origin: required_str(vector, "origin")?.to_owned(),
-        issued_at,
-        expires_at,
-        used: false,
-    };
-    let proof = proof_from_case(
-        vector,
-        &request_digest,
-        issued_at,
-        expires_at,
-        covered_fields.clone(),
-    )?;
-    let validation = DidProofValidation {
-        expected_principal_id: required_str(vector, "principal_id")?,
-        expected_device_id: Some(required_str(vector, "device_id")?),
-        expected_request_digest: &request_digest,
-        required_fields: &covered_fields,
-        now: issued_at,
-        max_window,
-        skew,
-    };
-    validate_did_proof(&mut challenge, &proof, &validation)
-        .map_err(|reason| anyhow!("first DID proof use rejected: {reason}"))?;
-    if expected_str(vector, "first_use")? != "accepted" {
-        bail!("DID proof first-use expectation drifted");
-    }
-    if validate_did_proof(&mut challenge, &proof, &validation).err()
-        != Some(expected_str(vector, "second_use_reason")?)
-    {
-        bail!("DID proof replay did not fail closed");
-    }
-
-    let mut audience_challenge = MiniDidProofChallenge {
-        challenge: required_str(vector, "challenge")?.to_owned(),
-        audience: required_str(vector, "audience")?.to_owned(),
-        origin: required_str(vector, "origin")?.to_owned(),
-        issued_at,
-        expires_at,
-        used: false,
-    };
-    let mut cross_audience = proof.clone();
-    cross_audience.audience = required_str(vector, "other_audience")?.to_owned();
-    cross_audience.origin = required_str(vector, "other_origin")?.to_owned();
-    if validate_did_proof(&mut audience_challenge, &cross_audience, &validation).err()
-        != Some(expected_str(vector, "audience_origin_reason")?)
-    {
-        bail!("DID proof audience/origin replay did not fail closed");
-    }
-
-    let mut wide_challenge = MiniDidProofChallenge {
-        challenge: required_str(vector, "challenge")?.to_owned(),
-        audience: required_str(vector, "audience")?.to_owned(),
-        origin: required_str(vector, "origin")?.to_owned(),
-        issued_at,
-        expires_at: parse_time(required_str(vector, "wide_expires_at")?)?,
-        used: false,
-    };
-    let wide_proof = proof_from_case(
-        vector,
-        &request_digest,
-        issued_at,
-        parse_time(required_str(vector, "wide_expires_at")?)?,
-        covered_fields.clone(),
-    )?;
-    if validate_did_proof(&mut wide_challenge, &wide_proof, &validation).err()
-        != Some(expected_str(vector, "window_reason")?)
-    {
-        bail!("wide DID proof replay window was not rejected");
-    }
-
-    let future_issued_at = parse_time(required_str(vector, "future_issued_at")?)?;
-    let mut future_challenge = MiniDidProofChallenge {
-        challenge: required_str(vector, "challenge")?.to_owned(),
-        audience: required_str(vector, "audience")?.to_owned(),
-        origin: required_str(vector, "origin")?.to_owned(),
-        issued_at: future_issued_at,
-        expires_at: future_issued_at + max_window,
-        used: false,
-    };
-    let future_proof = proof_from_case(
-        vector,
-        &request_digest,
-        future_issued_at,
-        future_issued_at + max_window,
-        covered_fields.clone(),
-    )?;
-    if validate_did_proof(&mut future_challenge, &future_proof, &validation).err()
-        != Some(expected_str(vector, "future_reason")?)
-    {
-        bail!("future-issued DID proof was not rejected");
     }
     Ok(())
 }
@@ -939,16 +728,15 @@ pub fn run_session_bare_bearer_rejected_protected_vector() -> Result<()> {
 
 pub fn run_auth_session_proof_fixture_suite() -> Result<()> {
     validate_auth_session_proof_fixture_metadata(&auth_session_proof_fixture()?)?;
-    if ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len() != 5 {
+    if ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len() != 3 {
         bail!(
-            "expected 5 auth session proof vector ids, got {}",
+            "expected 3 auth session proof vector ids, got {}",
             ALL_AUTH_SESSION_PROOF_VECTOR_IDS.len()
         );
     }
 
     run_auth_session_grant_audience_binding_vector()?;
-    run_auth_soft_logout_did_proof_vector()?;
-    run_identity_did_proof_replay_window_vector()?;
+    validate_closed_human_session_shapes()?;
     run_session_pop_presentation_vector()?;
     run_session_bare_bearer_rejected_protected_vector()?;
     Ok(())

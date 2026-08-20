@@ -20,11 +20,12 @@
     },
     "triggered_paths": [
       {
-        "strand": "oidc_session_grant",
+        "strand": "oidc_account_handoff_session_grant",
         "executed": true,
         "operations": [
           "oidc_callback",
-          "issue_session_grant"
+          "exchange_account_handoff",
+          "issue_human_session_grant"
         ]
       },
       {
@@ -54,8 +55,8 @@
   },
   "cases": [
     {
-      "name": "oidc_callback_exchanges_coauth_session_grant",
-      "strand": "oidc_session_grant",
+      "name": "oidc_callback_exchanges_account_handoff_then_issues_human_session_grant",
+      "strand": "oidc_account_handoff_session_grant",
       "profile": "ak.profile.full_client.v1",
       "expect": "pass",
       "environment": {
@@ -63,7 +64,8 @@
       },
       "black_box_operations": [
         "oidc_callback",
-        "issue_session_grant"
+        "exchange_account_handoff",
+        "issue_human_session_grant"
       ],
       "request_trace": [
         {
@@ -73,13 +75,19 @@
         },
         {
           "method": "POST",
+          "path": "/_arkret/gate/account/account-hand-offs",
+          "status": 200
+        },
+        {
+          "method": "POST",
           "path": "/_arkret/gate/account/session-grants",
           "status": 200
         }
       ],
       "observed": {
         "callback_status": 302,
-        "session_grant_token_type": "Bearer",
+        "session_grant_authorization_scheme": "DPoP",
+        "accepted_device_possession_proof": true,
         "dev_login_used": false,
         "fallbacks": [
           "none"

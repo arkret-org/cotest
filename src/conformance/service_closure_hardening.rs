@@ -516,7 +516,10 @@ fn run_push_wakeup_policy_case(case: &Value) -> Result<()> {
         assert_expected_subset(name, expected(step)?, &observed)?;
         record_step(VECTOR_ID_PUSH_WAKEUP_POLICY, name, step, &observed);
     }
-    for required in ["no_notification_unresolved_mention", "batch_unresolved_events"] {
+    for required in [
+        "no_notification_unresolved_mention",
+        "batch_unresolved_events",
+    ] {
         if !seen.contains(required) {
             bail!("push wakeup vector missing step {required}");
         }

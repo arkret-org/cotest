@@ -10,8 +10,7 @@ use arkret_models_crypto::{
 };
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffOutcome,
-    CanonicalSessionPublicJwk, InitialSessionGrantIntent,
-    STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
+    CanonicalSessionPublicJwk, InitialSessionGrantIntent, standard_initial_session_grant_scope,
 };
 use arkret_wire::{
     DidFullId, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
@@ -160,7 +159,6 @@ fn completion_vector() -> Result<CompletionVector> {
         device_id: device_id.parse()?,
         session_public_key: session_public_key.clone(),
         audience: audience.parse()?,
-        requested_scope: STANDARD_INITIAL_SESSION_GRANT_OPERATIONS.to_vec(),
     };
     initial_session.validate()?;
 
@@ -178,10 +176,9 @@ fn completion_vector() -> Result<CompletionVector> {
 
     let grant_claims = json!({
         "credential_class": "standard",
-        "proof_kind": "did_bound_signature",
         "cnf": { "jkt": holder_jkt },
         "aud": audience,
-        "scope": initial_session.requested_scope_strings()
+        "scope": standard_initial_session_grant_scope()
     });
     let jwt = format!(
         "{}.{}.fixture-signature",
@@ -197,7 +194,7 @@ fn completion_vector() -> Result<CompletionVector> {
             .parse()?,
         session_public_key,
         audience: audience.parse()?,
-        granted_scope: initial_session.requested_scope_strings(),
+        granted_scope: standard_initial_session_grant_scope(),
         scope_details: None,
     };
     let outcome = IssueRecoveryCompletionGrantOutcome {
@@ -293,10 +290,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         vector.outcome.issued_at,
     )?;
     let claims = jwt_payload(&grant.session_grant)?;
-    if claims["credential_class"] != "standard"
-        || claims.get("recovery_binding").is_some()
-        || claims["proof_kind"] == "oidc_code_exchange"
-    {
+    if claims["credential_class"] != "standard" || claims.get("recovery_binding").is_some() {
         bail!("recovery completion did not issue a direct Standard grant");
     }
     let operation_values = serde_json::to_value(ACCOUNT_HANDOFF_ALLOWED_OPERATIONS)?;
