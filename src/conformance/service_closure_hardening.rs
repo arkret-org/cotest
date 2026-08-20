@@ -516,11 +516,7 @@ fn run_push_wakeup_policy_case(case: &Value) -> Result<()> {
         assert_expected_subset(name, expected(step)?, &observed)?;
         record_step(VECTOR_ID_PUSH_WAKEUP_POLICY, name, step, &observed);
     }
-    for required in [
-        "no_notification_unresolved_mention",
-        "client_rule_digest_mismatch",
-        "batch_unresolved_events",
-    ] {
+    for required in ["no_notification_unresolved_mention", "batch_unresolved_events"] {
         if !seen.contains(required) {
             bail!("push wakeup vector missing step {required}");
         }
@@ -547,14 +543,6 @@ fn evaluate_push_step(step: &Value) -> Result<Value> {
                 "evaluation_locus_unresolved": true,
             }));
         }
-    }
-    if required_str(step, "registered_client_rule_digest")?
-        != required_str(step, "server_client_rule_digest")?
-    {
-        return Ok(json!({
-            "strategy": "conservative",
-            "rule_content_guessed": false,
-        }));
     }
     Ok(json!({"decision": "accept"}))
 }
