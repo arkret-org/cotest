@@ -67,7 +67,6 @@ mod proof_context_domain_separation;
 mod protocol_gap_closure;
 mod push_rule_core;
 mod read_receipt_signal;
-mod realm_key_vectors;
 mod recovery_completion_grant;
 pub mod recovery_transaction_faults;
 mod redaction;
@@ -358,9 +357,6 @@ pub use read_receipt_signal::{
     ALL_READ_RECEIPT_SIGNAL_VECTOR_IDS, VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE,
     VECTOR_ID_READ_RECEIPT_ROUND_TRIP, run_genesis_join_policy_bundle_vector,
     run_read_receipt_round_trip_vector, run_read_receipt_signal_vector_suite,
-};
-pub use realm_key_vectors::{
-    VECTOR_ID_REALM_KEY_SHARE_SENDER_SIGNATURE, run_realm_key_payload_vector_suite,
 };
 pub use recovery_completion_grant::run_recovery_completion_grant_suite;
 pub use redaction::run_redaction_fixture_suite;

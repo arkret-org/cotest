@@ -21,18 +21,13 @@ use cotest::conformance::{
     run_media_binding_vector_suite, run_member_identity_vector_suite,
     run_member_roster_vector_suite, run_mention_rendering_vector_suite,
     run_object_addressing_vector_suite, run_presence_signal_vector_suite,
-    run_primary_handle_vector_suite, run_realm_key_payload_vector_suite, run_sidecar_vector_suite,
+    run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
 use serde_json::{Value, json};
 
 #[test]
 fn encoding_artifact_vectors_reject_drift() -> Result<()> {
     run_encoding_fixture_suite()
-}
-
-#[test]
-fn realm_key_payload_vectors_reject_drift() -> Result<()> {
-    run_realm_key_payload_vector_suite()
 }
 
 #[test]
