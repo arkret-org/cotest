@@ -150,11 +150,6 @@ pub fn run_genesis_join_policy_bundle_vector() -> Result<()> {
     let mut bundle = RealmPolicyBundlePayload::new(1);
     bundle.content_scheme = Some("mls_exporter_aead_v1".to_owned());
     bundle.join_policy = Some(serde_json::from_value(join_policy)?);
-    bundle.aad_visibility = Some(
-        arkret_models_collaboration::events_payloads::RealmAadVisibilityPolicy {
-            event_id_kind: arkret_models_crypto::EncryptedEnvelopeAadVisibility::RoutingDigest,
-        },
-    );
 
     let wire = bundle.to_value()?;
     if wire.get("join_policy").is_none() {
@@ -170,16 +165,16 @@ pub fn run_genesis_join_policy_bundle_vector() -> Result<()> {
 
     // The `cas_register` hazard: a follow-up revision authored from the
     // accepted value keeps every component. Authoring one from scratch clears
-    // them — including the aad_visibility ceiling, which then presents
-    // downstream as "dedupe suddenly broke" rather than as a policy edit.
+    // them, which makes the complete-restatement requirement visible at the
+    // call site.
     let next = bundle.restate(2);
-    if next.join_policy.is_none() || next.aad_visibility != bundle.aad_visibility {
+    if next.join_policy.is_none() || next.content_scheme != bundle.content_scheme {
         bail!(
             "{VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE}: restating a revision must carry every \
              component forward"
         );
     }
-    if RealmPolicyBundlePayload::new(2).aad_visibility.is_some() {
+    if RealmPolicyBundlePayload::new(2).content_scheme.is_some() {
         bail!(
             "{VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE}: a bare revision must start with no components \
              so the clearing hazard stays visible at the call site"

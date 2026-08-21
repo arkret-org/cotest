@@ -199,15 +199,6 @@ fn read_receipt_signal_vector_suite_runs_clean() {
         .expect("read receipt Signal plaintext vectors must pass");
 }
 
-/// 2026-08-01 — `aad_visibility` became a registered policy_bundle component
-/// with a disclosure ceiling. The rule compares a policy value against an
-/// envelope discriminator, which no JSON Schema can express.
-#[test]
-fn aad_visibility_policy_ceiling_vector_runs_clean() {
-    cotest::conformance::run_aad_visibility_policy_ceiling_vector()
-        .expect("aad_visibility ceiling vector must pass");
-}
-
 /// 2026-08-17 — account lifecycle is an Account Authority issuer ledger, not a
 /// Principal Control Realm finality domain. Genesis/CAS, exact replay, same-seq
 /// fork, bounded gap recovery, binding rollback, service-key rotation, the

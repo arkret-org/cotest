@@ -56,11 +56,6 @@ pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     "ak.vector.sync.soft_fail_reconcile.v1",
     "ak.vector.lattice.lww_open_set.v1",
     "ak.vector.e2ee_relaxed.window_exceeds_ceiling.v1",
-    // 2026-08-01 — `aad_visibility` became a registered policy_bundle
-    // component with a disclosure ceiling (`encryption-and-audit.md` §2.8).
-    // The rule is cross-object (policy value vs envelope discriminator), so
-    // JSON Schema cannot express it and it lives here instead.
-    crate::conformance::aad_visibility_ceiling::VECTOR_ID_AAD_VISIBILITY_POLICY_CEILING,
     // 2026-08-17 — account lifecycle left the Event/PCR finality domain for the
     // Account Authority issuer ledger (`identity/account-lifecycle.md` §3.1).
     // The genesis/CAS, replay, fork, gap-recovery, binding-rollback and

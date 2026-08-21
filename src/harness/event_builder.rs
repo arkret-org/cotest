@@ -576,6 +576,20 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         member_join_payload_value(&derived_realm_id, actor)?,
         format!("ak:cell:ak.component.member.state.v1:{creator_core_id}"),
     )?;
+    for followup in &events[1..] {
+        arkret_schema::validate_registered_cell_writes_in_context(
+            followup,
+            arkret_schema::EventCellContractContext::OrdinaryRealmBootstrap,
+            arkret_canonical::DigestSuite::Sha256,
+        )
+        .map_err(|error| {
+            anyhow!(
+                "Realm bootstrap {} cell-write contract failed: {}",
+                followup.kind,
+                error
+            )
+        })?;
+    }
     arkret_policy::realm_bootstrap::validate_realm_bootstrap_unit(&events)
         .map_err(|error| anyhow!("Realm bootstrap validation failed: {error}"))?;
     Ok((derived_realm_id, events))

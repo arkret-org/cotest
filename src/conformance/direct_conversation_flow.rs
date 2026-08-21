@@ -162,7 +162,7 @@ fn validate_contact_verified_mirror_contract(fixture: &Value) -> Result<()> {
             [
                 "rejects a seal_refs member",
                 "unverified local row",
-                "neither refusal",
+                "does not reveal",
             ],
         ),
         (

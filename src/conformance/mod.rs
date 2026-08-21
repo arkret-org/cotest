@@ -1,4 +1,3 @@
-mod aad_visibility_ceiling;
 mod account_status_issuer_ledger;
 mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
@@ -109,10 +108,6 @@ const ARTIFACT_FIXTURES_DIR: &str = "fixtures";
 
 // ── Public suite re-exports ─────────────────────────────────────────────────
 
-pub use aad_visibility_ceiling::{
-    REASON_AAD_VISIBILITY_POLICY_VIOLATION, VECTOR_ID_AAD_VISIBILITY_POLICY_CEILING,
-    run_aad_visibility_policy_ceiling_vector,
-};
 pub use account_status_issuer_ledger::{
     VECTOR_ID_ACCOUNT_STATUS_ISSUER_LEDGER, run_account_status_issuer_ledger_vector,
 };
@@ -349,10 +344,7 @@ pub use proof_context_domain_separation::{
     run_proof_context_domain_separation_vector,
 };
 pub use protocol_gap_closure::run_protocol_gap_closure_fixture_suite;
-pub use push_rule_core::{
-    run_hardened_mention_routing_hint_vector, run_push_rule_client_only_vector,
-    run_push_rule_core_fixture_suite,
-};
+pub use push_rule_core::{run_push_rule_client_only_vector, run_push_rule_core_fixture_suite};
 pub use read_receipt_signal::{
     ALL_READ_RECEIPT_SIGNAL_VECTOR_IDS, VECTOR_ID_GENESIS_JOIN_POLICY_BUNDLE,
     VECTOR_ID_READ_RECEIPT_ROUND_TRIP, run_genesis_join_policy_bundle_vector,

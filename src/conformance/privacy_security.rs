@@ -314,7 +314,7 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
             case.cases.len()
         );
     }
-    if case.assertions.len() != 9 {
+    if case.assertions.len() != 10 {
         bail!("minimal-metadata author credential assertion catalogue drifted");
     }
 

@@ -15,7 +15,7 @@
                 "actor_id": "ak:did_core:web:notary.example",
                 "verification_method": "did:web:notary.example#notary-key-1",
                 "key_kind": "ed25519_raw32",
-                "jose_alg": "Ed25519",
+                "jose_algorithm": "Ed25519",
                 "frozen_public_key_b64u": "LRyzph4MGp_JtZDsPgNRrDmHq_0wUsIQSw_J0q12sUU",
                 "frozen_public_key_digest": "sha256:079e4b51afafa245c1c4fb02ab4f4ea303b0320697e4b89cfbdde46efbee4b0c"
               }
@@ -67,7 +67,7 @@
               "actor_id": "ak:did_core:web:notary.example",
               "verification_method": "did:web:notary.example#notary-key-1",
               "key_kind": "ed25519_raw32",
-              "jose_alg": "Ed25519",
+              "jose_algorithm": "Ed25519",
               "frozen_public_key_b64u": "LRyzph4MGp_JtZDsPgNRrDmHq_0wUsIQSw_J0q12sUU",
               "frozen_public_key_digest": "sha256:079e4b51afafa245c1c4fb02ab4f4ea303b0320697e4b89cfbdde46efbee4b0c"
             }
@@ -104,7 +104,7 @@
                 "actor_id": "ak:did_core:web:notary-a.example",
                 "verification_method": "did:web:notary-a.example#notary-key-1",
                 "key_kind": "ed25519_raw32",
-                "jose_alg": "Ed25519",
+                "jose_algorithm": "Ed25519",
                 "frozen_public_key_b64u": "WnA82IwABQeTR4DCdDNIbwpCZAbc6nFs1BaTzKuN3Gs",
                 "frozen_public_key_digest": "sha256:a6022dfca46e307e79cf859f5c23fbc6487277471d0d5c21bbd5b92286c80c83"
               },
@@ -112,7 +112,7 @@
                 "actor_id": "ak:did_core:web:notary-b.example",
                 "verification_method": "did:web:notary-b.example#notary-key-1",
                 "key_kind": "ed25519_raw32",
-                "jose_alg": "Ed25519",
+                "jose_algorithm": "Ed25519",
                 "frozen_public_key_b64u": "AM80FzpCfQd4Km4GjLJZjwPIngxZxw0YzHzlZo9jBXs",
                 "frozen_public_key_digest": "sha256:b52350835af60940f7d82a2e3e39fa3346c4801ca0e22fd8b09e9760bec24d47"
               }
@@ -174,6 +174,7 @@
               "previous_epoch": 0,
               "next_epoch": 0,
               "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "content_scheme": "mls_rfc9420",
               "binding_profile": "ak.profile.mls_governance_binding.full.v1",
               "reducer_profile": "ak.reducer.core.v1"
             },
@@ -199,6 +200,7 @@
               "previous_epoch": 0,
               "next_epoch": 1,
               "security_frontier_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+              "content_scheme": "mls_rfc9420",
               "binding_profile": "ak.profile.mls_governance_binding.full.v1",
               "reducer_profile": "ak.reducer.core.v1"
             }

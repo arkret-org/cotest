@@ -42,7 +42,6 @@ pub fn run_arkret_private_kdf_and_durability_suite() -> Result<()> {
     run_reaction_hmac(case(cases, "reaction_routing_hmac_nfc")?)?;
     run_signal_exporter_key(case(cases, "signal_exporter_key_sha256_aes128gcm")?)?;
     run_full_width_counter_nonce(case(cases, "full_width_counter_nonce_aes128gcm")?)?;
-    run_mention_routing_hmac(case(cases, "mention_routing_hmac_did")?)?;
     run_rrk_missing_seals(case(cases, "rrk_eager_seal_before_gc")?)?;
     run_rrk_recipient_validation(case(
         cases,
@@ -248,44 +247,6 @@ fn run_full_width_counter_nonce(case: &Value) -> Result<()> {
         .expect_err("a reused sender counter must be rejected");
     if counter.checked_sub(1).is_none() || u64::MAX.checked_add(1).is_some() {
         bail!("durable sender counter arithmetic boundary drifted");
-    }
-    Ok(())
-}
-
-/// `ak.vector.mention.routing_hmac_kat.v1` — the epoch routing key and the
-/// per-DID routing tag, both through the shipped SDK derivation.
-fn run_mention_routing_hmac(case: &Value) -> Result<()> {
-    let input = &case["input"];
-    let expected = &case["expected"];
-    let exporter_secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
-    let realm_id = arkret::RealmId::new(required_str(input, "realm_id_utf8")?.to_owned())
-        .map_err(|error| anyhow!("registered realm id is invalid: {error}"))?;
-    let exporter_label = required_str(input, "exporter_label")?;
-    if exporter_label != arkret::mls::MENTION_ROUTING_EXPORTER_LABEL {
-        bail!("registered mention routing exporter label drifted: {exporter_label}");
-    }
-    let mentioned = arkret::DidFullId::new(required_str(input, "mentioned_did_utf8")?.to_owned())
-        .map_err(|error| anyhow!("registered mentioned DID is invalid: {error}"))?;
-
-    let routing_key = arkret::mls::derive_mention_routing_key(&exporter_secret, &realm_id)
-        .map_err(|error| anyhow!("SDK mention routing key derivation failed: {error}"))?;
-    assert_hex(
-        "routing_hmac_key",
-        &routing_key,
-        expected,
-        "routing_hmac_key_hex",
-    )?;
-
-    let tag = arkret::mls::mention_routing_hmac(&exporter_secret, &realm_id, &mentioned)
-        .map_err(|error| anyhow!("SDK mention routing HMAC failed: {error}"))?;
-    assert_hex("routing_tag", &tag, expected, "routing_tag_hex")?;
-
-    // The from-key entry point clients use on the send path must land on the
-    // same tag as the from-secret one this vector registers.
-    let from_key = arkret::mls::mention_routing_hmac_from_key(&routing_key, &mentioned)
-        .map_err(|error| anyhow!("SDK mention routing HMAC from key failed: {error}"))?;
-    if from_key != tag {
-        bail!("mention routing HMAC disagrees between its from-secret and from-key entry points");
     }
     Ok(())
 }
