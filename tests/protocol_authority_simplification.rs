@@ -50,6 +50,8 @@ fn producer_event() -> Event {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
             event_digest: digest,
+            signer_resolution_evidence_ref: None,
+            signer_resolution_evidence_digest: None,
             created_at: event.created_at,
             domain: None,
             audience: None,
@@ -65,6 +67,8 @@ fn accept(mut event: Event) -> Event {
     let EventProof::Producer(producer) = &event.proofs[0] else {
         unreachable!("fixture starts with a producer proof")
     };
+    let (signer_resolution_evidence_ref, signer_resolution_evidence_digest) =
+        cotest::fixture_signer_evidence_pair("authority-simplification-admission");
     event.proofs.push(
         PrincipalServerAdmissionProof {
             kind: PrincipalServerAdmissionProofKind::PrincipalServerAdmission,
@@ -74,6 +78,8 @@ fn accept(mut event: Event) -> Event {
                 .unwrap(),
             producer_verification_method: producer.verification_method.clone(),
             producer_signing_key: DidKey::new("did:key:z6MkhFixtureDeviceKey").unwrap(),
+            signer_resolution_evidence_ref,
+            signer_resolution_evidence_digest,
             accepted_at: event.created_at,
             jws: "header..admission-signature".to_owned(),
         }
@@ -94,14 +100,14 @@ fn authority_pair_distinguishes_same_principal_at_different_servers() {
 fn accepted_event_requires_exact_origin_and_producer_binding() {
     let accepted = accept(producer_event());
     accepted
-        .validate_principal_server_admission_binding()
+        .validate_principal_server_admission_binding(arkret_canonical::DigestSuite::Sha256)
         .unwrap();
 
     let mut wrong_origin = accepted.clone();
     wrong_origin.principal_server_id = core("did:web:replica.example");
     assert!(
         wrong_origin
-            .validate_principal_server_admission_binding()
+            .validate_principal_server_admission_binding(arkret_canonical::DigestSuite::Sha256)
             .is_err()
     );
 
@@ -113,7 +119,7 @@ fn accepted_event_requires_exact_origin_and_producer_binding() {
     admission.producer_proof_digest = Hash::new(format!("sha256:{}", "0".repeat(64))).unwrap();
     assert!(
         wrong_producer_digest
-            .validate_principal_server_admission_binding()
+            .validate_principal_server_admission_binding(arkret_canonical::DigestSuite::Sha256)
             .is_err()
     );
 
@@ -123,7 +129,7 @@ fn accepted_event_requires_exact_origin_and_producer_binding() {
         .push(replica_resigned.proofs[1].clone());
     assert!(
         replica_resigned
-            .validate_principal_server_admission_binding()
+            .validate_principal_server_admission_binding(arkret_canonical::DigestSuite::Sha256)
             .is_err()
     );
 }

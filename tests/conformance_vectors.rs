@@ -883,6 +883,8 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
             event_digest: Hash::new(
                 "sha256:0000000000000000000000000000000000000000000000000000000000000088",
             )?,
+            signer_resolution_evidence_ref: None,
+            signer_resolution_evidence_digest: None,
             created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
                 .with_timezone(&chrono::Utc),
             domain: None,

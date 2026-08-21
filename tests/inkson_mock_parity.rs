@@ -1088,8 +1088,9 @@ async fn prepare_live_publication_body(
     .await?;
     let outcome: arkret_wire::AuthorizationLeaseIssueOutcome =
         serde_json::from_value(value).context("decode Realm bootstrap lease outcome")?;
+    let digest_suites = vec![arkret_canonical::DigestSuite::Sha256; request.events.len()];
     outcome
-        .validate_against_request(&request)
+        .validate_against_request(&request, &digest_suites)
         .context("validate Realm bootstrap lease outcome")?;
     Ok(Some(serde_json::to_value(
         arkret_wire::EventsSubmitBatchRequestBody {

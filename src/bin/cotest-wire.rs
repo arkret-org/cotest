@@ -889,6 +889,8 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
         kind: proof_kind::DETACHED_JWS.to_owned(),
         verification_method: input.verification_method,
         event_digest,
+        signer_resolution_evidence_ref: None,
+        signer_resolution_evidence_digest: None,
         created_at,
         domain: None,
         audience: None,
@@ -994,8 +996,14 @@ fn event_derived_id(event: Value) -> Result<Value> {
     }
     let digest_payload_bytes = arkret_canonical::canonical_json_bytes(&event)
         .context("canonicalize SDK Event digest payload")?;
-    let mut event = Event::from_digest_payload_bytes(&digest_payload_bytes)
-        .context("derive SDK Event identity from digest payload")?;
+    // This helper serves the existing fixed SHA-256 conformance fixtures.
+    // Dynamic-suite protocol paths use the SDK authoring APIs with an explicit
+    // replay-derived suite instead of this test-only command.
+    let mut event = Event::from_digest_payload_bytes(
+        &digest_payload_bytes,
+        arkret_canonical::DigestSuite::Sha256,
+    )
+    .context("derive SDK Event identity from digest payload")?;
     // A Realm genesis names no Realm, so its `realm_id` is a function of the
     // Event that creates it and can only be computed once the Event has its
     // own id. Callers get both back because neither is theirs to choose.

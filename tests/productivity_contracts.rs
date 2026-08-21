@@ -370,11 +370,15 @@ fn scheduled_send_signed_event(body: &str) -> arkret_wire::AuthoredEvent {
             .unwrap(),
     )
     .unwrap();
+    let (signer_resolution_evidence_ref, signer_resolution_evidence_digest) =
+        cotest::fixture_signer_evidence_pair("scheduled-send-producer");
     event.attach_proof(
         ProducerEventProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
             event_digest: digest,
+            signer_resolution_evidence_ref: Some(signer_resolution_evidence_ref),
+            signer_resolution_evidence_digest: Some(signer_resolution_evidence_digest),
             created_at: event.created_at,
             domain: None,
             audience: None,
