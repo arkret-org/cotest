@@ -701,7 +701,12 @@ test.describe("service surface contract — error envelope, pagination, idempote
         }
       }
 
-      // Tampered cursor → 4xx param_invalid / cursor_expired (api-conventions §7).
+      // Tampered cursor → encoding.md §8.3 closed set. Flipping the final
+      // base64url character corrupts the canonical JSON body, so this is a
+      // *syntax* failure: the mapping is pinned to top-level `param_invalid`
+      // with reason `invalid_cursor` — `cursor_expired` is reserved for TTL
+      // expiry and `cursor_integrity_invalid` for handle lookup / binding
+      // failures; a bare `invalid_cursor` error code is outside the closed set.
       const firstPage = await fetchPage();
       const validCursor = firstPage.next_cursor;
       expect(validCursor, "first page must carry a next_cursor to tamper").toMatch(cursorRe);
@@ -713,12 +718,15 @@ test.describe("service surface contract — error envelope, pagination, idempote
         headers: { ...authHeaders(token), "content-type": "application/json" },
         data: { realms: [realmId], limit: 2, after: tampered },
       });
-      expect(tamperResp.status(), "tampered cursor is rejected 4xx").toBeGreaterThanOrEqual(400);
-      expect(tamperResp.status(), "tampered cursor is a client error").toBeLessThan(500);
+      expect(tamperResp.status(), "tampered cursor is param_invalid (HTTP 400)").toBe(400);
+      const tamperBody = (await tamperResp.json()) as {
+        error?: { details?: { reason_code?: string } };
+      };
+      expect(wireErrCode(tamperBody), "tampered cursor error code").toBe("param_invalid");
       expect(
-        ["param_invalid", "cursor_expired", "invalid_cursor", "cursor_integrity_invalid"],
-        "tampered cursor error code",
-      ).toContain(wireErrCode(await tamperResp.json()));
+        tamperBody.error?.details?.reason_code,
+        "syntax failure carries reason invalid_cursor",
+      ).toBe("invalid_cursor");
     },
   );
 
