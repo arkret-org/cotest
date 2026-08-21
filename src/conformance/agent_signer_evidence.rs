@@ -9,10 +9,11 @@ use arkret_models_identity::agent_signer_evidence::{
     AGENT_KEY_COMPONENT, AGENT_STATUS_COMPONENT, AgentAdmissionEvidence, AgentAuthoritySnapshot,
     AgentAuthoritySnapshotCore, AgentAuthorizationEvidence, AgentAuthorizationStateWitness,
     AgentAuthorizationStatus, AgentCurrentObservation, AgentDetachedJws,
-    AgentEventAdmissionReceipt, AgentEvidenceOuterAttestation, AgentKeyCellEntry,
-    AgentLifecycleProvenance, AgentLifecycleStatus, AgentLifecycleWitness, AgentSignerEvidence,
-    AgentSigningPublicKey, AgentSnapshotLease, ControllerAccountEligibility,
-    ControllerAccountGateAttestation, ControllerAccountGateBasis, ControllerAccountStatus,
+    AgentEventAdmissionReceipt, AgentEvidenceOuterAttestation,
+    AgentHistoricalEvidenceOuterAttestation, AgentKeyCellEntry, AgentLifecycleProvenance,
+    AgentLifecycleStatus, AgentLifecycleWitness, AgentSignerEvidence, AgentSigningPublicKey,
+    AgentSnapshotLease, ControllerAccountEligibility, ControllerAccountGateAttestation,
+    ControllerAccountGateBasis, ControllerAccountStatus,
 };
 use arkret_signatures::agent_evidence::{
     AgentEvidenceCommonContext, AgentEvidenceRejectedReason, AgentEvidenceStateVerificationContext,
@@ -28,7 +29,7 @@ use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
     Base64UrlString, DidCoreId, DidFullId, DidUrl, EventId, EventKind, Hash, Hlc, NonEmptyString,
     NotarySig, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId, SealSignature,
-    project_full_id_to_core_id,
+    SignerEvidenceRef, project_full_id_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -41,6 +42,7 @@ pub const AGENT_SIGNER_EVIDENCE_FIXTURE: &str = "agent-signer-evidence-fixture.j
 pub const AGENT_SIGNER_EVIDENCE_SUITE: &str = "ak.suite.agent.signer_evidence.v1";
 
 pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
+    "query_success_returns_cas_frozen_authenticated_root",
     "current_exact_request_and_three_active_gates_verified",
     "current_cross_verifier_replay_rejected",
     "current_request_or_challenge_replay_rejected",
@@ -127,7 +129,9 @@ struct ExecutableEvidence {
     event_id: EventId,
     event_digest: Hash,
     realm_id: RealmId,
-    event_admitted_seal_id: SealId,
+    producer_accepted_at: DateTime<Utc>,
+    producer_signer_resolution_evidence_ref: SignerEvidenceRef,
+    producer_signer_resolution_evidence_digest: Hash,
     now: DateTime<Utc>,
 }
 
@@ -179,6 +183,9 @@ fn service_id(value: &str) -> Result<DidCoreId> {
 
 fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
     match name {
+        "query_success_returns_cas_frozen_authenticated_root" => {
+            current_outcome(&build_evidence(EvidenceConfig::default())?, None)
+        }
         "current_exact_request_and_three_active_gates_verified" => {
             current_outcome(&build_evidence(EvidenceConfig::default())?, None)
         }
@@ -315,17 +322,17 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
         }
         "outer_attestation_prevents_mode_splice" => {
             let mut fixture = build_evidence(EvidenceConfig::default())?;
-            let current_outer = match &fixture.current {
+            let current_core_digest = match &fixture.current {
                 AgentSignerEvidence::CurrentAdmission {
                     outer_attestation, ..
-                } => outer_attestation.clone(),
+                } => outer_attestation.core_digest.clone(),
                 AgentSignerEvidence::HistoricalEvent { .. } => unreachable!(),
             };
             if let AgentSignerEvidence::HistoricalEvent {
                 outer_attestation, ..
             } = &mut fixture.historical
             {
-                *outer_attestation = current_outer;
+                outer_attestation.core_digest = current_core_digest;
             }
             historical_outcome(&fixture, None, false)
         }
@@ -591,7 +598,11 @@ fn historical_outcome_with(
             event_id: &fixture.event_id,
             event_digest: &fixture.event_digest,
             realm_id: &fixture.realm_id,
-            event_admitted_seal_id: &fixture.event_admitted_seal_id,
+            producer_accepted_at: fixture.producer_accepted_at,
+            producer_signer_resolution_evidence_ref: &fixture
+                .producer_signer_resolution_evidence_ref,
+            producer_signer_resolution_evidence_digest: &fixture
+                .producer_signer_resolution_evidence_digest,
             receiver_service_id,
             resolve_receiver_historical_key: &resolve,
         },
@@ -957,36 +968,24 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
 
     let event_id = event_id(3)?;
     let event_digest = hash_byte(0x51)?;
-    let event_admitted_seal_id = admission
-        .agent_authority_snapshot
-        .core
-        .frontier_seal_id
-        .clone();
+    let producer_accepted_at = now - Duration::seconds(1);
+    let producer_signer_resolution_evidence_digest = hash_byte(0x71)?;
+    let producer_signer_resolution_evidence_ref = SignerEvidenceRef::new(format!(
+        "ak:signer_evidence:{}",
+        producer_signer_resolution_evidence_digest
+    ))?;
     let mut receipt = AgentEventAdmissionReceipt {
         schema: nes(SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1)?,
         event_id: event_id.clone(),
         event_digest: event_digest.clone(),
         realm_id: realm_id.clone(),
-        event_admitted_seal_id: event_admitted_seal_id.clone(),
+        producer_accepted_at,
         accepted_at: now,
         agent_id: signer_id.clone(),
         verification_method: verification_method.clone(),
-        agent_key_authorize_event_id: authorize_event_id.clone(),
-        admission_evidence_digest,
-        agent_snapshot_digest: snapshot_digest,
-        agent_key_seal_id: admission
-            .agent_authority_snapshot
-            .core
-            .key_state_witness
-            .seal_id
+        producer_signer_resolution_evidence_ref: producer_signer_resolution_evidence_ref.clone(),
+        producer_signer_resolution_evidence_digest: producer_signer_resolution_evidence_digest
             .clone(),
-        agent_status_seal_id: admission
-            .agent_authority_snapshot
-            .core
-            .agent_lifecycle_witness
-            .seal_id
-            .clone(),
-        controller_gate_attestation_digest: gate_digest,
         receiver_service_id: receiver_service_id.clone(),
         proof: pending_proof()?,
     };
@@ -1000,11 +999,10 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         schema: nes(SchemaId::AGENT_SIGNER_EVIDENCE_V1)?,
         admission_evidence: admission,
         event_admission_receipt: receipt,
-        outer_attestation: pending_outer(
+        outer_attestation: pending_historical_outer(
             &authority_service_id,
             &authority_verification_method,
-            issued_at,
-            expires_at,
+            now,
         )?,
         transparency: None,
     };
@@ -1038,7 +1036,9 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         event_id,
         event_digest,
         realm_id,
-        event_admitted_seal_id,
+        producer_accepted_at,
+        producer_signer_resolution_evidence_ref,
+        producer_signer_resolution_evidence_digest,
         now,
     })
 }
@@ -1085,17 +1085,46 @@ fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> R
         .and_then(|object| object.remove("outer_attestation"))
         .context("outer attestation missing")?;
     let core_digest = canonical_hash(&core)?;
-    let outer = match evidence {
+    match evidence {
         AgentSignerEvidence::CurrentAdmission {
             outer_attestation, ..
+        } => {
+            outer_attestation.core_digest = core_digest;
+            outer_attestation.proof = sign_domain(
+                "ak.agent-signer-evidence.v1",
+                outer_attestation,
+                signing_key,
+                None,
+            )?;
         }
-        | AgentSignerEvidence::HistoricalEvent {
+        AgentSignerEvidence::HistoricalEvent {
             outer_attestation, ..
-        } => outer_attestation,
-    };
-    outer.core_digest = core_digest;
-    outer.proof = sign_domain("ak.agent-signer-evidence.v1", outer, signing_key, None)?;
+        } => {
+            outer_attestation.core_digest = core_digest;
+            outer_attestation.proof = sign_domain(
+                "ak.agent-signer-evidence.v1",
+                outer_attestation,
+                signing_key,
+                None,
+            )?;
+        }
+    }
     Ok(())
+}
+
+fn pending_historical_outer(
+    service_id: &DidCoreId,
+    method: &DidUrl,
+    attested_at: DateTime<Utc>,
+) -> Result<AgentHistoricalEvidenceOuterAttestation> {
+    Ok(AgentHistoricalEvidenceOuterAttestation {
+        domain: nes("ak.agent-signer-evidence.v1")?,
+        core_digest: hash_byte(0)?,
+        source_service_id: service_id.clone(),
+        verification_method: method.clone(),
+        attested_at,
+        proof: pending_proof()?,
+    })
 }
 
 fn pending_outer(

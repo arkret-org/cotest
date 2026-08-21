@@ -78,6 +78,8 @@ fn accept(mut event: Event) -> Event {
                 .unwrap(),
             producer_verification_method: producer.verification_method.clone(),
             producer_signing_key: DidKey::new("did:key:z6MkhFixtureDeviceKey").unwrap(),
+            producer_signer_resolution_evidence_ref: None,
+            producer_signer_resolution_evidence_digest: None,
             signer_resolution_evidence_ref,
             signer_resolution_evidence_digest,
             accepted_at: event.created_at,
