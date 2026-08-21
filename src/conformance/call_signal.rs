@@ -295,7 +295,6 @@ fn call_signal_plaintext(signal_kind: &str, seq: u64) -> Value {
     let data = match signal_kind {
         "invite" => json!({
             "lifetime_ms": 60_000,
-            "mode": "p2p",
             "offer": {
                 "type": "offer",
                 "sdp": "v=0"
