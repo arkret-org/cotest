@@ -10,7 +10,6 @@ pub mod chaos_kill_midwrite;
 pub mod circle;
 pub mod coauth_session_grant_response_loss;
 pub mod collaboration_workflow;
-pub mod consent_revoke_scope_any_cascade;
 pub mod delivery_media;
 pub mod did_boundary_call_counts;
 pub mod directory;
