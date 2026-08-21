@@ -170,7 +170,7 @@
         "constraint_subkind": "visibility",
         "effect": "deny",
         "evaluation_class": "grant_local",
-        "allowed_history_visibility_values": ["joined", "invited"]
+        "allowed_history_access_values": ["since_join", "all_history_for_current_members"]
       },
       "expected": { "outcome": "shape_ok", "evaluation_class": "grant_local", "fast_path_eligible": true }
     }

@@ -77,7 +77,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         summary: "regression for local Realm genesis authoring",
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
         encryptionProfile: "none",
       });
       const batchEvents = (body: Record<string, unknown>): IngressEvent[] =>
@@ -408,7 +408,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         summary: "regression for write sync_token cursor poisoning",
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "none",
       });
       await alicePage.inviteFromAdmin(realmId, bob.did);

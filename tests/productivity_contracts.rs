@@ -357,13 +357,19 @@ fn scheduled_send_signed_event(body: &str) -> arkret_wire::AuthoredEvent {
         scheduled_send_test_payload(body),
     )
     .unwrap()
-    .author(
+    .author_with_digest_suite(
         7,
         Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
         Utc.with_ymd_and_hms(2026, 8, 13, 1, 2, 3).single().unwrap(),
+        arkret_canonical::DigestSuite::Sha256,
     )
     .unwrap();
-    let digest = Hash::new(event.event_digest().unwrap()).unwrap();
+    let digest = Hash::new(
+        event
+            .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+            .unwrap(),
+    )
+    .unwrap();
     event.attach_proof(
         ProducerEventProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),

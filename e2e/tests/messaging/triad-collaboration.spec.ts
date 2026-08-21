@@ -87,7 +87,7 @@ test.describe("single-server triad collaboration", () => {
     ]);
     const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
       title: `triad audit ${stamp}`,
-      historyVisibility: "shared",
+      historyAccess: "all_history_for_current_members",
     });
     const createBody = `triad create ${stamp}`;
     const created = await sendPlaintextMessageViaApi(
@@ -172,7 +172,7 @@ test.describe("single-server triad collaboration", () => {
     ]);
     const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
       title: `triad joined ${stamp}`,
-      historyVisibility: "joined",
+      historyAccess: "since_join",
     });
     const baseMs = Date.now() + 1_000;
     const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
@@ -228,7 +228,7 @@ test.describe("single-server triad collaboration", () => {
     expect(ids).toContain(post.event_id);
   });
 
-  // The history_visibility=joined server gap is now covered live by the
+  // The history_access=since_join server gap is now covered live by the
   // API late-join case above plus spaces/history-joined-enforcement.spec.ts.
   // Phases A-D (space lifecycle, invite, mutual messaging, reply, edit) are
   // fully wired in inkson (chat-* reply/edit testids + the realm-members invite
@@ -277,7 +277,7 @@ test.describe("single-server triad collaboration", () => {
         summary: "triad collaboration coverage",
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "none",
         seedMembers: [bob.did],
       });
@@ -323,7 +323,7 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(carolPage.page, testInfo, "C-carol-accepted-invite");
 
       await carolPage.gotoTimelineRealm(realmId);
-      // Spec models/realm-and-space.md §3.4: history_visibility=joined →
+      // Spec models/realm-and-space.md §3.4: history_access=since_join →
       // carol sees nothing posted before she became a member.
       await expect(carolPage.timelineEvent(m1)).toHaveCount(0);
       await expect(carolPage.timelineEvent(m2Edited)).toHaveCount(0);
@@ -336,7 +336,7 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(carolPage.page, testInfo, "D-carol-sees-m3");
 
       // Phase E — bob redacts his own M2; alice sees tombstone; carol unaffected
-      // (she never saw M2 anyway because of history_visibility).
+      // (she never saw M2 anyway because of history_access).
       await bobPage.gotoTimelineRealm(realmId);
       await bobPage.clickTimelineRedact(m2Edited);
       await bobPage.page.getByTestId("chat-confirm-redact-button").click();
@@ -430,13 +430,13 @@ test.describe("single-server triad collaboration", () => {
     });
 
     // E1.2 — pre-join message is sent BEFORE carol is invited. With
-    // history_visibility=shared (spec §3.4), late joiners must see the
+    // history_access=all_history_for_current_members (spec §3.4), late joiners must see the
     // pre-join timeline. soland's default sync path currently exposes the
     // full timeline regardless of visibility (see main test's soland gap
     // comment), so this positive assertion passes today; once soland adds
-    // history_visibility filtering, this test will still be the canonical
+    // history_access filtering, this test will still be the canonical
     // "shared visibility lets carol read history" coverage.
-    test("E1.2 history_visibility=shared exposes pre-join messages to late joiner", async ({
+    test("E1.2 history_access=all_history_for_current_members exposes pre-join messages to late joiner", async ({
       request,
     }) => {
       const stamp = Date.now();
@@ -450,7 +450,7 @@ test.describe("single-server triad collaboration", () => {
       const preMessage = `pre-join shared message ${stamp}`;
       const realmId = await createRealmViaApi(request, aliceToken, {
         title: `S1.2 Shared History ${stamp}`,
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
         ownerDid: alice.did,
       });
       const pre = await sendPlaintextMessageViaApi(
@@ -495,7 +495,7 @@ test.describe("single-server triad collaboration", () => {
       ]);
       const realmId = await createSharedRealmViaApi(request, alice, aliceToken, bob, {
         title: `S1.4 Leave Rejoin ${stamp}`,
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
       });
       const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       const beforeLeave = await sendPlaintextMessageViaApi(

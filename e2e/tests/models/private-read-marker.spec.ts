@@ -171,7 +171,7 @@ test.describe("private read marker", () => {
     const realmId = await createRealmApi(request, token1, {
       title: `read cursor xdev ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       encryption_profile: "none",
       ownerDid: alice.did,
     });
@@ -250,7 +250,7 @@ test.describe("private read marker", () => {
     const realmId = await createRealmApi(request, token1, {
       title: `read cursor ec ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       encryption_profile: "none",
       ownerDid: alice.did,
     });
@@ -308,7 +308,7 @@ test.describe("private read marker", () => {
     const realmId = await createRealmApi(request, bobToken, {
       title: `read cursor e2ee ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       encryption_profile: "mls_rfc9420",
       content_scheme: "mls_exporter_aead_v1",
       invitees: [alice.did],
@@ -354,7 +354,7 @@ test.describe("private read marker", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `read cursor circle ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       encryption_profile: "none",
       ownerDid: alice.did,
     });
@@ -436,7 +436,7 @@ async function readCursorFixture(
   const realmId = await createRealmApi(request, aliceToken, {
     title: `read cursor ${stamp}`,
     discoverability: "listed",
-    history_visibility: "shared",
+    history_access: "all_history_for_current_members",
     encryption_profile: "none",
     ownerDid: alice.did,
   });

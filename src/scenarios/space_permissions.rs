@@ -99,7 +99,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             "title": "Private Space",
             "summary": "Private Space",
             "discoverability": "invite_only",
-            "history_visibility": "shared",
+            "history_access": "all_history_for_current_members",
             "plaintext_visible_services": [server.service_id()]
         }))
         .await?;

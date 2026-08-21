@@ -422,17 +422,17 @@ fn reduce_equivocation(input: &KernelGateInput) -> KernelGateOutcome {
 
 fn notary_authorities(notary: &Value) -> Option<BTreeSet<String>> {
     match notary.get("kind").and_then(Value::as_str)? {
-        "single_did" => Some(
+        "single_signer" => Some(
             notary
-                .get("actor_id")
+                .pointer("/signer/actor_id")
                 .and_then(Value::as_str)
                 .map(|actor_id| BTreeSet::from([actor_id.to_owned()]))
                 .unwrap_or_default(),
         ),
-        "open_set" | "threshold" => Some(string_set(notary.get("members"))),
+        "open_set" | "threshold" => Some(notary_descriptor_actor_set(notary.get("members"))),
         "mixed" => {
-            let mut members = string_set(notary.get("recovery_members"));
-            if let Some(actor_id) = notary.get("actor_id").and_then(Value::as_str) {
+            let mut members = notary_descriptor_actor_set(notary.get("recovery_members"));
+            if let Some(actor_id) = notary.pointer("/signer/actor_id").and_then(Value::as_str) {
                 members.insert(actor_id.to_owned());
             }
             Some(members)
@@ -443,10 +443,20 @@ fn notary_authorities(notary: &Value) -> Option<BTreeSet<String>> {
 
 fn profile_name(notary: &Value) -> Option<&'static str> {
     match notary.get("kind").and_then(Value::as_str)? {
-        "single_did" | "threshold" | "mixed" => Some("single_chain"),
+        "single_signer" | "threshold" | "mixed" => Some("single_chain"),
         "open_set" => Some("open_set"),
         _ => None,
     }
+}
+
+fn notary_descriptor_actor_set(value: Option<&Value>) -> BTreeSet<String> {
+    value
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| entry.get("actor_id").and_then(Value::as_str))
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 fn string_set(value: Option<&Value>) -> BTreeSet<String> {

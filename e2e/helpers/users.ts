@@ -22,6 +22,7 @@ import {
   solandServiceId,
 } from "./env";
 import { selectDxcOption } from "./dxc-select";
+import type { RealmObject } from "./generated/spec-wire-objects";
 import {
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
@@ -140,7 +141,7 @@ export type CreateRealmOpts = {
   summary?: string;
   discoverability?: string;
   joinRule?: string;
-  historyVisibility?: string;
+  historyAccess?: RealmObject["history_access"];
   encryptionProfile?: string;
   seedMembers?: string[];
   completeRecoveryKeySetup?: boolean;
@@ -776,10 +777,10 @@ export class JointUserPage {
         promptHandling,
       );
     }
-    if (opts.historyVisibility !== undefined) {
+    if (opts.historyAccess !== undefined) {
       await this.selectCreateRealmOption(
-        strand.getByTestId("realm-policy-history-visibility-input"),
-        opts.historyVisibility,
+        strand.getByTestId("realm-policy-history-access-input"),
+        opts.historyAccess,
         promptHandling,
       );
     }

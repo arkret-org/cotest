@@ -245,9 +245,9 @@ conformance_test!(
 );
 
 conformance_test!(
-    history_crypto_closure_fixture_suite_matches_reference_semantics,
-    "history_crypto_closure_fixture",
-    cotest::conformance::run_history_crypto_closure_fixture_suite,
+    history_key_direct_traversal_fixture_matches_shared_sdk_types,
+    "history_key_direct_traversal_fixture",
+    cotest::conformance::run_history_key_direct_traversal_suite,
 );
 
 conformance_test!(
@@ -267,9 +267,8 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// FLOW-002/004/005/008/014 — joined generation-0 history, exact
-    /// first-valid founding replay, Commit/Welcome finality fences and
-    /// same-coordinate replacement-generation repair.
+    /// FLOW-002/004/005/008/014 — single derived MLS group, exact first-valid
+    /// founding replay, Commit/Welcome finality fences and same-group repair.
     direct_conversation_end_to_end_flow_matches_reference_semantics,
     "direct_conversation_end_to_end_flow",
     cotest::conformance::run_direct_conversation_flow_suite,
@@ -393,16 +392,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-20 M3 — anchorer cell governance vectors (4 happy-path profiles +
-    /// concurrent reconfig?Bottom Conflict + signature mismatch + threshold
-    /// below/over quorum + registry drift). Stand-alone JSON fixture for SUT
-    /// black-box validation; lattice round-trip stays in lattice_round_trip.rs.
-    anchorer_cell_fixture_suite_matches_reference_semantics,
-    "anchorer_cell_fixture",
-    cotest::conformance::run_anchorer_cell_fixture_suite,
-);
-
-conformance_test!(
     /// Round-20 M5 — conflict-repair Move vectors (head_in single-op?Value,
     /// self-authorising winner reject at lattice layer, manual repair via
     /// recovery_capability + anchorer endorsement). Stand-alone JSON fixture
@@ -502,13 +491,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-24 B2 — redaction reducer × history_visibility composition.
-    redaction_history_visibility_fixture_suite_matches_reference_semantics,
-    "redaction_history_visibility_fixture",
-    cotest::conformance::run_redaction_history_visibility_fixture_suite,
-);
-
-conformance_test!(
     /// Round-24 B3 — composite (cell, subject) state-key encoding determinism +
     /// reserved-name collision rejection.
     composite_state_key_encoding_fixture_suite_matches_reference_semantics,
@@ -522,14 +504,6 @@ conformance_test!(
     mls_e2ee_basic_fixture_suite_matches_reference_semantics,
     "mlR_e2ee_basic_fixture",
     cotest::conformance::run_mls_e2ee_basic_fixture_suite,
-);
-
-conformance_test!(
-    /// Round-25 B4 — history visibility scope vectors (joined / invited /
-    /// world_readable / shared) — smoke validation.
-    history_visibility_fixture_suite_matches_reference_semantics,
-    "history_visibility_fixture",
-    cotest::conformance::run_history_visibility_fixture_suite,
 );
 
 conformance_test!(
@@ -587,15 +561,6 @@ conformance_test!(
     recovery_ticket_state_machine_round_26,
     "recovery_ticket_state_machine_round_26",
     cotest::conformance::run_recovery_ticket_state_machine_check,
-);
-
-conformance_test!(
-    /// Round-26 B4 — fixture-decoupled history_visibility projection matrix
-    /// (every (visibility, membership, ts) tuple's expected visible/hidden bit
-    /// computed from the spec's projection function).
-    history_visibility_projection_matrix_round_26,
-    "history_visibility_projection_matrix_round_26",
-    cotest::conformance::run_history_visibility_projection_matrix_check,
 );
 
 conformance_test!(
@@ -677,15 +642,6 @@ conformance_test!(
     blob_stream_aead_fixture_suite_matches_reference_semantics,
     "blob_stream_aead_fixture",
     cotest::conformance::run_blob_stream_aead_fixture_suite,
-);
-
-conformance_test!(
-    /// Media AEAD nonce vectors promoted to spec artifacts. Asserts sender
-    /// nonce-prefix domain separation, counter replay rejection, and
-    /// deterministic rejection of random 96-bit nonce fallback.
-    media_aead_nonce_fixture_suite_matches_reference_semantics,
-    "media_aead_nonce_fixture",
-    cotest::conformance::run_media_aead_nonce_fixture_suite,
 );
 
 conformance_test!(

@@ -750,6 +750,7 @@ async fn bootstrap_test_device_authorization(
             principal_id: principal_actor_id.clone(),
             principal_server_id: server.service_id().clone(),
             principal_full_id: principal.clone(),
+            notary: crate::fixture_single_signer_notary(principal_actor_id.clone()),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal.clone(),
                 method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,

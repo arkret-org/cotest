@@ -60,7 +60,7 @@ test.describe("read receipts + privacy", () => {
       {
         title: `G2.T7 Receipt ${stamp}`,
         discoverability: "listed",
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
       },
     );
     const message = await sendPlaintextMessageViaApi(
@@ -618,7 +618,7 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
     title: `${label} receipt ${stamp}`,
     realm: {
       discoverability: "listed",
-      historyVisibility: "shared",
+      historyAccess: "all_history_for_current_members",
     },
   });
   const message = await sendPlaintextMessageViaApi(

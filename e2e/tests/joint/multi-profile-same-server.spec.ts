@@ -51,7 +51,7 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
         title: realmTitle,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "none",
       });
       await alicePage.inviteFromAdmin(realmId, bob.did);

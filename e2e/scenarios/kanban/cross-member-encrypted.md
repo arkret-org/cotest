@@ -37,7 +37,7 @@
 
 ## Steps
 
-**顺序关键:内容必须在 bob 加入后创建。** 否则加入前内容对 bob 既被 history_visibility=joined 裁剪、又因 MLS 前向保密(bob 无该 epoch 密钥)解不开——皆为正确行为,不是本场景要验的协作路径。
+**顺序关键:内容必须在 bob 加入后创建。** 否则加入前内容对 bob 既被 history_access=since_join 裁剪、又因 MLS 前向保密(bob 无该 epoch 密钥)解不开——皆为正确行为,不是本场景要验的协作路径。
 
 1. alice 建**空** `encryption_profile=mls_rfc9420` 的 Realm。
 2. alice 邀请 bob;断言邀请状态含 `MLS Welcome queued`(KeyPackage 被 claim)。

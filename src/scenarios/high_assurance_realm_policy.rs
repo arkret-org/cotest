@@ -14,10 +14,9 @@
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{DidCoreId, RealmId, TrustDomainId};
 use arkret_models_collaboration::governance::circle::EncryptionFloor;
-use arkret_models_collaboration::objects::realm::{NotaryProfile, Realm};
+use arkret_models_collaboration::objects::realm::Realm;
 use arkret_wire::{
-    Discoverability, EncryptionProfile, FederationPolicy, HistoryVisibility, JoinRule, NotaryValue,
-    SecurityClass,
+    Discoverability, EncryptionProfile, FederationPolicy, HistoryAccess, JoinRule, SecurityClass,
 };
 
 const REALM_ID: &str = "ak:realm:AWdkiR5jlnGgdx6sVlaEmGK5CATkDmi21Mn8gxnUmrZe";
@@ -59,7 +58,7 @@ fn build_realm(
         default_strand_id: None,
         default_discoverability: Discoverability::InviteOnly,
         default_join_rule: JoinRule::Invite,
-        history_visibility: HistoryVisibility::Joined,
+        history_access: HistoryAccess::SinceJoin,
         reducer_profile: arkret_wire::CORE_REDUCER_PROFILE.to_owned(),
         encryption_profile: EncryptionProfile::None,
         content_encryption_floor: Some(EncryptionFloor::AllowPlaintext),
@@ -75,10 +74,9 @@ fn build_realm(
         updated_by: None,
         updated_at: None,
         relation_profiles: Vec::new(),
-        notary_profile: NotaryProfile::SingleDid,
         availability_policy: None,
         audit_policy: None,
-        notary: NotaryValue::single_did(principal.clone()),
+        notary: crate::fixture_single_signer_notary(principal.clone()),
         // Create-locked genesis basis for the Realm authority-root cell
         // (realm-and-space.md section 2.5).
         capability_action_registry_digest: arkret::current_capability_action_registry_digest()

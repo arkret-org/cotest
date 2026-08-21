@@ -138,7 +138,12 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
                 .map(|(controller, _)| controller)
                 .ok_or_else(|| anyhow!("member verification method is not a DID URL"))?;
             let full_id = arkret_wire::DidFullId::new(controller.to_owned())?;
-            arkret_wire::project_full_id_to_core_id(&full_id).map_err(anyhow::Error::msg)
+            let actor_id =
+                arkret_wire::project_full_id_to_core_id(&full_id).map_err(anyhow::Error::msg)?;
+            Ok(crate::fixture_notary_signer_for_method(
+                actor_id,
+                member.signature.verification_method.clone(),
+            ))
         })
         .collect::<Result<Vec<_>>>()?;
     let notary = NotaryValue::Threshold {

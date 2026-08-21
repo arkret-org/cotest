@@ -19,9 +19,7 @@
 
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{DidFullId, Hash, Hlc, RealmId, SealId};
-use arkret_wire::{
-    NotarySig, PayloadSignature, Seal, SealKind, compute_seal_id, seal_canonical_bytes,
-};
+use arkret_wire::{NotarySig, Seal, SealSignature, compute_seal_id, seal_canonical_bytes};
 use chrono::TimeZone;
 
 fn realm() -> Result<RealmId> {
@@ -45,13 +43,11 @@ fn hash(hex_byte: u8) -> Result<Hash> {
     Hash::new(format!("sha256:{hex}")).map_err(|e| anyhow!("hash: {e}"))
 }
 
-fn signature() -> PayloadSignature {
-    PayloadSignature {
+fn signature() -> SealSignature {
+    SealSignature {
         verification_method: crate::fixture_did_url("did:web:notary.example#k1"),
         payload_digest: Hash::new(format!("sha256:{}", "f".repeat(64))).unwrap(),
-        created_at: chrono::Utc.with_ymd_and_hms(2026, 5, 8, 0, 0, 0).unwrap(),
         jws: "AAAA.BBBB.CCCC".to_owned(),
-        extra: Default::default(),
     }
 }
 
@@ -70,17 +66,17 @@ fn build_seal() -> Result<Seal> {
         notary_seq: 1,
         data_view_root: None,
         data_event_set_root: None,
-        availability_root: None,
-        coverage_scope: None,
+        availability_receipt_digests: Vec::new(),
         covered_event_digests: Vec::new(),
         previous_state_root: None,
         previous_digest_algorithm: None,
         notary_signature: NotarySig::Single(signature()),
         sealed_at: chrono::Utc.with_ymd_and_hms(2026, 5, 8, 0, 0, 0).unwrap(),
         hlc,
-        kind: SealKind::Normal,
     };
-    s.id = s.derive_id().map_err(|e| anyhow!("derive id: {e}"))?;
+    s.id = s
+        .derive_id(arkret_canonical::DigestSuite::Sha256)
+        .map_err(|e| anyhow!("derive id: {e}"))?;
     Ok(s)
 }
 
@@ -108,7 +104,8 @@ pub async fn seal_canonical_no_self_reference_run() -> Result<()> {
     }
     // Recompute the id from canonical bytes and confirm it matches the
     // stored id (verification path (a)).
-    let derived = compute_seal_id(&bytes).map_err(|e| anyhow!("compute id: {e}"))?;
+    let derived = compute_seal_id(&bytes, arkret_canonical::DigestSuite::Sha256)
+        .map_err(|e| anyhow!("compute id: {e}"))?;
     if derived.as_str() != s.id.as_str() {
         return Err(anyhow!(
             "Seal::derive_id != Seal.id; canonical-bytes/id binding broken"

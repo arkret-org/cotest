@@ -8,7 +8,7 @@
     "viewer_views": {
       "author": "full message body + redaction metadata (audit view)",
       "member": "tombstone {redacted_by, redacted_at, reason} only",
-      "world_readable_admin_override": "tombstone only — admin override does NOT bypass redaction privacy"
+      "privileged_member_override": "tombstone only — admin authority does NOT bypass redaction privacy"
     }
   },
   "vectors": [

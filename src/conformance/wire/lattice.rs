@@ -708,8 +708,8 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
         );
     }
 
-    if covered_quarantine < 4 {
-        bail!("state_resolution_quarantine fixture must include >= 4 quarantine vectors");
+    if covered_quarantine < 3 {
+        bail!("state_resolution_quarantine fixture must include >= 3 quarantine vectors");
     }
     if !covered_admin_escalation {
         bail!("state_resolution_quarantine fixture must cover admin escalation repair");

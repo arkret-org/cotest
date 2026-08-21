@@ -31,13 +31,19 @@ fn producer_event() -> Event {
         payload,
     )
     .unwrap()
-    .author(
+    .author_with_digest_suite(
         7,
         Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
         Utc.with_ymd_and_hms(2026, 8, 13, 1, 2, 3).single().unwrap(),
+        arkret_canonical::DigestSuite::Sha256,
     )
     .unwrap();
-    let digest = Hash::new(event.event_digest().unwrap()).unwrap();
+    let digest = Hash::new(
+        event
+            .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+            .unwrap(),
+    )
+    .unwrap();
     let mut event = event;
     event.attach_proof(
         ProducerEventProof {

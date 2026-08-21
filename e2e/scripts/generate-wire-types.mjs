@@ -2,7 +2,7 @@
 //
 // The e2e suite hand-builds protocol objects as TS object literals. Nothing
 // tied those literals to the normative schemas, so an unregistered member
-// (`plaintext_visible_services`, `history_sharing_policy`, `retention_policy`)
+// (`plaintext_visible_services`, `history_access`, `retention_policy`)
 // only failed on a live server — or, worse, never failed because the test that
 // would have caught it was never run. Generating the types from
 // `spec/v1/artifacts/schemas/*.json` and annotating the literals turns that

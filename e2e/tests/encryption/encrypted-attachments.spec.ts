@@ -78,7 +78,7 @@ test.describe("encrypted attachments", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S12 encrypted attachments ${Date.now()}`,
       discoverability: "listed",
-      history_visibility: "joined",
+      history_access: "since_join",
       encryption_profile: "mls_rfc9420",
       plaintext_visible_services: [],
       ownerDid: alice.did,

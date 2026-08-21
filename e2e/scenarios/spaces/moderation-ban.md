@@ -49,7 +49,7 @@
 1. **alice** `/setup` 建 Realm `R`:
    - discoverability = `listed`
    - join_rule = `invite`
-   - history_visibility = `shared`
+   - history_access = `all_history_for_current_members`
    - seed_members = `[bob.did, mallory.did, carol.did]`
 2. 记录 `realmId`
 3. 断言:alice 的 `/realms/${realmId}/admin` 显示 4 个成员 (alice + 3 个 seed)

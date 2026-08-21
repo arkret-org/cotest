@@ -316,7 +316,7 @@ async fn create_collaboration_realm(alice: &TestActorClient) -> Result<String> {
             "summary": "single server collaboration",
             "discoverability": "invite_only",
             "join_rule": "invite",
-            "history_visibility": "shared",
+            "history_access": "all_history_for_current_members",
             "encryption_profile": "none",
             "plaintext_visible_services": [alice.service_id()]
         }))

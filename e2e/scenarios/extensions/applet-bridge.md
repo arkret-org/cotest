@@ -61,7 +61,7 @@
    - title = `"extensions/applet-bridge Demo Realm ${stamp}"`
    - discoverability = `listed`
    - join_rule = `invite`
-   - history_visibility = `joined`
+   - history_access = `since_join`
    - seed_members = `[]`(bot 走 admin invite 通道,不走 seed)
 6. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 7. **alice** 在 `/realms/${realmId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_id`

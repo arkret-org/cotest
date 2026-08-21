@@ -14,9 +14,8 @@
     "comment": "Selected entries from §9.1. `direction` values: bidirectional (round-trip-safe), arkret_only (facade emits private extension, no inverse), mimi_only (Arkret has no native form, MIMI ingestion only).",
     "vectors": [
       { "arkret_component_type": "ak.component.realm.join_rule.v1",            "arkret_kind": "ak.realm.join_rule",            "mimi_path": "participation.join_policy",                 "direction": "bidirectional" },
-      { "arkret_component_type": "ak.component.realm.history_visibility.v1",   "arkret_kind": "ak.realm.history_visibility",   "mimi_path": "history_sharing.visibility",                "direction": "bidirectional" },
+      { "arkret_component_type": "ak.component.realm.history_access.v1",       "arkret_kind": "ak.realm.history_access",       "direction": "arkret_only", "facade_media_type": "application/vnd.arkret.component+json" },
       { "arkret_component_type": "ak.component.realm.discovery.v1",            "arkret_kind": "ak.realm.discovery",            "mimi_path": "participation.discoverability",             "direction": "bidirectional" },
-      { "arkret_component_type": "ak.component.realm.history_sharing_policy.v1","arkret_kind": "ak.realm.history_sharing_policy","mimi_path": "history_sharing",                          "direction": "bidirectional" },
       { "arkret_component_type": "ak.component.realm.asset_privacy_policy.v1", "arkret_kind": "ak.realm.asset_privacy_policy", "mimi_path": "asset",                                     "direction": "bidirectional" },
       { "arkret_component_type": "ak.component.realm.moderation_policy.v1",    "arkret_kind": "ak.realm.moderation_policy",    "mimi_path": "logging.abuse_report",                      "direction": "bidirectional", "mimi_extension": "moderation" },
       { "arkret_component_type": "ak.component.realm.policy_bundle.v1",    "arkret_kind": "ak.realm.policy_bundle",    "mimi_path": "policy_bundle",                          "direction": "bidirectional" },

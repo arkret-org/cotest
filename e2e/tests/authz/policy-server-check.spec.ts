@@ -285,7 +285,7 @@ test.describe("policy server check", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S30 policy config ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       public: true,
     });
     const policyServerDid = "did:web:policy.example.com";
@@ -396,7 +396,7 @@ test.describe("policy server check", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S30 policy ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       public: true,
     });
 
@@ -476,7 +476,7 @@ test.describe("policy server check", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S30 timeout ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       public: true,
     });
 
@@ -531,13 +531,13 @@ test.describe("policy server check", () => {
       const orgRealmId = await createRealmApi(request, aliceToken, {
         title: `S30 policy fallback org ${stamp}`,
         discoverability: "listed",
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
         public: true,
       });
       const childRealmId = await createRealmApi(request, aliceToken, {
         title: `S30 policy fallback child ${stamp}`,
         discoverability: "listed",
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
         public: true,
       });
 

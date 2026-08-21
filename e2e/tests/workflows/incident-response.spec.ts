@@ -75,7 +75,7 @@ test.describe("workflow: incident response", () => {
         summary: "Incident response war room",
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
         encryptionProfile: "none",
         seedMembers: [backend.did, comms.did],
       });

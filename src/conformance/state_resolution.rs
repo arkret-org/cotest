@@ -377,7 +377,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                         "same_slot_conflict": "equivocation",
                     }),
                     &json!({
-                        "single_did_profile_expected": pointer_str(vector, "/single_did_profile_expected"),
+                        "single_signer_profile_expected": pointer_str(vector, "/single_signer_profile_expected"),
                         "case_count": required_array(vector, "/cases", name)?.len(),
                     }),
                 );
@@ -1051,7 +1051,7 @@ fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result
                     "ak.realm.profile",
                     "ak.realm.policy_bundle",
                     "ak.realm.join_rule",
-                    "ak.realm.history_visibility",
+                    "ak.realm.history_access",
                     "ak.realm.discovery",
                     "ak.realm.delivery_binding_policy",
                     "ak.member.state",
@@ -1165,7 +1165,7 @@ fn validate_seal_canonical_no_self_reference(vector: &Value, vector_name: &str) 
         .map_err(|error| anyhow!("vector {vector_name} Seal canonicalization failed: {error}"))?;
     let digest = sha256_prefixed(&canonical);
     let computed_id = seal
-        .derive_id()
+        .derive_id(arkret_canonical::DigestSuite::Sha256)
         .map_err(|error| anyhow!("vector {vector_name} Seal id derivation failed: {error}"))?;
     if expected_id != computed_id.as_str() {
         bail!("vector {vector_name} expected id must be {computed_id}, got {expected_id}");
@@ -1603,7 +1603,7 @@ fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Resu
     }
     require_str_eq(
         vector,
-        "/single_did_profile_expected",
+        "/single_signer_profile_expected",
         "unavailable",
         vector_name,
     )?;

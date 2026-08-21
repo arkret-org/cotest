@@ -372,7 +372,7 @@ test.describe("discovery", () => {
       const presenceRealmId = await bobPage.createRealm({
         title: `S24 Presence ${stamp}`,
         discoverability: "unlisted",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "none",
       });
       await bobPage.inviteFromAdmin(presenceRealmId, alice.did);

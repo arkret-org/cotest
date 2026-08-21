@@ -621,15 +621,18 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     if agent_pcr == controller_pcr {
         bail!("managed Agent reused the controller PCR");
     }
+    let notary = serde_json::to_value(crate::fixture_single_signer_notary(
+        arkret_wire::DidCoreId::new(agent)?,
+    ))?;
     let genesis = serde_json::json!({
         "created_by": agent,
-        "notary": {"kind": "single_did", "actor_id": agent},
+        "notary": notary,
         "purpose": "managed_agent_control",
         "encryption_profile": "e2ee_required",
         "event_encryption_floor": "e2ee_required"
     });
     if genesis["created_by"] != agent
-        || genesis["notary"]["actor_id"] != agent
+        || genesis["notary"]["signer"]["actor_id"] != agent
         || genesis["purpose"] != "managed_agent_control"
         || genesis["encryption_profile"] != "e2ee_required"
         || genesis["event_encryption_floor"] != "e2ee_required"

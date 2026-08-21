@@ -76,7 +76,7 @@ pub fn run_lattice_round_trip_suite() -> Result<()> {
     ordered_log_gap_reports_pending_until_backfill()?;
     // C10.C extensions (2026-05-09 aggressive batch): Notary cell
     // configurations, conflict repair head_in semantics, MLS covered_frontier.
-    notary_cell_single_did_profile_resolves_to_value()?;
+    notary_cell_single_signer_profile_resolves_to_value()?;
     notary_cell_threshold_profile_resolves_to_value()?;
     notary_cell_open_set_profile_resolves_to_value()?;
     notary_cell_mixed_profile_resolves_to_value()?;
@@ -1155,7 +1155,7 @@ fn ordered_log_gap_reports_pending_until_backfill() -> Result<()> {
 // ──────────────────── Notary cell ────────────────────
 //
 // `ak:cell:ak.component.notary.v1:<realm_id>` is a cas_register holding the
-// `NotaryValue` (single_did | threshold(k/n) | open_set | mixed). Each
+// `NotaryValue` (single_signer | threshold(k/n) | open_set | mixed). Each
 // happy-path test below confirms a single sealed Move that sets the cell
 // to one of the four spec-normative shapes resolves to a Value (no Bottom).
 // The conflict test confirms two concurrent reconfigurations Bottom — admins
@@ -1168,17 +1168,16 @@ fn notary_cell(realm_suffix: &str) -> CellRef {
     )
 }
 
-fn notary_cell_single_did_profile_resolves_to_value() -> Result<()> {
+fn notary_cell_single_signer_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("01");
-    let value = json!({
-        "kind": "single_did",
-        "actor_id": "ak:did_core:web:hub.example",
-    });
+    let value = serde_json::to_value(crate::fixture_single_signer_notary(
+        arkret_wire::DidCoreId::new("ak:did_core:web:hub.example")?,
+    ))?;
     let ops = vec![SealedOp::new(issuer_digest("a1"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
-        bail!("Notary single_did profile must resolve to Value, got {resolved:?}");
+        bail!("Notary single_signer profile must resolve to Value, got {resolved:?}");
     }
     Ok(())
 }
@@ -1186,16 +1185,19 @@ fn notary_cell_single_did_profile_resolves_to_value() -> Result<()> {
 fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("02");
-    let value = json!({
-        "kind": "threshold",
-        "threshold": 2,
-        "members": [
-            "ak:did_core:web:notary1.example",
-            "ak:did_core:web:notary2.example",
-            "ak:did_core:web:notary3.example"
-        ],
-        "forensic_attribution": "quorum_intersection",
-    });
+    let value = serde_json::to_value(arkret_wire::NotaryValue::Threshold {
+        members: ["notary1", "notary2", "notary3"]
+            .into_iter()
+            .map(|name| {
+                crate::fixture_notary_signer(
+                    arkret_wire::DidCoreId::new(format!("ak:did_core:web:{name}.example"))
+                        .expect("fixed notary actor is valid"),
+                )
+            })
+            .collect(),
+        threshold: 2,
+        forensic_attribution: arkret_wire::ForensicAttribution::QuorumIntersection,
+    })?;
     let ops = vec![SealedOp::new(issuer_digest("a2"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -1207,13 +1209,17 @@ fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
 fn notary_cell_open_set_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("03");
-    let value = json!({
-        "kind": "open_set",
-        "members": [
-            "ak:did_core:web:peer1.example",
-            "ak:did_core:web:peer2.example"
-        ],
-    });
+    let value = serde_json::to_value(arkret_wire::NotaryValue::OpenSet {
+        members: ["peer1", "peer2"]
+            .into_iter()
+            .map(|name| {
+                crate::fixture_notary_signer(
+                    arkret_wire::DidCoreId::new(format!("ak:did_core:web:{name}.example"))
+                        .expect("fixed notary actor is valid"),
+                )
+            })
+            .collect(),
+    })?;
     let ops = vec![SealedOp::new(issuer_digest("a3"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -1225,14 +1231,22 @@ fn notary_cell_open_set_profile_resolves_to_value() -> Result<()> {
 fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("04");
-    let value = json!({
-        "kind": "mixed",
-        "actor_id": "ak:did_core:web:hub.example",
-        "recovery_members": [
-            "ak:did_core:web:recovery1.example",
-            "ak:did_core:web:recovery2.example"
-        ],
-    });
+    let value = serde_json::to_value(arkret_wire::NotaryValue::Mixed {
+        signer: crate::fixture_notary_signer(arkret_wire::DidCoreId::new(
+            "ak:did_core:web:hub.example",
+        )?),
+        recovery_members: ["recovery1", "recovery2"]
+            .into_iter()
+            .map(|name| {
+                crate::fixture_notary_signer(
+                    arkret_wire::DidCoreId::new(format!("ak:did_core:web:{name}.example"))
+                        .expect("fixed recovery notary actor is valid"),
+                )
+            })
+            .collect(),
+        controller_organization: None,
+        recovery_controller_organizations: Vec::new(),
+    })?;
     let ops = vec![SealedOp::new(issuer_digest("a4"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);
     if resolved.is_bottom() {
@@ -1250,17 +1264,15 @@ fn notary_cell_concurrent_reconfig_returns_bottom() -> Result<()> {
     let ops = vec![
         SealedOp::new(
             issuer_digest("a5"),
-            op_set(json!({
-                "kind": "single_did",
-                "actor_id": "ak:did_core:web:hub-a.example",
-            })),
+            op_set(serde_json::to_value(crate::fixture_single_signer_notary(
+                arkret_wire::DidCoreId::new("ak:did_core:web:hub-a.example")?,
+            ))?),
         ),
         SealedOp::new(
             issuer_digest("a6"),
-            op_set(json!({
-                "kind": "single_did",
-                "actor_id": "ak:did_core:web:hub-b.example",
-            })),
+            op_set(serde_json::to_value(crate::fixture_single_signer_notary(
+                arkret_wire::DidCoreId::new("ak:did_core:web:hub-b.example")?,
+            ))?),
         ),
     ];
     let resolved = lattice.join(&cref, &ops);

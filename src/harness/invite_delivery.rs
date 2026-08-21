@@ -92,8 +92,9 @@ async fn resolve_accepted_event(
             .json(&EventsResolveRequestBody {
                 event_ids: vec![arkret_identifiers::EventId::new(event_id.to_owned())?],
                 event_digests: Vec::new(),
-                seal_refs: Vec::new(),
                 include_payload: Some(true),
+                history_traversal_access: None,
+                max_response_bytes: None,
             }),
         StatusCode::OK,
     )

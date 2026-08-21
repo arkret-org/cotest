@@ -861,7 +861,7 @@ fn realm_bootstrap_batch(
             "summary": "created by T-P0-04 parity baseline",
             "discoverability": "public",
             "join_rule": "public",
-            "history_visibility": "world_readable",
+            "history_access": "all_history_for_current_members",
             "trust_domain": "ak:trust_domain:mock-parity.cotest.local",
             "genesis_salt": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             "plaintext_visible_services": []

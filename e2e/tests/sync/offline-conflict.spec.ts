@@ -69,7 +69,7 @@ test.describe("offline sync + conflict repair", () => {
       {
         title: `G2.T3 Offline Backfill ${stamp}`,
         discoverability: "listed",
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
       },
     );
     const before = JSON.stringify(
@@ -134,7 +134,7 @@ test.describe("offline sync + conflict repair", () => {
       {
         title: `G2.T3 ordered catchup ${stamp}`,
         discoverability: "listed",
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
       },
     );
     expect(
@@ -261,7 +261,7 @@ test.describe("offline sync + conflict repair", () => {
       {
         title: `G2.T3 offline backfill ${stamp}`,
         discoverability: "listed",
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
         invitees: [bob.did],
         invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
@@ -559,7 +559,7 @@ async function createBottomConflictFixture(
     bob,
     {
       title: `bottom conflict ${label} ${stamp}`,
-      historyVisibility: "shared",
+      historyAccess: "all_history_for_current_members",
     },
   );
   const aliceTitle = `renamed by alice ${stamp}`;

@@ -51,7 +51,7 @@
    - title = `"spaces/knock-application Knock Space ${stamp}"`
    - discoverability = `listed`
    - join_rule = `knock`
-   - history_visibility = `joined`
+   - history_access = `since_join`
    - seed_members = `[eve.did]`
 2. **alice** 写入 `ak:cell:ak.component.realm.join_policy.v1:<realmId>` cell,value:
    ```json

@@ -111,7 +111,7 @@ test.describe("knock + application + cooldown", () => {
       summary: "knock + application coverage",
       discoverability: "listed",
       default_join_rule: "knock",
-      history_visibility: "joined",
+      history_access: "since_join",
       ownerDid: alice.user.did,
     });
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);

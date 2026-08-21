@@ -39,7 +39,7 @@
 ### Phase A — 注册 + 共享 Realm
 
 1. alice、bob 注册
-2. **alice** 通过 `/setup` 建 Realm `R`(`discoverability=listed`、`join_rule=invite`、`history_visibility=joined`、`seed_members=[bob.did]`)
+2. **alice** 通过 `/setup` 建 Realm `R`(`discoverability=listed`、`join_rule=invite`、`history_access=since_join`、`seed_members=[bob.did]`)
 3. **bob** acceptInvite(`S`);双方都能进 `/timeline/${realmId}`
 
 ### Phase B — bob 发 M1,alice 可见(基线)

@@ -20,7 +20,6 @@ This layer complements `e2e/tests/**/*.spec.ts`:
 | `first-realm-continuity` | single | First registration, ordinary Realm bootstrap, messages, offline retry, reload, and sign-in continuity |
 | `device-pairing-revocation-recovery` | single | Pair a second device, restore history, revoke it, recover on a fresh device, and fence old devices |
 | `invite-history-bootstrap` | federated | Private cross-server invitation, MLS readiness, joined-history cutoff, catch-up, and privacy |
-| `contact-direct-conversation-repair` | federated | Contact request/response, deterministic first chat, block/unblock, leave, and in-place repair |
 | `federated-team-incident` | federated | Broad multi-user onboarding, incident collaboration, interruption, and authorization boundaries |
 
 The flow-to-scenario map and explicit harness/product gaps are recorded in

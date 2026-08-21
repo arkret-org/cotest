@@ -1,7 +1,6 @@
 //! Visibility policy conformance vectors.
 //!
-//! Covers the Circle/E2EE floor ratchet, Circle directory visibility, and the
-//! joined-history pre-join denial vector from the spec artifact fixture.
+//! Covers the Circle/E2EE floor ratchet and Circle directory visibility.
 
 use std::collections::BTreeSet;
 
@@ -25,9 +24,6 @@ pub const VECTOR_ID_DIRECTORY_VISIBILITY_MEMBERS_INDISTINGUISHABLE: &str =
     "ak.vector.circle.directory_visibility_members_indistinguishable.v1";
 pub const VECTOR_ID_DIRECTORY_VISIBILITY_REALM_MEMBERS_INDISTINGUISHABLE: &str =
     "ak.vector.circle.directory_visibility_realm_members_indistinguishable.v1";
-pub const VECTOR_ID_HISTORY_VISIBILITY_JOINED_PREJOIN_DENIED: &str =
-    "ak.vector.history_visibility.joined_prejoin_denied.v1";
-
 pub const ALL_VISIBILITY_POLICY_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_CONTENT_FLOOR_DOWNGRADE_REJECTED,
     VECTOR_ID_METADATA_FLOOR_DOWNGRADE_REJECTED,
@@ -35,7 +31,6 @@ pub const ALL_VISIBILITY_POLICY_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_CIRCLE_CONTENT_FLOOR_BELOW_REALM_REJECTED,
     VECTOR_ID_DIRECTORY_VISIBILITY_MEMBERS_INDISTINGUISHABLE,
     VECTOR_ID_DIRECTORY_VISIBILITY_REALM_MEMBERS_INDISTINGUISHABLE,
-    VECTOR_ID_HISTORY_VISIBILITY_JOINED_PREJOIN_DENIED,
 ];
 
 const VISIBILITY_POLICY_FIXTURE_FILE: &str = "visibility-policy-fixture.json";
@@ -472,92 +467,11 @@ pub fn run_directory_visibility_realm_members_indistinguishable_vector() -> Resu
     Ok(())
 }
 
-fn history_visible_joined(
-    viewer_membership: Option<&str>,
-    join_ts: Option<u64>,
-    origin_ts: u64,
-) -> bool {
-    matches!(viewer_membership, Some("join")) && join_ts.is_some_and(|ts| origin_ts >= ts)
-}
-
-pub fn run_history_visibility_joined_prejoin_denied_vector() -> Result<()> {
-    let fixture = visibility_fixture()?;
-    let vector = case(&fixture, VECTOR_ID_HISTORY_VISIBILITY_JOINED_PREJOIN_DENIED)?;
-    if vector.get("history_visibility").and_then(Value::as_str) != Some("joined") {
-        bail!("joined pre-join vector must use history_visibility=joined");
-    }
-
-    let viewer = vector
-        .get("viewer")
-        .ok_or_else(|| anyhow!("history vector missing viewer"))?;
-    let membership = viewer.get("membership_state").and_then(Value::as_str);
-    let join_ts = viewer.get("join_ts").and_then(Value::as_u64);
-    let events = vector
-        .get("events")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("history vector missing events[]"))?;
-    let mut saw_prejoin_denied = false;
-    let mut saw_postjoin_visible = false;
-    for event in events {
-        let event_id = event
-            .get("event_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("history event missing event_id"))?;
-        let origin_ts = event
-            .get("origin_ts")
-            .and_then(Value::as_u64)
-            .ok_or_else(|| anyhow!("history event missing origin_ts"))?;
-        let expected = event
-            .get("expected_visible")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("history event missing expected_visible"))?;
-        let actual = history_visible_joined(membership, join_ts, origin_ts);
-        if actual != expected {
-            bail!(
-                "history event {event_id} visibility mismatch: expected {expected}, got {actual}"
-            );
-        }
-        saw_prejoin_denied |= !actual && event_id == "E_before_join";
-        saw_postjoin_visible |= actual && event_id == "E_after_join";
-    }
-
-    let control = vector
-        .get("non_member_control")
-        .ok_or_else(|| anyhow!("history vector missing non_member_control"))?;
-    let control_actual = history_visible_joined(
-        control.get("membership_state").and_then(Value::as_str),
-        None,
-        control
-            .get("origin_ts")
-            .and_then(Value::as_u64)
-            .ok_or_else(|| anyhow!("non-member control missing origin_ts"))?,
-    );
-    if control_actual
-        != control
-            .get("expected_visible")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("non-member control missing expected_visible"))?
-    {
-        bail!("joined history non-member control visibility mismatch");
-    }
-    if !saw_prejoin_denied || !saw_postjoin_visible {
-        bail!("joined history vector must cover pre-join denial and post-join visibility");
-    }
-    if vector
-        .pointer("/expected/prejoin_error")
-        .and_then(Value::as_str)
-        != Some(arkret_wire::ErrorCode::HISTORY_NOT_VISIBLE)
-    {
-        bail!("joined pre-join denial error code drifted");
-    }
-    Ok(())
-}
-
 pub fn run_visibility_policy_fixture_suite() -> Result<()> {
     validate_visibility_policy_fixture_metadata(&visibility_fixture()?)?;
-    if ALL_VISIBILITY_POLICY_VECTOR_IDS.len() != 7 {
+    if ALL_VISIBILITY_POLICY_VECTOR_IDS.len() != 6 {
         bail!(
-            "expected 7 visibility policy vector ids, got {}",
+            "expected 6 visibility policy vector ids, got {}",
             ALL_VISIBILITY_POLICY_VECTOR_IDS.len()
         );
     }
@@ -568,7 +482,6 @@ pub fn run_visibility_policy_fixture_suite() -> Result<()> {
     run_circle_content_floor_below_realm_rejected_vector()?;
     run_directory_visibility_members_indistinguishable_vector()?;
     run_directory_visibility_realm_members_indistinguishable_vector()?;
-    run_history_visibility_joined_prejoin_denied_vector()?;
     Ok(())
 }
 

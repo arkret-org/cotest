@@ -26,28 +26,6 @@
       }
     },
     {
-      "name": "cas_register_concurrent_fork_history_visibility_quarantine_all_heads",
-      "cell_family": "ak.component.realm.history_visibility.v1",
-      "lattice": "cas_register",
-      "bottom": "reject",
-      "ops": [
-        { "op_id": "ak:event:Afab7TswzXygzB72iKHz5hHvOQNcFdGZSuVfr1sdl2HA", "actor": "did:web:alice.example", "value": "shared", "head_in": ["ak:anchor:sha256:def456"] },
-        { "op_id": "ak:event:ASis-E9AaWZ7FbUsZJMfg3XeRgIqBNYupIr3JDSTcvtM", "actor": "did:web:bob.example", "value": "joined", "head_in": ["ak:anchor:sha256:def456"] },
-        { "op_id": "ak:event:AXVaAVgJFKciaxCSX0EDb06FldpREjeSNx3e2AAsxwsL", "actor": "did:web:carol.example", "value": "world_readable", "head_in": ["ak:anchor:sha256:def456"] }
-      ],
-      "expected": {
-        "outcome": "all_heads_quarantined",
-        "reducer_picks_winner": false,
-        "admin_escalation_required": true,
-        "cell_state": "Bottom",
-        "quarantined_op_ids": [
-          "ak:event:Afab7TswzXygzB72iKHz5hHvOQNcFdGZSuVfr1sdl2HA",
-          "ak:event:ASis-E9AaWZ7FbUsZJMfg3XeRgIqBNYupIr3JDSTcvtM",
-          "ak:event:AXVaAVgJFKciaxCSX0EDb06FldpREjeSNx3e2AAsxwsL"
-        ]
-      }
-    },
-    {
       "name": "cas_register_admin_escalation_anchorer_endorse_one_head_unquarantines",
       "cell_family": "ak.component.realm.policy.v1",
       "lattice": "cas_register",

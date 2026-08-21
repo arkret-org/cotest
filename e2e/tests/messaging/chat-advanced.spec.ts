@@ -404,7 +404,7 @@ test.describe("chat advanced", () => {
         title: `typing API ${stamp}`,
         ownerDid: aliceFlow.user.did,
         invitees: [bob.did],
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
       });
       await acceptInviteViaApi(request, bobToken, bob.did, realmId);
       const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
@@ -484,7 +484,7 @@ test.describe("chat advanced", () => {
       bob,
       {
         title: `chat-route ${Date.now()}`,
-        historyVisibility: "joined",
+        historyAccess: "since_join",
       },
     );
     const alicePage = aliceFlow.page;
@@ -950,7 +950,7 @@ test.describe("chat advanced", () => {
       bob,
       {
         title: `S14.2 E2EE Mention ${stamp}`,
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       },
     );
@@ -1044,7 +1044,7 @@ async function createChatApiFixture(request: APIRequestContext, label: string) {
     label,
     title: `${label} ${stamp}`,
     realm: {
-      historyVisibility: "shared",
+      historyAccess: "all_history_for_current_members",
     },
   });
 }

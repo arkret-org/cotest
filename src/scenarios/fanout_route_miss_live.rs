@@ -426,8 +426,9 @@ async fn resolve_events_allow_missing(
     let request = EventsResolveRequestBody {
         event_ids,
         event_digests: Vec::new(),
-        seal_refs: Vec::new(),
         include_payload: Some(true),
+        history_traversal_access: None,
+        max_response_bytes: None,
     };
     serde_json::from_value(
         expect_json(

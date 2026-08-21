@@ -150,7 +150,7 @@ test.describe("applet bridge", () => {
       const realmId = await createAppletInstallRealm(request, aliceToken, {
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
-        history_visibility: "joined",
+        history_access: "since_join",
         plaintext_visible_services: [
           solandServiceId(),
           "did:web:soland.local",
@@ -341,7 +341,7 @@ test.describe("applet bridge", () => {
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet conflict ${stamp}`,
       discoverability: "listed",
-      history_visibility: "joined",
+      history_access: "since_join",
     });
 
     const first = await signPackage(request, registryBase, {
@@ -382,7 +382,7 @@ test.describe("applet bridge", () => {
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet revoke ${stamp}`,
       discoverability: "listed",
-      history_visibility: "joined",
+      history_access: "since_join",
     });
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:revoke-${stamp}`,
@@ -453,7 +453,7 @@ test.describe("applet bridge", () => {
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet idem ${stamp}`,
       discoverability: "listed",
-      history_visibility: "joined",
+      history_access: "since_join",
     });
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:idem-${stamp}`,
@@ -532,7 +532,7 @@ test.describe("applet bridge", () => {
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet tamper body ${stamp}`,
       discoverability: "listed",
-      history_visibility: "joined",
+      history_access: "since_join",
     });
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:tamper-body-${stamp}`,
@@ -572,7 +572,7 @@ test.describe("applet bridge", () => {
     const realmId = await createAppletInstallRealm(request, aliceToken, {
       title: `applet tamper proof ${stamp}`,
       discoverability: "listed",
-      history_visibility: "joined",
+      history_access: "since_join",
     });
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:tamper-proof-${stamp}`,
@@ -716,7 +716,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const realmId = await createAppletInstallRealm(request, token, {
       title: `applet inbound signed ${stamp}`,
       discoverability: "listed",
-      history_visibility: "joined",
+      history_access: "since_join",
     });
     const signed = await signPackage(request, registryBase, {
       package_id: `package:bridge:inbound-${stamp}`,

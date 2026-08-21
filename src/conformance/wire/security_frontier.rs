@@ -1,169 +1,62 @@
-//! MLS Security Frontier conformance vectors backed by the SDK projector.
-
-use std::collections::BTreeMap;
+//! Near-current MLS governance-frontier conformance vectors.
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_state::CellState;
-use arkret_state::mls_governance_proof::{MlsSecurityFrontierLeaf, derive_mls_security_frontier};
-use arkret_wire::{CellFamilyId, CellRef, Hash, ScopeRef, composite_subject};
-use serde_json::{Value, json};
+use arkret_models_crypto::mls_governance_proof::{
+    MlsGovernanceProofBundle, MlsGovernanceProofRequestBody,
+};
+use serde_json::Value;
 
-use crate::conformance::{load_artifact_json, load_fixture_value, required_str, validate_profile};
+use crate::conformance::{load_fixture_value, validate_profile};
 
 const FIXTURE: &str = "mls-governance-proof-fixture.json";
 const PROFILE: &str = "ak.profile.mls_governance_binding.full.v1";
 
-/// Replays the normative KAT through the public SDK projector and pins the
-/// closed frontier semantics that replaced the covered-seals accumulator.
+/// Replays the canonical near-current fixture through the public DTO
+/// validators. Full state replay is covered by the SDK verifier tests; this
+/// cross-repository runner pins the exact query/outcome/page-digest contract.
 pub fn run_mls_security_frontier_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
     validate_profile(&fixture, PROFILE)?;
-
-    let scope: ScopeRef = serde_json::from_value(
-        fixture
-            .pointer("/source_state/proof_identity/effective_scope")
-            .cloned()
-            .ok_or_else(|| anyhow!("MLS governance proof fixture missing effective_scope"))?,
-    )?;
-    let leaves: Vec<MlsSecurityFrontierLeaf> = serde_json::from_value(
-        fixture
-            .pointer("/commit_context/current_or_pending_mls_leaf_entries")
-            .cloned()
-            .ok_or_else(|| anyhow!("MLS governance proof fixture missing leaf entries"))?,
-    )?;
-    let state = fixture_control_state(&fixture)?;
-    let expected = Hash::new(
-        required_str(
-            fixture
-                .get("known_answer")
-                .ok_or_else(|| anyhow!("MLS governance proof fixture missing known_answer"))?,
-            "security_frontier_digest",
-        )?
-        .to_owned(),
-    )?;
-
-    let observed = derive_mls_security_frontier(&state, &scope, &leaves)?;
-    if observed != expected {
-        bail!("SDK security frontier KAT drifted: expected={expected}, observed={observed}");
-    }
-
-    assert_unrelated_state_is_orthogonal(&state, &scope, &leaves, &observed)?;
-    assert_active_leaf_revoke_changes_digest(&state, &scope, &leaves, &observed)?;
-    assert_realm_circle_isolation(&state, &scope, &leaves, &observed)?;
-    assert_closed_registry_rejects_unknown_input()?;
-    Ok(())
-}
-
-fn fixture_control_state(fixture: &Value) -> Result<BTreeMap<CellRef, CellState>> {
-    fixture
-        .pointer("/source_state/joined_control_state")
+    let cases = fixture
+        .get("cases")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("MLS governance proof fixture missing joined_control_state[]"))?
-        .iter()
-        .map(|entry| {
-            let cell = CellRef::new(required_str(entry, "cell")?.to_owned())?;
-            let value = entry
-                .pointer("/state/value")
-                .cloned()
-                .ok_or_else(|| anyhow!("fixture control cell {cell} missing state.value"))?;
-            Ok((cell, CellState::Value(value)))
-        })
-        .collect()
-}
-
-fn cell_ref(family: &str, subject_parts: &[&str]) -> Result<CellRef> {
-    let subject = match subject_parts {
-        [subject] => (*subject).to_owned(),
-        parts => composite_subject(parts).context("encoding composite cell subject")?,
-    };
-    CellRef::new(format!("ak:cell:{family}:{subject}"))
-        .with_context(|| format!("constructing {family} cell"))
-}
-
-fn assert_unrelated_state_is_orthogonal(
-    baseline: &BTreeMap<CellRef, CellState>,
-    scope: &ScopeRef,
-    leaves: &[MlsSecurityFrontierLeaf],
-    expected: &Hash,
-) -> Result<()> {
-    let mut changed = baseline.clone();
-    changed.insert(
-        cell_ref(
-            CellFamilyId::CAPABILITY_GRANT_V1,
-            &["ak:capability:019809f4-a800-7000-8000-000000000501"],
-        )?,
-        CellState::Value(json!({"action": "ak.message.send", "status": "active"})),
-    );
-    changed.insert(
-        cell_ref(CellFamilyId::REALM_PROFILE_V1, &["null"])?,
-        CellState::Value(json!({"title": "orthogonal profile"})),
-    );
-    let observed = derive_mls_security_frontier(&changed, scope, leaves)?;
-    if &observed != expected {
-        bail!("unrelated capability/profile state changed security_frontier_digest");
-    }
-    Ok(())
-}
-
-fn assert_active_leaf_revoke_changes_digest(
-    state: &BTreeMap<CellRef, CellState>,
-    scope: &ScopeRef,
-    leaves: &[MlsSecurityFrontierLeaf],
-    baseline: &Hash,
-) -> Result<()> {
-    let remaining = leaves
-        .get(1..)
-        .ok_or_else(|| anyhow!("KAT must contain at least two MLS leaves"))?;
-    let observed = derive_mls_security_frontier(state, scope, remaining)?;
-    if &observed == baseline {
-        bail!("removing an active MLS leaf did not change security_frontier_digest");
-    }
-    Ok(())
-}
-
-fn assert_realm_circle_isolation(
-    state: &BTreeMap<CellRef, CellState>,
-    realm_scope: &ScopeRef,
-    leaves: &[MlsSecurityFrontierLeaf],
-    baseline: &Hash,
-) -> Result<()> {
-    let mut with_other_circle = state.clone();
-    with_other_circle.insert(
-        cell_ref(
-            CellFamilyId::CIRCLE_MEMBER_V1,
-            &[
-                "ak:circle:AchuvpOGLMUeMqy1BDF30nl0o5YQFspCofWyFbnX0_8u",
-                "did:webvh:zfixture:bob.example",
-            ],
-        )?,
-        CellState::Value(json!({"membership": "ban"})),
-    );
-    let realm_observed = derive_mls_security_frontier(&with_other_circle, realm_scope, leaves)?;
-    if &realm_observed != baseline {
-        bail!("a Circle membership cell contaminated the Realm security frontier");
+        .ok_or_else(|| anyhow!("MLS governance proof fixture missing cases[]"))?;
+    if cases.is_empty() {
+        bail!("MLS governance proof fixture has no positive cases");
     }
 
-    let circle_scope: ScopeRef = serde_json::from_value(json!({
-        "kind": "circle",
-        "realm_id": "ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE",
-        "circle_id": "ak:circle:AchuvpOGLMUeMqy1BDF30nl0o5YQFspCofWyFbnX0_8u"
-    }))?;
-    let circle_observed = derive_mls_security_frontier(&with_other_circle, &circle_scope, leaves)?;
-    if circle_observed == *baseline {
-        bail!("Realm and Circle scopes produced the same security frontier digest");
-    }
-    Ok(())
-}
-
-fn assert_closed_registry_rejects_unknown_input() -> Result<()> {
-    let registry = load_artifact_json("registry/mls-security-frontier-registry.json")?;
-    if registry.get("source_of_truth").and_then(Value::as_bool) != Some(true)
-        || registry
-            .get("unknown_input_behavior")
+    let mut saw_genesis = false;
+    let mut saw_successor = false;
+    let mut saw_open_set = false;
+    for case in cases {
+        let name = case
+            .get("name")
             .and_then(Value::as_str)
-            != Some("fail_closed")
-    {
-        bail!("MLS security frontier registry must reject unknown inputs fail closed");
+            .ok_or_else(|| anyhow!("MLS governance proof case has no name"))?;
+        let request: MlsGovernanceProofRequestBody = serde_json::from_value(
+            case.get("query")
+                .cloned()
+                .ok_or_else(|| anyhow!("MLS governance proof case {name} has no query"))?,
+        )
+        .with_context(|| format!("decoding MLS governance proof query {name}"))?;
+        let outcome: MlsGovernanceProofBundle = serde_json::from_value(
+            case.get("outcome")
+                .cloned()
+                .ok_or_else(|| anyhow!("MLS governance proof case {name} has no outcome"))?,
+        )
+        .with_context(|| format!("decoding MLS governance proof outcome {name}"))?;
+        outcome
+            .validate_for_request(&request)
+            .with_context(|| format!("validating MLS governance proof outcome {name}"))?;
+        if outcome.page_digest != outcome.recompute_page_digest()? {
+            bail!("MLS governance proof case {name} has a stale page digest");
+        }
+        saw_genesis |= request.previous_epoch == 0 && request.next_epoch == 0;
+        saw_successor |= request.previous_epoch.checked_add(1) == Some(request.next_epoch);
+        saw_open_set |= request.proof_target_basis.leaves.len() > 1;
+    }
+    if !(saw_genesis && saw_successor && saw_open_set) {
+        bail!("MLS governance proof positives must cover genesis, successor and open-set targets");
     }
     Ok(())
 }

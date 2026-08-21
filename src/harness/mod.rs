@@ -197,10 +197,8 @@ pub struct RealmBootstrapDraft {
         arkret_models_collaboration::events_payloads::realm::RealmPolicyBundlePayload,
     pub join_rule:
         arkret_models_collaboration::governance::realm_lifecycle::RealmJoinRulePayload,
-    pub history_visibility:
-        arkret_models_collaboration::governance::realm_lifecycle::HistoryVisibilityPayload,
-    pub history_sharing_policy:
-        Option<arkret_models_collaboration::events_payloads::HistorySharingPolicyPayload>,
+    pub history_access:
+        arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload,
     pub discovery:
         arkret_models_collaboration::governance::realm_lifecycle::RealmDiscoveryPayload,
     pub alias:
@@ -234,10 +232,10 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
         .get("join_rule")
         .and_then(Value::as_str)
         .unwrap_or("invite");
-    let history_visibility_value = input
-        .get("history_visibility")
+    let history_access_value = input
+        .get("history_access")
         .and_then(Value::as_str)
-        .unwrap_or("shared");
+        .unwrap_or("since_join");
     let encryption_profile = input
         .get("encryption_profile")
         .and_then(Value::as_str)
@@ -278,16 +276,18 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
     });
 
     let notary_actor_id = arkret_identifiers::DidCoreId::new(service_id.to_owned())?;
-    let notary = arkret_wire::notary::NotaryValue::single_did_with_org(
-        notary_actor_id,
-        vec![arkret_identifiers::DidCoreId::new(
-            "ak:did_core:web:recovery.soland.local",
-        )?],
-        arkret_identifiers::DidCoreId::new("ak:did_core:web:organization.primary.soland.local")?,
-        vec![arkret_identifiers::DidCoreId::new(
+    let notary = arkret_wire::notary::NotaryValue::SingleSigner {
+        signer: crate::fixture_notary_signer(notary_actor_id),
+        recovery_members: vec![crate::fixture_notary_signer(
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:recovery.soland.local")?,
+        )],
+        controller_organization: Some(arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:organization.primary.soland.local",
+        )?),
+        recovery_controller_organizations: vec![arkret_identifiers::DidCoreId::new(
             "ak:did_core:web:organization.recovery.soland.local",
         )?],
-    );
+    };
     let genesis_salt = input
         .get("genesis_salt")
         .and_then(Value::as_str)
@@ -307,7 +307,6 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
         arkret_canonical::DigestSuite::Sha256,
         serde_json::from_value(json!("standard"))?,
         serde_json::from_value(json!(encryption_profile))?,
-        arkret_models_collaboration::objects::realm::NotaryProfile::SingleDid,
         notary,
         arkret::current_capability_action_registry_digest()?,
     )?;
@@ -333,35 +332,11 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
             .unwrap_or_else(|| json!("restricted")),
     )?);
     policy_bundle.validate()?;
-    let history_sharing_policy = input
-        .get("history_sharing_policy")
-        .cloned()
-        .map(
-            serde_json::from_value::<
-                arkret_models_collaboration::events_payloads::HistorySharingPolicyPayload,
-            >,
-        )
-        .transpose()?;
-    let history_visibility = if history_visibility_value == "restricted" {
-        let policy = history_sharing_policy.as_ref().ok_or_else(|| {
-            anyhow::anyhow!(
-                "cotest Realm bootstrap requires an explicit restricted history-sharing policy"
-            )
-        })?;
-        arkret_policy::history_visibility::validate_history_sharing_policy(&policy.value)?;
-        arkret_models_collaboration::governance::realm_lifecycle::HistoryVisibilityPayload::restricted(
-            arkret_canonical::canonical_sha256(&policy.value)?,
-        )
-    } else {
-        if history_sharing_policy.is_some() {
-            anyhow::bail!(
-                "cotest Realm bootstrap forbids history_sharing_policy unless history_visibility is restricted"
-            );
-        }
-        arkret_models_collaboration::governance::realm_lifecycle::HistoryVisibilityPayload::new(
-            serde_json::from_value(json!(history_visibility_value))?,
-        )
-    };
+    let history_access =
+        arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload::initialize(
+            serde_json::from_value(json!(history_access_value))?,
+        );
+    history_access.validate()?;
     let alias = input
         .get("alias")
         .and_then(Value::as_str)
@@ -407,8 +382,7 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
             arkret_models_collaboration::governance::realm_lifecycle::RealmJoinRulePayload::new(
                 serde_json::from_value(json!(join_rule))?,
             ),
-        history_visibility,
-        history_sharing_policy,
+        history_access,
         discovery:
             arkret_models_collaboration::governance::realm_lifecycle::RealmDiscoveryPayload::new(
                 serde_json::from_value(json!(discoverability))?,

@@ -99,7 +99,7 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
           title: `OIDC key lifecycle ${stamp}`,
           discoverability: "listed",
           joinRule: "invite",
-          historyVisibility: "joined",
+          historyAccess: "since_join",
           encryptionProfile: "mls_rfc9420",
         });
         boardId = await buildEncryptedBoardListCard(

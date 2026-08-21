@@ -246,7 +246,9 @@ impl TestActorClient {
             &verification_method,
             arkret_signatures::SignEventOptions::new().with_created_at(created_at),
         )?;
-        if Hash::new(event.event_digest()?)? != draft.event_digest {
+        if Hash::new(event.event_digest_with_digest_suite(draft.event_digest.digest_suite()?)?)?
+            != draft.event_digest
+        {
             return Err(anyhow!("signing changed the prepared Contact Event digest"));
         }
         Ok(event.into_event())

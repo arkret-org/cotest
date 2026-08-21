@@ -234,7 +234,7 @@ test.describe("key backup + restore", () => {
           "same-account fresh-profile MLS account secret recovery acceptance",
         discoverability: "unlisted",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
 
@@ -369,7 +369,7 @@ test.describe("key backup + restore", () => {
         summary: "fresh-browser restore must use real coauth session grant",
         discoverability: "unlisted",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
       const recoveryKey = await createMlsRecoveryBackupFromPrompt(
@@ -524,7 +524,7 @@ test.describe("key backup + restore", () => {
         summary: "kanban encrypted detail MLS restore acceptance",
         discoverability: "unlisted",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
       const boardId = await createKanbanBoardListAndCard(

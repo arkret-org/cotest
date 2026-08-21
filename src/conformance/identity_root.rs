@@ -269,6 +269,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
             principal_id: principal.clone(),
             principal_server_id: DidCoreId::new("ak:did_core:web:principal.example")?,
             principal_full_id: principal_full_id.clone(),
+            notary: crate::fixture_single_signer_notary(principal.clone()),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal_full_id,
                 method_history_head: format!("sha256:{}", "1".repeat(64)),
@@ -489,13 +490,19 @@ fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
 }
 
 fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Result<Event> {
-    event.refresh_content_bound_identity()?;
-    let digest = Hash::new(event.event_digest()?)?;
+    event
+        .refresh_content_bound_identity_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?;
+    let digest =
+        Hash::new(event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?)?;
+    let (signer_evidence_ref, signer_evidence_digest) =
+        crate::fixture_signer_evidence_pair(verification_method.as_str());
     event.proofs = vec![
         Proof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: verification_method.clone(),
             event_digest: digest,
+            signer_resolution_evidence_ref: Some(signer_evidence_ref),
+            signer_resolution_evidence_digest: Some(signer_evidence_digest),
             created_at: event.created_at,
             domain: None,
             audience: Some(Audience::Single(event.realm_id.to_string())),

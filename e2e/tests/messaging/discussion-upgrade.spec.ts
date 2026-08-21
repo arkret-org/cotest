@@ -153,7 +153,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       alice,
       aliceToken,
       carol,
-      { title: `circle visibility ${stamp}`, historyVisibility: "shared" },
+      { title: `circle visibility ${stamp}`, historyAccess: "all_history_for_current_members" },
     );
     const publicStrandId = await createStrandViaApi(
       request,
@@ -533,7 +533,7 @@ async function createDiscussionFixture(
     label,
     title: `${label} realm ${stamp}`,
     realm: {
-      historyVisibility: "shared",
+      historyAccess: "all_history_for_current_members",
     },
   });
   await joinRealmMemberViaApi(
@@ -671,7 +671,7 @@ async function createDiscussionCircleViaApi(
           },
           directory_visibility: "members",
           join_rule: "invite",
-          history_visibility: "joined",
+          history_access: "since_join",
           encryption_profile: opts.circleEncryptionProfile ?? "none",
           state: "active",
           created_by: fixture.alice.did,

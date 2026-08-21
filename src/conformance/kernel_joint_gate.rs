@@ -19,8 +19,7 @@ use arkret_wire::offline_publication::{
 };
 use arkret_wire::{
     CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, DidFullId, DidUrl,
-    LatticeOp, LatticeOpType, NotarySig, NotaryValue, PayloadSignature, SchemaId, ScopeRef, Seal,
-    SealKind,
+    LatticeOp, LatticeOpType, NotarySig, NotaryValue, SchemaId, ScopeRef, Seal, SealSignature,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
@@ -385,24 +384,20 @@ fn kernel_security_barrier(input: &KernelGateInput) -> KernelGateOutcome {
     let Some(authority) = input.payload.get("authority") else {
         return error("schema_violation", "security_barrier_authority_invalid");
     };
-    let notary = match serde_json::from_value::<NotaryValue>(json!({
-        "kind": "threshold",
-        "threshold": authority.get("threshold"),
-        "members": authority.get("members"),
-        "forensic_attribution": authority.get("forensic_attribution")
-    })) {
-        Ok(value) => value,
-        Err(_) => return error("schema_violation", "security_barrier_authority_invalid"),
+    let Some(threshold) = authority.get("threshold").and_then(Value::as_u64) else {
+        return error("schema_violation", "security_barrier_authority_invalid");
     };
-    if notary.validate().is_err() {
+    let Some(members) = authority.get("members").and_then(Value::as_array) else {
+        return error("schema_violation", "security_barrier_authority_invalid");
+    };
+    let unique_members = members
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<BTreeSet<_>>();
+    if threshold == 0 || unique_members.len() != members.len() || threshold as usize > members.len()
+    {
         return error("schema_violation", "security_barrier_authority_invalid");
     }
-    let NotaryValue::Threshold {
-        threshold, members, ..
-    } = notary
-    else {
-        unreachable!("constructed threshold notary");
-    };
     if usize::try_from(threshold)
         .ok()
         .is_none_or(|threshold| threshold.saturating_mul(2) <= members.len())
@@ -672,20 +667,33 @@ fn parse_notary(value: Option<&Value>) -> std::result::Result<NotaryValue, Kerne
 
 fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
     match notary {
-        NotaryValue::SingleDid { actor_id, .. } => BTreeSet::from([actor_id.as_str().to_owned()]),
-        NotaryValue::Threshold { members, .. } | NotaryValue::OpenSet { members } => members
-            .iter()
-            .map(|member| member.as_str().to_owned())
-            .collect(),
-        NotaryValue::Mixed {
-            actor_id,
+        NotaryValue::SingleSigner {
+            signer,
             recovery_members,
+            ..
         } => {
-            let mut members = BTreeSet::from([actor_id.as_str().to_owned()]);
+            let mut members = BTreeSet::from([signer.actor_id.as_str().to_owned()]);
             members.extend(
                 recovery_members
                     .iter()
-                    .map(|member| member.as_str().to_owned()),
+                    .map(|member| member.actor_id.as_str().to_owned()),
+            );
+            members
+        }
+        NotaryValue::Threshold { members, .. } | NotaryValue::OpenSet { members } => members
+            .iter()
+            .map(|member| member.actor_id.as_str().to_owned())
+            .collect(),
+        NotaryValue::Mixed {
+            signer,
+            recovery_members,
+            ..
+        } => {
+            let mut members = BTreeSet::from([signer.actor_id.as_str().to_owned()]);
+            members.extend(
+                recovery_members
+                    .iter()
+                    .map(|member| member.actor_id.as_str().to_owned()),
             );
             members
         }
@@ -756,23 +764,21 @@ fn sample_seal(notary_seq: u64, delta_byte: u8, verification_method: &DidUrl) ->
         notary_seq,
         data_view_root: None,
         data_event_set_root: None,
-        availability_root: None,
-        coverage_scope: None,
+        availability_receipt_digests: Vec::new(),
         covered_event_digests: Vec::new(),
         previous_state_root: None,
         previous_digest_algorithm: None,
-        notary_signature: NotarySig::Single(PayloadSignature {
+        notary_signature: NotarySig::Single(SealSignature {
             verification_method: verification_method.clone(),
             payload_digest: repeated_hash(0x55),
-            created_at: sealed_at,
             jws: "e30..c2ln".to_owned(),
-            extra: Default::default(),
         }),
         sealed_at,
         hlc: Hlc::new("01970e589d21-0000-a13f9c2e").expect("fixed HLC is valid"),
-        kind: SealKind::Normal,
     };
-    seal.id = seal.derive_id().expect("sample Seal id derives");
+    seal.id = seal
+        .derive_id(arkret_canonical::DigestSuite::Sha256)
+        .expect("sample Seal id derives");
     seal
 }
 

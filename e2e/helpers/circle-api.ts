@@ -24,6 +24,7 @@
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl } from "./env";
+import type { RealmObject } from "./generated/spec-wire-objects";
 import {
   authHeaders,
   canonicalJson,
@@ -49,7 +50,7 @@ export type CircleOutcome = {
   };
   directory_visibility: string;
   join_rule: string;
-  history_visibility: string;
+  history_access: RealmObject["history_access"];
   encryption_profile: string;
   mls_group_ref?: string;
   state: string;
@@ -228,7 +229,7 @@ function circleCreateObject(args: {
   summary?: string;
   joinRule?: string;
   directoryVisibility?: string;
-  historyVisibility?: string;
+  historyAccess?: "since_join" | "all_history_for_current_members";
   encryptionProfile?: string;
   createdAt: string;
 }): Record<string, unknown> {
@@ -240,7 +241,7 @@ function circleCreateObject(args: {
     display: circleDisplayFromTitle(args.title),
     directory_visibility: args.directoryVisibility ?? "members",
     join_rule: args.joinRule ?? "invite",
-    history_visibility: args.historyVisibility ?? "joined",
+    history_access: args.historyAccess ?? "since_join",
     encryption_profile: args.encryptionProfile ?? "mls_rfc9420",
     state: "active",
     created_by: args.actorDid,
@@ -250,7 +251,7 @@ function circleCreateObject(args: {
 
 // Create a Circle bound to `realmId`. Defaults mirror the values the service
 // used to fill in before the request body became the caller-signed Event
-// (`members` / `invite` / `joined` / `mls_rfc9420`), so admin-only one-way adds
+// (`members` / `invite` / `since_join` / `mls_rfc9420`), so admin-only one-way adds
 // stay the membership path.
 export async function createCircleArkret(
   request: APIRequestContext,
@@ -261,7 +262,7 @@ export async function createCircleArkret(
     title: string;
     joinRule?: string;
     directoryVisibility?: string;
-    historyVisibility?: string;
+    historyAccess?: RealmObject["history_access"];
     encryptionProfile?: string;
     summary?: string;
     server?: SolandKey;

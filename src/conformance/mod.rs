@@ -34,7 +34,7 @@ mod fanout_route_miss;
 mod federation;
 mod final_conformance_closure;
 mod handle_claim_rejection_vectors;
-mod history_crypto_closure;
+mod history_key_direct_traversal;
 mod identity_root;
 mod inkson_client;
 mod kernel_joint_gate;
@@ -45,7 +45,6 @@ mod lattice_mixed_kinds;
 mod lattice_round_trip;
 mod list_handles_for_subject_vectors;
 mod long_text_content;
-mod media_aead_nonce;
 mod media_binding;
 mod member_identity_vectors;
 mod member_roster_vectors;
@@ -230,14 +229,7 @@ pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
     run_service_handle_rejected_vector, run_subject_not_principal_did_rejected_vector,
 };
-pub use history_crypto_closure::{
-    ALL_HISTORY_CRYPTO_CLOSURE_VECTOR_IDS,
-    run_e2ee_late_key_recovery_t0_deterministic_visibility_vector,
-    run_history_crypto_closure_fixture_suite,
-    run_history_sharing_e2ee_prejoin_key_share_policy_vector,
-    run_history_sharing_principal_control_profile_baseline_vector,
-    run_preview_token_scoped_stripped_state_vector,
-};
+pub use history_key_direct_traversal::run_history_key_direct_traversal_suite;
 pub use identity_root::{
     run_identity_model_generation_fence_suite, run_identity_recovery_kdf_fixture_suite,
     run_identity_root_anchor_checkpoint_suite,
@@ -271,11 +263,6 @@ pub use list_handles_for_subject_vectors::{
     run_subject_mismatch_rejected_vector,
 };
 pub use long_text_content::run_long_text_content_fixture_suite;
-pub use media_aead_nonce::{
-    ALL_MEDIA_AEAD_NONCE_VECTOR_IDS, run_aead_nonce_counter_replay_vector,
-    run_aead_nonce_random_rejected_vector, run_aead_nonce_sender_domain_collision_vector,
-    run_media_aead_nonce_fixture_suite,
-};
 pub use media_binding::{
     ALL_MEDIA_BINDING_VECTOR_IDS, run_e2ee_key_source_vector,
     run_focus_selection_oldest_membership_vector, run_media_binding_vector_suite,
@@ -445,29 +432,27 @@ pub use visibility_policy::{
     run_content_floor_downgrade_rejected_vector,
     run_directory_visibility_members_indistinguishable_vector,
     run_directory_visibility_realm_members_indistinguishable_vector,
-    run_history_visibility_joined_prejoin_denied_vector, run_in_place_e2ee_enable_vector,
-    run_metadata_floor_downgrade_rejected_vector, run_visibility_policy_fixture_suite,
+    run_in_place_e2ee_enable_vector, run_metadata_floor_downgrade_rejected_vector,
+    run_visibility_policy_fixture_suite,
 };
 pub use websocket_binding::run_websocket_binding_suite;
 pub use wire::{
-    run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
-    run_composite_state_key_encoding_fixture_suite, run_composite_state_subject_fixture_suite,
-    run_conflict_repair_fixture_suite, run_consent_fixture_suite,
-    run_constraint_evaluation_class_fixture_suite, run_constraint_family_fixture_suite,
-    run_device_message_negative_fixture_suite, run_discovery_profile_fixture_suite,
-    run_event_kind_lattice_dispatch_fixture_suite, run_event_kind_payload_coverage_fixture_suite,
-    run_facet_renderer_query_fixture_suite, run_frontier_conflict_resolution_fixture_suite,
-    run_history_visibility_fixture_suite, run_history_visibility_projection_matrix_check,
-    run_interop_downgrade_fixture_suite, run_key_backup_aead_round_trip_check,
-    run_key_backup_encryption_fixture_suite, run_late_arriving_anchor_fixture_suite,
-    run_late_arriving_anchor_idempotency_check, run_megolm_ratchet_kdf_chain_check,
-    run_megolm_ratcheting_fixture_suite, run_membership_fsm_fixture_suite,
-    run_mimi_components_fixture_suite, run_mimi_interop_fixture_suite,
-    run_mls_e2ee_basic_fixture_suite, run_mls_security_frontier_fixture_suite,
-    run_multi_admin_distinct_approver_gate_check, run_multi_realm_federation_fixture_suite,
-    run_production_signing_fixture_suite, run_read_receipt_policy_fixture_suite,
-    run_recovery_bridge_full_chain_fixture_suite, run_recovery_ticket_state_machine_check,
-    run_redacted_cross_server_fixture_suite, run_redaction_history_visibility_fixture_suite,
+    run_anchor_view_compaction_fixture_suite, run_composite_state_key_encoding_fixture_suite,
+    run_composite_state_subject_fixture_suite, run_conflict_repair_fixture_suite,
+    run_consent_fixture_suite, run_constraint_evaluation_class_fixture_suite,
+    run_constraint_family_fixture_suite, run_device_message_negative_fixture_suite,
+    run_discovery_profile_fixture_suite, run_event_kind_lattice_dispatch_fixture_suite,
+    run_event_kind_payload_coverage_fixture_suite, run_facet_renderer_query_fixture_suite,
+    run_frontier_conflict_resolution_fixture_suite, run_interop_downgrade_fixture_suite,
+    run_key_backup_aead_round_trip_check, run_key_backup_encryption_fixture_suite,
+    run_late_arriving_anchor_fixture_suite, run_late_arriving_anchor_idempotency_check,
+    run_megolm_ratchet_kdf_chain_check, run_megolm_ratcheting_fixture_suite,
+    run_membership_fsm_fixture_suite, run_mimi_components_fixture_suite,
+    run_mimi_interop_fixture_suite, run_mls_e2ee_basic_fixture_suite,
+    run_mls_security_frontier_fixture_suite, run_multi_admin_distinct_approver_gate_check,
+    run_multi_realm_federation_fixture_suite, run_production_signing_fixture_suite,
+    run_read_receipt_policy_fixture_suite, run_recovery_bridge_full_chain_fixture_suite,
+    run_recovery_ticket_state_machine_check, run_redacted_cross_server_fixture_suite,
     run_restore_full_workflows_fixture_suite, run_state_resolution_quarantine_fixture_suite,
     run_threshold_multisig_fixture_suite,
 };

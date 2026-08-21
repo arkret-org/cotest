@@ -29,11 +29,19 @@ pub fn run_arkret_private_kdf_and_durability_suite() -> Result<()> {
     let cases = fixture["cases"]
         .as_array()
         .ok_or_else(|| anyhow!("arkret private KDF fixture missing cases[]"))?;
-    run_content_kdf(case(cases, "content_key_derivation_sha256_aes128gcm")?)?;
+    run_content_kdf(case(
+        cases,
+        "content_key_derivation_ordinary_sender_sha256_aes128gcm",
+    )?)?;
+    run_content_kdf(case(
+        cases,
+        "content_key_derivation_minimal_metadata_sender_sha256_aes128gcm",
+    )?)?;
+    run_content_sender_isolation(cases)?;
     run_content_negatives(case(cases, "content_key_derivation_fail_closed_negatives")?)?;
     run_reaction_hmac(case(cases, "reaction_routing_hmac_nfc")?)?;
     run_signal_exporter_key(case(cases, "signal_exporter_key_sha256_aes128gcm")?)?;
-    run_sender_nonce_prefix(case(cases, "aead_sender_nonce_prefix_aes128gcm")?)?;
+    run_full_width_counter_nonce(case(cases, "full_width_counter_nonce_aes128gcm")?)?;
     run_mention_routing_hmac(case(cases, "mention_routing_hmac_did")?)?;
     run_rrk_missing_seals(case(cases, "rrk_eager_seal_before_gc")?)?;
     run_rrk_recipient_validation(case(
@@ -51,6 +59,7 @@ fn run_content_kdf(case: &Value) -> Result<()> {
     let realm_id = required_str(input, "realm_id_utf8")?.as_bytes();
     let history_label = required_str(input, "history_label")?;
     let content_label = required_str(input, "content_label")?;
+    let sender_domain = required_str(input, "verified_sender_domain_utf8")?.as_bytes();
     let nh = required_u64(input, "kdf_nh")? as usize;
     let nk = required_u64(input, "aead_nk")? as usize;
 
@@ -62,15 +71,56 @@ fn run_content_kdf(case: &Value) -> Result<()> {
         "history_secret_hex",
     )?;
 
-    let info = kdf_label(nk, content_label, &[])?;
+    assert_hex(
+        "verified sender domain",
+        sender_domain,
+        input,
+        "verified_sender_domain_hex",
+    )?;
+    let info = kdf_label(nk, content_label, sender_domain)?;
     assert_hex(
         "content ExpandWithLabel info",
         &info,
         expected,
         "content_expand_with_label_info_hex",
     )?;
-    let content_key = hkdf_expand(&history_secret, &info, nk)?;
+    let content_key =
+        arkret::mls::derive_content_key_from_history_secret(&history_secret, sender_domain, nk)
+            .map_err(|error| anyhow!("SDK content-key derivation failed: {error}"))?;
     assert_hex("content_key", &content_key, expected, "content_key_hex")
+}
+
+fn run_content_sender_isolation(cases: &[Value]) -> Result<()> {
+    let ordinary = case(
+        cases,
+        "content_key_derivation_ordinary_sender_sha256_aes128gcm",
+    )?;
+    let minimal = case(
+        cases,
+        "content_key_derivation_minimal_metadata_sender_sha256_aes128gcm",
+    )?;
+    let history_secret = hex::decode(required_str(&ordinary["expected"], "history_secret_hex")?)?;
+    if history_secret != hex::decode(required_str(&minimal["expected"], "history_secret_hex")?)? {
+        bail!("sender-isolation KATs must share one history secret");
+    }
+    let key_len = required_u64(&ordinary["input"], "aead_nk")? as usize;
+    let ordinary_domain =
+        required_str(&ordinary["input"], "verified_sender_domain_utf8")?.as_bytes();
+    let minimal_domain = required_str(&minimal["input"], "verified_sender_domain_utf8")?.as_bytes();
+    let ordinary_key = arkret::mls::derive_content_key_from_history_secret(
+        &history_secret,
+        ordinary_domain,
+        key_len,
+    )?;
+    let minimal_key = arkret::mls::derive_content_key_from_history_secret(
+        &history_secret,
+        minimal_domain,
+        key_len,
+    )?;
+    if ordinary_key.as_slice() == minimal_key.as_slice() {
+        bail!("ordinary and minimal-metadata sender domains reused one content key");
+    }
+    Ok(())
 }
 
 /// `ak.vector.signal.exporter_key_kat.v1` — the Signal Extension AEAD key.
@@ -146,55 +196,60 @@ fn run_signal_exporter_key(case: &Value) -> Result<()> {
     Ok(())
 }
 
-/// `ak.vector.aead.sender_nonce_prefix_kat.v1` — the §10.1 sender prefix and
-/// the composed nonce, both through the shipped SDK derivation. The canonical
-/// exporter Context is pinned first so a canonicalization change cannot hide
-/// behind a prefix that happens to match over different bytes.
-fn run_sender_nonce_prefix(case: &Value) -> Result<()> {
+/// `ak.vector.aead.full_width_counter_nonce.v1` — the §10.1 canonical
+/// `I2OSP(counter, AEAD.Nn)` encoding and its fail-closed boundaries.
+fn run_full_width_counter_nonce(case: &Value) -> Result<()> {
     let input = &case["input"];
     let expected = &case["expected"];
-    let exporter_secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
-    let exporter_label = required_str(input, "exporter_label")?;
-    if exporter_label != arkret_crypto::AEAD_NONCE_EXPORTER_LABEL {
-        bail!("registered sender nonce exporter label drifted: {exporter_label}");
+    let counter = required_u64(input, "counter")?;
+    let nonce_len = required_u64(input, "aead_nn")? as usize;
+    if required_str(input, "encoding")? != "I2OSP(counter, AEAD.Nn)" {
+        bail!("registered full-width nonce encoding drifted");
     }
-    let context: arkret_crypto::AeadNonceContext = serde_json::from_value(
-        input
-            .get("context")
-            .cloned()
-            .ok_or_else(|| anyhow!("sender nonce case missing input.context"))?,
-    )
-    .map_err(|error| anyhow!("registered nonce context does not decode: {error}"))?;
-    let nonce_len = required_u64(input, "nonce_length_bytes")? as usize;
-
-    let canonical_context = arkret_crypto::aead_sender_nonce_context_bytes(&context)
-        .map_err(|error| anyhow!("canonical nonce context failed: {error}"))?;
-    let expected_context = required_str(expected, "context_canonical_json")?;
-    if canonical_context != expected_context.as_bytes() {
-        bail!(
-            "canonical nonce context drifted: expected {expected_context}, got {}",
-            String::from_utf8_lossy(&canonical_context)
-        );
+    let nonce = arkret_crypto::compose_aead_nonce(counter, nonce_len)?;
+    assert_hex("nonce", &nonce, expected, "nonce_hex")?;
+    let high_order_zero_bytes = nonce.iter().take_while(|byte| **byte == 0).count();
+    if required_u64(expected, "high_order_zero_bytes")? as usize != high_order_zero_bytes {
+        bail!("full-width nonce leading-zero count drifted");
     }
 
-    let prefix =
-        arkret_crypto::derive_aead_sender_nonce_prefix(&exporter_secret, &context, nonce_len)
-            .map_err(|error| anyhow!("SDK sender nonce prefix derivation failed: {error}"))?;
-    assert_hex(
-        "sender_nonce_prefix",
-        &prefix,
-        expected,
-        "sender_nonce_prefix_hex",
-    )?;
+    let mutations = expected
+        .get("negative_mutations")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("full-width nonce KAT omits negative_mutations[]"))?;
+    let expected_mutations = [
+        "nonzero_high_order_padding",
+        "counter_reuse_with_different_ciphertext",
+        "counter_rollback",
+        "counter_increment_after_u64_max",
+    ];
+    if mutations
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>()
+        != expected_mutations
+        || required_str(expected, "negative_decision")? != "reject"
+    {
+        bail!("full-width nonce negative mutation registry drifted");
+    }
 
-    let counter = u64::from_str_radix(required_str(input, "counter_be64_hex")?, 16)
-        .map_err(|error| anyhow!("registered nonce counter is not hex: {error}"))?;
-    assert_hex(
-        "nonce",
-        &arkret_crypto::compose_aead_nonce(&prefix, counter),
-        expected,
-        "nonce_hex",
-    )
+    let context = arkret_crypto::AeadNonceContext {
+        mls_group_id: "cotest-full-width-counter".to_owned(),
+        epoch: 1,
+        sender_domain: "ak:device:01904100-0000-7000-8000-000000000001".to_owned(),
+    };
+    let mut malformed = nonce.clone();
+    malformed[0] = 1;
+    arkret_crypto::verify_aead_sender_nonce(&context, &malformed, nonce_len, None)
+        .expect_err("non-zero high-order I2OSP padding must be rejected");
+    let mut replay = arkret_crypto::AeadNonceReplayTracker::new();
+    arkret_crypto::verify_aead_sender_nonce(&context, &nonce, nonce_len, Some(&mut replay))?;
+    arkret_crypto::verify_aead_sender_nonce(&context, &nonce, nonce_len, Some(&mut replay))
+        .expect_err("a reused sender counter must be rejected");
+    if counter.checked_sub(1).is_none() || u64::MAX.checked_add(1).is_some() {
+        bail!("durable sender counter arithmetic boundary drifted");
+    }
+    Ok(())
 }
 
 /// `ak.vector.mention.routing_hmac_kat.v1` — the epoch routing key and the
@@ -239,52 +294,54 @@ fn run_content_negatives(case: &Value) -> Result<()> {
     let fixture: Value = serde_json::from_slice(&fs::read(fixture_path(FIXTURE))?)?;
     let cases = fixture["cases"].as_array().unwrap();
     let declared_base = required_str(&case["input"], "base_case")?;
-    let base = match case_by_name(cases, declared_base) {
-        Ok(base) => base,
-        Err(_) if declared_base == "content_key_derivation_sha256_aes256gcm" => {
-            // The active SHA-256 fixture now uses the mandatory AES-128-GCM
-            // ciphersuite but the negative-vector backlink retained its former
-            // case name. Keep this compatibility closed to that one rename.
-            case_by_name(cases, "content_key_derivation_sha256_aes128gcm")?
-        }
-        Err(error) => return Err(error),
-    };
+    let base = case_by_name(cases, declared_base)?;
     let input = &base["input"];
     let secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
     let realm = required_str(input, "realm_id_utf8")?.as_bytes();
+    let sender_domain = required_str(input, "verified_sender_domain_utf8")?.as_bytes();
+    let nh = required_u64(input, "kdf_nh")? as usize;
+    let nk = required_u64(input, "aead_nk")? as usize;
     let expected = hex::decode(required_str(&base["expected"], "content_key_hex")?)?;
 
-    let swapped_history = mls_exporter(&secret, "ak.content-v1", realm, 32)?;
-    let swapped_key = expand_with_label(&swapped_history, "ak.content-v1", &[], 32)?;
+    let swapped_history = mls_exporter(&secret, "ak.content-v1", realm, nh)?;
+    let swapped_key = expand_with_label(&swapped_history, "ak.content-v1", sender_domain, nk)?;
     require_different("swapped history label", &swapped_key, &expected)?;
 
-    let history = mls_exporter(&secret, "ak.history-v1", realm, 32)?;
+    let history = mls_exporter(&secret, "ak.history-v1", realm, nh)?;
     require_different(
         "swapped content label",
-        &expand_with_label(&history, "ak.history-v1", &[], 32)?,
+        &expand_with_label(&history, "ak.history-v1", sender_domain, nk)?,
         &expected,
     )?;
     require_different(
         "empty exporter context",
         &expand_with_label(
-            &mls_exporter(&secret, "ak.history-v1", &[], 32)?,
+            &mls_exporter(&secret, "ak.history-v1", &[], nh)?,
             "ak.content-v1",
-            &[],
-            32,
+            sender_domain,
+            nk,
         )?,
         &expected,
     )?;
     require_different(
-        "realm content context",
-        &expand_with_label(&history, "ak.content-v1", realm, 32)?,
+        "unverified sender domain",
+        &expand_with_label(
+            &history,
+            "ak.content-v1",
+            b"ak:device:01904100-0000-7000-8000-00000000ffff",
+            nk,
+        )?,
         &expected,
     )?;
+    if arkret::mls::derive_content_key_from_history_secret(&history, &[], nk).is_ok() {
+        bail!("empty verified sender domain was accepted");
+    }
 
     let next_epoch_secret = Sha256::digest([secret.as_slice(), b"next epoch"].concat());
-    let next_history = mls_exporter(&next_epoch_secret, "ak.history-v1", realm, 32)?;
+    let next_history = mls_exporter(&next_epoch_secret, "ak.history-v1", realm, nh)?;
     require_different(
         "next epoch key",
-        &expand_with_label(&next_history, "ak.content-v1", &[], 32)?,
+        &expand_with_label(&next_history, "ak.content-v1", sender_domain, nk)?,
         &expected,
     )
 }

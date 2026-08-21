@@ -106,3 +106,69 @@ pub fn fixture_did_url(value: impl Into<String>) -> arkret_wire::DidUrl {
     arkret_wire::DidUrl::new(value.clone())
         .unwrap_or_else(|error| panic!("cotest fixture verification method {value:?}: {error}"))
 }
+
+/// Build a deterministic frozen Ed25519 notary signer for fixtures.
+#[track_caller]
+pub fn fixture_notary_signer(
+    actor_id: arkret_wire::DidCoreId,
+) -> arkret_wire::NotarySignerDescriptor {
+    let controller = actor_id
+        .as_str()
+        .strip_prefix("ak:did_core:")
+        .unwrap_or_else(|| panic!("fixture notary actor is not a DID-core id: {actor_id}"))
+        .to_owned();
+    fixture_notary_signer_for_method(
+        actor_id,
+        fixture_did_url(format!("did:{controller}#notary-key-1")),
+    )
+}
+
+/// Build a deterministic frozen Ed25519 notary signer for an exact fixture
+/// verification method.
+#[track_caller]
+pub fn fixture_notary_signer_for_method(
+    actor_id: arkret_wire::DidCoreId,
+    verification_method: arkret_wire::DidUrl,
+) -> arkret_wire::NotarySignerDescriptor {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use sha2::{Digest, Sha256};
+
+    let public_key: [u8; 32] = Sha256::digest(actor_id.as_str().as_bytes()).into();
+    let frozen_public_key_b64u = URL_SAFE_NO_PAD.encode(public_key);
+    let frozen_public_key_digest = arkret_wire::Hash::new(format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(public_key))
+    ))
+    .unwrap_or_else(|error| panic!("fixture notary digest is invalid: {error}"));
+    arkret_wire::NotarySignerDescriptor {
+        actor_id,
+        verification_method,
+        key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
+        jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
+        frozen_public_key_b64u,
+        frozen_public_key_digest,
+    }
+}
+
+#[track_caller]
+pub fn fixture_single_signer_notary(actor_id: arkret_wire::DidCoreId) -> arkret_wire::NotaryValue {
+    arkret_wire::NotaryValue::single_signer(fixture_notary_signer(actor_id))
+}
+
+/// Build a deterministic content-addressed signer-evidence reference pair for
+/// Event fixtures that do not carry a Principal Server admission proof.
+#[track_caller]
+pub fn fixture_signer_evidence_pair(
+    label: impl AsRef<[u8]>,
+) -> (arkret_wire::SignerEvidenceRef, arkret_wire::Hash) {
+    use sha2::{Digest, Sha256};
+
+    let digest_hex = hex::encode(Sha256::digest(label.as_ref()));
+    let reference =
+        arkret_wire::SignerEvidenceRef::new(format!("ak:signer_evidence:sha256:{digest_hex}"))
+            .unwrap_or_else(|error| panic!("fixture signer-evidence ref is invalid: {error}"));
+    let digest = arkret_wire::Hash::new(format!("sha256:{digest_hex}"))
+        .unwrap_or_else(|error| panic!("fixture signer-evidence digest is invalid: {error}"));
+    (reference, digest)
+}

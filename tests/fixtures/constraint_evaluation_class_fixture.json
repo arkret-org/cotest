@@ -83,7 +83,7 @@
       "fast_path_eligible": false,
       "needs_space_state": true,
       "needs_external_call": false,
-      "rationale": "confidentiality (e.g. min_visibility) requires reading the space's history_visibility cell.",
+      "rationale": "confidentiality (e.g. min_visibility) requires reading the space's history_access cell.",
       "expected": {"outcome": "accept", "classification": "slow_path"}
     },
     {

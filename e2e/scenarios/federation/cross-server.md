@@ -65,7 +65,7 @@
 1. **alice** 通过 α 的 inkson 进 `/setup`,建 Realm `R`:
    - discoverability = `listed`
    - join_rule = `invite`
-   - history_visibility = `joined`
+   - history_access = `since_join`
    - seed_members = `[]`(本次不在创建阶段邀,改用空间管理面 invite 流程,这样能精确捕获 `ak.invite.create` 事件)
 2. 记录 `realmId`
 3. **alice** 进 `/realms/${realmId}/admin`,通过 `invite-member` 邀请 `bob.did`

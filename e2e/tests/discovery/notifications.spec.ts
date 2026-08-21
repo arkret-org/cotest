@@ -390,7 +390,7 @@ test.describe("notifications", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S23 Mark Read ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       encryption_profile: "none",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
@@ -448,7 +448,7 @@ test.describe("notifications", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S23 E2EE Blind Wake ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       encryption_profile: "mls_rfc9420",
       content_scheme: "mls_exporter_aead_v1",
     });
@@ -604,7 +604,7 @@ test.describe("notifications", () => {
       const realmId = await createRealmApi(request, aliceToken, {
         title: `S23 Cross Device ${stamp}`,
         discoverability: "listed",
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
         encryption_profile: "none",
       });
       await addRealmMemberApi(request, aliceToken, realmId, bob.did);

@@ -984,7 +984,7 @@ fn fixed_unsigned_sidecar_event(
         requirements: EventRequirements::default(),
     };
     event.event_id = event
-        .derive_event_id()
+        .derive_event_id_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
         .map_err(|_| SidecarModelError::ModelInvariant)?;
     Ok(event)
 }
@@ -1007,7 +1007,7 @@ fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEvent
             .map_err(|_| SidecarModelError::ModelInvariant)?,
         event_digest: Hash::new(
             event
-                .event_digest()
+                .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
                 .map_err(|_| SidecarModelError::ModelInvariant)?,
         )
         .map_err(|_| SidecarModelError::ModelInvariant)?,
@@ -1040,13 +1040,17 @@ fn decode_prepared_event(draft: &SidecarPreparedEventDraft) -> SidecarModelResul
     );
     let event: Event =
         serde_json::from_value(value).map_err(|_| SidecarModelError::DraftMismatch)?;
+    let digest_suite = draft
+        .event_digest
+        .digest_suite()
+        .map_err(|_| SidecarModelError::DraftMismatch)?;
     let derived = event
-        .derive_event_id()
+        .derive_event_id_with_digest_suite(digest_suite)
         .map_err(|_| SidecarModelError::DraftMismatch)?;
     if derived != draft.event_id
         || event.kind != draft.kind
         || event
-            .event_digest()
+            .event_digest_with_digest_suite(digest_suite)
             .map_err(|_| SidecarModelError::DraftMismatch)?
             != draft.event_digest.as_str()
     {
@@ -1243,7 +1247,12 @@ fn validate_signed_draft(
         || event.kind != draft.kind
         || actual_unsigned != expected_unsigned
         || event
-            .event_digest()
+            .event_digest_with_digest_suite(
+                draft
+                    .event_digest
+                    .digest_suite()
+                    .map_err(|_| SidecarModelError::DraftMismatch)?,
+            )
             .map_err(|_| SidecarModelError::DraftMismatch)?
             != draft.event_digest.as_str()
         || !matches!(
@@ -2894,10 +2903,15 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
         let digest_winner = events
             .iter()
             .max_by(|left, right| {
-                left.event_digest()
+                left.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
                     .expect("digest")
                     .as_bytes()
-                    .cmp(right.event_digest().expect("digest").as_bytes())
+                    .cmp(
+                        right
+                            .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+                            .expect("digest")
+                            .as_bytes(),
+                    )
             })
             .expect("two siblings");
         let event_id_winner = events
@@ -2915,10 +2929,15 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
     let digest_winner = events
         .iter()
         .max_by(|left, right| {
-            left.event_digest()
+            left.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
                 .expect("digest")
                 .as_bytes()
-                .cmp(right.event_digest().expect("digest").as_bytes())
+                .cmp(
+                    right
+                        .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+                        .expect("digest")
+                        .as_bytes(),
+                )
         })
         .expect("two siblings");
     let event_id_winner = events
@@ -2938,7 +2957,9 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
                 .iter()
                 .map(|event| (
                     event.event_id.as_str(),
-                    event.event_digest().expect("digest")
+                    event
+                        .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+                        .expect("digest")
                 ))
                 .collect::<Vec<_>>()
         );
@@ -2948,10 +2969,15 @@ pub fn run_sidecar_canonical_sibling_digest_vector() -> Result<()> {
     let reversed_winner = events
         .iter()
         .max_by(|left, right| {
-            left.event_digest()
+            left.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
                 .expect("digest")
                 .as_bytes()
-                .cmp(right.event_digest().expect("digest").as_bytes())
+                .cmp(
+                    right
+                        .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+                        .expect("digest")
+                        .as_bytes(),
+                )
         })
         .expect("two siblings");
     if reversed_winner.event_id != digest_winner_id

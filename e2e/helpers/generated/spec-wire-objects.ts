@@ -42,7 +42,7 @@ export type RealmObject = {
   "default_strand_id"?: string | null;
   "default_discoverability": "public" | "listed" | "restricted" | "unlisted" | "invite_only" | "secret";
   "default_join_rule": "public" | "invite" | "knock" | "restricted" | "knock_restricted" | "closed";
-  "history_visibility": "world_readable" | "shared" | "invited" | "joined" | "restricted";
+  "history_access": "since_join" | "all_history_for_current_members";
   "reducer_profile": string;
   "encryption_profile": "none" | "mls_rfc9420" | "external";
   "content_scheme"?: "mls_rfc9420" | "mls_exporter_aead_v1";
@@ -291,7 +291,7 @@ export type CapabilityGrantObject = {
     "trusted_claim_issuers"?: string[];
     "claim_refresh_required"?: boolean;
     "claim_max_age"?: string;
-    "allowed_history_visibility_values"?: Array<"world_readable" | "shared" | "invited" | "joined" | "restricted">;
+    "allowed_history_access_values"?: Array<"since_join" | "all_history_for_current_members">;
     "redacted_history_allowed"?: boolean;
     "encryption_required"?: boolean;
     "min_encryption_level"?: "none" | "mls_rfc9420" | "external";

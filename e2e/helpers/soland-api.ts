@@ -517,7 +517,7 @@ export async function createRealmApi(
     // The policy axes are the closed `realm.schema.json` enums, not free
     // strings: a typo used to travel all the way to the server.
     discoverability?: RealmObject["default_discoverability"];
-    history_visibility?: RealmObject["history_visibility"];
+    history_access?: RealmObject["history_access"];
     encryption_profile?: RealmObject["encryption_profile"];
     content_scheme?: RealmObject["content_scheme"];
     invitees?: string[];
@@ -559,11 +559,6 @@ export async function createRealmApi(
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
-  if (data.history_visibility === "restricted") {
-    throw new Error(
-      "createRealmApi requires an explicit history-sharing policy for restricted history",
-    );
-  }
   const realmGenesis = {
     schema: "ak.schema.realm_genesis.v1",
     purpose: "collaboration",
@@ -670,9 +665,9 @@ export async function createRealmApi(
     { value: data.default_join_rule ?? "invite" },
   );
   pushBootstrapEvent(
-    "ak.realm.history_visibility",
-    "ak:cell:ak.component.realm.history_visibility.v1:null",
-    { value: data.history_visibility ?? "shared" },
+    "ak.realm.history_access",
+    "ak:cell:ak.component.realm.history_access.v1:null",
+    { to: data.history_access ?? "since_join" },
   );
   pushBootstrapEvent(
     "ak.realm.discovery",

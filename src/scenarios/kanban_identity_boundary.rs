@@ -246,7 +246,7 @@ async fn create_test_realm(alice: &TestActorClient, title: &str) -> Result<Strin
             "public": true,
             "discoverability": "public",
             "join_rule": "public",
-            "history_visibility": "world_readable",
+            "history_access": "all_history_for_current_members",
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;

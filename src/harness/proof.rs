@@ -13,7 +13,7 @@ pub(crate) fn canonical_event_digest(event: &Value) -> Result<String> {
     let typed: arkret_wire::Event = serde_json::from_value(typed_value)
         .with_context(|| format!("Event fixture {label} does not match the SDK wire shape"))?;
     typed
-        .event_digest()
+        .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
         .with_context(|| format!("Event fixture {label} is not canonicalizable"))
 }
 
@@ -219,7 +219,12 @@ mod tests {
             json!("sha256:0000000000000000000000000000000000000000000000000000000000000000");
         let typed: arkret_wire::Event = serde_json::from_value(parseable).unwrap();
 
-        assert_eq!(digest, typed.event_digest().unwrap());
+        assert_eq!(
+            digest,
+            typed
+                .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+                .unwrap()
+        );
     }
 
     /// The signal rail carries no product `signal_kind`, `call_id` or

@@ -62,7 +62,7 @@ alice 邀请仅持有邮箱的 bob;协议用 token commitment 隐藏明文邮箱
     - 把 pending invite 转 `ak.invite.create` for bob
 14. bob 客户端再提交 `ak.invite.accept` → 加入成员
 15. 断言:`/realms/${realmId}/admin` 显示 bob 是 member;old pending row 消失
-16. 断言:bob 进 `/timeline/${realmId}` 看得到 alice 的消息(history_visibility 之内)
+16. 断言:bob 进 `/timeline/${realmId}` 看得到 alice 的消息(history_access 之内)
 
 ### Phase D — E2EE Realm 的 MLS welcome
 

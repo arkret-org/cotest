@@ -71,7 +71,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       "ak.realm.profile",
       "ak.realm.policy_bundle",
       "ak.realm.join_rule",
-      "ak.realm.history_visibility",
+      "ak.realm.history_access",
       "ak.realm.discovery",
       "ak.realm.plaintext_visible_services",
       "ak.realm.delivery_binding_policy",

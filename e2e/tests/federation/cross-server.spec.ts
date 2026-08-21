@@ -311,7 +311,7 @@ test.describe("cross-server federation", () => {
         title: `S2 Cross-server ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
       });
       await alicePage.inviteFromAdmin(realmId, bob.did, undefined, {
         token: bobLocatorToken,
@@ -550,7 +550,7 @@ test.describe("cross-server federation", () => {
         title: `S2 auto federation ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
       });
       await alicePage.inviteFromAdmin(realmId, bob.did, undefined, {
         token: bobLocatorToken,
@@ -676,7 +676,7 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 two-way ${stamp}`,
         discoverability: "listed",
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
         invitees: [bob.did],
         invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
@@ -740,7 +740,7 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 backfill ${stamp}`,
         discoverability: "listed",
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
         invitees: [bob.did],
         invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,
@@ -936,7 +936,7 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 revoke fanout ${stamp}`,
         discoverability: "listed",
-        history_visibility: "shared",
+        history_access: "all_history_for_current_members",
         invitees: [bob.did],
         invitee_service_ids: { [bob.did]: solandServiceId("beta") },
         ownerDid: alice.did,

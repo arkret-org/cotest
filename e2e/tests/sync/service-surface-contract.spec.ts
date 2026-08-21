@@ -517,7 +517,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const token = await issueDevSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc event idempotency ${stamp}`,
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
         ownerDid: alice.did,
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);
@@ -602,7 +602,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const token = await issueDevSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc pagination ${stamp}`,
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
         ownerDid: alice.did,
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);
@@ -743,7 +743,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const token = await issueDevSession(request, alice);
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc idempotency-key ${stamp}`,
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
         ownerDid: alice.did,
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);

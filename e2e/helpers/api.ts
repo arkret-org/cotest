@@ -18,7 +18,7 @@ export type ApiRealmOpts = {
   summary?: string;
   // Closed `realm.schema.json` enums, mirrored from the spec artifacts.
   discoverability?: RealmObject["default_discoverability"];
-  historyVisibility?: RealmObject["history_visibility"];
+  historyAccess?: RealmObject["history_access"];
   encryptionProfile?: RealmObject["encryption_profile"];
   plaintextVisibleServices?: string[];
   invitees?: string[];
@@ -68,7 +68,7 @@ export async function createRealmViaApi(
       title: opts.title,
       summary: opts.summary,
       discoverability: opts.discoverability ?? "public",
-      history_visibility: opts.historyVisibility,
+      history_access: opts.historyAccess,
       encryption_profile: opts.encryptionProfile,
       plaintext_visible_services: opts.plaintextVisibleServices,
       invitees: opts.invitees,

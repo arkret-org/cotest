@@ -202,7 +202,10 @@ fn event_submission(
     event.seal_basis = Some(arkret_wire::SealBasis {
         leaves: vec![SealId::new(format!("ak:seal:sha256:{}", "b".repeat(64)))?],
     });
-    let event_digest = Hash::new(event.event_digest()?)?;
+    let event_digest =
+        Hash::new(event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?)?;
+    let (signer_evidence_ref, signer_evidence_digest) =
+        crate::fixture_signer_evidence_pair(principal.as_str());
     event.proofs.push(
         arkret_wire::Proof {
             kind: "DataIntegrityProof".to_owned(),
@@ -213,6 +216,8 @@ fn event_submission(
                 principal.as_str(),
             ),
             event_digest,
+            signer_resolution_evidence_ref: Some(signer_evidence_ref),
+            signer_resolution_evidence_digest: Some(signer_evidence_digest),
             created_at: now,
             domain: None,
             audience: None,

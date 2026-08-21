@@ -77,7 +77,7 @@
 17. alice 客户端:`ak.mls.commit` Add carol;epoch 1 → epoch 2;新 application key
 18. soland 接受 commit + welcome → carol 拉 welcome → 派生 epoch 2 secrets
 19. 断言:carol `/timeline/${realmId}` 可见;**但** carol 解 Phase C 的 `M_a` / `M_b`?
-    - 看 `history_visibility`:joined → carol 看不到加入前的 `M_a/M_b`(spec §3.4 + §2.4.1 `decryption_pending` for pre-join)
+    - 看 `history_access`:since_join → carol 看不到加入前的 `M_a/M_b`(spec §3.4 + §2.4.1 `decryption_pending` for pre-join)
 20. alice 发新消息 `M_a_post_carol`,用 epoch 2 key
 21. 断言:三方 timeline 都有 `M_a_post_carol`
 22. 断言:bob 之前用 epoch 1 解密的 `M_a` 仍在 bob 视图(本地缓存的明文)
@@ -113,7 +113,7 @@
 - **E11.1 并发 commits**:alice 和 bob 同时提交 commit(竞态)→ `covered_frontier_cell` 返回 ⊥,clients 进入 `decryption_pending`,后续 commit 解决(spec §2.5.2)
 - **E11.2 Governance binding mismatch**:测试 harness 改 alice 提交的 `governance_binding.realm_policy_digest` → soland 拒绝整批,reducer reason `governance_binding_mismatch`
 - **E11.3 KeyPackage 不可用**:bob 没上传 KeyPackage → alice claim 失败,`POST /keypackages/claim` 返回 404 / `no_keypackage`
-- **E11.4 加入前已发消息 + history_visibility=shared**:把 Phase D 改用 `history_visibility=shared` — carol 加入后应当能解(spec §3.4 shared rule + §6 offline epoch retention)
+- **E11.4 加入前已发消息 + history_access=all_history_for_current_members**:把 Phase D 改用 `history_access=all_history_for_current_members`；carol 成为当前成员后通过私有 history-key 恢复流程取得获准 epoch 的历史 secret。
 - **E11.5 Cipher suite negotiation**:不同 cipher suite → alice 创建 Realm 时指定 suite,bob 的 KeyPackage 不支持 → soland 提示客户端
 - **E11.6 Realm encryption_profile create-locked**(active):对已建的 `mls_rfc9420` Realm 发送夹带 `encryption_profile` 的 `ak.realm.policy_bundle` → closed payload schema 以 `schema_violation` 拒绝。`encryption_profile` 只有 genesis carrier，任何可变 facet 都不能把已加密 Realm 静默降级成明文。
 - **E11.7 Circle encryption_profile create-locked**(fixme,blocking-on soland#circle-submit-validation-gap):在加密 Realm 下按 floor 建 Circle 后,`ak.circle.update` patch `encryption_profile`。**实测确认 gap**:soland 提交时**接受**(返回 200),因为 `operation_schema_for_kind` 无 circle arm → 提交时操作校验整段被跳过;create-lock 只在异步 reducer 兜底(状态安全但响应误导)。修后转 active:断言 wire code `circle_encryption_profile_create_locked`。

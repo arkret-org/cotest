@@ -57,7 +57,7 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
    这里复用 dev-login 双 token 作为代理)
 2. alice (device-1) 通过 `/setup` 多步向导建 Realm `R`:
    - title = `"models/private-read-cursor S ${stamp}"`
-   - discoverability = `listed`,join_rule = `invite`,history_visibility = `joined`
+   - discoverability = `listed`,join_rule = `invite`,history_access = `since_join`
    - seed_members = `[bob.did]`
 3. 断言:`realm-lifecycle-strand` 含 `created ak:realm:...`,记录 `realmId`
 4. bob 通过 `acceptInvite(realmId)` 加入 Realm

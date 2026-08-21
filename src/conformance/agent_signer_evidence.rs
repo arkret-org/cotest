@@ -27,8 +27,8 @@ use arkret_signatures::agent_evidence::{
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
     Base64UrlString, DidCoreId, DidFullId, DidUrl, EventId, EventKind, Hash, Hlc, NonEmptyString,
-    NotarySig, PayloadSignature, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId,
-    SealKind, project_full_id_to_core_id,
+    NotarySig, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId, SealSignature,
+    project_full_id_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -758,6 +758,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let key_leaf_digest = arkret_state::state_value_leaf_digest(
         &arkret_wire::CellRef::new(key_cell_ref.as_str().to_owned())?,
         &serde_json::to_value(&key_cell_value)?,
+        arkret_canonical::DigestSuite::Sha256,
     )?;
     let lifecycle_cell_ref = nes(&arkret_wire::composite_subject(&[signer_id.as_str()])?)?;
     let lifecycle_cell_ref = nes(&format!(
@@ -767,6 +768,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let lifecycle_leaf_digest = arkret_state::state_value_leaf_digest(
         &arkret_wire::CellRef::new(lifecycle_cell_ref.as_str().to_owned())?,
         &serde_json::to_value(config.lifecycle_status)?,
+        arkret_canonical::DigestSuite::Sha256,
     )?;
 
     let key_seal = make_seal(
@@ -1061,23 +1063,19 @@ fn make_seal(
         notary_seq: sequence,
         data_view_root: None,
         data_event_set_root: None,
-        availability_root: None,
-        coverage_scope: None,
+        availability_receipt_digests: Vec::new(),
         covered_event_digests: Vec::new(),
         previous_state_root: None,
         previous_digest_algorithm: None,
-        notary_signature: NotarySig::Single(PayloadSignature {
+        notary_signature: NotarySig::Single(SealSignature {
             verification_method: verification_method.clone(),
             payload_digest: hash_byte(0x63)?,
-            created_at: sealed_at,
             jws: "e30..c2ln".to_owned(),
-            extra: Default::default(),
         }),
         sealed_at,
         hlc: Hlc::new(hlc)?,
-        kind: SealKind::Normal,
     };
-    seal.id = seal.derive_id()?;
+    seal.id = seal.derive_id(arkret_canonical::DigestSuite::Sha256)?;
     Ok(seal)
 }
 

@@ -83,7 +83,7 @@ async function createJointTwoUserRealm(
     summary: "cotest joint harness smoke",
     discoverability: "public",
     joinRule: "invite",
-    historyVisibility: "joined",
+    historyAccess: "since_join",
     encryptionProfile: "none",
   });
 

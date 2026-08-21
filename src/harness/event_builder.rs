@@ -323,6 +323,7 @@ pub async fn moderation_report_request(
             target_ref: target_ref.to_owned(),
             effective_scope,
         },
+        arkret_canonical::DigestSuite::Sha256,
     )?;
     Ok(request)
 }
@@ -478,8 +479,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         profile,
         policy_bundle,
         join_rule,
-        history_visibility,
-        history_sharing_policy,
+        history_access,
         discovery,
         alias,
         plaintext_visible_services,
@@ -540,19 +540,10 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_JOIN_RULE_V1),
     )?;
     push_followup(
-        arkret_wire::event_kind_str::REALM_HISTORY_VISIBILITY,
-        history_visibility.to_value()?,
-        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_HISTORY_VISIBILITY_V1),
+        arkret_wire::event_kind_str::REALM_HISTORY_ACCESS,
+        history_access.to_value()?,
+        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_HISTORY_ACCESS_V1),
     )?;
-    if let Some(policy) = history_sharing_policy {
-        push_followup(
-            arkret_wire::event_kind_str::REALM_HISTORY_SHARING_POLICY,
-            policy.to_value()?,
-            arkret_wire::null_subject_cell(
-                arkret_wire::CellFamilyId::REALM_HISTORY_SHARING_POLICY_V1,
-            ),
-        )?;
-    }
     push_followup(
         arkret_wire::event_kind_str::REALM_DISCOVERY,
         discovery.to_value()?,
@@ -1468,7 +1459,7 @@ mod realm_bootstrap_tests {
                 arkret_wire::event_kind_str::REALM_PROFILE,
                 arkret_wire::event_kind_str::REALM_POLICY_BUNDLE,
                 arkret_wire::event_kind_str::REALM_JOIN_RULE,
-                arkret_wire::event_kind_str::REALM_HISTORY_VISIBILITY,
+                arkret_wire::event_kind_str::REALM_HISTORY_ACCESS,
                 arkret_wire::event_kind_str::REALM_DISCOVERY,
                 arkret_wire::event_kind_str::REALM_ALIAS,
                 arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,

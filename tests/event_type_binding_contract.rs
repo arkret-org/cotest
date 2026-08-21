@@ -1,7 +1,7 @@
-use arkret_canonical::canonical_json_bytes;
+use arkret_canonical::{DigestSuite, canonical_json_bytes};
 use arkret_event_draft::{EventPayloadExt, TypedEventDraft, ValidatedExtensionPayload};
 use arkret_models_collaboration::events_payloads::{
-    ContentBlock, MessageCreatePayload, RealmKeySharePayload, StatePayload,
+    ContentBlock, MessageCreatePayload, StatePayload,
 };
 use arkret_wire::{
     ConfidentialityClass, DidCoreId, DidFullId, Event, EventKind, ExtensionManifest, Hash, Hlc,
@@ -45,7 +45,7 @@ fn message_event() -> Event {
     );
     TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), principal_server(), payload)
         .unwrap()
-        .author(7, Hlc::new(HLC).unwrap(), created_at())
+        .author_with_digest_suite(7, Hlc::new(HLC).unwrap(), created_at(), DigestSuite::Sha256)
         .unwrap()
         .into_event()
 }
@@ -64,7 +64,7 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
         },
     )
     .unwrap()
-    .author(7, Hlc::new(HLC).unwrap(), created_at())
+    .author_with_digest_suite(7, Hlc::new(HLC).unwrap(), created_at(), DigestSuite::Sha256)
     .unwrap();
 
     let message_bytes = canonical_json_bytes(&message.digest_payload().unwrap()).unwrap();
@@ -111,43 +111,9 @@ fn typed_authored_event_round_trips_at_the_wire_boundary() {
     let wire = serde_json::to_vec(&event).unwrap();
     let decoded: Event = serde_json::from_slice(&wire).unwrap();
     assert_eq!(decoded, event);
-    decoded.verify_event_id_matches_content().unwrap();
-}
-
-#[test]
-fn realm_key_share_one_of_rejects_cross_carried_wire_fields() {
-    let baseline = serde_json::json!({
-        "share_kind": "member_device",
-        "recipient_principal_id": "ak:did_core:web:bob.example",
-        "recipient_device_id": "ak:device:019f9000-0000-7000-8000-000000000003",
-        "sender_device_id": "ak:device:019f9000-0000-7000-8000-000000000004",
-        "source_authorization_ref":
-            "ak:event:Adl8EVE0XuYmtOeRAa0WJVGy5DWansCGrXuwPONweuzs",
-        "sender_device_signature": {
-            "kid": "k",
-            "signature_algorithm": "Ed25519",
-            "sig": "AAAA"
-        },
-        "key_scope": {
-            "effective_scope": { "kind": "realm", "realm_id": REALM_ID },
-            "policy_digest":
-                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        },
-        "ciphertext": "Y2lwaGVy",
-        "created_at": "2026-08-09T01:02:03.000Z"
-    });
-    let parsed: RealmKeySharePayload = serde_json::from_value(baseline.clone()).unwrap();
-    assert_eq!(serde_json::to_value(parsed).unwrap(), baseline);
-
-    let mut wrong_branch = baseline.clone();
-    wrong_branch["recovery_recipient_id"] = serde_json::json!("rr-1");
-    assert!(serde_json::from_value::<RealmKeySharePayload>(wrong_branch).is_err());
-
-    let mut doubled_material = baseline;
-    doubled_material["encrypted_key_ref"] = serde_json::json!(
-        "ak:blob:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-    );
-    assert!(serde_json::from_value::<RealmKeySharePayload>(doubled_material).is_err());
+    decoded
+        .verify_event_id_matches_content_with_digest_suite(DigestSuite::Sha256)
+        .unwrap();
 }
 
 #[test]
@@ -200,6 +166,7 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
             7,
             Hlc::new(HLC).unwrap(),
             created_at(),
+            DigestSuite::Sha256,
         )
         .unwrap();
     assert_eq!(event.kind, EventKind::Unknown("ak.example.note".to_owned()));

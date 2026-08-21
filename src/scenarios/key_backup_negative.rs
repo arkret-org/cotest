@@ -8,7 +8,7 @@ use arkret_models_crypto::{
     KeyBackupRecipientMethod, KeyBackupSignatureAlgorithm, UnsignedKeyBackup,
     UnsignedKeyBackupAuthData,
 };
-use arkret_wire::{Base64UrlString, DidUrl};
+use arkret_wire::{Base64UrlString, DidUrl, Hash, RealmId, ScopeRef};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
@@ -202,6 +202,10 @@ async fn reject_digest_mismatch_on_put(
 fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBackup> {
     let created_at = ts("2026-05-18T00:00:00.000Z")?;
     let actor_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
+    let effective_scope = ScopeRef::Realm {
+        realm_id: RealmId::new("ak:realm:Aa1JCF6pnQnSgl8DnT6vNtPcFGPCxLnEY130o2lmyDSh".to_owned())?,
+    };
+    let mls_group_id = effective_scope.canonical_mls_group_id()?;
     let backup = KeyBackup {
         backup_id: BackupId::new(backup_id.to_owned())?,
         actor_id: actor_id.clone(),
@@ -240,7 +244,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
                 backup_kind: BackupKind::MlsHistory,
                 backup_version: "kb_1".to_owned(),
                 created_at,
-                item_kinds: vec!["mls_group_state".to_owned()],
+                item_kinds: vec!["history_secret_segment".to_owned()],
                 managed_principal_bindings: Vec::new(),
                 recipient_method: Some(KeyBackupRecipientMethod::SecretStorageKey),
                 recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
@@ -249,11 +253,25 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
             extra: Default::default(),
         },
         contents: vec![KeyBackupContentItem {
-            item_kind: "mls_group_state".to_owned(),
+            item_kind: "history_secret_segment".to_owned(),
             realm_id: None,
             managed_principal_binding: None,
-            mls_group_id: Some("group_d3".to_owned()),
-            epoch: Some(0),
+            mls_group_id: Some(mls_group_id),
+            effective_scope: Some(effective_scope),
+            from_epoch: Some(0),
+            to_epoch: Some(0),
+            group_state_ref: Some(EventId::new(
+                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM".to_owned(),
+            )?),
+            policy_digest: Some(Hash::new(
+                "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_owned(),
+            )?),
+            membership_frontier_digest: Some(Hash::new(
+                "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+                    .to_owned(),
+            )?),
+            epoch: None,
             first_event_id: None,
             last_event_id: None,
             secret_id: None,

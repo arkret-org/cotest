@@ -424,8 +424,11 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
     if projected_cell(&active)? != projected_cell(&revoked)? {
         bail!("{VECTOR_ID} reordered exact-set revoke addressed a different cell");
     }
-    arkret_schema::validate_registered_cell_writes(&active)?;
-    arkret_schema::validate_registered_cell_writes(&revoked)?;
+    arkret_schema::validate_registered_cell_writes(&active, arkret_canonical::DigestSuite::Sha256)?;
+    arkret_schema::validate_registered_cell_writes(
+        &revoked,
+        arkret_canonical::DigestSuite::Sha256,
+    )?;
 
     // A subset is a different exact set and therefore a different cell: a
     // partial revoke must not collide with the superset grant.

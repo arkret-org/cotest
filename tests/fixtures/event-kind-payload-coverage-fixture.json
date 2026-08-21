@@ -42,12 +42,12 @@
       "payload_shape": { "rule": "invite" }
     },
     {
-      "name": "space_history_visibility_cas_register",
-      "event_kind": "ak.realm.history_visibility",
-      "cell_family": "ak.component.realm.history_visibility.v1",
-      "lattice": "cas_register",
+      "name": "realm_history_access_one_way_fsm",
+      "event_kind": "ak.realm.history_access",
+      "cell_family": "ak.component.realm.history_access.v1",
+      "lattice": "fsm",
       "bottom": "reject",
-      "payload_shape": { "scope": "shared" }
+      "payload_shape": { "from": "all_history_for_current_members", "to": "since_join" }
     },
     {
       "name": "realm_archive_cas_register",

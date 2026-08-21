@@ -60,7 +60,7 @@ test.describe("moderation and ban", () => {
       summary: "moderation + ban API-first coverage",
       public: true,
       discoverability: "public",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
@@ -235,7 +235,7 @@ test.describe("moderation and ban", () => {
       title: `S5.3 Idempotent Ban API ${stamp}`,
       public: true,
       discoverability: "public",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
     });
     await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
 
@@ -289,7 +289,7 @@ test.describe("moderation and ban", () => {
       title: `S5 UI Ban ${stamp}`,
       public: true,
       discoverability: "public",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
     });
     await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
 

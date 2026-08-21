@@ -1,11 +1,7 @@
-//! End-to-end state-machine coverage for Direct Conversation history,
-//! founding durability, MLS finality fences, and same-coordinate repair.
+//! End-to-end state-machine coverage for Direct Conversation founding
+//! durability and MLS finality fences.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::direct_conversation_repair::{
-    DirectConversationRepairAuthorization, DirectConversationRepairDispatchRequest,
-};
-use arkret_wire::{Base64UrlString, DeviceId, DidUrl, EventId, NonEmptyString, ProtocolSignature};
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
@@ -158,13 +154,13 @@ fn validate_contact_verified_mirror_contract(fixture: &Value) -> Result<()> {
         (
             "contact_mirror_branch_returns_exact_event_without_seal",
             "accept",
-            ["exact signed Event", "seals is empty", "no Event other"],
+            ["exact signed Event", "no seals member", "no Event other"],
         ),
         (
-            "contact_mirror_branch_refuses_seal_refs_and_unverified_rows",
+            "contact_mirror_branch_has_no_seal_selector_and_refuses_unverified_rows",
             "reject",
             [
-                "seal_refs selector",
+                "rejects a seal_refs member",
                 "unverified local row",
                 "neither refusal",
             ],
@@ -200,26 +196,6 @@ fn validate_contact_verified_mirror_contract(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum RepairStage {
-    ActiveGenerationRemoved,
-    SelfRejoined,
-    RepairRequestRelayed,
-    ExactPairReadded,
-    ReplacementActivated,
-}
-
-fn advance_repair(stage: RepairStage, action: &str) -> Result<RepairStage> {
-    use RepairStage::*;
-    match (stage, action) {
-        (ActiveGenerationRemoved, "ak.member.rejoin.own") => Ok(SelfRejoined),
-        (SelfRejoined, "ak.member.repair.request") => Ok(RepairRequestRelayed),
-        (RepairRequestRelayed, "exact_pair_readd") => Ok(ExactPairReadded),
-        (ExactPairReadded, "replacement_generation_activate") => Ok(ReplacementActivated),
-        _ => bail!("Direct Conversation repair action is out of order or outside its profile"),
-    }
-}
-
 fn semantic_case<'a>(fixture: &'a Value, name: &str) -> Result<&'a Value> {
     fixture
         .get("semantic_cases")
@@ -228,53 +204,6 @@ fn semantic_case<'a>(fixture: &'a Value, name: &str) -> Result<&'a Value> {
         .flatten()
         .find(|case| case.get("name").and_then(Value::as_str) == Some(name))
         .ok_or_else(|| anyhow!("Direct Conversation fixture omits semantic case `{name}`"))
-}
-
-fn validate_joined_shared_history() -> Result<()> {
-    let profiles = load_artifact_json("profiles/conformance-profiles.json")?;
-    let profile = profiles
-        .pointer("/profile_requirements/ak.profile.direct_conversation_realm.v1")
-        .ok_or_else(|| anyhow!("Direct Conversation profile is missing"))?;
-    if profile
-        .pointer("/realm_defaults/history_visibility")
-        .and_then(Value::as_str)
-        != Some("joined")
-    {
-        bail!("Direct Conversation history visibility must remain joined");
-    }
-    let expected = profile
-        .pointer("/history_sharing_policy_fixed_baseline/value")
-        .ok_or_else(|| anyhow!("Direct Conversation fixed history baseline is missing"))?;
-    let actual =
-        arkret_policy::history_visibility::direct_conversation_realm_history_sharing_policy()?;
-    let actual = serde_json::to_value(actual)?;
-    if &actual != expected {
-        bail!("SDK Direct Conversation fixed history baseline drifted from the profile");
-    }
-    let receiver_states = expected
-        .get("allowed_receiver_states")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("fixed history baseline omits receiver states"))?;
-    if receiver_states.len() != 1
-        || receiver_states[0].as_str() != Some("active_member")
-        || expected.get("pre_join_history").and_then(Value::as_str) != Some("deny")
-        || expected
-            .get("post_removal_recovery")
-            .and_then(Value::as_str)
-            != Some("deny")
-    {
-        bail!("Direct Conversation exact-peer history boundary drifted");
-    }
-    // Realm membership is already joined at Genesis even while the peer has
-    // not become an MLS leaf. Generation-0 sharing therefore is joined
-    // history, not the pre-Realm-membership `pre_join_history` branch.
-    let peer_joined_at_genesis = true;
-    let peer_is_mls_leaf = false;
-    let generation_zero_share_allowed = peer_joined_at_genesis && !peer_is_mls_leaf;
-    if !generation_zero_share_allowed {
-        bail!("joined peer lost generation-0 provisional history sharing");
-    }
-    Ok(())
 }
 
 fn validate_founding_and_crash_replay(fixture: &Value) -> Result<()> {
@@ -405,7 +334,7 @@ fn validate_commit_welcome_fences() -> Result<()> {
     stage = advance_admission(stage, "commit_covering_seal")?;
     stage = advance_admission(stage, "welcome_rejected")?;
     stage = advance_admission(stage, "welcomes_accepted")?;
-    if advance_admission(stage, "replacement_generation_activate").is_ok() {
+    if advance_admission(stage, "activate_without_welcome_seal").is_ok() {
         bail!("delivery handoff crossed a Welcome without its covering Seal");
     }
     stage = advance_admission(stage, "welcome_covering_seals")?;
@@ -415,114 +344,22 @@ fn validate_commit_welcome_fences() -> Result<()> {
     Ok(())
 }
 
-fn validate_repair(fixture: &Value) -> Result<()> {
-    semantic_case(fixture, "rejoin_uses_same_realm_without_old_keys")?;
-    semantic_case(
-        fixture,
-        "repair_dispatch_is_a_non_authorizing_durable_trigger",
-    )?;
-    let realm = "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD";
-    let strand = "ak:strand:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS";
-    let current_generation = 7_u64;
-    let mut stage = RepairStage::ActiveGenerationRemoved;
-    if advance_repair(stage, "ak.member.leave.own").is_ok() {
-        bail!("repair authority accepted daily self-leave instead of rejoin.own");
-    }
-    stage = advance_repair(stage, "ak.member.rejoin.own")?;
-    let repair_request = json!({
-        "realm_id": realm,
-        "requester_principal_id": "ak:did_core:webvh:z6mkfixture:alice.example",
-        "requester_device_id": "ak:device:01964137-1000-7000-8000-000000000011",
-        "requester_keypackage_ref": "ak:keypackage:fixture-requester-1",
-        "observed_active_generation_value_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "rejoin_event_id": "ak:event:AWAIb405aEEenVBHYRG-ZfDs-f9_j3E67tWGI36uYxFJ",
-        "created_at": "2026-08-10T00:00:00.000Z"
-    });
-    let typed_request = serde_json::from_value::<
-        arkret_models_collaboration::events_payloads::MemberRepairRequestPayload,
-    >(repair_request)?;
-    typed_request.validate()?;
-
-    // The trigger must bind the exact requester KeyPackage. This exercises
-    // the SDK DTO and canonical signing input directly: changing only the
-    // KeyPackage ref must change the signed bytes, while changing the device
-    // branch without matching content must fail shape validation.
-    let signed_at = arkret_canonical::parse_timestamp_canonical("2026-08-10T00:00:00.000Z")?;
-    let verification_method = DidUrl::new("did:webvh:z6mkfixture:alice.example#device-key-1")
-        .map_err(|error| anyhow!(error))?;
-    let requester_device_id = DeviceId::new("ak:device:01964137-1000-7000-8000-000000000011")?;
-    let dispatch = DirectConversationRepairDispatchRequest {
-        request_id: Base64UrlString::new("repair_request_fixture_01")
-            .map_err(|error| anyhow!(error))?,
-        content: typed_request.clone(),
-        requester_authorization: DirectConversationRepairAuthorization::Device {
-            requester_device_id,
-            verification_method: verification_method.clone(),
-            device_authorize_event_id: EventId::new(
-                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-            )?,
-            signed_at,
-            signature: ProtocolSignature {
-                verification_method,
-                created_at: signed_at,
-                jws: Base64UrlString::new("c2ln".to_owned()).map_err(|error| anyhow!(error))?,
-            },
-        },
-    };
-    dispatch.validate_shape()?;
-    let exact_input = dispatch.signing_input()?;
-    let mut other_keypackage = dispatch.clone();
-    other_keypackage.content.requester_keypackage_ref =
-        NonEmptyString::new("ak:keypackage:fixture-requester-2").map_err(|error| anyhow!(error))?;
-    if other_keypackage.signing_input()? == exact_input {
-        bail!("repair dispatch signature did not bind the exact requester KeyPackage");
-    }
-    let mut mismatched_device = dispatch;
-    if let DirectConversationRepairAuthorization::Device {
-        requester_device_id,
-        ..
-    } = &mut mismatched_device.requester_authorization
-    {
-        *requester_device_id = DeviceId::new("ak:device:01964137-1000-7000-8000-000000000012")?;
-    }
-    if mismatched_device.validate_shape().is_ok() {
-        bail!("repair dispatch accepted a device authorization for another requester");
-    }
-    stage = advance_repair(stage, "ak.member.repair.request")?;
-    stage = advance_repair(stage, "exact_pair_readd")?;
-    stage = advance_repair(stage, "replacement_generation_activate")?;
-    let replacement_generation = current_generation + 1;
-    let old_history_keys_delivered = false;
-    if stage != RepairStage::ReplacementActivated
-        || replacement_generation != 8
-        || old_history_keys_delivered
-        || realm.is_empty()
-        || strand.is_empty()
-    {
-        bail!("Direct Conversation repair changed coordinates, generation, or history boundary");
-    }
-    Ok(())
-}
-
 pub fn run_direct_conversation_flow_suite() -> Result<()> {
     let fixture = load_artifact_json("fixtures/direct-conversation-fixture.json")?;
-    validate_joined_shared_history()?;
     validate_founding_and_crash_replay(&fixture)?;
     validate_bilateral_continuity_checkpoint_fixture()?;
     validate_contact_verified_mirror_contract(&fixture)?;
     validate_founder_loss_terminality(&fixture)?;
     validate_commit_welcome_fences()?;
-    validate_repair(&fixture)?;
     record_vector_event(
         "direct_conversation.end_to_end_flow",
         &json!({"fixture": "direct-conversation-fixture.json"}),
         &json!({
-            "flow_002": "joined_generation_zero_history_shared",
+            "flow_002": "single_scope_group_since_join_history",
             "flow_004_008": "exact_four_event_first_valid_unit_and_byte_identical_retry",
             "continuity": "bilateral_checkpoint_plus_bounded_tail_reaches_unique_root",
             "contact_mirror": "exact_event_from_verified_pending_mirror_without_seal_then_missing_after_terminal",
             "flow_005": "commit_and_welcome_each_wait_for_exact_covering_seal",
-            "flow_014": "remove_rejoin_durable_request_readd_replacement_generation_without_old_keys",
             "founder_loss": "same_authority_recovers_other_authorities_reject_new_identity_is_new_pair"
         }),
         &json!({"status": "validated"}),

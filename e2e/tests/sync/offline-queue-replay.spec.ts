@@ -109,7 +109,7 @@ async function createOfflineFixture(
     bob,
     {
       title: `offline queue ${label} ${stamp}`,
-      historyVisibility: "shared",
+      historyAccess: "all_history_for_current_members",
     },
   );
   const alicePage = aliceFlow.page;

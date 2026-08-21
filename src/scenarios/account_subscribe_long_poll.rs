@@ -287,7 +287,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             "title": "Joined History Sync Realm",
             "summary": "Joined History Sync Realm",
             "public": false,
-            "history_visibility": "joined",
+            "history_access": "since_join",
             "plaintext_visible_services": [alice.service_id().to_owned()]
         }))
         .await?;

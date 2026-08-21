@@ -223,6 +223,7 @@ fn base_leaf(base: &BaseFixture) -> AuthorLeaf {
             identity: base.leaf.credential_identity_utf8.as_bytes().to_vec(),
         },
         signature_key: base.leaf.signature_key.as_bytes().to_vec(),
+        leaf_node_canonical_bytes: Vec::new(),
     }
 }
 
@@ -233,6 +234,7 @@ fn bystander_leaf() -> AuthorLeaf {
             identity: b"ak:did_core:key:z6MkpairwiseBob".to_vec(),
         },
         signature_key: b"z6MkpairwiseBystanderKey".to_vec(),
+        leaf_node_canonical_bytes: Vec::new(),
     }
 }
 

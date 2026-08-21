@@ -114,12 +114,14 @@ async fn inkson_schedule_frontier(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(
-        inkson::calendar::schedule_revision_heads(&events, strand_id)?
-            .into_iter()
-            .map(|digest| digest.as_str().to_owned())
-            .collect(),
-    )
+    Ok(inkson::calendar::schedule_revision_heads(
+        &events,
+        strand_id,
+        arkret_canonical::DigestSuite::Sha256,
+    )?
+    .into_iter()
+    .map(|digest| digest.as_str().to_owned())
+    .collect())
 }
 
 fn heads_for(strand: &Value, actor: &str) -> Vec<Value> {

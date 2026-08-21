@@ -55,7 +55,7 @@
 1. **alice** 先通过 `JointUserPage.createRealm({...})` 走 `/setup` 多步向导建 Realm `R`，再通过 New Space 表单在 `R` 内建 Space `S`
    - Realm title = `"models/core-object-invariants Realm ${stamp}"`
    - Space title = `"models/core-object-invariants Space ${stamp}"`
-   - discoverability = `listed`，join_rule = `invite`，history_visibility = `joined`
+   - discoverability = `listed`，join_rule = `invite`，history_access = `since_join`
 2. 断言：`realm-lifecycle-strand` 含 `created ak:realm:...`，记录 `realmId`；`new-space-created-id` 含 `ak:space:...`，记录 `spaceId`
 3. **alice** 调 `GET /_soland/self/spaces/${spaceId}`，断言返回 JSON 至少包含以下 wire 字段（spec §3 公共字段在 soland 当前 serializer 上的等价表达）：
    - `space_id` — `id:space` typed prefix，对应 spec `id`

@@ -190,8 +190,8 @@ fn run_case(case: &Value) -> Result<()> {
             validate_three_point_limit_matrix(case, generator)?;
             return Ok(());
         }
-        "mls_governance_proof_chunk_request_matrix" => {
-            validate_chunk_request_matrix(case, generator)?;
+        "mls_governance_proof_exact_query_matrix" => {
+            validate_mls_governance_exact_query_matrix(case, generator)?;
             return Ok(());
         }
         "decoded_canonical_size_matrix" => {
@@ -552,52 +552,75 @@ fn validate_three_point_limit_matrix(case: &Value, generator: &Value) -> Result<
     Ok(())
 }
 
-fn validate_chunk_request_matrix(case: &Value, generator: &Value) -> Result<()> {
+fn validate_mls_governance_exact_query_matrix(case: &Value, generator: &Value) -> Result<()> {
     let name = required_str(case, "name")?;
     let expected_cases = serde_json::json!([
         {
-            "chunk_index": 0,
-            "expected_bundle_digest": "absent",
+            "previous_epoch": 0,
+            "next_epoch": 0,
+            "base_group_state_ref": "absent",
             "expect": "accept"
         },
         {
-            "chunk_index": 0,
-            "expected_bundle_digest": "present",
+            "previous_epoch": 0,
+            "next_epoch": 0,
+            "base_group_state_ref": "present",
             "expect": "schema_violation"
         },
         {
-            "chunk_index": 1,
-            "expected_bundle_digest": "absent",
+            "previous_epoch": 7,
+            "next_epoch": 8,
+            "base_group_state_ref": "absent",
             "expect": "schema_violation"
         },
         {
-            "chunk_index": 1,
-            "expected_bundle_digest": "matches_chunk_zero",
+            "previous_epoch": 7,
+            "next_epoch": 8,
+            "base_group_state_ref": "accepted_previous_epoch_winner",
             "expect": "accept"
         },
         {
-            "chunk_index": "equal_to_manifest_chunk_count",
-            "expected_bundle_digest": "matches_chunk_zero",
-            "expect": "param_invalid"
+            "byte_limit": 65535,
+            "expect": "schema_violation"
+        },
+        {
+            "byte_limit": 65536,
+            "expect": "accept"
+        },
+        {
+            "byte_limit": 1048576,
+            "expect": "accept"
+        },
+        {
+            "byte_limit": 1048577,
+            "expect": "schema_violation"
         }
     ]);
     if generator.get("cases") != Some(&expected_cases) {
-        bail!("{name} chunk acquisition cases drifted");
+        bail!("{name} exact-query cases drifted");
     }
     if case
-        .pointer("/expected/proof_request_digest_excludes_transport_fields")
+        .pointer("/expected/query_digest_covers_every_query_field")
         .and_then(Value::as_bool)
         != Some(true)
         || case
-            .pointer("/expected/must_not_mix_bundle_digests")
+            .pointer("/expected/genesis_forbids_base_group_state_ref")
             .and_then(Value::as_bool)
             != Some(true)
         || case
-            .pointer("/expected/unavailable_expected_bundle_error_code")
+            .pointer("/expected/successor_requires_accepted_previous_epoch_winner")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || case
+            .pointer("/expected/response_is_complete_without_cursor_or_continuation")
+            .and_then(Value::as_bool)
+            != Some(true)
+        || case
+            .pointer("/expected/canonical_overflow_error_code")
             .and_then(Value::as_str)
-            != Some("frontier_unavailable")
+            != Some("mls_governance_proof_bounds_exceeded")
     {
-        bail!("{name} chunk acquisition expectations drifted");
+        bail!("{name} exact-query expectations drifted");
     }
     Ok(())
 }

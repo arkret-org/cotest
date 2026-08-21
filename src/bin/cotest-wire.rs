@@ -424,9 +424,10 @@ fn build_pcr_genesis_unit(
     };
     let mut create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
-            principal_id,
+            principal_id: principal_id.clone(),
             principal_server_id,
             principal_full_id: principal.clone(),
+            notary: cotest::fixture_single_signer_notary(principal_id),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal.clone(),
                 method_history_head: method_history_head.to_owned(),
@@ -486,10 +487,11 @@ fn build_pcr_genesis_unit(
         authorize_payload,
     )?
     .with_prev_refs(vec![create.event_id.clone()])
-    .author(
+    .author_with_digest_suite(
         1,
         arkret::hlc::HlcGenerator::new(create.realm_id.as_str(), device_id, root_seed).generate(),
         created_at,
+        arkret_canonical::DigestSuite::Sha256,
     )?;
     let device_method =
         arkret_wire::DidUrl::new(format!("{principal}#{device_id}")).map_err(anyhow::Error::msg)?;

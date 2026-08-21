@@ -10,7 +10,6 @@ use cotest::scenarios::circle::confidential_discussion_relation::confidential_di
 use cotest::scenarios::circle::create_circle::create_circle_run;
 use cotest::scenarios::circle::effective_scope_mismatch::effective_scope_mismatch_run;
 use cotest::scenarios::circle::error_code_paths::error_code_paths_run;
-use cotest::scenarios::circle::history_visibility_floor::history_visibility_floor_run;
 use cotest::scenarios::circle::member_state_machine::member_state_machine_run;
 use cotest::scenarios::circle::member_strict_subset::member_strict_subset_run;
 use cotest::scenarios::circle::metadata_encryption_floor::metadata_encryption_floor_run;
@@ -71,13 +70,6 @@ async fn circle_scope_circle_id_immutability() {
     scope_circle_id_immutability_run()
         .await
         .expect("scope_circle_id_immutability scenario");
-}
-
-#[tokio::test]
-async fn circle_history_visibility_floor() {
-    history_visibility_floor_run()
-        .await
-        .expect("history_visibility_floor scenario");
 }
 
 #[tokio::test]

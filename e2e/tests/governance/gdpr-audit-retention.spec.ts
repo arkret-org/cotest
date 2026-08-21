@@ -256,7 +256,7 @@ test.describe("GDPR / audit / retention", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S27 retention ${stamp}`,
       discoverability: "listed",
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
       ownerDid: alice.did,
     });
     // `realm.schema.json` is closed and declares only `retention_policy_id`
@@ -360,7 +360,7 @@ test.describe("GDPR / audit / retention", () => {
         {
           title: `S27 fanout ${stamp}`,
           discoverability: "listed",
-          history_visibility: "shared",
+          history_access: "all_history_for_current_members",
           invitees: [bob.did],
           invitee_service_ids: { [bob.did]: solandServiceId("beta") },
           ownerDid: alice.did,

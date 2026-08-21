@@ -535,7 +535,7 @@ test.describe("cross-member encrypted kanban", () => {
         title: `Secure cache realm ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
       const boardId = await buildEncryptedBoardListCard(
@@ -615,7 +615,7 @@ test.describe("cross-member encrypted kanban", () => {
         title: `Encrypted XM Kanban ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
 
@@ -640,7 +640,7 @@ test.describe("cross-member encrypted kanban", () => {
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
 
       // 3) Bob JOINS before any board content exists. This matters twice over:
-      //    under history_visibility=joined, soland crops pre-join events from
+      //    under history_access=since_join, soland crops pre-join events from
       //    bob's view; and under MLS forward secrecy, bob has no key for epochs
       //    that predate his membership. So content alice creates AFTER this point
       //    is the content bob can legitimately both see and decrypt. (Pre-join
@@ -807,13 +807,13 @@ test.describe("cross-member encrypted kanban", () => {
 
       // 1) Alice creates a shared-history MLS realm. For this visibility the
       // card events are visible to a later joined member, but the private body
-      // still requires the explicit ak.realm_key.request -> ak.realm_key.share
+      // still requires the private history-key request/response mailbox flow
       // path before Bob may render plaintext.
       const realmId = await alicePage.createRealm({
         title: `Shared-history MLS Kanban ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "shared",
+        historyAccess: "all_history_for_current_members",
         encryptionProfile: "mls_rfc9420",
       });
 

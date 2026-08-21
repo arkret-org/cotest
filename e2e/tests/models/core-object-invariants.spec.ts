@@ -178,7 +178,7 @@ test.describe("core object invariants", () => {
           summary: "core object invariants coverage",
           discoverability: "listed",
           joinRule: "invite",
-          historyVisibility: "joined",
+          historyAccess: "since_join",
         });
         expect(realmId).toMatch(/^ak:realm:/);
         await stepShot(alicePage.page, testInfo, "A-alice-realm-created");

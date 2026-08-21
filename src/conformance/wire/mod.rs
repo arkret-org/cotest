@@ -25,9 +25,9 @@ mod security_frontier;
 use std::path::PathBuf;
 
 pub use anchor::{
-    run_anchor_view_compaction_fixture_suite, run_anchorer_cell_fixture_suite,
-    run_conflict_repair_fixture_suite, run_frontier_conflict_resolution_fixture_suite,
-    run_late_arriving_anchor_fixture_suite, run_late_arriving_anchor_idempotency_check,
+    run_anchor_view_compaction_fixture_suite, run_conflict_repair_fixture_suite,
+    run_frontier_conflict_resolution_fixture_suite, run_late_arriving_anchor_fixture_suite,
+    run_late_arriving_anchor_idempotency_check,
 };
 use anyhow::{Result, anyhow};
 pub use consent::{
@@ -40,10 +40,7 @@ pub use e2ee::{
     run_megolm_ratcheting_fixture_suite, run_mls_e2ee_basic_fixture_suite,
 };
 pub use federation::run_multi_realm_federation_fixture_suite;
-pub use history::{
-    run_history_visibility_fixture_suite, run_history_visibility_projection_matrix_check,
-    run_redacted_cross_server_fixture_suite, run_redaction_history_visibility_fixture_suite,
-};
+pub use history::run_redacted_cross_server_fixture_suite;
 pub use interop::run_interop_downgrade_fixture_suite;
 pub use key_backup::{
     run_key_backup_aead_round_trip_check, run_key_backup_encryption_fixture_suite,

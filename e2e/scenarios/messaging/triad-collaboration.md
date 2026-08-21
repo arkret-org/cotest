@@ -2,14 +2,14 @@
 
 ## 目标
 
-验证在同一个 principal server 上,三个 actor 完成「建 Realm → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_visibility` 看到正确历史」的完整协作链路;过程中 anchor frontier 在所有成员之间收敛一致。
+验证在同一个 principal server 上,三个 actor 完成「建 Realm → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_access` 看到正确历史」的完整协作链路;过程中 anchor frontier 在所有成员之间收敛一致。
 
 不验证:跨服务器联邦 (见 federation/cross-server)、审核封禁 (见 spaces/moderation-ban)、knock 申请 (见 spaces/knock-application)、第三方邮件邀请 (后续 invites/third-party)、设备授权 (后续 identity/account-device-auth)。
 
 ## Spec 锚点
 
 - `arkret-spec/spec/v1/zh/models/realm-and-space.md` §2 — Space 概念与字段
-- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — `default_join_rule` 与 discoverability / history_visibility 三个轴独立
+- `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — `default_join_rule` 与 discoverability / history_access 三个轴独立
 - `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.8 — Membership 状态机扩展
 - `arkret-spec/spec/v1/zh/models/strand-and-message.md` §8 — Message 概览
 - `arkret-spec/spec/v1/zh/models/strand-and-message.md` §8.4 — Chat 模式示例 (mention、reply、reaction、edit 的事件链)
@@ -45,7 +45,7 @@
    - title = `"messaging/triad-collaboration Triad Realm ${stamp}"`
    - discoverability = `listed`
    - join_rule = `invite`
-   - history_visibility = `joined` ← 关键:carol 加入前的消息对她不可见
+   - history_access = `since_join` ← 关键:carol 加入前的消息对她不可见
    - seed_members = `[bob.did]` ← 在 Seed 步骤填,触发 alice 对 bob 的 invite 事件
 2. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 3. **bob** 加载 inkson,进入 Realm;隐式接受 invite (现有 helper 的行为是 seed members 已经被 alice 直接加成员,等于 invite + accept 一起);如果未来 inkson 把 invite/accept 拆开,这里要补一个 `bob 接受邀请` 的子步
@@ -64,13 +64,13 @@
 10. **bob** 编辑 `M2` → `M2' = "bob replying edited ${stamp}"`
     - 断言:`write-status` 含 `revised`;`timeline-event` 含 `M2'` 文本
 
-### Phase C — 晚到成员 + history_visibility 验证
+### Phase C — 晚到成员 + history_access 验证
 
 11. **alice** 通过 `/realms/${realmId}/admin` 的 `invite-member` 流程邀请 `carol.did`
     - 断言:`realm-admin-panel` 状态文本含 `invited carol.did`
 12. **carol** 加载 inkson,进入 Realm
 13. **carol** 看 `/timeline/${realmId}`
-    - 断言 (history_visibility = joined 的语义):**carol 看不到** `M1` / `M2`(她加入之前的消息);timeline 是空的,或者只显示一个"history starts here"占位
+    - 断言 (history_access = since_join 的语义):**carol 看不到** `M1` / `M2`(她加入之前的消息);timeline 是空的,或者只显示一个"history starts here"占位
     - (实现侧检查:`getByTestId("timeline-event")` 的数量为 0;或者出现 `joined-from-here-marker`)
 14. **alice** 发新消息 `M3 = "welcome carol ${stamp}"`
 15. **carol** 同步,timeline 包含 `M3`,且**不含** `M1/M2`
@@ -85,7 +85,7 @@
 ### Phase E — 三方 anchor frontier 一致
 
 19. 三方各调一次 `GET /_arkret/self/account/subscribe?catchup=true`(或读 `sync-cursor` testid),分别记录 anchor frontier
-20. 断言:三个 frontier 集合一致(忽略 carol 那侧因 history_visibility 被裁掉的部分,只比较 carol 可见的 `M3` 之后的 anchor 集合)
+20. 断言:三个 frontier 集合一致(忽略 carol 那侧因 history_access 被裁掉的部分,只比较 carol 可见的 `M3` 之后的 anchor 集合)
 
 ## Observable assertions (合并清单)
 
@@ -101,8 +101,7 @@
 ## Edge cases / sub-tests
 
 - **E1.1 idempotent invite**:alice 在 Phase C 之前对 carol 连发两次 invite,只产生一个 `ak.invite.create` 事件,后续 accept 仍能成功
-- **E1.2 history_visibility=shared**:同样的步骤改用 `shared` 而不是 `joined`,carol 应该看到 `M1/M2/M2'/tombstone`(`shared` 允许新成员读"应该共享的"历史) — spec §3.4 / §3.7
-- **E1.3 history_visibility=world_readable**:carol 在加入 Realm **之前**就能通过 `/timeline/${realmId}` 看到消息(在 spec 里 `world_readable` 允许未加入者读历史) — 这一条要小心,因为它跨过了 join_rule 的 gate
+- **E1.2 history_access=all_history_for_current_members**:同样的步骤改用 `all_history_for_current_members` 而不是 `since_join`，carol 成为当前成员后应看到 `M1/M2/M2'/tombstone`；未加入者仍不得读取 Realm 历史。
 - **E1.4 membership leave/rejoin**:bob 主动 `leave` 后不再出现在 Realm `members[]`,普通消息写入被拒绝;owner 重新提交 `join` 后,bob 可以再次写入同一 Realm
 
 E1.3 建议拆成独立的小 spec(`spaces/history-world-readable`),保持主 scenario 紧凑。
@@ -113,7 +112,7 @@ E1.3 建议拆成独立的小 spec(`spaces/history-world-readable`),保持主 sc
 - `/realms/:id/admin` 的 invite UI (`invite-member`、`invite-target-input`、`send-invite-button`) 已经存在,Phase C 直接用
 - Timeline 现有的 testid:`composer-input`、`send-button`、`timeline`、`timeline-event`、`write-status`、`edit-button`、`save-edit-button`、`redact-button`、`confirm-redact-button`、`redacted-tombstone`、`chat-react-button`、`chat-reactions`、`chat-reply-button`、`chat-reply-indicator`
 - 不需要新 helper,基本能用现有 `JointUserPage.createRealm` + `JointUserPage.gotoRealmAdmin` + 直接 `page.goto("/timeline/${realmId}")` 覆盖
-- 步骤 13 的 "carol 看不到旧消息" 是新增断言点,要确认 inkson 实现了 history_visibility 的 client-side 过滤(否则 fail 不代表 spec 不对,而是 inkson 漏实现)— 跑测前**先确认或挂 TODO**
+- 步骤 13 的 "carol 看不到旧消息" 是新增断言点,要确认 inkson 实现了 history_access 的 client-side 过滤(否则 fail 不代表 spec 不对,而是 inkson 漏实现)— 跑测前**先确认或挂 TODO**
 
 ## 总耗时预估
 

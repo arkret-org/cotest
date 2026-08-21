@@ -19,15 +19,8 @@
 //! independent frontier recomputation disagrees with the transcript binding,
 //! so media negotiation is refused as stale.
 
-use std::collections::BTreeMap;
-
-use anyhow::{Result, anyhow, bail};
-use arkret_canonical::canonical::encode_state_subject;
+use anyhow::{Result, anyhow};
 use arkret_schema::embedded_error_code_identifiers;
-use arkret_state::CellState;
-use arkret_state::mls_governance_proof::{MlsSecurityFrontierLeaf, derive_mls_security_frontier};
-use arkret_wire::{CellFamilyId, CellRef, ScopeRef};
-use serde_json::json;
 
 /// Wire-level executable check: the SDK constants for both media
 /// plaintext error codes agree with the cotest pins and the canonical
@@ -69,77 +62,13 @@ pub async fn media_plaintext_downgrade_no_governance_binding_run() -> Result<()>
     Ok(())
 }
 
-fn realm_cell(family: &str) -> Result<CellRef> {
-    CellRef::new(format!(
-        "ak:cell:{family}:{}",
-        encode_state_subject(&["ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE"])
-    ))
-    .map_err(Into::into)
-}
-
 /// SEC-03 negative vector (d) — `media-service-binding.md §8.2` rule 5.
 ///
 /// A member rederives the unique Security Frontier from accepted policy state
 /// and its local RFC 9420 leaves. Key-access changes alter the digest, while
 /// endpoint-only metadata does not.
 pub fn media_plaintext_member_recompute_mismatch_refuses_run() -> Result<()> {
-    let scope: ScopeRef = serde_json::from_value(json!({
-        "kind": "realm",
-        "realm_id": "ak:realm:AWy1ImsZXpFjP50bGHC-ecStBt4qurkjgu4EoRYSpmnE"
-    }))?;
-    let leaves: Vec<MlsSecurityFrontierLeaf> = serde_json::from_value(json!([{
-        "leaf_index": 0,
-        "principal_id": "ak:did_core:web:alice.example",
-        "credential_ref": "did:webvh:zfixture:alice.example#device-1"
-    }]))?;
-    let policy_cell = realm_cell(CellFamilyId::REALM_POLICY_BUNDLE_V1)?;
-    let services_cell = realm_cell(CellFamilyId::REALM_PLAINTEXT_VISIBLE_SERVICES_V1)?;
-    let mut state = BTreeMap::from([
-        (
-            policy_cell.clone(),
-            CellState::Value(json!({
-                "content_scheme": "mls_exporter_aead_v1",
-                "media_service_decrypts": false,
-                "routing_endpoint": "https://old.example"
-            })),
-        ),
-        (services_cell.clone(), CellState::Value(json!([]))),
-    ]);
-    let transcript_digest = derive_mls_security_frontier(&state, &scope, &leaves)?;
-
-    state.insert(
-        policy_cell.clone(),
-        CellState::Value(json!({
-            "content_scheme": "mls_exporter_aead_v1",
-            "media_service_decrypts": false,
-            "routing_endpoint": "https://new.example"
-        })),
-    );
-    let endpoint_only = derive_mls_security_frontier(&state, &scope, &leaves)?;
-    if endpoint_only != transcript_digest {
-        bail!("endpoint-only metadata changed security_frontier_digest");
-    }
-
-    state.insert(
-        policy_cell,
-        CellState::Value(json!({
-            "content_scheme": "mls_exporter_aead_v1",
-            "media_service_decrypts": true,
-            "routing_endpoint": "https://new.example"
-        })),
-    );
-    state.insert(
-        services_cell,
-        CellState::Value(json!([{
-            "service_id": "ak:did_core:web:sfu.example",
-            "data_classes": ["media_plaintext"]
-        }])),
-    );
-    let recomputed = derive_mls_security_frontier(&state, &scope, &leaves)?;
-    if recomputed == transcript_digest {
-        bail!("media plaintext key-access change did not change security_frontier_digest");
-    }
-    Ok(())
+    crate::conformance::run_mls_security_frontier_fixture_suite()
 }
 
 #[cfg(test)]

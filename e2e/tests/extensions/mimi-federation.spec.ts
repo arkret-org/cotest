@@ -5,7 +5,7 @@
 //   §2 Realm `federation_profile = "mimi_interop"` + endpoint exposure
 //   §3 Room binding: Arkret Strand ↔ MIMI room; event ↔ Message translation
 //   §4 Content mapping: standard MIMI content type ↔ `ak.morph` kind; unknown → quarantine
-//   §5 Policy mapping: join_rule / history_visibility ↔ MIMI room policy
+//   §5 Policy mapping: join_rule / history_access ↔ MIMI room policy
 //   §6 Identity bridging: MIMI handle → pairwise DID, per-Realm scoped (unlinkability)
 //   §7 E2EE boundary: MLS-via-IETF profile transcript binding or explicit downgrade
 
@@ -217,7 +217,7 @@ async function createBoundMimiRoom(
   const realmId = await createRealmApi(request, token, {
     title: `mimi ${suffix} ${stamp}`,
     discoverability: "listed",
-    history_visibility: "joined",
+    history_access: "since_join",
     encryption_profile: "mls_rfc9420",
   });
   // MIMI ingress is translated by the local Principal Server, so its service

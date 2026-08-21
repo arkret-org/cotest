@@ -176,7 +176,7 @@ test.describe("realm links", () => {
           title: `realm-link-cycle-${label}-${stamp}`,
           public: true,
           discoverability: "public",
-          history_visibility: "shared",
+          history_access: "all_history_for_current_members",
         });
       };
       const A = await mk("A");

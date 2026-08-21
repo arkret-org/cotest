@@ -12,7 +12,7 @@
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §2 — Realm `federation_profile = "mimi_interop"` 字段语义;暴露 MIMI endpoint
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §3 — Room binding:Arkret Strand ↔ MIMI room 的双向映射;event ↔ Message 翻译
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §4 — Content mapping:MIMI 标准 content type ↔ `ak.morph` content kind;未知类型 quarantine
-- `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §5 — Policy mapping:Arkret join_rule / history_visibility ↔ MIMI room policy
+- `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §5 — Policy mapping:Arkret join_rule / history_access ↔ MIMI room policy
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §6 — Identity bridging:MIMI 用户 → pairwise DID;同一个 MIMI 身份在不同 Realm 中产生不同 pairwise DID
 - `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §7 — E2EE 边界:MIMI 可能使用不同的 group encryption (MLS via IETF profile);transcript binding 或 downgrade 标记
 
@@ -48,7 +48,7 @@
    - title = `"extensions/mimi-federation MIMI Realm ${stamp}"`
    - discoverability = `listed`
    - join_rule = `invite`
-   - history_visibility = `joined`
+   - history_access = `since_join`
    - `ak.realm.federation_profile = "mimi_interop"` ← 关键:声明该 Realm 暴露 MIMI 互通 endpoint
 2. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
@@ -120,7 +120,7 @@
 - pairwise DID 的生成规则参见 `arkret-spec/spec/v1/zh/extensions/mimi-interop.md` §6;关键点是同一个 MIMI 身份在不同 Realm 得到不同 DID(unlinkability)
 - soland gap (当前):MIMI Provider Facade 绑定、`federation_profile = "mimi_interop"` Realm 字段、identity bridging 到 pairwise DID、outbound retry 仍未形成完整业务链路。已落地的服务端面包括 room binding、MIMI ingress 到 canonical timeline、E2EE boundary policy(未标记 E2EE 明文拒绝;transcript binding / explicit downgrade 可过)、unknown content kind quarantine。
 - `helpers/mimi-facade.ts` 提供 `createMimiFacadeClient()`;harness 自检 [`harness/mocks-selftest`](../harness/mocks-selftest.md) 负责锁住 facade mock 契约。
-- 与 `messaging/triad-collaboration` 的差别:这里的 "晚到成员" 不是 history_visibility 测试,而是跨 federation boundary 的 identity bridging 测试;消息双向不是 Arkret-Arkret 而是 Arkret-MIMI
+- 与 `messaging/triad-collaboration` 的差别:这里的 "晚到成员" 不是 history_access 测试,而是跨 federation boundary 的 identity bridging 测试;消息双向不是 Arkret-Arkret 而是 Arkret-MIMI
 
 ## 总耗时预估
 

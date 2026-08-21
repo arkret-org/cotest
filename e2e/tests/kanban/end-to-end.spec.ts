@@ -811,7 +811,7 @@ test.describe("kanban end-to-end", () => {
         title: `Encrypted Kanban ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
 
@@ -935,7 +935,7 @@ test.describe("kanban end-to-end", () => {
         title: `Encrypted Kanban Synthesis ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
       await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);
@@ -1014,7 +1014,7 @@ test.describe("kanban end-to-end", () => {
         title: `Encrypted Kanban Discussion ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
       await buildEncryptedBoardAndCard(alicePage.page, realmId, stamp, cardTitle);

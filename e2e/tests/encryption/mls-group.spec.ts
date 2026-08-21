@@ -18,7 +18,7 @@ test.describe("MLS group encryption", () => {
     const realmId = await createRealmApi(request, token, {
       title: "MLS create-lock smoke",
       ownerDid: alice.did,
-      history_visibility: "joined",
+      history_access: "since_join",
       encryption_profile: "mls_rfc9420",
     });
 
@@ -35,9 +35,9 @@ test.describe("MLS group encryption", () => {
       createRealmApi(request, token, {
         title: "MLS incompatible visibility",
         ownerDid: alice.did,
-        history_visibility: "world_readable",
+        history_access: "all_history_for_current_members",
         encryption_profile: "mls_rfc9420",
       }),
-    ).rejects.toThrow("history_visibility_requires_history_capable_scheme");
+    ).rejects.toThrow("history_access_requires_history_capable_scheme");
   });
 });

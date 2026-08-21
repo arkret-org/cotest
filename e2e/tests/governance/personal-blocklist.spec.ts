@@ -191,7 +191,7 @@ test.describe("personal blocklist", () => {
         title: `S31 Blocklist ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        historyVisibility: "joined",
+        historyAccess: "since_join",
         encryptionProfile: "none",
         seedMembers: [bob.did],
       });
@@ -331,7 +331,7 @@ test.describe("personal blocklist", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S31 E11.1 ${stamp}`,
       public: true,
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await addRealmMemberApi(request, aliceToken, realmId, carol.did);
@@ -401,7 +401,7 @@ test.describe("personal blocklist", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S31 E11.2 ${stamp}`,
       public: true,
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
 
@@ -493,7 +493,7 @@ test.describe("personal blocklist", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S31 E11.3 ${stamp}`,
       public: true,
-      history_visibility: "shared",
+      history_access: "all_history_for_current_members",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await putBlocklist(request, aliceToken, alice.did, [
