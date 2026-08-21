@@ -222,7 +222,9 @@ async function setupEncryptedMessage(
     reporterDid: reporter.did,
     realmId,
     message,
-    ciphertextDigest: String(encryptedContent.payload_digest),
+    ciphertextDigest: `sha256:${createHash("sha256")
+      .update(Buffer.from(ciphertext, "base64url"))
+      .digest("hex")}`,
     plaintext,
   };
 }
@@ -326,42 +328,14 @@ function encryptedEnvelope(
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
-  const scopeRef = { kind: "realm", realm_id: realmId };
-  const aad = {
-    realm_id: realmId,
-    event_kind: "ak.message.create",
-    scope_digest: sha256Digest(
-      `ak.aad-scope-v1\0${canonicalJson(scopeRef)}\0${realmId}`,
-    ),
-  };
-  const payloadMetadata = {
-    scheme: "mls_rfc9420",
-    version: "1.0",
-    group_id: "mls_test",
-    epoch: 1,
-    content_type: "application/vnd.arkret.message+json",
-    aad_visibility_event_id_kind: "hidden",
-    aad,
-    key_ref: {
-      algorithm: "MLS",
-      group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    },
-  };
+  void realmId;
   return {
-    ...payloadMetadata,
+    version: "1.0",
+    content_type: "application/vnd.arkret.message+json",
+    encryption_context: {
+      epoch: 1,
+      group_state_ref: "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+    },
     ciphertext,
-    aad_digest: sha256Digest(canonicalJson(aad)),
-    payload_digest: encryptedPayloadDigest(payloadMetadata, ciphertext),
   };
-}
-
-function sha256Digest(value: string): string {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
-
-function encryptedPayloadDigest(metadata: Record<string, unknown>, ciphertext: string): string {
-  const hash = createHash("sha256");
-  hash.update(Buffer.from(canonicalJson(metadata), "utf8"));
-  hash.update(Buffer.from(ciphertext, "base64url"));
-  return `sha256:${hash.digest("hex")}`;
 }

@@ -4,7 +4,10 @@
 //! canonical blob encrypted_attachment schema together.
 
 use anyhow::{Result, anyhow, bail};
-use arkret::{Hash, KeyRefObject};
+use arkret::{
+    EncryptedAttachmentGroupStateRef, EncryptedAttachmentKeyAlgorithm, EncryptedAttachmentKeyRef,
+    EventId, Hash,
+};
 use arkret_crypto::blob_aead::{
     ALG_STREAM_XCHACHA, SCHEME_STREAM, StreamDecryptor, StreamEncryptParams, decrypt_stream,
     encrypt_stream,
@@ -77,10 +80,13 @@ fn key() -> [u8; 32] {
     out
 }
 
-fn key_ref() -> KeyRefObject {
-    KeyRefObject {
-        algorithm: "MLS".to_owned(),
-        group_state_ref: "ak:event:ASIihwq2PrVn-0TWdd_J8voN4PsCP2T40iIDdKrDQaCU".to_owned(),
+fn key_ref() -> EncryptedAttachmentKeyRef {
+    EncryptedAttachmentKeyRef {
+        algorithm: EncryptedAttachmentKeyAlgorithm::Mls,
+        group_state_ref: EncryptedAttachmentGroupStateRef::Event(
+            EventId::new("ak:event:ASIihwq2PrVn-0TWdd_J8voN4PsCP2T40iIDdKrDQaCU".to_owned())
+                .unwrap(),
+        ),
     }
 }
 

@@ -12,7 +12,6 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
   authHeaders,
-  canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -189,32 +188,16 @@ function encryptedAttachmentEnvelope(
   ciphertext: string,
   realmId: string,
 ): Record<string, unknown> {
-  const aad = { realm_id: realmId, event_kind: "ak.message.create" };
-  const payloadMetadata = {
-    scheme: "mls_rfc9420",
-    version: "1.0",
-    group_id: "mls_test",
-    epoch: 1,
-    content_type: "application/vnd.arkret.attachment+json",
-    aad_visibility_event_id_kind: "hidden",
-    aad,
-    key_ref: {
-      algorithm: "MLS",
-      group_state_ref:
-        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-    },
-  };
-  const aadDigest = `sha256:${createHash("sha256")
-    .update(canonicalJson(aad))
-    .digest("hex")}`;
-  const payloadHash = createHash("sha256");
-  payloadHash.update(Buffer.from(canonicalJson(payloadMetadata), "utf8"));
-  payloadHash.update(Buffer.from(ciphertext, "base64url"));
+  void realmId;
   return {
-    ...payloadMetadata,
+    version: "1.0",
+    content_type: "application/vnd.arkret.attachment+json",
+    encryption_context: {
+      epoch: 1,
+      group_state_ref:
+        "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+    },
     ciphertext,
-    aad_digest: aadDigest,
-    payload_digest: `sha256:${payloadHash.digest("hex")}`,
   };
 }
 

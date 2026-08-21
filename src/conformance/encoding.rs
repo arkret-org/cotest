@@ -221,11 +221,11 @@ fn run_encoding_artifact_suite(value: &Value) -> Result<()> {
         bail!("encoding rank_order did not match expected_order");
     }
     run_accountability_scope_set_subject_vector(value)?;
-    run_encrypted_envelope_scope_digest_vector(value)?;
+    run_encrypted_envelope_digest_vector(value)?;
     Ok(())
 }
 
-fn run_encrypted_envelope_scope_digest_vector(fixture: &Value) -> Result<()> {
+fn run_encrypted_envelope_digest_vector(fixture: &Value) -> Result<()> {
     const VECTOR_ID: &str = "ak.vector.encoding.encrypted_envelope_digest.v1";
     let vector = fixture
         .get("vectors")
@@ -234,46 +234,27 @@ fn run_encrypted_envelope_scope_digest_vector(fixture: &Value) -> Result<()> {
         .flatten()
         .find(|vector| vector.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID))
         .ok_or_else(|| anyhow!("encoding fixture missing {VECTOR_ID}"))?;
-    let kat = vector
-        .get("scope_digest_kat")
-        .ok_or_else(|| anyhow!("{VECTOR_ID} missing scope_digest_kat"))?;
-    if value_field_str(kat, "domain_separator_utf8")?
-        != arkret_models_crypto::AAD_SCOPE_DIGEST_DOMAIN
-    {
-        bail!("{VECTOR_ID} scope digest domain separator drifted");
+    let metadata = vector
+        .get("payload_metadata")
+        .cloned()
+        .ok_or_else(|| anyhow!("{VECTOR_ID} missing payload_metadata"))?;
+    let canonical = arkret_canonical::canonical_json_string(&metadata)?;
+    if canonical != value_field_str(vector, "expected_metadata_canonical_bytes_utf8")? {
+        bail!("{VECTOR_ID} minimal envelope metadata canonical bytes drifted");
     }
-    let realm_id = arkret_wire::RealmId::new(value_field_str(kat, "realm_id")?.to_owned())?;
-    for case in [
-        kat,
-        kat.get("sidecar_case")
-            .ok_or_else(|| anyhow!("{VECTOR_ID} missing Sidecar scope digest known-answer case"))?,
-    ] {
-        let scope_value = case
-            .get("scope_ref")
-            .cloned()
-            .ok_or_else(|| anyhow!("{VECTOR_ID} scope digest case missing scope_ref"))?;
-        let scope = serde_json::from_value::<arkret_wire::ScopeRef>(scope_value)?;
-        let canonical = arkret_canonical::canonical_json_string(&scope)?;
-        if canonical != value_field_str(case, "canonical_scope_ref_json")? {
-            bail!("{VECTOR_ID} canonical scope_ref bytes drifted");
-        }
-        let digest = arkret_models_crypto::encrypted_envelope_scope_digest(&scope, &realm_id)?;
-        if digest.as_str() != value_field_str(case, "expected_digest")? {
-            bail!("{VECTOR_ID} scope digest known-answer mismatch");
-        }
-    }
-    let valid = value_field_str(kat, "expected_digest")?;
-    for mutation in kat
-        .get("mutation_cases")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let bytes = hex::decode(value_field_str(mutation, "digest_input_hex")?)?;
-        let observed = sha256_prefixed(&bytes);
-        if observed != value_field_str(mutation, "expected_digest")? || observed == valid {
-            bail!("{VECTOR_ID} mutation case failed to separate from the valid digest");
-        }
+    let ciphertext = value_field_str(vector, "ciphertext_base64url")?;
+    let mut envelope = metadata;
+    envelope
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("{VECTOR_ID} payload_metadata must be an object"))?
+        .insert(
+            "ciphertext".to_owned(),
+            Value::String(ciphertext.to_owned()),
+        );
+    let envelope = serde_json::from_value::<arkret_models_crypto::EncryptedEnvelope>(envelope)?;
+    envelope.validate()?;
+    if envelope.payload_digest()?.as_str() != value_field_str(vector, "expected_digest")? {
+        bail!("{VECTOR_ID} minimal envelope digest known-answer mismatch");
     }
     Ok(())
 }
