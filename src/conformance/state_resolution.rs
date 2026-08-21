@@ -447,7 +447,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                         "light_client": "pending_or_fail_closed",
                     }),
                     &json!({
-                        "notary_profile": pointer_str(vector, "/notary_profile"),
+                        "notary_kind": pointer_str(vector, "/notary_kind"),
                         "case_count": required_array(vector, "/cases", name)?.len(),
                     }),
                 );
@@ -1515,9 +1515,9 @@ fn validate_seal_compaction_interval_enforced(vector: &Value, vector_name: &str)
 }
 
 fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Result<()> {
-    require_str_eq(vector, "/notary_profile/kind", "threshold", vector_name)?;
-    let proposer = required_pointer_str(vector, "/notary_profile/proposer_id", vector_name)?;
-    let signer = required_pointer_str(vector, "/notary_profile/signer_id", vector_name)?;
+    require_str_eq(vector, "/notary_kind", "threshold", vector_name)?;
+    let proposer = required_pointer_str(vector, "/notary_proposer_id", vector_name)?;
+    let signer = required_pointer_str(vector, "/notary_signer_id", vector_name)?;
     if proposer == signer {
         bail!("vector {vector_name} inclusion list signer must be non-proposer");
     }
@@ -1785,7 +1785,7 @@ fn validate_open_set_concurrent_revocation_fail_closed(
     vector: &Value,
     vector_name: &str,
 ) -> Result<()> {
-    require_str_eq(vector, "/notary_profile", "open_set", vector_name)?;
+    require_str_eq(vector, "/notary_kind", "open_set", vector_name)?;
     require_array_len_at_least(vector, "/joined_leaf_set", 2, vector_name)?;
     require_str_eq(vector, "/data_event/plane", "data", vector_name)?;
 

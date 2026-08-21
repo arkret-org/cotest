@@ -57,21 +57,8 @@ export type RealmObject = {
       "act_on_behalf": boolean;
     };
   };
-  "durability_policy"?: {
-    "mode": "none" | "org_recovery_key" | "threshold";
-    "recovery_recipients"?: Array<{
-      "recipient_id": string;
-      "principal_id": string;
-      "verification_method": string;
-      "controller_organization"?: string;
-    }>;
-    "threshold"?: {
-      "k": number;
-      "n": number;
-    };
-  };
+  "durability_policy"?: "none" | "organization_recovery_key";
   "federation_policy"?: "open" | "restricted" | "closed" | "quarantine";
-  "notary_profile": "single_did" | "threshold" | "open_set" | "mixed";
   "availability_policy"?: {
     "min_holders": number;
     "holder_roles": Array<"joined_member_principal_server" | "joined_service_actor">;
@@ -85,14 +72,109 @@ export type RealmObject = {
   };
   "digest_algorithm"?: "sha256" | "blake3";
   "notary": {
-    "actor_id"?: string;
-    "members"?: string[];
-    "threshold"?: number;
-    "forensic_attribution"?: "quorum_intersection" | "waived";
-    "recovery_members"?: string[];
+    "kind": "single_signer";
+    "signer": {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "ed25519_raw32";
+      "jose_algorithm": "Ed25519";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    } | {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "p256_sec1_compressed33";
+      "jose_algorithm": "ES256";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    };
+    "recovery_members"?: Array<{
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "ed25519_raw32";
+      "jose_algorithm": "Ed25519";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    } | {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "p256_sec1_compressed33";
+      "jose_algorithm": "ES256";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    }>;
     "controller_organization"?: string;
     "recovery_controller_organizations"?: string[];
-    "kind": "single_did" | "threshold" | "open_set" | "mixed";
+  } | {
+    "kind": "threshold";
+    "members": Array<{
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "ed25519_raw32";
+      "jose_algorithm": "Ed25519";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    } | {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "p256_sec1_compressed33";
+      "jose_algorithm": "ES256";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    }>;
+    "threshold": number;
+    "forensic_attribution": "quorum_intersection" | "waived";
+  } | {
+    "kind": "open_set";
+    "members": Array<{
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "ed25519_raw32";
+      "jose_algorithm": "Ed25519";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    } | {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "p256_sec1_compressed33";
+      "jose_algorithm": "ES256";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    }>;
+  } | {
+    "kind": "mixed";
+    "signer": {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "ed25519_raw32";
+      "jose_algorithm": "Ed25519";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    } | {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "p256_sec1_compressed33";
+      "jose_algorithm": "ES256";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    };
+    "recovery_members": Array<{
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "ed25519_raw32";
+      "jose_algorithm": "Ed25519";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    } | {
+      "actor_id": string;
+      "verification_method": string;
+      "key_kind": "p256_sec1_compressed33";
+      "jose_algorithm": "ES256";
+      "frozen_public_key_b64u": string;
+      "frozen_public_key_digest": string;
+    }>;
+    "controller_organization"?: string;
+    "recovery_controller_organizations"?: string[];
   };
   "capability_action_registry_digest": string;
   "revocation_freshness_window_ms"?: number;
@@ -374,15 +456,22 @@ export type InviteDeliveryRequestBody = {
     "prev_refs": string[];
     "refs": Array<{
       "id": string;
-      "role": string;
-      "critical"?: boolean;
-      "proof"?: {
-        "kind"?: "rfc6962_merkle";
-        "leaf_digest"?: string;
-        "audit_path"?: string[];
-        "leaf_index"?: number;
-        "leaf_count"?: number;
+      "role": "state_witness" | "inclusion_proof";
+      "critical": true;
+      "proof": {
+        "kind": "rfc6962_merkle";
+        "root_field": "state_root" | "control_event_set_root";
+        "root_digest": string;
+        "leaf_canonical_preimage_b64u": string;
+        "leaf_digest": string;
+        "audit_path": string[];
+        "leaf_index": number;
+        "leaf_count": number;
       };
+    } | {
+      "id": string;
+      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "did_recovery_anchor" | "accountability";
+      "critical": boolean;
     }>;
     "causal_refs"?: string[];
     "preconditions"?: Array<{
@@ -411,6 +500,8 @@ export type InviteDeliveryRequestBody = {
       "verification_method": string;
       "event_digest": string;
       "created_at": string;
+      "signer_resolution_evidence_ref"?: string;
+      "signer_resolution_evidence_digest"?: string;
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
@@ -422,6 +513,10 @@ export type InviteDeliveryRequestBody = {
       "producer_proof_digest": string;
       "producer_verification_method": string;
       "producer_signing_key": string;
+      "producer_signer_resolution_evidence_ref"?: string;
+      "producer_signer_resolution_evidence_digest"?: string;
+      "signer_resolution_evidence_ref": string;
+      "signer_resolution_evidence_digest": string;
       "accepted_at": string;
       "jws": string;
     }>;
@@ -682,9 +777,9 @@ export type InviteDeliveryRequestBody = {
 export type RealmSealFrontierView = {
   "kind": "realm_seal";
   "realm_id": string;
-  "seal_id": string;
-  "control_event_set_root": string;
-  "state_root": string;
+  "seal_basis": {
+    "leaves": string[];
+  };
   "governance_health": {
     "status": "healthy" | "degraded";
     "pending_proposals": Array<{
@@ -847,7 +942,11 @@ export type RealmSealFrontierView = {
       "fault_reason": "control_proposal_decision_overdue";
     }>;
   };
-  "hlc"?: string;
+  "observation_coordinate": {
+    "service_id": string;
+    "sequence": number;
+    "observed_at": string;
+  };
 };
 
 /** `service-operation-dtos.schema.json#/$defs/EventFederationSubmission` — closed object schema. */
@@ -894,15 +993,22 @@ export type EventFederationSubmission = {
     "prev_refs": string[];
     "refs": Array<{
       "id": string;
-      "role": string;
-      "critical"?: boolean;
-      "proof"?: {
-        "kind"?: "rfc6962_merkle";
-        "leaf_digest"?: string;
-        "audit_path"?: string[];
-        "leaf_index"?: number;
-        "leaf_count"?: number;
+      "role": "state_witness" | "inclusion_proof";
+      "critical": true;
+      "proof": {
+        "kind": "rfc6962_merkle";
+        "root_field": "state_root" | "control_event_set_root";
+        "root_digest": string;
+        "leaf_canonical_preimage_b64u": string;
+        "leaf_digest": string;
+        "audit_path": string[];
+        "leaf_index": number;
+        "leaf_count": number;
       };
+    } | {
+      "id": string;
+      "role": "authorized_by" | "attestation" | "parent_event" | "after" | "audit_pair" | "recovery_capability" | "did_inception" | "did_recovery_anchor" | "accountability";
+      "critical": boolean;
     }>;
     "causal_refs"?: string[];
     "preconditions"?: Array<{
@@ -931,6 +1037,8 @@ export type EventFederationSubmission = {
       "verification_method": string;
       "event_digest": string;
       "created_at": string;
+      "signer_resolution_evidence_ref"?: string;
+      "signer_resolution_evidence_digest"?: string;
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
@@ -942,6 +1050,10 @@ export type EventFederationSubmission = {
       "producer_proof_digest": string;
       "producer_verification_method": string;
       "producer_signing_key": string;
+      "producer_signer_resolution_evidence_ref"?: string;
+      "producer_signer_resolution_evidence_digest"?: string;
+      "signer_resolution_evidence_ref": string;
+      "signer_resolution_evidence_digest": string;
       "accepted_at": string;
       "jws": string;
     }>;

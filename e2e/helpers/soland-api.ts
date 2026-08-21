@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import {
   createHash,
   createPrivateKey,
+  createPublicKey,
   hkdfSync,
   randomBytes,
   sign,
@@ -436,19 +437,40 @@ function serviceCoreIdToDid(serviceId: string): string {
   return serviceId;
 }
 
-export function singleDidNotaryFromFullDid(
+// `realm.schema.json` notary: `kind` is the sole discriminator and every signer
+// is a frozen descriptor (exact verification method, key kind, JOSE alg and key
+// digest). The Realm names the Principal Server's own notary key, so the
+// descriptor is derived from the same development seed soland freezes into
+// `service_notary_signer_descriptor()`. No controlling organization is derived
+// for the development deployment, so the org-diversity members stay absent.
+export function singleSignerNotaryFromFullDid(
   fullDid: string,
 ): RealmObject["notary"] {
+  const actorId = canonicalDidCoreId(fullDid);
+  const publicKey = serviceNotaryPublicKey(actorId);
   return {
-    kind: "single_did",
-    actor_id: canonicalDidCoreId(fullDid),
-    recovery_members: ["ak:did_core:web:recovery.soland.local"],
-    controller_organization:
-      "ak:did_core:web:organization.primary.soland.local",
-    recovery_controller_organizations: [
-      "ak:did_core:web:organization.recovery.soland.local",
-    ],
+    kind: "single_signer",
+    signer: {
+      actor_id: actorId,
+      verification_method: `${fullDid}#notary-key`,
+      key_kind: "ed25519_raw32",
+      jose_algorithm: "Ed25519",
+      frozen_public_key_b64u: publicKey.toString("base64url"),
+      frozen_public_key_digest: `sha256:${createHash("sha256")
+        .update(publicKey)
+        .digest("hex")}`,
+    },
   };
+}
+
+// FIXTURE ONLY: mirrors soland development_mode notary keys, which are derived
+// from the same seed as the service HTTP signing key.
+function serviceNotaryPublicKey(serviceId: string): Buffer {
+  const spki = createPublicKey(serviceHttpPrivateKey(serviceId)).export({
+    format: "der",
+    type: "spki",
+  });
+  return Buffer.from(spki.subarray(spki.length - 32));
 }
 
 export async function expectJsonOk<T = Record<string, unknown>>(
@@ -568,12 +590,11 @@ export async function createRealmApi(
     reducer_profile: "ak.reducer.core.v1",
     encryption_profile: data.encryption_profile ?? "none",
     security_class: "standard",
-    notary_profile: "single_did",
     digest_algorithm: "sha256",
     // This helper creates Principal-Server-hosted collaboration Realms. The
     // service owns the notary key and materializes Event Seals; the principal
     // remains the Realm creator and root authority-cell controller.
-    notary: singleDidNotaryFromFullDid(solandServiceFullId(opts.server)),
+    notary: singleSignerNotaryFromFullDid(solandServiceFullId(opts.server)),
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator
     // effective `ak.realm.owner`. v1 issues no genesis self-grant.
@@ -3088,14 +3109,20 @@ export async function readRealmSealBasis(
   return { leaves: [frontier.seal_id] };
 }
 
-// Local projection of the wire view: the callers only need the seal head plus
-// a flat digest list. The members are typed off
-// `service-operation-dtos.schema.json#/$defs/RealmSealFrontierView` so a
-// renamed or retyped wire member is a `tsc` error here.
-type RealmSealFrontier = Pick<
-  RealmSealFrontierView,
-  "seal_id" | "control_event_set_root" | "state_root"
-> & {
+// Local projection of the frontier the running Principal Server answers with:
+// the callers only need the Seal head plus a flat digest list.
+//
+// DRIFT, tracked by `arkret-work` task 2026-08-20-1901: the spec view
+// (`service-operation-dtos.schema.json#/$defs/RealmSealFrontierView`) is now
+// `seal_basis.leaves[]` plus `observation_coordinate`, while the SDK type
+// (`arkret-models-collaboration::event_sync::RealmSealFrontierView`) and the
+// soland endpoint still answer `seal_id` + the two roots + `hlc`. The Seal head
+// members below therefore cannot be typed off the generated view yet; restore
+// that binding as soon as the SDK/soland frontier is rebuilt.
+type RealmSealFrontier = {
+  seal_id: string;
+  control_event_set_root: string;
+  state_root: string;
   pending_proposal_digests: string[];
 };
 
@@ -3118,7 +3145,13 @@ async function readRealmSealFrontier(
   // lands, so every member is treated as possibly missing and re-checked at
   // runtime below.
   const body = await expectJsonOk<{
-    frontier?: Partial<RealmSealFrontierView>;
+    frontier?: {
+      kind?: string;
+      seal_id?: unknown;
+      control_event_set_root?: unknown;
+      state_root?: unknown;
+      governance_health?: Partial<RealmSealFrontierView["governance_health"]>;
+    };
   }>(response, `read Realm Seal frontier for ${realmId}`);
   const frontier = body.frontier;
   if (
