@@ -326,10 +326,8 @@ pub fn realm_create_payload_with_notary(
     profile.summary = Some(summary.to_owned());
     let mut policy_bundle =
         arkret_models_collaboration::events_payloads::realm::RealmPolicyBundlePayload::new(1);
-    policy_bundle.content_scheme = input
-        .get("content_scheme")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
+    // `content_scheme` is frozen by the accepted MLS group Genesis and is not a
+    // policy-bundle component (realm-and-space.md section 2.3).
     let encryption_floor = if encryption_profile == "mls_rfc9420" {
         arkret_models_collaboration::governance::circle::EncryptionFloor::E2eeRequired
     } else {
