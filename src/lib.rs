@@ -117,6 +117,15 @@ pub fn fixture_notary_signer(
         .strip_prefix("ak:did_core:")
         .unwrap_or_else(|| panic!("fixture notary actor is not a DID-core id: {actor_id}"))
         .to_owned();
+    // A WebVH core intentionally retains only the SCID, so prefix
+    // substitution cannot recreate a resolvable full DID. Fixtures still need
+    // a syntactically complete verification-method controller that projects
+    // back to the same core; use a closed test-only method coordinate for it.
+    let controller = if controller.starts_with("webvh:") {
+        format!("{controller}:cotest.invalid:webvh:notary-fixture")
+    } else {
+        controller
+    };
     fixture_notary_signer_for_method(
         actor_id,
         fixture_did_url(format!("did:{controller}#notary-key-1")),

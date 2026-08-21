@@ -568,7 +568,7 @@ pub async fn seal_current_principal_control_frontier(
     let outcome =
         serde_json::from_value::<arkret_models_collaboration::http_bodies::EventSealSubmitOutcome>(
             expect_json(
-                client.post("/_arkret/self/events/seals").json(&seal),
+                client.post("/_arkret/self/seals").json(&seal),
                 StatusCode::OK,
             )
             .await?,
@@ -750,7 +750,12 @@ async fn bootstrap_test_device_authorization(
             principal_id: principal_actor_id.clone(),
             principal_server_id: server.service_id().clone(),
             principal_full_id: principal.clone(),
-            notary: crate::fixture_single_signer_notary(principal_actor_id.clone()),
+            notary: arkret_wire::NotaryValue::single_signer(
+                crate::fixture_notary_signer_for_method(
+                    principal_actor_id.clone(),
+                    crate::fixture_did_url(format!("{actor}#notary-key-1")),
+                ),
+            ),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal.clone(),
                 method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,
@@ -901,7 +906,7 @@ async fn bootstrap_test_device_authorization(
             expect_json(
                 server
                     .http()
-                    .post(server.url("/_arkret/self/events/seals"))
+                    .post(server.url("/_arkret/self/seals"))
                     .bearer_auth(token)
                     .json(&bootstrap_seal),
                 StatusCode::OK,

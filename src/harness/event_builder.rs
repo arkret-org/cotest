@@ -34,7 +34,7 @@ use super::proof::refresh_typed_event_proof_with_signing_seed;
 use super::server::ArkretServer;
 use super::{
     NEXT_EVENT_SEQ, RealmBootstrapDraft, canonical_device_id, events_frontier_request_body,
-    member_join_payload, query_method, realm_create_payload,
+    member_join_payload, query_method, realm_create_payload_with_notary,
 };
 
 type RegisteredEventSigner = ([u8; 32], DidUrl, DidCoreId);
@@ -254,7 +254,7 @@ pub async fn create_realm(
     actor: &str,
     title: &str,
 ) -> Result<String> {
-    let draft = realm_create_payload(
+    let draft = realm_create_payload_with_notary(
         server.service_id().as_str(),
         &json!({
             "title": title,
@@ -262,6 +262,7 @@ pub async fn create_realm(
             "public": false,
             "plaintext_visible_services": [server.service_id()]
         }),
+        server.service_notary_signer().clone(),
     )?;
     let (realm_id, events) = realm_bootstrap_event_batch(actor, draft)?;
     let events = events
@@ -335,7 +336,7 @@ pub async fn create_realm_with_signing_seed(
     title: &str,
     signing_seed: [u8; 32],
 ) -> Result<String> {
-    let draft = realm_create_payload(
+    let draft = realm_create_payload_with_notary(
         server.service_id().as_str(),
         &json!({
             "title": title,
@@ -343,6 +344,7 @@ pub async fn create_realm_with_signing_seed(
             "public": false,
             "plaintext_visible_services": [server.service_id()]
         }),
+        server.service_notary_signer().clone(),
     )?;
     let (realm_id, events) = realm_bootstrap_event_batch_with_signing_seed(
         actor,
@@ -1446,7 +1448,7 @@ mod realm_bootstrap_tests {
             .as_object_mut()
             .expect("fixture object")
             .extend(extra.as_object().expect("extra object").clone());
-        realm_create_payload(SERVICE, &input).expect("valid Realm bootstrap draft")
+        crate::harness::realm_create_payload(SERVICE, &input).expect("valid Realm bootstrap draft")
     }
 
     fn build(draft: RealmBootstrapDraft) -> (String, Vec<Event>) {

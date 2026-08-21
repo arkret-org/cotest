@@ -26,7 +26,7 @@ use super::event_builder::{
 };
 use super::{
     events_frontier_request_body, member_join_payload, message_create_text_payload, next_typed_id,
-    query_method, realm_create_payload, refresh_typed_event_proof_with_signing_seed,
+    query_method, realm_create_payload_with_notary, refresh_typed_event_proof_with_signing_seed,
 };
 
 #[derive(Clone)]
@@ -35,6 +35,7 @@ pub struct TestActorClient {
     pub(super) sdk: SdkClient,
     pub(super) base_url: Url,
     pub(super) service_id: String,
+    pub(super) service_notary_signer: arkret_wire::NotarySignerDescriptor,
     pub actor: String,
     pub device_id: String,
     pub token: String,
@@ -262,11 +263,19 @@ impl TestActorClient {
     /// frontier_unavailable`. That is a transient state a client waits out,
     /// not an error — every Realm-scoped Seal read here therefore retries it.
     pub async fn realm_seal_frontier(&self, realm_id: &str) -> Result<Value> {
+        self.events_frontier_with_retry(None, Some(realm_id)).await
+    }
+
+    async fn events_frontier_with_retry(
+        &self,
+        actor_id: Option<&str>,
+        realm_id: Option<&str>,
+    ) -> Result<Value> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
             let response = expect_response(
                 self.query("/_arkret/self/events/frontier")
-                    .json(&events_frontier_request_body(None, Some(realm_id))?),
+                    .json(&events_frontier_request_body(actor_id, realm_id)?),
                 StatusCode::OK,
             )
             .await;
@@ -539,7 +548,11 @@ impl TestActorClient {
     /// for the bootstrap Seal before authoring their first DataEvent, without
     /// racing the convenience helper's default Discussion Strand.
     pub async fn create_realm_bootstrap_with(&self, body: Value) -> Result<Value> {
-        let draft = realm_create_payload(&self.service_id, &body)?;
+        let draft = realm_create_payload_with_notary(
+            &self.service_id,
+            &body,
+            self.service_notary_signer.clone(),
+        )?;
         let (realm_id, events) = realm_bootstrap_event_batch_for_device(
             &self.actor,
             &self.device_id,
@@ -788,15 +801,9 @@ impl TestActorClient {
         causal_refs: Vec<String>,
         capability_refs: Vec<String>,
     ) -> Result<Event> {
-        let frontier = expect_json(
-            self.query("/_arkret/self/events/frontier")
-                .json(&events_frontier_request_body(
-                    Some(self.actor.as_str()),
-                    Some(realm_id),
-                )?),
-            StatusCode::OK,
-        )
-        .await?;
+        let frontier = self
+            .events_frontier_with_retry(Some(self.actor.as_str()), Some(realm_id))
+            .await?;
         let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
             serde_json::from_value(frontier)?;
         let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
@@ -899,15 +906,9 @@ impl TestActorClient {
         preconditions: Vec<arkret_wire::cba::Precondition>,
     ) -> Result<Event> {
         self.ensure_authority_for_kind(realm_id, kind).await?;
-        let frontier = expect_json(
-            self.query("/_arkret/self/events/frontier")
-                .json(&events_frontier_request_body(
-                    Some(self.actor.as_str()),
-                    Some(realm_id),
-                )?),
-            StatusCode::OK,
-        )
-        .await?;
+        let frontier = self
+            .events_frontier_with_retry(Some(self.actor.as_str()), Some(realm_id))
+            .await?;
         let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
             serde_json::from_value(frontier)?;
         let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =

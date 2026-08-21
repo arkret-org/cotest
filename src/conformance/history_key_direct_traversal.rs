@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload;
 use arkret_models_collaboration::history_key::{
     HistoryGovernanceTraversalIntent, HistoryGovernanceTraversalRetention,
-    PeerHistoryTraversalAccess, SelfHistoryTraversalAccess,
+    PeerHistoryTraversalAccess, SelfHistoryTraversalAccess, response_capability_commitment,
 };
 use arkret_wire::HistoryAccess;
 use serde_json::{Value, json};
@@ -96,6 +96,50 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     .validate()
     .expect_err("history access widening must fail closed");
 
+    let capability_kat = fixture
+        .pointer("/history_response_capability_kat")
+        .context("history-key fixture omits history response capability KAT")?;
+    let capability = capability_kat["response_capability_b64u"]
+        .as_str()
+        .context("history response capability KAT omits capability")?;
+    if capability_kat["decoded_length"].as_u64() != Some(32)
+        || response_capability_commitment(capability)?.as_ref()
+            != capability_kat["expected_response_capability_commitment"]
+                .as_str()
+                .context("history response capability KAT omits commitment")?
+        || capability_kat
+            .pointer("/surface/read")
+            .and_then(Value::as_str)
+            != Some("POST /_arkret/self/history-key-responses/read")
+        || capability_kat
+            .pointer("/surface/ack")
+            .and_then(Value::as_str)
+            != Some("POST /_arkret/self/history-key-responses/ack")
+        || capability_kat
+            .pointer("/surface/request_locator_in_path_query_or_body")
+            .and_then(Value::as_bool)
+            != Some(false)
+    {
+        bail!("history response capability KAT drifted");
+    }
+    let capability_negative_cases = capability_kat["negative_cases"]
+        .as_array()
+        .context("history response capability KAT omits negative cases")?;
+    for required in [
+        "unknown_expired_gc_and_unauthorized_same_not_found_shape",
+        "stream_a_capability_cannot_read_or_ack_stream_b",
+        "stream_a_capability_cannot_consume_stream_b_ack_token",
+        "commitment_collision_resampled_before_any_durable_write",
+        "exact_create_retry_returns_byte_identical_sealed_capability",
+    ] {
+        if !capability_negative_cases
+            .iter()
+            .any(|case| case.as_str() == Some(required))
+        {
+            bail!("history response capability KAT omits {required}");
+        }
+    }
+
     let scale_cases = fixture
         .pointer("/streaming_direct_traversal_scale_kats")
         .and_then(Value::as_array)
@@ -152,6 +196,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             "closed_access_branches_valid": true,
             "closed_cut_negative_cases_valid": true,
             "history_access_widening_rejected": true,
+            "response_capability_kat_valid": true,
             "streaming_scale_kats_valid": true,
         }),
         &json!({"status": "validated"}),

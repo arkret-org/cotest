@@ -211,6 +211,19 @@ pub struct RealmBootstrapDraft {
 }
 
 pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBootstrapDraft> {
+    let notary_actor_id = arkret_identifiers::DidCoreId::new(service_id.to_owned())?;
+    realm_create_payload_with_notary(
+        service_id,
+        input,
+        crate::fixture_notary_signer(notary_actor_id),
+    )
+}
+
+pub fn realm_create_payload_with_notary(
+    service_id: &str,
+    input: &Value,
+    notary_signer: arkret_wire::NotarySignerDescriptor,
+) -> Result<RealmBootstrapDraft> {
     let title = input
         .get("title")
         .and_then(Value::as_str)
@@ -275,9 +288,8 @@ pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBoot
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload::new(services)
     });
 
-    let notary_actor_id = arkret_identifiers::DidCoreId::new(service_id.to_owned())?;
     let notary = arkret_wire::notary::NotaryValue::SingleSigner {
-        signer: crate::fixture_notary_signer(notary_actor_id),
+        signer: notary_signer,
         recovery_members: vec![crate::fixture_notary_signer(
             arkret_identifiers::DidCoreId::new("ak:did_core:web:recovery.soland.local")?,
         )],

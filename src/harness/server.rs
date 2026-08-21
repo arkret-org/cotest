@@ -12,7 +12,7 @@ use anyhow::{Context, Result, anyhow};
 use arkret::{DidCoreId, DidFullId, TrustDomainId};
 use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD};
 use chrono::Utc;
 use reqwest::{Client as HttpClient, StatusCode};
 use serde_json::Value;
@@ -40,6 +40,7 @@ pub struct ArkretServer {
     base_url: Url,
     service_id: DidCoreId,
     service_full_id: DidFullId,
+    service_notary_signer: arkret_wire::NotarySignerDescriptor,
     trust_domain: TrustDomainId,
     blob_root: Option<PathBuf>,
     log_path: Option<PathBuf>,
@@ -84,6 +85,30 @@ fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
     let mut seed = [0_u8; 32];
     seed.copy_from_slice(&digest);
     (BASE64_STANDARD.encode(seed), seed)
+}
+
+fn test_service_notary_signer(
+    service_id: &DidCoreId,
+    service_full_id: &DidFullId,
+    signing_seed: [u8; 32],
+) -> Result<arkret_wire::NotarySignerDescriptor> {
+    let public_key = ed25519_dalek::SigningKey::from_bytes(&signing_seed)
+        .verifying_key()
+        .to_bytes();
+    let descriptor = arkret_wire::NotarySignerDescriptor {
+        actor_id: service_id.clone(),
+        verification_method: arkret_wire::DidUrl::new(format!("{service_full_id}#notary-key"))
+            .map_err(anyhow::Error::msg)?,
+        key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
+        jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
+        frozen_public_key_b64u: URL_SAFE_NO_PAD.encode(public_key),
+        frozen_public_key_digest: arkret_wire::Hash::new(format!(
+            "sha256:{}",
+            hex::encode(Sha256::digest(public_key))
+        ))?,
+    };
+    descriptor.validate()?;
+    Ok(descriptor)
 }
 
 /// Every cotest SUT trusts the harness-owned Account Authority identity so the
@@ -178,7 +203,7 @@ impl ArkretServer {
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let metrics_bind_for_handle = metrics_bind.clone();
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (notary_signing_key, _) = test_service_signing_key(name);
+        let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
         initialize_service_log(log_path.as_deref(), name, "external_binary")?;
@@ -245,6 +270,8 @@ impl ArkretServer {
             return Err(error);
         }
         let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let service_notary_signer =
+            test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
@@ -262,6 +289,7 @@ impl ArkretServer {
             base_url,
             service_id,
             service_full_id,
+            service_notary_signer,
             trust_domain,
             blob_root: Some(blob_root),
             log_path,
@@ -290,7 +318,7 @@ impl ArkretServer {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (notary_signing_key, _) = test_service_signing_key(name);
+        let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
         let manifest = sut_manifest();
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -344,6 +372,8 @@ impl ArkretServer {
             return Err(error);
         }
         let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let service_notary_signer =
+            test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
@@ -351,6 +381,7 @@ impl ArkretServer {
             base_url,
             service_id,
             service_full_id,
+            service_notary_signer,
             trust_domain,
             blob_root: Some(blob_root),
             log_path,
@@ -368,7 +399,7 @@ impl ArkretServer {
         let container_port = sut_container_port();
         let alias = sanitize_runtime_name(name);
         let base_url = Url::parse(&format!("http://127.0.0.1:{}/", host_port.port()))?;
-        let (notary_signing_key, _) = test_service_signing_key(name);
+        let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
         let public_base_url = if docker_network.is_some() {
             format!("http://{alias}:{container_port}/")
         } else {
@@ -452,6 +483,8 @@ impl ArkretServer {
             return Err(anyhow!("{error}{log_suffix}"));
         }
         let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let service_notary_signer =
+            test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
@@ -459,6 +492,7 @@ impl ArkretServer {
             base_url,
             service_id,
             service_full_id,
+            service_notary_signer,
             trust_domain,
             blob_root: None,
             log_path,
@@ -479,6 +513,10 @@ impl ArkretServer {
 
     pub fn service_full_id(&self) -> &DidFullId {
         &self.service_full_id
+    }
+
+    pub fn service_notary_signer(&self) -> &arkret_wire::NotarySignerDescriptor {
+        &self.service_notary_signer
     }
 
     pub fn trust_domain(&self) -> &TrustDomainId {
@@ -835,6 +873,7 @@ impl ArkretServer {
             sdk,
             base_url: self.base_url(),
             service_id: self.service_id.to_string(),
+            service_notary_signer: self.service_notary_signer.clone(),
             actor: actor.to_owned(),
             device_id: device_id.to_owned(),
             token,
