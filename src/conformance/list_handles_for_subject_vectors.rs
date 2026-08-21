@@ -70,14 +70,25 @@ fn claim_for(
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
     Ok(HandleClaim {
+        schema: HandleClaim::SCHEMA.to_owned(),
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
+        handle_aliases: Vec::new(),
         subject: Some(subj.clone()),
         issuer: Some(DidCoreId::new(issuer)?),
+        issuer_service_id: None,
         binding_state: Some(HandleBindingState::Verified),
+        claim_kind: None,
+        visibility: None,
         audience: audience.map(str::to_owned),
-        created_at: Some(at(2026, 5, 1)),
+        challenge: None,
+        claim_scope: Default::default(),
+        member_delivery_binding: None,
+        claims: Vec::new(),
+        created_at: at(2026, 5, 1),
         expires_at: Some(at(2026, 7, 1)),
-        ..Default::default()
+        verified_at: None,
+        source_refs: Vec::new(),
+        proofs: Vec::new(),
     })
 }
 

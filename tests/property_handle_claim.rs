@@ -42,6 +42,33 @@ fn arb_handle() -> impl Strategy<Value = String> {
     (arb_localpart(), arb_domain()).prop_map(|(l, d)| format!("{l}:{d}"))
 }
 
+/// Claim shell with every field written explicitly: `HandleClaim` has no
+/// `Default` impl because the schema-required `created_at` must come from a
+/// real constructor, not a fabricated placeholder.
+fn base_claim() -> HandleClaim {
+    HandleClaim {
+        schema: HandleClaim::SCHEMA.to_owned(),
+        handle: None,
+        handle_aliases: Vec::new(),
+        subject: None,
+        issuer: None,
+        issuer_service_id: None,
+        binding_state: None,
+        claim_kind: None,
+        visibility: None,
+        audience: None,
+        challenge: None,
+        claim_scope: Default::default(),
+        member_delivery_binding: None,
+        claims: Vec::new(),
+        created_at: Utc::now(),
+        expires_at: None,
+        verified_at: None,
+        source_refs: Vec::new(),
+        proofs: Vec::new(),
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(PROPTEST_CASES))]
 
@@ -75,7 +102,7 @@ proptest! {
             member_delivery_binding: Some(member_delivery_binding()),
             expires_at: Some(Utc::now() + Duration::minutes(5)),
             audience: audience.clone().map(|a| format!("did:web:{a}.example")),
-            ..Default::default()
+            ..base_claim()
         };
         let outcome = claim.validate();
         if audience.is_some() {
@@ -99,7 +126,7 @@ proptest! {
             issuer: Some(DidCoreId::new("ak:did_core:web:issuer.example").unwrap()),
             expires_at: with_expiry.then(|| Utc::now() + Duration::minutes(5)),
             verified_at: with_verified_at.then(Utc::now),
-            ..Default::default()
+            ..base_claim()
         };
         let outcome = claim.validate();
         if with_expiry {
@@ -121,7 +148,7 @@ proptest! {
             issuer: Some(
                 DidCoreId::new(format!("ak:did_core:web:{issuer}.example")).unwrap(),
             ),
-            ..Default::default()
+            ..base_claim()
         };
         // No binding_state, no recipient — should validate trivially.
         prop_assert!(claim.validate().is_ok());

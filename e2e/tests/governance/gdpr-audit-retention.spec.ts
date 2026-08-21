@@ -32,14 +32,19 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("GDPR / audit / retention", () => {
-  test("removed export/erase rails stay 404; the §8.1 erasure-request intake resolves fail-closed", async ({ request }) => {
+  test("removed export/erase rails stay fail-closed (404/405); the §8.1 erasure-request intake resolves fail-closed", async ({ request }) => {
     const alice = uniqueUser("s27-probe");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
     // The incomplete product-private export rail and the product-private erase
     // rail were intentionally removed — no compatibility shim, so both must
-    // stay 404.
+    // stay fail-closed. The export GET path collides with no registered route
+    // and answers 404 unrecognized_endpoint; the erase POST path collides
+    // segment-wise with the registered `/_soland/self/account/{did}` GET
+    // pattern (extensions/sovereign.rs), so the canonical catch-all answers
+    // 405 method_not_allowed + Allow per api-conventions.md §10. Both codes
+    // are the spec-mandated "no such rail" answers; neither may be 2xx.
     const exportProbe = await request.get(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -49,12 +54,12 @@ test.describe("GDPR / audit / retention", () => {
       headers: { authorization: `Bearer ${token}` },
       data: {},
     });
-    expect(eraseProbe.status()).toBe(404);
+    expect([404, 405]).toContain(eraseProbe.status());
 
-    // The current self-erasure surface is the spec entry point
-    // (account-lifecycle.md §8.1 ak.self.account.command.request_erasure). It
-    // records the intent durably and is fail-closed on fresh high-risk
-    // authentication, so a bare probe is refused — but the route MUST resolve.
+    // The current self-erasure entry moved to the Account Authority gate
+    // surface (account-lifecycle.md §8.1 ak.gate.account.command.request_erasure,
+    // POST /_arkret/gate/account/erasure-requests on coauth); the former soland
+    // self surface was removed by the same adjudication, so it must stay 404.
     const erasureRequestProbe = await request.post(
       `${solandBaseUrl()}/_arkret/self/account/erasure-requests`,
       {
@@ -62,8 +67,7 @@ test.describe("GDPR / audit / retention", () => {
         data: {},
       },
     );
-    expect(erasureRequestProbe.status()).not.toBe(404);
-    expect(erasureRequestProbe.status()).toBeLessThan(500);
+    expect(erasureRequestProbe.status()).toBe(404);
   });
 
   test("GDPR export returns a JSON bundle containing account/profile/realms/devices/audit_log facets", async ({

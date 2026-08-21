@@ -92,21 +92,32 @@ fn pinned_claim_digest(byte: &str) -> Result<Hash> {
 /// A verified handle claim whose `subject` is `alice_subject()`.
 fn verified_claim_for_subject(handle: &str, subject: &DidCoreId) -> Result<HandleClaim> {
     Ok(HandleClaim {
+        schema: HandleClaim::SCHEMA.to_owned(),
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
+        handle_aliases: Vec::new(),
         subject: Some(subject.clone()),
         issuer: Some(DidCoreId::new("ak:did_core:web:coauth.acme.example")?),
+        issuer_service_id: None,
         binding_state: Some(HandleBindingState::Verified),
-        created_at: Some(
-            Utc.with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
-                .single()
-                .expect("pinned created_at"),
-        ),
+        claim_kind: None,
+        visibility: None,
+        audience: None,
+        challenge: None,
+        claim_scope: Default::default(),
+        member_delivery_binding: None,
+        claims: Vec::new(),
+        created_at: Utc
+            .with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
+            .single()
+            .expect("pinned created_at"),
         expires_at: Some(
             Utc.with_ymd_and_hms(2026, 6, 20, 0, 0, 0)
                 .single()
                 .expect("pinned expires_at"),
         ),
-        ..Default::default()
+        verified_at: None,
+        source_refs: Vec::new(),
+        proofs: Vec::new(),
     })
 }
 

@@ -21,13 +21,18 @@ use cotest::conformance::{
     run_media_binding_vector_suite, run_member_identity_vector_suite,
     run_member_roster_vector_suite, run_mention_rendering_vector_suite,
     run_object_addressing_vector_suite, run_presence_signal_vector_suite,
-    run_primary_handle_vector_suite, run_sidecar_vector_suite,
+    run_primary_handle_vector_suite, run_realm_key_payload_vector_suite, run_sidecar_vector_suite,
 };
 use serde_json::{Value, json};
 
 #[test]
 fn encoding_artifact_vectors_reject_drift() -> Result<()> {
     run_encoding_fixture_suite()
+}
+
+#[test]
+fn realm_key_payload_vectors_reject_drift() -> Result<()> {
+    run_realm_key_payload_vector_suite()
 }
 
 #[test]
@@ -333,9 +338,11 @@ fn sidecar_vector_suite_runs_clean() {
 fn cursor_vector_suite_runs_clean() {
     run_cursor_vector_suite().expect("cursor vectors must pass");
     // `ALL_CURSOR_VECTOR_IDS` is the authoritative set for the encoding
-    // cursor_opaque family (one vector); the high-assurance cursor revoke
-    // vector lives under the service-closure suite, so this set has length 1.
-    assert_eq!(ALL_CURSOR_VECTOR_IDS.len(), 1);
+    // cursor_opaque family: the round-trip vector plus the 2026-08-21
+    // handle_reject negative vector (short / padded / non-alphabet / oversized
+    // handles). The high-assurance cursor revoke vector lives under the
+    // service-closure suite, so this set has length 2.
+    assert_eq!(ALL_CURSOR_VECTOR_IDS.len(), 2);
 }
 
 // ─── R3.1 / VECT-MID-1..7 — MemberIdentity vectors ─────────────────────────
