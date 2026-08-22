@@ -1,14 +1,19 @@
 //! Direct history-governance traversal and history-access ratchet checks.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload;
 use arkret_models_collaboration::history_key::{
-    HistoryGovernanceTraversalIntent, HistoryGovernanceTraversalRetention,
-    PeerHistoryTraversalAccess, SelfHistoryTraversalAccess, response_capability_commitment,
+    AuthorizationIncarnation, HistoryGovernanceTraversalIntent,
+    HistoryGovernanceTraversalRetention, PeerHistoryTraversalAccess, SelfHistoryTraversalAccess,
+    response_capability_commitment,
 };
-use arkret_wire::HistoryAccess;
+use arkret_state::direct_traversal::{
+    BoundedDirectTraversalJournal, DirectCutDescriptorIndex, DirectCutRequest,
+    SealPredecessorDescriptor, discover_direct_cut,
+};
+use arkret_wire::{HistoryAccess, RealmId, SealBasis, SealId};
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
@@ -58,32 +63,16 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
         .pointer("/direct_traversal_kat/negative_cases")
         .and_then(Value::as_array)
         .context("history-key fixture omits direct traversal negative cases")?;
-    for expected_name in [
-        "hidden_predecessor",
-        "target_does_not_dominate_current",
-        "branch_stops_before_base",
-        "base_leaf_not_consumed",
-        "surplus_descriptor",
-    ] {
-        let case = negative_cases
-            .iter()
-            .find(|case| case["name"].as_str() == Some(expected_name))
-            .with_context(|| format!("history traversal fixture omits {expected_name}"))?;
-        let expected_error = case["expected_error"].as_str().with_context(|| {
-            format!("history traversal case {expected_name} omits expected_error")
-        })?;
-        if !case["actual_errors"].as_array().is_some_and(|errors| {
-            errors
-                .iter()
-                .any(|error| error.as_str() == Some(expected_error))
-        }) {
-            bail!("history traversal case {expected_name} did not produce {expected_error}");
-        }
-    }
     verify_direct_cut_graph_mutations(
         fixture
             .pointer("/direct_traversal_kat/direct_cut")
             .context("history-key fixture omits direct_cut")?,
+        negative_cases,
+    )?;
+    verify_since_join_lineage(
+        fixture
+            .pointer("/direct_traversal_kat/since_join_lineage")
+            .context("history-key fixture omits since_join_lineage")?,
     )?;
 
     HistoryAccessPayload::initialize(HistoryAccess::AllHistoryForCurrentMembers).validate()?;
@@ -195,6 +184,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             "organization_recovery_intent_valid": true,
             "closed_access_branches_valid": true,
             "closed_cut_negative_cases_valid": true,
+            "since_join_lineage_valid": true,
             "history_access_widening_rejected": true,
             "response_capability_kat_valid": true,
             "streaming_scale_kats_valid": true,
@@ -204,13 +194,75 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     Ok(())
 }
 
+/// Fixture-declared reverse-traversal descriptor.
 #[derive(Clone, Debug)]
 struct DirectCutSeal {
     seal_ref: String,
     predecessor_refs: Vec<String>,
 }
 
-fn verify_direct_cut_graph_mutations(cut: &Value) -> Result<()> {
+impl DirectCutSeal {
+    fn into_descriptor(self) -> Result<SealPredecessorDescriptor> {
+        Ok(SealPredecessorDescriptor {
+            seal_ref: SealId::new(self.seal_ref)?,
+            predecessor_refs: self
+                .predecessor_refs
+                .into_iter()
+                .map(|value| Ok(SealId::new(value)?))
+                .collect::<Result<Vec<_>>>()?,
+        })
+    }
+}
+
+const UNREACHABLE_SEAL_REF: &str =
+    "ak:seal:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
+const TRAVERSAL_REALM_ID: &str = "ak:realm:AYw-PHWIOTuZhm-EenZx-cCbOziC8pNCrh10oRfqiEmN";
+
+fn seal_basis(leaves: &[String]) -> Result<SealBasis> {
+    let mut leaves = leaves
+        .iter()
+        .map(|value| Ok(SealId::new(value.clone())?))
+        .collect::<Result<Vec<_>>>()?;
+    leaves.sort();
+    let basis = SealBasis { leaves };
+    basis.validate_protocol_bounds()?;
+    Ok(basis)
+}
+
+/// Run one cut through the SDK verifier and return its canonical error names.
+fn cut_errors(
+    base: &[String],
+    current: &[String],
+    target: &[String],
+    seals: &[DirectCutSeal],
+) -> Result<BTreeSet<String>> {
+    let request = DirectCutRequest {
+        realm_id: RealmId::new(TRAVERSAL_REALM_ID)?,
+        trusted_history_base_basis: seal_basis(base)?,
+        trusted_current_basis: seal_basis(current)?,
+        target_basis: seal_basis(target)?,
+    };
+    let source = DirectCutDescriptorIndex::new(
+        seals
+            .iter()
+            .cloned()
+            .map(DirectCutSeal::into_descriptor)
+            .collect::<Result<Vec<_>>>()?,
+    )?;
+    let mut journal = BoundedDirectTraversalJournal::default();
+    Ok(discover_direct_cut(&request, &source, &mut journal)?
+        .error_names()
+        .into_iter()
+        .map(str::to_owned)
+        .collect())
+}
+
+/// Drive the SDK direct-traversal verifier against the fixture's canonical cut
+/// and its five declared negative mutations. The assertion is equality with each
+/// case's complete `actual_errors` set, not mere containment, so a verifier that
+/// over- or under-reports fails here.
+fn verify_direct_cut_graph_mutations(cut: &Value, negative_cases: &[Value]) -> Result<()> {
     let basis = |name: &str| -> Result<Vec<String>> {
         cut.pointer(&format!("/{name}/leaves"))
             .and_then(Value::as_array)
@@ -252,112 +304,154 @@ fn verify_direct_cut_graph_mutations(cut: &Value) -> Result<()> {
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    if !direct_cut_errors(&base, &current, &target, &seals).is_empty() {
+    if !cut_errors(&base, &current, &target, &seals)?.is_empty() {
         bail!("canonical direct cut does not satisfy its closed interval");
     }
 
-    let mut hidden = seals.clone();
-    hidden.retain(|seal| seal.seal_ref != current[0]);
-    require_cut_error(&base, &current, &target, &hidden, "dependency_missing")?;
+    let hidden_ref = current
+        .first()
+        .context("direct cut lacks a first current leaf")?
+        .clone();
 
-    require_cut_error(
-        &base,
-        &current,
-        &target[..1],
-        &seals,
-        "trusted_current_not_dominated",
-    )?;
+    // The responder simply omits one interval descriptor while its successor
+    // still points at it.
+    let mut hidden_predecessor = seals.clone();
+    hidden_predecessor.retain(|seal| seal.seal_ref != hidden_ref);
 
-    let mut early_stop = seals.clone();
-    let branch = early_stop
-        .iter_mut()
-        .find(|seal| seal.seal_ref == current[0])
-        .context("direct cut lacks the first current leaf")?;
-    branch.predecessor_refs.clear();
-    require_cut_error(
-        &base,
-        &current,
-        &target,
-        &early_stop,
-        "interval_stops_before_base",
-    )?;
+    // The same branch is additionally truncated, so the surviving successor is
+    // predecessor-free without being a base leaf.
+    let mut branch_stops_before_base = hidden_predecessor.clone();
+    for seal in &mut branch_stops_before_base {
+        seal.predecessor_refs.retain(|value| *value != hidden_ref);
+    }
 
-    require_cut_error(
-        &base,
-        &current[..1],
-        &target[..1],
-        &seals,
-        "base_leaf_not_consumed",
-    )?;
+    let mut extended_base = base.clone();
+    extended_base.push(UNREACHABLE_SEAL_REF.to_owned());
 
     let mut surplus = seals.clone();
     surplus.push(DirectCutSeal {
-        seal_ref: format!("ak:seal:sha256:{}", "ee".repeat(32)),
+        seal_ref: UNREACHABLE_SEAL_REF.to_owned(),
         predecessor_refs: Vec::new(),
     });
-    require_cut_error(&base, &current, &target, &surplus, "surplus_descriptor")
-}
 
-fn require_cut_error(
-    base: &[String],
-    current: &[String],
-    target: &[String],
-    seals: &[DirectCutSeal],
-    expected: &'static str,
-) -> Result<()> {
-    let errors = direct_cut_errors(base, current, target, seals);
-    if !errors.contains(expected) {
-        bail!("direct cut mutation did not produce {expected}: {errors:?}");
+    let disjoint_current = vec![UNREACHABLE_SEAL_REF.to_owned()];
+
+    let mutations: [(&str, &[String], &[String], &[String], &[DirectCutSeal]); 5] = [
+        (
+            "hidden_predecessor",
+            &base,
+            &current,
+            &target,
+            &hidden_predecessor,
+        ),
+        (
+            "target_does_not_dominate_current",
+            &base,
+            &disjoint_current,
+            &target,
+            &seals,
+        ),
+        (
+            "branch_stops_before_base",
+            &base,
+            &current,
+            &target,
+            &branch_stops_before_base,
+        ),
+        (
+            "base_leaf_not_consumed",
+            &extended_base,
+            &current,
+            &target,
+            &seals,
+        ),
+        ("surplus_descriptor", &base, &current, &target, &surplus),
+    ];
+    for (name, base, current, target, seals) in mutations {
+        let case = negative_cases
+            .iter()
+            .find(|case| case["name"].as_str() == Some(name))
+            .with_context(|| format!("history traversal fixture omits {name}"))?;
+        let expected_error = case["expected_error"]
+            .as_str()
+            .with_context(|| format!("history traversal case {name} omits expected_error"))?;
+        let expected_errors = case["actual_errors"]
+            .as_array()
+            .with_context(|| format!("history traversal case {name} omits actual_errors"))?
+            .iter()
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow!("history traversal case {name} error is not text"))
+            })
+            .collect::<Result<BTreeSet<_>>>()?;
+        let observed = cut_errors(base, current, target, seals)?;
+        if observed != expected_errors {
+            bail!(
+                "SDK direct traversal for {name} produced {observed:?}, fixture declares {expected_errors:?}"
+            );
+        }
+        if !observed.contains(expected_error) {
+            bail!("SDK direct traversal for {name} did not produce {expected_error}");
+        }
     }
     Ok(())
 }
 
-fn direct_cut_errors(
-    base: &[String],
-    current: &[String],
-    target: &[String],
-    seals: &[DirectCutSeal],
-) -> BTreeSet<&'static str> {
-    let mut errors = BTreeSet::new();
-    let mut by_ref = BTreeMap::new();
-    for seal in seals {
-        if by_ref.insert(seal.seal_ref.as_str(), seal).is_some() {
-            errors.insert("duplicate_descriptor");
+/// Check the fixture's `since_join` lineage against the only two admissible
+/// `join_epoch` sources: the winning Commit that consumes the exact Add, and a
+/// proven Genesis initial leaf. Local clocks and current epoch stay forbidden.
+fn verify_since_join_lineage(lineage: &Value) -> Result<()> {
+    let incarnation: AuthorizationIncarnation =
+        serde_json::from_value(lineage["add_target_authorization_incarnation"].clone())?;
+    let AuthorizationIncarnation::Realm {
+        realm_membership_incarnation_ref,
+    } = &incarnation
+    else {
+        bail!("since_join lineage fixture is not a Realm incarnation");
+    };
+    if lineage["membership_incarnation_ref"].as_str()
+        != Some(realm_membership_incarnation_ref.as_str())
+    {
+        bail!("since_join lineage incarnation refs disagree");
+    }
+    let expected = lineage["expected_join_epoch"]
+        .as_u64()
+        .context("since_join lineage omits expected_join_epoch")?;
+    if lineage["winning_commit_next_epoch"].as_u64() != Some(expected) {
+        bail!("since_join lineage expected_join_epoch is not the winning Commit next_epoch");
+    }
+    let winning_commit_ref = lineage["winning_commit_ref"]
+        .as_str()
+        .context("since_join lineage omits winning_commit_ref")?;
+    let add_proposal_ref = lineage["add_proposal_ref"]
+        .as_str()
+        .context("since_join lineage omits add_proposal_ref")?;
+    if winning_commit_ref == add_proposal_ref
+        || !lineage["winning_commit_proposal_refs"]
+            .as_array()
+            .context("since_join lineage omits winning_commit_proposal_refs")?
+            .iter()
+            .any(|value| value.as_str() == Some(add_proposal_ref))
+    {
+        bail!("since_join lineage winning Commit does not consume the exact Add proposal");
+    }
+    for forbidden in lineage["forbidden_derivations"]
+        .as_array()
+        .context("since_join lineage omits forbidden_derivations")?
+    {
+        let forbidden = forbidden
+            .as_str()
+            .context("since_join forbidden derivation is not text")?;
+        if !matches!(
+            forbidden,
+            "joined_at" | "received_at" | "latest_epoch" | "current_session_device"
+        ) {
+            bail!("since_join lineage declares an unknown forbidden derivation {forbidden}");
         }
     }
-    let base = base.iter().map(String::as_str).collect::<BTreeSet<_>>();
-    let current = current.iter().map(String::as_str).collect::<BTreeSet<_>>();
-    let mut visited = BTreeSet::new();
-    let mut consumed_base = BTreeSet::new();
-    let mut stack = target.iter().map(String::as_str).collect::<Vec<_>>();
-    while let Some(seal_ref) = stack.pop() {
-        if !visited.insert(seal_ref) {
-            continue;
-        }
-        let Some(seal) = by_ref.get(seal_ref) else {
-            errors.insert("dependency_missing");
-            continue;
-        };
-        if base.contains(seal_ref) {
-            consumed_base.insert(seal_ref);
-            continue;
-        }
-        if seal.predecessor_refs.is_empty() {
-            errors.insert("interval_stops_before_base");
-        }
-        stack.extend(seal.predecessor_refs.iter().map(String::as_str));
-    }
-    if !current.is_subset(&visited) {
-        errors.insert("trusted_current_not_dominated");
-    }
-    if consumed_base != base {
-        errors.insert("base_leaf_not_consumed");
-    }
-    let described = by_ref.keys().copied().collect::<BTreeSet<_>>();
-    if described != visited {
-        errors.insert("surplus_descriptor");
-    }
-    errors
+    Ok(())
 }
 
 #[cfg(test)]
