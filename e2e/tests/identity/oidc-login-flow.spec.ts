@@ -391,13 +391,17 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
             }
           }
           // The per-account blob lives in the encrypted IndexedDB store on
-          // wasm; the localStorage root index keeps the durable known-DID
+          // wasm; the localStorage root index keeps the durable typed authority
           // marker for the bound account.
           const rootIndex = JSON.parse(
             localStorage.getItem("inkson.local_state.v1") ?? "{}",
-          ) as { known_dids?: string[] };
-          const boundAccountKnown = (rootIndex.known_dids ?? []).includes(
-            expectedDid,
+          ) as {
+            known_profiles?: Array<{
+              authority?: { principal_id?: string };
+            }>;
+          };
+          const boundAccountKnown = (rootIndex.known_profiles ?? []).some(
+            (profile) => profile.authority?.principal_id === expectedDid,
           );
           return { pendingKeys, boundAccountKnown };
         }, account.did);
@@ -407,7 +411,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         ).toEqual([]);
         expect(
           state.boundAccountKnown,
-          "the bound account's known-DID marker must survive the forged error",
+          "the bound account's typed authority marker must survive the forged error",
         ).toBe(true);
       });
     } finally {
