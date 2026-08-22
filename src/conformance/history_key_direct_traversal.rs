@@ -835,7 +835,7 @@ fn verify_scope_and_endpoint_kats(fixture: &Value) -> Result<()> {
                 preimage.push(0);
                 preimage.extend_from_slice(operation.as_bytes());
                 preimage.extend_from_slice(&epoch.to_be_bytes());
-                if hex::encode(arkret_canonical::sha256_digest(preimage))
+                if arkret_canonical::sha256_hex(preimage)
                     != tag["sha256_hex"].as_str().unwrap_or_default()
                 {
                     bail!("standard fresh endpoint transition tag drifted at epoch {epoch}");

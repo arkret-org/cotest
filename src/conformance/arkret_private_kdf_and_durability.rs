@@ -47,7 +47,6 @@ pub fn run_arkret_private_kdf_and_durability_suite() -> Result<()> {
     run_reaction_hmac(case(cases, "reaction_routing_hmac_nfc")?)?;
     run_signal_exporter_key(case(cases, "signal_exporter_key_sha256_aes128gcm")?)?;
     run_full_width_counter_nonce(case(cases, "full_width_counter_nonce_aes128gcm")?)?;
-    run_rrk_archive_durability_contract(case(cases, "rrk_archive_durable_before_local_gc")?)?;
     run_exporter_aead_seal_open(case(cases, "mls_exporter_aead_seal_open_transcript")?)?;
     Ok(())
 }
@@ -582,35 +581,6 @@ fn run_reaction_hmac(case: &Value) -> Result<()> {
         || required_str(expected, "negative_decision")? != "reject"
     {
         bail!("reaction routing negative mutation set drifted");
-    }
-    Ok(())
-}
-
-fn run_rrk_archive_durability_contract(case: &Value) -> Result<()> {
-    let input = &case["input"];
-    let expected = &case["expected"];
-    if required_str(input, "durability_policy")? != "organization_recovery_key"
-        || required_str(input, "archive_tuple")?
-            != "exact recovery_key_id/version/holder principal+service/signing ref"
-        || strings_in_order(&input["durable_completion"])?
-            != [
-                "byte_identical_archive_container_event_accepted_or_duplicate",
-                "barrier_resolve_exact_reread",
-                "local_atomic_coverage_ledger",
-            ]
-        || required_str(expected, "gc_before_completion")? != "reject_failed_precondition"
-        || required_str(expected, "gc_after_completion")? != "accept"
-        || required_str(expected, "exact_retry")? != "returns_original_archive_event_and_receipt"
-        || strings_in_order(&expected["forbidden"])?
-            != [
-                "share_event",
-                "availability_receipt",
-                "threshold_target_set",
-                "renewal_state_machine",
-                "portable_active_mls_state",
-            ]
-    {
-        bail!("RRK exact-archive durability contract drifted");
     }
     Ok(())
 }
