@@ -22,13 +22,14 @@ use arkret_identifiers::{
     project_full_id_to_core_id,
 };
 use arkret_models_crypto::{
-    BackupKind, KeyBackup, KeyBackupAead, KeyBackupAeadName, KeyBackupContentItem,
-    KeyBackupDomainSeparation, KeyBackupDomainSeparationAad, KeyBackupEncryption,
-    KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
-    KeyBackupUnlockProof, KeysBackupsUnlockRequestBody, ProofKind, UnsignedKeyBackup,
-    UnsignedKeyBackupAuthData, UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
+    BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,
+    KeyBackupAeadName, KeyBackupContentItem, KeyBackupDomainSeparation,
+    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
+    KeyBackupRetention, KeyBackupSignatureAlgorithm, KeyBackupUnlockProof,
+    KeysBackupsUnlockRequestBody, ProofKind, UnsignedKeyBackup, UnsignedKeyBackupAuthData,
+    UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
 };
-use arkret_wire::{Base64UrlString, DidUrl, RealmId, ScopeRef};
+use arkret_wire::{Base64UrlString, DidUrl, EpochRange, HistoryEffectiveScope, RealmId, ScopeRef};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
@@ -93,7 +94,7 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
     let effective_scope = ScopeRef::Realm {
         realm_id: RealmId::new("ak:realm:Aa1JCF6pnQnSgl8DnT6vNtPcFGPCxLnEY130o2lmyDSh".to_owned())?,
     };
-    let mls_group_id = effective_scope.canonical_mls_group_id()?;
+    let history_scope = HistoryEffectiveScope::try_from(effective_scope)?;
     let envelope = KeyBackup {
         backup_id: backup_id(BACKUP_ID)?,
         actor_id: did(actor_id)?,
@@ -130,40 +131,24 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
                 backup_kind: BackupKind::MlsHistory,
                 backup_version: "kb_1".to_owned(),
                 created_at,
-                item_kinds: vec!["history_secret_segment".to_owned()],
-                managed_principal_bindings: Vec::new(),
+                item_kinds: vec!["history_secret_ranges".to_owned()],
                 recipient_method: Some(KeyBackupRecipientMethod::SecretStorageKey),
                 recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
                 extra: Default::default(),
             },
             extra: Default::default(),
         },
-        contents: vec![KeyBackupContentItem {
-            item_kind: "history_secret_segment".to_owned(),
-            realm_id: None,
-            managed_principal_binding: None,
-            mls_group_id: Some(mls_group_id),
-            effective_scope: Some(effective_scope),
-            from_epoch: Some(0),
-            to_epoch: Some(0),
-            group_state_ref: Some(EventId::new(
-                "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM".to_owned(),
-            )?),
-            policy_digest: Some(Hash::new(
-                "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-                    .to_owned(),
-            )?),
-            membership_frontier_digest: Some(Hash::new(
-                "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-                    .to_owned(),
-            )?),
-            epoch: None,
-            first_event_id: None,
-            last_event_id: None,
-            secret_id: None,
-            secret_version: None,
-            extra: Default::default(),
-        }],
+        contents: vec![KeyBackupContentItem::HistorySecretRanges(
+            HistorySecretRangeIndex {
+                item_kind: HistorySecretRangesItemKind::Value,
+                effective_scope: history_scope,
+                ranges: vec![EpochRange {
+                    from_epoch: 0,
+                    to_epoch: 0,
+                }],
+                extra: Default::default(),
+            },
+        )],
         ciphertext: "Y2lwaGVydGV4dA".to_owned(),
         ciphertext_digest: CIPHERTEXT_DIGEST.to_owned(),
         plaintext_commitment: None,

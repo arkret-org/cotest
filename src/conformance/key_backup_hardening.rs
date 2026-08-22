@@ -1,7 +1,7 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_crypto::{BackupKind, KeyBackupPlaintext, KeyBackupUnlockProof};
+use arkret_models_crypto::{BackupKind, KeyBackupKeybag, KeyBackupPlaintext, KeyBackupUnlockProof};
 use arkret_wire::ProfileId;
 use serde_json::Value;
 
@@ -359,18 +359,23 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
     let plaintext: KeyBackupPlaintext = serde_json::from_value(plaintext_value)?;
     if expected_bool(vector, "plaintext_metadata_matches_envelope")?
         && (plaintext.backup_id.as_str() != envelope.backup_id
-            || backup_class_str(plaintext.backup_kind) != envelope.backup_kind
+            || backup_class_str(plaintext.keybag.backup_kind()) != envelope.backup_kind
             || plaintext.series_id.as_str() != envelope.series_id
             || plaintext.series_seq != envelope.series_seq)
     {
         bail!("key backup plaintext metadata does not match the envelope");
     }
-    if plaintext
-        .items
-        .iter()
-        .any(|item| item.secret_b64u.trim().is_empty())
-    {
-        bail!("plaintext keybag item carried an empty secret");
+    match &plaintext.keybag {
+        KeyBackupKeybag::SecretStorage { items } => {
+            if items.iter().any(|item| item.secret_b64u.trim().is_empty()) {
+                bail!("plaintext keybag item carried an empty secret");
+            }
+        }
+        KeyBackupKeybag::MlsHistory { items, .. } => {
+            if items.iter().any(|item| item.secrets_b64u.trim().is_empty()) {
+                bail!("plaintext keybag item carried an empty secret");
+            }
+        }
     }
     Ok(())
 }
