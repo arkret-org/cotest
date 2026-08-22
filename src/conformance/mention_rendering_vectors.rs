@@ -15,7 +15,10 @@
 //! `Verified → Cached → NameOnly → Unresolved`.
 
 use anyhow::{Result, anyhow, bail};
-use arkret::identity::{MentionRender, PrimaryHandleSelectInput, render_mention};
+use arkret::identity::{
+    HandleIssuerAuthorityClass, HandleIssuerPolicyEntry, MentionRender, PrimaryHandleSelectInput,
+    render_mention,
+};
 use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::events_payloads::mention::Mention;
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
@@ -65,6 +68,14 @@ fn now_anchor() -> DateTime<Utc> {
     at(2026, 5, 27)
 }
 
+fn issuer_policy() -> HandleIssuerPolicyEntry {
+    HandleIssuerPolicyEntry {
+        issuer: issuer_string(),
+        authorized_handle_domains: vec!["acme.example".to_owned(), "other.example".to_owned()],
+        issuer_class: HandleIssuerAuthorityClass::DomainAuthority,
+    }
+}
+
 fn verified_claim(
     handle: &str,
     subject: &DidCoreId,
@@ -101,7 +112,7 @@ fn empty_selection<'a>(
         subject_id: subject.as_str(),
         context: None,
         claim_set_snapshot: snapshot,
-        accepted_issuers: &[],
+        handle_issuer_policy: &[],
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     }
@@ -144,9 +155,9 @@ pub fn run_new_shape_accepted_vector() -> Result<()> {
 pub fn run_render_step1_unique_success_vector() -> Result<()> {
     let s = subject()?;
     let snapshot = vec![verified_claim("alice:acme.example", &s, None)?];
-    let accepted = vec![issuer_string()];
+    let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
-        accepted_issuers: &accepted,
+        handle_issuer_policy: &accepted,
         ..empty_selection(&s, &snapshot)
     };
     let render = render_mention(&s, &selection, None, Some("Alice Zhang"));
@@ -169,12 +180,12 @@ pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
         verified_claim("alice:other.example", &s, None)?,
         verified_claim("alice:acme.example", &s, Some(realm_ctx))?,
     ];
-    let accepted = vec![issuer_string()];
+    let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
         subject_id: s.as_str(),
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted,
+        handle_issuer_policy: &accepted,
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -252,9 +263,9 @@ pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()
     // Render: the authoritative selection over Alice's real claim MUST win
     // regardless of the misleading handle_at_time.
     let snapshot = vec![verified_claim("alice:acme.example", &s, None)?];
-    let accepted = vec![issuer_string()];
+    let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
-        accepted_issuers: &accepted,
+        handle_issuer_policy: &accepted,
         ..empty_selection(&s, &snapshot)
     };
     let render = render_mention(&mention.subject_id, &selection, None, None);

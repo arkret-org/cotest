@@ -15,7 +15,10 @@
 //! (materialised from the subject DID Document `metadata.primary_handle`).
 
 use anyhow::{Result, anyhow, bail};
-use arkret::identity::{PrimaryHandleSelectInput, claim_digest, select_primary_handle};
+use arkret::identity::{
+    HandleIssuerAuthorityClass, HandleIssuerPolicyEntry, PrimaryHandleSelectInput, claim_digest,
+    select_primary_handle,
+};
 use arkret_identifiers::{DidCoreId, Hash};
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
 use arkret_wire::PayloadProof;
@@ -112,10 +115,18 @@ fn claim(
     })
 }
 
-fn accepted(issuers: &[&str]) -> Vec<DidCoreId> {
+fn accepted(issuers: &[&str]) -> Vec<HandleIssuerPolicyEntry> {
     issuers
         .iter()
-        .map(|issuer| DidCoreId::new(*issuer).expect("fixture issuer is a valid core id"))
+        .map(|issuer| HandleIssuerPolicyEntry {
+            issuer: DidCoreId::new(*issuer).expect("fixture issuer is a valid core id"),
+            authorized_handle_domains: vec![if issuer.contains("other") {
+                "other.example".to_owned()
+            } else {
+                "acme.example".to_owned()
+            }],
+            issuer_class: HandleIssuerAuthorityClass::DomainAuthority,
+        })
         .collect()
 }
 
@@ -135,7 +146,7 @@ pub fn run_empty_candidate_fallback_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &[],
-        accepted_issuers: &accepted(&[ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -160,7 +171,7 @@ pub fn run_single_candidate_passthrough_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -198,7 +209,7 @@ pub fn run_audience_match_wins_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
         // holder flags the newer handle, yet audience-match MUST still win.
         holder_primary_handle_at_as_of: Some("alice:other.example"),
         resolution_as_of: now_anchor(),
@@ -236,7 +247,7 @@ pub fn run_holder_flag_wins_over_most_recent_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
         holder_primary_handle_at_as_of: Some("alice:acme.example"),
         resolution_as_of: now_anchor(),
     };
@@ -274,7 +285,7 @@ pub fn run_most_recent_wins_when_neither_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -301,7 +312,7 @@ pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -313,7 +324,7 @@ pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
     // Reverse the policy order → OTHER now wins, proving the position
     // drives the tie-break deterministically.
     let reversed = PrimaryHandleSelectInput {
-        accepted_issuers: &accepted(&[OTHER_ISSUER, ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[OTHER_ISSUER, ACME_ISSUER]),
         ..input
     };
     let chosen_rev = select_primary_handle(&reversed)
@@ -349,7 +360,7 @@ pub fn run_tie_break_by_created_at_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -386,7 +397,7 @@ pub fn run_tie_break_by_claim_digest_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -428,7 +439,7 @@ pub fn run_holder_primary_null_skips_layer_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -471,7 +482,7 @@ pub fn run_as_of_replay_vs_realtime_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted(&[ACME_ISSUER]),
+        handle_issuer_policy: &accepted(&[ACME_ISSUER]),
         holder_primary_handle_at_as_of: None,
         resolution_as_of: at(2026, 5, 10),
     };
@@ -569,7 +580,7 @@ pub fn run_policy_snapshot_as_of_replay_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: None,
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &policy_v1,
+        handle_issuer_policy: &policy_v1,
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -582,7 +593,7 @@ pub fn run_policy_snapshot_as_of_replay_vector() -> Result<()> {
     // Current policy (version 2) trusts both, ACME first → ACME wins.
     let policy_v2 = accepted(&[ACME_ISSUER, OTHER_ISSUER]);
     let realtime_v2 = PrimaryHandleSelectInput {
-        accepted_issuers: &policy_v2,
+        handle_issuer_policy: &policy_v2,
         ..replay_v1
     };
     let chosen_v2 = select_primary_handle(&realtime_v2)
