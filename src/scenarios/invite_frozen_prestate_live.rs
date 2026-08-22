@@ -95,7 +95,7 @@ async fn observe(
         .unwrap_or_default();
     Ok(RealmObservation {
         event_ids,
-        seal_id: seal_frontier.seal_id.to_string(),
+        seal_id: seal_frontier.sole_leaf()?.to_string(),
         invite_states,
     })
 }
@@ -173,7 +173,7 @@ async fn submit_invite_move(
             "Realm selector returned the wrong frontier variant"
         ));
     };
-    let before_seal_id = before.seal_id.to_string();
+    let before_seal_id = before.sole_leaf()?.to_string();
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
     let event_id = event.event_id.clone();
     let response = actor
@@ -208,7 +208,7 @@ async fn submit_invite_move(
                             "Realm selector returned the wrong frontier variant"
                         ));
                     };
-                    if frontier.seal_id.to_string() == before_seal_id {
+                    if frontier.sole_leaf()?.to_string() == before_seal_id {
                         Err(anyhow!(
                             "Realm Seal frontier has not advanced from {before_seal_id}"
                         ))

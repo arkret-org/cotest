@@ -98,7 +98,7 @@ async fn accepted_seal_id(client: &TestActorClient, realm_id: &str) -> Result<St
             "Realm selector returned the wrong frontier variant"
         ));
     };
-    Ok(frontier.seal_id.to_string())
+    Ok(frontier.sole_leaf()?.to_string())
 }
 
 async fn get_policy_server(

@@ -772,7 +772,7 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
             let physical_millis = chrono::Utc::now().timestamp_millis();
             event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
         } else {
-            event.seal_ref = Some(frontier.seal_id);
+            event.seal_ref = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(AuthContext {
                 actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                     actor.to_owned(),

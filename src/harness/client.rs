@@ -380,8 +380,9 @@ impl TestActorClient {
                         .pending_proposals
                         .iter()
                         .any(|pending| pending.proposal_digest.as_str() == proposal_digest);
-                    if !pending && frontier.seal_id.as_str() != previous_seal_id {
-                        return Ok(frontier.seal_id.to_string());
+                    let leaf = frontier.sole_leaf()?.clone();
+                    if !pending && leaf.as_str() != previous_seal_id {
+                        return Ok(leaf.to_string());
                     }
                 }
             }
@@ -396,7 +397,7 @@ impl TestActorClient {
 
     async fn realm_seal_id(&self, realm_id: &str) -> Result<String> {
         let frontier = self.realm_seal_frontier(realm_id).await?;
-        frontier["frontier"]["seal_id"]
+        frontier["frontier"]["seal_basis"]["leaves"][0]
             .as_str()
             .map(ToOwned::to_owned)
             .ok_or_else(|| anyhow!("Realm frontier has no seal_id: {frontier}"))
@@ -850,7 +851,7 @@ impl TestActorClient {
             // A DataEvent anchors its effects with `seal_ref`, not
             // `seal_basis`: carrying a Seal basis is what marks an Event as a
             // Control Move, and a Control Move may not write a data-plane cell.
-            event.seal_ref = Some(frontier.seal_id);
+            event.seal_ref = Some(frontier.sole_leaf()?.clone());
             // Capability coverage is per DataEvent: the reducer checks that a
             // named grant actually covers this action on this target.
             event.auth_context = Some(AuthContext {
@@ -959,7 +960,7 @@ impl TestActorClient {
                 let physical_millis = chrono::Utc::now().timestamp_millis();
                 event.hlc = Some(Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?);
             } else {
-                event.seal_ref = Some(frontier.seal_id);
+                event.seal_ref = Some(frontier.sole_leaf()?.clone());
                 event.auth_context = Some(AuthContext {
                     actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
                         self.actor.clone(),

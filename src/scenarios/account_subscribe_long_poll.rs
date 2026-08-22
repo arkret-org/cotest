@@ -764,7 +764,7 @@ async fn submit_event_now(
         if is_data_event {
             // A DataEvent anchors on `seal_ref`; carrying `seal_basis` is what
             // marks an Event as a Control Move.
-            event.seal_ref = Some(frontier.seal_id);
+            event.seal_ref = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(arkret_wire::AuthContext {
                 actor_id: arkret_identifiers::DidCoreId::from(
                     arkret_identifiers::project_full_id_to_core_id(
@@ -795,7 +795,7 @@ async fn submit_event_now(
                     .collect();
             }
         } else {
-            previous_control_seal_id = Some(frontier.seal_id.to_string());
+            previous_control_seal_id = Some(frontier.sole_leaf()?.to_string());
             event.seal_basis = Some(frontier.seal_basis());
             let physical_millis = chrono::Utc::now().timestamp_millis();
             event.hlc = Some(arkret_identifiers::Hlc::new(format!(

@@ -371,7 +371,7 @@ async fn submit_and_settle_member_transition(
     payload: serde_json::Value,
 ) -> Result<EventId> {
     let before = client.realm_seal_frontier(realm_id).await?;
-    let before = before["frontier"]["seal_id"]
+    let before = before["frontier"]["seal_basis"]["leaves"][0]
         .as_str()
         .context("member transition predecessor Seal")?;
     let response = client

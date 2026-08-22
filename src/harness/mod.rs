@@ -381,6 +381,7 @@ pub fn realm_create_payload_with_notary(
                 required_endorsers: None,
                 unroutable_membership_allowed: Some(true),
                 rebind_authorization: None,
+                handover_grace_seconds: None,
                 expires_after_seconds: None,
             },
         );

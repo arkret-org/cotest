@@ -116,7 +116,7 @@ struct PrincipalBootstrapSealInput {
 #[derive(Debug, Deserialize)]
 struct PrincipalSuccessorSealInput {
     events: Vec<Value>,
-    predecessor_frontier: Value,
+    predecessor_seal: Value,
     device_signing_seed_b64url: String,
 }
 
@@ -792,9 +792,8 @@ fn principal_successor_seal(input: Value) -> Result<Value> {
     if founding_authorize.actor_id != create.actor_id {
         bail!("founding DeviceAuthorize actor does not match PCR create actor");
     }
-    let predecessor: arkret_models_collaboration::event_sync::RealmSealFrontierView =
-        serde_json::from_value(input.predecessor_frontier)
-            .context("parse principal predecessor Seal frontier")?;
+    let predecessor: arkret_wire::Seal = serde_json::from_value(input.predecessor_seal)
+        .context("parse resolved principal predecessor Seal")?;
     let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
     let (signer_full_id, verification_method) = trusted_actor_signer_material(founding_authorize)?;
     let signer =

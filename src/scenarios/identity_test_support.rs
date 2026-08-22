@@ -551,6 +551,29 @@ pub async fn seal_current_principal_control_frontier(
     else {
         anyhow::bail!("PCR Realm selector returned a non-Seal frontier");
     };
+    // The successor Seal binds the predecessor's own signed roots, so the
+    // frontier's single accepted leaf is resolved instead of trusting the
+    // service view.
+    let leaf = frontier.sole_leaf()?.clone();
+    let resolve: arkret_models_collaboration::http_bodies::SealResolveOutcome =
+        serde_json::from_value(
+            expect_json(
+                client.query("/_arkret/self/seals/resolve").json(
+                    &arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody {
+                        realm_id: realm_id.clone(),
+                        seal_refs: vec![leaf.clone()],
+                        history_traversal_access: None,
+                    },
+                ),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    let predecessor = resolve
+        .seals
+        .into_iter()
+        .find(|seal| seal.id == leaf)
+        .context("accepted PCR Realm Seal frontier leaf did not resolve")?;
     let device_method = crate::fixture_did_url(format!("{}#{}", client.actor, client.device_id));
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         device_signing_key.to_bytes(),
@@ -560,7 +583,7 @@ pub async fn seal_current_principal_control_frontier(
     let physical_millis = chrono::Utc::now().timestamp_millis();
     let seal = build_self_principal_linear_successor_seal(
         &events,
-        &frontier,
+        &predecessor,
         Hlc::new(format!("{physical_millis:012x}-0000-a13f9c2e"))?,
         &signer,
         &crate::publication::project_cells,

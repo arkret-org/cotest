@@ -173,7 +173,7 @@ async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Re
             if root == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
                 return Err(anyhow!("Realm bootstrap Seal is still empty"));
             }
-            frontier["frontier"]["seal_id"]
+            frontier["frontier"]["seal_basis"]["leaves"][0]
                 .as_str()
                 .map(ToOwned::to_owned)
                 .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))
@@ -193,7 +193,7 @@ async fn wait_for_next_seal(
         Duration::from_millis(100),
         || async {
             let frontier = client.realm_seal_frontier(realm_id).await?;
-            let seal_id = frontier["frontier"]["seal_id"]
+            let seal_id = frontier["frontier"]["seal_basis"]["leaves"][0]
                 .as_str()
                 .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))?;
             if seal_id == predecessor {
@@ -242,7 +242,7 @@ async fn wait_for_projected_grant(
 
 async fn current_seal(client: &TestActorClient, realm_id: &str) -> Result<String> {
     let frontier = client.realm_seal_frontier(realm_id).await?;
-    frontier["frontier"]["seal_id"]
+    frontier["frontier"]["seal_basis"]["leaves"][0]
         .as_str()
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))

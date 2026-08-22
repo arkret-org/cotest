@@ -63,12 +63,34 @@ async function sealPrincipalControlEvent(
   );
   const predecessorFrontier = frontierBody.frontier as JsonObject;
   expect(predecessorFrontier?.kind).toBe("realm_seal");
+  const leaves = (predecessorFrontier?.seal_basis as JsonObject | undefined)
+    ?.leaves as string[] | undefined;
+  expect(leaves, "accepted Seal frontier leaves").toHaveLength(1);
+  // The frontier view carries no root hint: the successor Seal binds the
+  // predecessor's own signed roots, so the single leaf is resolved first.
+  const resolveUrl = `${solandBaseUrl()}/_arkret/self/seals/resolve`;
+  const resolveResponse = await request.fetch(resolveUrl, {
+    method: "QUERY",
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "QUERY", resolveUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ realm_id: realmId, seal_refs: [leaves![0]] }),
+  });
+  const resolveBody = await expectJsonOk<JsonObject>(
+    resolveResponse,
+    "resolve principal predecessor Seal",
+  );
+  const predecessorSeal = (resolveBody.seals as JsonObject[]).find(
+    (candidate) => candidate.id === leaves![0],
+  );
+  expect(predecessorSeal, "resolved principal predecessor Seal").toBeTruthy();
   const events = [...session.principalControlEvents, event];
   const seal = cotestWire<JsonObject>(
     "principal-successor-seal",
     {
       events,
-      predecessor_frontier: predecessorFrontier,
+      predecessor_seal: predecessorSeal,
       device_signing_seed_b64url: session.eventSigningSeedB64url,
     },
   );

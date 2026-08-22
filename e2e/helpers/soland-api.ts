@@ -321,13 +321,25 @@ export async function submitPrincipalSuccessorSealApi(
     },
     data: canonicalJson({ realm_id: realmId }),
   });
-  const frontier = await expectJsonOk<{ frontier: Record<string, unknown> }>(
-    frontierResponse,
-    `read principal Seal frontier for ${actorId}`,
+  const frontier = await expectJsonOk<{
+    frontier: { seal_basis?: { leaves?: unknown } };
+  }>(frontierResponse, `read principal Seal frontier for ${actorId}`);
+  const leaves = frontier.frontier?.seal_basis?.leaves;
+  if (!Array.isArray(leaves) || leaves.length !== 1 || typeof leaves[0] !== "string") {
+    throw new Error(
+      `principal Seal frontier for ${actorId} is not a single accepted leaf`,
+    );
+  }
+  const predecessorSeal = await readAcceptedSeal(
+    request,
+    token,
+    realmId,
+    leaves[0],
+    opts.server,
   );
   const seal = cotestWire<Record<string, unknown>>("principal-successor-seal", {
     events: [...events, event],
-    predecessor_frontier: frontier.frontier,
+    predecessor_seal: predecessorSeal,
     device_signing_seed_b64url: signer.signingSeedB64url,
   });
   const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events/seals`;
@@ -3109,22 +3121,87 @@ export async function readRealmSealBasis(
   return { leaves: [frontier.seal_id] };
 }
 
-// Local projection of the frontier the running Principal Server answers with:
-// the callers only need the Seal head plus a flat digest list.
+// Local projection of the registered `RealmSealFrontierView`: the single
+// accepted leaf of a `single_signer` test Realm, plus the roots the caller
+// recomputes from that resolved leaf Seal, plus a flat pending-digest list.
 //
-// DRIFT, tracked by `arkret-work` task 2026-08-20-1901: the spec view
-// (`service-operation-dtos.schema.json#/$defs/RealmSealFrontierView`) is now
-// `seal_basis.leaves[]` plus `observation_coordinate`, while the SDK type
-// (`arkret-models-collaboration::event_sync::RealmSealFrontierView`) and the
-// soland endpoint still answer `seal_id` + the two roots + `hlc`. The Seal head
-// members below therefore cannot be typed off the generated view yet; restore
-// that binding as soon as the SDK/soland frontier is rebuilt.
+// The view itself carries no root hint — `event-auth-state-resolution.md`
+// requires the consumer to resolve and verify every leaf Seal — so the two
+// roots below come from `ak.self.seals.read.resolve`, never from the frontier
+// response.
 type RealmSealFrontier = {
   seal_id: string;
   control_event_set_root: string;
   state_root: string;
   pending_proposal_digests: string[];
 };
+
+export async function readAcceptedSeal(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  sealId: string,
+  server?: SolandKey,
+): Promise<Record<string, unknown>> {
+  const resolveUrl = `${solandBaseUrl(server)}/_arkret/self/seals/resolve`;
+  const response = await request.fetch(resolveUrl, {
+    method: "QUERY",
+    data: canonicalJson({ realm_id: realmId, seal_refs: [sealId] }),
+    headers: {
+      ...authHeaders(token, "QUERY", resolveUrl),
+      "content-type": "application/json",
+    },
+  });
+  const body = await expectJsonOk<{
+    seals?: Array<Record<string, unknown>>;
+  }>(response, `resolve accepted Seal ${sealId}`);
+  const seal = (body.seals ?? []).find((candidate) => candidate.id === sealId);
+  if (!seal) {
+    throw new Error(
+      `accepted Seal ${sealId} did not resolve: ${JSON.stringify(body)}`,
+    );
+  }
+  return seal;
+}
+
+async function resolveAcceptedSeal(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  sealId: string,
+  server?: SolandKey,
+): Promise<{ control_event_set_root: string; state_root: string }> {
+  const resolveUrl = `${solandBaseUrl(server)}/_arkret/self/seals/resolve`;
+  const response = await request.fetch(resolveUrl, {
+    method: "QUERY",
+    data: canonicalJson({ realm_id: realmId, seal_refs: [sealId] }),
+    headers: {
+      ...authHeaders(token, "QUERY", resolveUrl),
+      "content-type": "application/json",
+    },
+  });
+  const body = await expectJsonOk<{
+    seals?: Array<{
+      id?: unknown;
+      control_event_set_root?: unknown;
+      state_root?: unknown;
+    }>;
+  }>(response, `resolve accepted Seal ${sealId}`);
+  const seal = (body.seals ?? []).find((candidate) => candidate.id === sealId);
+  if (
+    !seal ||
+    typeof seal.control_event_set_root !== "string" ||
+    typeof seal.state_root !== "string"
+  ) {
+    throw new Error(
+      `accepted Seal ${sealId} did not resolve: ${JSON.stringify(body)}`,
+    );
+  }
+  return {
+    control_event_set_root: seal.control_event_set_root,
+    state_root: seal.state_root,
+  };
+}
 
 async function readRealmSealFrontier(
   request: APIRequestContext,
@@ -3147,27 +3224,34 @@ async function readRealmSealFrontier(
   const body = await expectJsonOk<{
     frontier?: {
       kind?: string;
-      seal_id?: unknown;
-      control_event_set_root?: unknown;
-      state_root?: unknown;
+      seal_basis?: { leaves?: unknown };
       governance_health?: Partial<RealmSealFrontierView["governance_health"]>;
     };
   }>(response, `read Realm Seal frontier for ${realmId}`);
   const frontier = body.frontier;
+  const leaves = frontier?.seal_basis?.leaves;
   if (
     frontier?.kind !== "realm_seal" ||
-    typeof frontier.seal_id !== "string" ||
-    typeof frontier.control_event_set_root !== "string" ||
-    typeof frontier.state_root !== "string"
+    !Array.isArray(leaves) ||
+    leaves.length !== 1 ||
+    typeof leaves[0] !== "string"
   ) {
     throw new Error(
       `Realm Seal frontier for ${realmId} has an invalid shape: ${JSON.stringify(body)}`,
     );
   }
+  const sealId = leaves[0];
+  const roots = await resolveAcceptedSeal(
+    request,
+    token,
+    realmId,
+    sealId,
+    server,
+  );
   return {
-    seal_id: frontier.seal_id,
-    control_event_set_root: frontier.control_event_set_root,
-    state_root: frontier.state_root,
+    seal_id: sealId,
+    control_event_set_root: roots.control_event_set_root,
+    state_root: roots.state_root,
     pending_proposal_digests: (
       frontier.governance_health?.pending_proposals ?? []
     ).flatMap((proposal) =>

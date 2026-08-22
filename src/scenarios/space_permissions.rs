@@ -235,7 +235,7 @@ async fn current_seal_id(
     client: &crate::harness::TestActorClient,
     realm_id: &str,
 ) -> Result<String> {
-    client.realm_seal_frontier(realm_id).await?["frontier"]["seal_id"]
+    client.realm_seal_frontier(realm_id).await?["frontier"]["seal_basis"]["leaves"][0]
         .as_str()
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow!("Realm frontier omitted seal_id"))
