@@ -10,7 +10,7 @@
 4. **Relation 基数** — 在已注册了 `max_to_per_from=1` 等基数约束的 `relation_kind`（典型：`has_default_view`、单负责人 `assigned_to`）上写入第二条同源 active edge 时，reducer MUST 关闭旧 edge 或返回 `failed_precondition`；同 `(realm_id, relation_kind, from_ref, to_ref)` 重复写入 MUST 幂等去重。
 5. **View projection fallback** — 请求一个 Space / Board 未显式声明的 View 时，server MUST 按 `views.md` §6 的派生规则返回**默认 view projection**（`kind="collection" + renderer="board"` 等响应族默认），而不是 404 — 让一个全新的 Space 在没有 user-defined View 时也能渲染。
 
-不验证：encoding canonical JSON / digest（见 `conformance/encoding-vectors`）、registry drift（见 `conformance/registry-drift`）、realm link 图与 inherited policy（见 `models/realm-links`）、actor-private read marker propagation（见 `models/private-read-cursor`）、morph schema migration（见 `models/morph-schema-migration`，G1.T7 owner）、消息/聊天交互流（见 `messaging/*`）。
+不验证：encoding canonical JSON / digest（见 `conformance/encoding-vectors`）、registry drift（见 `conformance/registry-drift`）、realm link 图与 inherited policy（见 `models/realm-links`）、actor-private read marker propagation（见 `models/private-read-cursor`）、消息/聊天交互流（见 `messaging/*`）。
 
 ## Spec 锚点
 

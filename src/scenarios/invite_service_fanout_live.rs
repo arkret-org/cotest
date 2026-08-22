@@ -31,7 +31,9 @@ use arkret_models_collaboration::sync_frames::account_sync::{
 };
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
-use arkret_wire::{AccountDataKey, Event, EventInitialSubmission, InviteReceiveAction};
+use arkret_wire::{
+    AccountDataKey, ConsentScope, Event, EventInitialSubmission, InviteReceiveAction,
+};
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -300,7 +302,7 @@ async fn grant_then_revoke_invite_consent(
     let grant_payload = ConsentGrantPayload {
         consent_id: consent_id.clone(),
         peer: peer_core_id,
-        consent_scope: "invite".to_owned(),
+        consent_scope: ConsentScope::Invite,
         not_before: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
         constraints: None,

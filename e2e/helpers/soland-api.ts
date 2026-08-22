@@ -42,10 +42,7 @@ export type SignedEventEnvelopeArgs = {
   hlc?: string;
   eventId?: string;
   schemaId?: string;
-  /// Override the full `requirements.schema[]` binding. morph.md §4.1 S1/S2
-  /// requires schema-evolving events (ak.morph.schema_migrate /
-  /// schema_refs-changing ak.morph.update) to bind the active Morph schema set
-  /// (the union of from/to schema_refs) here, not just the payload schema id.
+  /// Override the full `requirements.schema[]` binding.
   requirementsSchema?: string[];
   requirementsCriticalExtensions?: Array<Record<string, unknown>>;
   proofVerificationMethod?: string;

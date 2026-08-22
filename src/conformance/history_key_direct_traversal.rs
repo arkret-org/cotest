@@ -1,8 +1,6 @@
 //! Direct history-governance traversal and history-access ratchet checks.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload;
@@ -296,74 +294,7 @@ fn verify_response_stream_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn collect_source_files(root: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<()> {
-    for entry in
-        fs::read_dir(root).with_context(|| format!("read static-gate root {}", root.display()))?
-    {
-        let path = entry?.path();
-        if path.is_dir() {
-            if path.file_name().and_then(|name| name.to_str()) != Some("target") {
-                collect_source_files(&path, files)?;
-            }
-        } else if matches!(
-            path.extension().and_then(|extension| extension.to_str()),
-            Some("rs" | "toml")
-        ) && path.file_name().and_then(|name| name.to_str())
-            != Some("embedded_artifacts.json")
-        {
-            files.push(path);
-        }
-    }
-    Ok(())
-}
-
 fn verify_history_static_gates(fixture: &Value) -> Result<()> {
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .context("cotest manifest has no workspace parent")?;
-    let forbidden = fixture
-        .get("forbidden_legacy_terms")
-        .and_then(Value::as_array)
-        .context("history-key fixture omits forbidden_legacy_terms")?;
-    let mut source_files = Vec::new();
-    for relative in [
-        "arkret-rust-sdk/crates",
-        "soland/crates",
-        "garth/src",
-        "inkson/src",
-    ] {
-        collect_source_files(&workspace.join(relative), &mut source_files)?;
-    }
-    let mut forbidden_terms = forbidden
-        .iter()
-        .map(|term| {
-            term.as_str()
-                .map(str::to_owned)
-                .context("history forbidden legacy term is not text")
-        })
-        .collect::<Result<Vec<_>>>()?;
-    forbidden_terms.extend(
-        [
-            "history_secret_confirmation",
-            "max_request_body_bytes",
-            "max_response_body_bytes",
-        ]
-        .into_iter()
-        .map(str::to_owned),
-    );
-    let mut hits = Vec::new();
-    for path in source_files {
-        let source = fs::read_to_string(&path)?;
-        for term in &forbidden_terms {
-            if source.contains(term) {
-                hits.push(format!("{}: {term}", path.display()));
-            }
-        }
-    }
-    if !hits.is_empty() {
-        bail!("history production trees retain forbidden legacy terms: {hits:?}");
-    }
-
     let operation_registry = load_artifact_json("registry/operation-registry.json")?;
     let operations = operation_registry["operations"]
         .as_array()

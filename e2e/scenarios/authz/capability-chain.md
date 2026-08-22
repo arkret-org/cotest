@@ -77,7 +77,7 @@ operation）；仅存的同步读面是注册端点 `POST /_arkret/self/authz/ch
 
 - 事件面 helper:`grantCapabilityEventApi` / `buildCapabilityGrantEnvelope`(负例 raw 提交)/ `revokeCapabilityApi`(`e2e/helpers/soland-api.ts`)
 - soland 的 child grant 校验在 reducer（`apply_capability.rs`）：issuer 必须是 referenced grant 的 subject、realm 一致、actions/resources 不超过 issuer authority union、expiry 不得晚于对应 authority、ancestor 被 revoke → `grant_revoked_upstream`
-- 高层写事件引用授权走信封 `refs[role="authorized_by"]` 直接指向不可变 grant（`ak:grant:` id），不得使用承载 Event id alias；既有用法见 `models/morph-schema-migration.spec.ts`
+- 高层写事件引用授权走信封 `refs[role="authorized_by"]` 直接指向不可变 grant（`ak:grant:` id），不得使用承载 Event id alias。
 
 ## 总耗时预估
 

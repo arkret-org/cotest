@@ -95,7 +95,6 @@ fn validate_directory(
         payload_digest: proof.payload_digest.clone(),
         created_at: proof.created_at,
         jws: proof.jws.clone(),
-        extra: BTreeMap::new(),
     };
     verify_ed25519_payload_signature(&bytes, &signature, verifying_key)?;
     Ok(())

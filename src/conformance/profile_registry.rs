@@ -87,11 +87,7 @@ const NEW_VECTOR_PROFILES: &[&str] = &[
 const NEW_IMPLEMENTATION_PROFILES: &[&str] = &[
     "ak.profile.e2ee_relaxed.v1",
     "ak.profile.directory_service.v1",
-    // Round C45 (2026-05-18 main; spec 5ed365c) — federation high-assurance
-    // peer profile and morph.schema_migrate transformation profile. Both
-    // default to `unsupported` here pending fixture vectors.
     "ak.profile.federation.high_assurance.v1",
-    "ak.profile.morph.schema_migration_transformations.v1",
 ];
 
 /// Wired cotest suites. Each entry is `(suite_id, fixture_file)`. The fixture

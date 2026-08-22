@@ -1102,7 +1102,7 @@ mod tests {
         );
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
-            "kind": "ak.morph.schema_migrate",
+            "kind": "ak.morph.update",
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
@@ -1117,10 +1117,8 @@ mod tests {
             }],
             "requirements": {"schema": ["ak.schema.event_payload.v1"]},
             "payload": {
-                "morph_id": "ak:morph:Aa8s5OtJTr4DL7dYQbiLrzNhuis8EyjprcGjTo_qPZDF",
-                "from_schema_refs": ["ak.schema.morph.customer_risk.v1"],
-                "to_schema_refs": ["ak.schema.morph.customer_risk.ext.v1"],
-                "compatibility_class": "transformation"
+                "target_ref": "ak:morph:Aa8s5OtJTr4DL7dYQbiLrzNhuis8EyjprcGjTo_qPZDF",
+                "patch": [{"op": "replace", "path": "fields.status", "value": "review"}]
             }
         });
         let raw_digest = canonical::canonical_sha256(&event).unwrap();

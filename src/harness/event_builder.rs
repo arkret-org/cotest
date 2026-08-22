@@ -992,7 +992,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     actor: &str,
     realm_id: &str,
     kind: &str,
-    mut payload: Value,
+    payload: Value,
     actor_seq: Option<u64>,
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
@@ -1005,7 +1005,6 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     let actor_seq = actor_seq.unwrap_or(unique_seq);
     let hlc_logical = unique_seq & 0xffff;
     let suffix = format!("01999999-0000-7000-8000-{unique_seq:012x}");
-    normalize_message_payload(kind, &mut payload);
     // A static timestamp cannot stay behind a causal predecessor: the Realm
     // bootstrap the SDK submits is stamped with the real clock, so any harness
     // Event pinned to a fixed past date lands before the Event it names in
@@ -1133,32 +1132,6 @@ pub(crate) fn event_envelope_with_chain_for_device(
     )
 }
 
-fn normalize_message_payload(kind: &str, payload: &mut Value) {
-    let Some(object) = payload.as_object_mut() else {
-        return;
-    };
-
-    match kind {
-        "ak.message.create" => {
-            object
-                .entry("track_name".to_owned())
-                .or_insert_with(|| Value::String("discussion".to_owned()));
-            object.remove("thread_id");
-            normalize_message_content(object);
-        }
-        // Both Message-scoped payload classes register exactly one target
-        // carrier, `message_id`; normalize any create-Event spelling to it.
-        "ak.message.revise" | "ak.message.redact" => {
-            normalize_message_target_carrier(object);
-            object.remove("thread_id");
-            if kind == "ak.message.revise" {
-                normalize_message_content(object);
-            }
-        }
-        _ => {}
-    }
-}
-
 pub(crate) fn ensure_submit_event_id(body: &mut Value, event: &Event) {
     let Some(object) = body.as_object_mut() else {
         return;
@@ -1175,56 +1148,6 @@ pub(crate) fn ensure_submit_event_id(body: &mut Value, event: &Event) {
     let event_id = accepted_id.or_else(|| Some(event.event_id.to_string()));
     if let Some(event_id) = event_id {
         object.insert("event_id".to_owned(), Value::String(event_id));
-    }
-}
-
-fn normalize_message_content(object: &mut serde_json::Map<String, Value>) {
-    let body = object.remove("body");
-    if !object.contains_key("content")
-        && let Some(body) = body
-    {
-        object.insert(
-            "content".to_owned(),
-            json!({
-                "kind": "ak.content.text",
-                "body": body,
-            }),
-        );
-    }
-    if let Some(content) = object.get_mut("content").and_then(Value::as_object_mut)
-        && content.get("kind").is_none()
-        && content.get("body").is_some()
-    {
-        content.insert(
-            "kind".to_owned(),
-            Value::String("ak.content.text".to_owned()),
-        );
-    }
-}
-
-fn message_ref_from_event_ref(value: Value) -> Value {
-    if let Some(event_id) = value.as_str()
-        && let Ok(event_id) = EventId::new(event_id.to_owned())
-    {
-        return Value::String(MessageId::from_event_id(&event_id).to_string());
-    }
-    value
-}
-
-/// Fold any create-Event spelling of a Message target onto the single
-/// registered carrier `message_id` (`common-fields.md` §6.0 retype).
-fn normalize_message_target_carrier(object: &mut serde_json::Map<String, Value>) {
-    if object.contains_key("message_id") {
-        return;
-    }
-    for legacy in ["target_ref", "event_id", "target_event_id", "revision_of"] {
-        if let Some(value) = object.remove(legacy) {
-            object.insert("message_id".to_owned(), message_ref_from_event_ref(value));
-            break;
-        }
-    }
-    for legacy in ["target_ref", "event_id", "target_event_id", "revision_of"] {
-        object.remove(legacy);
     }
 }
 
