@@ -11,10 +11,12 @@ use arkret_models_collaboration::governance_dependencies::{
 };
 use arkret_models_collaboration::history_key::{
     AuthorizationIncarnation, HistoryCandidateOriginAttribution, HistoryGovernanceTraversalIntent,
-    HistoryGovernanceTraversalRetention, HistoryKeyResponseSigningInput, HistoryResponseId,
-    HistorySourceAgentObservationInput, PeerHistoryTraversalAccess, ResponseSenderOriginRef,
-    ResponseSenderQuotaDomain, SelfHistoryTraversalAccess,
-    history_release_predicate_registry_digest, response_capability_commitment,
+    HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequest,
+    HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt, HistoryKeyResponseSendRequest,
+    HistoryKeyResponseSigningInput, HistoryResponseId, HistorySourceAgentObservationInput,
+    PeerHistoryTraversalAccess, ResponseSenderOriginRef, ResponseSenderQuotaDomain,
+    SelfHistoryTraversalAccess, history_release_predicate_registry_digest,
+    response_capability_commitment,
 };
 use arkret_models_identity::AuthenticatedSignerResolutionEvidence;
 use arkret_state::direct_traversal::{
@@ -103,7 +105,8 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     )?;
     verify_history_digest_and_sender_kats(&fixture)?;
     verify_governance_dependency_kats(&fixture)?;
-    verify_rrk_method_evaluator()?;
+    verify_rrk_method_evaluator(&fixture)?;
+    verify_response_stream_fixture(&fixture)?;
     verify_history_candidate_store_kat(&fixture)?;
     verify_history_static_gates(&fixture)?;
     verify_scope_and_endpoint_kats(&fixture)?;
@@ -231,6 +234,65 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
         }),
         &json!({"status": "validated"}),
     );
+    Ok(())
+}
+
+fn verify_response_stream_fixture(fixture: &Value) -> Result<()> {
+    let kat = fixture
+        .get("response_stream_cases")
+        .context("history fixture omits response_stream_cases")?;
+    let send: HistoryKeyResponseSendRequest = serde_json::from_value(
+        kat.pointer("/wire_instances/manifest_send")
+            .cloned()
+            .context("response stream KAT omits manifest_send")?,
+    )?;
+    send.validate()?;
+    let receipt: HistoryKeyResponseSendReceipt = serde_json::from_value(
+        kat.pointer("/wire_instances/first_send_receipt")
+            .cloned()
+            .context("response stream KAT omits first_send_receipt")?,
+    )?;
+    receipt.validate()?;
+    if receipt.source_record_digest != send.source_record_digest()? {
+        bail!("response stream receipt does not bind the exact source record bytes");
+    }
+    let list: HistoryKeyResponseListOutcome = serde_json::from_value(
+        kat.pointer("/wire_instances/sequence_ordered_list")
+            .cloned()
+            .context("response stream KAT omits sequence_ordered_list")?,
+    )?;
+    list.validate()?;
+    let ack: HistoryKeyResponseAckRequest = serde_json::from_value(
+        kat.pointer("/wire_instances/ack_request")
+            .cloned()
+            .context("response stream KAT omits ack_request")?,
+    )?;
+    ack.validate()?;
+
+    let receipt_bytes =
+        arkret_wire::canonical::canonical_json_bytes(&serde_json::to_value(&receipt)?)?;
+    let first = URL_SAFE_NO_PAD.decode(
+        kat.pointer("/byte_exact/first_receipt_jcs_b64u")
+            .and_then(Value::as_str)
+            .context("response stream KAT omits first receipt bytes")?,
+    )?;
+    let retry = URL_SAFE_NO_PAD.decode(
+        kat.pointer("/byte_exact/exact_retry_receipt_jcs_b64u")
+            .and_then(Value::as_str)
+            .context("response stream KAT omits exact retry bytes")?,
+    )?;
+    if first != receipt_bytes || retry != first {
+        bail!("response stream exact retry receipt is not byte-identical");
+    }
+
+    let out_of_order: HistoryKeyResponseAckRequest = serde_json::from_value(
+        kat.pointer("/negative_cases/2/input")
+            .cloned()
+            .context("response stream KAT omits out-of-order ack")?,
+    )?;
+    if out_of_order.validate().is_ok() {
+        bail!("response stream KAT accepted an out-of-order ack");
+    }
     Ok(())
 }
 
@@ -816,48 +878,84 @@ fn verify_scope_and_endpoint_kats(fixture: &Value) -> Result<()> {
             {
                 bail!("standard fresh endpoint floor KAT drifted");
             }
+            let model = &case["deterministic_model"];
+            if model["algorithm"].as_str() != Some("ak.standard-fresh-endpoint-model.v1")
+                || model["initial_state"]["admitted"].as_bool() != Some(false)
+                || !model["initial_state"]["current_epoch"].is_null()
+            {
+                bail!("standard fresh endpoint deterministic model is missing or changed");
+            }
+            let seed = hex::decode(
+                case["seed_hex"]
+                    .as_str()
+                    .context("standard fresh endpoint KAT omits seed_hex")?,
+            )?;
+            for tag in model["transition_tags"]
+                .as_array()
+                .context("standard fresh endpoint KAT omits transition_tags")?
+            {
+                let operation = tag["operation"]
+                    .as_str()
+                    .context("fresh endpoint transition omits operation")?;
+                let epoch = tag["epoch"]
+                    .as_u64()
+                    .context("fresh endpoint transition omits epoch")?;
+                let mut preimage = seed.clone();
+                preimage.push(0);
+                preimage.extend_from_slice(operation.as_bytes());
+                preimage.extend_from_slice(&epoch.to_be_bytes());
+                if hex::encode(arkret_canonical::sha256_digest(preimage))
+                    != tag["sha256_hex"].as_str().unwrap_or_default()
+                {
+                    bail!("standard fresh endpoint transition tag drifted at epoch {epoch}");
+                }
+            }
         }
     }
     Ok(())
 }
 
-fn verify_rrk_method_evaluator() -> Result<()> {
+fn verify_rrk_method_evaluator(fixture: &Value) -> Result<()> {
     use arkret_identity::history_recovery::resolve_realm_history_recovery_key;
 
-    let principal_id = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
-    let verification_method =
-        DidUrl::new("did:webvh:z6mkfixture:acme.example#realm-history-recovery-1")
-            .map_err(|err| anyhow::anyhow!(err))?;
-    let mut multicodec_key = vec![0xec, 0x01];
-    multicodec_key.extend_from_slice(&[5_u8; 32]);
-    let public_key_multibase =
-        arkret_canonical::multibase::encode_multibase_base58btc(multicodec_key);
-    let document = json!({
-        "id": principal_id.as_str(),
-        "verificationMethod": [{
-            "id": verification_method,
-            "type": "Multikey",
-            "controller": principal_id.as_str(),
-            "publicKeyMultibase": public_key_multibase,
-        }],
-        "keyAgreement": [verification_method],
-        "service": [{
-            "id": "did:webvh:z6mkfixture:acme.example#realm-history-recovery",
-            "type": "ArkretRealmHistoryRecoveryKey",
-            "serviceEndpoint": {
-                "verificationMethod": verification_method,
-                "kem": "hpke",
-                "domain": "mls_history",
-            }
-        }]
-    });
+    let kat = fixture
+        .get("rrk_registration_rotation_kat")
+        .context("history fixture omits rrk_registration_rotation_kat")?;
+    let document = kat
+        .pointer("/did_documents/register")
+        .cloned()
+        .context("RRK KAT omits register DID Document")?;
+    let key_tuple = kat
+        .pointer("/events/register/payload/new_key_tuple")
+        .context("RRK KAT omits register key tuple")?;
+    let principal_id = DidCoreId::new(
+        key_tuple["holder_principal_id"]
+            .as_str()
+            .context("RRK tuple omits holder_principal_id")?,
+    )?;
+    let verification_method = DidUrl::new(
+        key_tuple["key_agreement_ref"]
+            .as_str()
+            .context("RRK tuple omits key_agreement_ref")?,
+    )
+    .map_err(|err| anyhow::anyhow!(err))?;
+    let expected_key: [u8; 32] = URL_SAFE_NO_PAD
+        .decode(
+            key_tuple["frozen_public_key_b64u"]
+                .as_str()
+                .context("RRK tuple omits frozen_public_key_b64u")?,
+        )?
+        .try_into()
+        .map_err(|bytes: Vec<u8>| anyhow!("RRK frozen key is {} bytes", bytes.len()))?;
     let resolved = resolve_realm_history_recovery_key(
-        "acme-org-rrk-1",
+        key_tuple["recovery_key_id"]
+            .as_str()
+            .unwrap_or("rrk-fixture"),
         &principal_id,
         &verification_method,
         &document,
     )?;
-    if resolved.hpke_public_key != [5_u8; 32]
+    if resolved.hpke_public_key != expected_key
         || resolved.principal_id != principal_id
         || resolved.verification_method != verification_method
     {
@@ -866,28 +964,13 @@ fn verify_rrk_method_evaluator() -> Result<()> {
 
     let mutations = [
         (
-            "wrong_document_owner",
-            "/id",
-            json!("ak:did_core:webvh:z6mkother"),
-        ),
-        (
-            "wrong_method_controller",
+            "wrong_controller",
             "/verificationMethod/0/controller",
-            json!("ak:did_core:webvh:z6mkother"),
-        ),
-        (
-            "missing_designation",
-            "/service/0/type",
-            json!("OtherService"),
-        ),
-        (
-            "wrong_domain",
-            "/service/0/serviceEndpoint/domain",
-            json!("did_control"),
+            json!("ak:did_core:web:other.example"),
         ),
         ("missing_key_agreement", "/keyAgreement", json!([])),
         (
-            "wrong_key_type",
+            "wrong_method_type",
             "/verificationMethod/0/type",
             json!("JsonWebKey2020"),
         ),
@@ -898,7 +981,9 @@ fn verify_rrk_method_evaluator() -> Result<()> {
             .pointer_mut(pointer)
             .with_context(|| format!("RRK mutation {name} pointer is absent"))? = replacement;
         if resolve_realm_history_recovery_key(
-            "acme-org-rrk-1",
+            key_tuple["recovery_key_id"]
+                .as_str()
+                .unwrap_or("rrk-fixture"),
             &principal_id,
             &verification_method,
             &mutated,
@@ -916,7 +1001,9 @@ fn verify_rrk_method_evaluator() -> Result<()> {
         .context("RRK DID Document verificationMethod is not an array")?
         .push(duplicate);
     resolve_realm_history_recovery_key(
-        "acme-org-rrk-1",
+        key_tuple["recovery_key_id"]
+            .as_str()
+            .unwrap_or("rrk-fixture"),
         &principal_id,
         &verification_method,
         &duplicate_method,
@@ -925,31 +1012,69 @@ fn verify_rrk_method_evaluator() -> Result<()> {
 
     let mut wrong_curve = document.clone();
     let mut ed25519_key = vec![0xed, 0x01];
-    ed25519_key.extend_from_slice(&[5_u8; 32]);
+    ed25519_key.extend_from_slice(&expected_key);
     wrong_curve["verificationMethod"][0]["publicKeyMultibase"] = json!(
         arkret_canonical::multibase::encode_multibase_base58btc(ed25519_key)
     );
     resolve_realm_history_recovery_key(
-        "acme-org-rrk-1",
+        key_tuple["recovery_key_id"]
+            .as_str()
+            .unwrap_or("rrk-fixture"),
         &principal_id,
         &verification_method,
         &wrong_curve,
     )
     .expect_err("RRK exact method evaluator must reject a non-X25519 multicodec key");
 
-    let mut wrong_length = document;
+    let mut wrong_length = document.clone();
     let mut short_x25519_key = vec![0xec, 0x01];
-    short_x25519_key.extend_from_slice(&[5_u8; 31]);
+    short_x25519_key.extend_from_slice(&expected_key[..31]);
     wrong_length["verificationMethod"][0]["publicKeyMultibase"] = json!(
         arkret_canonical::multibase::encode_multibase_base58btc(short_x25519_key)
     );
     resolve_realm_history_recovery_key(
-        "acme-org-rrk-1",
+        key_tuple["recovery_key_id"]
+            .as_str()
+            .unwrap_or("rrk-fixture"),
         &principal_id,
         &verification_method,
         &wrong_length,
     )
     .expect_err("RRK exact method evaluator must reject a non-32-byte X25519 key");
+
+    let mut unrelated_service = document;
+    unrelated_service["service"] = json!([{"type": "UnrelatedService"}]);
+    resolve_realm_history_recovery_key(
+        key_tuple["recovery_key_id"]
+            .as_str()
+            .unwrap_or("rrk-fixture"),
+        &principal_id,
+        &verification_method,
+        &unrelated_service,
+    )
+    .context("RRK DID service designation must not be required")?;
+
+    let mutation_names = kat["negative_mutations"]
+        .as_array()
+        .context("RRK KAT omits negative_mutations")?
+        .iter()
+        .filter_map(|row| row["name"].as_str())
+        .collect::<BTreeSet<_>>();
+    for required in [
+        "wrong_curve",
+        "wrong_method_type",
+        "wrong_key_length",
+        "wrong_controller",
+        "wrong_holder_proof_domain",
+        "holder_tuple_mismatch",
+        "register_before_realm_create",
+        "rotate_before_register",
+        "rotate_cas_mismatch",
+    ] {
+        if !mutation_names.contains(required) {
+            bail!("RRK fixture omits required mutation {required}");
+        }
+    }
     Ok(())
 }
 
