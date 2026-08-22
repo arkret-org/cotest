@@ -1,20 +1,21 @@
 {
   "profile": "ak.profile.consent_vectors.v1",
-  "version": "2026-05-09",
+  "version": "2026-08-22",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "Holder-private consent cell (or-set lattice) Move semantics. Spec: identity/consent-model.md + authz/event-auth-state-resolution.md (Move/Anchor/Lattice). Each consent grant Move adds a tag (peer, scope) to the holder-keyed or-set cell `ak:cell:ak.component.consent.grant.v1:<holder>`; each consent revoke Move issues a causal remove of one or more existing tags by their op_ids. Consent membership is the join (active set) of the cell after applying every Move; an invite Move's `consent_required` precondition reads that active set. C19.A wire-break (spec 2026-05-09): typed cell ids carry holder DIDs as the subject; previous fixtures used a synthetic `ak:consent:<ulid>` id that is no longer registered as a typed UUIDv7 id_kind.",
+  "comment": "Holder-private consent-cell OR-Set semantics. The caller-minted typed consent_id is the cell subject: ak:cell:ak.component.consent.grant.v1:<consent_id>. The first accepted grant freezes the exact (peer, consent_scope) intent for that cell; later grants add Event-derived dots only for the same intent, and revokes remove only explicitly observed dots. Downstream invite/message checks are operation-admission checks against the holder PCR projection, never cross-Realm CBA preconditions.",
   "vectors": [
     {
       "name": "grant_then_invite_accepts",
-      "comment": "Holder grants consent for `invite` scope to peer; the or-set cell join contains (bob, invite). The subsequent invite Move's `consent_required` precondition resolves true and Move is accepted.",
+      "comment": "Holder grants invite consent to the peer. The subsequent operation-admission check reads the holder PCR projection and resolves active.",
       "moves": [
         {
           "move_id": "ak:event:AZC-U6IhvshOPx6I2sZcwUIipTolibFEKZrW4-KHFwXY",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000001",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000001",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -25,10 +26,11 @@
           "move_id": "ak:event:ASWDS-DvTMGsI8ra8IMcrWzD1L3BUF2D3bFEvSpZJB01",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
-          "preconditions": [
+          "admission_checks": [
             {
               "kind": "consent_active",
               "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000001",
               "peer": "did:web:bob.example",
               "scope": "invite"
             }
@@ -40,15 +42,16 @@
     },
     {
       "name": "revoke_after_grant_blocks_invite",
-      "comment": "Causal remove of the prior grant op (or-set or_set_remove referencing the grant move_id). After Move 2, the cell join no longer contains (bob, invite); Move 3's `consent_active` precondition resolves false and the Move is rejected with consent_required.",
+      "comment": "Causal remove names the prior grant dot explicitly. The following operation-admission check resolves no_consent and rejects with consent_required.",
       "moves": [
         {
           "move_id": "ak:event:ASRboSxLt55ezeNBXCa9odsuRrRWsJ_J49TgWKtyTcWd",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000002",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000002",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -59,11 +62,12 @@
           "move_id": "ak:event:AerVVhAWptFKZiFBDlob36MUqKQML7m1Hilkfvbtzngz",
           "kind": "ak.consent.revoke",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000002",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000002",
               "op": "or_set_remove",
-              "removes": ["ak:event:ASRboSxLt55ezeNBXCa9odsuRrRWsJ_J49TgWKtyTcWd"]
+              "removes": ["ak:event:ASRboSxLt55ezeNBXCa9odsuRrRWsJ_J49TgWKtyTcWd:0"]
             }
           ],
           "expected": { "outcome": "accept" }
@@ -72,10 +76,11 @@
           "move_id": "ak:event:AbLUaNO9m_tRCJn4qAM03Ym0bFcN-oRmeEHjTinQpPUu",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
-          "preconditions": [
+          "admission_checks": [
             {
               "kind": "consent_active",
               "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000002",
               "peer": "did:web:bob.example",
               "scope": "invite"
             }
@@ -93,9 +98,10 @@
           "move_id": "ak:event:AVcRegcVuCp930M9IWpAEAB1WurfkmzertYaDjGXO2Er",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000003",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000003",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "any" }
             }
@@ -106,10 +112,11 @@
           "move_id": "ak:event:AR6k4R7kutlf3GbRm7fWf23NK2AkTOnggBXBo27It2lg",
           "kind": "ak.call.invite",
           "actor_id": "did:web:bob.example",
-          "preconditions": [
+          "admission_checks": [
             {
               "kind": "consent_active",
               "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000003",
               "peer": "did:web:bob.example",
               "scope": "voice_call"
             }
@@ -127,9 +134,10 @@
           "move_id": "ak:event:AQ7PcRk7F8COt6aCuAycx49-WYhi3NKKzgPpCmERO_pH",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000004",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000004",
               "op": "or_set_add",
               "tag": {
                 "peer": "did:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
@@ -143,10 +151,11 @@
           "move_id": "ak:event:AZIHixnEFY8AjPKf_lcxVA5lvzAJ8mwvgHMnPklwWczI",
           "kind": "ak.message.create",
           "actor_id": "did:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
-          "preconditions": [
+          "admission_checks": [
             {
               "kind": "consent_active",
               "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000004",
               "peer": "did:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
               "scope": "direct_message"
             }
@@ -158,16 +167,17 @@
     },
     {
       "name": "require_consent_profile_blocks_unconsented_invite",
-      "comment": "When the receiving Space pins the consent_required component, the invite Move's `consent_active` precondition fails closed because the holder's or-set has no matching tag. Move is rejected with consent_required.",
+      "comment": "When the receiving profile requires explicit consent, the operation-admission check fails closed because the holder has no cell for the requested consent_id.",
       "moves": [
         {
           "move_id": "ak:event:AXmvES9hZnd6rMGeyyrheZ3OD3clq90EyCR8zNtL7b-q",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
-          "preconditions": [
+          "admission_checks": [
             {
               "kind": "consent_active",
               "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000005",
               "peer": "did:web:bob.example",
               "scope": "invite"
             }
@@ -185,9 +195,10 @@
           "move_id": "ak:event:AYOCSkT8KIIWmurgqwj-bO34GhBMojoBLNgda-4YNv4N",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000006",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -198,11 +209,12 @@
           "move_id": "ak:event:AU6Gj6E2x1N3tRNymmRUM5a2b7hlQsNAjPXsZshWZCdN",
           "kind": "ak.consent.revoke",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000006",
               "op": "or_set_remove",
-              "removes": ["ak:event:AYOCSkT8KIIWmurgqwj-bO34GhBMojoBLNgda-4YNv4N"]
+              "removes": ["ak:event:AYOCSkT8KIIWmurgqwj-bO34GhBMojoBLNgda-4YNv4N:0"]
             }
           ],
           "expected": { "outcome": "accept" }
@@ -211,9 +223,10 @@
           "move_id": "ak:event:AXelGZt58KVKD4UNPjrUnRlRhVgmn3VKkoiNHRc0uEnW",
           "kind": "ak.consent.grant",
           "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
           "effects": [
             {
-              "cell": "ak:cell:ak.component.consent.grant.v1:did:web:alice.example",
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000006",
               "op": "or_set_add",
               "tag": { "peer": "did:web:bob.example", "scope": "invite" }
             }
@@ -224,10 +237,125 @@
           "move_id": "ak:event:AckajWhdlCrAHZ-QiTx6WaNU8bp6NZw9atIdivEChqNg",
           "kind": "ak.invite.send",
           "actor_id": "did:web:bob.example",
-          "preconditions": [
+          "admission_checks": [
             {
               "kind": "consent_active",
               "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
+              "peer": "did:web:bob.example",
+              "scope": "invite"
+            }
+          ],
+          "payload": { "target": "did:web:alice.example" },
+          "expected": { "outcome": "accept" }
+        }
+      ]
+    },
+    {
+      "name": "partial_revoke_leaves_unobserved_dot_active",
+      "comment": "Two byte-distinct grant Events add two dots for the same frozen intent. Revoking only the explicitly observed first dot is a partial revoke; the second dot remains active.",
+      "moves": [
+        {
+          "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA001",
+          "kind": "ak.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
+          "effects": [
+            {
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000007",
+              "op": "or_set_add",
+              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+            }
+          ],
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA002",
+          "kind": "ak.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
+          "effects": [
+            {
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000007",
+              "op": "or_set_add",
+              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+            }
+          ],
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA003",
+          "kind": "ak.consent.revoke",
+          "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
+          "effects": [
+            {
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000007",
+              "op": "or_set_remove",
+              "removes": ["ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA001:0"]
+            }
+          ],
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA004",
+          "kind": "ak.invite.send",
+          "actor_id": "did:web:bob.example",
+          "admission_checks": [
+            {
+              "kind": "consent_active",
+              "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
+              "peer": "did:web:bob.example",
+              "scope": "invite"
+            }
+          ],
+          "payload": { "target": "did:web:alice.example" },
+          "expected": { "outcome": "accept" }
+        }
+      ]
+    },
+    {
+      "name": "same_consent_id_cannot_rebind_intent",
+      "comment": "The first accepted grant freezes the cell intent. A later grant with the same consent_id but another peer is rejected without changing the active dot set.",
+      "moves": [
+        {
+          "move_id": "ak:event:AeQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uB001",
+          "kind": "ak.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000008",
+          "effects": [
+            {
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000008",
+              "op": "or_set_add",
+              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+            }
+          ],
+          "expected": { "outcome": "accept" }
+        },
+        {
+          "move_id": "ak:event:AeQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uB002",
+          "kind": "ak.consent.grant",
+          "actor_id": "did:web:alice.example",
+          "consent_id": "ak:consent:01964100-0000-7000-8000-000000000008",
+          "effects": [
+            {
+              "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000008",
+              "op": "or_set_add",
+              "tag": { "peer": "did:web:carol.example", "scope": "invite" }
+            }
+          ],
+          "expected": { "outcome": "reject", "reason_code": "consent_intent_rebind" }
+        },
+        {
+          "move_id": "ak:event:AeQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uB003",
+          "kind": "ak.invite.send",
+          "actor_id": "did:web:bob.example",
+          "admission_checks": [
+            {
+              "kind": "consent_active",
+              "holder": "did:web:alice.example",
+              "consent_id": "ak:consent:01964100-0000-7000-8000-000000000008",
               "peer": "did:web:bob.example",
               "scope": "invite"
             }

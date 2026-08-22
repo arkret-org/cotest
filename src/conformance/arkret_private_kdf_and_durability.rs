@@ -1,7 +1,12 @@
-use std::collections::BTreeSet;
 use std::fs;
 
+use aes_gcm::aead::{Aead, KeyInit as AesKeyInit, Payload};
+use aes_gcm::{Aes128Gcm, Nonce};
 use anyhow::{Context, Result, anyhow, bail};
+use arkret_models_crypto::EventContentPreEncryptionHeader;
+use arkret_wire::{EventId, ScopeRef};
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hkdf::Hkdf;
 use hmac::{Hmac, KeyInit, Mac};
 use serde_json::Value;
@@ -42,12 +47,8 @@ pub fn run_arkret_private_kdf_and_durability_suite() -> Result<()> {
     run_reaction_hmac(case(cases, "reaction_routing_hmac_nfc")?)?;
     run_signal_exporter_key(case(cases, "signal_exporter_key_sha256_aes128gcm")?)?;
     run_full_width_counter_nonce(case(cases, "full_width_counter_nonce_aes128gcm")?)?;
-    run_rrk_missing_seals(case(cases, "rrk_eager_seal_before_gc")?)?;
-    run_rrk_recipient_validation(case(
-        cases,
-        "rrk_recipient_method_must_be_active_and_designated",
-    )?)?;
-    run_rrk_complete_target_set(case(cases, "rrk_threshold_target_set_complete")?)?;
+    run_rrk_archive_durability_contract(case(cases, "rrk_archive_durable_before_local_gc")?)?;
+    run_exporter_aead_seal_open(case(cases, "mls_exporter_aead_seal_open_transcript")?)?;
     Ok(())
 }
 
@@ -307,13 +308,146 @@ fn run_content_negatives(case: &Value) -> Result<()> {
     )
 }
 
+fn run_exporter_aead_seal_open(case: &Value) -> Result<()> {
+    let input = &case["input"];
+    let expected = &case["expected"];
+    let history_secret = hex::decode(required_str(input, "history_secret_hex")?)?;
+    let sender_domain = required_str(input, "verified_sender_domain")?.as_bytes();
+    let content_key =
+        arkret::mls::derive_content_key_from_history_secret(&history_secret, sender_domain, 16)?;
+    assert_hex(
+        "exporter AEAD content key",
+        &content_key,
+        input,
+        "content_key_hex",
+    )?;
+    let header: EventContentPreEncryptionHeader =
+        serde_json::from_value(expected["reconstructed_pre_encryption_header"].clone())?;
+    let aad = header.canonical_bytes()?;
+    if aad != required_str(expected, "aead_aad_canonical_json")?.as_bytes() {
+        bail!("exporter AEAD canonical AAD drifted");
+    }
+    let counter = required_u64(
+        &input["wire_envelope_without_ciphertext"]["encryption_context"],
+        "counter",
+    )?;
+    let nonce = arkret_crypto::compose_aead_nonce(counter, 12)?;
+    assert_hex("exporter AEAD nonce", &nonce, expected, "derived_nonce_hex")?;
+    let plaintext = hex::decode(required_str(input, "plaintext_hex")?)?;
+    let cipher = Aes128Gcm::new_from_slice(&content_key)
+        .map_err(|_| anyhow!("invalid exporter AES-128-GCM content key"))?;
+    let ciphertext = cipher
+        .encrypt(
+            Nonce::from_slice(&nonce),
+            Payload {
+                msg: &plaintext,
+                aad: &aad,
+            },
+        )
+        .map_err(|_| anyhow!("independent exporter AEAD seal failed"))?;
+    assert_hex(
+        "exporter AEAD ciphertext",
+        &ciphertext,
+        expected,
+        "ciphertext_with_tag_hex",
+    )?;
+    let aead_profile = required_str(&input["exact_group_state"], "ciphersuite_id")?;
+    let opened = arkret::mls::decrypt_content_exporter_aead_standalone(
+        &history_secret,
+        sender_domain,
+        &header,
+        aead_profile,
+        &ciphertext,
+    )?;
+    assert_hex(
+        "exporter AEAD opened plaintext",
+        &opened,
+        expected,
+        "opened_plaintext_hex",
+    )?;
+
+    let required_mutations = [
+        "envelope_version",
+        "content_type",
+        "outer_event.kind",
+        "outer_event.effective_scope",
+        "producer_verification_method",
+        "group_state_ref",
+        "content_scheme",
+        "counter",
+        "ciphertext_tag",
+    ];
+    if strings_in_order(&expected["negative_mutations"])? != required_mutations
+        || required_str(expected, "negative_decision")? != "reject"
+    {
+        bail!("exporter AEAD negative mutation set drifted");
+    }
+    for (field, replacement) in [
+        ("envelope_version", serde_json::json!("1.1")),
+        ("content_type", serde_json::json!("application/json")),
+        ("event_kind", serde_json::json!("ak.message.edit")),
+        (
+            "effective_scope",
+            serde_json::json!({
+                "kind": "realm",
+                "realm_id": "ak:realm:AYw-PHWIOTuZhm-EenZx-cCbOziC8pNCrh10oRfqiEmN"
+            }),
+        ),
+        (
+            "sender_domain",
+            serde_json::json!("ak:device:019a7360-0000-7000-8000-000000000002"),
+        ),
+        (
+            "group_state_ref",
+            serde_json::json!("ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
+        ),
+        ("scheme", serde_json::json!("mls_rfc9420")),
+        ("counter", serde_json::json!(8)),
+    ] {
+        let mut mutated = serde_json::to_value(&header)?;
+        mutated[field] = replacement;
+        if let Ok(mutated) = serde_json::from_value::<EventContentPreEncryptionHeader>(mutated) {
+            arkret::mls::decrypt_content_exporter_aead_standalone(
+                &history_secret,
+                sender_domain,
+                &mutated,
+                aead_profile,
+                &ciphertext,
+            )
+            .expect_err("mutated exporter AEAD AAD must fail closed");
+        }
+    }
+    let mut tampered = ciphertext;
+    *tampered
+        .last_mut()
+        .context("exporter AEAD ciphertext is empty")? ^= 1;
+    arkret::mls::decrypt_content_exporter_aead_standalone(
+        &history_secret,
+        sender_domain,
+        &header,
+        aead_profile,
+        &tampered,
+    )
+    .expect_err("mutated exporter AEAD tag must fail closed");
+    Ok(())
+}
+
 fn run_reaction_hmac(case: &Value) -> Result<()> {
     let input = &case["input"];
     let expected = &case["expected"];
-    let secret = hex::decode(required_str(input, "exporter_secret_hex")?)?;
-    let realm = required_str(input, "realm_id_utf8")?.as_bytes();
-    let label = required_str(input, "exporter_label")?;
-    let key = mls_exporter(&secret, label, realm, 32)?;
+    let routing_root = hex::decode(required_str(input, "routing_root_hex")?)?;
+    let scope: ScopeRef = serde_json::from_value(input["effective_scope"].clone())?;
+    let target_ref = EventId::new(required_str(input, "target_ref")?)?;
+    let routing_window = required_u64(input, "routing_window")?;
+    let context = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "effective_scope": scope,
+        "target_ref": target_ref,
+        "routing_window": routing_window,
+    }))?;
+    if context != required_str(input, "routing_context_canonical_json")?.as_bytes() {
+        bail!("reaction routing context canonical bytes drifted");
+    }
+    let key = expand_with_label(&routing_root, "ak.reaction-routing-v1", &context, 32)?;
     assert_hex(
         "reaction routing key",
         &key,
@@ -344,9 +478,31 @@ fn run_reaction_hmac(case: &Value) -> Result<()> {
                 .as_str()
                 .ok_or_else(|| anyhow!("reaction tag {index} must be a string"))?,
         )?;
+        let production_tag = arkret::mls::reaction_routing_tag_from_root(
+            &routing_root,
+            &scope,
+            &target_ref,
+            routing_window,
+            &source,
+        )?;
+        assert_eq_hex(
+            &format!("emoji case {index} production tag"),
+            &URL_SAFE_NO_PAD.decode(production_tag)?,
+            tags[index]
+                .as_str()
+                .ok_or_else(|| anyhow!("reaction tag {index} must be a string"))?,
+        )?;
     }
 
     let decomposed = codepoints_to_string(&emoji_cases[0]["source_codepoints"])?;
+    let normalized = decomposed.nfc().collect::<String>();
+    let original_tag = URL_SAFE_NO_PAD.decode(arkret::mls::reaction_routing_tag_from_root(
+        &routing_root,
+        &scope,
+        &target_ref,
+        routing_window,
+        &decomposed,
+    )?)?;
     let mut raw_mac = <Hmac<Sha256> as KeyInit>::new_from_slice(&key)?;
     raw_mac.update(decomposed.as_bytes());
     require_different(
@@ -356,82 +512,115 @@ fn run_reaction_hmac(case: &Value) -> Result<()> {
     )?;
     require_different(
         "reaction wrong exporter label",
-        &mls_exporter(&secret, "arkret-reaction-routing-v0", realm, 32)?,
+        &expand_with_label(&routing_root, "ak.content-v1", &context, 32)?,
         &key,
     )?;
+    let other_scope: ScopeRef = serde_json::from_value(serde_json::json!({
+        "kind": "realm",
+        "realm_id": "ak:realm:AYw-PHWIOTuZhm-EenZx-cCbOziC8pNCrh10oRfqiEmN",
+    }))?;
+    let other_scope_tag = URL_SAFE_NO_PAD.decode(arkret::mls::reaction_routing_tag_from_root(
+        &routing_root,
+        &other_scope,
+        &target_ref,
+        routing_window,
+        &normalized,
+    )?)?;
     require_different(
-        "reaction different realm",
-        &mls_exporter(&secret, label, b"ak:realm:different", 32)?,
+        "reaction different effective scope",
+        &other_scope_tag,
+        &original_tag,
+    )?;
+
+    let other_target = EventId::new("ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")?;
+    let other_target_tag = URL_SAFE_NO_PAD.decode(arkret::mls::reaction_routing_tag_from_root(
+        &routing_root,
+        &scope,
+        &other_target,
+        routing_window,
+        &normalized,
+    )?)?;
+    require_different(
+        "reaction different target",
+        &other_target_tag,
+        &original_tag,
+    )?;
+
+    let other_context = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "effective_scope": scope,
+        "target_ref": target_ref,
+        "routing_window": routing_window + 1,
+    }))?;
+    require_different(
+        "reaction different routing window",
+        &expand_with_label(&routing_root, "ak.reaction-routing-v1", &other_context, 32)?,
         &key,
-    )
-}
+    )?;
+    let other_window_tag = URL_SAFE_NO_PAD.decode(arkret::mls::reaction_routing_tag_from_root(
+        &routing_root,
+        &scope,
+        &target_ref,
+        routing_window + 1,
+        &normalized,
+    )?)?;
+    require_different(
+        "reaction different routing-window tag",
+        &other_window_tag,
+        &original_tag,
+    )?;
 
-#[derive(Debug)]
-struct DurabilityState {
-    recipients: BTreeSet<String>,
-    accepted: BTreeSet<String>,
-    history_secret_retained: bool,
-}
+    let mut next_epoch_root = routing_root;
+    next_epoch_root[0] ^= 1;
+    let next_epoch_tag = URL_SAFE_NO_PAD.decode(arkret::mls::reaction_routing_tag_from_root(
+        &next_epoch_root,
+        &scope,
+        &target_ref,
+        routing_window,
+        &normalized,
+    )?)?;
+    require_different("reaction next-epoch root", &next_epoch_tag, &original_tag)?;
 
-impl DurabilityState {
-    fn gc(&mut self) -> Result<()> {
-        if self.accepted != self.recipients {
-            bail!("durability_seal_missing_before_gc");
-        }
-        self.history_secret_retained = false;
-        Ok(())
-    }
-}
-
-fn run_rrk_missing_seals(case: &Value) -> Result<()> {
-    let policy = &case["input"]["durability_policy"];
-    let mut state = DurabilityState {
-        recipients: strings(&policy["recovery_recipients"])?,
-        accepted: strings(&case["input"]["accepted_share_recipients"])?,
-        history_secret_retained: true,
-    };
-    let error = state
-        .gc()
-        .expect_err("GC before every eager seal must fail");
-    if !error
-        .to_string()
-        .contains(required_str(&case["expected"], "reason_code")?)
+    if strings_in_order(&expected["negative_mutations"])?
+        != [
+            "skip_NFC",
+            "wrong_exporter_label",
+            "different_effective_scope",
+            "different_target_ref",
+            "different_routing_window",
+            "reuse_key_after_epoch_change",
+        ]
+        || required_str(expected, "negative_decision")? != "reject"
     {
-        bail!("RRK missing-seal rejection reason drifted");
-    }
-    if !state.history_secret_retained {
-        bail!("failed RRK GC discarded the history secret");
+        bail!("reaction routing negative mutation set drifted");
     }
     Ok(())
 }
 
-fn run_rrk_recipient_validation(case: &Value) -> Result<()> {
+fn run_rrk_archive_durability_contract(case: &Value) -> Result<()> {
     let input = &case["input"];
-    let active = required_str(input, "verification_method_state")? == "active";
-    let designated =
-        required_str(input, "did_service_kind")? == "ArkretRealmHistoryRecoveryKey" && active;
-    if active && designated {
-        bail!("revoked RRK method was unexpectedly accepted");
-    }
-    if case["expected"]["must_not_fallback_to_other_key"].as_bool() != Some(true) {
-        bail!("RRK fixture no longer pins no-fallback behavior");
-    }
-    Ok(())
-}
-
-fn run_rrk_complete_target_set(case: &Value) -> Result<()> {
-    let input = &case["input"];
-    let recipient_count = required_u64(input, "recipient_count")?;
-    let accepted_count = required_u64(input, "accepted_share_count")?;
-    let threshold = required_u64(input, "threshold")?;
-    let required_targets = required_u64(&case["expected"], "required_share_target_count")?;
-    if threshold >= recipient_count || required_targets != recipient_count {
-        bail!("threshold incorrectly reduced the eager-seal target set");
-    }
-    if accepted_count != required_targets
-        || input["accepted_share_recipients_unique"].as_bool() != Some(true)
+    let expected = &case["expected"];
+    if required_str(input, "durability_policy")? != "organization_recovery_key"
+        || required_str(input, "archive_tuple")?
+            != "exact recovery_key_id/version/holder principal+service/signing ref"
+        || strings_in_order(&input["durable_completion"])?
+            != [
+                "byte_identical_archive_container_event_accepted_or_duplicate",
+                "barrier_resolve_exact_reread",
+                "local_atomic_coverage_ledger",
+            ]
+        || required_str(expected, "gc_before_completion")? != "reject_failed_precondition"
+        || required_str(expected, "gc_after_completion")? != "accept"
+        || required_str(expected, "exact_retry")? != "returns_original_archive_event_and_receipt"
+        || strings_in_order(&expected["forbidden"])?
+            != [
+                "share_event",
+                "availability_receipt",
+                "threshold_target_set",
+                "renewal_state_machine",
+                "portable_active_mls_state",
+            ]
     {
-        bail!("RRK GC accepted an incomplete or duplicate target set");
+        bail!("RRK exact-archive durability contract drifted");
     }
     Ok(())
 }
@@ -515,7 +704,7 @@ fn required_u64(value: &Value, field: &str) -> Result<u64> {
         .ok_or_else(|| anyhow!("missing integer field {field}"))
 }
 
-fn strings(value: &Value) -> Result<BTreeSet<String>> {
+fn strings_in_order(value: &Value) -> Result<Vec<&str>> {
     value
         .as_array()
         .ok_or_else(|| anyhow!("expected string array"))?
@@ -523,7 +712,6 @@ fn strings(value: &Value) -> Result<BTreeSet<String>> {
         .map(|value| {
             value
                 .as_str()
-                .map(str::to_owned)
                 .ok_or_else(|| anyhow!("array member must be a string"))
         })
         .collect()

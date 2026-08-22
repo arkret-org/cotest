@@ -10,10 +10,11 @@
 //! wrong key) that MUST be rejected.
 
 use arkret_signatures::http_signature::{
-    Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
-    SignatureVerificationPolicy, SignedRequestParts, canonical_message, public_key_from_bytes,
-    sign_message, verify_signed_http_message,
+    Component, ContentDigest, ContentDigestAlgorithm, SignatureInput, SignatureVerificationPolicy,
+    SignedRequestParts, canonical_message, public_key_from_bytes, sign_message,
+    verify_signed_http_message,
 };
+use ed25519_dalek::{SigningKey, VerifyingKey};
 
 const MAX_WINDOW_SECONDS: i64 = 300;
 const SKEW_SECONDS: i64 = 30;
@@ -30,7 +31,7 @@ struct SignedRequest {
 /// Sign a self request exactly as the client (inkson) does: cover
 /// `@method`/`@target-uri`/`@authority` plus `content-digest` over the body.
 fn sign_self_request(
-    signing_key: &Ed25519SigningKey,
+    signing_key: &SigningKey,
     key_id: &str,
     method: &str,
     body: &[u8],
@@ -91,11 +92,7 @@ fn sign_self_request(
 /// The verification soland's `session_pop` hoop performs: SDK verify (covered
 /// components + content-digest + created/expires sanity) plus the 300s window
 /// upper bound.
-fn verify_self_pop(
-    req: &SignedRequest,
-    public_key: &arkret_signatures::http_signature::Ed25519PublicKey,
-    now: i64,
-) -> Result<(), String> {
+fn verify_self_pop(req: &SignedRequest, public_key: &VerifyingKey, now: i64) -> Result<(), String> {
     let policy = if req.body.is_empty() {
         SignatureVerificationPolicy::new(vec![
             Component::Method,
@@ -126,8 +123,8 @@ fn verify_self_pop(
     Ok(())
 }
 
-fn test_key(seed: u8) -> Ed25519SigningKey {
-    arkret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
+fn test_key(seed: u8) -> SigningKey {
+    SigningKey::from_bytes(&[seed; 32])
 }
 
 const URI: &str = "https://soland.example.com/_arkret/self/events";

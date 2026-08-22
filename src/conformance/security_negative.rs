@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
 use arkret_identifiers::DidCoreId;
 use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
-use arkret_wire::Proof;
+use arkret_wire::ProducerEventProof;
 use serde_json::{Value, json};
 use url::Url;
 
@@ -97,7 +97,7 @@ fn validate_bad_signature(case: &Value) -> Result<SecurityDecision> {
         .into_iter()
         .flatten()
     {
-        let proof: Proof = match serde_json::from_value(proof.clone()) {
+        let proof: ProducerEventProof = match serde_json::from_value(proof.clone()) {
             Ok(proof) => proof,
             Err(_) => return Ok(SecurityDecision::reject("signature_invalid")),
         };
@@ -115,7 +115,7 @@ fn validate_bad_signature(case: &Value) -> Result<SecurityDecision> {
 /// reconstruct RFC 7797 signing input in cotest.
 fn verify_event_proof_signature(
     event: &Value,
-    proof: &Proof,
+    proof: &ProducerEventProof,
     public_key: &PublicKeyMaterial,
 ) -> std::result::Result<(), &'static str> {
     let actor_id = required_str(event, "actor_id")
@@ -385,12 +385,12 @@ mod tests {
 
     /// Build a valid detached JWS over the SDK canonical Event-proof binding
     /// object.
-    fn signed_proof(event: &Value, signing_key: &SigningKey) -> Proof {
+    fn signed_proof(event: &Value, signing_key: &SigningKey) -> ProducerEventProof {
         let canonical = canonical_event_payload_bytes(event).unwrap();
         let actor_id = DidCoreId::new(event["actor_id"].as_str().unwrap()).unwrap();
         let (signer_evidence_ref, signer_evidence_digest) =
             crate::fixture_signer_evidence_pair(actor_id.as_str());
-        let mut proof = Proof {
+        let mut proof = ProducerEventProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
             verification_method: crate::fixture_did_url("did:web:alice.example#device"),
             event_digest: Hash::new(sha256_prefixed(&canonical)).unwrap(),

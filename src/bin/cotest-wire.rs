@@ -9,8 +9,8 @@ use arkret_identifiers::{
 };
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
 use arkret_wire::{
-    Audience, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof, Proof,
-    proof_kind,
+    Audience, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof,
+    ProducerEventProof, proof_kind,
 };
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
@@ -884,7 +884,7 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
         None => development_event_signing_key(&input.verification_method),
     };
 
-    let mut proof = Proof {
+    let mut proof = ProducerEventProof {
         kind: proof_kind::DETACHED_JWS.to_owned(),
         verification_method: input.verification_method,
         event_digest,
@@ -1204,7 +1204,7 @@ mod tests {
             EventDigestMode::RawCanonicalJson,
         )
         .unwrap();
-        let proof: Proof = serde_json::from_value(proof_value).unwrap();
+        let proof: ProducerEventProof = serde_json::from_value(proof_value).unwrap();
 
         let mut event_with_proofs = event;
         event_with_proofs["proofs"] = json!([]);

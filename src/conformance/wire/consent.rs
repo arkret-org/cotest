@@ -3,7 +3,8 @@
 //! Covers holder-private consent or-set Move semantics and the
 //! composite-state subject / key-encoding digests.
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
+use arkret_identifiers::{ConsentId, EventId};
 use base64::Engine as _;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -11,23 +12,33 @@ use sha2::{Digest, Sha256};
 use super::{emit_vector, expected_outcome, expected_reason, load_local_fixture};
 use crate::conformance::{canonical_json, required_str, validate_profile};
 
+fn consent_cell_id(mv: &Value, vector_name: &str) -> Result<String> {
+    let consent_id = ConsentId::new(required_str(mv, "consent_id")?.to_owned())
+        .with_context(|| format!("vector {vector_name} carries an invalid consent_id"))?;
+    Ok(format!(
+        "ak:cell:ak.component.consent.grant.v1:{}",
+        consent_id.as_str()
+    ))
+}
+
 /// W3 — holder-private consent cell or-set Move semantics.
 ///
 /// Spec: `identity/consent-model.md` + `authz/event-auth-state-resolution.md`
 /// (Move/Anchor/Lattice). Each grant Move adds a `(peer, scope)` tag to the
-/// holder-keyed or-set cell `ak:cell:ak.component.consent.grant.v1:<holder>`.
-/// Each revoke Move issues a causal `or_set_remove` against the prior grant
-/// Move's id. The cell join (active set) is the lookup surface for
-/// `consent_active` preconditions on downstream invite / message Moves.
+/// caller-minted cell `ak:cell:ak.component.consent.grant.v1:<consent_id>`.
+/// Each revoke Move issues a causal `or_set_remove` against a prior grant
+/// dot. The cell join is read by the downstream operation-admission gate;
+/// it is never copied into a cross-Realm CBA precondition.
 ///
 /// This validator replays the fixture's Move sequence per vector, tracking
 /// the or-set's active tags by their op_ids (Move ids). It enforces:
-///   * grant ops add `(peer, scope)` tagged by Move id
-///   * revoke ops remove the referenced op_ids causally
-///   * `consent_active` preconditions on downstream Moves resolve against the cell's join, with
+///   * grant ops add `(peer, scope)` under the canonical `<EventId>:<write_index>` dot
+///   * revoke ops remove the referenced dots causally
+///   * `consent_active` operation-admission checks resolve against the cell's join, with
 ///     `scope=any` acting as a peer-scoped wildcard
 ///   * `accept` preconditioned Moves always have an active matching tag
-///   * `reject` Moves carry `reason_code=consent_required` and always have no matching active tag
+///   * rejected downstream operations carry `consent_required`; rejected intent rebinds use the
+///     dedicated `consent_intent_rebind` decision
 pub fn run_consent_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("consent_fixture.json")?;
     validate_profile(&fixture, "ak.profile.consent_vectors.v1")?;
@@ -42,6 +53,8 @@ pub fn run_consent_fixture_suite() -> Result<()> {
     let mut covered_pseudonym = false;
     let mut covered_require_consent = false;
     let mut covered_idempotent_regrant = false;
+    let mut covered_partial_revoke = false;
+    let mut covered_intent_rebind_rejection = false;
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
@@ -57,6 +70,8 @@ pub fn run_consent_fixture_suite() -> Result<()> {
             String,
             std::collections::HashMap<String, (String, String)>,
         > = Default::default();
+        let mut frozen_intents: std::collections::HashMap<String, (String, String)> =
+            Default::default();
         let mut saw_grant_then_invite_accept = false;
         let mut saw_revoke_then_invite_reject = false;
 
@@ -71,9 +86,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
             let outcome = expected_outcome(mv, name)?;
             match kind {
                 "ak.consent.grant" => {
-                    if outcome != "accept" {
-                        bail!("vector {name} ak.consent.grant must accept");
-                    }
+                    let expected_cell = consent_cell_id(mv, name)?;
                     let effects = mv
                         .get("effects")
                         .and_then(Value::as_array)
@@ -81,11 +94,12 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     if effects.is_empty() {
                         bail!("vector {name} grant move has empty effects[]");
                     }
-                    for effect in effects {
+                    let mut rejected_rebind = false;
+                    for (write_index, effect) in effects.iter().enumerate() {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("ak:cell:ak.component.consent.grant.v1:") {
+                        if cell != expected_cell {
                             bail!(
-                                "vector {name} grant effect cell must be the consent.grant.v1 cell, got {cell}"
+                                "vector {name} grant effect cell must use its typed consent_id subject: expected {expected_cell}, got {cell}"
                             );
                         }
                         if required_str(effect, "op")? != "or_set_add" {
@@ -98,10 +112,39 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                             .ok_or_else(|| anyhow!("vector {name} grant effect missing tag"))?;
                         let peer = required_str(tag, "peer")?;
                         let scope = required_str(tag, "scope")?;
-                        or_set
-                            .entry(cell.to_owned())
-                            .or_default()
-                            .insert(move_id.to_owned(), (peer.to_owned(), scope.to_owned()));
+                        let rebind =
+                            frozen_intents
+                                .get(cell)
+                                .is_some_and(|(frozen_peer, frozen_scope)| {
+                                    frozen_peer != peer || frozen_scope != scope
+                                });
+                        match outcome {
+                            "accept" if rebind => bail!(
+                                "vector {name} accepts a grant that rebinds consent_id {expected_cell}"
+                            ),
+                            "accept" => {
+                                frozen_intents
+                                    .entry(cell.to_owned())
+                                    .or_insert_with(|| (peer.to_owned(), scope.to_owned()));
+                                or_set.entry(cell.to_owned()).or_default().insert(
+                                    format!("{move_id}:{write_index}"),
+                                    (peer.to_owned(), scope.to_owned()),
+                                );
+                            }
+                            "reject"
+                                if rebind
+                                    && expected_reason(mv) == Some("consent_intent_rebind") =>
+                            {
+                                rejected_rebind = true;
+                                covered_intent_rebind_rejection = true;
+                            }
+                            "reject" => bail!(
+                                "vector {name} rejected grant must prove consent_intent_rebind"
+                            ),
+                            other => bail!(
+                                "vector {name} ak.consent.grant has unexpected outcome {other}"
+                            ),
+                        }
                         if peer.starts_with("did:ak:psd-") {
                             covered_pseudonym = true;
                         }
@@ -109,11 +152,15 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                             covered_scope_any = true;
                         }
                     }
+                    if outcome == "reject" && !rejected_rebind {
+                        bail!("vector {name} did not exercise an intent rebind");
+                    }
                 }
                 "ak.consent.revoke" => {
                     if outcome != "accept" {
                         bail!("vector {name} ak.consent.revoke must accept");
                     }
+                    let expected_cell = consent_cell_id(mv, name)?;
                     let effects = mv
                         .get("effects")
                         .and_then(Value::as_array)
@@ -121,9 +168,9 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     let mut removed_anything = false;
                     for effect in effects {
                         let cell = required_str(effect, "cell")?;
-                        if !cell.starts_with("ak:cell:ak.component.consent.grant.v1:") {
+                        if cell != expected_cell {
                             bail!(
-                                "vector {name} revoke effect cell must be the consent.grant.v1 cell, got {cell}"
+                                "vector {name} revoke effect cell must use its typed consent_id subject: expected {expected_cell}, got {cell}"
                             );
                         }
                         if required_str(effect, "op")? != "or_set_remove" {
@@ -149,11 +196,23 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                             let r = r.as_str().ok_or_else(|| {
                                 anyhow!("vector {name} revoke removes[] entry must be a string")
                             })?;
+                            let (event_ref, write_index) = r.rsplit_once(':').ok_or_else(|| {
+                                anyhow!("vector {name} revoke dot lacks a write index")
+                            })?;
+                            let canonical_write_index = write_index
+                                .parse::<u64>()
+                                .is_ok_and(|index| index.to_string() == write_index);
+                            if EventId::new(event_ref.to_owned()).is_err() || !canonical_write_index
+                            {
+                                bail!(
+                                    "vector {name} revoke dot {r} is not <EventId>:<write_index>"
+                                );
+                            }
                             if cell_set.remove(r).is_some() {
                                 removed_anything = true;
                             } else {
                                 bail!(
-                                    "vector {name} revoke references unknown grant op_id {r} (causal predecessor missing)"
+                                    "vector {name} revoke references unknown grant dot {r} (causal predecessor missing)"
                                 );
                             }
                         }
@@ -163,27 +222,31 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                 }
                 _ => {
-                    // Downstream Move (ak.invite.send / ak.message.send /
-                    // ak.call.invite ...) carrying a `consent_active`
-                    // precondition. Resolve precondition against the
-                    // consent.grant.v1 cell join.
-                    let preconditions = mv
-                        .get("preconditions")
+                    // Downstream operation (invite/message/call) carrying a
+                    // fixture-local admission check. Resolve it against the
+                    // holder PCR consent projection, outside CBA.
+                    let admission_checks = mv
+                        .get("admission_checks")
                         .and_then(Value::as_array)
                         .ok_or_else(|| {
                             anyhow!(
-                                "vector {name} non-consent move {kind} missing preconditions[] (consent_active required for v1 wire)"
+                                "vector {name} non-consent operation {kind} missing admission_checks[]"
                             )
                         })?;
                     let mut consent_resolved: Option<bool> = None;
-                    for pre in preconditions {
-                        if required_str(pre, "kind")? != "consent_active" {
+                    for check in admission_checks {
+                        if required_str(check, "kind")? != "consent_active" {
                             continue;
                         }
-                        let holder = required_str(pre, "holder")?;
-                        let peer = required_str(pre, "peer")?;
-                        let scope = required_str(pre, "scope")?;
-                        let cell = format!("ak:cell:ak.component.consent.grant.v1:{holder}");
+                        let _holder = required_str(check, "holder")?;
+                        let peer = required_str(check, "peer")?;
+                        let scope = required_str(check, "scope")?;
+                        let consent_id =
+                            ConsentId::new(required_str(check, "consent_id")?.to_owned())?;
+                        let cell = format!(
+                            "ak:cell:ak.component.consent.grant.v1:{}",
+                            consent_id.as_str()
+                        );
                         let active_tags = or_set.get(&cell);
                         let resolved = active_tags
                             .map(|tags| {
@@ -195,19 +258,22 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                     }
                     let resolved = consent_resolved.ok_or_else(|| {
                         anyhow!(
-                            "vector {name} non-consent move {kind} missing consent_active precondition"
+                            "vector {name} non-consent operation {kind} missing consent_active admission check"
                         )
                     })?;
                     match outcome {
                         "accept" => {
                             if !resolved {
                                 bail!(
-                                    "vector {name} move {kind} accepts but consent_active precondition resolves false"
+                                    "vector {name} operation {kind} accepts but consent_active admission check resolves false"
                                 );
                             }
                             covered_grant_accept = true;
                             if name == "idempotent_re_grant_after_revoke" {
                                 covered_idempotent_regrant = true;
+                            }
+                            if name == "partial_revoke_leaves_unobserved_dot_active" {
+                                covered_partial_revoke = true;
                             }
                             if name == "revoke_after_grant_blocks_invite" {
                                 saw_grant_then_invite_accept = true;
@@ -216,7 +282,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                         "reject" => {
                             if resolved {
                                 bail!(
-                                    "vector {name} move {kind} rejects but consent_active precondition resolves true"
+                                    "vector {name} operation {kind} rejects but consent_active admission check resolves true"
                                 );
                             }
                             if expected_reason(mv) != Some("consent_required") {
@@ -254,10 +320,12 @@ pub fn run_consent_fixture_suite() -> Result<()> {
         && covered_scope_any
         && covered_pseudonym
         && covered_require_consent
-        && covered_idempotent_regrant)
+        && covered_idempotent_regrant
+        && covered_partial_revoke
+        && covered_intent_rebind_rejection)
     {
         bail!(
-            "consent fixture must cover grant_accept + revoke_block + scope_any + pseudonym + consent_required + idempotent_regrant (or-set Move semantics)"
+            "consent fixture must cover grant_accept + revoke_block + scope_any + pseudonym + consent_required + idempotent_regrant + partial_revoke + intent_rebind_rejection"
         );
     }
     Ok(())

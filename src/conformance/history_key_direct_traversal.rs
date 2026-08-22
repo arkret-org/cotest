@@ -1,25 +1,36 @@
 //! Direct history-governance traversal and history-access ratchet checks.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::Path;
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload;
-use arkret_models_collaboration::history_key::{
-    AuthorizationIncarnation, HistoryGovernanceTraversalIntent,
-    HistoryGovernanceTraversalRetention, PeerHistoryTraversalAccess, SelfHistoryTraversalAccess,
-    response_capability_commitment,
+use arkret_models_collaboration::governance_dependencies::{
+    GovernanceDependencyResolveOutcome, GovernanceRegistryArtifact, GovernanceRegistrySnapshot,
 };
+use arkret_models_collaboration::history_key::{
+    AuthorizationIncarnation, HistoryCandidateOriginAttribution, HistoryGovernanceTraversalIntent,
+    HistoryGovernanceTraversalRetention, HistoryKeyResponseSigningInput, HistoryResponseId,
+    HistorySourceAgentObservationInput, PeerHistoryTraversalAccess, ResponseSenderOriginRef,
+    ResponseSenderQuotaDomain, SelfHistoryTraversalAccess,
+    history_release_predicate_registry_digest, response_capability_commitment,
+};
+use arkret_models_identity::AuthenticatedSignerResolutionEvidence;
 use arkret_state::direct_traversal::{
     BoundedDirectTraversalJournal, DirectCutDescriptorIndex, DirectCutMaterial, DirectCutRequest,
     SealPredecessorDescriptor, discover_direct_cut, verify_direct_traversal_cut_with_registry,
 };
+use arkret_state::history_store::HistoryMaterialLedger;
 use arkret_state::{BottomMode, CellState, LatticeKind, MemoryCellRegistry, compute_state_root};
 use arkret_wire::event_envelope::ScopeRef;
 use arkret_wire::{
-    CellFamilyId, CellRef, DidCoreId, DidFullId, DidUrl, Event, EventKind, Hash, HistoryAccess,
-    Hlc, LatticeOp, LatticeOpType, NotarySig, NotarySignerDescriptor, NotaryValue,
-    ProjectedCellWrite, ProjectedOp, Proof, RealmId, Seal, SealBasis, SealId, SealSignature,
-    null_subject_cell,
+    AvailabilityReceipt, CellFamilyId, CellRef, DidCoreId, DidFullId, DidUrl, Event,
+    EventCandidateBinding, EventCandidateBindingKey, EventCandidateBindingOutcome, EventId,
+    EventKind, HISTORY_STORE_LIMITS, Hash, HistoryAccess, HistoryCandidateMaterialKey,
+    HistoryEffectiveScope, Hlc, LatticeOp, LatticeOpType, NotarySig, NotarySignerDescriptor,
+    NotaryValue, ProducerEventProof, ProjectedCellWrite, ProjectedOp, RealmId, Seal, SealBasis,
+    SealId, SealSignature, null_subject_cell,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -90,6 +101,12 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             .pointer("/direct_traversal_replay_kat")
             .context("history-key fixture omits direct_traversal_replay_kat")?,
     )?;
+    verify_history_digest_and_sender_kats(&fixture)?;
+    verify_governance_dependency_kats(&fixture)?;
+    verify_rrk_method_evaluator()?;
+    verify_history_candidate_store_kat(&fixture)?;
+    verify_history_static_gates(&fixture)?;
+    verify_scope_and_endpoint_kats(&fixture)?;
 
     HistoryAccessPayload::initialize(HistoryAccess::AllHistoryForCurrentMembers).validate()?;
     HistoryAccessPayload::tighten().validate()?;
@@ -202,12 +219,737 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             "closed_cut_negative_cases_valid": true,
             "since_join_lineage_valid": true,
             "direct_traversal_replay_kat_valid": true,
+            "history_digest_and_sender_kats_valid": true,
+            "governance_dependency_kats_valid": true,
+            "rrk_method_evaluator_valid": true,
+            "candidate_store_kat_valid": true,
+            "history_static_gates_valid": true,
+            "scope_and_endpoint_kats_valid": true,
             "history_access_widening_rejected": true,
             "response_capability_kat_valid": true,
             "streaming_scale_kats_valid": true,
         }),
         &json!({"status": "validated"}),
     );
+    Ok(())
+}
+
+fn collect_source_files(root: &Path, files: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    for entry in
+        fs::read_dir(root).with_context(|| format!("read static-gate root {}", root.display()))?
+    {
+        let path = entry?.path();
+        if path.is_dir() {
+            if path.file_name().and_then(|name| name.to_str()) != Some("target") {
+                collect_source_files(&path, files)?;
+            }
+        } else if matches!(
+            path.extension().and_then(|extension| extension.to_str()),
+            Some("rs" | "toml")
+        ) && path.file_name().and_then(|name| name.to_str())
+            != Some("embedded_artifacts.json")
+        {
+            files.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn verify_history_static_gates(fixture: &Value) -> Result<()> {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("cotest manifest has no workspace parent")?;
+    let forbidden = fixture
+        .get("forbidden_legacy_terms")
+        .and_then(Value::as_array)
+        .context("history-key fixture omits forbidden_legacy_terms")?;
+    let mut source_files = Vec::new();
+    for relative in [
+        "arkret-rust-sdk/crates",
+        "soland/crates",
+        "garth/src",
+        "inkson/src",
+    ] {
+        collect_source_files(&workspace.join(relative), &mut source_files)?;
+    }
+    let mut forbidden_terms = forbidden
+        .iter()
+        .map(|term| {
+            term.as_str()
+                .map(str::to_owned)
+                .context("history forbidden legacy term is not text")
+        })
+        .collect::<Result<Vec<_>>>()?;
+    forbidden_terms.extend(
+        [
+            "history_secret_confirmation",
+            "max_request_body_bytes",
+            "max_response_body_bytes",
+        ]
+        .into_iter()
+        .map(str::to_owned),
+    );
+    let mut hits = Vec::new();
+    for path in source_files {
+        let source = fs::read_to_string(&path)?;
+        for term in &forbidden_terms {
+            if source.contains(term) {
+                hits.push(format!("{}: {term}", path.display()));
+            }
+        }
+    }
+    if !hits.is_empty() {
+        bail!("history production trees retain forbidden legacy terms: {hits:?}");
+    }
+
+    let operation_registry = load_artifact_json("registry/operation-registry.json")?;
+    let operations = operation_registry["operations"]
+        .as_array()
+        .context("operation registry omits operations[]")?;
+    let mut history_operations = 0_usize;
+    for operation in operations {
+        let operation_id = operation["operation_id"]
+            .as_str()
+            .context("operation registry entry omits operation_id")?;
+        if !operation_id.contains("history_key") {
+            continue;
+        }
+        history_operations += 1;
+        let object = operation
+            .as_object()
+            .context("operation registry entry is not an object")?;
+        if object.contains_key("max_request_body_bytes")
+            || object.contains_key("max_response_body_bytes")
+        {
+            bail!("history operation {operation_id} retains a parallel body-limit field");
+        }
+        if object
+            .get("max_canonical_body_bytes")
+            .and_then(Value::as_u64)
+            .is_some_and(|limit| limit > 8 * 1024 * 1024)
+        {
+            bail!("history operation {operation_id} exceeds the general 8 MiB limit");
+        }
+    }
+    if history_operations == 0 {
+        bail!("operation registry contains no history-key operations");
+    }
+
+    let vector_registry = load_artifact_json("registry/vector-registry.json")?;
+    let registered = vector_registry["vectors"]
+        .as_array()
+        .context("vector registry omits vectors[]")?
+        .iter()
+        .any(|vector| {
+            vector["vector_id"].as_str()
+                == Some("ak.vector.history_key.frontier_traversal_split.v1")
+        });
+    if !registered
+        || !fixture["covers_vectors"]
+            .as_array()
+            .context("history-key fixture omits covers_vectors[]")?
+            .iter()
+            .any(|vector| {
+                vector.as_str() == Some("ak.vector.history_key.frontier_traversal_split.v1")
+            })
+    {
+        bail!("history frontier/direct-traversal split vector is not closed in registry+fixture");
+    }
+    Ok(())
+}
+
+fn sha256_hash(bytes: &[u8]) -> arkret_wire::Result<Hash> {
+    Ok(Hash::new(arkret_canonical::sha256_digest(bytes))?)
+}
+
+fn verify_history_digest_and_sender_kats(fixture: &Value) -> Result<()> {
+    let sender_kat = fixture
+        .pointer("/sender_crypto_kats")
+        .context("history-key fixture omits sender_crypto_kats")?;
+    let authoritative_name = sender_kat["authoritative_fixture"]
+        .as_str()
+        .context("history sender KAT omits authoritative_fixture")?;
+    if authoritative_name != "arkret-private-kdf-fixture.json" {
+        bail!("history sender KAT points at a non-authoritative fixture");
+    }
+    let authoritative = load_artifact_json(&format!("fixtures/{authoritative_name}"))?;
+    let authoritative_cases = authoritative["cases"]
+        .as_array()
+        .context("private KDF fixture omits cases[]")?;
+    for link in sender_kat["cases"]
+        .as_array()
+        .context("history sender KAT omits cases[]")?
+    {
+        let case_ref = link["case_ref"]
+            .as_str()
+            .context("history sender KAT link omits case_ref")?;
+        let target = authoritative_cases
+            .iter()
+            .find(|case| case["name"].as_str() == Some(case_ref))
+            .with_context(|| format!("history sender KAT target {case_ref} is absent"))?;
+        if target
+            .pointer("/expected/content_key_hex")
+            .and_then(Value::as_str)
+            != link["expected_content_key_hex"].as_str()
+        {
+            bail!("history sender KAT {case_ref} drifted from its authoritative key bytes");
+        }
+    }
+
+    let predicate_kat = fixture
+        .pointer("/predicate_registry_digest_kat")
+        .context("history-key fixture omits predicate_registry_digest_kat")?;
+    let registry = load_artifact_json("registry/history-release-attestation-registry.json")?;
+    let expected = predicate_kat["expected_digest"]
+        .as_str()
+        .context("history predicate registry KAT omits expected_digest")?;
+    let actual_registry_digest = history_release_predicate_registry_digest(&registry)?;
+    if actual_registry_digest.as_str() != expected {
+        bail!(
+            "history release predicate registry digest drifted: expected {expected}, got {}",
+            actual_registry_digest.as_str()
+        );
+    }
+    let mut omitted = registry.clone();
+    let omitted_name = omitted
+        .as_object()
+        .context("history release registry is not an object")?
+        .keys()
+        .find(|name| name.as_str() != "wire_registry_binding")
+        .cloned()
+        .context("history release registry has no digest-covered member")?;
+    omitted
+        .as_object_mut()
+        .context("history release registry is not an object")?
+        .remove(&omitted_name);
+    if history_release_predicate_registry_digest(&omitted)?.as_str() == expected {
+        bail!("history predicate digest ignored covered registry member {omitted_name}");
+    }
+
+    let observation_kat = fixture
+        .pointer("/history_source_agent_observation_digest_kat")
+        .context("history-key fixture omits source Agent observation digest KAT")?;
+    let input: HistorySourceAgentObservationInput =
+        serde_json::from_value(observation_kat["preimage"].clone())?;
+    input.validate()?;
+    let expected_observation = observation_kat["expected_digest"]
+        .as_str()
+        .context("source Agent observation KAT omits expected_digest")?;
+    if input.history_source_agent_observation_digest()?.as_str() != expected_observation {
+        bail!("history source Agent observation digest drifted");
+    }
+    for branch in ["signing_input_a", "signing_input_b"] {
+        let signing_input: HistoryKeyResponseSigningInput =
+            serde_json::from_value(observation_kat[branch].clone())?;
+        signing_input.validate()?;
+        if signing_input
+            .history_source_agent_observation_digest()?
+            .as_str()
+            != expected_observation
+        {
+            bail!("history signer evidence coordinates leaked into the observation digest");
+        }
+    }
+    let mut mutated_content = observation_kat["preimage"].clone();
+    mutated_content["content"]["chunks"][0]["chunk_response_id"] =
+        json!("ak:history_response:019c0000-0000-7000-8000-000000000003");
+    let mutated: HistorySourceAgentObservationInput = serde_json::from_value(mutated_content)?;
+    if mutated.history_source_agent_observation_digest()?.as_str() == expected_observation {
+        bail!("history source Agent observation digest ignored response content");
+    }
+    Ok(())
+}
+
+fn verify_governance_dependency_kats(fixture: &Value) -> Result<()> {
+    let snapshot_kat = fixture
+        .pointer("/governance_registry_artifact_kat")
+        .context("history-key fixture omits governance_registry_artifact_kat")?;
+    let snapshot: GovernanceRegistrySnapshot =
+        serde_json::from_value(snapshot_kat["snapshot"].clone())?;
+    snapshot.validate()?;
+
+    let artifact: GovernanceRegistryArtifact =
+        serde_json::from_value(snapshot_kat["sample_registry_artifact"].clone())?;
+    artifact.validate()?;
+    let decoded = URL_SAFE_NO_PAD.decode(&artifact.canonical_bytes_b64u)?;
+    let canonical: Value = serde_json::from_slice(&decoded)?;
+    if arkret_canonical::canonical::canonical_json_bytes(&canonical)? != decoded {
+        bail!("governance registry artifact KAT is not canonical JSON");
+    }
+    let mut tampered_artifact = artifact.clone();
+    let mut tampered_value = canonical;
+    tampered_value
+        .as_object_mut()
+        .context("sample governance artifact is not an object")?
+        .insert("tampered".to_owned(), json!(true));
+    tampered_artifact.canonical_bytes_b64u = URL_SAFE_NO_PAD.encode(
+        arkret_canonical::canonical::canonical_json_bytes(&tampered_value)?,
+    );
+    tampered_artifact
+        .validate()
+        .expect_err("changed registry artifact bytes must not retain the descriptor digest");
+
+    let signer_kat = fixture
+        .pointer("/authenticated_signer_resolution_evidence_kat")
+        .context("history-key fixture omits authenticated signer evidence KAT")?;
+    let signer_evidence: AuthenticatedSignerResolutionEvidence =
+        serde_json::from_value(signer_kat["evidence"].clone())?;
+    let signer_digest = signer_evidence.canonical_sha256_digest()?;
+    if signer_digest.as_str()
+        != signer_kat["evidence_digest"]
+            .as_str()
+            .context("signer evidence KAT omits evidence_digest")?
+        || signer_evidence.evidence_ref()?.as_ref()
+            != signer_kat["evidence_ref"]
+                .as_str()
+                .context("signer evidence KAT omits evidence_ref")?
+        || arkret_canonical::canonical::canonical_json_bytes(&signer_evidence)?.len() as u64
+            != signer_kat["canonical_bytes"]
+                .as_u64()
+                .context("signer evidence KAT omits canonical_bytes")?
+    {
+        bail!("authenticated signer evidence KAT drifted");
+    }
+
+    let dependency_kat = fixture
+        .pointer("/governance_dependency_resolve_kat")
+        .context("history-key fixture omits governance dependency resolve KAT")?;
+    let receipt: AvailabilityReceipt =
+        serde_json::from_value(dependency_kat["availability_receipt"].clone())?;
+    receipt.validate_structural()?;
+    receipt.validate_receipt_digest(sha256_hash)?;
+    receipt.validate_signature_payload_digest(sha256_hash)?;
+
+    let outcome: GovernanceDependencyResolveOutcome =
+        serde_json::from_value(dependency_kat["resolve_outcome"].clone())?;
+    outcome.validate()?;
+
+    let mut branch_mismatch = dependency_kat["resolve_outcome"].clone();
+    let items = branch_mismatch["items"]
+        .as_array_mut()
+        .context("governance dependency outcome omits items")?;
+    let availability = items
+        .iter()
+        .find_map(|item| item.get("availability_receipt").cloned())
+        .context("governance dependency outcome omits availability receipt")?;
+    let signer_item = items
+        .iter_mut()
+        .find(|item| {
+            item.get("authenticated_signer_resolution_evidence")
+                .is_some()
+        })
+        .context("governance dependency outcome omits signer evidence")?;
+    signer_item
+        .as_object_mut()
+        .context("governance dependency item is not an object")?
+        .remove("authenticated_signer_resolution_evidence");
+    signer_item
+        .as_object_mut()
+        .context("governance dependency item is not an object")?
+        .insert("availability_receipt".to_owned(), availability);
+    let mismatched: GovernanceDependencyResolveOutcome = serde_json::from_value(branch_mismatch)?;
+    mismatched
+        .validate()
+        .expect_err("selector/payload branch mismatch must fail closed");
+    Ok(())
+}
+
+fn fixture_limit(kat: &Value, name: &str) -> Result<u64> {
+    kat.pointer(&format!("/limits/{name}"))
+        .and_then(Value::as_u64)
+        .with_context(|| format!("candidate-store KAT omits limits.{name}"))
+}
+
+fn candidate_digest(byte: u8) -> Result<Hash> {
+    Ok(Hash::new(arkret_wire::canonical::sha256_digest(
+        [byte; 32],
+    ))?)
+}
+
+fn candidate_material_key(
+    effective_scope: &HistoryEffectiveScope,
+    candidate_digest: Hash,
+) -> Result<HistoryCandidateMaterialKey> {
+    Ok(HistoryCandidateMaterialKey {
+        mls_group_id: effective_scope.canonical_mls_group_id()?,
+        effective_scope: effective_scope.clone(),
+        epoch: 4,
+        candidate_digest,
+    })
+}
+
+fn candidate_attribution(
+    effective_scope: &HistoryEffectiveScope,
+    candidate_byte: u8,
+    sender_domain: &str,
+    response_index: u8,
+    now: DateTime<Utc>,
+) -> Result<HistoryCandidateOriginAttribution> {
+    Ok(HistoryCandidateOriginAttribution::ResponseSender {
+        material_key: candidate_material_key(effective_scope, candidate_digest(candidate_byte)?)?,
+        origin_quota_domain: ResponseSenderQuotaDomain {
+            source_sender_domain: sender_domain.to_owned(),
+        },
+        origin_ref: ResponseSenderOriginRef {
+            response_id: HistoryResponseId::new(format!(
+                "ak:history_response:019a0000-0000-7000-8000-0000000000{response_index:02x}"
+            ))?,
+            source_record_digest: candidate_digest(0xf0 ^ response_index)?,
+        },
+        first_observed_at: now,
+        expires_at: now
+            + chrono::Duration::seconds(HISTORY_STORE_LIMITS.origin_attribution_ttl_seconds),
+    })
+}
+
+fn candidate_binding_key(
+    material_key: &HistoryCandidateMaterialKey,
+) -> Result<EventCandidateBindingKey> {
+    Ok(EventCandidateBindingKey {
+        effective_scope: material_key.effective_scope.clone(),
+        mls_group_id: material_key.mls_group_id.clone(),
+        epoch: material_key.epoch,
+        event_id: EventId::new("ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")?,
+        event_digest: candidate_digest(0xaa)?,
+        verified_sender_domain: "ak:device:sender".to_owned(),
+    })
+}
+
+fn verify_history_candidate_store_kat(fixture: &Value) -> Result<()> {
+    let kat = fixture
+        .pointer("/candidate_store_kat")
+        .context("history-key fixture omits candidate_store_kat")?;
+    let declared_limits = [
+        (
+            "received_candidates_per_scope_group_epoch",
+            HISTORY_STORE_LIMITS.max_received_candidates_per_scope_group_epoch as u64,
+        ),
+        (
+            "origin_attributions_per_candidate",
+            HISTORY_STORE_LIMITS.max_origin_attributions_per_candidate as u64,
+        ),
+        (
+            "origin_attributions_per_scope_group_epoch",
+            HISTORY_STORE_LIMITS.max_origin_attributions_per_scope_group_epoch as u64,
+        ),
+        (
+            "origin_attributions_per_scope_group_epoch_quota_domain",
+            HISTORY_STORE_LIMITS.max_origin_attributions_per_scope_group_epoch_quota_domain as u64,
+        ),
+        (
+            "origin_attribution_ttl_seconds",
+            HISTORY_STORE_LIMITS.origin_attribution_ttl_seconds as u64,
+        ),
+        (
+            "event_candidate_bindings_per_scope_group_epoch",
+            HISTORY_STORE_LIMITS.max_event_candidate_bindings_per_scope_group_epoch as u64,
+        ),
+        (
+            "event_candidate_binding_ttl_seconds",
+            HISTORY_STORE_LIMITS.event_candidate_binding_ttl_seconds as u64,
+        ),
+    ];
+    for (name, generated) in declared_limits {
+        if fixture_limit(kat, name)? != generated {
+            bail!("candidate-store fixture limit {name} drifted from generated registry");
+        }
+    }
+
+    let effective_scope = HistoryEffectiveScope::Realm {
+        realm_id: RealmId::new(TRAVERSAL_REALM_ID)?,
+    };
+    let now = DateTime::parse_from_rfc3339("2026-08-22T12:00:00Z")?.with_timezone(&Utc);
+    let mut ledger = HistoryMaterialLedger::default();
+
+    let first = candidate_attribution(&effective_scope, 1, "sender.one", 1, now)?;
+    let first_plan = ledger.admit_received_candidate(&first, now)?;
+    let first_sequence = ledger
+        .resident
+        .first()
+        .context("first received candidate did not become resident")?
+        .material_received_sequence;
+    let second_origin = candidate_attribution(&effective_scope, 1, "sender.two", 2, now)?;
+    let duplicate_plan = ledger.admit_received_candidate(&second_origin, now)?;
+    if first_plan.store.is_none()
+        || duplicate_plan.store.is_some()
+        || !duplicate_plan.resident
+        || ledger.resident.len() != 1
+        || ledger.origins.len() != 2
+        || ledger.resident[0].material_received_sequence != first_sequence
+    {
+        bail!("candidate-store exact-byte dedupe or immutable sequence rule drifted");
+    }
+
+    for candidate_byte in 2..=8_u8 {
+        let attribution = candidate_attribution(
+            &effective_scope,
+            candidate_byte,
+            "sender.one",
+            candidate_byte + 1,
+            now,
+        )?;
+        let _ = ledger.admit_received_candidate(&attribution, now)?;
+    }
+    let first_key = candidate_material_key(&effective_scope, candidate_digest(1)?)?;
+    let successful_binding = EventCandidateBinding::new(
+        candidate_binding_key(&first_key)?,
+        candidate_digest(1)?,
+        EventCandidateBindingOutcome::Success,
+        now,
+    )?;
+    ledger.record_event_binding(&successful_binding, now)?;
+
+    let ninth = candidate_attribution(&effective_scope, 9, "sender.one", 10, now)?;
+    let ninth_plan = ledger.admit_received_candidate(&ninth, now)?;
+    let second_key = candidate_material_key(&effective_scope, candidate_digest(2)?)?;
+    if ninth_plan.evict != vec![second_key.clone()]
+        || ninth_plan.store
+            != Some(candidate_material_key(
+                &effective_scope,
+                candidate_digest(9)?,
+            )?)
+        || ledger.resident.len()
+            != HISTORY_STORE_LIMITS.max_received_candidates_per_scope_group_epoch
+        || !ledger
+            .resident
+            .iter()
+            .any(|entry| entry.material_key == first_key)
+        || ledger
+            .resident
+            .iter()
+            .any(|entry| entry.material_key == second_key)
+        || ledger.origins.len() != 10
+    {
+        bail!("candidate-store two-tier eviction or bounded tombstone rule drifted");
+    }
+
+    let failure_key = candidate_material_key(&effective_scope, candidate_digest(3)?)?;
+    let failure = EventCandidateBinding::new(
+        candidate_binding_key(&failure_key)?,
+        candidate_digest(3)?,
+        EventCandidateBindingOutcome::Failure,
+        now,
+    )?;
+    ledger.record_event_binding(&failure, now)?;
+    let contradiction = EventCandidateBinding::new(
+        failure.event_binding_key.clone(),
+        failure.candidate_digest.clone(),
+        EventCandidateBindingOutcome::Success,
+        now,
+    )?;
+    ledger
+        .record_event_binding(&contradiction, now)
+        .expect_err("contradictory exact Event/candidate binding must fail closed");
+
+    let expired_attribution = candidate_attribution(&effective_scope, 10, "sender.one", 11, now)?;
+    ledger
+        .admit_received_candidate(
+            &expired_attribution,
+            expired_attribution.expires_at() + chrono::Duration::seconds(1),
+        )
+        .expect_err("expired candidate attribution must not be renewed");
+    Ok(())
+}
+
+fn verify_scope_and_endpoint_kats(fixture: &Value) -> Result<()> {
+    let cases = fixture
+        .pointer("/scope_and_endpoint_kats")
+        .and_then(Value::as_array)
+        .context("history-key fixture omits scope_and_endpoint_kats")?;
+    for case in cases {
+        for branch in ["realm", "circle"] {
+            let Some(scope_case) = case.get(branch) else {
+                continue;
+            };
+            let scope: HistoryEffectiveScope =
+                serde_json::from_value(scope_case["effective_scope"].clone())?;
+            let scope_key = match &scope {
+                HistoryEffectiveScope::Realm { realm_id } => realm_id.as_str().as_bytes(),
+                HistoryEffectiveScope::Circle { circle_id, .. } => circle_id.as_str().as_bytes(),
+            };
+            let declared_scope_key = hex::decode(
+                scope_case["effective_scope_key_hex"]
+                    .as_str()
+                    .context("scope KAT omits effective_scope_key_hex")?,
+            )?;
+            let expected_group_id = scope_case["expected_mls_group_id"]
+                .as_str()
+                .context("scope KAT omits expected_mls_group_id")?;
+            if declared_scope_key != scope_key
+                || URL_SAFE_NO_PAD.encode(scope_key) != expected_group_id
+                || scope.canonical_mls_group_id()? != expected_group_id
+            {
+                bail!(
+                    "scope/group KAT {}.{branch} disagrees with the production canonical scope key",
+                    case["name"].as_str().unwrap_or("unnamed")
+                );
+            }
+        }
+        if case["name"].as_str() == Some("standard_fresh_endpoint_floor") {
+            let inputs = &case["inputs"];
+            let expected = &case["expected"];
+            let pre = inputs["pre_admission_epochs"]
+                .as_array()
+                .context("standard fresh endpoint KAT omits pre_admission_epochs")?;
+            let winning = inputs["winning_add_epoch"]
+                .as_u64()
+                .context("standard fresh endpoint KAT omits winning_add_epoch")?;
+            let post = inputs["post_admission_commit_epochs"]
+                .as_array()
+                .context("standard fresh endpoint KAT omits post-admission epochs")?;
+            let mut decryptable = vec![winning];
+            decryptable.extend(post.iter().filter_map(Value::as_u64));
+            if case["content_scheme"].as_str() != Some("mls_rfc9420")
+                || expected["decryptable_epochs"]
+                    .as_array()
+                    .context("standard fresh endpoint KAT omits decryptable_epochs")?
+                    .iter()
+                    .filter_map(Value::as_u64)
+                    .ne(decryptable)
+                || expected["rejected_pre_admission_epochs"].as_u64() != Some(pre.len() as u64)
+                || pre
+                    .iter()
+                    .filter_map(Value::as_u64)
+                    .any(|epoch| epoch >= winning)
+                || expected["history_key_requests_allowed"].as_u64() != Some(0)
+                || expected["foreign_active_mls_state_imports_allowed"].as_u64() != Some(0)
+            {
+                bail!("standard fresh endpoint floor KAT drifted");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn verify_rrk_method_evaluator() -> Result<()> {
+    use arkret_identity::history_recovery::resolve_realm_history_recovery_key;
+
+    let principal_id = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
+    let verification_method =
+        DidUrl::new("did:webvh:z6mkfixture:acme.example#realm-history-recovery-1")
+            .map_err(|err| anyhow::anyhow!(err))?;
+    let mut multicodec_key = vec![0xec, 0x01];
+    multicodec_key.extend_from_slice(&[5_u8; 32]);
+    let public_key_multibase =
+        arkret_canonical::multibase::encode_multibase_base58btc(multicodec_key);
+    let document = json!({
+        "id": principal_id.as_str(),
+        "verificationMethod": [{
+            "id": verification_method,
+            "type": "Multikey",
+            "controller": principal_id.as_str(),
+            "publicKeyMultibase": public_key_multibase,
+        }],
+        "keyAgreement": [verification_method],
+        "service": [{
+            "id": "did:webvh:z6mkfixture:acme.example#realm-history-recovery",
+            "type": "ArkretRealmHistoryRecoveryKey",
+            "serviceEndpoint": {
+                "verificationMethod": verification_method,
+                "kem": "hpke",
+                "domain": "mls_history",
+            }
+        }]
+    });
+    let resolved = resolve_realm_history_recovery_key(
+        "acme-org-rrk-1",
+        &principal_id,
+        &verification_method,
+        &document,
+    )?;
+    if resolved.hpke_public_key != [5_u8; 32]
+        || resolved.principal_id != principal_id
+        || resolved.verification_method != verification_method
+    {
+        bail!("RRK exact method evaluator returned a different recipient tuple");
+    }
+
+    let mutations = [
+        (
+            "wrong_document_owner",
+            "/id",
+            json!("ak:did_core:webvh:z6mkother"),
+        ),
+        (
+            "wrong_method_controller",
+            "/verificationMethod/0/controller",
+            json!("ak:did_core:webvh:z6mkother"),
+        ),
+        (
+            "missing_designation",
+            "/service/0/type",
+            json!("OtherService"),
+        ),
+        (
+            "wrong_domain",
+            "/service/0/serviceEndpoint/domain",
+            json!("did_control"),
+        ),
+        ("missing_key_agreement", "/keyAgreement", json!([])),
+        (
+            "wrong_key_type",
+            "/verificationMethod/0/type",
+            json!("JsonWebKey2020"),
+        ),
+    ];
+    for (name, pointer, replacement) in mutations {
+        let mut mutated = document.clone();
+        *mutated
+            .pointer_mut(pointer)
+            .with_context(|| format!("RRK mutation {name} pointer is absent"))? = replacement;
+        if resolve_realm_history_recovery_key(
+            "acme-org-rrk-1",
+            &principal_id,
+            &verification_method,
+            &mutated,
+        )
+        .is_ok()
+        {
+            bail!("RRK exact method evaluator accepted {name}");
+        }
+    }
+
+    let mut duplicate_method = document.clone();
+    let duplicate = duplicate_method["verificationMethod"][0].clone();
+    duplicate_method["verificationMethod"]
+        .as_array_mut()
+        .context("RRK DID Document verificationMethod is not an array")?
+        .push(duplicate);
+    resolve_realm_history_recovery_key(
+        "acme-org-rrk-1",
+        &principal_id,
+        &verification_method,
+        &duplicate_method,
+    )
+    .expect_err("RRK exact method evaluator must reject multiple matching methods");
+
+    let mut wrong_curve = document.clone();
+    let mut ed25519_key = vec![0xed, 0x01];
+    ed25519_key.extend_from_slice(&[5_u8; 32]);
+    wrong_curve["verificationMethod"][0]["publicKeyMultibase"] = json!(
+        arkret_canonical::multibase::encode_multibase_base58btc(ed25519_key)
+    );
+    resolve_realm_history_recovery_key(
+        "acme-org-rrk-1",
+        &principal_id,
+        &verification_method,
+        &wrong_curve,
+    )
+    .expect_err("RRK exact method evaluator must reject a non-X25519 multicodec key");
+
+    let mut wrong_length = document;
+    let mut short_x25519_key = vec![0xec, 0x01];
+    short_x25519_key.extend_from_slice(&[5_u8; 31]);
+    wrong_length["verificationMethod"][0]["publicKeyMultibase"] = json!(
+        arkret_canonical::multibase::encode_multibase_base58btc(short_x25519_key)
+    );
+    resolve_realm_history_recovery_key(
+        "acme-org-rrk-1",
+        &principal_id,
+        &verification_method,
+        &wrong_length,
+    )
+    .expect_err("RRK exact method evaluator must reject a non-32-byte X25519 key");
     Ok(())
 }
 
@@ -280,7 +1022,7 @@ fn attach_replay_kat_proof(event: &mut Event, verification_method: &DidUrl) -> R
     let event_digest =
         Hash::new(event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?)?;
     let signer_evidence_digest = Hash::new(format!("sha256:{}", "91".repeat(32)))?;
-    event.proofs = vec![Proof {
+    event.proofs = vec![ProducerEventProof {
         kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
         verification_method: verification_method.clone(),
         event_digest,

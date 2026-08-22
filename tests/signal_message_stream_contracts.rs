@@ -63,7 +63,7 @@ fn plaintext(frame: MessageStreamFrame) -> SignalPlaintext {
         payload_sequence,
         ttl_ms: None,
         // The typed profile the receiver dispatched to (`signal.md` §1.1).
-        payload: garth::SdkSignalPlaintext::MessageStream(frame),
+        payload: garth::SignalPlaintext::MessageStream(frame),
         sent_at: at(0),
         expires_at: at(30),
         scope_ref: ScopeRef::Realm { realm_id: realm() },

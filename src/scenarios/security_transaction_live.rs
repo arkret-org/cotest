@@ -207,7 +207,7 @@ fn event_submission(
     let (signer_evidence_ref, signer_evidence_digest) =
         crate::fixture_signer_evidence_pair(principal.as_str());
     event.proofs.push(
-        arkret_wire::Proof {
+        arkret_wire::ProducerEventProof {
             kind: "DataIntegrityProof".to_owned(),
             // `zh/identity/did-usage-and-verification.md` §2.2: a
             // `verification_method` is a DID URL, never a bare DID. This fixture

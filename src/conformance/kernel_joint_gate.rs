@@ -18,8 +18,8 @@ use arkret_wire::offline_publication::{
 };
 use arkret_wire::{
     CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, DidFullId, DidUrl,
-    LatticeOp, LatticeOpType, NotarySig, NotaryValue, OperationKind, Proof, SchemaId, ScopeRef,
-    Seal, SealSignature,
+    LatticeOp, LatticeOpType, NotarySig, NotaryValue, OperationKind, ProducerEventProof, SchemaId,
+    ScopeRef, Seal, SealSignature,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
@@ -743,7 +743,7 @@ fn operation_with_producer(
     .expect("fixture Event digest is typed");
     event.proofs = verification_method
         .map(|verification_method| {
-            Proof {
+            ProducerEventProof {
                 kind: "detached_jws".to_owned(),
                 verification_method: DidUrl::new(verification_method)
                     .expect("fixture verification method is valid"),

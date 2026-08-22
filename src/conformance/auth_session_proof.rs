@@ -11,12 +11,12 @@ use arkret_models_identity::{
     CanonicalSessionPublicJwk, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use arkret_signatures::http_signature::{
-    Component, ContentDigest, ContentDigestAlgorithm, Ed25519SigningKey, SignatureInput,
-    SignatureVerificationPolicy, SignedRequestParts, canonical_message, sign_message,
-    verify_signed_http_message,
+    Component, ContentDigest, ContentDigestAlgorithm, SignatureInput, SignatureVerificationPolicy,
+    SignedRequestParts, canonical_message, sign_message, verify_signed_http_message,
 };
 use arkret_wire::ProfileId;
 use chrono::{DateTime, Duration, Utc};
+use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -340,12 +340,12 @@ struct SignedRequest {
     body: Vec<u8>,
 }
 
-fn signing_key(seed: u8) -> Ed25519SigningKey {
-    arkret_signatures::http_signature::signing_key_from_seed(&[seed; 32])
+fn signing_key(seed: u8) -> SigningKey {
+    SigningKey::from_bytes(&[seed; 32])
 }
 
 struct SelfRequestSigning<'a> {
-    signing_key: &'a Ed25519SigningKey,
+    signing_key: &'a SigningKey,
     key_id: &'a str,
     method: &'a str,
     target_uri: &'a str,
@@ -431,7 +431,7 @@ fn sign_self_request(request: SelfRequestSigning<'_>) -> Result<SignedRequest> {
 
 fn verify_self_pop(
     request: &SignedRequest,
-    public_key: &arkret_signatures::http_signature::Ed25519PublicKey,
+    public_key: &VerifyingKey,
     expected_key_id: &str,
     now: i64,
 ) -> std::result::Result<(), &'static str> {

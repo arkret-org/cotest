@@ -24,7 +24,7 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
 use arkret_wire::{
-    Audience, DidUrl, Event, EventRef, NonEmptyString, PrincipalAuthorityKey, Proof,
+    Audience, DidUrl, Event, EventRef, NonEmptyString, PrincipalAuthorityKey, ProducerEventProof,
 };
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
@@ -497,7 +497,7 @@ fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Re
     let (signer_evidence_ref, signer_evidence_digest) =
         crate::fixture_signer_evidence_pair(verification_method.as_str());
     event.proofs = vec![
-        Proof {
+        ProducerEventProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: verification_method.clone(),
             event_digest: digest,

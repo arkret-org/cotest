@@ -43,7 +43,7 @@ use arkret_models_collaboration::governance::member_delivery_binding_candidate::
 use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
 use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
 use arkret_models_identity::handle_claim::DeliveryBindingHint;
-use arkret_wire::{Audience, PrincipalAuthorityKey, Proof};
+use arkret_wire::{Audience, PrincipalAuthorityKey, ProducerEventProof};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -561,8 +561,8 @@ fn future_expiry(window: ChronoDuration) -> DateTime<Utc> {
     Utc::now() + window
 }
 
-fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<Proof> {
-    Ok(Proof {
+fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<ProducerEventProof> {
+    Ok(ProducerEventProof {
         kind: "detached_jws".to_owned(),
         verification_method: crate::fixture_did_url("did:web:principal.acme.example#key-1"),
         event_digest: Hash::new(digest.to_owned())?,

@@ -350,6 +350,7 @@ dependencies = [
  "arkret-state",
  "arkret-wire",
  "chrono",
+ "ed25519-dalek",
  "futures-util",
  "getrandom 0.4.3",
  "reqwest 0.13.4",
@@ -1893,6 +1894,7 @@ dependencies = [
 name = "cotest"
 version = "0.3.0"
 dependencies = [
+ "aes-gcm",
  "anyhow",
  "arbitrary",
  "argon2",

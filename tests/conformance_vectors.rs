@@ -830,7 +830,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
     use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
     use arkret_models_identity::handle_claim::DeliveryBindingHint;
-    use arkret_wire::{Audience, PrincipalAuthorityKey, Proof};
+    use arkret_wire::{Audience, PrincipalAuthorityKey, ProducerEventProof};
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     if invite_handle.canonical() != "alice:acme.example" {
@@ -868,7 +868,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         source_refs: vec![EventId::new(
             "ak:event:AZYdi3qlzHC9BLa3vihHvgrhFh0AYuNTNpOD7a8MiN5J",
         )?],
-        proofs: vec![Proof {
+        proofs: vec![ProducerEventProof {
             kind: "detached_jws".to_owned(),
             verification_method: cotest::fixture_did_url("did:web:principal.acme.example#key-1"),
             event_digest: Hash::new(
