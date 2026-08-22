@@ -300,7 +300,7 @@ async fn grant_then_revoke_invite_consent(
     let grant_payload = ConsentGrantPayload {
         consent_id: consent_id.clone(),
         peer: peer_core_id,
-        consent_scope: "invite".to_owned(),
+        consent_scope: arkret_wire::ConsentScope::Invite,
         not_before: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
         constraints: None,
