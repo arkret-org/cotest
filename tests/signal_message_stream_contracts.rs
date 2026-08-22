@@ -3,6 +3,7 @@ use arkret::{
     MessageStreamFormat, MessageStreamFrame, MessageStreamId, MessageStreamKeyframe,
     MessageStreamProducer, RealmId, ScopeRef, SealId, StrandId,
 };
+use arkret_models_collaboration::signal_plaintext::SignalPlaintext as SignalPayload;
 use chrono::{DateTime, Utc};
 use garth::{
     MESSAGE_STREAM_KIND, MessageStreamApplyOutcome, MessageStreamProjection, SignalPlaintext,
@@ -63,7 +64,7 @@ fn plaintext(frame: MessageStreamFrame) -> SignalPlaintext {
         payload_sequence,
         ttl_ms: None,
         // The typed profile the receiver dispatched to (`signal.md` §1.1).
-        payload: garth::SignalPlaintext::MessageStream(frame),
+        payload: SignalPayload::MessageStream(frame),
         sent_at: at(0),
         expires_at: at(30),
         scope_ref: ScopeRef::Realm { realm_id: realm() },
