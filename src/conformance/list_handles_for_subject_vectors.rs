@@ -12,7 +12,10 @@
 //! [`DirectorySubjectHandleList::validate`]).
 
 use anyhow::{Result, anyhow, bail};
-use arkret::identity::{PrimaryHandleSelectInput, select_primary_handle};
+use arkret::identity::{
+    HandleIssuerAuthorityClass, HandleIssuerPolicyEntry, PrimaryHandleSelectInput,
+    select_primary_handle,
+};
 use arkret_identifiers::DidCoreId;
 use arkret_models_discovery::{
     DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList,
@@ -314,7 +317,18 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
         claim_for("alice:other.example", &s, OTHER_ISSUER, None)?,
         claim_for("alice:acme.example", &s, ACME_ISSUER, Some(realm_ctx))?,
     ];
-    let accepted = vec![DidCoreId::new(ACME_ISSUER)?, DidCoreId::new(OTHER_ISSUER)?];
+    let accepted = vec![
+        HandleIssuerPolicyEntry {
+            issuer: DidCoreId::new(ACME_ISSUER)?,
+            authorized_handle_domains: vec!["acme.example".to_owned()],
+            issuer_class: HandleIssuerAuthorityClass::DomainAuthority,
+        },
+        HandleIssuerPolicyEntry {
+            issuer: DidCoreId::new(OTHER_ISSUER)?,
+            authorized_handle_domains: vec!["other.example".to_owned()],
+            issuer_class: HandleIssuerAuthorityClass::DomainAuthority,
+        },
+    ];
 
     // The directory's `primary_handle` field MUST equal the §3.2.1
     // selection output for the same context + policy.
@@ -322,7 +336,7 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
-        accepted_issuers: &accepted,
+        handle_issuer_policy: &accepted,
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
