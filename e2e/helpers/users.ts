@@ -1680,10 +1680,25 @@ export async function openUser(
     {
       name: "inkson.config.v1",
       value: JSON.stringify({
-        server_url: serverUrl,
         principal_servers: [serverUrl],
-        account_did: opts.neutralLoginConfig ? "" : user.did,
-        device_id: opts.neutralLoginConfig ? "" : user.deviceId,
+        active_account: opts.neutralLoginConfig
+          ? null
+          : {
+              profile_id: `ak:profile:${randomUUID()}`,
+              authority: {
+                principal_id: user.did,
+                principal_server_id: solandServiceId(opts.server),
+              },
+              resolution: {
+                full_id: user.fullDid,
+                method_history_head: "sha256:cotest-accepted-history-head",
+                version_id: "cotest-accepted-version",
+                resolution_event_ref: "ak:event:cotest-accepted-resolution",
+                updated_at: new Date().toISOString(),
+              },
+              device_id: user.deviceId,
+              server_url: serverUrl,
+            },
         session_credential: opts.neutralLoginConfig ? "" : sessionCredential,
       }),
     },

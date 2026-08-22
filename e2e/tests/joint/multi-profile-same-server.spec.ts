@@ -44,8 +44,12 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
         alicePage.page.evaluate(() => window.localStorage.getItem("inkson.config.v1")),
         bobPage.page.evaluate(() => window.localStorage.getItem("inkson.config.v1")),
       ]);
-      expect(JSON.parse(aliceConfigRaw ?? "{}").account_did).toBe(alice.did);
-      expect(JSON.parse(bobConfigRaw ?? "{}").account_did).toBe(bob.did);
+      expect(
+        JSON.parse(aliceConfigRaw ?? "{}").active_account?.authority?.principal_id,
+      ).toBe(alice.did);
+      expect(
+        JSON.parse(bobConfigRaw ?? "{}").active_account?.authority?.principal_id,
+      ).toBe(bob.did);
 
       const realmId = await alicePage.createRealm({
         title: realmTitle,
