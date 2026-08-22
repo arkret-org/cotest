@@ -6,7 +6,6 @@ use std::fs;
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_event_draft::ProjectedEventOperation as Operation;
-use arkret_event_draft::test_support::raw_projected_operation;
 use arkret_identifiers::{
     AuthorizationLeaseId, CellRef, DeviceId, DidCoreId, Hash, Hlc, OperationId, RealmId, SealId,
 };
@@ -19,7 +18,8 @@ use arkret_wire::offline_publication::{
 };
 use arkret_wire::{
     CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, DidFullId, DidUrl,
-    LatticeOp, LatticeOpType, NotarySig, NotaryValue, SchemaId, ScopeRef, Seal, SealSignature,
+    LatticeOp, LatticeOpType, NotarySig, NotaryValue, OperationKind, Proof, SchemaId, ScopeRef,
+    Seal, SealSignature,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
@@ -701,20 +701,76 @@ fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
 }
 
 fn operation(kind: &str, payload: Value, suffix: u8) -> Operation {
-    let mut operation = raw_projected_operation(
+    operation_with_producer(
+        kind,
+        payload,
+        suffix,
+        "ak:did_core:web:fixture.example",
+        Some("did:web:fixture.example#ak:device:0196419b-0000-7000-8000-000000000001"),
+    )
+}
+
+fn operation_with_producer(
+    kind: &str,
+    payload: Value,
+    suffix: u8,
+    actor_id: &str,
+    verification_method: Option<&str>,
+) -> Operation {
+    let actor_id = DidCoreId::new(actor_id).expect("fixture actor core id is valid");
+    let created_at = Utc
+        .with_ymd_and_hms(2026, 7, 28, 0, 0, u32::from(suffix))
+        .single()
+        .expect("fixed timestamp is valid");
+    let mut event = arkret_wire::test_support::raw_event_at(
+        kind,
+        ScopeRef::Realm {
+            realm_id: sample_realm(),
+        },
+        actor_id.clone(),
+        actor_id,
+        1,
+        Hlc::new("01970e589d21-0000-a13f9c2e").expect("fixed HLC is valid"),
+        payload,
+        created_at,
+    )
+    .expect("raw fixture Event is valid");
+    let event_digest = Hash::new(
+        event
+            .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+            .expect("fixture Event digest is valid"),
+    )
+    .expect("fixture Event digest is typed");
+    event.proofs = verification_method
+        .map(|verification_method| {
+            Proof {
+                kind: "detached_jws".to_owned(),
+                verification_method: DidUrl::new(verification_method)
+                    .expect("fixture verification method is valid"),
+                event_digest,
+                signer_resolution_evidence_ref: None,
+                signer_resolution_evidence_digest: None,
+                created_at,
+                domain: None,
+                audience: None,
+                proof_purpose: None,
+                jws: "fixture..signature".to_owned(),
+            }
+            .into()
+        })
+        .into_iter()
+        .collect();
+    Operation::from_accepted_event(
         OperationId::new(format!(
             "ak:operation:0196419b-0000-7000-8000-{suffix:012x}"
         ))
         .expect("fixed operation id is valid"),
-        sample_realm(),
-        kind,
-        payload,
-    );
-    operation.created_at = Utc
-        .with_ymd_and_hms(2026, 7, 28, 0, 0, u32::from(suffix))
-        .single()
-        .expect("fixed timestamp is valid");
-    operation
+        OperationKind::Create,
+        None,
+        &event,
+        arkret_canonical::DigestSuite::Sha256,
+    )
+    .expect("accepted fixture Event projects")
 }
 
 fn sample_cell(component: &str) -> CellRef {
@@ -871,8 +927,124 @@ fn error(code: &str, reason: &str) -> KernelGateOutcome {
 mod tests {
     use super::*;
 
+    fn fixture_genesis_payload() -> Value {
+        let fixture = load_local_fixture_value(KERNEL_JOINT_GATE_FIXTURE)
+            .expect("kernel gate fixture must load");
+        fixture
+            .get("cases")
+            .and_then(Value::as_array)
+            .and_then(|cases| {
+                cases.iter().find(|case| {
+                    case.get("case_id").and_then(Value::as_str)
+                        == Some("membership_and_mls_commit_are_atomic")
+                })
+            })
+            .and_then(|case| case.pointer("/input/payload/genesis"))
+            .cloned()
+            .expect("membership/MLS case must carry genesis")
+    }
+
     #[test]
     fn independent_reference_and_kernel_match_all_joint_gate_cases() {
         run_kernel_joint_gate_suite().expect("kernel joint gate must pass");
+    }
+
+    #[test]
+    fn mls_genesis_schema_rejects_legacy_creator_coordinates() {
+        let catalog = arkret_schema::event_payload_validator_catalog_from_spec_artifacts(
+            crate::conformance::spec_artifacts_root(),
+        )
+        .expect("event payload catalog must compile");
+        let payload = fixture_genesis_payload();
+        catalog
+            .validate_payload(arkret_wire::EventKind::MlsGenesis.as_str(), &payload)
+            .expect("current genesis fixture must satisfy the closed schema");
+
+        for field in ["creator_principal_id", "creator_device_id"] {
+            let mut legacy = payload.clone();
+            legacy
+                .as_object_mut()
+                .expect("genesis is an object")
+                .insert(
+                    field.to_owned(),
+                    json!(if field == "creator_principal_id" {
+                        "ak:did_core:web:alice.example"
+                    } else {
+                        "ak:device:0196419b-0000-7000-8000-000000000001"
+                    }),
+                );
+            assert!(
+                catalog
+                    .validate_payload(arkret_wire::EventKind::MlsGenesis.as_str(), &legacy)
+                    .is_err(),
+                "closed genesis schema must reject legacy {field}"
+            );
+        }
+    }
+
+    #[test]
+    fn mls_genesis_ordinary_device_projection_succeeds() {
+        let mut state = ProjectionState::new();
+        let operation = operation("ak.mls.genesis", fixture_genesis_payload(), 1);
+        assert_eq!(
+            operation
+                .context
+                .producer_device_id
+                .as_ref()
+                .map(DeviceId::as_str),
+            Some("ak:device:0196419b-0000-7000-8000-000000000001")
+        );
+
+        let effect = mls::apply_group_genesis(&mut state, &operation);
+
+        assert!(matches!(
+            effect,
+            ProjectionEffect::Mls(MlsEffect::GroupGenesis {
+                ref creator_actor_id,
+                ref creator_device_id,
+                ..
+            }) if creator_actor_id == "ak:did_core:web:fixture.example"
+                && creator_device_id == "ak:device:0196419b-0000-7000-8000-000000000001"
+        ));
+    }
+
+    #[test]
+    fn mls_genesis_without_projected_device_fails_closed_for_all_deviceless_regimes() {
+        for (regime, actor_id, verification_method) in [
+            ("minimal_metadata", "ak:did_core:web:alice.example", None),
+            (
+                "native_agent",
+                "ak:did_core:webvh:z6mkagent:agent.example",
+                Some("did:webvh:z6mkagent:agent.example#runtime-1"),
+            ),
+            (
+                "service",
+                "ak:did_core:web:service.example",
+                Some("did:web:service.example#service-key-1"),
+            ),
+        ] {
+            let mut state = ProjectionState::new();
+            let operation = operation_with_producer(
+                "ak.mls.genesis",
+                fixture_genesis_payload(),
+                1,
+                actor_id,
+                verification_method,
+            );
+            assert!(
+                operation.context.producer_device_id.is_none(),
+                "{regime} unexpectedly projected a creator device"
+            );
+
+            assert!(
+                matches!(
+                    mls::apply_group_genesis(&mut state, &operation),
+                    ProjectionEffect::Rejected { ref reason }
+                        if reason == "schema_violation"
+                ),
+                "{regime} must not create an MLS genesis without a projected device"
+            );
+            assert!(state.mls_commit_epochs.is_empty(), "{regime} mutated state");
+        }
     }
 }

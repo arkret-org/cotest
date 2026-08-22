@@ -360,8 +360,10 @@ pub use scaffold_gate::{
 pub use scalability_limits::run_scalability_limits_fixture_suite;
 pub use schema_validation::run_schema_validation_suite;
 pub use schema_validation_fixture::{
+    EVENT_PAYLOAD_VALUE_CLOSURE_FIXTURE, SCHEMA_DEFINITION_VALIDATOR_KAT,
     SCHEMA_VALIDATION_FIXTURE, SchemaValidationCase, SchemaValidationFixture,
-    run_schema_validation_fixture_suite,
+    run_event_payload_value_closure_fixture, run_schema_definition_validator_kat,
+    run_schema_validation_fixture_file, run_schema_validation_fixture_suite,
 };
 pub use security_closure::{
     ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SECURITY_CLOSURE_VECTORS_FIXTURE,
