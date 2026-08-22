@@ -29,9 +29,9 @@ use arkret_models_collaboration::events_payloads::call::{
     CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
     CallRecordingEncryptionAlgorithm, CallRecordingEncryptionContext, CallRecordingId,
-    CallRecordingRetention, CallRecordingState, CallRecordingTransition, CallStatePayload,
-    CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult, CallTranscriptState,
-    CallTranscriptTransition, RecordingStartPayload,
+    CallRecordingRetention, CallRecordingStartPayload, CallRecordingState, CallRecordingTransition,
+    CallStatePayload, CallStatePayloadRecordingResult, CallStatePayloadTranscriptResult,
+    CallTranscriptState, CallTranscriptTransition,
 };
 use arkret_wire::{ExporterLabelId, ProfileId};
 use chrono::{DateTime, Utc};
@@ -480,19 +480,19 @@ pub fn run_transcribe_lifecycle_vector() -> Result<()> {
             }
         }
     });
-    let start_payload = serde_json::from_value::<RecordingStartPayload>(start_value.clone())
+    let start_payload = serde_json::from_value::<CallRecordingStartPayload>(start_value.clone())
         .map_err(|error| anyhow::anyhow!("valid transcript start rejected: {error}"))?;
     start_payload
         .validate()
         .map_err(|error| anyhow::anyhow!("valid transcript start rejected: {error}"))?;
     let mut missing_mode = start_value.clone();
     missing_mode.as_object_mut().unwrap().remove("mode");
-    if serde_json::from_value::<RecordingStartPayload>(missing_mode).is_ok() {
+    if serde_json::from_value::<CallRecordingStartPayload>(missing_mode).is_ok() {
         bail!("recording start without mode must be schema_violation");
     }
     let mut noncanonical_recording_id = start_value;
     noncanonical_recording_id["recording_id"] = json!("transcript id");
-    if serde_json::from_value::<RecordingStartPayload>(noncanonical_recording_id).is_ok() {
+    if serde_json::from_value::<CallRecordingStartPayload>(noncanonical_recording_id).is_ok() {
         bail!("recording start with noncanonical recording_id must be schema_violation");
     }
 
