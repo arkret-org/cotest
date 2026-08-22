@@ -138,7 +138,7 @@ jobs:
           -StartCoauth
           -RunProfile joint-smoke
           -PlaywrightProject joint-inkson
-          -Grep '@returning-login-gate|@returning-device-key-gate'
+          -Grep '@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate'
           -RequireScenario 'identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts'
           -ForbidSkippedTests
           -SkipNpmInstall

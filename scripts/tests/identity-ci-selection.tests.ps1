@@ -18,16 +18,17 @@ function Assert-NotContains {
 }
 
 Assert-Contains $oidc "@returning-login-gate" "returning-login test has no stable CI tag"
+Assert-Contains $oidc "@onboarding-recovery-gate" "Recovery Key onboarding test has no stable CI tag"
 Assert-Contains $lifecycle "@returning-device-key-gate" "device-key returning test has no stable CI tag"
 Assert-NotContains $oidc 'test.describe.configure({ mode: "serial" })' "independent OIDC cases must not cascade-skip after an earlier failure"
 
 Assert-Contains $ci "-PlaywrightProject joint-inkson" "merge CI does not select the joint-inkson project"
-Assert-Contains $ci '-Grep "@returning-login-gate"' "merge CI does not select the real returning-login case"
+Assert-Contains $ci '@returning-login-gate|@onboarding-recovery-gate' "merge CI does not select returning login and Recovery Key onboarding"
 Assert-Contains $ci '-RequireScenario "identity/oidc-login-flow.spec.ts"' "merge CI does not require returning-login junit evidence"
 Assert-Contains $ci "-ForbidSkippedTests" "merge CI still permits a skipped returning-login false green"
 
 Assert-Contains $integration "-PlaywrightProject joint-inkson" "nightly does not select the joint-inkson project"
-Assert-Contains $integration "@returning-login-gate|@returning-device-key-gate" "nightly does not select both returning-login cases"
+Assert-Contains $integration "@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate" "nightly does not select all identity cases"
 Assert-Contains $integration "identity/oidc-login-flow.spec.ts,identity/device-key-lifecycle.spec.ts" "nightly does not require both identity scenarios"
 Assert-NotContains $integration "terminal auth loss|transient self-path failure" "nightly retains the zero-match identity grep"
 
@@ -42,7 +43,7 @@ if (-not (Test-Path -LiteralPath $playwrightCli -PathType Leaf)) {
 }
 Push-Location $e2eRoot
 try {
-    $listed = @(& node $playwrightCli test --config playwright.config.ts --project=joint-inkson --grep "@returning-login-gate|@returning-device-key-gate" --list 2>&1)
+    $listed = @(& node $playwrightCli test --config playwright.config.ts --project=joint-inkson --grep "@returning-login-gate|@returning-device-key-gate|@onboarding-recovery-gate" --list 2>&1)
     if ($LASTEXITCODE -ne 0) {
         throw "Playwright identity selection failed:`n$($listed -join [Environment]::NewLine)"
     }
@@ -52,6 +53,7 @@ try {
 $selection = ($listed -join "`n") -replace '\\', '/'
 Assert-Contains $selection "identity/device-key-lifecycle.spec.ts" "joint-inkson did not discover the device-key returning test"
 Assert-Contains $selection "identity/oidc-login-flow.spec.ts" "joint-inkson did not discover the OIDC returning-login test"
-Assert-Contains $selection "Total: 2 tests in 2 files" "identity gate selection changed; review the required scenario matrix"
+Assert-Contains $selection "unbound account completes Recovery Key onboarding" "joint-inkson did not discover the Recovery Key onboarding test"
+Assert-Contains $selection "Total: 3 tests in 2 files" "identity gate selection changed; review the required scenario matrix"
 
 Write-Host "Identity CI selection regression tests passed."

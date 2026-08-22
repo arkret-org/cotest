@@ -319,7 +319,7 @@ jobs:
           -SkipBrowserInstall
           -RunProfile joint-smoke
           -PlaywrightProject joint-inkson
-          -Grep "@returning-login-gate"
+          -Grep "@returning-login-gate|@onboarding-recovery-gate"
           -RequireScenario "identity/oidc-login-flow.spec.ts"
           -ForbidSkippedTests
 

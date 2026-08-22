@@ -52,7 +52,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
   const coauth = coauthBaseUrl();
   const optIn = optionalEnv("COTEST_REAL_OIDC_LOGIN");
 
-  test("unbound account completes Recovery Key onboarding through the real UI", async ({
+  test("unbound account completes Recovery Key onboarding through the real UI @onboarding-recovery-gate", async ({
     browser,
     request,
   }) => {
