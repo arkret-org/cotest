@@ -251,7 +251,7 @@ pub fn run_threshold_multisig_fixture_suite() -> Result<()> {
             .aggregate(&canonical_body, |_partial, bytes| {
                 verifier_calls.set(verifier_calls.get() + 1);
                 if bytes != canonical_body.as_slice() {
-                    return Err(arkret_wire::Error::Protocol(
+                    return Err(arkret_wire::WireError::Protocol(
                         "aggregate() handed the verifier bytes other than the canonical body"
                             .to_owned(),
                     ));

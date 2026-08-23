@@ -25,8 +25,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_collaboration::{
-    ObjectRef, RealmOrganizationControlScope, RealmOrganizationPayload,
-    RealmOrganizationRelationship,
+    RealmOrganizationControlScope, RealmOrganizationPayload, RealmOrganizationRelationship,
 };
 use arkret_policy::{
     NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
@@ -35,7 +34,7 @@ use arkret_policy::{
 use arkret_schema::{
     EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
 };
-use arkret_wire::{DidCoreId, RealmId};
+use arkret_wire::{DidCoreId, ObjectRef, RealmId};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 

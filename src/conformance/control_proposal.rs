@@ -338,7 +338,6 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
             payload_digest: hash('0'),
             created_at: ack.received_at,
             jws: "a..b".to_owned(),
-            extra: Default::default(),
         }],
     };
     let digest = decision.decision_digest()?;
@@ -440,7 +439,6 @@ fn member(
             payload_digest: hash('0'),
             created_at: received_at,
             jws: "a..b".to_owned(),
-            extra: Default::default(),
         },
     };
     member.signature.payload_digest = member.authority_ack_digest()?;
