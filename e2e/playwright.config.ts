@@ -37,6 +37,10 @@ const workers = workersEnv
     ? workersEnv
     : Number(workersEnv)
   : 2;
+const tlsSpkiSha256 = process.env.COTEST_TLS_SPKI_SHA256?.trim();
+const tlsLaunchArgs = tlsSpkiSha256
+  ? [`--ignore-certificate-errors-spki-list=${tlsSpkiSha256}`]
+  : [];
 
 export default defineConfig({
   globalSetup: "./global-setup.ts",
@@ -55,6 +59,7 @@ export default defineConfig({
   ],
   use: {
     baseURL,
+    launchOptions: { args: tlsLaunchArgs },
     // A Playwright action inherits an unbounded timeout by default, so a
     // `fill` against a control that the current page state does not have waits
     // out the whole scenario budget instead of failing where the mistake is.

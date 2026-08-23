@@ -22,10 +22,11 @@
     Runner-owned process-mode services publish their public identity through a
     managed TLS reverse proxy (0530-C): the processes keep plain loopback
     listeners, while public base URLs, issuers and minted service DIDs use
-    stable `https://<service>.local.host:<port>` names. The run-scoped CA is
-    installed into the current user's Root store and reverted at teardown; the
-    exact host names are registered in the system hosts file for the duration
-    of the run. Caller-owned URLs (-SolandBaseUrl / -CoauthBaseUrl /
+    stable `https://<service>.local.host:<port>` names. Trust stays process-local:
+    Node receives the run-scoped CA and Chromium receives the exact leaf SPKI
+    pin; the current user's Root store is never modified. The exact host names
+    are registered in the system hosts file for the duration of the run.
+    Caller-owned URLs (-SolandBaseUrl / -CoauthBaseUrl /
     -SolandCommand / docker runtime) bypass this topology unchanged.
 #>
 [CmdletBinding()]
@@ -876,12 +877,6 @@ function Invoke-JointE2ePreflight {
         } else {
             Add-PreflightResult $results "tls assets (openssl)" "fail" "openssl is required to mint the joint CA and server certificates"
         }
-        $certutil = Find-CommandPath @("certutil.exe")
-        if ($certutil) {
-            Add-PreflightResult $results "ca trust store (certutil)" "pass" $certutil
-        } else {
-            Add-PreflightResult $results "ca trust store (certutil)" "fail" "certutil is required to install the run-scoped CA into the user Root store"
-        }
         $hostsPath = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
         try {
             $hostsStream = [System.IO.File]::Open(
@@ -1033,11 +1028,10 @@ function Write-DotEnvFile {
 # Runner-owned services keep their plain loopback listeners, but their public
 # base URLs — and therefore the service `did:webvh` they mint — are stable
 # HTTPS names (`<service>.local.host:<tls port>`) fronted by one managed Caddy
-# reverse proxy. A run-scoped self-signed CA is installed into the current
-# user's Root store so the services (rustls platform-verifier), the runner
-# itself (.NET/Schannel), and the Chromium-based test browser all verify the
-# same chain; Node helpers read it through NODE_EXTRA_CA_CERTS. Every
-# machine-level foothold (hosts entries, CA trust, key files) is reverted in
+# reverse proxy. Trust is run-scoped rather than machine-scoped: Node and
+# coauth receive the CA file, while Chromium receives the exact leaf SPKI pin.
+# The topology gate independently verifies the CA chain, served leaf and every
+# SAN before business tests run. Hosts entries and key files are reverted in
 # the finally block unless -KeepServices is set.
 
 function New-JointTlsAssets {
@@ -1091,30 +1085,26 @@ function New-JointTlsAssets {
     }
     Remove-Item -LiteralPath $serverCsr -ErrorAction SilentlyContinue
 
+    $serverCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($serverPem)
+    $serverRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($serverCertificate)
+    try {
+        $serverSpki = $serverRsa.ExportSubjectPublicKeyInfo()
+        $serverSpkiSha256 = [Convert]::ToBase64String(
+            [System.Security.Cryptography.SHA256]::HashData($serverSpki)
+        )
+    } finally {
+        $serverRsa.Dispose()
+        $serverCertificate.Dispose()
+    }
+
     return [pscustomobject]@{
-        CaPemPath     = $caPem
-        CaKeyPath     = $caKey
-        ServerPemPath = $serverPem
-        ServerKeyPath = $serverKey
-        CaSubjectName = $caName
+        CaPemPath        = $caPem
+        CaKeyPath        = $caKey
+        ServerPemPath    = $serverPem
+        ServerKeyPath    = $serverKey
+        ServerSpkiSha256 = $serverSpkiSha256
+        CaSubjectName    = $caName
     }
-}
-
-function Install-JointCaTrust {
-    param([Parameter(Mandatory = $true)][string]$CaPemPath)
-
-    # Current-user Root store: no elevation needed, honoured by Schannel and by
-    # rustls-platform-verifier, and silent (no import-wizard prompt).
-    & certutil -user -addstore Root $CaPemPath | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "certutil -user -addstore Root failed for $CaPemPath (exit $LASTEXITCODE)"
-    }
-}
-
-function Remove-JointCaTrust {
-    param([Parameter(Mandatory = $true)][string]$CaSubjectName)
-
-    & certutil -user -delstore Root $CaSubjectName | Out-Null
 }
 
 function Install-JointLoopbackHosts {
@@ -1206,12 +1196,26 @@ function Assert-JointTlsTopology {
         [Parameter(Mandatory = $true)][int]$TlsPort,
         [Parameter(Mandatory = $true)][string[]]$TrustedHosts,
         [Parameter(Mandatory = $true)][string]$UnregisteredProbeHost,
+        [Parameter(Mandatory = $true)][string]$CaPemPath,
+        [Parameter(Mandatory = $true)][string]$ServerPemPath,
         [Parameter(Mandatory = $true)][string]$CotestWireBin,
         [Parameter(Mandatory = $true)][string]$EvidenceDir,
         [Parameter(Mandatory = $true)][object[]]$Services
     )
 
     $null = New-Item -ItemType Directory -Force -Path $EvidenceDir
+
+    $openssl = Find-CommandPath @("openssl.exe", "openssl")
+    if (-not $openssl) {
+        throw "joint TLS topology: openssl disappeared after preflight"
+    }
+    $verifyOutput = & $openssl verify -CAfile $CaPemPath $ServerPemPath 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "joint TLS topology: generated server certificate does not verify against the run-scoped CA: $($verifyOutput -join ' ')"
+    }
+    $expectedServerCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($ServerPemPath)
+    $expectedServerThumbprint = $expectedServerCertificate.Thumbprint
+    $expectedServerCertificate.Dispose()
 
     # 1. Every topology name — including the unregistered negative probe —
     #    resolves wholly to loopback. One non-loopback answer fails the run
@@ -1233,11 +1237,12 @@ function Assert-JointTlsTopology {
     }
 
     foreach ($hostName in $TrustedHosts) {
-        # 2a. A real verified HTTPS fetch: chain trust, hostname binding and the
-        #     proxy route are all exercised by the platform verifier here.
+        # 2a. The runner deliberately does not mutate the Windows Root store.
+        #     The chain was verified against the exact run CA above; now prove
+        #     that this host serves that exact leaf and that its SAN is bound.
         $healthUrl = "https://${hostName}:$TlsPort/health"
         try {
-            $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+            $response = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -SkipCertificateCheck -TimeoutSec 10 -ErrorAction Stop
         } catch {
             throw "joint TLS topology: verified HTTPS fetch $healthUrl failed: $($_.Exception.Message)"
         }
@@ -1253,6 +1258,9 @@ function Assert-JointTlsTopology {
             $ssl = [System.Net.Security.SslStream]::new($tcp.GetStream(), $false, $acceptAll)
             $ssl.AuthenticateAsClient($hostName)
             $remote = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($ssl.RemoteCertificate)
+            if ($remote.Thumbprint -ne $expectedServerThumbprint) {
+                throw "joint TLS topology: $hostName served leaf $($remote.Thumbprint), expected $expectedServerThumbprint"
+            }
             $san = $remote.Extensions | Where-Object { $_.Oid.Value -eq "2.5.29.17" } | Select-Object -First 1
             $sanText = if ($san) { $san.Format($false) } else { "" }
             if ($sanText -notmatch [regex]::Escape($hostName)) {
@@ -1271,7 +1279,7 @@ function Assert-JointTlsTopology {
         $logUrl = Get-WebvhLogUrlFromDid -Did $did
         $logPath = Join-Path $EvidenceDir "$($service.Name)-did.jsonl"
         try {
-            $logResponse = Invoke-WebRequest -Uri $logUrl -UseBasicParsing -TimeoutSec 15 -ErrorAction Stop
+            $logResponse = Invoke-WebRequest -Uri $logUrl -UseBasicParsing -SkipCertificateCheck -TimeoutSec 15 -ErrorAction Stop
         } catch {
             throw "joint TLS topology: cannot read $logUrl over HTTPS: $($_.Exception.Message)"
         }
@@ -1685,7 +1693,11 @@ function Wait-HttpReady {
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
         try {
-            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+            $requestOptions = @{}
+            if (([System.Uri]$Url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
+                $requestOptions.SkipCertificateCheck = $true
+            }
+            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop @requestOptions
             if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
                 return
             }
@@ -1710,7 +1722,11 @@ function Get-DescribedServiceId {
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
         try {
-            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop
+            $requestOptions = @{}
+            if (([System.Uri]$url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
+                $requestOptions.SkipCertificateCheck = $true
+            }
+            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
             $serviceId = [string]$describe.service_id
             if (-not [string]::IsNullOrWhiteSpace($serviceId) -and $serviceId.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
                 return $serviceId
@@ -1736,7 +1752,11 @@ function Get-DescribedServiceFullId {
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
         try {
-            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop
+            $requestOptions = @{}
+            if (([System.Uri]$url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
+                $requestOptions.SkipCertificateCheck = $true
+            }
+            $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
             $fullId = [string]$describe.service_resolution.full_id
             if (-not [string]::IsNullOrWhiteSpace($fullId) -and $fullId.StartsWith("did:", [System.StringComparison]::Ordinal)) {
                 return $fullId
@@ -1758,6 +1778,10 @@ function Assert-CoauthDpopGrantSeamReady {
         # An empty object is intentionally invalid. Any non-404 HTTP response
         # proves the debug-only route is registered; the joint tests create the
         # valid account/device-bound request later.
+        $requestOptions = @{}
+        if (([System.Uri]$url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
+            $requestOptions.SkipCertificateCheck = $true
+        }
         Invoke-WebRequest `
             -Uri $url `
             -Method Post `
@@ -1765,7 +1789,8 @@ function Assert-CoauthDpopGrantSeamReady {
             -Body "{}" `
             -UseBasicParsing `
             -TimeoutSec 5 `
-            -ErrorAction Stop | Out-Null
+            -ErrorAction Stop `
+            @requestOptions | Out-Null
     } catch {
         $response = $_.Exception.Response
         if ($response -and [int]$response.StatusCode -ne 404) {
@@ -3026,9 +3051,8 @@ try {
 
     # 0530-C: stand up the HTTPS identity front before any owned service
     # starts, so readiness probes, service-to-service calls and the browser all
-    # traverse the real TLS path from the first request. The run-scoped CA is
-    # trusted by the current user's Root store (services + runner + browser)
-    # and by Node helpers through NODE_EXTRA_CA_CERTS.
+    # traverse the real TLS path from the first request. Trust is confined to
+    # this process tree; Windows CurrentUser Root is intentionally untouched.
     $jointTlsAssets = $null
     $jointTlsDir = $null
     if ($jointTlsEnabled) {
@@ -3041,8 +3065,9 @@ try {
         Install-JointLoopbackHosts `
             -Hosts ($jointTlsHostNames + $jointTlsUnregisteredProbeHost) `
             -Marker $jointTlsHostsMarker
-        Install-JointCaTrust -CaPemPath $jointTlsAssets.CaPemPath
         $env:NODE_EXTRA_CA_CERTS = $jointTlsAssets.CaPemPath
+        $env:COTEST_RUN_SCOPED_CA_PEM = $jointTlsAssets.CaPemPath
+        $env:COTEST_TLS_SPKI_SHA256 = $jointTlsAssets.ServerSpkiSha256
 
         $jointTlsRoutes = @()
         if ($solandPublicHost) {
@@ -3518,6 +3543,9 @@ try {
             -KeyStoreMasterKey $SolandKeyStoreMasterKey `
             -NotarySigningKey $SolandNotarySigningKey `
             -FederationPeers $alphaPeer
+        if ($jointTlsAssets) {
+            $SolandCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $SolandCommand"
+        }
     }
     if ($SolandCommand) {
         $solandWorkingDirectory = if ($generatedSolandCommand) { $repoRoot } else { Split-Path -Parent $SutManifest }
@@ -3585,6 +3613,9 @@ try {
                 -KeyStoreMasterKey $SolandBetaKeyStoreMasterKey `
                 -NotarySigningKey $SolandBetaNotarySigningKey `
                 -FederationPeers $SolandBaseUrl
+            if ($jointTlsAssets) {
+                $solandBetaCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $solandBetaCommand"
+            }
             $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
         }
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
@@ -3725,6 +3756,8 @@ try {
             -TlsPort $jointTlsPort `
             -TrustedHosts $jointTlsHostNames `
             -UnregisteredProbeHost $jointTlsUnregisteredProbeHost `
+            -CaPemPath $jointTlsAssets.CaPemPath `
+            -ServerPemPath $jointTlsAssets.ServerPemPath `
             -CotestWireBin $env:COTEST_WIRE_BIN `
             -EvidenceDir (Join-Path $jointDir "tls-preflight") `
             -Services $jointTlsServices
@@ -4194,23 +4227,19 @@ finally {
             Stop-EphemeralPostgres -ContainerName $ephemeralPostgres.ContainerName
         }
         if ($jointTlsEnabled) {
-            # 0530-C: revert every machine-level foothold of the TLS topology
-            # (hosts entries, user Root CA, key files). Best-effort: a cleanup
-            # failure must not mask the run's own exit code.
+            # 0530-C: revert the hosts entries and delete private keys.
+            # Process-local trust disappears with the environment below.
             try {
                 Remove-JointLoopbackHosts -Marker $jointTlsHostsMarker
             } catch {
                 Write-Warning "joint TLS topology: failed to remove hosts entries ($jointTlsHostsMarker): $($_.Exception.Message)"
             }
             if ($jointTlsAssets) {
-                try {
-                    Remove-JointCaTrust -CaSubjectName $jointTlsAssets.CaSubjectName
-                } catch {
-                    Write-Warning "joint TLS topology: failed to remove CA trust ($($jointTlsAssets.CaSubjectName)): $($_.Exception.Message)"
-                }
                 Remove-Item -LiteralPath $jointTlsAssets.CaKeyPath, $jointTlsAssets.ServerKeyPath -Force -ErrorAction SilentlyContinue
             }
             Remove-Item Env:NODE_EXTRA_CA_CERTS -ErrorAction SilentlyContinue
+            Remove-Item Env:COTEST_RUN_SCOPED_CA_PEM -ErrorAction SilentlyContinue
+            Remove-Item Env:COTEST_TLS_SPKI_SHA256 -ErrorAction SilentlyContinue
         }
     }
 }

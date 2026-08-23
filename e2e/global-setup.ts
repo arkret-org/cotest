@@ -42,7 +42,12 @@ export default async function verifyBuildIdentity(config: FullConfig) {
     throw new Error("build identity gate cannot resolve the Inkson base URL");
   }
 
-  const browser = await chromium.launch();
+  const tlsSpkiSha256 = process.env.COTEST_TLS_SPKI_SHA256?.trim();
+  const browser = await chromium.launch({
+    args: tlsSpkiSha256
+      ? [`--ignore-certificate-errors-spki-list=${tlsSpkiSha256}`]
+      : [],
+  });
   try {
     const page = await browser.newPage({
       ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
