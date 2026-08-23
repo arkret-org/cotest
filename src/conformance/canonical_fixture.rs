@@ -16,12 +16,6 @@ pub struct CanonicalFixtureSuite {
     pub vectors: Vec<CanonicalFixtureVector>,
 }
 
-impl CanonicalFixtureSuite {
-    pub fn to_pretty_json(&self) -> Result<String> {
-        Ok(serde_json::to_string_pretty(self)?)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CanonicalFixtureVector {
     pub vector_id: String,

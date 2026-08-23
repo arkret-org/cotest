@@ -21,7 +21,7 @@
 
 - 请求/响应丢失、刷新或崩溃：逐字节重放同一 draft，返回同一 receipt 和 grant。
 - DID 已发布但 PCR 未接受、原设备丢失：新设备凭 Recovery Key 取得递增 fence，重建 draft 后继续。
-- 旧 genesis 已先接受：不得创建第二个 PCR，改走 root-anchored re-anchor。
+- 旧 genesis 已先接受：不得创建第二个 PCR，改走 PCR-policy re-anchor。
 - 任一 root/device/DPoP/lease/digest/device/HPKE/algorithm/order mutation：拒绝且零写入。
 
 ## DID 边界

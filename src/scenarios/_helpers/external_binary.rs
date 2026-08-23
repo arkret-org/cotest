@@ -367,23 +367,6 @@ pub const TEABAY_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     health_timeout: Duration::from_secs(30),
 };
 
-/// `coauth` (auth/account server) spec — needs a Postgres DSN to boot.
-/// `try_spawn` returns `Ok(None)` until both `COAUTH_BIN` (or sibling
-/// binary) **and** `COAUTH_DATABASE_URI` are set, so CI runners without a
-/// Postgres test DB get a clean skip rather than a partial-spawn failure.
-pub const COAUTH_SPEC: ExternalBinarySpec = ExternalBinarySpec {
-    service: "coauth",
-    bin_env: "COAUTH_BIN",
-    sibling_path: &["coauth", "target", "debug"],
-    bind_env: "COAUTH_HTTP_BIND",
-    bind_arg: None,
-    extra_env: &[],
-    extra_args: &[],
-    required_env_vars: &["COAUTH_DATABASE_URI"],
-    health_path: "/health",
-    health_timeout: Duration::from_secs(30),
-};
-
 /// `floria` (push gateway) spec — config-file driven (KDL/YAML); we treat a
 /// `FLORIA_CONFIG` env var as a hard prerequisite. Without it the binary
 /// cannot pick a listen port from `--bind` alone, so we gate on the env.

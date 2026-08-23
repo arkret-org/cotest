@@ -239,15 +239,6 @@ pub fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<Opt
     }
 }
 
-/// Convenience assertion for scenarios that expect a fully-clean
-/// shutdown. Panics with a structured message rather than a generic
-/// `assert!` failure so the chaos kind shows up in the test log.
-pub fn assert_clean_exit(outcome: &ShutdownOutcome) {
-    if !outcome.is_clean_exit() {
-        panic!("chaos_inject: expected clean graceful shutdown but got {outcome:?}");
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::process::Command;

@@ -23,7 +23,6 @@
 //! yet ready stay behind `#[ignore]` in `tests/security_closure_fixture.rs`
 //! as active local runner-contract checks in `tests/security_closure_fixture.rs`.
 
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -152,18 +151,6 @@ impl SecurityClosureFixture {
             .iter()
             .find(|v| v.vector_id == vector_id)
             .ok_or_else(|| anyhow!("security-closure-fixture missing vector_id `{vector_id}`"))
-    }
-
-    /// Index every step by `(vector_id, step.name)` for quick lookup from
-    /// individual scenario tests.
-    pub fn step_index(&self) -> BTreeMap<(String, String), &SecurityClosureStep> {
-        let mut out = BTreeMap::new();
-        for vector in &self.security_closure_fixture {
-            for step in &vector.steps {
-                out.insert((vector.vector_id.clone(), step.name.clone()), step);
-            }
-        }
-        out
     }
 }
 

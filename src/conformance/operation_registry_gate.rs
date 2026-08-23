@@ -90,12 +90,6 @@ impl OperationRegistryGateReport {
             .iter()
             .filter(|entry| entry.gate_status == OperationRegistryGateStatus::Registered)
     }
-
-    pub fn product_private_entries(&self) -> impl Iterator<Item = &OperationRegistryGateEntry> {
-        self.entries
-            .iter()
-            .filter(|entry| entry.gate_status == OperationRegistryGateStatus::ProductPrivate)
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]

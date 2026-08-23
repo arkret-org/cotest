@@ -11,18 +11,13 @@ use sha2::{Digest, Sha256};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RecoveryModel {
-    RootAnchored,
+    PcrPolicy,
 }
 
 impl RecoveryModel {
     fn steps(self) -> &'static [&'static str] {
         match self {
-            Self::RootAnchored => &[
-                "create",
-                "publish_did_entry",
-                "submit_reanchor_unit",
-                "issue_terminal_receipt",
-            ],
+            Self::PcrPolicy => &["create", "submit_reanchor_unit", "issue_terminal_receipt"],
         }
     }
 }
@@ -152,7 +147,7 @@ fn author_terminal_with_staged_secret(
 }
 
 pub fn run_recovery_transaction_fault_matrix() -> Result<()> {
-    for model in [RecoveryModel::RootAnchored] {
+    for model in [RecoveryModel::PcrPolicy] {
         for (index, step) in model.steps().iter().enumerate() {
             let operation_id = format!("{model:?}:{index}");
             let canonical_request = format!("canonical:{model:?}:{step}").into_bytes();

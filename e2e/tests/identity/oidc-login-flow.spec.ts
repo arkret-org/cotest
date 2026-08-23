@@ -215,7 +215,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       await test.step("returning user signs back in", async () => {
         await serverLoginViaCoauth(page, account);
         expect(new URL(page.url()).pathname).not.toBe("/onboarding");
-        await expect(page.getByTestId("root-anchored-device-recovery")).toHaveCount(0);
+        await expect(page.getByTestId("pcr-policy-device-recovery")).toHaveCount(0);
         const returningDeviceId = await page.evaluate(() => {
           const config = JSON.parse(
             window.localStorage.getItem("inkson.config.v1") ?? "{}",

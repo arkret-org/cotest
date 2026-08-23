@@ -104,9 +104,10 @@ impl ClaimKind {
 /// per-profile diagnostics without re-deriving the role table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProfileClaimFailure {
-    /// `profile_id` is not in the spec catalogue (and the claim is not
-    /// `Experimental`, which would surface as
-    /// [`Self::ExperimentalUnknownProfile`]).
+    /// `profile_id` is not in the spec catalogue. `Experimental` claims with
+    /// an unknown id are not failures — they land in
+    /// [`ProfileClaimOutcome::experimental_unknown_allowed`] so the caller can
+    /// decide whether the deployment allows experimental ids.
     UnknownProfile { profile_id: String },
     /// The profile is known but its `profile_roles` entry is incompatible
     /// with `service_role`. Interop profiles are pre-filtered as allowed and
@@ -116,9 +117,6 @@ pub enum ProfileClaimFailure {
         declared_role: ServiceRole,
         service_role: ServiceRole,
     },
-    /// Experimental claim whose id is not in the spec — surfaced so the
-    /// caller can decide whether the deployment allows experimental ids.
-    ExperimentalUnknownProfile { profile_id: String },
 }
 
 /// Outcome of [`validate_describe_profile_claims`]: per-profile classification

@@ -3,7 +3,7 @@
   "id": "device-pairing-revocation-recovery",
   "title": "One account pairs, revokes, and recovers devices",
   "required_topology": "single",
-  "intent": "Exercise first-device readiness, short-link pairing with human verification, same-account history recovery, device revocation, old-device denial, and root-anchored recovery from a fresh browser profile.",
+  "intent": "Exercise first-device readiness, short-link pairing with human verification, same-account history recovery, device revocation, old-device denial, and PCR-policy recovery from a fresh browser profile.",
   "source_flows": [
     "registration-pcr-genesis",
     "device-pairing-and-recovery",

@@ -22,7 +22,6 @@ use url::Url;
 use super::assertions::expect_json;
 use super::canonical_device_id;
 use super::client::TestActorClient;
-use super::event_builder::{dev_login, register_account, register_event_signing_identity};
 use super::principal::ProvisionedTestPrincipal;
 use crate::scenarios::identity_test_support::{
     ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN, bootstrap_registered_actor,
@@ -747,27 +746,6 @@ impl ArkretServer {
         Ok(client)
     }
 
-    /// Explicit opt-out for negative fixtures: a session whose device never
-    /// receives the §5.1 founding authorization. Durable writes from this
-    /// device fail closed with `device_unauthorized` by design.
-    pub async fn demo_client_without_device_authorization(
-        &self,
-        actor: &str,
-        device_id: &str,
-    ) -> Result<TestActorClient> {
-        let device_id = canonical_device_id(device_id);
-        let token = dev_login(self, actor, &device_id).await?;
-        let verification_method =
-            arkret::DidUrl::new(format!("{actor}#{device_id}")).map_err(anyhow::Error::msg)?;
-        register_event_signing_identity(
-            actor,
-            arkret::signatures::development_signing_key_seed(&verification_method),
-            verification_method.as_str().to_owned(),
-            self.service_id.clone(),
-        );
-        self.actor_client(actor, &device_id, token, None)
-    }
-
     pub async fn register_client(
         &self,
         did: &str,
@@ -789,18 +767,6 @@ impl ArkretServer {
         )?;
         client.track_controlled_realm(&principal.pcr_realm_id);
         Ok(client)
-    }
-
-    /// Explicit opt-out for negative fixtures: account registration plus a
-    /// session, but no §5.1 founding device authorization.
-    pub async fn register_client_without_device_authorization(
-        &self,
-        did: &str,
-        handle: &str,
-        device_id: &str,
-    ) -> Result<TestActorClient> {
-        let token = register_account(self, did, handle, device_id).await?;
-        self.actor_client(did, &canonical_device_id(device_id), token, None)
     }
 
     pub fn client_with_token(

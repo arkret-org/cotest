@@ -372,26 +372,6 @@ impl ServiceMetricsClient {
         Ok(signature_verifies(&self.snapshot().await?, self.service))
     }
 
-    /// Fail loudly when the build under test predates the DID-boundary
-    /// counters, so an absent series is never read as a passing zero.
-    pub async fn require_did_boundary_counters(&self) -> Result<()> {
-        let snapshot = self.snapshot().await?;
-        for metric in [
-            self.service.did_resolve_metric(),
-            self.service.signature_verify_metric(),
-        ] {
-            if !snapshot.has_metric(metric) {
-                bail!(
-                    "{} at {} exposes no `{metric}` series — the binary under test predates the \
-                     DID-boundary counters, so a zero reading would prove nothing",
-                    self.service.name(),
-                    self.metrics_url()
-                );
-            }
-        }
-        Ok(())
-    }
-
     /// Run `body` and report the DID-boundary counter increments it caused.
     ///
     /// Increments, not absolutes: the counters are process-lifetime totals and

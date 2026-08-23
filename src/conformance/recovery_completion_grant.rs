@@ -84,7 +84,7 @@ fn completion_vector() -> Result<CompletionVector> {
             policy_version: 1,
             trust_domain: "ak:trust_domain:example.net".parse()?,
             new_device_id: device_id.parse()?,
-            identity_model: arkret_models_crypto::RecoveryIdentityModel::RootAnchored,
+            identity_model: arkret_models_crypto::RecoveryIdentityModel::PcrPolicy,
             previous_model_generation_ref: previous_generation,
             result_model_generation_ref: result_generation,
             authorization_event_id: authorization_event_id.parse()?,
@@ -95,7 +95,6 @@ fn completion_vector() -> Result<CompletionVector> {
             reanchor_batch_receipt_id: Some(
                 "ak:receipt:019a8400-0000-7000-8000-000000000006".parse()?,
             ),
-            did_entry_ref: Some("2-QmReplacementRoot".to_owned()),
             proof_summary: RecoveryProofSummary {
                 kind: RecoveryProofKind::RecoveryUnlock,
                 proof_digest: hash('4').parse()?,

@@ -88,8 +88,8 @@ identity/recovery(账户恢复)的姊妹篇,但 encryption/key-backup 聚焦在*
     - 计算 commitment,与 backup 的 `key_commitment` 比对
     - **commitment mismatch → 客户端在本地拒绝,不向服务器发任何 oracle 查询**(spec §7.2)
     - commitment match → 用 derived_key 解 ciphertext → 拿回 mls_history_backup_key
-15. 客户端提交更高 canonical DID entry，再构造 root-signed `ak.device.reanchor` + 新设备自签 PoP 的 replacement authorize 原子 unit。
-16. soland 校验 registry head、recovery policy、完整 frontier CAS 与 replacement binding 后原子接受;旧 generation 的 Event/Seal/离线队列立即 fenced。
+15. 客户端根据 accepted recovery policy/session 构造 policy-authorized `ak.device.reanchor` + 新设备自签 PoP 的 replacement authorize 原子 unit；恢复事务不提交 DID entry。
+16. soland 校验 recovery policy/session、完整 frontier CAS 与 replacement binding 后原子接受；旧 generation 的 Event/Seal/离线队列立即 fenced。
 17. 断言:device-B `/settings/devices` 显示 alice 的 device 列表(可能含 device-A,看是否 revoke;此时未 revoke,所以 A 还在)
 
 ### Phase E — Device-B 从 MLS commit chain 重建 epoch keys + 解 bob 的消息
