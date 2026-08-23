@@ -490,7 +490,7 @@ fn evaluate_device_revocation_step(step: &Value) -> Result<Value> {
         == Some(false)
     {
         return Ok(json!({
-            "active_generation_advanced": false,
+            "active_epoch_advanced": false,
             "e2ee_data_gate": "blocked",
             "reason": "epoch_update_required",
         }));

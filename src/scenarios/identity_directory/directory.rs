@@ -1,15 +1,8 @@
-use std::collections::BTreeSet;
-
 use anyhow::{Context, Result, anyhow};
-use arkret_canonical::canonical_sha256;
-use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{
-    actor_core_id, dispatch_accepted_invite_and_read_token, expect_api_error, expect_json,
-    invite_create_payload,
-};
+use crate::harness::{actor_core_id, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, seal_current_principal_control_frontier,
     spawn_with_harness_account_authority,
@@ -67,67 +60,11 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             "discoverability": "public"
         }))
         .await?;
-    let listed_realm = alice
-        .create_realm_with(json!({
-            "title": "Visibility Matrix Listed",
-            "discoverability": "listed"
-        }))
-        .await?;
-    let restricted_realm = alice
-        .create_realm_with(json!({
-            "title": "Visibility Matrix Restricted",
-            "discoverability": "restricted"
-        }))
-        .await?;
-    let unlisted_realm = alice
-        .create_realm_with(json!({
-            "title": "Visibility Matrix Unlisted",
-            "discoverability": "unlisted"
-        }))
-        .await?;
-    let invite_only_realm = alice
-        .create_realm_with(json!({
-            "title": "Visibility Matrix Invite Only",
-            "discoverability": "invite_only",
-            "invitees": [bob.actor.clone()]
-        }))
-        .await?;
-    let secret_realm = alice
-        .create_realm_with(json!({
-            "title": "Visibility Matrix Secret",
-            "discoverability": "secret"
-        }))
-        .await?;
-
     let public_realm_id = realm_id_from(&public_realm, "public")?;
-    let listed_realm_id = realm_id_from(&listed_realm, "listed")?;
-    let restricted_realm_id = realm_id_from(&restricted_realm, "restricted")?;
-    let unlisted_realm_id = realm_id_from(&unlisted_realm, "unlisted")?;
-    let invite_only_realm_id = realm_id_from(&invite_only_realm, "invite_only")?;
-    let secret_realm_id = realm_id_from(&secret_realm, "secret")?;
 
-    let introduction_evidence = IntroductionEvidence::SamePrincipalServer;
-    let invite_expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-        .with_timezone(&chrono::Utc);
-    let invite_event = alice
-        .submit_event(
-            &invite_only_realm_id,
-            "ak.invite.create",
-            invite_create_payload(
-                bob.actor.as_str(),
-                server.service_id().as_str(),
-                canonical_sha256(&introduction_evidence)?,
-                invite_expires_at,
-            )?,
-        )
-        .await?;
-    assert_eq!(
-        invite_event["status"],
-        "accepted",
-        "invite event was not accepted: {}",
-        serde_json::to_string_pretty(&invite_event)?
-    );
-
+    // Realm creation and a public discoverability hint do not opt a resource
+    // into a Directory. The signed discovery Event and announce/pull ingest
+    // required by discovery-directory.md section 8 have not happened here.
     let anonymous_search = expect_json(
         server
             .http()
@@ -140,44 +77,12 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let anonymous_search_ids: BTreeSet<_> = anonymous_search["realms"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|space| space["realm_id"].as_str().map(ToOwned::to_owned))
-        .collect();
-    assert_eq!(
-        anonymous_search_ids,
-        BTreeSet::from([
-            public_realm_id.clone(),
-            listed_realm_id.clone(),
-            restricted_realm_id.clone(),
-        ])
+    assert!(
+        anonymous_search["realms"]
+            .as_array()
+            .is_some_and(Vec::is_empty),
+        "Directory indexed a Realm without bidirectional opt-in ingest: {anonymous_search}"
     );
-
-    for resolvable_realm_id in [
-        &public_realm_id,
-        &listed_realm_id,
-        &restricted_realm_id,
-        &unlisted_realm_id,
-    ] {
-        let resolved = expect_json(
-            server
-                .http()
-                .post(server.url("/_arkret/find/directory/resolve-realm"))
-                .json(&serde_json::from_value::<
-                    arkret_models_discovery::DirectoryResolveRealmRequestBody,
-                >(
-                    json!({"realm_id": resolvable_realm_id.as_str()})
-                )?),
-            StatusCode::OK,
-        )
-        .await?;
-        assert_eq!(
-            resolved["realm_preview"]["realm_id"],
-            resolvable_realm_id.as_str()
-        );
-    }
 
     expect_api_error(
         server
@@ -185,83 +90,11 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .post(server.url("/_arkret/find/directory/resolve-realm"))
             .json(&serde_json::from_value::<
                 arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(
-                json!({"realm_id": invite_only_realm_id.clone()})
-            )?),
+            >(json!({"realm_id": public_realm_id}))?),
         StatusCode::NOT_FOUND,
         "not_found",
     )
     .await?;
-    expect_api_error(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(json!({"realm_id": secret_realm_id.clone()}))?),
-        StatusCode::NOT_FOUND,
-        "not_found",
-    )
-    .await?;
-
-    let invites = expect_json(bob.get("/_arkret/self/authz/invites"), StatusCode::OK).await?;
-    let invite_id = invites["invites"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|invite| invite["realm_id"].as_str() == Some(invite_only_realm_id.as_str()))
-        .and_then(|invite| invite["id"].as_str())
-        .ok_or_else(|| anyhow!("missing invite for invite-only Realm: {invites}"))?
-        .to_owned();
-    // governance-objects.md §5.3 — the invite token is private delivery
-    // material and MUST NOT appear on the Invite read model; the invitee
-    // receives it through the invite-addressing.md §7 private delivery flow.
-    let invite_event_id = invite_event["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("invite submit outcome omitted event_id: {invite_event}"))?;
-    let invite_token = dispatch_accepted_invite_and_read_token(
-        &alice,
-        &bob,
-        invite_event_id,
-        &invite_id,
-        introduction_evidence,
-    )
-    .await?;
-    let invite_only_resolved = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(json!({
-                "realm_id": invite_only_realm_id.clone(),
-                "invite_token": invite_token
-            }))?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        invite_only_resolved["realm_preview"]["realm_id"],
-        invite_only_realm_id
-    );
-
-    let secret_resolved = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(json!({
-                "realm_id": secret_realm_id.clone(),
-                "signed_link": "cotest-signed-link"
-            }))?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        secret_resolved["realm_preview"]["realm_id"],
-        secret_realm_id
-    );
 
     let anonymous_bob_actors = expect_json(
         server

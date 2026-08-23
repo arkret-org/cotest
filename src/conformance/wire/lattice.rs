@@ -618,9 +618,9 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
         .get("vectors")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("state_resolution_quarantine fixture missing vectors[]"))?;
-    if vectors.len() < 5 {
+    if vectors.len() != 4 {
         bail!(
-            "state_resolution_quarantine fixture has {} vectors, expected >= 5",
+            "state_resolution_quarantine fixture has {} vectors, expected exactly 4",
             vectors.len()
         );
     }

@@ -42,7 +42,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase C — alice 触发 erasure
 
 8. alice 进 `/settings/account` → "Erase my account"
-9. 确认对话框 → 走 spec 定义的自助擦除入口 `ak.self.account.command.request_erasure`（`identity/account-lifecycle.md` §8.1）；soland 受理面为 `POST /_arkret/self/account/erasure-requests`（鉴权 + durable 记录意图）。**已移除的私有轨 `/_soland/self/account/erase` 不再存在，不得引用**
+9. 确认对话框 → 走 spec 定义的 Account Authority 入口 `ak.gate.account.command.request_erasure`（`identity/account-lifecycle.md` §8.1），即 `POST /_arkret/gate/account/erasure-requests`（fresh high-risk authentication + durable 记录意图）。**已移除的私有轨 `/_soland/self/account/erase` 不再存在，不得引用**
 10. Account Authority 签发 `erasure_pending` AccountStatusRecord → `ak.peer.account_status.command.submit` → 异步 durable execution → `ak.peer.erasure_receipt.command.submit` 验收，soland 返回 `ak.schema.erasure_receipt.v1`
 11. soland 后台任务执行:
     - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)

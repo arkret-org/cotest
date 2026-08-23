@@ -1154,7 +1154,6 @@ fn validate_seal_canonical_no_self_reference(vector: &Value, vector_name: &str) 
                 "/expected/notary_signature_payload_digest",
                 vector_name,
             )?,
-            "created_at": "2026-06-11T00:00:00.000Z",
             "jws": "AAAA.BBBB.CCCC"
         }),
     );

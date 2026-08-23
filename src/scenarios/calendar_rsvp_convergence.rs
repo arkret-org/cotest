@@ -167,16 +167,17 @@ async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Re
         Duration::from_millis(100),
         || async {
             let frontier = client.realm_seal_frontier(realm_id).await?;
-            let root = frontier["frontier"]["control_event_set_root"]
-                .as_str()
-                .ok_or_else(|| anyhow!("Realm frontier has no control_event_set_root"))?;
-            if root == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" {
-                return Err(anyhow!("Realm bootstrap Seal is still empty"));
-            }
-            frontier["frontier"]["seal_basis"]["leaves"][0]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| anyhow!("Realm frontier has no seal_id"))
+            let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                serde_json::from_value(frontier)?;
+            let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
+                state.frontier
+            else {
+                return Err(anyhow!("Realm selector returned a non-Seal frontier"));
+            };
+            frontier
+                .sole_leaf()
+                .map(ToString::to_string)
+                .map_err(Into::into)
         },
     )
     .await

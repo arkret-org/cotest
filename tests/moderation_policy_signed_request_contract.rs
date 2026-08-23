@@ -69,7 +69,10 @@ fn sdk_model_and_client_keep_the_signed_body_closed_and_canonical() {
     let model =
         read("arkret-rust-sdk/crates/models-collaboration/src/governance/realm_governance.rs");
     assert!(model.contains("pub moderation_policy_event: EventInitialSubmission"));
-    assert!(model.contains("pub fn validate(&self, realm_id: &RealmId)"));
+    assert!(model.contains("impl RealmModerationPolicyReplaceRequestBody"));
+    assert!(model.contains("pub fn validate("));
+    assert!(model.contains("realm_id: &RealmId"));
+    assert!(model.contains("digest_suite: arkret_canonical::DigestSuite"));
     assert!(model.contains("EventKind::RealmModerationPolicy"));
     assert!(model.contains("REALM_MODERATION_POLICY_CELL_REF"));
     assert!(model.contains("requires exactly one signed head_eq precondition"));
@@ -85,7 +88,7 @@ fn sdk_model_and_client_keep_the_signed_body_closed_and_canonical() {
 
     let client = read("arkret-rust-sdk/crates/http-client/src/endpoints/moderation.rs");
     assert!(client.contains("request: &RealmModerationPolicyReplaceRequestBody"));
-    assert!(client.contains("request.validate(realm_id)?"));
+    assert!(client.contains("request.validate(realm_id, digest_suite)?"));
     assert!(client.contains("/_arkret/self/realms/{realm_id}/moderation-policy"));
     assert!(client.contains("self.put("));
 

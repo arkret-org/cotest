@@ -42,7 +42,9 @@ use crate::harness::{
     TestActorClient, TestServerGroup, actor_core_id, expect_json, invite_create_payload,
     next_typed_id,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::{
+    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+};
 
 #[derive(Debug)]
 struct DispatchedInvite {
@@ -341,6 +343,13 @@ async fn grant_then_revoke_invite_consent(
             .any(|dot| dot == &expected_dot),
         "consent grant projection omitted its Event-derived dot: {granted:?}"
     );
+    let device_signing_key = holder
+        .principal
+        .as_ref()
+        .context("holder was not provisioned with a device signing key")?
+        .device_signing_key
+        .clone();
+    seal_current_principal_control_frontier(holder, &device_signing_key).await?;
 
     let revoke_payload = ConsentRevokePayload {
         consent_id,

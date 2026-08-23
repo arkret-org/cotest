@@ -125,8 +125,6 @@ pub struct SchemaValidationFixture {
     #[serde(default)]
     pub description: String,
     pub schema_validation_cases: Vec<SchemaValidationCase>,
-    #[serde(default)]
-    pub semantic_cases: Vec<SchemaSemanticCase>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -150,6 +148,12 @@ pub struct SchemaSemanticCase {
     #[serde(default)]
     pub expected_reason_code: Option<String>,
     pub instance: Value,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct SchemaSemanticCasesFixture {
+    #[serde(default)]
+    semantic_cases: Vec<SchemaSemanticCase>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -277,7 +281,7 @@ fn run_schema_validation_fixture_file_with_identity(
             }
         }
     }
-    let fixture: SchemaValidationFixture = serde_json::from_value(value)
+    let fixture: SchemaValidationFixture = serde_json::from_value(value.clone())
         .with_context(|| format!("decode schema-validation fixture {}", path.display()))?;
     if fixture.suite != expected_suite {
         bail!(
@@ -290,7 +294,12 @@ fn run_schema_validation_fixture_file_with_identity(
     }
     run_cases(&fixture.schema_validation_cases)?;
     run_semantic_cases(file_name, &fixture.schema_validation_cases)?;
-    run_schema_semantic_cases(&fixture.semantic_cases)
+    if file_name == EVENT_PAYLOAD_VALUE_CLOSURE_FIXTURE {
+        let semantic_fixture: SchemaSemanticCasesFixture = serde_json::from_value(value)
+            .with_context(|| format!("decode semantic-rule cases from {file_name}"))?;
+        run_schema_semantic_cases(&semantic_fixture.semantic_cases)?;
+    }
+    Ok(())
 }
 
 fn validate_event_payload_value_closure_coverage(cases: &[SchemaValidationCase]) -> Result<()> {

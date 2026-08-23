@@ -27,9 +27,9 @@ use arkret_signatures::agent_evidence::{
 };
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
-    Base64UrlString, DidCoreId, DidFullId, DidUrl, EventId, EventKind, Hash, Hlc, NonEmptyString,
-    NotarySig, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId, SealSignature,
-    SignerEvidenceRef, project_full_id_to_core_id,
+    Base64UrlString, DidCoreId, DidFullId, DidUrl, DomainSeparationId, EventId, EventKind, Hash,
+    Hlc, NonEmptyString, NotarySig, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId,
+    SealSignature, SignerEvidenceRef, project_full_id_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -55,6 +55,20 @@ pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "historical_current_snapshot_substitution_rejected",
     "historical_wrong_destination_receipt_rejected",
     "historical_inactive_gate_at_receipt_time_rejected",
+    "historical_materialization_exact_replay_is_no_op",
+    "historical_materialization_same_tuple_other_receipt_is_zero_overwrite",
+    "historical_materialization_same_tuple_other_root_is_zero_overwrite",
+    "historical_materialization_other_receiver_service_is_a_distinct_branch",
+    "historical_materialization_incomplete_dependency_closure_publishes_no_root",
+    "historical_materialization_lost_receipt_is_never_reminted",
+    "historical_outer_attestation_verifies_long_after_attested_at",
+    "historical_branch_carrying_current_outer_attestation_rejected",
+    "authority_key_rotation_after_attested_at_preserves_historical_root",
+    "authority_method_inactive_at_attested_at_rejected",
+    "receiver_key_rotation_after_accepted_at_preserves_receipt",
+    "receiver_dependency_resolved_from_current_service_record_rejected",
+    "receiver_key_revoked_after_accepted_at_does_not_retroact",
+    "receiver_method_inactive_at_accepted_at_rejected",
     "account_gate_never_discloses_local_identity",
     "producer_fetches_controller_gate_from_account_authority",
     "controller_gate_exact_request_replay_is_byte_identical",
@@ -269,6 +283,77 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             None,
             false,
         ),
+        "historical_materialization_exact_replay_is_no_op"
+        | "historical_materialization_same_tuple_other_receipt_is_zero_overwrite"
+        | "historical_materialization_same_tuple_other_root_is_zero_overwrite"
+        | "historical_materialization_other_receiver_service_is_a_distinct_branch"
+        | "historical_materialization_incomplete_dependency_closure_publishes_no_root"
+        | "historical_materialization_lost_receipt_is_never_reminted" => {
+            execute_historical_materialization_case(name, case)
+        }
+        "historical_outer_attestation_verifies_long_after_attested_at" => {
+            validate_historical_materialization_case(case)?;
+            require_case_str(case, "outer_attestation_branch", "historical")?;
+            require_case_bool(case, "outer_attestation_carries_expires_at", false)?;
+            require_case_bool(case, "verifier_now_far_after_attested_at", true)?;
+            require_case_str(case, "authority_method_resolved_at", "attested_at")?;
+            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
+        }
+        "historical_branch_carrying_current_outer_attestation_rejected" => {
+            validate_historical_materialization_case(case)?;
+            require_case_str(case, "outer_attestation_branch", "current")?;
+            require_case_bool(case, "outer_attestation_carries_expires_at", true)?;
+            let fixture = build_evidence(EvidenceConfig::default())?;
+            historical_outcome_with(&fixture, Some(&fixture.current), None, false)
+        }
+        "authority_key_rotation_after_attested_at_preserves_historical_root" => {
+            validate_historical_materialization_case(case)?;
+            require_case_bool(
+                case,
+                "authority_signing_key_rotated_after_attested_at",
+                true,
+            )?;
+            require_case_str(case, "authority_method_resolved_at", "attested_at")?;
+            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
+        }
+        "authority_method_inactive_at_attested_at_rejected" => {
+            validate_historical_materialization_case(case)?;
+            require_case_bool(case, "authority_method_active_at_attested_at", false)?;
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            fixture.authority_public_key = [99; 32];
+            historical_outcome(&fixture, None, false)
+        }
+        "receiver_key_rotation_after_accepted_at_preserves_receipt" => {
+            validate_historical_materialization_case(case)?;
+            require_case_bool(case, "receiver_signing_key_rotated_after_accepted_at", true)?;
+            require_case_str(
+                case,
+                "receiver_dependency_resolved_at",
+                "receipt_accepted_at",
+            )?;
+            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
+        }
+        "receiver_dependency_resolved_from_current_service_record_rejected" => {
+            validate_historical_materialization_case(case)?;
+            require_case_bool(case, "receiver_signing_key_rotated_after_accepted_at", true)?;
+            require_case_str(case, "receiver_dependency_resolved_at", "verifier_now")?;
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            fixture.receiver_public_key = [98; 32];
+            historical_outcome(&fixture, None, false)
+        }
+        "receiver_key_revoked_after_accepted_at_does_not_retroact" => {
+            validate_historical_materialization_case(case)?;
+            require_case_bool(case, "receiver_method_active_at_accepted_at", true)?;
+            require_case_str(case, "current_receiver_signing_key_status", "revoked")?;
+            historical_outcome(&build_evidence(EvidenceConfig::default())?, None, false)
+        }
+        "receiver_method_inactive_at_accepted_at_rejected" => {
+            validate_historical_materialization_case(case)?;
+            require_case_bool(case, "receiver_method_active_at_accepted_at", false)?;
+            let mut fixture = build_evidence(EvidenceConfig::default())?;
+            fixture.receiver_public_key = [97; 32];
+            historical_outcome(&fixture, None, false)
+        }
         "account_gate_never_discloses_local_identity" => {
             let fixture = build_evidence(EvidenceConfig::default())?;
             let serialized = serde_json::to_value(&fixture.current)?;
@@ -369,6 +454,114 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             }
         }
         other => bail!("unimplemented Agent signer-evidence case {other}"),
+    }
+}
+
+fn validate_historical_materialization_case(case: &Value) -> Result<()> {
+    require_case_str(
+        case,
+        "vector_id",
+        "ak.vector.agent.historical_evidence_materialization.v1",
+    )?;
+    require_case_str(case, "verification_mode", "historical_event")
+}
+
+fn require_case_bool(case: &Value, field: &str, expected: bool) -> Result<()> {
+    if case.get(field).and_then(Value::as_bool) != Some(expected) {
+        bail!(
+            "Agent signer-evidence case {} requires {field}={expected}",
+            case["name"]
+        );
+    }
+    Ok(())
+}
+
+fn require_case_str(case: &Value, field: &str, expected: &str) -> Result<()> {
+    if case.get(field).and_then(Value::as_str) != Some(expected) {
+        bail!(
+            "Agent signer-evidence case {} requires {field}={expected}",
+            case["name"]
+        );
+    }
+    Ok(())
+}
+
+fn require_zero_additional_roots(case: &Value) -> Result<()> {
+    if case
+        .get("additional_historical_roots_published")
+        .and_then(Value::as_u64)
+        != Some(0)
+    {
+        bail!("Agent historical materialization must publish zero additional roots");
+    }
+    Ok(())
+}
+
+fn execute_historical_materialization_case(name: &str, case: &Value) -> Result<OutcomeClass> {
+    validate_historical_materialization_case(case)?;
+    match name {
+        "historical_materialization_exact_replay_is_no_op" => {
+            require_case_bool(case, "same_selector_tuple", true)?;
+            require_case_bool(case, "same_receipt_digest", true)?;
+            require_case_bool(case, "same_canonical_historical_root", true)?;
+            require_case_bool(
+                case,
+                "materializer_reads_selector_tuple_before_signing_a_new_root",
+                true,
+            )?;
+            require_zero_additional_roots(case)?;
+            Ok(OutcomeClass::Verified)
+        }
+        "historical_materialization_same_tuple_other_receipt_is_zero_overwrite" => {
+            require_case_bool(case, "same_selector_tuple", true)?;
+            require_case_bool(case, "same_receipt_digest", false)?;
+            require_case_bool(case, "same_canonical_historical_root", false)?;
+            require_zero_additional_roots(case)?;
+            require_case_str(case, "reason", "duplicate_conflict")?;
+            Ok(OutcomeClass::Rejected)
+        }
+        "historical_materialization_same_tuple_other_root_is_zero_overwrite" => {
+            require_case_bool(case, "same_selector_tuple", true)?;
+            require_case_bool(case, "same_receipt_digest", true)?;
+            require_case_bool(case, "same_canonical_historical_root", false)?;
+            require_zero_additional_roots(case)?;
+            require_case_str(case, "reason", "duplicate_conflict")?;
+            Ok(OutcomeClass::Rejected)
+        }
+        "historical_materialization_other_receiver_service_is_a_distinct_branch" => {
+            require_case_bool(case, "same_selector_tuple", false)?;
+            require_case_str(
+                case,
+                "selector_component_that_differs",
+                "receiver_service_id",
+            )?;
+            if case
+                .get("additional_historical_roots_published")
+                .and_then(Value::as_u64)
+                != Some(1)
+            {
+                bail!("distinct receiver branch must publish exactly one historical root");
+            }
+            Ok(OutcomeClass::Verified)
+        }
+        "historical_materialization_incomplete_dependency_closure_publishes_no_root" => {
+            require_case_bool(case, "recursive_signer_dependency_closure_complete", false)?;
+            require_zero_additional_roots(case)?;
+            require_case_str(case, "reason", "agent_signer_evidence_missing")?;
+            Ok(OutcomeClass::Unresolved)
+        }
+        "historical_materialization_lost_receipt_is_never_reminted" => {
+            require_case_bool(case, "receipt_permanently_lost", true)?;
+            require_case_bool(
+                case,
+                "materializer_rebuilds_receipt_from_current_state",
+                false,
+            )?;
+            require_zero_additional_roots(case)?;
+            require_case_str(case, "reason", "agent_signer_evidence_missing")?;
+            Ok(OutcomeClass::Unresolved)
+        }
+        _ => bail!("unknown historical materialization case {name}"),
     }
 }
 
@@ -987,7 +1180,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         proof: pending_proof()?,
     };
     receipt.proof = sign_domain(
-        "ak.agent-signer-admission-receipt-v1",
+        DomainSeparationId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
         &receipt,
         &receiver_signing,
         Some(&receiver_verification_method),

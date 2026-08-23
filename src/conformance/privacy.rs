@@ -1334,7 +1334,7 @@ fn is_fail_closed_search_state_change(state_change: &str) -> bool {
     matches!(
         state_change,
         "capability_revoked"
-            | "history_access_tightened"
+            | "history_access_private"
             | "redaction_or_expiry"
             | "mls_epoch_rotate"
     )

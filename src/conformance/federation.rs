@@ -1,10 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow, bail};
+use arkret_wire::{DomainSeparationId, SchemaId};
 use serde_json::{Value, json};
 
 use super::{FederationFixture, canonical_json, load_fixture, sha256_prefixed};
 use crate::transcripts::record_vector_event;
+
+const VECTOR_ID_AGENT_ADMISSION_RECEIPT_HANDOFF: &str =
+    "ak.vector.federation.agent_admission_receipt_handoff.v1";
 
 pub fn run_federation_fixture_suite() -> Result<()> {
     let fixture = load_fixture::<FederationFixture>("federation-fixture.json")?;
@@ -132,6 +136,9 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 validate_seal_prerequisite_partial_retry_case(&case)?;
             }
             "cba_dependency_resolve" => validate_cba_dependency_resolve_case(&case)?,
+            "agent_event_admission_receipt_handoff" => {
+                validate_agent_event_admission_receipt_handoff_case(&case)?
+            }
             "ordinary_event_uses_cba_reducer_profile_cell"
             | "settled_reducer_profile_not_implemented"
             | "upgrade_target_not_registered" => validate_reducer_profile_resolution_case(&case)?,
@@ -234,6 +241,113 @@ pub fn run_federation_fixture_suite() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) -> Result<()> {
+    if case.vector_id.as_deref() != Some(VECTOR_ID_AGENT_ADMISSION_RECEIPT_HANDOFF) {
+        bail!("{} has the wrong vector_id", case.name);
+    }
+    let contract = case
+        .request_contract
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} lacks request_contract", case.name))?;
+    let required_contract = json!({
+        "outcome_field": "agent_event_admission_receipts",
+        "receipt_schema": SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
+        "receipt_proof_domain": DomainSeparationId::AGENT_SIGNER_ADMISSION_RECEIPT_V1,
+        "receipted_outcome_classes": ["accepted", "duplicate"],
+        "unreceipted_outcome_classes": ["rejected", "quarantine", "dependency_missing"],
+        "receipt_written_in_event_acceptance_transaction": true,
+        "self_submit_outcome_omits_receipts": true,
+        "receipt_binding_fields": [
+            "event_id",
+            "event_digest",
+            "realm_id",
+            "producer_accepted_at",
+            "accepted_at",
+            "agent_id",
+            "verification_method",
+            "producer_signer_resolution_evidence_ref",
+            "producer_signer_resolution_evidence_digest",
+            "receiver_service_id"
+        ]
+    });
+    if contract != &required_contract {
+        bail!("{} request_contract drifted", case.name);
+    }
+    const EXPECTED: &[(&str, &str)] = &[
+        (
+            "accepted_native_agent_event",
+            "outcome_returns_one_receiver_signed_receipt_for_that_event",
+        ),
+        (
+            "accepted_non_agent_event",
+            "outcome_carries_no_receipt_for_that_event",
+        ),
+        (
+            "rejected_quarantined_or_dependency_missing_native_agent_event",
+            "no_receipt_signed_and_none_returned",
+        ),
+        (
+            "receipt_write_fails_inside_event_acceptance_transaction",
+            "event_acceptance_rolls_back_with_zero_receipt",
+        ),
+        (
+            "two_receivers_accept_the_same_event",
+            "one_receipt_per_receiver_service_id_as_distinct_historical_branches",
+        ),
+        (
+            "byte_identical_resubmission_of_an_accepted_event",
+            "duplicate_returns_the_first_stored_byte_identical_receipt",
+        ),
+        (
+            "duplicate_branch_mints_a_new_accepted_at_or_signing_method",
+            "nonconformant_receipt_replay",
+        ),
+        (
+            "same_event_id_with_different_canonical_bytes",
+            "duplicate_conflict_with_zero_receipt_and_zero_overwrite",
+        ),
+        (
+            "receipt_set_matches_producer_evidence_pair_events_one_to_one",
+            "source_atomically_commits_receipt_and_materialization_obligation",
+        ),
+        (
+            "outcome_omits_a_receipt_for_one_such_event",
+            "handoff_incomplete_and_delivery_not_marked_complete",
+        ),
+        (
+            "outcome_returns_a_receipt_outside_accepted_and_duplicate",
+            "handoff_incomplete_and_delivery_not_marked_complete",
+        ),
+        (
+            "receipt_proof_unparsable_or_receiver_service_id_mismatch",
+            "handoff_incomplete_and_delivery_not_marked_complete",
+        ),
+        (
+            "receipt_producer_evidence_pair_differs_from_the_frozen_origin_pair",
+            "handoff_incomplete_and_delivery_not_marked_complete",
+        ),
+        (
+            "source_restarts_before_the_obligation_commit",
+            "same_outbox_row_replays_the_same_event_receiver_receipt_intent",
+        ),
+        (
+            "response_transport_authentication_or_outcome_schema_invalid",
+            "outcome_discarded_before_any_receipt_consumption",
+        ),
+    ];
+    validate_named_expectations(case, EXPECTED)?;
+    record_vector_event(
+        "federation.agent_event_admission_receipt_handoff",
+        contract,
+        &json!({"cases": EXPECTED}),
+        &json!({
+            "request_contract_matches": true,
+            "validated_case_count": EXPECTED.len(),
+        }),
+    );
     Ok(())
 }
 

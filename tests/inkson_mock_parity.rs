@@ -110,6 +110,7 @@ struct TemplateContext {
     alice_token: String,
     alice_device_signing_key: ed25519_dalek::SigningKey,
     service_id: String,
+    service_notary_signer: arkret_wire::NotarySignerDescriptor,
     realm_id: String,
     space_id: String,
 }
@@ -144,6 +145,7 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         alice_token,
         alice_device_signing_key: principal.device_signing_key,
         service_id: server.service_id().to_string(),
+        service_notary_signer: server.service_notary_signer().clone(),
         realm_id: String::new(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };
@@ -237,6 +239,9 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
         alice_token: "cotest-format-smoke-token".to_owned(),
         alice_device_signing_key: ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         service_id: "ak:did_core:web:soland.mock-parity-smoke.local".to_owned(),
+        service_notary_signer: cotest::fixture_notary_signer(arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:soland.mock-parity-smoke.local".to_owned(),
+        )?),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };
@@ -260,6 +265,9 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
         alice_token: "cotest-artifact-gate-token".to_owned(),
         alice_device_signing_key: ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         service_id: "ak:did_core:web:soland.mock-parity-gate.local".to_owned(),
+        service_notary_signer: cotest::fixture_notary_signer(arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:soland.mock-parity-gate.local".to_owned(),
+        )?),
         realm_id: "ak:realm:AeHsC4PtEYSA7Jc0C2kRtZ1V5ZG6aMCG8aL6V5juJvfk".to_owned(),
         space_id: "ak:space:Ad3UlXP6ccWRlthrQ99e2Z3KV4UYm8ko8ct2eE6fdk-9".to_owned(),
     };
@@ -854,7 +862,7 @@ fn realm_bootstrap_batch(
     _realm_id: &str,
     title: &str,
 ) -> Result<(String, Value)> {
-    let draft = cotest::harness::realm_create_payload(
+    let draft = cotest::harness::realm_create_payload_with_notary(
         &ctx.service_id,
         &json!({
             "title": title,
@@ -866,6 +874,7 @@ fn realm_bootstrap_batch(
             "genesis_salt": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             "plaintext_visible_services": []
         }),
+        ctx.service_notary_signer.clone(),
     )?;
     let (derived_realm_id, events) =
         cotest::harness::realm_bootstrap_event_batch_with_signing_seed(
@@ -1125,18 +1134,32 @@ async fn wait_for_realm_seal(
             .json(&events_frontier_request_body(None, Some(realm_id))?)
             .send()
             .await?;
-        if response.status() == reqwest::StatusCode::OK {
+        let status = response.status();
+        let observation = if status == reqwest::StatusCode::OK {
             let body: Value = response.json().await?;
-            if let Some(seal_id) = body
-                .pointer("/frontier/seal_id")
-                .and_then(Value::as_str)
-                .filter(|seal_id| !seal_id.trim().is_empty())
+            match serde_json::from_value::<
+                arkret_models_collaboration::event_sync::EventsFrontierAccountClientState,
+            >(body.clone())
             {
-                return Ok(seal_id.to_owned());
+                Ok(state) => {
+                    if let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
+                        frontier,
+                    ) = state.frontier
+                        && let Ok(seal_id) = frontier.sole_leaf()
+                    {
+                        return Ok(seal_id.to_string());
+                    }
+                    format!("unexpected frontier variant: {body}")
+                }
+                Err(error) => format!("invalid frontier response ({error}): {body}"),
             }
-        }
+        } else {
+            format!("HTTP {status}")
+        };
         if tokio::time::Instant::now() >= deadline {
-            bail!("Realm {realm_id} founding Seal was not materialized within 30 seconds");
+            bail!(
+                "Realm {realm_id} founding Seal was not materialized within 30 seconds; last observation: {observation}"
+            );
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }

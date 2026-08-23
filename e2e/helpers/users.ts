@@ -1520,7 +1520,7 @@ export async function createDpopUserSessionForAccount(
     viewerResponse.ok(),
     `principal bootstrap account viewer returned ${viewerResponse.status()}: ${viewerText}`,
   ).toBeTruthy();
-  const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events/seals`;
+  const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals`;
   const sealResponse = await request.post(sealUrl, {
     headers: {
       ...selfPathHeadersForDpopSession(session, "POST", sealUrl),

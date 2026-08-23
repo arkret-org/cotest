@@ -32,7 +32,7 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("GDPR / audit / retention", () => {
-  test("removed export/erase rails stay fail-closed (404/405); the §8.1 erasure-request intake resolves fail-closed", async ({ request }) => {
+  test("removed product-private export/erase rails stay fail-closed (404/405)", async ({ request }) => {
     const alice = uniqueUser("s27-probe");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
@@ -56,18 +56,6 @@ test.describe("GDPR / audit / retention", () => {
     });
     expect([404, 405]).toContain(eraseProbe.status());
 
-    // The current self-erasure entry moved to the Account Authority gate
-    // surface (account-lifecycle.md §8.1 ak.gate.account.command.request_erasure,
-    // POST /_arkret/gate/account/erasure-requests on coauth); the former soland
-    // self surface was removed by the same adjudication, so it must stay 404.
-    const erasureRequestProbe = await request.post(
-      `${solandBaseUrl()}/_arkret/self/account/erasure-requests`,
-      {
-        headers: { authorization: `Bearer ${token}` },
-        data: {},
-      },
-    );
-    expect(erasureRequestProbe.status()).toBe(404);
   });
 
   test("GDPR export returns a JSON bundle containing account/profile/realms/devices/audit_log facets", async ({

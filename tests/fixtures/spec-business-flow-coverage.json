@@ -1095,6 +1095,79 @@
       ]
     },
     {
+      "id": "history_key_recovery_and_direct_traversal",
+      "title": "History-key request, response, archive recovery, and bounded direct traversal",
+      "status": "partially_implemented",
+      "surfaces": [
+        "history_key_recovery"
+      ],
+      "operation_spine": [
+        {
+          "operation_id": "ak.self.history_key_requests.command.create",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.self.history_key_requests.read.list",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.self.history_key_responses.command.send",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.self.history_key_responses.read.list",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.self.history_key_responses.command.ack",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.self.organization_recovery_archives.read.list",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.peer.history_key_requests.command.replicate",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.peer.history_key_responses.command.relay",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.peer.seals.read.mls_governance_proof",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.peer.seals.read.governance_dependencies",
+          "surfaces": ["history_key_recovery"]
+        },
+        {
+          "operation_id": "ak.peer.organization_recovery_archives.command.replicate",
+          "surfaces": ["history_key_recovery"]
+        }
+      ],
+      "coverage": [
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/governance_history.rs",
+          "markers": [
+            "ak.self.history_key_requests.command.create",
+            "ak.peer.history_key_responses.command.relay",
+            "ak.self.history_key_responses.command.ack"
+          ]
+        },
+        {
+          "kind": "conformance_fixture",
+          "path": "src/conformance/history_key_direct_traversal.rs",
+          "markers": [
+            "ak.vector.history_key.frontier_traversal_split.v1",
+            "run_history_key_direct_traversal_suite"
+          ]
+        }
+      ]
+    },
+    {
       "id": "candidate_join_application_review",
       "title": "Profile-private Realm join application, review, cancellation, and audit",
       "status": "implemented",

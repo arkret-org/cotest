@@ -339,7 +339,7 @@ export async function submitPrincipalSuccessorSealApi(
     predecessor_seal: predecessorSeal,
     device_signing_seed_b64url: signer.signingSeedB64url,
   });
-  const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events/seals`;
+  const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals`;
   await expectJsonOk(
     await request.post(sealUrl, {
       headers: {

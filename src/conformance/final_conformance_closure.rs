@@ -677,7 +677,7 @@ fn run_mls_security_frontier_case(case: &Value) -> Result<()> {
                     "reject"
                 },
                 "mls_epoch_cell_advanced": true,
-                "active_generation_advanced": true,
+                "active_epoch_advanced": true,
             }),
             "unrelated_governance_and_new_seal_ref" => json!({
                 "decision": "accept",
@@ -732,7 +732,7 @@ fn evaluate_mls_governance_epoch_binding(commit: &Value) -> Result<Value> {
             "decision": "reject",
             "reason": "epoch_update_required",
             "mls_epoch_cell_advanced": false,
-            "active_generation_advanced": false,
+            "active_epoch_advanced": false,
         }));
     }
     if commit.get("other_checks_valid").and_then(Value::as_bool) != Some(true) {
@@ -740,13 +740,13 @@ fn evaluate_mls_governance_epoch_binding(commit: &Value) -> Result<Value> {
             "decision": "reject",
             "reason": "failed_precondition",
             "mls_epoch_cell_advanced": false,
-            "active_generation_advanced": false,
+            "active_epoch_advanced": false,
         }));
     }
     Ok(json!({
         "decision": "accept",
         "mls_epoch_cell_advanced": true,
-        "active_generation_advanced": true,
+        "active_epoch_advanced": true,
     }))
 }
 

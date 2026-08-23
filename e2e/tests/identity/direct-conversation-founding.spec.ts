@@ -94,7 +94,7 @@ async function sealPrincipalControlEvent(
       device_signing_seed_b64url: session.eventSigningSeedB64url,
     },
   );
-  const sealUrl = `${solandBaseUrl()}/_arkret/self/events/seals`;
+  const sealUrl = `${solandBaseUrl()}/_arkret/self/seals`;
   const sealResponse = await request.post(sealUrl, {
     headers: {
       ...selfPathHeadersForDpopSession(session, "POST", sealUrl),

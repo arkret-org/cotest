@@ -84,7 +84,8 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
     assert!(body.contains("pub report_event: EventInitialSubmission"));
     assert!(!body.contains("pub target_ref:"));
     assert!(!body.contains("pub reporter:"));
-    assert!(model.contains("pub fn validate(&self) -> Result<()>"));
+    assert!(model.contains("impl ModerationReportRequestBody"));
+    assert!(model.contains("pub fn validate(&self, digest_suite: arkret_canonical::DigestSuite)"));
     assert!(model.contains("pub fn validate_authoring_context("));
     assert!(model.contains("ReportId::from_event_id"));
     let status = source_between(
@@ -101,8 +102,8 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
         "pub async fn moderation_report(",
         "pub async fn realm_moderation_policy_replace(",
     );
-    assert!(method.contains("request.validate()?"));
-    assert!(method.contains("request.report_id()?"));
+    assert!(method.contains("request.validate(digest_suite)?"));
+    assert!(method.contains("request.report_id(digest_suite)?"));
     assert!(method.contains(".post("));
     assert!(method.contains("\"/_arkret/self/moderation/report\""));
     assert!(method.contains("request)"));

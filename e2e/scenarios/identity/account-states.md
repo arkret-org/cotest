@@ -78,7 +78,7 @@
 
 ## Implementation notes
 
-- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/account/me.state` 与 `org.arkret.soland.account.state_change` audit 已覆盖;自助擦除入口为 `POST /_arkret/self/account/erasure-requests`(仅 durable 记录意图,执行链见 governance/gdpr-audit-retention)。已移除的私有轨 `/_soland/self/account/deactivate`、`/_soland/self/account/erase` 不再存在,不得引用。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
+- **soland 本地状态**:`/_soland/admin/accounts/<did>/{lock,unlock,suspend,unsuspend,deactivate}`、`/_soland/admin/accounts/<did>/status`、`/account/me.state` 与 `org.arkret.soland.account.state_change` audit 已覆盖;自助擦除唯一入口为 Account Authority 的 `POST /_arkret/gate/account/erasure-requests`(执行链见 governance/gdpr-audit-retention)。已移除的私有轨 `/_soland/self/account/deactivate`、`/_soland/self/account/erase` 不再存在,不得引用。跨服务器 suspension 同步仍单独由 federation/account-state projection 后续项处理。
 - **inkson 缺口**:UI 在 locked 状态下的 fallback 屏(deactivate 发起已移至 admin/support 面,无自助按钮入口)
 
 ## 总耗时预估

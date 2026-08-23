@@ -116,9 +116,17 @@ fn validate_founder_loss_terminality(fixture: &Value) -> Result<()> {
             "different_stable_identity_creates_a_new_non_continuous_pair",
             "accept",
         ),
+        (
+            "all_members_private_state_loss_permanently_suspends_same_pair",
+            "reject",
+        ),
+        (
+            "offline_member_or_late_backup_means_state_was_not_globally_lost",
+            "accept_existing_only",
+        ),
     ];
     if selected.len() != expected.len() {
-        bail!("founder-loss vector must expose exactly three closed paths");
+        bail!("founder-loss vector must expose exactly five closed paths");
     }
     for (name, outcome) in expected {
         let case = selected

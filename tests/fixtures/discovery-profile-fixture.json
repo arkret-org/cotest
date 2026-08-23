@@ -30,6 +30,7 @@
       "device_and_keys",
       "device_pairing_handoff",
       "directory_discovery",
+      "history_key_recovery",
       "identity_resolution",
       "invite_locator_handoff",
       "moderation_reports",

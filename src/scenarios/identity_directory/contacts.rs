@@ -134,59 +134,6 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     .await?;
     assert_eq!(invite_resolve["realm_preview"]["realm_id"], invite_realm_id);
 
-    let listed_realm = alice
-        .create_realm_with(json!({
-            "title": "Listed Directory Realm",
-            "discoverability": "listed"
-        }))
-        .await?;
-    let listed_realm_id = listed_realm["realm_id"].as_str().unwrap().to_owned();
-    let listed_search = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/search-realms"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchRealmsRequestBody,
-            >(json!({"query": "Listed Directory Realm"}))?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(listed_search["realms"][0]["realm_id"], listed_realm_id);
-
-    let unlisted_realm = alice
-        .create_realm_with(json!({
-            "title": "Unlisted Directory Realm",
-            "discoverability": "unlisted"
-        }))
-        .await?;
-    let unlisted_realm_id = unlisted_realm["realm_id"].as_str().unwrap().to_owned();
-    let unlisted_search = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/search-realms"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchRealmsRequestBody,
-            >(json!({"query": "Unlisted Directory Realm"}))?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert!(unlisted_search["realms"].as_array().unwrap().is_empty());
-
-    let unlisted_resolve = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(json!({"realm_id": unlisted_realm_id}))?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        unlisted_resolve["realm_preview"]["realm_id"],
-        unlisted_realm["realm_id"]
-    );
-
     let shared_realm_id = alice.create_realm("Workflow Export Realm").await?;
     let shared_strand_id = alice.default_strand_id(&shared_realm_id)?;
     alice.add_member(&shared_realm_id, &bob).await?;
