@@ -162,13 +162,6 @@ export function mockClaimIssuerBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_CLAIM_ISSUER_BASE_URL")?.replace(/\/$/, "");
 }
 
-export function mockClaimIssuerDid(): string {
-  return (
-    optionalEnv("COTEST_MOCK_CLAIM_ISSUER_DID") ??
-    "did:webvh:z6mkfixture:vc-issuer.joint-e2e.local"
-  );
-}
-
 export function mockChallengeProviderBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_CHALLENGE_PROVIDER_BASE_URL")?.replace(
     /\/$/,
@@ -232,10 +225,6 @@ export function mockAppletRegistryBaseUrl(): string | undefined {
     /\/$/,
     "",
   );
-}
-
-export function mockAppletRegistryDid(): string | undefined {
-  return optionalEnv("COTEST_MOCK_APPLET_REGISTRY_DID");
 }
 
 export function mockTspEndpointBaseUrl(): string | undefined {

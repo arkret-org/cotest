@@ -165,15 +165,15 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
     )
     .unwrap();
     let event = validated
-        .author(
-            scope(),
-            actor(),
-            principal_server(),
-            7,
-            Hlc::new(HLC).unwrap(),
-            created_at(),
-            DigestSuite::Sha256,
-        )
+        .author(arkret_event_draft::EventAuthoringContext {
+            scope_ref: scope(),
+            actor_id: actor(),
+            principal_server_id: principal_server(),
+            actor_seq: 7,
+            hlc: Hlc::new(HLC).unwrap(),
+            created_at: created_at(),
+            digest_suite: DigestSuite::Sha256,
+        })
         .unwrap();
     assert_eq!(event.kind, EventKind::Unknown("ak.example.note".to_owned()));
     assert_eq!(event.payload["provider_extension"]["x"], 1);

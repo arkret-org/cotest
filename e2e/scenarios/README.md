@@ -74,10 +74,10 @@ e2e/
 | WebVH witness | [mocks/mock-witness.mjs](../mocks/mock-witness.mjs) | `-StartMockWitness` | `mockWitnessBaseUrl()` + `mockWitnessDid()` |
 | Policy server | [mocks/mock-policy-server.mjs](../mocks/mock-policy-server.mjs) | `-StartMockPolicyServer` | `mockPolicyServerBaseUrl()` + `mockPolicyServerDid()` |
 | Push gateway | [mocks/mock-push-gateway.mjs](../mocks/mock-push-gateway.mjs) | `-StartMockPushGateway` | `mockPushGatewayBaseUrl()` |
-| Applet registry | [mocks/mock-applet-registry.mjs](../mocks/mock-applet-registry.mjs) | `-StartMockAppletRegistry` | `mockAppletRegistryBaseUrl()` + `mockAppletRegistryDid()` |
+| Applet registry | [mocks/mock-applet-registry.mjs](../mocks/mock-applet-registry.mjs) | `-StartMockAppletRegistry` | `mockAppletRegistryBaseUrl()` |
 | TSP endpoint | [mocks/mock-tsp-endpoint.mjs](../mocks/mock-tsp-endpoint.mjs) | `-StartMockTspEndpoint` | `mockTspEndpointBaseUrl()` + `mockTspEndpointVid()` |
 | MIMI facade | [mocks/mock-mimi-facade.mjs](../mocks/mock-mimi-facade.mjs) | `-StartMockMimiFacade` | `mockMimiFacadeBaseUrl()` + `mockMimiFacadeDid()` / `createMimiFacadeClient()` |
-| Claim issuer | [mocks/mock-claim-issuer.mjs](../mocks/mock-claim-issuer.mjs) | `-StartMockClaimIssuer` | `mockClaimIssuerBaseUrl()` + `mockClaimIssuerDid()` |
+| Claim issuer | [mocks/mock-claim-issuer.mjs](../mocks/mock-claim-issuer.mjs) | `-StartMockClaimIssuer` | `mockClaimIssuerBaseUrl()` |
 | Challenge provider | [mocks/mock-challenge-provider.mjs](../mocks/mock-challenge-provider.mjs) | `-StartMockChallengeProvider` | `mockChallengeProviderBaseUrl()` + `mockChallengeProviderDid()` |
 
 `-StartMocks` 一次启动全部 10 个。每个 mock 都是 Node.js 单文件,需要签名的 mock 使用 RS256 / Ed25519 真签名 JWT,全部共享 `mocks/_shared/inspect.mjs` 的 debug surface。harness 自检 spec [`harness/mocks-selftest`](harness/mocks-selftest.md) 锁住其中 8 类共享基础契约；claim issuer / challenge provider 的业务约束由 `spaces/knock-auto-resolve` 覆盖。

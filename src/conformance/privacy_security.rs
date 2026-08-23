@@ -192,28 +192,7 @@ struct ExpectedOutcome {
     #[serde(default)]
     reason_code: Option<String>,
     #[serde(default)]
-    principal_directory_queries: Option<u64>,
-    #[serde(default)]
     network_submission_count: Option<u64>,
-}
-
-/// Executable principal-directory spy. The production validator's signature
-/// takes no directory client or resolver callback, so this spy cannot be
-/// reached by it — `queries` staying 0 is the executable form of the
-/// "author verification never queries principal-scoped keys/query" assertion,
-/// not a comment.
-#[derive(Debug, Default)]
-struct PrincipalDirectorySpy {
-    queries: usize,
-}
-
-impl PrincipalDirectorySpy {
-    // Intentionally never called: the spy being unreachable from the
-    // production validator IS the assertion (see the type doc above).
-    #[allow(dead_code)]
-    fn keys_query(&mut self, _principal: &str) {
-        self.queries += 1;
-    }
 }
 
 fn base_leaf(base: &BaseFixture) -> AuthorLeaf {
@@ -332,7 +311,6 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
             base.realm_declares_minimal_metadata_profile;
         let mut pairwise_actor_current_member = base.pairwise_actor_current_member;
         let mut local_pairwise_key_scope_matches = true;
-        let directory = PrincipalDirectorySpy::default();
 
         match mutation_case.mutation.as_str() {
             "none" => {}
@@ -373,8 +351,8 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
                 // The forbidden-fallback probe: the author's leaf is absent, so
                 // a non-conformant receiver would be tempted to resolve the
                 // author through the principal directory. The production
-                // validator has no directory parameter, so the spy MUST stay
-                // untouched and the claim MUST reject.
+                // validator has no directory parameter, so the claim must
+                // reject instead of falling back to a lookup.
                 active_leaves = vec![bystander_leaf()];
             }
             other => bail!("unknown minimal-metadata author mutation {other}"),
@@ -453,26 +431,6 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
             other => bail!("unknown expected result {other}"),
         }
 
-        // `principal_directory_queries: 0` is an executable assertion: the spy
-        // is the ONLY directory in scope and the validator cannot reach it.
-        if let Some(expected_queries) = mutation_case.expected.principal_directory_queries
-            && (directory.queries as u64 != expected_queries || expected_queries != 0)
-        {
-            bail!(
-                "case {} performed {} principal directory queries (expected {expected_queries})",
-                mutation_case.name,
-                directory.queries
-            );
-        }
-        // Every case — accept and reject alike — runs without a directory.
-        if directory.queries != 0 {
-            bail!(
-                "case {} reached the principal directory {} times",
-                mutation_case.name,
-                directory.queries
-            );
-        }
-
         record_vector_event(
             "privacy_security.minimal_metadata_author_credential",
             &json!({
@@ -482,12 +440,10 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
             &json!({
                 "result": mutation_case.expected.result,
                 "reason_code": mutation_case.expected.reason_code,
-                "principal_directory_queries": 0,
             }),
             &json!({
                 "accepted": accepted,
                 "reason_code": rejected_reason,
-                "principal_directory_queries": directory.queries,
             }),
         );
     }

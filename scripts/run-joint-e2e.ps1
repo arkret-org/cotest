@@ -3920,14 +3920,8 @@ try {
     }
     if ($mockAppletRegistryBaseUrl) {
         $env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL = $mockAppletRegistryBaseUrl
-        if ($MockAppletRegistryDid) {
-            $env:COTEST_MOCK_APPLET_REGISTRY_DID = $MockAppletRegistryDid
-        } else {
-            Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_DID -ErrorAction SilentlyContinue
-        }
     } else {
         Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_APPLET_REGISTRY_DID -ErrorAction SilentlyContinue
     }
     if ($mockTspEndpointBaseUrl) {
         $env:COTEST_MOCK_TSP_ENDPOINT_BASE_URL = $mockTspEndpointBaseUrl
@@ -3949,10 +3943,8 @@ try {
     }
     if ($mockClaimIssuerBaseUrl) {
         $env:COTEST_MOCK_CLAIM_ISSUER_BASE_URL = $mockClaimIssuerBaseUrl
-        $env:COTEST_MOCK_CLAIM_ISSUER_DID = $MockClaimIssuerDid
     } else {
         Remove-Item Env:COTEST_MOCK_CLAIM_ISSUER_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_CLAIM_ISSUER_DID -ErrorAction SilentlyContinue
     }
     if ($mockChallengeProviderBaseUrl) {
         $env:COTEST_MOCK_CHALLENGE_PROVIDER_BASE_URL = $mockChallengeProviderBaseUrl

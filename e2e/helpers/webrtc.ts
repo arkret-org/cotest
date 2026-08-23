@@ -357,7 +357,6 @@ export const callSignalPlaintext = signalPlaintext;
 
 export const CAP_CALL_SIGNAL_SEND = "ak.call.signal.send";
 export const CAP_CALL_JOIN = "ak.call.join";
-export const CAP_CALL_MODERATE = "ak.call.moderate";
 
 export async function grantCallCapability(
   request: APIRequestContext,
@@ -756,7 +755,6 @@ export { authHeaders };
 // decode the LiveKit `video` grant claims without a live SFU.
 
 export const PARTICIPANT_BINDING_SCHEME = "ak.media.participant_binding.v1";
-export const MEDIA_TOKEN_TTL_MAX_SECS = 600;
 
 // Closed `media_service_focus` shape (event-payload.schema.json:10721-10726,
 // media-service-binding.md §2): required focus_id / focus_kind /
@@ -806,36 +804,6 @@ export async function configureMediaService(
   await waitForRealmControlIdleApi(request, token, realmId, {
     afterControlEventSetRoot: String(sealBasis.control_event_set_root),
   });
-}
-
-export interface MediaParticipantBinding {
-  scheme: string;
-  sig: string;
-  issuer_kid: string;
-  realm_id: string;
-  call_id: string;
-  focus_id: string;
-  actor_id: string;
-  device_id: string;
-  participant_identity: string;
-  issued_at: string;
-  expires_at: string;
-}
-
-export interface MediaServiceSignature {
-  kid: string;
-  sig: string;
-}
-
-export interface MediaTokenExchangeResult {
-  focus_id: string;
-  backend_kind: string;
-  connect_url: string;
-  backend_token: string;
-  participant_identity: string;
-  participant_binding: MediaParticipantBinding;
-  expires_at: string;
-  service_signature: MediaServiceSignature;
 }
 
 export async function exchangeMediaToken(

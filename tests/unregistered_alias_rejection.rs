@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_policy::authz::ResourceSelector;
+use arkret_wire::WireResourceSelector;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -50,13 +50,13 @@ fn resource_selector_rejects_unregistered_schema_id_fields() {
     let realm_id = "ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_";
     let schema_ref = "ak.schema.strand.v1";
 
-    let canonical = ResourceSelector::from_spec_value(&json!({
+    let canonical: WireResourceSelector = serde_json::from_value(json!({
         "kind": "schema",
         "realm_id": realm_id,
         "schema_ref": schema_ref
     }))
     .expect("canonical schema_ref selector must parse");
-    let encoded = canonical.to_spec_value();
+    let encoded = serde_json::to_value(canonical).expect("selector must serialize");
     assert_eq!(encoded.get("schema_ref"), Some(&json!(schema_ref)));
     assert_eq!(encoded.get("schema_id"), None);
 
@@ -73,7 +73,7 @@ fn resource_selector_rejects_unregistered_schema_id_fields() {
             "schema_id": schema_ref
         }),
     ] {
-        let error = ResourceSelector::from_spec_value(&unregistered)
+        let error = serde_json::from_value::<WireResourceSelector>(unregistered)
             .expect_err("schema_id must never be accepted as an alias")
             .to_string();
         assert!(
