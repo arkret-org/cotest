@@ -480,8 +480,6 @@ async fn authorize_additional_principal_device(
                 .json(&AccountDevicePairRequestBody {
                     pairing_code: stage.pairing_code.clone(),
                     new_device_pubkey,
-                    hpke_key,
-                    device_signature: attestation.device_signature.clone(),
                     challenge_proof,
                     authorize_event: crate::publication::initial_submission(authorize_event, "")?,
                     display_name: None,

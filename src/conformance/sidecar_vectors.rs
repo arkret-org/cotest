@@ -526,9 +526,6 @@ impl SidecarExecutableModel {
         let SidecarPreparedOutcome::New {
             operation_id,
             reservation_handle,
-            sidecar_id,
-            create_event_id,
-            context_attach_event_id,
             create_event_draft,
             context_attach_event_draft,
             ..
@@ -550,7 +547,7 @@ impl SidecarExecutableModel {
         )?;
 
         let coordinates = SidecarCoordinates {
-            sidecar_id: sidecar_id.clone(),
+            sidecar_id: SidecarId::from_event_id(&request.create_event.event_id),
         };
         let context = context_coordinates_from_event(&request.context_attach_event)?;
         let context_key = normalized_context_key_from_event(&request.context_attach_event)?;
@@ -568,9 +565,10 @@ impl SidecarExecutableModel {
             return Err(SidecarModelError::BranchMismatch);
         }
         next.contexts.insert(context_key, context.clone());
-        next.accepted_event_ids.insert(create_event_id.clone());
         next.accepted_event_ids
-            .insert(context_attach_event_id.clone());
+            .insert(request.create_event.event_id.clone());
+        next.accepted_event_ids
+            .insert(request.context_attach_event.event_id.clone());
 
         let outcome = accepted_sidecar_outcome(
             operation_id.clone(),
@@ -631,7 +629,6 @@ impl SidecarExecutableModel {
             operation_id,
             reservation_handle,
             sidecar_id,
-            context_attach_event_id,
             context_attach_event_draft,
             ..
         } = &prepared
@@ -669,7 +666,7 @@ impl SidecarExecutableModel {
         }
         next.contexts.insert(context_key, context.clone());
         next.accepted_event_ids
-            .insert(context_attach_event_id.clone());
+            .insert(request.context_attach_event.event_id.clone());
         let outcome = accepted_sidecar_outcome(
             operation_id.clone(),
             SidecarAcceptedPhase::Attach,
@@ -907,7 +904,6 @@ fn build_fixed_sidecar_prepare(
             reservation_handle,
             expires_at,
             sidecar_id,
-            context_attach_event_id: attach_event.event_id.clone(),
             context_attach_event_draft,
         })
     } else {
@@ -917,13 +913,6 @@ fn build_fixed_sidecar_prepare(
             operation_id: request.operation_id.clone(),
             reservation_handle,
             expires_at,
-            sidecar_id,
-            create_event_id: create_event
-                .as_ref()
-                .ok_or(SidecarModelError::ModelInvariant)?
-                .event_id
-                .clone(),
-            context_attach_event_id: attach_event.event_id.clone(),
             create_event_draft: fixed_sidecar_draft(
                 create_event
                     .as_ref()
@@ -1001,8 +990,6 @@ fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEvent
     )
     .map_err(|_| SidecarModelError::ModelInvariant)?;
     Ok(SidecarPreparedEventDraft {
-        event_id: event.event_id.clone(),
-        kind: event.kind.clone(),
         unsigned_event_bytes: Base64UrlString::new(URL_SAFE_NO_PAD.encode(unsigned))
             .map_err(|_| SidecarModelError::ModelInvariant)?,
         event_digest: Hash::new(
@@ -1015,48 +1002,10 @@ fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEvent
 }
 
 fn decode_prepared_event(draft: &SidecarPreparedEventDraft) -> SidecarModelResult<Event> {
-    let bytes = URL_SAFE_NO_PAD
-        .decode(draft.unsigned_event_bytes.as_str())
-        .map_err(|_| SidecarModelError::DraftMismatch)?;
-    let mut value: Value =
-        serde_json::from_slice(&bytes).map_err(|_| SidecarModelError::DraftMismatch)?;
-    if arkret_canonical::canonical_json_bytes(&value)
-        .map_err(|_| SidecarModelError::DraftMismatch)?
-        != bytes
-    {
-        return Err(SidecarModelError::DraftMismatch);
-    }
-    // The draft bytes are the *digest preimage*, which excludes `event_id`
-    // (spec encoding.md section 6). Reinstate the id the draft declares, then
-    // the checks below re-derive it from the content and compare — the
-    // recompute-before-use discipline of section 4.0.
-    let object = value
-        .as_object_mut()
-        .ok_or(SidecarModelError::DraftMismatch)?;
-    object.insert("proofs".to_owned(), Value::Array(Vec::new()));
-    object.insert(
-        "event_id".to_owned(),
-        Value::String(draft.event_id.to_string()),
-    );
-    let event: Event =
-        serde_json::from_value(value).map_err(|_| SidecarModelError::DraftMismatch)?;
-    let digest_suite = draft
-        .event_digest
-        .digest_suite()
-        .map_err(|_| SidecarModelError::DraftMismatch)?;
-    let derived = event
-        .derive_event_id_with_digest_suite(digest_suite)
-        .map_err(|_| SidecarModelError::DraftMismatch)?;
-    if derived != draft.event_id
-        || event.kind != draft.kind
-        || event
-            .event_digest_with_digest_suite(digest_suite)
-            .map_err(|_| SidecarModelError::DraftMismatch)?
-            != draft.event_digest.as_str()
-    {
-        return Err(SidecarModelError::DraftMismatch);
-    }
-    Ok(event)
+    draft
+        .unsigned_event()
+        .map(|event| event.into_event())
+        .map_err(|_| SidecarModelError::DraftMismatch)
 }
 
 fn validate_prepared_outcome(
@@ -1067,23 +1016,17 @@ fn validate_prepared_outcome(
         SidecarPreparedOutcome::New {
             operation_id,
             expires_at,
-            sidecar_id,
-            create_event_id,
-            context_attach_event_id,
             create_event_draft,
             context_attach_event_draft,
             ..
         } => {
-            if create_event_id != &create_event_draft.event_id
-                || context_attach_event_id != &context_attach_event_draft.event_id
-            {
-                return Err(SidecarModelError::DraftMismatch);
-            }
+            let create = decode_prepared_event(create_event_draft)?;
+            let sidecar_id = SidecarId::from_event_id(&create.event_id);
             (
                 operation_id,
                 expires_at,
                 sidecar_id,
-                Some(decode_prepared_event(create_event_draft)?),
+                Some(create),
                 decode_prepared_event(context_attach_event_draft)?,
             )
         }
@@ -1091,21 +1034,15 @@ fn validate_prepared_outcome(
             operation_id,
             expires_at,
             sidecar_id,
-            context_attach_event_id,
             context_attach_event_draft,
             ..
-        } => {
-            if context_attach_event_id != &context_attach_event_draft.event_id {
-                return Err(SidecarModelError::DraftMismatch);
-            }
-            (
-                operation_id,
-                expires_at,
-                sidecar_id,
-                None,
-                decode_prepared_event(context_attach_event_draft)?,
-            )
-        }
+        } => (
+            operation_id,
+            expires_at,
+            sidecar_id.clone(),
+            None,
+            decode_prepared_event(context_attach_event_draft)?,
+        ),
     };
     if operation_id != &request.operation_id || *expires_at <= fixed_sidecar_time() {
         return Err(SidecarModelError::ReservationMismatch);
@@ -1124,7 +1061,7 @@ fn validate_prepared_outcome(
                 "encryption_profile".to_owned(),
                 Value::String("mls_rfc9420".to_owned()),
             )])
-            || SidecarId::from_event_id(&create.event_id) != *sidecar_id
+            || SidecarId::from_event_id(&create.event_id) != sidecar_id
         {
             return Err(SidecarModelError::DraftMismatch);
         }
@@ -1144,7 +1081,7 @@ fn validate_prepared_outcome(
                 realm_id: request.source_realm_id.clone(),
                 sidecar_id: sidecar_id.clone(),
             })
-        || attach_payload.sidecar_id != *sidecar_id
+        || attach_payload.sidecar_id != sidecar_id
         || attach_payload.source_context_ref != request.context_ref
     {
         return Err(SidecarModelError::DraftMismatch);
@@ -1243,9 +1180,7 @@ fn validate_signed_draft(
     let expected_unsigned = URL_SAFE_NO_PAD
         .decode(draft.unsigned_event_bytes.as_str())
         .map_err(|_| SidecarModelError::DraftMismatch)?;
-    if event.event_id != draft.event_id
-        || event.kind != draft.kind
-        || actual_unsigned != expected_unsigned
+    if actual_unsigned != expected_unsigned
         || event
             .event_digest_with_digest_suite(
                 draft
@@ -1585,7 +1520,6 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let SidecarPreparedOutcome::New {
         operation_id: operation_a,
         reservation_handle: handle_a,
-        sidecar_id: sidecar_a,
         create_event_draft: create_a,
         context_attach_event_draft: attach_a,
         ..
@@ -1596,7 +1530,6 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let SidecarPreparedOutcome::New {
         operation_id: operation_b,
         reservation_handle: handle_b,
-        sidecar_id: sidecar_b,
         create_event_draft: create_b,
         context_attach_event_draft: attach_b,
         ..
@@ -1604,6 +1537,8 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     else {
         bail!("device B concurrent prepare was not New");
     };
+    let sidecar_a = SidecarId::from_event_id(&create_a.event_id()?);
+    let sidecar_b = SidecarId::from_event_id(&create_b.event_id()?);
     if handle_a == handle_b || concurrent.reservations.len() != 2 || sidecar_a != sidecar_b {
         bail!("concurrent device reservations overwrote or diverged fixed coordinates");
     }

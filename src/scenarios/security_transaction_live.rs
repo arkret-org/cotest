@@ -87,7 +87,6 @@ fn rotation_create_request(
     let principal_id = arkret_wire::project_full_id_to_core_id(&principal)?;
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
     let revoke_submission = event_submission(&principal, pcr_realm, "ak.device.revoke")?;
-    let revoke_event_id = revoke_submission.event.event_id.clone();
     let revoke_unit = event_unit(&coordinator, revoke_submission)?;
     let rotations = [
         (BackupRotationKind::SecretStorage, "c"),
@@ -101,7 +100,6 @@ fn rotation_create_request(
             transaction_id,
             principal_id,
             Utc::now() + chrono::Duration::hours(1),
-            revoke_event_id,
             revoke_unit,
             hash('e')?,
             rotations,
