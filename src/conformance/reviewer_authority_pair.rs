@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, bail};
+use arkret_wire::ProofContextId;
 
 use super::load_fixture_value;
 
@@ -27,7 +28,7 @@ pub fn run_reviewer_authority_pair_suite() -> Result<()> {
     }
 
     let transcript = &fixture["proof_transcript"];
-    if transcript["context"] != "ak.join-application-review-receipt-proof-v1"
+    if transcript["context"] != ProofContextId::JOIN_APPLICATION_REVIEW_RECEIPT_PROOF_V1
         || transcript["ordered_fields"]
             != serde_json::json!([
                 "receipt_digest",

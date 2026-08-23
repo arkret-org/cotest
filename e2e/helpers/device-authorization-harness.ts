@@ -60,7 +60,7 @@ export function buildDevicePossessionSignature(args: {
     authorization_binding_kind: args.authorizationBindingKind,
   };
   const transcript = Buffer.concat([
-    Buffer.from("ak.device-authorize-possession-proof-v1\n", "utf8"),
+    Buffer.from("ak.device_authorize_possession_proof.v1\n", "utf8"),
     Buffer.from(canonicalJson(body), "utf8"),
   ]);
   return nodeSign(null, transcript, args.privateKey).toString("base64url");

@@ -180,7 +180,7 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
 // ─── VECT-CS-3 — proof_detached_jws (REAL ed25519 round-trip) ──────────────
 
 /// Build a call-signal [`SignalEnvelope`] exactly as a sender does, sign it
-/// with a real ed25519 key under the `ak.signal-proof-v1` transcript, and
+/// with a real ed25519 key under the `ak.signal_proof.v1` transcript, and
 /// verify it through the SDK receiver path.
 ///
 /// The transcript commits to `envelope_digest` — the envelope with `proof`

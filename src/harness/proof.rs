@@ -130,7 +130,7 @@ fn event_fixture_label(event: &Value) -> String {
         .to_owned()
 }
 
-/// Attach the `ak.signal-proof-v1` device proof to a [`SignalEnvelope`].
+/// Attach the `ak.signal_proof.v1` device proof to a [`SignalEnvelope`].
 ///
 /// The Signal proof is not an Event proof: its transcript names the sending
 /// device and commits to `envelope_digest` — the envelope with `proof`
@@ -230,7 +230,7 @@ mod tests {
     /// The signal rail carries no product `signal_kind`, `call_id` or
     /// `strand_id` on the outer header; a raw envelope is signable from its
     /// header alone, and the resulting proof verifies under the
-    /// `ak.signal-proof-v1` transcript.
+    /// `ak.signal_proof.v1` transcript.
     #[test]
     fn raw_signal_envelope_can_be_signed_and_verifies() {
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]);

@@ -1483,7 +1483,7 @@ export async function submitApplicationApi(
       realmId,
       receiptDigest: applicationReceiptDigest,
       createdAt: submittedAt,
-      context: "ak.join-application-receipt-proof-v1",
+      context: "ak.join_application_receipt_proof.v1",
     }),
   };
   const response = await request.post(
@@ -1567,7 +1567,7 @@ export async function submitApplicationReviewApi(
       realmId,
       receiptDigest: reviewReceiptDigest,
       createdAt: reviewedAt,
-      context: "ak.join-application-review-receipt-proof-v1",
+      context: "ak.join_application_review_receipt_proof.v1",
       applicationRef: review.applicationRef,
       applicationRevisionDigest: application.applicationRevisionDigest,
     }),

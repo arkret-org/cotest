@@ -1295,7 +1295,7 @@ function appletEventProof(
   const verificationMethod = `${sourceServiceId}#applet-service-key`;
   const createdAt = canonicalEventTimestamp();
   const binding = canonicalJson({
-    context: "ak.event-proof-v1",
+    context: "ak.event_proof.v1",
     event_digest: eventDigest,
     actor_id: event.actor_id,
     verification_method: verificationMethod,

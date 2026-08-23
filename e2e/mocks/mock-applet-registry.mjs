@@ -245,7 +245,7 @@ function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
   const eventDigest = canonicalHash(event);
   const createdAt = rfc3339Now();
   const binding = {
-    context: "ak.event-proof-v1",
+    context: "ak.event_proof.v1",
     event_digest: eventDigest,
     actor_id: actorDid,
     verification_method: verificationMethod,
@@ -354,7 +354,7 @@ function signedGhostProvisionEvents({
     .update(canonicalJson(grantWithoutProof), "utf8")
     .digest("hex")}`;
   const accountabilityProofBinding = {
-    context: "ak.accountability-grant-proof-v1",
+    context: "ak.accountability_grant_proof.v1",
     payload_digest: payloadDigest,
     issuer: packageInfo.serviceId,
     subject: ghostActorId,

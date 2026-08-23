@@ -1073,7 +1073,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         },
     };
     snapshot.lease.proof = sign_domain(
-        "ak.agent-authority-snapshot-v1",
+        DomainSeparationId::AGENT_AUTHORITY_SNAPSHOT_V1,
         &snapshot.lease,
         &authority_signing,
         None,
@@ -1097,7 +1097,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         proof: pending_proof()?,
     };
     gate.proof = sign_domain(
-        "ak.controller-account-gate-v1",
+        DomainSeparationId::CONTROLLER_ACCOUNT_GATE_V1,
         &gate,
         &account_signing,
         None,
@@ -1281,7 +1281,7 @@ fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> R
         } => {
             outer_attestation.core_digest = core_digest;
             outer_attestation.proof = sign_domain(
-                "ak.agent-signer-evidence.v1",
+                DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1,
                 outer_attestation,
                 signing_key,
                 None,
@@ -1292,7 +1292,7 @@ fn sign_outer(evidence: &mut AgentSignerEvidence, signing_key: &SigningKey) -> R
         } => {
             outer_attestation.core_digest = core_digest;
             outer_attestation.proof = sign_domain(
-                "ak.agent-signer-evidence.v1",
+                DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1,
                 outer_attestation,
                 signing_key,
                 None,
@@ -1308,7 +1308,7 @@ fn pending_historical_outer(
     attested_at: DateTime<Utc>,
 ) -> Result<AgentHistoricalEvidenceOuterAttestation> {
     Ok(AgentHistoricalEvidenceOuterAttestation {
-        domain: nes("ak.agent-signer-evidence.v1")?,
+        domain: nes(DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1)?,
         core_digest: hash_byte(0)?,
         source_service_id: service_id.clone(),
         verification_method: method.clone(),
@@ -1324,7 +1324,7 @@ fn pending_outer(
     expires_at: DateTime<Utc>,
 ) -> Result<AgentEvidenceOuterAttestation> {
     Ok(AgentEvidenceOuterAttestation {
-        domain: nes("ak.agent-signer-evidence.v1")?,
+        domain: nes(DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1)?,
         core_digest: hash_byte(0)?,
         source_service_id: service_id.clone(),
         verification_method: method.clone(),

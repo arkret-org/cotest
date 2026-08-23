@@ -2,7 +2,7 @@
 //! (`discovery/discovery-directory.md` §9.0.1) and MIMI
 //! (`extensions/mimi-interop.md` §5.1) request and outcome families.
 //!
-//! v1 has no `ak.directory-operation-proof-v1` / `ak.mimi-operation-proof-v1`.
+//! v1 has no `ak.directory_operation_proof.v1` / `ak.mimi_operation_proof.v1`.
 //! Every request and outcome family carries its own registered context, so a
 //! signature minted for one family can never be replayed onto another. This
 //! module drives that closure from three sides:
@@ -47,7 +47,7 @@ use serde_json::{Value, json};
 use super::load_artifact_json;
 
 /// The five directory request families that replaced the retired over-broad
-/// `ak.directory-operation-proof-v1`.
+/// `ak.directory_operation_proof.v1`.
 pub const DIRECTORY_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
     (
         ProofContextId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
@@ -72,7 +72,7 @@ pub const DIRECTORY_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
 ];
 
 /// The seven MIMI operation families that replaced the retired over-broad
-/// `ak.mimi-operation-proof-v1`.
+/// `ak.mimi_operation_proof.v1`.
 pub const MIMI_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
     (
         ProofContextId::MIMI_GROUP_INFO_OUTCOME_PROOF_V1,
@@ -108,8 +108,8 @@ pub const MIMI_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
 /// resolve through the registry or the shared vocabulary; a receiver that still
 /// accepted one would accept a proof minted for any sibling operation.
 const RETIRED_OVER_BROAD_CONTEXTS: &[&str] = &[
-    "ak.directory-operation-proof-v1",
-    "ak.mimi-operation-proof-v1",
+    "ak.directory_operation_proof.v1",
+    "ak.mimi_operation_proof.v1",
 ];
 
 const DIRECTORY_AUDIENCE: &str = "ak:did_core:web:teabay.example";

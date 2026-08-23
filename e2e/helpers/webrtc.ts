@@ -308,7 +308,7 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
     .digest("hex")}`;
   proof.envelope_digest = envelopeDigest;
   const bindingObject = {
-    context: "ak.signal-proof-v1",
+    context: "ak.signal_proof.v1",
     envelope_digest: envelopeDigest,
     sender_actor_id: envelope.sender_actor_id,
     sender_device_id: envelope.sender_device_id,

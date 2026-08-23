@@ -3,10 +3,10 @@
 //! `sync-fixture.json` block `snapshot_witness_quorum`).
 //!
 //! A witness attestation is its own object family, not a bare proof appended to
-//! the manifest. It is signed under `ak.snapshot-witness-attestation-proof-v1`
+//! the manifest. It is signed under `ak.snapshot_witness_attestation_proof.v1`
 //! over the signature-free canonical projection, so:
 //!
-//!  - reusing the manifest's `ak.snapshot-proof-v1` context yields a different transcript digest
+//!  - reusing the manifest's `ak.snapshot_proof.v1` context yields a different transcript digest
 //!    and MUST be rejected even when the JWS itself verifies;
 //!  - the projection may not contain `signature` or `witness_attestations`, otherwise a witness
 //!    would sign a transcript containing its own signature;

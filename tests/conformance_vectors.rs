@@ -172,7 +172,7 @@ fn media_binding_vector_suite_runs_clean() {
 //
 // signal_kind enum on the decrypted plaintext (rejects retired
 // offer/ice/device_change) + per-(realm, call, actor, device) seq monotonicity
-// + a REAL ed25519 round-trip under the `ak.signal-proof-v1` transcript +
+// + a REAL ed25519 round-trip under the `ak.signal_proof.v1` transcript +
 // outer-header metadata minimisation, the class TTL ceiling, and SDK-backed
 // closed plaintext schema rejection.
 
@@ -214,8 +214,8 @@ fn account_status_issuer_ledger_vector_runs_clean() {
         .expect("account-status issuer ledger vector must pass");
 }
 
-/// 2026-08-17 — the over-broad `ak.directory-operation-proof-v1` /
-/// `ak.mimi-operation-proof-v1` contexts were replaced by twelve per-object-
+/// 2026-08-17 — the over-broad `ak.directory_operation_proof.v1` /
+/// `ak.mimi_operation_proof.v1` contexts were replaced by twelve per-object-
 /// family contexts. Domain separation is what stops a proof minted for one
 /// operation from being replayed onto a sibling, and no JSON Schema can
 /// express it.

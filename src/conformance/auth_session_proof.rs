@@ -14,7 +14,7 @@ use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignatureInput, SignatureVerificationPolicy,
     SignedRequestParts, canonical_message, sign_message, verify_signed_http_message,
 };
-use arkret_wire::ProfileId;
+use arkret_wire::{ProfileId, ProofContextId};
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde_json::{Value, json};
@@ -177,7 +177,7 @@ fn session_grant_request_value(
         "device_id": required_str(vector, "device_id")?,
         "audience": audience,
         "accepted_device_possession_proof": {
-            "context": "ak.session-grant-accepted-device-possession-proof-v1",
+            "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
             "purpose": "session_grant_issue",
             "request_id": required_str(vector, "request_id")?,
             "account_subject": required_str(vector, "account_subject")?,
@@ -268,7 +268,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
         "audience": audience,
         "device_id": device_id,
         "accepted_device_possession_proof": {
-            "context": "ak.session-grant-accepted-device-possession-proof-v1",
+            "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
             "purpose": "session_grant_refresh",
             "predecessor_session_grant_id": predecessor,
             "principal_id": principal_id,
@@ -299,7 +299,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
         "device_id": device_id,
         "audience": audience,
         "accepted_device_possession_proof": {
-            "context": "ak.session-grant-accepted-device-possession-proof-v1",
+            "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
             "purpose": "session_grant_issue",
             "request_id": request_id,
             "account_subject": format!("sha256:{}", "a".repeat(64)),
