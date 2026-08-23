@@ -52,7 +52,7 @@ fn circle_b() -> Result<CircleId> {
 fn actor() -> Result<DidCoreId> {
     let full_id =
         DidFullId::new("did:web:alice.example").map_err(|e| anyhow!("actor full id: {e}"))?;
-    Ok(DidCoreId::from(project_full_id_to_core_id(&full_id)?))
+    Ok(project_full_id_to_core_id(&full_id)?)
 }
 
 /// Reducer-pure invariant: for two sequential states of the same Strand /

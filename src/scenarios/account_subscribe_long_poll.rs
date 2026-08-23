@@ -766,11 +766,9 @@ async fn submit_event_now(
             // marks an Event as a Control Move.
             event.seal_ref = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(arkret_wire::AuthContext {
-                actor_id: arkret_identifiers::DidCoreId::from(
-                    arkret_identifiers::project_full_id_to_core_id(
-                        &arkret_identifiers::DidFullId::new(actor.actor.clone())?,
-                    )?,
-                ),
+                actor_id: arkret_identifiers::project_full_id_to_core_id(
+                    &arkret_identifiers::DidFullId::new(actor.actor.clone())?,
+                )?,
                 key_id: crate::harness::auth_context_key_id(
                     crate::harness::default_event_verification_method(&actor.actor).as_str(),
                 ),

@@ -30,7 +30,7 @@ use serde_json::{Value, json};
 fn build_event(kind: &str, realm_id: &RealmId, payload: Value) -> Result<Event> {
     let actor_full_id = DidFullId::new("did:web:alice.example".to_owned())
         .map_err(|err| anyhow!("invalid actor did: {err}"))?;
-    let actor_id = DidCoreId::from(project_full_id_to_core_id(&actor_full_id)?);
+    let actor_id = project_full_id_to_core_id(&actor_full_id)?;
     let hlc = Hlc::new("01970e589d21-0001-a13f9c2e".to_owned())
         .map_err(|err| anyhow!("invalid hlc: {err}"))?;
     arkret_wire::test_support::raw_event(

@@ -351,7 +351,7 @@ fn build_pcr_genesis_unit(
     created_at: chrono::DateTime<Utc>,
     hlc: &str,
 ) -> Result<(Event, Event, String)> {
-    let principal_id = DidCoreId::from(project_full_id_to_core_id(principal)?);
+    let principal_id = project_full_id_to_core_id(principal)?;
     let principal_device_id = DeviceId::new(device_id.to_owned()).context("parse device id")?;
     let device_seed: [u8; 32] = Sha256::digest(
         [
@@ -479,10 +479,8 @@ fn build_pcr_genesis_unit(
         arkret::ScopeRef::Realm {
             realm_id: create.realm_id.clone(),
         },
-        DidCoreId::from(
-            project_full_id_to_core_id(principal)
-                .context("project principal DID for founding DeviceAuthorize")?,
-        ),
+        project_full_id_to_core_id(principal)
+            .context("project principal DID for founding DeviceAuthorize")?,
         create.principal_server_id.clone(),
         authorize_payload,
     )?
@@ -718,10 +716,8 @@ fn trusted_actor_signer_material(event: &Event) -> Result<(DidFullId, DidUrl)> {
         .context("founding DeviceAuthorize proof method lacks a controller fragment")?;
     let controller = DidFullId::new(controller.to_owned())
         .context("parse founding DeviceAuthorize proof controller DID")?;
-    let controller_actor = DidCoreId::from(
-        project_full_id_to_core_id(&controller)
-            .context("project founding DeviceAuthorize proof controller")?,
-    );
+    let controller_actor = project_full_id_to_core_id(&controller)
+        .context("project founding DeviceAuthorize proof controller")?;
     if controller_actor != event.actor_id {
         bail!("founding DeviceAuthorize proof controller does not match its actor core id");
     }
@@ -872,9 +868,8 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let input: EventProofInput =
         serde_json::from_value(input).context("parse event proof input")?;
     let actor_full_id = DidFullId::new(input.actor_did.clone()).context("parse actor DID")?;
-    let actor = DidCoreId::from(
-        project_full_id_to_core_id(&actor_full_id).context("project actor DID to its core id")?,
-    );
+    let actor =
+        project_full_id_to_core_id(&actor_full_id).context("project actor DID to its core id")?;
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
     let event_digest =
@@ -1044,7 +1039,7 @@ mod tests {
 
     fn actor_ids(value: &str) -> (DidFullId, DidCoreId) {
         let full_id = DidFullId::new(value.to_owned()).unwrap();
-        let core_id = DidCoreId::from(project_full_id_to_core_id(&full_id).unwrap());
+        let core_id = project_full_id_to_core_id(&full_id).unwrap();
         (full_id, core_id)
     }
 

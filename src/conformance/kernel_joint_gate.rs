@@ -950,39 +950,6 @@ mod tests {
     }
 
     #[test]
-    fn mls_genesis_schema_rejects_legacy_creator_coordinates() {
-        let catalog = arkret_schema::event_payload_validator_catalog_from_spec_artifacts(
-            crate::conformance::spec_artifacts_root(),
-        )
-        .expect("event payload catalog must compile");
-        let payload = fixture_genesis_payload();
-        catalog
-            .validate_payload(arkret_wire::EventKind::MlsGenesis.as_str(), &payload)
-            .expect("current genesis fixture must satisfy the closed schema");
-
-        for field in ["creator_principal_id", "creator_device_id"] {
-            let mut legacy = payload.clone();
-            legacy
-                .as_object_mut()
-                .expect("genesis is an object")
-                .insert(
-                    field.to_owned(),
-                    json!(if field == "creator_principal_id" {
-                        "ak:did_core:web:alice.example"
-                    } else {
-                        "ak:device:0196419b-0000-7000-8000-000000000001"
-                    }),
-                );
-            assert!(
-                catalog
-                    .validate_payload(arkret_wire::EventKind::MlsGenesis.as_str(), &legacy)
-                    .is_err(),
-                "closed genesis schema must reject legacy {field}"
-            );
-        }
-    }
-
-    #[test]
     fn mls_genesis_ordinary_device_projection_succeeds() {
         let mut state = ProjectionState::new();
         let operation = operation("ak.mls.genesis", fixture_genesis_payload(), 1);

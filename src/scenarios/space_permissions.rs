@@ -199,20 +199,16 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
 fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<()> {
     let verification_method = crate::harness::default_event_verification_method(actor).to_string();
     let actor_full_id = arkret_identifiers::DidFullId::new(actor.to_owned())?;
-    event.actor_id = arkret_identifiers::DidCoreId::from(
-        arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?,
-    );
+    event.actor_id = arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?;
     event.actor_seq = 0;
     event.prev_refs.clear();
     if event.seal_basis.is_some() {
         event.auth_context = None;
     } else {
         event.auth_context = Some(arkret_wire::AuthContext {
-            actor_id: arkret_identifiers::DidCoreId::from(
-                arkret_identifiers::project_full_id_to_core_id(
-                    &arkret_identifiers::DidFullId::new(actor.to_owned())?,
-                )?,
-            ),
+            actor_id: arkret_identifiers::project_full_id_to_core_id(
+                &arkret_identifiers::DidFullId::new(actor.to_owned())?,
+            )?,
             key_id: crate::harness::auth_context_key_id(&verification_method),
             key_epoch: 0,
             credential_epoch: None,

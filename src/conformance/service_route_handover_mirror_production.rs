@@ -39,9 +39,7 @@ fn digest(value: &impl serde::Serialize) -> Result<Hash> {
 }
 
 fn service_id(full_id: &DidFullId) -> Result<DidCoreId> {
-    Ok(DidCoreId::from(arkret_wire::project_full_id_to_core_id(
-        full_id,
-    )?))
+    Ok(arkret_wire::project_full_id_to_core_id(full_id)?)
 }
 
 fn signature(full_id: &DidFullId, created_at: DateTime<Utc>) -> Result<ProtocolSignature> {

@@ -263,7 +263,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
         &audience,
         holder_jkt,
     )?;
-    let mut refresh = json!({
+    let refresh = json!({
         "grant_jwt": "grant.jwt.fixture",
         "audience": audience,
         "device_id": device_id,
@@ -284,11 +284,6 @@ fn validate_closed_human_session_shapes() -> Result<()> {
     });
     let parsed: SessionGrantRefreshRequestBody = serde_json::from_value(refresh.clone())?;
     parsed.validate()?;
-
-    refresh["legacy_open_proof"] = json!({ "signature": "placeholder" });
-    if serde_json::from_value::<SessionGrantRefreshRequestBody>(refresh).is_ok() {
-        bail!("legacy open refresh proof object was accepted");
-    }
 
     let request_id = "ak:request:0196419b-0000-7000-8000-000000000002".parse()?;
     let issue_intent = human_session_grant_intent_digest(

@@ -188,16 +188,28 @@ fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
     Ok(())
 }
 
-fn claim_record_value(
-    claim_id: &str,
-    keypackage_ref: &str,
-    keypackage_digest: &str,
-    principal_id: &DidCoreId,
-    verification_method: &DidUrl,
-    device_id: &DeviceId,
+struct ClaimRecordInput<'a> {
+    claim_id: &'a str,
+    keypackage_ref: &'a str,
+    keypackage_digest: &'a str,
+    principal_id: &'a DidCoreId,
+    verification_method: &'a DidUrl,
+    device_id: &'a DeviceId,
     last_resort: bool,
     expires_at: DateTime<Utc>,
-) -> Value {
+}
+
+fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
+    let ClaimRecordInput {
+        claim_id,
+        keypackage_ref,
+        keypackage_digest,
+        principal_id,
+        verification_method,
+        device_id,
+        last_resort,
+        expires_at,
+    } = input;
     let mut value = json!({
         "claim_id": claim_id,
         "keypackage_ref": keypackage_ref,
@@ -399,16 +411,16 @@ impl MiniKeypackage {
         if !self.last_resort {
             self.state = MiniKeypackageState::Claimed;
         }
-        claim_record_value(
+        claim_record_value(ClaimRecordInput {
             claim_id,
-            &self.keypackage_ref,
-            &self.keypackage_digest,
-            &self.principal_id,
-            &self.verification_method,
-            &self.device_id,
-            self.last_resort,
-            self.expires_at,
-        )
+            keypackage_ref: &self.keypackage_ref,
+            keypackage_digest: &self.keypackage_digest,
+            principal_id: &self.principal_id,
+            verification_method: &self.verification_method,
+            device_id: &self.device_id,
+            last_resort: self.last_resort,
+            expires_at: self.expires_at,
+        })
     }
 
     fn consume(
@@ -1037,18 +1049,21 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     }
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 
-    let claim_record = claim_record_value(
+    let principal_id = core_did("ak:did_core:web:alice.example")?;
+    let verification_method = verification_method(
+        "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
+    )?;
+    let device_id = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
+    let claim_record = claim_record_value(ClaimRecordInput {
         claim_id,
         keypackage_ref,
-        digest,
-        &core_did("ak:did_core:web:alice.example")?,
-        &verification_method(
-            "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
-        )?,
-        &device("ak:device:0196419b-0000-7000-8000-000000000001")?,
-        false,
-        parse_time("2100-01-01T00:00:00.000Z")?,
-    );
+        keypackage_digest: digest,
+        principal_id: &principal_id,
+        verification_method: &verification_method,
+        device_id: &device_id,
+        last_resort: false,
+        expires_at: parse_time("2100-01-01T00:00:00.000Z")?,
+    });
     let claim_outcome = parse_claim_outcome(claim_outcome_value(claim_record))?;
     let claim_receipt = serde_json::to_value(&claim_outcome.claim_receipt)?;
     let claim = claim_outcome

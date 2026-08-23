@@ -256,9 +256,7 @@ use garth::queued_record::{
 const SCHEDULED_SEND_ID: &str = "ak:scheduled_send:01904100-0000-7000-8000-000000000003";
 
 fn scheduled_send_core_id(full_id: &str) -> DidCoreId {
-    DidCoreId::from(
-        project_full_id_to_core_id(&DidFullId::new(full_id.to_owned()).unwrap()).unwrap(),
-    )
+    project_full_id_to_core_id(&DidFullId::new(full_id.to_owned()).unwrap()).unwrap()
 }
 
 fn scheduled_send_test_payload(body: &str) -> MessageCreatePayload {
@@ -477,7 +475,7 @@ struct MemoryCasRegister {
 #[derive(Debug)]
 struct CasConflict {
     current_revision: u64,
-    current_entry: Option<AccountDataEncryptedValue>,
+    current_entry: Option<Box<AccountDataEncryptedValue>>,
 }
 
 impl MemoryCasRegister {
@@ -489,7 +487,7 @@ impl MemoryCasRegister {
         if expected_revision != self.revision {
             return Err(CasConflict {
                 current_revision: self.revision,
-                current_entry: self.entry.clone(),
+                current_entry: self.entry.clone().map(Box::new),
             });
         }
         self.revision += 1;

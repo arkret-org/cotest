@@ -269,10 +269,8 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
         .ok_or_else(|| anyhow!("vector proof verification_method has no fragment"))?;
     let proof_controller = arkret_identifiers::DidFullId::new(proof_controller.to_owned())
         .context("vector proof controller must be a DidFullId")?;
-    let projected_actor = arkret_identifiers::DidCoreId::from(
-        arkret_identifiers::project_full_id_to_core_id(&proof_controller)
-            .context("vector proof controller has no active adapter")?,
-    );
+    let projected_actor = arkret_identifiers::project_full_id_to_core_id(&proof_controller)
+        .context("vector proof controller has no active adapter")?;
     if projected_actor.as_str() != case.base.actor_id {
         bail!("vector proof DidFullId does not project to the pairwise Core DidCoreId");
     }

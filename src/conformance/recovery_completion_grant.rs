@@ -258,9 +258,9 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
     let initial: InitialSessionGrantIntent =
         serde_json::from_value(vector.request.initial_session.clone())?;
     initial.validate()?;
-    let receipt_generation = serde_json::to_value(&receipt.result_model_generation_ref)?;
-    let attestation_generation = serde_json::to_value(&attestation.result_model_generation_ref)?;
-    let request_generation = serde_json::to_value(&vector.request.result_model_generation_ref)?;
+    let receipt_generation = serde_json::to_value(receipt.result_model_generation_ref)?;
+    let attestation_generation = serde_json::to_value(attestation.result_model_generation_ref)?;
+    let request_generation = serde_json::to_value(vector.request.result_model_generation_ref)?;
     if receipt.transaction_id != vector.request.transaction_id
         || receipt.transaction_request_digest != vector.request.transaction_request_digest
         || receipt.receipt_id != attestation.terminal_receipt_id

@@ -92,9 +92,7 @@ fn authorization_lease_for_basis(
             .context("authorization lease verification method has no controller")?;
         let full_id = arkret_identifiers::DidFullId::new(controller.to_owned())
             .context("authorization lease verification-method controller is not a full id")?;
-        arkret_identifiers::DidCoreId::from(arkret_identifiers::project_full_id_to_core_id(
-            &full_id,
-        )?)
+        arkret_identifiers::project_full_id_to_core_id(&full_id)?
     };
     let authorization_rule_id = "realm_admission";
     let authority_set_policy = AuthoritySetPolicy {

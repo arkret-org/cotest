@@ -76,8 +76,7 @@ fn validate_directory(
         .map(|(controller, _)| controller)
         .ok_or_else(|| anyhow!("MIMI proof verification method has no fragment"))?;
     let proof_controller = DidFullId::new(proof_controller.to_owned())?;
-    let proof_controller =
-        arkret_wire::DidCoreId::from(arkret_wire::project_full_id_to_core_id(&proof_controller)?);
+    let proof_controller = arkret_wire::project_full_id_to_core_id(&proof_controller)?;
     if proof.kind != "detached_jws"
         || proof_controller != directory.service_id
         || now - proof.created_at > Duration::minutes(5)
@@ -182,8 +181,7 @@ fn assert_foreign_context_signature_is_rejected(
 
 fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)> {
     let service_full_id = DidFullId::new("did:webvh:z6mkfixture:provider.example")?;
-    let service_id =
-        arkret_wire::DidCoreId::from(arkret_wire::project_full_id_to_core_id(&service_full_id)?);
+    let service_id = arkret_wire::project_full_id_to_core_id(&service_full_id)?;
     let verification_method = DidUrl::new(format!("{}#notary-key", service_full_id.as_str()))
         .map_err(|error| anyhow!(error))?;
     let placeholder = PayloadProof {

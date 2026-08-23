@@ -1213,16 +1213,29 @@ fn sign_replay_kat_seal(seal: &mut Seal, seed: [u8; 32], method: &DidUrl) -> Res
     Ok(())
 }
 
-fn replay_kat_seal(
+struct ReplayKatSealInput<'a> {
     realm_id: RealmId,
     predecessor_refs: Vec<SealId>,
     delta: Vec<Hash>,
-    covered_events: &[(Event, arkret_canonical::DigestSuite)],
     state_root: Hash,
     notary_seq: u64,
     seed: [u8; 32],
-    method: &DidUrl,
+    method: &'a DidUrl,
+}
+
+fn replay_kat_seal(
+    input: ReplayKatSealInput<'_>,
+    covered_events: &[(Event, arkret_canonical::DigestSuite)],
 ) -> Result<Seal> {
+    let ReplayKatSealInput {
+        realm_id,
+        predecessor_refs,
+        delta,
+        state_root,
+        notary_seq,
+        seed,
+        method,
+    } = input;
     let covered = covered_events
         .iter()
         .map(|(event, suite)| Ok(Hash::new(event.event_digest_with_digest_suite(*suite)?)?))
@@ -1331,14 +1344,16 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
         genesis_event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
     )?;
     let genesis_seal = replay_kat_seal(
-        realm_id.clone(),
-        Vec::new(),
-        vec![genesis_digest],
+        ReplayKatSealInput {
+            realm_id: realm_id.clone(),
+            predecessor_refs: Vec::new(),
+            delta: vec![genesis_digest],
+            state_root: state_root.clone(),
+            notary_seq: 0,
+            seed: historical_seed,
+            method: &method,
+        },
         &[(genesis_event.clone(), arkret_canonical::DigestSuite::Sha256)],
-        state_root.clone(),
-        0,
-        historical_seed,
-        &method,
     )?;
 
     let mut successor_event = arkret_wire::test_support::raw_event_at(
@@ -1364,9 +1379,15 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
         successor_event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
     )?;
     let successor_seal = replay_kat_seal(
-        realm_id.clone(),
-        vec![genesis_seal.id.clone()],
-        vec![successor_digest],
+        ReplayKatSealInput {
+            realm_id: realm_id.clone(),
+            predecessor_refs: vec![genesis_seal.id.clone()],
+            delta: vec![successor_digest],
+            state_root,
+            notary_seq: 1,
+            seed: historical_seed,
+            method: &method,
+        },
         &[
             (genesis_event.clone(), arkret_canonical::DigestSuite::Sha256),
             (
@@ -1374,10 +1395,6 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
                 arkret_canonical::DigestSuite::Sha256,
             ),
         ],
-        state_root,
-        1,
-        historical_seed,
-        &method,
     )?;
     let request = DirectCutRequest {
         realm_id,
@@ -1710,7 +1727,14 @@ fn verify_direct_cut_graph_mutations(cut: &Value, negative_cases: &[Value]) -> R
 
     let disjoint_current = vec![UNREACHABLE_SEAL_REF.to_owned()];
 
-    let mutations: [(&str, &[String], &[String], &[String], &[DirectCutSeal]); 5] = [
+    type TraversalMutation<'a> = (
+        &'a str,
+        &'a [String],
+        &'a [String],
+        &'a [String],
+        &'a [DirectCutSeal],
+    );
+    let mutations: [TraversalMutation<'_>; 5] = [
         (
             "hidden_predecessor",
             &base,

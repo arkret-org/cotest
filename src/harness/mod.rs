@@ -76,7 +76,6 @@ pub fn events_frontier_request_body(
                 .map(|value| {
                     arkret_identifiers::DidFullId::new(value.to_owned()).and_then(|full_id| {
                         arkret_identifiers::project_full_id_to_core_id(&full_id)
-                            .map(arkret_identifiers::DidCoreId::from)
                     })
                 })
                 .transpose()?,

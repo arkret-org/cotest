@@ -504,7 +504,7 @@ pub async fn seal_current_principal_control_frontier(
     device_signing_key: &SigningKey,
 ) -> Result<()> {
     let principal = DidFullId::new(client.actor.clone())?;
-    let principal_actor_id = DidCoreId::from(project_full_id_to_core_id(&principal)?);
+    let principal_actor_id = project_full_id_to_core_id(&principal)?;
     let mut selected = None;
     for candidate in client.controlled_realm_ids() {
         let events = client
@@ -705,7 +705,7 @@ async fn bootstrap_test_device_authorization(
     let host = method_authority.replace("%3A", ":").replace("%3a", ":");
     let principal = DidFullId::new(actor.to_owned()).context("invalid test principal DID")?;
     let principal_core_id = project_full_id_to_core_id(&principal)?;
-    let principal_actor_id = DidCoreId::from(principal_core_id.clone());
+    let principal_actor_id = principal_core_id.clone();
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
 
@@ -784,7 +784,7 @@ async fn bootstrap_test_device_authorization(
                 method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,
                 version_id: prepared.version_id.clone(),
             },
-            genesis_salt: test_principal_genesis_salt(&host, &local_id, device_id.as_str())?,
+            genesis_salt: test_principal_genesis_salt(&host, local_id, device_id.as_str())?,
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             founding_device_descriptor: descriptor,

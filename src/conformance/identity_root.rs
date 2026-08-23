@@ -210,7 +210,7 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
 
 fn validate_pcr_genesis_helpers() -> Result<()> {
     let principal_full_id = DidFullId::new("did:webvh:z6mkfixture:alice.example")?;
-    let principal = DidCoreId::from(project_full_id_to_core_id(&principal_full_id)?);
+    let principal = project_full_id_to_core_id(&principal_full_id)?;
     let created_at = "2026-07-15T00:00:00.000Z".parse()?;
     let device_id = DeviceId::new("ak:device:01904100-0000-7000-8000-000000000001")?;
     let device_verification_method =

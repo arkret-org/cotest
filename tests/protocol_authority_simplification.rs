@@ -8,9 +8,7 @@ use arkret_wire::{
 use chrono::{TimeZone as _, Utc};
 
 fn core(full_id: &str) -> DidCoreId {
-    DidCoreId::from(
-        project_full_id_to_core_id(&DidFullId::new(full_id.to_owned()).unwrap()).unwrap(),
-    )
+    project_full_id_to_core_id(&DidFullId::new(full_id.to_owned()).unwrap()).unwrap()
 }
 
 fn producer_event() -> Event {

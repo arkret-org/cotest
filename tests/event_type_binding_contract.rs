@@ -27,7 +27,7 @@ fn actor() -> DidCoreId {
     let projected =
         arkret_wire::project_full_id_to_core_id(&DidFullId::new(ACTOR_FULL_ID).unwrap()).unwrap();
     assert_eq!(projected.as_str(), ACTOR_ID);
-    DidCoreId::from(projected)
+    projected
 }
 
 fn principal_server() -> DidCoreId {

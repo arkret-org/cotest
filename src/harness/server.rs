@@ -738,7 +738,7 @@ impl ArkretServer {
         .await?;
         let client = self.actor_client(
             actor,
-            &principal.device_id.as_str().to_owned(),
+            principal.device_id.as_str(),
             token,
             Some(principal.clone()),
         )?;
@@ -761,7 +761,7 @@ impl ArkretServer {
         .await?;
         let client = self.actor_client(
             did,
-            &principal.device_id.as_str().to_owned(),
+            principal.device_id.as_str(),
             token,
             Some(principal.clone()),
         )?;
@@ -799,7 +799,7 @@ impl ArkretServer {
         .await?;
         let client = self.actor_client(
             did,
-            &principal.device_id.as_str().to_owned(),
+            principal.device_id.as_str(),
             token,
             Some(principal.clone()),
         )?;

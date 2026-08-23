@@ -178,7 +178,7 @@ fn expected_class(expected: &str) -> Result<OutcomeClass> {
 
 fn service_id(value: &str) -> Result<DidCoreId> {
     let full_id = DidFullId::new(value.to_owned())?;
-    Ok(DidCoreId::from(project_full_id_to_core_id(&full_id)?))
+    Ok(project_full_id_to_core_id(&full_id)?)
 }
 
 fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
@@ -705,15 +705,12 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let account_authority_service_full_id =
         DidFullId::new("did:webvh:z6mkaccount:account-authority.example")?;
     let receiver_service_full_id = DidFullId::new("did:webvh:z6mkreceiver:receiver.example")?;
-    let signer_id = DidCoreId::from(project_full_id_to_core_id(&signer_full_id)?);
-    let controller_id = DidCoreId::from(project_full_id_to_core_id(&controller_full_id)?);
-    let authority_service_id =
-        DidCoreId::from(project_full_id_to_core_id(&authority_service_full_id)?);
-    let account_authority_service_id = DidCoreId::from(project_full_id_to_core_id(
-        &account_authority_service_full_id,
-    )?);
-    let receiver_service_id =
-        DidCoreId::from(project_full_id_to_core_id(&receiver_service_full_id)?);
+    let signer_id = project_full_id_to_core_id(&signer_full_id)?;
+    let controller_id = project_full_id_to_core_id(&controller_full_id)?;
+    let authority_service_id = project_full_id_to_core_id(&authority_service_full_id)?;
+    let account_authority_service_id =
+        project_full_id_to_core_id(&account_authority_service_full_id)?;
+    let receiver_service_id = project_full_id_to_core_id(&receiver_service_full_id)?;
     let verification_method =
         DidUrl::new(format!("{signer_full_id}#runtime-1")).map_err(anyhow::Error::msg)?;
     let controller_verification_method =
@@ -895,7 +892,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     };
     let mut gate = ControllerAccountGateAttestation {
         schema: nes(SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1)?,
-        principal_id: DidCoreId::from(DidCoreId::from(controller_id.clone())),
+        principal_id: controller_id.clone(),
         eligibility: config.controller_eligibility,
         status: config.controller_status,
         basis_digest: canonical_hash(&basis)?,

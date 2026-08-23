@@ -530,10 +530,8 @@ fn issued_op(issuer: &str, suffix: &str, op: LatticeOp) -> IssuedOp {
     let full_id =
         DidFullId::new(issuer.to_owned()).expect("test fixture issuer should be a valid did");
     IssuedOp {
-        issuer: arkret_identifiers::DidCoreId::from(
-            arkret_identifiers::project_full_id_to_core_id(&full_id)
-                .expect("test fixture issuer should project to a core id"),
-        ),
+        issuer: arkret_identifiers::project_full_id_to_core_id(&full_id)
+            .expect("test fixture issuer should project to a core id"),
         op: SealedOp::new(issuer_digest(suffix), op),
     }
 }

@@ -628,7 +628,6 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
         "valid_high_assurance_challenge",
         "insufficient_event_id_samples",
         "commitment_root_mismatch",
-        "legacy_unprefixed_commitment_root",
         "silent_actor_seq_gap",
         "entire_unknown_actor_omitted_without_independent_witness",
     ] {

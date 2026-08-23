@@ -83,9 +83,7 @@ impl TestActorClient {
                 operation_id,
                 idempotency_key,
                 peer: ContactPeer::Human {
-                    principal_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
-                        target.to_owned(),
-                    )?)?),
+                    principal_id: project_full_id_to_core_id(&DidFullId::new(target.to_owned())?)?,
                 },
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
                 introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
@@ -493,9 +491,7 @@ impl TestActorClient {
         )?;
         let event_response = bootstrap["event_response"].clone();
         let actor_full_id = arkret_identifiers::DidFullId::new(self.actor.clone())?;
-        let actor_id = arkret_identifiers::DidCoreId::from(
-            arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?,
-        );
+        let actor_id = arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?;
         let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
         strand.tracks.clear();
         strand
@@ -682,14 +678,14 @@ impl TestActorClient {
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
             realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
-            issuer: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+            issuer: project_full_id_to_core_id(&DidFullId::new(
                 self.actor.clone(),
-            )?)?),
+            )?)?,
             subject:
                 arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::CoreDid(
-                    DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
+                    project_full_id_to_core_id(&DidFullId::new(
                         subject.to_owned(),
-                    )?)?),
+                    )?)?,
                 ),
             subject_principal_server_id: Some(DidCoreId::new(self.service_id.clone())?),
             actions: actions.iter().map(|action| (*action).to_owned()).collect(),
@@ -855,9 +851,7 @@ impl TestActorClient {
             // Capability coverage is per DataEvent: the reducer checks that a
             // named grant actually covers this action on this target.
             event.auth_context = Some(AuthContext {
-                actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
-                    self.actor.clone(),
-                )?)?),
+                actor_id: project_full_id_to_core_id(&DidFullId::new(self.actor.clone())?)?,
                 key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                 key_epoch: 0,
                 credential_epoch: None,
@@ -932,7 +926,6 @@ impl TestActorClient {
             kind,
             payload,
             frontier.next_actor_seq,
-            None,
         );
         event.prev_refs = frontier.frontier_event_ids;
         event.preconditions = preconditions;
@@ -962,9 +955,7 @@ impl TestActorClient {
             } else {
                 event.seal_ref = Some(frontier.sole_leaf()?.clone());
                 event.auth_context = Some(AuthContext {
-                    actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
-                        self.actor.clone(),
-                    )?)?),
+                    actor_id: project_full_id_to_core_id(&DidFullId::new(self.actor.clone())?)?,
                     key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                     key_epoch: 0,
                     credential_epoch: None,

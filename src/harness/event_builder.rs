@@ -240,9 +240,7 @@ pub fn device_message_send_request(
     devices.insert(DeviceId::new(device_id.to_owned())?, target);
     let mut messages = BTreeMap::new();
     messages.insert(
-        DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
-            recipient.to_owned(),
-        )?)?),
+        project_full_id_to_core_id(&DidFullId::new(recipient.to_owned())?)?,
         devices,
     );
     Ok(DeviceMessagesSendRequestBody { messages })
@@ -774,9 +772,7 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         } else {
             event.seal_ref = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(AuthContext {
-                actor_id: DidCoreId::from(project_full_id_to_core_id(&DidFullId::new(
-                    actor.to_owned(),
-                )?)?),
+                actor_id: project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?,
                 key_id: auth_context_key_id(verification_method.as_str()),
                 key_epoch: 0,
                 credential_epoch: None,
@@ -1013,10 +1009,8 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // step once per built Event so successors are strictly later.
     let created_at = harness_event_created_at();
     let actor_full_id = DidFullId::new(actor.to_owned()).expect("cotest actor DID");
-    let actor_id = arkret_identifiers::DidCoreId::from(
-        arkret_identifiers::project_full_id_to_core_id(&actor_full_id)
-            .expect("cotest actor DID projects to a core id"),
-    );
+    let actor_id = arkret_identifiers::project_full_id_to_core_id(&actor_full_id)
+        .expect("cotest actor DID projects to a core id");
     let principal_server_id = principal_server_id
         .cloned()
         .unwrap_or_else(|| event_principal_server_id(actor));
@@ -1076,8 +1070,8 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         arkret::signatures::SignEventOptions::new().with_created_at(created_at),
     )
     .expect("SDK Event signer accepts cotest envelope");
-    let event = event.into_event();
-    event
+
+    event.into_event()
 }
 
 pub(crate) fn event_envelope_with_chain(
@@ -1113,7 +1107,6 @@ pub(crate) fn event_envelope_with_chain_for_device(
     kind: &str,
     payload: Value,
     actor_seq: u64,
-    prev_event_id: Option<&str>,
 ) -> Event {
     let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
     event_envelope_with_chain_and_signing_identity(
@@ -1122,10 +1115,7 @@ pub(crate) fn event_envelope_with_chain_for_device(
         kind,
         payload,
         Some(actor_seq),
-        prev_event_id
-            .map(|value| EventId::new(value.to_owned()).expect("accepted actor frontier Event id"))
-            .into_iter()
-            .collect(),
+        Vec::new(),
         signing_seed,
         &verification_method,
         Some(principal_server_id),
@@ -1277,11 +1267,9 @@ fn member_payload(
         membership,
         strand_id: None,
         realm_id: Some(RealmId::new(realm_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
-        actor_id: Some(arkret_identifiers::DidCoreId::from(
-            arkret_identifiers::project_full_id_to_core_id(
-                &DidFullId::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
-            )?,
-        )),
+        actor_id: Some(arkret_identifiers::project_full_id_to_core_id(
+            &DidFullId::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
+        )?),
         principal_authority: None,
         delivery_status,
         delivery_binding,
