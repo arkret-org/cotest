@@ -3,7 +3,6 @@ use arkret::{
     MessageStreamFormat, MessageStreamFrame, MessageStreamId, MessageStreamKeyframe,
     MessageStreamProducer, RealmId, ScopeRef, SealId, SignalPlaintext as SignalPayload, StrandId,
 };
-use arkret_models_collaboration::signal_plaintext::SignalPlaintext as SignalPayload;
 use chrono::{DateTime, Utc};
 use garth::{
     MESSAGE_STREAM_KIND, MessageStreamApplyOutcome, MessageStreamProjection, SignalPlaintext,
