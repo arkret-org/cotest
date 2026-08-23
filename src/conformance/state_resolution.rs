@@ -17,6 +17,8 @@ use super::{
 };
 use crate::transcripts::record_vector_event;
 
+const CONFLICT_RECOVERY_VECTOR_ID: &str = "ak.vector.cba_lattice.conflict_recovery_move.v1";
+
 pub fn run_state_resolution_fixture_suite() -> Result<()> {
     run_cba_lattice_fixture_suite()
 }
@@ -55,9 +57,14 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_realm_create_projection_closure = false;
     let mut seen_null_cell_subject_wire_form = false;
     let mut seen_realm_alias_single_carrier = false;
+    let mut seen_vector_ids = BTreeSet::new();
 
     for vector in vectors {
         let name = required_str(vector, "name")?;
+        let vector_id = required_str(vector, "vector_id")?;
+        if !seen_vector_ids.insert(vector_id) {
+            bail!("cba lattice fixture repeats vector_id {vector_id}");
+        }
         match name {
             "data_event_accepts_without_seal_finality" => {
                 require_str_eq(vector, "/event/plane", "data", name)?;
@@ -470,6 +477,9 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                 );
             }
             "conflict_recovery_move" => {
+                if vector_id != CONFLICT_RECOVERY_VECTOR_ID {
+                    bail!("vector {name} must use the canonical id {CONFLICT_RECOVERY_VECTOR_ID}");
+                }
                 validate_conflict_recovery_move(vector, name)?;
                 seen_conflict_recovery = true;
                 record_vector_event(
@@ -478,6 +488,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     &json!({
                         "valid_recovery": "accept_after_valid_seal",
                         "unsealed_recovery": "control_pending",
+                        "ordinary_mls_commit": "failed_bottom",
                     }),
                     &json!({
                         "cell": pointer_str(vector, "/cell"),
