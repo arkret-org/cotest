@@ -84,7 +84,7 @@ fn evaluate_binding_tombstone(case: &Value) -> Result<()> {
             "/expected/delete_inherited_value_mutates_ancestor",
             json!(false),
         ),
-        ("/expected/from_org_fallback", json!(true)),
+        ("/expected/from_organization_fallback", json!(true)),
     ] {
         if case.pointer(pointer) != Some(&expected) {
             bail!("binding tombstone expectation {pointer} drifted");
@@ -115,7 +115,7 @@ fn evaluate_replace_delete_conflict(case: &Value) -> Result<()> {
             .and_then(Value::as_bool)
             != Some(false)
         || case
-            .pointer("/expected/org_fallback_used")
+            .pointer("/expected/organization_fallback_used")
             .and_then(Value::as_bool)
             != Some(false)
     {

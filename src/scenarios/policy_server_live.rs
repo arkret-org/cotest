@@ -227,7 +227,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     )
     .await?;
     assert_eq!(status, StatusCode::OK, "org PUT: {view}");
-    assert_eq!(view["from_org_fallback"], false);
+    assert_eq!(view["from_organization_fallback"], false);
     let declared = policy_server_events(&alice, &org_realm).await?;
     assert_eq!(declared.len(), 1, "declaration events: {declared:?}");
     assert_eq!(
@@ -247,7 +247,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
         inherited["policy_server_service_id"],
         "ak:did_core:web:org-policy.example"
     );
-    assert_eq!(inherited["from_org_fallback"], true);
+    assert_eq!(inherited["from_organization_fallback"], true);
 
     // An inherited binding is not a direct declaration: DELETE answers
     // not_found and must not touch the ancestor.
@@ -294,7 +294,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
         fallback["policy_server_service_id"],
         "ak:did_core:web:org-policy.example"
     );
-    assert_eq!(fallback["from_org_fallback"], true);
+    assert_eq!(fallback["from_organization_fallback"], true);
     // A settled tombstone answers empty-success without admitting the Event, so
     // the repeat needs no guard of its own.
     let (repeat_status, repeat) = delete_policy_server(&alice, &child_realm, None).await?;
@@ -313,11 +313,11 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
 
     record_vector_event(
         "policy_server.binding_tombstone",
-        &json!({"realm_id": child_realm, "org_realm_id": org_realm}),
+        &json!({"realm_id": child_realm, "organization_realm_id": org_realm}),
         &json!({
             "missing_direct_history_delete": "not_found",
             "delete_inherited_value_mutates_ancestor": false,
-            "from_org_fallback": true,
+            "from_organization_fallback": true,
             "declaration_accepted_after_seal": true,
         }),
         &json!({

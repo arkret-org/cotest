@@ -303,7 +303,7 @@ test.describe("policy server check", () => {
       canonicalDidCoreId(policyServerDid),
     );
     expect(projected.policy_server_url).toBe(policyServerUrl);
-    expect(projected.from_org_fallback).toBe(false);
+    expect(projected.from_organization_fallback).toBe(false);
 
     const canonicalEvents = await policyServerEvents(
       request,
@@ -606,7 +606,7 @@ test.describe("policy server check", () => {
       expect(fallbackBody.policy_server_url).toBe(orgUrl);
       expect(fallbackBody.cache_ttl_seconds).toBe(17);
       expect(fallbackBody.timeout_ms).toBe(1200);
-      expect(fallbackBody.from_org_fallback).toBe(true);
+      expect(fallbackBody.from_organization_fallback).toBe(true);
 
       const inheritedOnlyDelete = await deletePolicyServer(
         request,
@@ -641,7 +641,7 @@ test.describe("policy server check", () => {
       expect(directBody.policy_server_url).toBe(childUrl);
       expect(directBody.cache_ttl_seconds).toBe(3);
       expect(directBody.timeout_ms).toBe(900);
-      expect(directBody.from_org_fallback).toBe(false);
+      expect(directBody.from_organization_fallback).toBe(false);
 
       const deleted = await deletePolicyServer(
         request,
@@ -662,7 +662,7 @@ test.describe("policy server check", () => {
       expect(restoredFallbackBody.policy_server_service_id).toBe(
         canonicalDidCoreId(orgDid),
       );
-      expect(restoredFallbackBody.from_org_fallback).toBe(true);
+      expect(restoredFallbackBody.from_organization_fallback).toBe(true);
 
       const childPolicyEvents = await policyServerEvents(
         request,

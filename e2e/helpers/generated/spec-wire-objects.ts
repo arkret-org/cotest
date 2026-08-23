@@ -449,7 +449,7 @@ export type InviteDeliveryRequestBody = {
       "url"?: string;
       [key: string]: unknown;
     };
-    "actor_kind"?: "user" | "org" | "team" | "agent" | "service" | "integration";
+    "actor_kind"?: "user" | "organization" | "team" | "agent" | "service" | "integration";
     "actor_seq": number;
     "created_at": string;
     "hlc"?: string;
@@ -986,7 +986,7 @@ export type EventFederationSubmission = {
       "url"?: string;
       [key: string]: unknown;
     };
-    "actor_kind"?: "user" | "org" | "team" | "agent" | "service" | "integration";
+    "actor_kind"?: "user" | "organization" | "team" | "agent" | "service" | "integration";
     "actor_seq": number;
     "created_at": string;
     "hlc"?: string;
