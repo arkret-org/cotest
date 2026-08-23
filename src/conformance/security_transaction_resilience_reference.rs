@@ -241,7 +241,9 @@ fn validate_fixture(fixture: &Value) -> Result<(), String> {
     let assertions = strings_at(fixture, "/assertions")?
         .into_iter()
         .collect::<BTreeSet<_>>();
-    if assertions.len() != 8 {
+    if assertions.len() != 9
+        || !assertions.contains("device_attestation_readiness_is_derived_from_canonical_next_step")
+    {
         return Err("resilience assertion set is incomplete".to_owned());
     }
     validate_schema_cases(fixture)
