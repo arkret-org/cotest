@@ -19,6 +19,7 @@ function Assert-NotContains {
 
 Assert-Contains $oidc "@returning-login-gate" "returning-login test has no stable CI tag"
 Assert-Contains $oidc "@onboarding-recovery-gate" "Recovery Key onboarding test has no stable CI tag"
+Assert-Contains $oidc "@onboarding-resume-gate" "accepted onboarding resume test has no stable CI tag"
 Assert-Contains $lifecycle "@returning-device-key-gate" "device-key returning test has no stable CI tag"
 Assert-NotContains $oidc 'test.describe.configure({ mode: "serial" })' "independent OIDC cases must not cascade-skip after an earlier failure"
 

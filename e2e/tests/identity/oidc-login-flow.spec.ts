@@ -52,7 +52,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
   const coauth = coauthBaseUrl();
   const optIn = optionalEnv("COTEST_REAL_OIDC_LOGIN");
 
-  test("unbound account completes Recovery Key onboarding through the real UI @onboarding-recovery-gate", async ({
+  test("unbound account completes Recovery Key onboarding through the real UI @onboarding-recovery-gate @onboarding-resume-gate", async ({
     browser,
     request,
   }) => {
@@ -84,6 +84,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     });
     const page = jointPage.page;
     const onboardingResponses: Array<{ url: string; status: number }> = [];
+    const identityCreationRequests: string[] = [];
     page.on("response", (response) => {
       const url = new URL(response.url());
       if (url.pathname === "/_arkret/gate/account/onboarding") {
@@ -91,6 +92,16 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           url: response.url(),
           status: response.status(),
         });
+      }
+    });
+    page.on("request", (request) => {
+      const url = request.url();
+      if (
+        url.includes("/_arkret/gate/account/identity-binding-challenges") ||
+        url.includes("/_arkret/gate/account/register") ||
+        url.includes("submit-did-operation")
+      ) {
+        identityCreationRequests.push(url);
       }
     });
     try {
@@ -120,6 +131,49 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       await page
         .getByTestId("onboarding-recovery-key-confirm")
         .fill(recoveryKey);
+
+      let interruptedBootstrapSeal = false;
+      const interruptFirstBootstrapSeal = async (
+        route: import("@playwright/test").Route,
+      ) => {
+        if (
+          !interruptedBootstrapSeal &&
+          route.request().method() === "POST"
+        ) {
+          interruptedBootstrapSeal = true;
+          await route.abort("connectionfailed");
+          return;
+        }
+        await route.continue();
+      };
+      await page.route(
+        "**/_arkret/self/seals",
+        interruptFirstBootstrapSeal,
+      );
+      await page.getByTestId("onboarding-bind-identity").click();
+
+      await expect(
+        page.getByTestId("onboarding-resume-diagnostics"),
+      ).toBeVisible({ timeout: 240_000 });
+      await expect(page.getByTestId("retry-onboarding-resume")).toBeVisible();
+      expect(
+        interruptedBootstrapSeal,
+        "the test must interrupt the recovery-material gate after account acceptance",
+      ).toBe(true);
+      const creationRequestCountAtInterruption =
+        identityCreationRequests.length;
+
+      await page.unroute(
+        "**/_arkret/self/seals",
+        interruptFirstBootstrapSeal,
+      );
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(
+        page.getByTestId("onboarding-recovery-key-display").locator("li"),
+      ).toHaveCount(24, { timeout: 120_000 });
+      await page
+        .getByTestId("onboarding-recovery-key-confirm")
+        .fill(recoveryKey);
       await page.getByTestId("onboarding-bind-identity").click();
 
       await expect(page.getByTestId("onboarding-complete")).toContainText(
@@ -135,6 +189,10 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         expect(response.status).not.toBe(401);
         expect(response.status).not.toBe(404);
       }
+      expect(
+        identityCreationRequests.length,
+        "resuming an accepted setup must not create another identity or device",
+      ).toBe(creationRequestCountAtInterruption);
 
       await page
         .getByTestId("onboarding-complete")
