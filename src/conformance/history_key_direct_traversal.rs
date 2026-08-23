@@ -22,6 +22,7 @@ use arkret_state::direct_traversal::{
     SealPredecessorDescriptor, discover_direct_cut, verify_direct_traversal_cut_with_registry,
 };
 use arkret_state::history_store::HistoryMaterialLedger;
+use arkret_state::lattice::{CasRegister, Lattice, SealedOp};
 use arkret_state::{BottomMode, CellState, LatticeKind, MemoryCellRegistry, compute_state_root};
 use arkret_wire::event_envelope::ScopeRef;
 use arkret_wire::{
@@ -104,6 +105,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     verify_history_digest_and_sender_kats(&fixture)?;
     verify_governance_dependency_kats(&fixture)?;
     verify_rrk_method_evaluator(&fixture)?;
+    verify_rrk_production_projection_and_join(&fixture)?;
     verify_response_stream_fixture(&fixture)?;
     verify_history_candidate_store_kat(&fixture)?;
     verify_history_static_gates(&fixture)?;
@@ -232,6 +234,93 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
         }),
         &json!({"status": "validated"}),
     );
+    Ok(())
+}
+
+fn verify_rrk_production_projection_and_join(fixture: &Value) -> Result<()> {
+    let kat = fixture
+        .get("rrk_registration_rotation_kat")
+        .context("history-key fixture omits rrk_registration_rotation_kat")?;
+    let register_event: Event = serde_json::from_value(kat["events"]["register"].clone())?;
+    let rotate_event: Event = serde_json::from_value(kat["events"]["rotate"].clone())?;
+    let register_write = arkret_schema::project_registered_cell_writes(
+        &register_event,
+        arkret_canonical::DigestSuite::Sha256,
+    )?
+    .into_iter()
+    .next()
+    .context("RRK register produced no cell write")?;
+    let rotate_write = arkret_schema::project_registered_cell_writes(
+        &rotate_event,
+        arkret_canonical::DigestSuite::Sha256,
+    )?
+    .into_iter()
+    .next()
+    .context("RRK rotate produced no cell write")?;
+    let ProjectedOp::Direct(register_op) = register_write.op else {
+        bail!("RRK register must project a direct CAS operation");
+    };
+    let ProjectedOp::Direct(rotate_op) = rotate_write.op else {
+        bail!("RRK rotate must project a direct CAS operation");
+    };
+    if rotate_op.from.as_ref() != Some(&kat["projected_rotate_op"]["from"])
+        || rotate_op.value.as_ref() != Some(&kat["projected_rotate_op"]["to"])
+    {
+        bail!("RRK production projector lost the exact from/to transition");
+    }
+    let register_id = Hash::new(
+        register_event.proofs[0]
+            .as_producer()
+            .context("RRK register omits producer proof")?
+            .event_digest
+            .as_str()
+            .to_owned(),
+    )?;
+    let rotate_id = Hash::new(
+        rotate_event.proofs[0]
+            .as_producer()
+            .context("RRK rotate omits producer proof")?
+            .event_digest
+            .as_str()
+            .to_owned(),
+    )?;
+    let joined = CasRegister.join(
+        &register_write.cell,
+        &[
+            SealedOp::new(register_id.clone(), register_op.clone()),
+            SealedOp::new(rotate_id.clone(), rotate_op),
+        ],
+    );
+    if joined != CellState::Value(kat["projected_rotate_op"]["to"].clone()) {
+        bail!("RRK production CAS did not settle the conformant rotation");
+    }
+
+    let mut missing_head = rotate_event;
+    missing_head.preconditions.clear();
+    let stale_write = arkret_schema::project_registered_cell_writes(
+        &missing_head,
+        arkret_canonical::DigestSuite::Sha256,
+    )?
+    .into_iter()
+    .next()
+    .context("RRK missing-head mutation produced no cell write")?;
+    let ProjectedOp::Direct(stale_op) = stale_write.op else {
+        bail!("RRK missing-head mutation must remain a direct CAS operation");
+    };
+    if stale_op.from.is_some()
+        || !matches!(
+            CasRegister.join(
+                &register_write.cell,
+                &[
+                    SealedOp::new(register_id, register_op),
+                    SealedOp::new(rotate_id, stale_op),
+                ],
+            ),
+            CellState::Bottom(_)
+        )
+    {
+        bail!("RRK missing exact signed head_eq did not fail closed");
+    }
     Ok(())
 }
 
@@ -1000,7 +1089,10 @@ fn verify_rrk_method_evaluator(fixture: &Value) -> Result<()> {
         "holder_tuple_mismatch",
         "register_before_realm_create",
         "rotate_before_register",
-        "rotate_cas_mismatch",
+        "rotate_missing_head_eq",
+        "rotate_stale_head_eq",
+        "rotate_provenance_event_mismatch",
+        "rotate_provenance_seal_mismatch",
     ] {
         if !mutation_names.contains(required) {
             bail!("RRK fixture omits required mutation {required}");

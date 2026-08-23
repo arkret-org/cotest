@@ -16,7 +16,7 @@ pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     Ok(())
 }
 
-async fn register_device(server: &ArkretServer, token: &str) -> Result<String> {
+async fn register_device(server: &ArkretServer, token: &str) -> Result<arkret_wire::PushTargetId> {
     let push = expect_json(
         server
             .http()
@@ -45,7 +45,10 @@ async fn register_device(server: &ArkretServer, token: &str) -> Result<String> {
     Ok(outcome.push_target_id)
 }
 
-async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Result<()> {
+async fn notify_blind_wakeup(
+    server: &ArkretServer,
+    push_target_id: &arkret_wire::PushTargetId,
+) -> Result<()> {
     let notify = expect_json(
         server
             .http()
@@ -54,7 +57,7 @@ async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Res
                 arkret_models_integration::PushNotifyRequestBody,
             >(json!({
                 "notification": {
-                    "push_target_id": push_target_id,
+                    "push_target_id": push_target_id.as_str(),
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"}, {"device_id": "ak:device:01904100-0000-7000-8000-00000000dead"}]
@@ -66,7 +69,7 @@ async fn notify_blind_wakeup(server: &ArkretServer, push_target_id: &str) -> Res
     // `push_notify_outcome` reports one entry per requested device rather than
     // accepted / rejected buckets. The registered device is accepted; the
     // device that was never registered is rejected as `push_token_unknown`.
-    assert_eq!(notify["push_target_id"], push_target_id);
+    assert_eq!(notify["push_target_id"], push_target_id.as_str());
     let outcomes = notify["outcomes"]
         .as_array()
         .expect("push notify must return per-device outcomes");

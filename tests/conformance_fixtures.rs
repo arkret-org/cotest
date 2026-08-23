@@ -251,6 +251,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    push_route_revision_fixture_matches_production_sdk,
+    "push_route_revision_fixture",
+    cotest::conformance::run_push_route_revision_suite,
+);
+
+conformance_test!(
     final_conformance_closure_fixture_suite_matches_reference_semantics,
     "final_conformance_closure_fixture",
     cotest::conformance::run_final_conformance_closure_fixture_suite,

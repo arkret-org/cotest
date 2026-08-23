@@ -7,7 +7,7 @@
       "name": "minimal_blind_wakeup",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message"
         }
       }
@@ -16,7 +16,7 @@
       "name": "with_push_hint_literal",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "call_invite",
           "push_hint": "incoming_call"
         }
@@ -26,7 +26,7 @@
       "name": "with_push_hint_l10n_key",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "mention",
           "push_hint": "l10n_key:message.new"
         }
@@ -36,7 +36,7 @@
       "name": "with_badge_and_unread_count",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "badge": 1,
           "unread_count": 3
@@ -47,7 +47,7 @@
       "name": "with_counts_object",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "counts": { "unread": 4 }
         }
@@ -61,7 +61,7 @@
       "expected_field_path": "event_id",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "event_id": "ak:event:AXvTyW7VH8UkQV87tSUYpv-GHzhF1ggMhkp6_m5YKwoJ"
         }
@@ -73,7 +73,7 @@
       "expected_field_path": "message_id",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "message_id": "ak:message:01JS0MS000000000000000000"
         }
@@ -85,7 +85,7 @@
       "expected_field_path": "strand_id",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "strand_id": "ak:strand:01JS0FL000000000000000000"
         }
@@ -97,7 +97,7 @@
       "expected_field_path": "space_id",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "space_id": "ak:space:01JS0SP000000000000000000"
         }
@@ -109,7 +109,7 @@
       "expected_field_path": "realm_id",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "realm_id": "ak:realm:01JS0RM000000000000000000"
         }
@@ -121,7 +121,7 @@
       "expected_field_path": "thread_id",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "thread_id": "thread-abc"
         }
@@ -133,7 +133,7 @@
       "expected_field_path": "correlation_id",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "correlation_id": "corr-1"
         }
@@ -145,7 +145,7 @@
       "expected_field_path": "sender_did",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "sender_did": "did:web:alice.example"
         }
@@ -157,7 +157,7 @@
       "expected_field_path": "sender_handle",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "sender_handle": "@alice"
         }
@@ -169,7 +169,7 @@
       "expected_field_path": "sender_display_name",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "sender_display_name": "Alice"
         }
@@ -181,7 +181,7 @@
       "expected_field_path": "display_name",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "display_name": "Alice"
         }
@@ -193,7 +193,7 @@
       "expected_field_path": "device_did",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "device_did": "did:web:device.example#fcm-1"
         }
@@ -205,7 +205,7 @@
       "expected_field_path": "device_url",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "device_url": "https://fcm.example/devices/1"
         }
@@ -217,7 +217,7 @@
       "expected_field_path": "body",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "body": "you have a new message"
         }
@@ -229,7 +229,7 @@
       "expected_field_path": "content",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "content": { "body": "..." }
         }
@@ -241,7 +241,7 @@
       "expected_field_path": "title",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "title": "Secret"
         }
@@ -253,7 +253,7 @@
       "expected_field_path": "reaction_value",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "reaction_value": "thumbs_up"
         }
@@ -265,7 +265,7 @@
       "expected_field_path": "attachment_filename",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "attachment_filename": "secret.pdf"
         }
@@ -277,7 +277,7 @@
       "expected_field_path": "provider_payload",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "provider_payload": { "aps": {} }
         }
@@ -289,7 +289,7 @@
       "expected_field_path": "sdp",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "incoming_call",
           "sdp": "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n"
         }
@@ -301,7 +301,7 @@
       "expected_field_path": "view_renderer",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "view_renderer": "preview-block"
         }
@@ -313,7 +313,7 @@
       "expected_field_path": "custom_extension",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "custom_extension": "anything"
         }
@@ -325,7 +325,7 @@
       "expected_field_path": "local_name",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "local_name": "Pinned Engineering"
         }
@@ -337,7 +337,7 @@
       "expected_field_path": "note",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "note": "Alice private note"
         }
@@ -349,7 +349,7 @@
       "expected_field_path": "pinned",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "pinned": true
         }
@@ -361,7 +361,7 @@
       "expected_field_path": "account_data_key",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "account_data_key": "ak.contacts.realm.ak:realm:AWTDh81g8RB36YDiswQuSLkbySREHjIIO5wwjNzpiEg9"
         }
@@ -373,7 +373,7 @@
       "expected_field_path": "trace.parent",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message"
         },
         "trace": { "parent": "did:web:alice.example" }
@@ -385,7 +385,7 @@
       "expected_field_path": "unread_count",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "unread_count": 100000
         }
@@ -397,7 +397,7 @@
       "expected_field_path": "unread_count",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "unread_count": -1
         }
@@ -442,7 +442,7 @@
       "expected_field_path": "push_hint",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "push_hint": "l10n_key:did:web:alice"
         }
@@ -454,7 +454,7 @@
       "expected_field_path": "push_hint",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",
           "push_hint": "you have new mail"
         }
@@ -466,7 +466,7 @@
       "expected_field_path": "wakeup_kind",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "MESSAGE"
         }
       }
@@ -477,7 +477,7 @@
       "expected_field_path": "wakeup_kind",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000",
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "bg_refresh"
         }
       }
@@ -500,7 +500,7 @@
       "expected_field_path": "wakeup_kind",
       "payload": {
         "notification": {
-          "push_target_id": "ak:pseudonym:push:01HYZ8Z000000000000000"
+          "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8"
         }
       }
     }

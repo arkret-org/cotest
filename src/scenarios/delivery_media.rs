@@ -517,7 +517,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     let push_baseline =
         serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
             "notification": {
-                "push_target_id": "ak:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
+                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                 "wakeup_kind": "message",
                 "timing_profile_hint": "default",
                 "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]
@@ -543,7 +543,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
                 arkret_models_integration::PushNotifyRequestBody,
             >(json!({
                 "notification": {
-                    "push_target_id": "ak:pseudonym:push:aaaaaaaaaaaaaaaaaaaaaa",
+                    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
                     "wakeup_kind": "message",
                     "timing_profile_hint": "default",
                     "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]

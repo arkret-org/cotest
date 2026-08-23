@@ -49,6 +49,8 @@ pub const CALENDAR_NOTIFICATION_FIXTURE: &str = "calendar-notification-fixture.j
 
 pub const EVENT_PAYLOAD_VALUE_CLOSURE_FIXTURE: &str = "event-payload-value-closure-fixture.json";
 
+pub const PUSH_NOTIFY_OUTCOME_FIXTURE: &str = "push-notify-outcome-fixture.json";
+
 pub const SCHEMA_DEFINITION_VALIDATOR_KAT: &str = "schema-definition-validator-kat.json";
 
 #[derive(Clone, Copy)]
@@ -104,6 +106,11 @@ const SCHEMA_VALIDATION_FIXTURE_FILES: &[(&str, FixtureIdentity<'static>, &str)]
         EVENT_PAYLOAD_VALUE_CLOSURE_FIXTURE,
         FixtureIdentity::RunnerKind("json_schema_and_semantic_cases"),
         "event_payload_value_closure",
+    ),
+    (
+        PUSH_NOTIFY_OUTCOME_FIXTURE,
+        FixtureIdentity::Profile("ak.vector_group.discovery.v1"),
+        "push_notify_outcome_conformance",
     ),
 ];
 

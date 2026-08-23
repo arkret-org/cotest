@@ -82,7 +82,7 @@ const SOURCE_REF_EVENT_ID: &str = "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnT
 
 /// Opaque push pseudonym used by the blind-wakeup mock. Matches the
 /// `ak:pseudonym:push:<token>` shape required by the sanitizer.
-const PUSH_TARGET_ID: &str = "ak:pseudonym:push:fullstack-e2e-target-001";
+const PUSH_TARGET_ID: &str = "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8";
 
 // ── Top-level entry-point ──────────────────────────────────────────────────
 
