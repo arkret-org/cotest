@@ -11,7 +11,7 @@ use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 /// A grant-shaped bearer credential (JWT with `kind = "ak.session.grant"`).
 /// The mock never verifies its signature; the shape only matters so the SUT
 /// recognizes the credential class and so `ath` binds a stable token.
-fn mock_session_grant_jwt(subject: &str, device_id: &str, audience: &str) -> String {
+pub fn mock_session_grant_jwt(subject: &str, device_id: &str, audience: &str) -> String {
     let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"Ed25519","typ":"JWT"}"#);
     let payload = URL_SAFE_NO_PAD.encode(
         serde_json::to_vec(&json!({

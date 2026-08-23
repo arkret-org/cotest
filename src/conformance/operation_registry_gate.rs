@@ -1200,11 +1200,22 @@ fn scan_source_file(
         )
     })?;
     let lines = raw.lines().collect::<Vec<_>>();
+    let mut scannable_lines = lines.clone();
+    if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
+        for (line, test_only) in scannable_lines
+            .iter_mut()
+            .zip(rust_cfg_test_only_lines(&lines))
+        {
+            if test_only {
+                *line = "";
+            }
+        }
+    }
     let relative = path.strip_prefix(root).unwrap_or(path);
 
-    scan_soland_extension_table(source, relative, &lines, out);
+    scan_soland_extension_table(source, relative, &scannable_lines, out);
 
-    for (index, line) in lines.iter().enumerate() {
+    for (index, line) in scannable_lines.iter().enumerate() {
         if is_comment_only_line(line) {
             continue;
         }
@@ -1229,6 +1240,106 @@ fn scan_source_file(
     }
 
     Ok(())
+}
+
+fn rust_cfg_test_only_lines(lines: &[&str]) -> Vec<bool> {
+    let mut test_only = vec![false; lines.len()];
+    let mut pending_item = false;
+    let mut item_started = false;
+    let mut brace_depth = 0_i32;
+
+    for (index, line) in lines.iter().enumerate() {
+        if !pending_item && line.trim() == "#[cfg(test)]" {
+            pending_item = true;
+            test_only[index] = true;
+            continue;
+        }
+        if !pending_item {
+            continue;
+        }
+
+        test_only[index] = true;
+        let (line_brace_delta, has_open_brace, has_semicolon) = rust_code_structure(line);
+        if !item_started {
+            if has_open_brace {
+                if line_brace_delta > 0 {
+                    item_started = true;
+                    brace_depth = line_brace_delta;
+                } else {
+                    pending_item = false;
+                }
+            } else if has_semicolon {
+                pending_item = false;
+            }
+            continue;
+        }
+
+        brace_depth += line_brace_delta;
+        if brace_depth <= 0 {
+            pending_item = false;
+            item_started = false;
+            brace_depth = 0;
+        }
+    }
+
+    test_only
+}
+
+fn rust_code_structure(line: &str) -> (i32, bool, bool) {
+    let bytes = line.as_bytes();
+    let mut index = 0;
+    let mut brace_delta = 0_i32;
+    let mut has_open_brace = false;
+    let mut has_semicolon = false;
+    let mut quote = None;
+    let mut escaped = false;
+
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if let Some(expected_quote) = quote {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == expected_quote {
+                quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        if byte == b'/' && bytes.get(index + 1) == Some(&b'/') {
+            break;
+        }
+        if byte == b'"' {
+            quote = Some(byte);
+            index += 1;
+            continue;
+        }
+        if byte == b'\''
+            && (bytes.get(index + 2) == Some(&b'\'')
+                || (bytes.get(index + 1) == Some(&b'\\') && bytes.get(index + 3) == Some(&b'\'')))
+        {
+            index += if bytes.get(index + 1) == Some(&b'\\') {
+                4
+            } else {
+                3
+            };
+            continue;
+        }
+        match byte {
+            b'{' => {
+                brace_delta += 1;
+                has_open_brace = true;
+            }
+            b'}' => brace_delta -= 1,
+            b';' => has_semicolon = true,
+            _ => {}
+        }
+        index += 1;
+    }
+
+    (brace_delta, has_open_brace, has_semicolon)
 }
 
 fn is_comment_only_line(line: &str) -> bool {

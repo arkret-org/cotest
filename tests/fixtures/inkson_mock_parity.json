@@ -145,7 +145,7 @@
       "operation_id": "ak.root.identity.recovery_policy.resource.get",
       "method": "GET",
       "path": "/_arkret/root/identity/recovery-policy",
-      "auth": "alice"
+      "auth": "alice_session_grant"
     },
     {
       "id": "signal",

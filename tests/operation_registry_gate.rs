@@ -190,6 +190,83 @@ fn cotest_spec_files_are_scanned() -> Result<()> {
 }
 
 #[test]
+fn rust_cfg_test_items_are_not_treated_as_production_operations() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let artifacts_root = temp.path().join("artifacts");
+    let product_private_path = temp.path().join("operation-product-private-paths.json");
+    let source_dir = temp.path().join("source");
+    write_minimal_artifacts(
+        &artifacts_root,
+        &[
+            (
+                "ak.server.read.describe",
+                "GET /_arkret/describe",
+                "typed_response",
+                None,
+                None,
+            ),
+            (
+                "ak.server.read.health",
+                "GET /_arkret/health",
+                "typed_response",
+                None,
+                None,
+            ),
+        ],
+        &[
+            ("GET", "/_arkret/describe", "ak.server.read.describe"),
+            ("GET", "/_arkret/health", "ak.server.read.health"),
+        ],
+    )?;
+    write_json(
+        &product_private_path,
+        &json!({"schema": "cotest.operation-product-private-paths.v1", "allowed": []}),
+    )?;
+    write_source(
+        &source_dir,
+        "src/api.rs",
+        r#"
+fn production_call() {
+    client.get_json("/_arkret/describe");
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn rejects_an_unregistered_test_vector() {
+        assert_rejected("POST", "/_arkret/self/test-only-invalid");
+    }
+}
+
+#[cfg(test)]
+fn one_line_test_item() { assert_rejected("POST", "/_arkret/self/also-test-only"); }
+
+fn production_call_after_test_item() {
+    client.get_json("/_arkret/health");
+}
+"#,
+    )?;
+
+    let report = build_operation_registry_gate_report_from_paths(paths(
+        &artifacts_root,
+        &product_private_path,
+        source_root("soland", &source_dir, "src/api.rs"),
+    ))?;
+    validate_operation_registry_gate_report(&report)?;
+    assert!(report.entries.iter().all(|entry| !matches!(
+        entry.path.as_str(),
+        "/_arkret/self/test-only-invalid" | "/_arkret/self/also-test-only"
+    )));
+    assert!(
+        report
+            .entries
+            .iter()
+            .any(|entry| entry.path == "/_arkret/health")
+    );
+    Ok(())
+}
+
+#[test]
 fn current_workspace_operation_registry_gate_passes() -> Result<()> {
     let report = build_operation_registry_gate_report()?;
     assert!(

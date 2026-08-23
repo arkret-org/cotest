@@ -7,6 +7,8 @@ use std::process::{Command, Stdio};
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
 use cotest::harness::{ArkretServer, events_frontier_request_body, expect_json, query_method};
+use cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
+use cotest::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
 use cotest::scenarios::identity_test_support::{
     ActorBootstrapRegistration, actor_did_for_service_full_id, bootstrap_registered_actor,
     spawn_with_harness_account_authority,
@@ -108,6 +110,7 @@ struct TemplateContext {
     alice_did: String,
     alice_core_id: String,
     alice_token: String,
+    alice_session_grant: String,
     alice_device_signing_key: ed25519_dalek::SigningKey,
     service_id: String,
     service_notary_signer: arkret_wire::NotarySignerDescriptor,
@@ -128,7 +131,22 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         );
     }
 
-    let server = spawn_with_harness_account_authority("inkson-mock-parity", &[]).await?;
+    let coauth = MockCoauthIntrospectionServer::spawn().await?;
+    let introspection_url = coauth.url();
+    let server = spawn_with_harness_account_authority(
+        "inkson-mock-parity",
+        &[
+            (
+                "SOLAND_SESSION_GRANT_INTROSPECTION_URL",
+                introspection_url.as_str(),
+            ),
+            (
+                "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER",
+                "principal-token",
+            ),
+        ],
+    )
+    .await?;
     let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-mock-parity")?;
     let (principal, alice_token) = bootstrap_registered_actor(
         &server,
@@ -139,10 +157,22 @@ async fn inkson_mock_contract_matches_live_soland_baseline() -> Result<()> {
         },
     )
     .await?;
+    coauth.bind_founding_device_grant(
+        principal.core_id.as_str(),
+        principal.device_id.as_str(),
+        principal.founding_authorize_event_id.as_str(),
+        &principal.device_signing_key.verifying_key(),
+    )?;
+    let alice_session_grant = mock_session_grant_jwt(
+        principal.core_id.as_str(),
+        principal.device_id.as_str(),
+        server.service_id().as_str(),
+    );
     let mut ctx = TemplateContext {
         alice_core_id: principal.core_id.to_string(),
         alice_did,
         alice_token,
+        alice_session_grant,
         alice_device_signing_key: principal.device_signing_key,
         service_id: server.service_id().to_string(),
         service_notary_signer: server.service_notary_signer().clone(),
@@ -237,6 +267,7 @@ fn inkson_mock_contract_format_smoke() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_core_id: "ak:did_core:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-format-smoke-token".to_owned(),
+        alice_session_grant: "cotest-format-smoke-session-grant".to_owned(),
         alice_device_signing_key: ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         service_id: "ak:did_core:web:soland.mock-parity-smoke.local".to_owned(),
         service_notary_signer: cotest::fixture_notary_signer(arkret_identifiers::DidCoreId::new(
@@ -263,6 +294,7 @@ fn inkson_mock_contract_matches_operation_schema_artifacts() -> Result<()> {
         alice_did: "did:web:alice-mock-parity.example".to_owned(),
         alice_core_id: "ak:did_core:web:alice-mock-parity.example".to_owned(),
         alice_token: "cotest-artifact-gate-token".to_owned(),
+        alice_session_grant: "cotest-artifact-gate-session-grant".to_owned(),
         alice_device_signing_key: ed25519_dalek::SigningKey::from_bytes(&[0x5f; 32]),
         service_id: "ak:did_core:web:soland.mock-parity-gate.local".to_owned(),
         service_notary_signer: cotest::fixture_notary_signer(arkret_identifiers::DidCoreId::new(
@@ -1000,8 +1032,29 @@ async fn call_live_soland(
         .parse::<Method>()
         .with_context(|| format!("invalid method {} for {}", case.method, case.id))?;
     let mut request = server.http().request(method, server.url(rendered_path));
-    if case.auth.as_deref() == Some("alice") {
-        request = request.bearer_auth(&ctx.alice_token);
+    match case.auth.as_deref() {
+        Some("alice") => {
+            request = request.bearer_auth(&ctx.alice_token);
+        }
+        Some("alice_session_grant") => {
+            let target = server.url(rendered_path);
+            let dpop = arkret_signatures::build_dpop_proof(
+                &arkret_signatures::DpopProofRequest::new(case.method.as_str(), &target)
+                    .access_token(&ctx.alice_session_grant),
+                &ctx.alice_device_signing_key,
+            )?;
+            request = request
+                .header(
+                    reqwest::header::AUTHORIZATION,
+                    format!("DPoP {}", ctx.alice_session_grant),
+                )
+                .header("DPoP", dpop.header_value);
+        }
+        Some(other) => bail!(
+            "unsupported mock parity auth mode `{other}` for {}",
+            case.id
+        ),
+        None => {}
     }
     for (key, value) in &case.headers {
         request = request.header(key, value);
