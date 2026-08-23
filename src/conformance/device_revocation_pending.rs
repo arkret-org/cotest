@@ -338,13 +338,15 @@ fn signed_receipt(
 fn verify_receipt_signature(receipt: &DeviceRevocationGateDecisionReceipt) -> Result<()> {
     receipt.verify_proof_with(|proof, bytes| {
         let encoded = arkret_canonical::base64url_decode(&proof.jws)
-            .map_err(|error| arkret_wire::Error::Protocol(error.to_string()))?;
+            .map_err(|error| arkret_wire::WireError::Protocol(error.to_string()))?;
         let signature = Signature::from_slice(&encoded)
-            .map_err(|error| arkret_wire::Error::Protocol(error.to_string()))?;
+            .map_err(|error| arkret_wire::WireError::Protocol(error.to_string()))?;
         SigningKey::from_bytes(&[0x42; 32])
             .verifying_key()
             .verify(bytes, &signature)
-            .map_err(|_| arkret_wire::Error::Protocol("invalid fixture receipt proof".to_owned()))
+            .map_err(|_| {
+                arkret_wire::WireError::Protocol("invalid fixture receipt proof".to_owned())
+            })
     })?;
     Ok(())
 }

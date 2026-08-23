@@ -137,7 +137,7 @@ fn run_signal_exporter_key(case: &Value) -> Result<()> {
     let key_len = required_u64(input, "aead_nk")? as usize;
 
     assert_hex(
-        "signal context",
+        "verified sender domain",
         sender_domain,
         input,
         "verified_sender_domain_hex",

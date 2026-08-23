@@ -355,14 +355,14 @@ pub fn realm_create_payload_with_notary(
                 .get("alias_authority_service_full_id")
                 .and_then(Value::as_str)
                 .ok_or_else(|| {
-                    arkret_wire::Error::Protocol(
+                    arkret_wire::WireError::Protocol(
                         "cotest Realm bootstrap alias requires alias_authority_service_full_id"
                             .to_owned(),
                     )
                 })?;
             let authority = arkret_models_collaboration::objects::realm_alias::RealmAlias::authority_domain_for_service(authority_service_full_id)?;
             let alias = arkret_models_collaboration::objects::realm_alias::RealmAlias::prepare_under_authority(value, &authority)?;
-            Ok::<_, arkret_wire::Error>(
+            Ok::<_, arkret_wire::WireError>(
                 arkret_models_collaboration::governance::realm_governance::RealmAliasPayload::declaration(alias),
             )
         })
