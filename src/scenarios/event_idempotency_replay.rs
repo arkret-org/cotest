@@ -1,10 +1,12 @@
+use std::time::Duration;
+
 use anyhow::{Result, anyhow};
 use arkret_wire::Event;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, events_query_for_realm, expect_json,
+    TestActorClient, TestServerGroup, events_query_for_realm, eventually, expect_json,
     message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
     parse_strand_id,
 };
@@ -94,7 +96,14 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let created = submit_and_duplicate(&alice, &create_event).await?;
     let create_event_id = submitted_event_id(&created)
         .ok_or_else(|| anyhow!("create response missing event id: {created}"))?;
-    assert_projected_kind_count(&alice, &realm_id, "ak.message.create", 1).await?;
+    assert_projected_kind_count(
+        &alice,
+        &realm_id,
+        "ak.message.create",
+        1,
+        submission_barrier(&created)?,
+    )
+    .await?;
 
     let revise_event = alice
         .author_event(
@@ -106,9 +115,11 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
     let revise_event_id = submitted_event_id(&revised)
         .ok_or_else(|| anyhow!("revise response missing event id: {revised}"))?;
-    assert_projected_event_count(&alice, &realm_id, revise_event_id, 1).await?;
-    assert_projected_kind_count(&alice, &realm_id, "ak.message.revise", 1).await?;
+    let revise_barrier = submission_barrier(&revised)?;
+    assert_projected_event_count(&alice, &realm_id, revise_event_id, 1, revise_barrier).await?;
+    assert_projected_kind_count(&alice, &realm_id, "ak.message.revise", 1, revise_barrier).await?;
 
+    let seal_before_redaction = current_realm_seal(&alice, &realm_id).await?;
     let redact_event = alice
         .author_event(
             &realm_id,
@@ -119,7 +130,9 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     let redacted = submit_and_duplicate(&alice, &redact_event).await?;
     let redact_event_id = submitted_event_id(&redacted)
         .ok_or_else(|| anyhow!("redact response missing event id: {redacted}"))?;
-    let visible_after_redaction = list_realm_events(&alice, &realm_id).await?;
+    wait_for_next_realm_seal(&alice, &realm_id, &seal_before_redaction).await?;
+    let visible_after_redaction =
+        list_realm_events_after(&alice, &realm_id, submission_barrier(&redacted)?).await?;
     assert_eq!(
         event_count(&visible_after_redaction, create_event_id)?,
         1,
@@ -152,6 +165,34 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     );
 
     Ok(())
+}
+
+async fn current_realm_seal(alice: &TestActorClient, realm_id: &str) -> Result<String> {
+    let frontier = alice.realm_seal_frontier(realm_id).await?;
+    frontier["frontier"]["seal_basis"]["leaves"][0]
+        .as_str()
+        .map(ToOwned::to_owned)
+        .ok_or_else(|| anyhow!("Realm frontier has no sole Seal leaf: {frontier}"))
+}
+
+async fn wait_for_next_realm_seal(
+    alice: &TestActorClient,
+    realm_id: &str,
+    predecessor: &str,
+) -> Result<()> {
+    eventually(
+        "redaction-covering Realm Seal",
+        Duration::from_secs(30),
+        Duration::from_millis(100),
+        || async {
+            let successor = current_realm_seal(alice, realm_id).await?;
+            if successor == predecessor {
+                return Err(anyhow!("message redaction is not sealed yet"));
+            }
+            Ok(())
+        },
+    )
+    .await
 }
 
 /// Creates a Realm and returns the id the genesis Event derived.
@@ -203,14 +244,25 @@ async fn submit_and_duplicate(alice: &TestActorClient, event: &Event) -> Result<
     Ok(first)
 }
 
-async fn list_realm_events(alice: &TestActorClient, realm_id: &str) -> Result<Value> {
+async fn list_realm_events_after(
+    alice: &TestActorClient,
+    realm_id: &str,
+    barrier: &str,
+) -> Result<Value> {
     expect_json(
         alice
             .query("/_arkret/self/events")
+            .header("X-Arkret-Wait-For", barrier)
             .json(&events_query_for_realm(realm_id, 100)?),
         StatusCode::OK,
     )
     .await
+}
+
+fn submission_barrier(response: &Value) -> Result<&str> {
+    response["cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("event submission response missing barrier cursor: {response}"))
 }
 
 async fn assert_projected_event_count(
@@ -218,8 +270,9 @@ async fn assert_projected_event_count(
     realm_id: &str,
     event_id: &str,
     expected: usize,
+    barrier: &str,
 ) -> Result<()> {
-    let listed = list_realm_events(alice, realm_id).await?;
+    let listed = list_realm_events_after(alice, realm_id, barrier).await?;
     let actual = event_count(&listed, event_id)?;
     assert_eq!(
         actual, expected,
@@ -233,8 +286,9 @@ async fn assert_projected_kind_count(
     realm_id: &str,
     kind: &str,
     expected: usize,
+    barrier: &str,
 ) -> Result<()> {
-    let listed = list_realm_events(alice, realm_id).await?;
+    let listed = list_realm_events_after(alice, realm_id, barrier).await?;
     let actual = event_kind_count(&listed, kind)?;
     assert_eq!(
         actual, expected,

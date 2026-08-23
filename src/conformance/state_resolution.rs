@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_wire::{PayloadSignature, Seal};
+use arkret_wire::{PayloadProof, Seal};
 use serde_json::{Map, Value, json};
 
 use super::{
@@ -1395,6 +1395,55 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
                     vector_name,
                 )?;
             }
+            "first_delivery_thirty_days_after_revocation_keeps_same_historical_grace_result" => {
+                require_str_eq(case, "/risk_tier", "medium", vector_name)?;
+                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
+                if distance > window {
+                    bail!("vector {vector_name} delayed-delivery case exceeds freshness window");
+                }
+                let basis_committed_at =
+                    required_pointer_str(case, "/basis_seal_committed_at", vector_name)?
+                        .parse::<chrono::DateTime<chrono::Utc>>()?;
+                let revocation_committed_at =
+                    required_pointer_str(case, "/revocation_seal_committed_at", vector_name)?
+                        .parse::<chrono::DateTime<chrono::Utc>>()?;
+                let first_delivery_at =
+                    required_pointer_str(case, "/first_delivery_at", vector_name)?
+                        .parse::<chrono::DateTime<chrono::Utc>>()?;
+                let committed_distance =
+                    (revocation_committed_at - basis_committed_at).num_milliseconds();
+                if committed_distance < 0 || committed_distance as u64 != distance {
+                    bail!(
+                        "vector {vector_name} delayed-delivery distance must come from the two Seal commit times"
+                    );
+                }
+                if first_delivery_at <= revocation_committed_at {
+                    bail!(
+                        "vector {vector_name} delayed-delivery control must arrive after revocation"
+                    );
+                }
+                require_str_eq(case, "/expected/result", "accept", vector_name)?;
+                for pointer in [
+                    "/expected/same_as_immediate_delivery",
+                    "/expected/same_across_receivers",
+                    "/expected/same_under_offline_replay",
+                    "/expected/first_delivery_at_is_not_an_input",
+                ] {
+                    require_bool_eq(case, pointer, true, vector_name)?;
+                }
+            }
+            "high_risk_has_zero_historical_grace_even_on_immediate_delivery" => {
+                require_str_eq(case, "/risk_tier", "high", vector_name)?;
+                let distance = required_u64(case, "/seal_ref_distance_ms", vector_name)?;
+                if distance == 0 {
+                    bail!("vector {vector_name} high-risk control must use an older basis Seal");
+                }
+                require_str_eq(case, "/expected/result", "reject_or_hide", vector_name)?;
+                require_str_eq(case, "/expected/reason", "seal_ref_stale", vector_name)?;
+                if required_u64(case, "/expected/effective_window_ms", vector_name)? != 0 {
+                    bail!("vector {vector_name} high-risk effective freshness window must be zero");
+                }
+            }
             "epoch_not_valid_at_seal_ref" => {
                 require_bool_eq(
                     case,
@@ -1421,6 +1470,8 @@ fn validate_auth_context_epoch_pinning_reject(vector: &Value, vector_name: &str)
             "revoked_key_within_freshness_window",
             "revoked_key_at_freshness_window_boundary",
             "rejecting_revoked_key_within_freshness_window_is_nonconformant",
+            "first_delivery_thirty_days_after_revocation_keeps_same_historical_grace_result",
+            "high_risk_has_zero_historical_grace_even_on_immediate_delivery",
             "epoch_not_valid_at_seal_ref",
         ],
     )
@@ -1538,9 +1589,20 @@ fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Resu
         .pointer("/inclusion_list/signature")
         .cloned()
         .ok_or_else(|| anyhow!("vector {vector_name} missing inclusion-list signature"))?;
-    let signature: PayloadSignature = serde_json::from_value(signature_value).map_err(|error| {
-        anyhow!("vector {vector_name} inclusion-list signature is not a PayloadSignature: {error}")
+    let signature: PayloadProof = serde_json::from_value(signature_value).map_err(|error| {
+        anyhow!("vector {vector_name} inclusion-list signature is not a PayloadProof: {error}")
     })?;
+    signature.validate_production().map_err(|error| {
+        anyhow!("vector {vector_name} inclusion-list signature is invalid: {error}")
+    })?;
+    if signature.domain.is_some()
+        || signature.audience.is_some()
+        || signature.proof_purpose.is_some()
+    {
+        bail!(
+            "vector {vector_name} inclusion-list signature contains members outside its closed schema"
+        );
+    }
     if !signature
         .verification_method
         .as_str()
@@ -2089,6 +2151,31 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                     vector_name,
                 )?;
             }
+            "ordinary_mls_commit_cannot_recover_bottom" => {
+                require_str_eq(
+                    case,
+                    "/target_cell_family",
+                    "ak.component.mls.epoch.v1",
+                    vector_name,
+                )?;
+                require_str_eq(case, "/cell_status_before", "bottom", vector_name)?;
+                require_str_eq(case, "/operation", "ak.mls.commit", vector_name)?;
+                let base_epoch = required_u64(case, "/base_epoch", vector_name)?;
+                let next_epoch = required_u64(case, "/next_epoch", vector_name)?;
+                if next_epoch <= base_epoch + 1 {
+                    bail!(
+                        "vector {vector_name} ordinary MLS commit bypass must attempt a later epoch"
+                    );
+                }
+                require_str_eq(case, "/expected/result", "failed_bottom", vector_name)?;
+                require_str_eq(case, "/expected/cell_remains", "bottom", vector_name)?;
+                require_str_eq(
+                    case,
+                    "/expected/application_send_gate",
+                    "blocked",
+                    vector_name,
+                )?;
+            }
             other => bail!("vector {vector_name} unknown conflict recovery case {other}"),
         }
     }
@@ -2104,6 +2191,7 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
             "unsealed_recovery_move",
             "reset_on_a_cell_not_in_bottom",
             "target_cell_mismatch",
+            "ordinary_mls_commit_cannot_recover_bottom",
         ],
     )
 }
