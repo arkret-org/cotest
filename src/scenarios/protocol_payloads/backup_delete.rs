@@ -13,7 +13,9 @@ use arkret_models_crypto::{
     KeyBackupDeleteProof, KeysBackupsDeleteChallenge, KeysBackupsDeleteRequestBody,
     KeysBackupsIssueDeleteChallengeRequestBody,
 };
-use arkret_wire::{Base64UrlString, NonEmptyString, PayloadProof, PayloadProofPurpose, proof_kind};
+use arkret_wire::{
+    AuditReasonText, Base64UrlString, PayloadProof, PayloadProofPurpose, proof_kind,
+};
 use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 
@@ -24,8 +26,8 @@ use crate::scenarios::identity_test_support::test_principal_root_signing_authori
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
     let request_id = Base64UrlString::new("Y290ZXN0LWJhY2t1cC1kZWxldGUtMDE".to_owned())
         .map_err(|error| anyhow!("delete request_id: {error}"))?;
-    let reason =
-        NonEmptyString::new("user_requested").map_err(|error| anyhow!("delete reason: {error}"))?;
+    let reason = AuditReasonText::new("user_requested")
+        .map_err(|error| anyhow!("delete reason: {error}"))?;
 
     // 1. The service mints the challenge. Every freshness value in the transcript is server-side,
     //    so nothing here may be caller-chosen.

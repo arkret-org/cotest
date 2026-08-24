@@ -9,7 +9,7 @@ use arkret_identifiers::{
 };
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
 use arkret_wire::{
-    Audience, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof,
+    Audience, AuditReasonText, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof,
     ProducerEventProof, proof_kind,
 };
 use base64::Engine as _;
@@ -935,7 +935,7 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         .request
         .get("reason")
         .and_then(Value::as_str)
-        .map(NonEmptyString::new)
+        .map(AuditReasonText::new)
         .transpose()
         .map_err(|error| anyhow::anyhow!("parse MIMI consent reason: {error}"))?;
     let expires_at = input

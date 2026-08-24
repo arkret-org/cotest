@@ -5,7 +5,9 @@
 import {
   createHash,
   createPrivateKey,
+  createPublicKey,
   sign,
+  verify,
   type KeyObject,
 } from "node:crypto";
 import {
@@ -36,6 +38,7 @@ import {
   issueAuthorizationLeasesApi,
   authorizationLeasesFromIssueOutcome,
   queryRealmEventsApi,
+  registerEventSigner,
   plaintextVisibleServiceDeclarations,
   prepareSignedEventBatchSubmissionsApi,
   readRealmSealBasis,
@@ -86,6 +89,7 @@ type SignedPackage = {
   bot_actor_operation?: BuiltWebvhGenesis;
   ghost_namespace_token?: string;
   service_signing_private_key?: KeyObject;
+  bot_signing_private_key?: KeyObject;
 };
 
 type AppletRegistration = {
@@ -308,6 +312,44 @@ test.describe("applet bridge", () => {
           signed.applet_package.service_id,
         ],
       );
+      await publishAppletServiceIdDocument(request, signed);
+      const botVerificationMethod = `${signed.bot_actor_operation?.did}#bot-event-key`;
+      const botSigningJwk = signed.bot_signing_private_key?.export({ format: "jwk" });
+      if (!botSigningJwk?.d || !signed.bot_actor_operation) {
+        throw new Error("Applet Bot is missing its durable runtime signing custody");
+      }
+      registerEventSigner({
+        actorDid: signed.applet_package.bot_actor_id,
+        deviceId: "bot-event-key",
+        verificationMethod: botVerificationMethod,
+        signingSeedB64url: botSigningJwk.d,
+      });
+      const botToken = await issueDevSession(request, {
+        ...uniqueUser(`applet-bot-${stamp}`),
+        did: signed.applet_package.bot_actor_id,
+      });
+      const preInstallMembership = signedEventEnvelope({
+        actorDid: signed.applet_package.bot_actor_id,
+        realmId,
+        kind: "ak.member.state",
+        appletId: signed.applet_package.applet_id,
+        proofVerificationMethod: botVerificationMethod,
+        payload: {
+          realm_id: realmId,
+          actor_id: signed.applet_package.bot_actor_id,
+          membership: "join",
+          delivery_status: "unroutable",
+        },
+      });
+      const preInstallLease = await issueAuthorizationLeasesApi(
+        request,
+        botToken,
+        [preInstallMembership],
+      );
+      expect(preInstallLease.status()).not.toBe(200);
+      expect(wireErrCode(await preInstallLease.json())).toBe(
+        "applet_registration_unauthorized",
+      );
       const registration = await installApplet(
         request,
         aliceToken,
@@ -332,19 +374,59 @@ test.describe("applet bridge", () => {
         ...uniqueUser(`applet-service-${stamp}`),
         did: signed.applet_package.service_id,
       });
-      await addRealmMemberApi(
+      const botMembershipEvent = signedEventEnvelope({
+        actorDid: registration.bot_actor_id,
+        realmId,
+        kind: "ak.member.state",
+        appletId: registration.applet_id,
+        proofVerificationMethod: botVerificationMethod,
+        payload: {
+          realm_id: realmId,
+          actor_id: registration.bot_actor_id,
+          membership: "join",
+          delivery_status: "unroutable",
+        },
+      });
+      await submitSignedEventApi(request, botToken, botMembershipEvent, {
+        context: "post-install Applet Bot ordinary self-join admission",
+      });
+      const federatedMembershipReplay = await rawPushFederationEvents(
+        request,
+        [botMembershipEvent],
+        {
+          origin: solandServiceId(),
+          destination: solandServiceId(),
+          realmId,
+          idempotencyKey: `applet-bot-membership-peer-replay-${stamp}`,
+        },
+      );
+      const federatedMembershipOutcome = (await federatedMembershipReplay.json()) as {
+        accepted?: string[];
+        duplicate?: string[];
+      };
+      expect(federatedMembershipReplay.status()).toBe(200);
+      expect([
+        ...(federatedMembershipOutcome.accepted ?? []),
+        ...(federatedMembershipOutcome.duplicate ?? []),
+      ]).toContain(String(botMembershipEvent.event_id));
+      const membershipTimeline = await queryRealmEventsApi(
         request,
         aliceToken,
         realmId,
-        registration.bot_actor_id,
       );
-      await waitForRealmControlIdleApi(request, aliceToken, realmId);
-      const accept = await request.post(
-        `${registryBase}/bot/${encodeURIComponent(registration.applet_id)}/accept-invite`,
-        { data: { realm_id: realmId } },
-      );
-      expect(accept.status()).toBe(200);
-      expect((await accept.json()).status).toBe("joined");
+      expect(
+        ((membershipTimeline.events ?? []) as Array<Record<string, unknown>>).some(
+          (event) =>
+            event.kind === "ak.member.state" &&
+            event.actor_id === registration.bot_actor_id &&
+            event.applet_id === registration.applet_id &&
+            (event.payload as Record<string, unknown>)?.actor_id ===
+              registration.bot_actor_id &&
+            (event.payload as Record<string, unknown>)?.membership === "join" &&
+            ((event.proofs as Array<Record<string, unknown>>)?.[0]
+              ?.verification_method === botVerificationMethod),
+        ),
+      ).toBe(true);
 
       const externalUser = { id: "ext-user-X", display_name: "External X" };
       if (!signed.ghost_namespace_token) {
@@ -1057,6 +1139,78 @@ test.describe("applet bridge", () => {
     expect([400, 409]).toContain(denied.status());
     expect(wireErrCode(await denied.json())).toBe("proof_invalid");
   });
+
+  test("E4.7 first expired install commit is rejected, while an exact successful replay remains stable after expiry", async ({
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const registryBase = requireMockAppletRegistry();
+    const stamp = Date.now();
+    const alice = uniqueUser(`applet-commit-expiry-${stamp}`);
+    await ensureRegistered(request, alice);
+    const token = await issueDevSession(request, alice);
+    const realmId = await createAppletInstallRealm(request, token, {
+      title: `applet commit expiry ${stamp}`,
+      discoverability: "listed",
+      history_access: "since_join",
+    });
+
+    const expiresBeforeFirstCommit = await signPackage(request, registryBase, {
+      package_id: `package:bridge:first-expired-${stamp}`,
+      namespace: `bridge.first.expired.${stamp}`,
+    });
+    const firstExpired = await rawInstallApplet(
+      request,
+      token,
+      expiresBeforeFirstCommit,
+      realmId,
+      `first-expired-${stamp}`,
+      undefined,
+      {
+        requestedWindowMs: 10_000,
+        commitDelayMs: 10_500,
+        exerciseAuthoringKats: false,
+      },
+    );
+    expect(firstExpired.response.status()).toBe(410);
+    expect(wireErrCode(await firstExpired.response.json())).toBe(
+      "authoring_request_expired",
+    );
+
+    const succeedsBeforeExpiry = await signPackage(request, registryBase, {
+      package_id: `package:bridge:replay-expired-${stamp}`,
+      namespace: `bridge.replay.expired.${stamp}`,
+    });
+    const idempotencyKey = `success-then-expired-${stamp}`;
+    const first = await rawInstallApplet(
+      request,
+      token,
+      succeedsBeforeExpiry,
+      realmId,
+      idempotencyKey,
+      undefined,
+      { requestedWindowMs: 10_000, exerciseAuthoringKats: false },
+    );
+    expect([200, 201]).toContain(first.response.status());
+    const firstOutcome = await first.response.json();
+    if (!first.prepared) {
+      throw new Error("successful install omitted its exact prepared commit bytes");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10_500));
+    const replay = await rawInstallApplet(
+      request,
+      token,
+      succeedsBeforeExpiry,
+      realmId,
+      idempotencyKey,
+      first.prepared,
+      { exerciseAuthoringKats: false },
+    );
+    expect(replay.response.status()).toBe(200);
+    expect(canonicalJson(await replay.response.json())).toBe(
+      canonicalJson(firstOutcome),
+    );
+  });
 });
 
 // Spec: extensions/applet-integration.md §7.3.1. The inbound direction
@@ -1519,6 +1673,7 @@ async function signPackage(
     bot_actor_operation: botBuilt,
     ghost_namespace_token: ghostNamespaceToken,
     service_signing_private_key: serviceSigningKey.privateKey,
+    bot_signing_private_key: botSigningKey.privateKey,
   };
 }
 
@@ -1532,10 +1687,12 @@ function tamperSignedPackage(
 ): SignedPackage {
   const {
     service_signing_private_key: serviceSigningPrivateKey,
+    bot_signing_private_key: botSigningPrivateKey,
     ...wirePackage
   } = signed;
   const cloned = structuredClone(wirePackage) as SignedPackage;
   cloned.service_signing_private_key = serviceSigningPrivateKey;
+  cloned.bot_signing_private_key = botSigningPrivateKey;
   mutate(cloned.applet_package);
   return cloned;
 }
@@ -1583,6 +1740,11 @@ async function rawInstallApplet(
   realmId: string,
   idempotencyKey: string,
   prepared?: PreparedAppletInstall,
+  options: {
+    requestedWindowMs?: number;
+    commitDelayMs?: number;
+    exerciseAuthoringKats?: boolean;
+  } = {},
 ): Promise<RawAppletInstallResult> {
   await publishAppletServiceIdDocument(request, signed);
   let resolved = prepared;
@@ -1594,6 +1756,7 @@ async function rawInstallApplet(
       signed,
       realmId,
       effectiveScope,
+      options.requestedWindowMs,
     );
     const previewUrl = `${solandBaseUrl()}/_arkret/self/applets/install/preview`;
     const preview = await request.fetch(previewUrl, {
@@ -1626,69 +1789,134 @@ async function rawInstallApplet(
       headers: { "content-type": "application/json" },
       data: canonicalJson({ authoring_request: authoringRequest }),
     };
-    const nestedUnknown = structuredClone(
-      authoringRequest,
-    ) as Record<string, unknown>;
-    const nestedUnknownBasis = nestedUnknown.basis as Record<string, unknown>;
-    (nestedUnknownBasis.approval_request as Record<string, unknown>).legacy = true;
-    const nestedUnknownResponse = await request.post(
-      `${authorBaseUrl}/_arkret/edge/applet/install/author`,
-      {
-        headers: { "content-type": "application/json" },
-        data: canonicalJson({ authoring_request: nestedUnknown }),
-      },
-    );
-    expect(nestedUnknownResponse.status()).toBe(400);
-    expect((await nestedUnknownResponse.json()).error).toBe(
-      "authoring_request_coordinate_mismatch",
-    );
-
-    const invertedWindow = structuredClone(
-      authoringRequest,
-    ) as Record<string, unknown>;
-    const invertedBasis = invertedWindow.basis as Record<string, unknown>;
-    invertedBasis.requested_at = canonicalTimestamp(
-      new Date(Date.parse(String(invertedBasis.requested_expires_at)) + 1_000),
-    );
-    const invertedWindowResponse = await request.post(
-      `${authorBaseUrl}/_arkret/edge/applet/install/author`,
-      {
-        headers: { "content-type": "application/json" },
-        data: canonicalJson({ authoring_request: invertedWindow }),
-      },
-    );
-    expect(invertedWindowResponse.status()).toBe(410);
-    expect((await invertedWindowResponse.json()).error).toBe(
-      "authoring_request_expired",
-    );
-
-    const untrustedPrincipalServer = structuredClone(
-      authoringRequest,
-    ) as Record<string, unknown>;
-    (untrustedPrincipalServer.proof as Record<string, unknown>).jws =
-      "eyJhbGciOiJFZDI1NTE5In0..dGFtcGVyZWQ";
-    const untrustedPrincipalServerResponse = await request.post(
-      `${authorBaseUrl}/_arkret/edge/applet/install/author`,
-      {
-        headers: { "content-type": "application/json" },
-        data: canonicalJson({ authoring_request: untrustedPrincipalServer }),
-      },
-    );
-    expect(untrustedPrincipalServerResponse.status()).toBe(400);
-    expect((await untrustedPrincipalServerResponse.json()).error).toBe(
-      "authoring_request_proof_invalid",
-    );
-
-    const [authored, concurrentReplay] = await Promise.all([
-      request.post(
+    if (options.exerciseAuthoringKats !== false) {
+      const rotatePrincipalServerTrust = await request.post(
+        `${authorBaseUrl}/inspect/principal-server-key-current`,
+        { data: { rotated: true } },
+      );
+      expect(rotatePrincipalServerTrust.status()).toBe(200);
+      const staleButCryptographicallyValid = await request.post(
         `${authorBaseUrl}/_arkret/edge/applet/install/author`,
         authorRequestOptions,
-      ),
-      request.post(
+      );
+      expect(staleButCryptographicallyValid.status()).toBe(400);
+      expect((await staleButCryptographicallyValid.json()).error).toBe(
+        "authoring_request_proof_invalid",
+      );
+      const restorePrincipalServerTrust = await request.post(
+        `${authorBaseUrl}/inspect/principal-server-key-current`,
+        { data: { rotated: false } },
+      );
+      expect(restorePrincipalServerTrust.status()).toBe(200);
+      const wrongTarget = structuredClone(
+        authoringRequest,
+      ) as Record<string, unknown>;
+      const alternatePrincipalKey = generateWebvhKey();
+      const alternatePrincipalDid = "did:web:wrong-principal.example";
+      (wrongTarget.basis as Record<string, unknown>).target_principal_server_id =
+        canonicalDidCoreId(alternatePrincipalDid);
+      wrongTarget.authoring_request_id = derivedAuthoringRequestId(wrongTarget);
+      const wrongTargetProof = wrongTarget.proof as Record<string, unknown>;
+      wrongTargetProof.verification_method = `${alternatePrincipalDid}#notary-key`;
+      wrongTargetProof.payload_digest = canonicalHash(
+        authoringRequestUnsigned(wrongTarget),
+      );
+      const wrongTargetBinding = authoringProofBinding(wrongTargetProof);
+      wrongTargetProof.jws = detachedJws(
+        wrongTargetBinding,
+        alternatePrincipalKey.privateKey,
+      );
+      expect(
+        verifyDetachedJws(
+          String(wrongTargetProof.jws),
+          wrongTargetBinding,
+          createPublicKey(alternatePrincipalKey.privateKey),
+        ),
+      ).toBe(true);
+      const wrongTargetResponse = await request.post(
         `${authorBaseUrl}/_arkret/edge/applet/install/author`,
-        authorRequestOptions,
-      ),
-    ]);
+        {
+          headers: { "content-type": "application/json" },
+          data: canonicalJson({ authoring_request: wrongTarget }),
+        },
+      );
+      expect(wrongTargetResponse.status()).toBe(400);
+      expect((await wrongTargetResponse.json()).error).toBe(
+        "authoring_request_coordinate_mismatch",
+      );
+      const nestedUnknown = structuredClone(
+        authoringRequest,
+      ) as Record<string, unknown>;
+      const nestedUnknownBasis = nestedUnknown.basis as Record<string, unknown>;
+      (nestedUnknownBasis.approval_request as Record<string, unknown>).legacy = true;
+      const nestedUnknownResponse = await request.post(
+        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        {
+          headers: { "content-type": "application/json" },
+          data: canonicalJson({ authoring_request: nestedUnknown }),
+        },
+      );
+      expect(nestedUnknownResponse.status()).toBe(400);
+      expect((await nestedUnknownResponse.json()).error).toBe(
+        "authoring_request_coordinate_mismatch",
+      );
+
+      const invertedWindow = structuredClone(
+        authoringRequest,
+      ) as Record<string, unknown>;
+      const invertedBasis = invertedWindow.basis as Record<string, unknown>;
+      invertedBasis.requested_at = canonicalTimestamp(
+        new Date(Date.parse(String(invertedBasis.requested_expires_at)) + 1_000),
+      );
+      const invertedWindowResponse = await request.post(
+        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        {
+          headers: { "content-type": "application/json" },
+          data: canonicalJson({ authoring_request: invertedWindow }),
+        },
+      );
+      expect(invertedWindowResponse.status()).toBe(410);
+      expect((await invertedWindowResponse.json()).error).toBe(
+        "authoring_request_expired",
+      );
+
+      const untrustedPrincipalServer = structuredClone(
+        authoringRequest,
+      ) as Record<string, unknown>;
+      (untrustedPrincipalServer.proof as Record<string, unknown>).jws =
+        "eyJhbGciOiJFZDI1NTE5In0..dGFtcGVyZWQ";
+      const untrustedPrincipalServerResponse = await request.post(
+        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        {
+          headers: { "content-type": "application/json" },
+          data: canonicalJson({ authoring_request: untrustedPrincipalServer }),
+        },
+      );
+      expect(untrustedPrincipalServerResponse.status()).toBe(400);
+      expect((await untrustedPrincipalServerResponse.json()).error).toBe(
+        "authoring_request_proof_invalid",
+      );
+    }
+
+    const exerciseAuthoringKats = options.exerciseAuthoringKats !== false;
+    const authoredRequests = exerciseAuthoringKats
+      ? await Promise.all([
+          request.post(
+            `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+            authorRequestOptions,
+          ),
+          request.post(
+            `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+            authorRequestOptions,
+          ),
+        ])
+      : [
+          await request.post(
+            `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+            authorRequestOptions,
+          ),
+        ];
+    const authored = authoredRequests[0];
     const authoredText = await authored.text();
     if (!authored.ok()) {
       throw new Error(
@@ -1696,40 +1924,43 @@ async function rawInstallApplet(
       );
     }
     const authorOutcome = JSON.parse(authoredText) as Record<string, unknown>;
-    expect(concurrentReplay.status()).toBe(200);
-    expect(canonicalJson(await concurrentReplay.json())).toBe(
-      canonicalJson(authorOutcome),
-    );
-    const reloaded = await request.post(
-      `${authorBaseUrl}/inspect/authoring-reload`,
-    );
-    expect(reloaded.status()).toBe(200);
-    const replayed = await request.post(
-      `${authorBaseUrl}/_arkret/edge/applet/install/author`,
-      {
-        headers: { "content-type": "application/json" },
-        data: canonicalJson({ authoring_request: authoringRequest }),
-      },
-    );
-    expect(replayed.status()).toBe(200);
-    expect(canonicalJson(await replayed.json())).toBe(
-      canonicalJson(authorOutcome),
-    );
-    const changedSameId = structuredClone(
-      authoringRequest,
-    ) as Record<string, unknown>;
-    changedSameId.plan_digest = `sha256:${"0".repeat(64)}`;
-    const conflict = await request.post(
-      `${authorBaseUrl}/_arkret/edge/applet/install/author`,
-      {
-        headers: { "content-type": "application/json" },
-        data: canonicalJson({ authoring_request: changedSameId }),
-      },
-    );
-    expect(conflict.status()).toBe(409);
-    expect((await conflict.json()).error).toBe(
-      "authoring_request_id_conflict",
-    );
+    if (exerciseAuthoringKats) {
+      const concurrentReplay = authoredRequests[1];
+      expect(concurrentReplay.status()).toBe(200);
+      expect(canonicalJson(await concurrentReplay.json())).toBe(
+        canonicalJson(authorOutcome),
+      );
+      const reloaded = await request.post(
+        `${authorBaseUrl}/inspect/authoring-reload`,
+      );
+      expect(reloaded.status()).toBe(200);
+      const replayed = await request.post(
+        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        {
+          headers: { "content-type": "application/json" },
+          data: canonicalJson({ authoring_request: authoringRequest }),
+        },
+      );
+      expect(replayed.status()).toBe(200);
+      expect(canonicalJson(await replayed.json())).toBe(
+        canonicalJson(authorOutcome),
+      );
+      const changedSameId = structuredClone(
+        authoringRequest,
+      ) as Record<string, unknown>;
+      changedSameId.plan_digest = `sha256:${"0".repeat(64)}`;
+      const conflict = await request.post(
+        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        {
+          headers: { "content-type": "application/json" },
+          data: canonicalJson({ authoring_request: changedSameId }),
+        },
+      );
+      expect(conflict.status()).toBe(409);
+      expect((await conflict.json()).error).toBe(
+        "authoring_request_id_conflict",
+      );
+    }
     const managedActorBundle = authorOutcome.managed_actor_bundle;
     if (!managedActorBundle || typeof managedActorBundle !== "object") {
       throw new Error("Applet install author endpoint omitted managed_actor_bundle");
@@ -1749,6 +1980,25 @@ async function rawInstallApplet(
     ]);
   }
   const installUrl = `${solandBaseUrl()}/_arkret/self/applets/install`;
+  if (options.exerciseAuthoringKats !== false) {
+    const fifthRole = structuredClone(resolved.commitBody);
+    const bundle = fifthRole.managed_actor_bundle as Record<string, unknown>;
+    bundle.membership_event = structuredClone(bundle.bot_profile_event);
+    const fifthRoleResponse = await request.fetch(installUrl, {
+      method: "POST",
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
+        "Idempotency-Key": `${idempotencyKey}-fifth-role`,
+      },
+      data: canonicalJson(fifthRole),
+    });
+    expect(fifthRoleResponse.status()).toBe(400);
+    expect(wireErrCode(await fifthRoleResponse.json())).toBe("schema_violation");
+  }
+  if (options.commitDelayMs) {
+    await new Promise((resolve) => setTimeout(resolve, options.commitDelayMs));
+  }
   const response = await request.fetch(installUrl, {
     method: "POST",
     headers: {
@@ -1771,6 +2021,7 @@ async function prepareAppletInstallAuthoringBasis(
   signed: SignedPackage,
   realmId: string,
   effectiveScope: Record<string, unknown>,
+  requestedWindowMs = 2 * 60 * 1000,
 ): Promise<{
   basis: Record<string, unknown>;
   grantActionsById: Map<string, string[]>;
@@ -1884,14 +2135,13 @@ async function prepareAppletInstallAuthoringBasis(
       widget_allowed: false,
     },
     actor_policy: {
-      bot_membership: "join",
       ghost_actor_mode: "policy_declared",
     },
     e2ee_policy: { mls_join_allowed: false },
     widget_policy: { widget_allowed: false },
     requested_at: createdAt,
     requested_expires_at: canonicalTimestamp(
-      new Date(Date.now() + 2 * 60 * 1000),
+      new Date(Date.now() + requestedWindowMs),
     ),
     registration_event: registrationEvent,
     capability_grant_events: capabilityGrantEvents,
@@ -2234,6 +2484,75 @@ function detachedJws(
     signingKey,
   ).toString("base64url");
   return `${protectedHeader}..${signature}`;
+}
+
+function canonicalHash(value: unknown): string {
+  return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
+}
+
+function authoringRequestUnsigned(
+  request: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    schema: request.schema,
+    authoring_request_id: request.authoring_request_id,
+    basis: request.basis,
+    plan_digest: request.plan_digest,
+    expires_at: request.expires_at,
+  };
+}
+
+function authoringRequestProjection(
+  request: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    schema: request.schema,
+    basis: request.basis,
+    plan_digest: request.plan_digest,
+    expires_at: request.expires_at,
+  };
+}
+
+function derivedAuthoringRequestId(request: Record<string, unknown>): string {
+  const hex = canonicalHash(authoringRequestProjection(request)).slice(
+    "sha256:".length,
+  );
+  const bytes = Buffer.from(hex.slice(0, 32), "hex");
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const uuid = bytes.toString("hex");
+  return `ak:operation:${uuid.slice(0, 8)}-${uuid.slice(8, 12)}-${uuid.slice(12, 16)}-${uuid.slice(16, 20)}-${uuid.slice(20)}`;
+}
+
+function authoringProofBinding(
+  proof: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    payload_digest: proof.payload_digest,
+    verification_method: proof.verification_method,
+    created_at: proof.created_at,
+    domain: proof.domain,
+    audience: proof.audience,
+  };
+}
+
+function verifyDetachedJws(
+  jws: string,
+  binding: Record<string, unknown>,
+  publicKey: KeyObject,
+): boolean {
+  const [protectedHeader, payload, signature] = jws.split(".");
+  if (!protectedHeader || payload !== "" || !signature) return false;
+  const signingInput = `${protectedHeader}.${Buffer.from(
+    canonicalJson(binding),
+    "utf8",
+  ).toString("base64url")}`;
+  return verify(
+    null,
+    Buffer.from(signingInput, "utf8"),
+    publicKey,
+    Buffer.from(signature, "base64url"),
+  );
 }
 
 function appletEventProof(

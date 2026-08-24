@@ -63,14 +63,12 @@
 5. **alice** 通过 `/setup` 多步向导建 Realm `R`:
    - title = `"extensions/applet-bridge Demo Realm ${stamp}"`
    - discoverability = `listed`
-   - join_rule = `invite`
+   - join_rule 由普通 Realm membership policy 决定，本场景不声称执行 invite FSM
    - history_access = `since_join`
-   - seed_members = `[]`(bot 走 admin invite 通道,不走 seed)
+   - seed_members = `[]`（install 不写 membership）
 6. 断言:`realm-lifecycle-strand` 显示 `created ak:realm:...`,记录 `realmId`
-7. **alice** 在 `/realms/${realmId}/admin/members` 通过 `invite-member` 邀请 `bot_actor_id`
-   - 断言:`realm-admin-panel` 状态文本含 `invited ${bot_actor_id}`
-8. **applet_service** 替 bot 接受 invite:`POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/bot/${applet_id}/accept-invite`,body = `{ realm_id: realmId }`
-   - mock 内部会用 bot 的 session token 调 Realm invite accept API
+7. 安装本身不创建 membership。PCR accepted 后，Bot 使用持久化的独立 runtime key，通过正式 `ak.member.state` Event 执行普通 self-join admission；不得由管理员预写 membership、Applet service 代签或调用私有 endpoint。
+8. 测试把已接受的同一 Bot Event 投递到标准 peer ingress，并仅断言 duplicate/accepted 幂等结果；这是 peer ingress 重放覆盖，不宣称观察了 outbound federation outbox，也不冒充 invite accept FSM。
    - 断言:返回 `{ status: "joined" }`
 9. **alice** 同步 `/realms/${realmId}/admin/members`,断言 members 列表包含 `bot_actor_id`
 
@@ -157,7 +155,7 @@
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`
-  - `POST /bot/:applet_id/accept-invite` → `{ status }`
+  - 不提供 Bot membership 私有 endpoint；测试必须提交正式 Bot-signed Event。
   - `POST /external-event` → `{ ghost_actor_id, message_id }` 或错误
 - `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 由 cotest harness 在启动 mock 时注入;mock 自身仍用 `MOCK_APPLET_REGISTRY_PORT` 绑定本地监听端口
 - Inkson UI 侧:`ghost-actor-badge`、`accountability-trace-button`、`/settings/applets` 当前都不存在 — 主测试用 timeline 可见性 + HTTP accountability 断言为主

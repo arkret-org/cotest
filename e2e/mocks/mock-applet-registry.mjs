@@ -113,6 +113,7 @@ const packagesByApplet = new Map(
 const installAuthoringOutcomes = new Map(
   durableState.installAuthoringOutcomes ?? [],
 );
+let currentPrincipalServerVerificationMethod = `${principalServerFullId()}#notary-key`;
 const provisionedGhosts = new Map();
 const actorSequences = new Map();
 
@@ -743,14 +744,7 @@ function validAuthoringPolicies(basis) {
     typeof approval.e2ee_join_allowed === "boolean" &&
     typeof approval.widget_allowed === "boolean" &&
     (basis.actor_policy === undefined ||
-      (closedObjectKeys(basis.actor_policy, [], [
-        "bot_membership",
-        "ghost_actor_mode",
-      ]) &&
-        (basis.actor_policy.bot_membership === undefined ||
-          ["invite", "join", "disabled"].includes(
-            basis.actor_policy.bot_membership,
-          )) &&
+      (closedObjectKeys(basis.actor_policy, [], ["ghost_actor_mode"]) &&
         (basis.actor_policy.ghost_actor_mode === undefined ||
           ["disallowed", "controller_approved", "policy_declared"].includes(
             basis.actor_policy.ghost_actor_mode,
@@ -828,7 +822,6 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
     return "authoring_request_id_mismatch";
   }
   const proof = request.proof;
-  const expectedVerificationMethod = `${principalServerFullId()}#notary-key`;
   const payloadDigest = canonicalHash(authoringRequestUnsigned(request));
   if (
     !exactObjectKeys(proof, [
@@ -841,7 +834,6 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
       "jws",
     ]) ||
     proof.kind !== "detached_jws" ||
-    proof.verification_method !== expectedVerificationMethod ||
     proof.payload_digest !== payloadDigest ||
     proof.domain !== "arkret.applet.install.authoring-request.v1" ||
     proof.audience !== packageInfo.serviceId ||
@@ -857,6 +849,9 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
       createPublicKey(principalServerNotaryPrivateKey()),
     )
   ) {
+    return "authoring_request_proof_invalid";
+  }
+  if (proof.verification_method !== currentPrincipalServerVerificationMethod) {
     return "authoring_request_proof_invalid";
   }
   const resolvedAdmin = await resolveCurrentAdminKey(basis);
@@ -1621,12 +1616,6 @@ function signedPackage(body) {
   };
 }
 
-function matchBotPath(pathname) {
-  const m = pathname.match(/^\/bot\/([^/]+)\/accept-invite$/);
-  if (!m) return null;
-  return { appletId: decodeURIComponent(m[1]) };
-}
-
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://127.0.0.1");
   res.setHeader("content-type", "application/json");
@@ -1634,6 +1623,15 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/inspect/authoring-reload" && req.method === "POST") {
     reloadDurableAuthoringState();
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (url.pathname === "/inspect/principal-server-key-current" && req.method === "POST") {
+    const body = await readJson(req);
+    currentPrincipalServerVerificationMethod = body?.rotated
+      ? `${principalServerFullId()}#notary-key-rotated`
+      : `${principalServerFullId()}#notary-key`;
+    res.end(JSON.stringify({ ok: true, verification_method: currentPrincipalServerVerificationMethod }));
     return;
   }
 
@@ -1737,20 +1735,6 @@ const server = createServer(async (req, res) => {
     });
     persistDurableAuthoringState();
     res.end(canonicalJson(outcome));
-    return;
-  }
-
-  const botMatch = matchBotPath(url.pathname);
-  if (botMatch && req.method === "POST") {
-    const body = await readJson(req);
-    res.end(
-      JSON.stringify({
-        applet_id: botMatch.appletId,
-        bot_actor_id: null,
-        realm_id: body?.realm_id ?? null,
-        status: "joined",
-      }),
-    );
     return;
   }
 

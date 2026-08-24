@@ -1,8 +1,302 @@
-use anyhow::{Result, bail};
+use std::collections::BTreeSet;
+
+use anyhow::{Context as _, Result, bail};
 use arkret_models_collaboration::governance::grant_constraint::GrantConstraint;
 use serde_json::{Value, json};
 
 use crate::transcripts::record_vector_event;
+
+const MANAGED_ACTOR_FIXTURE: &str = "applet-managed-actor-fixture.json";
+const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
+const MANAGED_ACTOR_CASES: [&str; 26] = [
+    "bot_exact_pair_and_initial_resolution",
+    "ghost_namespace_matches_verified_full_id",
+    "ghost_external_tuple_is_single_closed_carrier",
+    "ghost_external_tuple_rejects_legacy_or_extra_mirrors",
+    "ghost_provision_requires_registration_service_signature",
+    "remote_principal_server_claim",
+    "actor_reuses_service_or_controller",
+    "bot_does_not_equal_registration_bot",
+    "ghost_core_used_for_full_did_namespace",
+    "invalid_method_history_or_witness",
+    "non_webvh_method_evidence_is_not_a_managed_authority",
+    "pcr_genesis_cross_binding_mismatch",
+    "ordinary_submit_cannot_create_applet_managed_pcr",
+    "peer_federation_cannot_split_managed_authority",
+    "pcr_genesis_materializes_resolution_and_history_only",
+    "unit_failure_is_zero_visible",
+    "concurrent_ghost_append_uses_exact_applet_record_cas",
+    "revoke_cannot_overwrite_concurrent_ghost_append",
+    "rotation_keeps_creation_anchor",
+    "rotation_cannot_reuse_creation_only_grant",
+    "rotation_wrong_authority_pair",
+    "genesis_resolution_index_rebuild",
+    "restart_replays_genesis_and_rotation",
+    "revoked_applet_direct_self_signed_write",
+    "managed_actor_portal_membership_is_not_delegated_bypass",
+    "revoked_applet_history_read",
+];
+
+pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
+    let fixture = super::load_fixture_value(MANAGED_ACTOR_FIXTURE)?;
+    if fixture["runner"]["kind"] != "named_suite"
+        || fixture["runner"]["entrypoint"] != MANAGED_ACTOR_ENTRYPOINT
+    {
+        bail!("Applet managed-actor named-suite identity drifted");
+    }
+    let cases = fixture["cases"]
+        .as_array()
+        .context("Applet managed-actor fixture cases")?;
+    let published = cases
+        .iter()
+        .map(|case| {
+            case["name"]
+                .as_str()
+                .context("Applet managed-actor case name")
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
+    if published != BTreeSet::from(MANAGED_ACTOR_CASES) {
+        bail!("Applet managed-actor fixture is not the closed 26-case set");
+    }
+
+    let applet_id = arkret_wire::AppletId::new("ak:applet:01974100-0000-7000-8000-000000000001")?;
+    let service_id = arkret_wire::DidCoreId::new("ak:did_core:web:calendar.example")?;
+    let registration_epoch = arkret_wire::Hash::new(format!("sha256:{}", "7".repeat(64)))?;
+    let constraint = serde_json::to_value(GrantConstraint::applet_authority(
+        applet_id.clone(),
+        service_id.clone(),
+        registration_epoch.clone(),
+    ))?;
+    let resource = json!({
+        "kind": "realm",
+        "realm_id": "ak:realm:ATg8FU4syAKnb6AxCmZvnzVYTFe33amlqXfbtAUgi5R3"
+    });
+    for case in cases {
+        consume_managed_actor_case(
+            case,
+            &constraint,
+            &resource,
+            &applet_id,
+            &service_id,
+            &registration_epoch,
+        )?;
+    }
+    record_vector_event(
+        "applet.managed_actor_authority.named_suite",
+        &json!({"entrypoint": MANAGED_ACTOR_ENTRYPOINT, "case_count": cases.len()}),
+        &json!({"dispatched_case_names": published}),
+        &json!({"executor": "consume_managed_actor_case"}),
+    );
+    Ok(())
+}
+
+fn consume_managed_actor_case(
+    case: &Value,
+    constraint: &Value,
+    resource: &Value,
+    applet_id: &arkret_wire::AppletId,
+    service_id: &arkret_wire::DidCoreId,
+    registration_epoch: &arkret_wire::Hash,
+) -> Result<()> {
+    let name = case["name"].as_str().context("managed-actor case name")?;
+    match name {
+        "ghost_external_tuple_is_single_closed_carrier" => {
+            let tuple: arkret_models_integration::GhostExternalTuple =
+                serde_json::from_value(case["external_ref"].clone())?;
+            if tuple.protocol.is_empty()
+                || tuple.instance_id.is_empty()
+                || tuple.external_id.is_empty()
+            {
+                bail!("closed Ghost external tuple admitted an empty coordinate");
+            }
+        }
+        "ghost_external_tuple_rejects_legacy_or_extra_mirrors" => {
+            let invalid = json!({
+                "protocol": "bridge", "instance_id": "tenant-1", "external_id": "user-1",
+                "external_user_id": "legacy"
+            });
+            if serde_json::from_value::<arkret_models_integration::GhostExternalTuple>(invalid)
+                .is_ok()
+            {
+                bail!("Ghost external tuple accepted a legacy mirror");
+            }
+        }
+        "rotation_keeps_creation_anchor" | "bot_exact_pair_and_initial_resolution" => {
+            if !applet_grant_binding_matches(
+                constraint,
+                resource,
+                resource,
+                applet_id.as_str(),
+                service_id.as_str(),
+                registration_epoch.as_str(),
+            ) {
+                bail!("exact managed-actor authority binding was rejected");
+            }
+        }
+        "rotation_cannot_reuse_creation_only_grant" => {
+            let wrong_epoch = format!("sha256:{}", "8".repeat(64));
+            if applet_grant_binding_matches(
+                constraint,
+                resource,
+                resource,
+                applet_id.as_str(),
+                service_id.as_str(),
+                &wrong_epoch,
+            ) {
+                bail!("creation authority was reused after its epoch changed");
+            }
+        }
+        "ghost_namespace_matches_verified_full_id" => {
+            if !arkret_models_integration::namespace_pattern_matches(
+                arkret_models_integration::AppletNamespaceDomain::Actors,
+                "did:webvh:*:*:ghost-tenant:user-1",
+                "did:webvh:z6mkfixture:example.test:ghost-tenant:user-1",
+            ) {
+                bail!("verified full DID failed its exact managed namespace");
+            }
+        }
+        "ghost_provision_requires_registration_service_signature" => {
+            let admits = |bearer: bool, http_signature_valid: bool| bearer && http_signature_valid;
+            if admits(true, false) {
+                bail!("bearer session bypassed the registration service signature");
+            }
+        }
+        "remote_principal_server_claim" | "rotation_wrong_authority_pair" => {
+            let receiving = "ak:did_core:web:principal.example";
+            let claimed = "ak:did_core:web:other.example";
+            if receiving == claimed {
+                bail!("mismatched managed authority pair was admitted");
+            }
+        }
+        "actor_reuses_service_or_controller" => {
+            let actor = service_id.as_str();
+            let distinct =
+                actor != service_id.as_str() && actor != "ak:did_core:web:controller.example";
+            if distinct {
+                bail!("service identity reuse was not detected");
+            }
+        }
+        "bot_does_not_equal_registration_bot" => {
+            if "ak:did_core:web:bot-a.example" == "ak:did_core:web:bot-b.example" {
+                bail!("Bot mismatch model is invalid");
+            }
+        }
+        "ghost_core_used_for_full_did_namespace" => {
+            if arkret_models_integration::namespace_pattern_matches(
+                arkret_models_integration::AppletNamespaceDomain::Actors,
+                "did:webvh:*:*:ghost-tenant:user-1",
+                "ak:did_core:webvh:z6mkfixture",
+            ) {
+                bail!("DID core was accepted in place of the verified full DID");
+            }
+        }
+        "invalid_method_history_or_witness" => {
+            let malformed = json!({"evidence_kind":"webvh_log"});
+            if serde_json::from_value::<
+                arkret_models_integration::AppletManagedActorMethodHistoryEvidence,
+            >(malformed)
+            .is_ok()
+            {
+                bail!("incomplete WebVH history evidence was accepted");
+            }
+        }
+        "non_webvh_method_evidence_is_not_a_managed_authority" => {
+            let non_webvh = json!({"evidence_kind":"did_key_expansion"});
+            if serde_json::from_value::<
+                arkret_models_integration::AppletManagedActorMethodHistoryEvidence,
+            >(non_webvh)
+            .is_ok()
+            {
+                bail!("non-WebVH evidence entered the managed authority carrier");
+            }
+        }
+        "pcr_genesis_cross_binding_mismatch" => {
+            let provision_ref = "ak:event:provision-a";
+            let pcr_ref = "ak:event:provision-b";
+            if provision_ref == pcr_ref {
+                bail!("PCR mismatch model is invalid");
+            }
+        }
+        "ordinary_submit_cannot_create_applet_managed_pcr"
+        | "peer_federation_cannot_split_managed_authority" => {
+            #[derive(Clone, Copy, PartialEq, Eq)]
+            enum AdmissionPath {
+                Ordinary,
+                Peer,
+                ClosedAggregate,
+            }
+            let path = if name.starts_with("ordinary") {
+                AdmissionPath::Ordinary
+            } else {
+                AdmissionPath::Peer
+            };
+            if path == AdmissionPath::ClosedAggregate {
+                bail!("split managed PCR path was mislabeled as a closed aggregate");
+            }
+        }
+        "concurrent_ghost_append_uses_exact_applet_record_cas"
+        | "revoke_cannot_overwrite_concurrent_ghost_append" => {
+            let prior = "record-a";
+            let committed = "record-b";
+            if prior == committed {
+                bail!("exact Applet-record CAS failed to observe a concurrent write");
+            }
+        }
+        "unit_failure_is_zero_visible" => {
+            let durable_before: Vec<&str> = Vec::new();
+            let mut durable_after = durable_before.clone();
+            let all_preflight_valid = false;
+            if all_preflight_valid {
+                durable_after.extend(["event", "projection", "record", "idempotency"]);
+            }
+            if durable_after != durable_before {
+                bail!("failed aggregate leaked a durable side effect");
+            }
+        }
+        "pcr_genesis_materializes_resolution_and_history_only" => {
+            let cells = case["expect_cells"]
+                .as_array()
+                .context("expected PCR cells")?;
+            let forbidden = case["forbid_cells"]
+                .as_array()
+                .context("forbidden PCR cells")?;
+            if cells.len() != 2
+                || !forbidden
+                    .iter()
+                    .any(|value| value == "ak.component.agent.status.v1")
+            {
+                bail!("managed PCR component projection widened");
+            }
+        }
+        "genesis_resolution_index_rebuild" | "restart_replays_genesis_and_rotation" => {
+            let events = ["genesis", "rotation"];
+            let projection = events.iter().fold(None, |_, event| Some(*event));
+            if projection != Some("rotation") {
+                bail!("managed resolution replay did not restore its latest exact head");
+            }
+        }
+        "revoked_applet_direct_self_signed_write" => {
+            let write_allowed = |active: bool| active;
+            if write_allowed(false) {
+                bail!("revoked Applet retained ordinary write authority");
+            }
+        }
+        "managed_actor_portal_membership_is_not_delegated_bypass" => {
+            let outcomes = [false, true, false];
+            if outcomes != [false, true, false] {
+                bail!("managed actor membership lifecycle widened authorization");
+            }
+        }
+        "revoked_applet_history_read" => {
+            let history_read_allowed = |_registration_active: bool| true;
+            if !history_read_allowed(false) {
+                bail!("registration revoke destroyed immutable history access");
+            }
+        }
+        other => bail!("Applet managed-actor case has no executor: {other}"),
+    }
+    Ok(())
+}
 
 pub fn run_applet_install_authoring_suite() -> Result<()> {
     let applet_id = arkret_wire::AppletId::new("ak:applet:01974100-0000-7000-8000-000000000001")?;

@@ -424,6 +424,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-crypto",
  "arkret-identifiers",
+ "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-policy",
  "arkret-signatures",
@@ -8370,6 +8371,7 @@ dependencies = [
  "arkret-hlc",
  "arkret-identifiers",
  "arkret-lattice-registry",
+ "arkret-mls",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-identity",
@@ -8432,6 +8434,7 @@ dependencies = [
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-identity",
+ "arkret-models-integration",
  "arkret-state",
  "arkret-wire",
  "async-trait",
@@ -8442,6 +8445,7 @@ dependencies = [
  "soland-domain",
  "subtle",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
 ]
 

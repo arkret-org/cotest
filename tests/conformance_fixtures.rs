@@ -42,6 +42,12 @@ conformance_test!(
 );
 
 conformance_test!(
+    applet_managed_actor_authority_consumes_registered_fixture,
+    "applet_managed_actor_authority",
+    cotest::conformance::run_applet_managed_actor_authority_suite,
+);
+
+conformance_test!(
     arkret_private_kdf_and_durability_executes_registered_vectors,
     "arkret_private_kdf_and_durability",
     cotest::conformance::run_arkret_private_kdf_and_durability_suite,

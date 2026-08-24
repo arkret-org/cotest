@@ -295,7 +295,6 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
     let removal = PendingSidecarAccessReconciliationItem {
         agent_id: DidCoreId::new("ak:did_core:web:assistant.agents.example")?,
         provisioning_phase: PendingSidecarAccessReconciliationStage::MlsRemove,
-        reason: NonEmptyString::new("mls_remove_obligation_pending").map_err(anyhow::Error::msg)?,
         membership_frontier: Some(vec![EventId::new(
             "ak:event:AWifyy9pOZxDgygPC-YXK0utndmBAgXZy7HF-iPG3cyV",
         )?]),
