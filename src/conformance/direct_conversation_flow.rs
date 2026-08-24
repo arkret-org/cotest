@@ -214,6 +214,49 @@ fn semantic_case<'a>(fixture: &'a Value, name: &str) -> Result<&'a Value> {
         .ok_or_else(|| anyhow!("Direct Conversation fixture omits semantic case `{name}`"))
 }
 
+fn validate_event_id_digest_mirror_removal(fixture: &Value) -> Result<()> {
+    const REMOVED_PAIRS: [(&str, &str); 6] = [
+        ("head_event_ref", "head_digest"),
+        ("request_event_ref", "request_digest"),
+        ("response_event_ref", "response_digest"),
+        ("reject_event_ref", "reject_digest"),
+        ("signed_event_ref", "signed_event_digest"),
+        ("agent_provision_ref", "agent_provision_digest"),
+    ];
+
+    fn reject_mirrors(value: &Value, path: &str) -> Result<()> {
+        match value {
+            Value::Object(object) => {
+                for (event_ref, digest) in REMOVED_PAIRS {
+                    if object.contains_key(event_ref) && object.contains_key(digest) {
+                        bail!("{path} reintroduces redundant {event_ref}/{digest} wire fields");
+                    }
+                }
+                for (key, child) in object {
+                    reject_mirrors(child, &format!("{path}.{key}"))?;
+                }
+            }
+            Value::Array(array) => {
+                for (index, child) in array.iter().enumerate() {
+                    reject_mirrors(child, &format!("{path}[{index}]"))?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    reject_mirrors(fixture, "$")?;
+    let event_id =
+        arkret_wire::EventId::new("ak:event:AWAIb405aEEenVBHYRG-ZfDs-f9_j3E67tWGI36uYxFJ")?;
+    if event_id.event_digest().as_str()
+        != "sha256:60086f8d3968411e9d50476111be65f0ecf9ff7f8f713aeed586237eae631149"
+    {
+        bail!("EventId digest decoding no longer matches the fixture KAT");
+    }
+    Ok(())
+}
+
 fn validate_founding_and_crash_replay(fixture: &Value) -> Result<()> {
     for name in [
         "founding_coordinates_are_derived_from_unit_bytes",
@@ -354,6 +397,7 @@ fn validate_commit_welcome_fences() -> Result<()> {
 
 pub fn run_direct_conversation_flow_suite() -> Result<()> {
     let fixture = load_artifact_json("fixtures/direct-conversation-fixture.json")?;
+    validate_event_id_digest_mirror_removal(&fixture)?;
     validate_founding_and_crash_replay(&fixture)?;
     validate_bilateral_continuity_checkpoint_fixture()?;
     validate_contact_verified_mirror_contract(&fixture)?;
