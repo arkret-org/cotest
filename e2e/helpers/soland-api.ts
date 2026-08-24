@@ -2232,8 +2232,6 @@ function encryptedAccountDataValue(
     nonce: base64url(nonce),
     ciphertext: base64url(ciphertext),
     aad,
-    aad_digest: digest(aadBytes),
-    ciphertext_digest: digest(ciphertext),
   };
 }
 

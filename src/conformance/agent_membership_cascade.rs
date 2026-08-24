@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, bail};
 use arkret_models_collaboration::governance::agent_membership_cascade::{
-    AgentCleanupPendingRecord, AgentCleanupStatus, AgentControllerMembershipBinding,
+    AgentCleanupRecord, AgentCleanupStatusView, AgentControllerMembershipBinding,
     AgentMembershipCascadeSchema,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
@@ -153,7 +153,7 @@ fn validate_cleanup_intent_digest_and_states(
         .controller_terminal_event_ref
         .clone()
         .context("Agent cleanup terminal Event")?;
-    let mut record = AgentCleanupPendingRecord {
+    let mut record = AgentCleanupRecord {
         schema: AgentMembershipCascadeSchema::V1,
         realm_id: RealmId::from_event_id(&EventId::from_digest(
             arkret_canonical::DigestSuite::Sha256,
@@ -169,7 +169,6 @@ fn validate_cleanup_intent_digest_and_states(
         controller_terminal_event_digest: Hash::new(format!("sha256:{}", "7".repeat(64)))?,
         expected_agent_ids: vec![DidCoreId::new("ak:did_core:webvh:z6mkfixtureagentexample")?],
         cleanup_intent_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
-        status: AgentCleanupStatus::AgentCleanupPending,
         accepted_at,
         cleanup_due_at: accepted_at + Duration::hours(1),
         completed_at: None,
@@ -191,10 +190,13 @@ fn validate_cleanup_intent_digest_and_states(
         "same intent digest must not name changed canonical content"
     );
 
-    let mut overdue = record;
-    overdue.status = AgentCleanupStatus::AgentCleanupOverdue;
-    overdue.validate()?;
-    if overdue.completed_at.is_some() || overdue.agent_transition_event_ids.is_some() {
+    if record.cleanup_status(accepted_at + Duration::minutes(30)) != AgentCleanupStatusView::Pending
+        || record.cleanup_status(accepted_at + Duration::hours(2))
+            != AgentCleanupStatusView::Overdue
+    {
+        bail!("Agent cleanup status is not derived from its deadline");
+    }
+    if record.completed_at.is_some() || record.agent_transition_event_ids.is_some() {
         bail!("overdue cleanup incorrectly materialized synthetic Agent transitions");
     }
     Ok(())

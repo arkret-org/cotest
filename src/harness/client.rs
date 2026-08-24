@@ -141,7 +141,10 @@ impl TestActorClient {
             operation_id,
             idempotency_key,
             reservation_handle,
-            signed_event: self.sign_prepared_contact_event(&event_draft)?,
+            signed_event: self.sign_prepared_contact_event(
+                &event_draft,
+                arkret_wire::event_kind_str::CONTACT_REQUESTED,
+            )?,
             control_proposal_ack: None,
         });
         let accepted = self.sdk.contacts_request(&commit).await?;
@@ -211,7 +214,10 @@ impl TestActorClient {
             operation_id,
             idempotency_key,
             reservation_handle,
-            signed_event: self.sign_prepared_contact_event(&event_draft)?,
+            signed_event: self.sign_prepared_contact_event(
+                &event_draft,
+                arkret_wire::event_kind_str::CONTACT_ACCEPTED,
+            )?,
             control_proposal_ack: None,
         });
         match self.sdk.contacts_respond(&commit).await? {
@@ -231,8 +237,9 @@ impl TestActorClient {
     fn sign_prepared_contact_event(
         &self,
         draft: &PreparedEventDraft,
+        expected_kind: &str,
     ) -> Result<arkret_wire::Event> {
-        let mut event = draft.unsigned_event()?;
+        let mut event = draft.unsigned_event_for_kind(expected_kind)?;
         let created_at = event.created_at;
         let (signing_seed, verification_method) =
             event_signing_identity_for_device(&self.actor, &self.device_id);

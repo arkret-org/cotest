@@ -25,7 +25,7 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
         .as_ref()
         .map(|principal| principal.pcr_realm_id.as_str().to_owned())
         .ok_or_else(|| anyhow::anyhow!("client carries its provisioned principal"))?;
-    let request = rotation_create_request(server.service_id(), &actor, &pcr_realm)?;
+    let request = rotation_create_request(&actor, &pcr_realm)?;
 
     let first = expect_json(
         client
@@ -78,22 +78,20 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
 }
 
 fn rotation_create_request(
-    service_id: &DidCoreId,
     actor: &str,
     pcr_realm: &str,
 ) -> Result<SecurityTransactionCreateRequest> {
-    let coordinator = service_id.clone();
     let principal = DidFullId::new(actor.to_owned())?;
     let principal_id = arkret_wire::project_full_id_to_core_id(&principal)?;
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
     let revoke_submission = event_submission(&principal, pcr_realm, "ak.device.revoke")?;
-    let revoke_unit = event_unit(&coordinator, revoke_submission)?;
+    let revoke_unit = event_unit(revoke_submission)?;
     let rotations = [
         (BackupRotationKind::SecretStorage, "c"),
         (BackupRotationKind::MlsHistory, "d"),
     ]
     .into_iter()
-    .map(|(kind, suffix)| rotation_plan(&coordinator, &principal, pcr_realm, kind, suffix))
+    .map(|(kind, suffix)| rotation_plan(&principal, pcr_realm, kind, suffix))
     .collect::<Result<Vec<_>>>()?;
     Ok(SecurityTransactionCreateRequest::SecurityRotation(
         SecurityRotationTransactionCreateRequest::from_prepared_rotations(
@@ -108,7 +106,6 @@ fn rotation_create_request(
 }
 
 fn rotation_plan(
-    coordinator: &DidCoreId,
     principal: &DidFullId,
     pcr_realm: &str,
     kind: BackupRotationKind,
@@ -154,22 +151,19 @@ fn rotation_plan(
         }]
     }))?;
     Ok(BackupRotationPlan {
-        active_series_unit: event_unit(coordinator, active_series_submission)?,
+        active_series_unit: event_unit(active_series_submission)?,
         encrypted_backup_material: material,
         binding,
     })
 }
 
-fn event_unit(
-    coordinator: &DidCoreId,
-    submission: EventInitialSubmission,
-) -> Result<arkret_wire::PreparedEventUnit> {
+fn event_unit(submission: EventInitialSubmission) -> Result<arkret_wire::PreparedEventUnit> {
     let request = EventsSubmitBatchRequestBody {
         events: vec![submission],
     };
     Ok(arkret_wire::PreparedEventUnit::new(
-        coordinator.clone(),
-        serde_json::to_value(request)?,
+        arkret_canonical::DigestSuite::Sha256,
+        request,
     )?)
 }
 

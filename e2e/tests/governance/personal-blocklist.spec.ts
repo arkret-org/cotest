@@ -579,14 +579,12 @@ function isEncryptedAccountDataCarrier(
     content.aead_profile === "ak.aead.xchacha20_poly1305.v1" &&
     typeof content.key_ref === "string" &&
     /^sha256:[0-9a-f]{64}$/.test(content.key_ref) &&
-    typeof content.aad_digest === "string" &&
-    /^sha256:[0-9a-f]{64}$/.test(content.aad_digest) &&
+    !("aad_digest" in content) &&
     aad.schema === "ak.schema.account_data_encrypted_value.v1" &&
     aad.account_data_key === BLOCKLIST_DATA_TYPE &&
     typeof content.ciphertext === "string" &&
     content.ciphertext.length > 0 &&
-    typeof content.ciphertext_digest === "string" &&
-    /^sha256:[0-9a-f]{64}$/.test(content.ciphertext_digest) &&
+    !("ciphertext_digest" in content) &&
     typeof content.nonce === "string" &&
     content.nonce.length > 0
   );
