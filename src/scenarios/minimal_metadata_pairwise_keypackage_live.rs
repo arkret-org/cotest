@@ -54,6 +54,10 @@ const TARGET_SEED: [u8; 32] = [0x42; 32];
 const REQUESTER_SEED: [u8; 32] = [0x24; 32];
 const OTHER_SEED: [u8; 32] = [0x66; 32];
 
+fn wire_value<T>(value: std::result::Result<T, &'static str>) -> Result<T> {
+    value.map_err(anyhow::Error::msg)
+}
+
 #[derive(Clone)]
 struct PairwiseKey {
     seed: [u8; 32],
@@ -70,7 +74,9 @@ impl PairwiseKey {
             seed,
             full_id: DidFullId::new(format!("did:key:{multibase}"))?,
             actor_id: DidCoreId::new(format!("ak:did_core:key:{multibase}"))?,
-            verification_method: DidUrl::new(format!("did:key:{multibase}#{multibase}"))?,
+            verification_method: wire_value(DidUrl::new(format!(
+                "did:key:{multibase}#{multibase}"
+            )))?,
         })
     }
 
@@ -87,11 +93,11 @@ impl PairwiseKey {
 
     fn signature(&self, bytes: &[u8]) -> Result<KeyOperationSignature> {
         Ok(KeyOperationSignature {
-            kid: NonEmptyString::new(self.verification_method.to_string())?,
-            signature_algorithm: Some(NonEmptyString::new("Ed25519")?),
-            sig: Base64UrlString::new(
+            kid: wire_value(NonEmptyString::new(self.verification_method.to_string()))?,
+            signature_algorithm: Some(wire_value(NonEmptyString::new("Ed25519"))?),
+            sig: wire_value(Base64UrlString::new(
                 URL_SAFE_NO_PAD.encode(SigningKey::from_bytes(&self.seed).sign(bytes).to_bytes()),
-            )?,
+            ))?,
         })
     }
 }
@@ -598,16 +604,16 @@ fn signed_device_claim(
     let request_token = request_token.chars().take(32).collect::<String>();
     let signed_at = Utc::now();
     let unsigned = PeerKeyPackagesClaimUnsignedRequest {
-        claim_request_id: Base64UrlString::new(request_token)?,
+        claim_request_id: wire_value(Base64UrlString::new(request_token))?,
         target_principal_id: target.actor_id.clone(),
         requester: requester.core_id.clone(),
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
-        mls_group_id: NonEmptyString::new(mls_group_id)?,
+        mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
         required_capabilities: ["mimi.content.v1", "ak.content.v1"]
             .into_iter()
-            .map(NonEmptyString::new)
-            .collect::<arkret_wire::Result<Vec<_>>>()?,
+            .map(|value| wire_value(NonEmptyString::new(value)))
+            .collect::<Result<Vec<_>>>()?,
         expires_at: signed_at + chrono::Duration::minutes(4),
         target_device_ids: Vec::new(),
         target_keypackage_ref: None,
@@ -624,12 +630,14 @@ fn signed_device_claim(
         source_service_id,
         destination_service_id,
     };
-    let verification_method =
-        DidUrl::new(format!("{}#{}", requester.full_id, requester.device_id))?;
+    let verification_method = wire_value(DidUrl::new(format!(
+        "{}#{}",
+        requester.full_id, requester.device_id
+    )))?;
     let placeholder = KeyOperationSignature {
-        kid: NonEmptyString::new(verification_method.to_string())?,
-        signature_algorithm: Some(NonEmptyString::new("Ed25519")?),
-        sig: Base64UrlString::new("AA")?,
+        kid: wire_value(NonEmptyString::new(verification_method.to_string()))?,
+        signature_algorithm: Some(wire_value(NonEmptyString::new("Ed25519"))?),
+        sig: wire_value(Base64UrlString::new("AA"))?,
     };
     let mut authorization = PeerKeyPackageRequesterAuthorization::Device {
         verification_method,
@@ -643,9 +651,9 @@ fn signed_device_claim(
     let PeerKeyPackageRequesterAuthorization::Device { signature, .. } = &mut authorization else {
         unreachable!("device claim constructor selected another branch")
     };
-    signature.sig = Base64UrlString::new(
+    signature.sig = wire_value(Base64UrlString::new(
         URL_SAFE_NO_PAD.encode(requester.device_signing_key.sign(&signing_bytes).to_bytes()),
-    )?;
+    ))?;
 
     let body = KeyPackagesClaimRequestBody {
         claim_request_id: unsigned.claim_request_id,
@@ -797,19 +805,24 @@ async fn accept_welcome_and_consume(
         &arkret_canonical::canonical_json_bytes(&claimed.capabilities)?,
     ))?;
     let keypackage_ref = claimed.keypackage_ref.clone();
-    let requester_method = DidUrl::new(format!("{}#{}", requester.full_id, requester.device_id))?;
+    let requester_method = wire_value(DidUrl::new(format!(
+        "{}#{}",
+        requester.full_id, requester.device_id
+    )))?;
     let unsigned_envelope =
         UnsignedMlsWelcomeClaimEnvelope::new(MlsWelcomeClaimEnvelopeSigningInput {
             keypackage_ref: keypackage_ref.clone(),
             keypackage_digest: keypackage_digest.clone(),
             intended_realm_id: RealmId::new(realm_id.to_owned())?,
-            claim_id: NonEmptyString::new(claimed.claim_id.clone())?,
+            claim_id: wire_value(NonEmptyString::new(claimed.claim_id.clone()))?,
             requester_actor_id: requester.core_id.clone(),
             trust_binding: MlsRequesterTrustBinding::RequesterDevice {
                 requester_device_id: requester.device_id.clone(),
                 requester_device_authorize_event_id: requester.founding_authorize_event_id.clone(),
             },
-            nonce: NonEmptyString::new(claim_outcome.claim_request_id.to_string())?,
+            nonce: wire_value(NonEmptyString::new(
+                claim_outcome.claim_request_id.to_string(),
+            ))?,
             welcome_digest: add.welcome.welcome_hash.clone(),
             created_at: Utc::now(),
         });
@@ -818,11 +831,13 @@ async fn accept_welcome_and_consume(
         .sign(&unsigned_envelope.canonical_signing_bytes()?)
         .to_bytes();
     let claim_envelope: MlsWelcomeClaimEnvelope = unsigned_envelope.attach_signature(
-        NonEmptyString::new(requester_method.to_string())?,
-        Base64UrlString::new(URL_SAFE_NO_PAD.encode(envelope_signature))?,
+        wire_value(NonEmptyString::new(requester_method.to_string()))?,
+        wire_value(Base64UrlString::new(
+            URL_SAFE_NO_PAD.encode(envelope_signature),
+        ))?,
     )?;
     let welcome_payload = MlsWelcomePayload {
-        mls_group_id: MlsGroupId::new(requester_group.group_id())?,
+        mls_group_id: wire_value(MlsGroupId::new(requester_group.group_id()))?,
         epoch: add.welcome.epoch,
         recipient_principal_id: None,
         recipient: MlsWelcomeRecipient::MinimalMetadataPairwise {
@@ -831,9 +846,9 @@ async fn accept_welcome_and_consume(
         },
         sender_device_id: Some(requester.device_id.clone()),
         keypackage_ref: keypackage_ref.clone(),
-        claim_id: NonEmptyString::new(claimed.claim_id.clone())?,
+        claim_id: wire_value(NonEmptyString::new(claimed.claim_id.clone()))?,
         claim_ref: MlsWelcomePayloadClaimRef {
-            claim_id: NonEmptyString::new(claimed.claim_id.clone())?,
+            claim_id: wire_value(NonEmptyString::new(claimed.claim_id.clone()))?,
             keypackage_ref,
             keypackage_digest,
             capabilities_digest,
@@ -847,7 +862,9 @@ async fn accept_welcome_and_consume(
         carrier: MlsWelcomeCarrier::new(
             None,
             None,
-            Some(NonEmptyString::new(add.welcome.welcome.clone())?),
+            Some(wire_value(NonEmptyString::new(
+                add.welcome.welcome.clone(),
+            ))?),
         )
         .map_err(anyhow::Error::msg)?,
         commit_ref: commit_event.event_id.clone(),
@@ -868,26 +885,26 @@ async fn accept_welcome_and_consume(
         joined
             .identity()
             .sign_recipient_mls_durable_receipt(RecipientMlsDurableReceipt {
-                domain: NonEmptyString::new(
+                domain: wire_value(NonEmptyString::new(
                     arkret_wire::DomainSeparationId::MLS_RECIPIENT_DURABLE_RECEIPT_V1,
-                )?,
+                ))?,
                 claim_request_id: claim_outcome.claim_request_id.clone(),
-                key_package_ref: NonEmptyString::new(claimed.keypackage_ref.clone())?,
+                key_package_ref: wire_value(NonEmptyString::new(claimed.keypackage_ref.clone()))?,
                 recipient_principal_id: target.actor_id.clone(),
                 recipient: RecipientMlsDurableSigner::MinimalMetadataPairwise {
                     recipient_pairwise_verification_method: target.verification_method.clone(),
                 },
                 recipient_service_id: DidCoreId::new(client.service_id().to_owned())?,
                 realm_id: RealmId::new(realm_id.to_owned())?,
-                mls_group_id: NonEmptyString::new(requester_group.group_id())?,
+                mls_group_id: wire_value(NonEmptyString::new(requester_group.group_id()))?,
                 mls_epoch: add.welcome.epoch,
-                welcome_ref: NonEmptyString::new(welcome_event.event_id.to_string())?,
+                welcome_ref: wire_value(NonEmptyString::new(welcome_event.event_id.to_string()))?,
                 welcome_digest,
                 durable_at: Utc::now(),
                 signature: target.signature(&[])?,
             })?;
     let consume = joined.identity().signed_key_packages_consume_request(
-        NonEmptyString::new(claimed.claim_id.clone())?,
+        wire_value(NonEmptyString::new(claimed.claim_id.clone()))?,
         durable_receipt,
     )?;
     let consume_bytes = arkret_canonical::canonical_json_bytes(&consume)?;
@@ -959,16 +976,16 @@ fn signed_pairwise_claim(
     let request_token = request_token.chars().take(32).collect::<String>();
     let signed_at = Utc::now();
     let unsigned = PeerKeyPackagesClaimUnsignedRequest {
-        claim_request_id: Base64UrlString::new(request_token.clone())?,
+        claim_request_id: wire_value(Base64UrlString::new(request_token.clone()))?,
         target_principal_id: target.actor_id.clone(),
         requester: requester.actor_id.clone(),
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
-        mls_group_id: NonEmptyString::new(mls_group_id)?,
+        mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
         required_capabilities: ["mimi.content.v1", "ak.content.v1"]
             .into_iter()
-            .map(NonEmptyString::new)
-            .collect::<arkret_wire::Result<Vec<_>>>()?,
+            .map(|value| wire_value(NonEmptyString::new(value)))
+            .collect::<Result<Vec<_>>>()?,
         expires_at: signed_at + chrono::Duration::minutes(4),
         target_device_ids: Vec::new(),
         target_keypackage_ref: None,

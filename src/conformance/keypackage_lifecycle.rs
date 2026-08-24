@@ -1048,9 +1048,6 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 
     let principal_id = core_did("ak:did_core:web:alice.example")?;
-    let verification_method = verification_method(
-        "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
-    )?;
     let device_id = device("ak:device:0196419b-0000-7000-8000-000000000001")?;
     let claim_record = claim_record_value(ClaimRecordInput {
         claim_id,
