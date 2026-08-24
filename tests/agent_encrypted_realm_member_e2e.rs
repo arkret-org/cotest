@@ -11,13 +11,13 @@
 
 use anyhow::{Context, Result, bail};
 use arkret::{
-    DeviceId, DidCoreId, Hash, KeyPackageUploadEntry, KeyPackagesConsumeUnsignedRequest,
-    KeyPackagesRevokeUnsignedRequest, KeyPackagesUploadUnsignedRequest,
-    keypackage_upload_entry_signing_input, keypackages_consume_signing_input,
-    keypackages_revoke_signing_input, keypackages_upload_signing_input, late_device_join_steps,
-    sign_keypackage_upload_entry, sign_keypackages_consume_request,
-    sign_keypackages_revoke_request, sign_keypackages_upload_request,
-    verify_keypackage_signing_input,
+    DeviceId, DidCoreId, Hash, KeyPackageConsumeReceipt, KeyPackageUploadEntry,
+    KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
+    KeyPackagesUploadUnsignedRequest, keypackage_upload_entry_signing_input,
+    keypackages_consume_signing_input, keypackages_revoke_signing_input,
+    keypackages_upload_signing_input, late_device_join_steps, sign_keypackage_upload_entry,
+    sign_keypackages_consume_request, sign_keypackages_revoke_request,
+    sign_keypackages_upload_request, verify_keypackage_signing_input,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -109,7 +109,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                     sign_keypackage_upload_entry(&principal_id, &device_id, &entry, kid, &seed)?,
                 )
             }
-            "consume_all_optional_fields" => {
+            "consume_single_claim" => {
                 let unsigned: KeyPackagesConsumeUnsignedRequest = serde_json::from_value(
                     case.get("unsigned_request")
                         .cloned()
@@ -119,6 +119,15 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                     keypackages_consume_signing_input(&unsigned)?,
                     sign_keypackages_consume_request(&unsigned, kid, &seed)?,
                 )
+            }
+            "consume_receipt_single_source_coordinates" => {
+                let receipt: KeyPackageConsumeReceipt = serde_json::from_value(
+                    case.get("signed_receipt")
+                        .cloned()
+                        .context("consume receipt case missing signed_receipt")?,
+                )?;
+                receipt.validate_shape().map_err(anyhow::Error::msg)?;
+                (receipt.canonical_signing_bytes()?, receipt.signature)
             }
             "revoke_with_reason" => {
                 let unsigned: KeyPackagesRevokeUnsignedRequest = serde_json::from_value(

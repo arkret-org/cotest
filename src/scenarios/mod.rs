@@ -37,6 +37,7 @@ pub mod kanban_identity_boundary;
 pub mod key_backup_negative;
 pub mod late_key_recovery_removed_actor;
 pub mod media_plaintext_downgrade_no_governance_binding;
+pub mod minimal_metadata_pairwise_keypackage_live;
 pub mod moderation_appeal_strand_end_to_end;
 pub mod oob_code_entropy_and_lockout;
 pub mod policy_server_live;

@@ -317,6 +317,7 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("bilateral continuity fixture has no cases"))?;
     for name in [
+        "root_basis_digest_is_sha256_of_jcs_and_not_wire_state",
         "history_beyond_64_uses_checkpoint_and_bounded_tail",
         "same_sequence_different_digest_is_fork",
         "single_roundtrip_countersigns_and_commits_same_checkpoint",
@@ -333,6 +334,17 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
         {
             bail!("bilateral continuity fixture omits `{name}`");
         }
+    }
+    let root_digest = cases
+        .iter()
+        .find(|case| case["name"] == "root_basis_digest_is_sha256_of_jcs_and_not_wire_state")
+        .unwrap();
+    let canonical_root = arkret_canonical::canonical_json_bytes(&root_digest["root_basis"])?;
+    let actual_root_digest = arkret_canonical::sha256_digest(canonical_root);
+    if root_digest["expected_root_basis_digest"].as_str() != Some(actual_root_digest.as_str())
+        || root_digest["wire_member"].as_bool() != Some(false)
+    {
+        bail!("continuity root basis digest formula drifted or became wire state");
     }
     let fork = cases
         .iter()

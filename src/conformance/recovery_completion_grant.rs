@@ -173,7 +173,7 @@ fn completion_vector() -> Result<CompletionVector> {
 
     let grant_claims = json!({
         "credential_class": "standard",
-        "cnf": { "jkt": holder_jkt },
+        "session_public_key": session_public_key.clone(),
         "aud": audience,
         "scope": standard_initial_session_grant_scope()
     });

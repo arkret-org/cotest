@@ -76,24 +76,7 @@ fn authorization_lease_for_basis(
     basis_ref: LeaseBasisRef,
 ) -> Result<AuthorizationLease> {
     let issued_at = event.created_at - Duration::minutes(5);
-    let actor_id = if let Some(auth_context) = &event.auth_context {
-        auth_context.actor_id.clone()
-    } else {
-        let verification_method = event
-            .proofs
-            .iter()
-            .find_map(arkret_wire::EventProof::as_producer)
-            .context("authorization lease Event has no full-id signing material")?
-            .verification_method
-            .as_str();
-        let controller = verification_method
-            .split_once('#')
-            .map(|(controller, _)| controller)
-            .context("authorization lease verification method has no controller")?;
-        let full_id = arkret_identifiers::DidFullId::new(controller.to_owned())
-            .context("authorization lease verification-method controller is not a full id")?;
-        arkret_identifiers::project_full_id_to_core_id(&full_id)?
-    };
+    let actor_id = event.actor_id.clone();
     let authorization_rule_id = "realm_admission";
     let authority_set_policy = AuthoritySetPolicy {
         schema: SchemaId::AUTHORITY_SET_POLICY_V1.to_owned(),

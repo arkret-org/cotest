@@ -19,7 +19,7 @@ export type RealmObject = {
   "owning_organizations"?: string[];
   "schema_refs": string[];
   "fields"?: {
-    "purpose"?: "principal_control" | "managed_agent_control";
+    "purpose"?: "principal_control" | "managed_agent_control" | "applet_managed_control";
     "collaboration_role"?: "direct_conversation";
     [key: string]: unknown;
   };
@@ -61,7 +61,6 @@ export type RealmObject = {
   "federation_policy"?: "open" | "restricted" | "closed" | "quarantine";
   "availability_policy"?: {
     "min_holders": number;
-    "holder_roles": Array<"joined_member_principal_server" | "joined_service_actor">;
     "applies_to": Array<"seal_include" | "snapshot" | "backfill">;
     "minimum_retention_ms"?: number;
   };
@@ -358,7 +357,7 @@ export type CapabilityGrantObject = {
     "max_resources"?: number;
     "resource_kind"?: string;
     "approval_required"?: boolean;
-    "approval_mode"?: "before_commit" | "proposal_then_approve" | "after_commit_review";
+    "approval_mode"?: "before_commit" | "proposal_then_approve";
     "approval_actor_ids"?: string[];
     "approval_relation"?: "responsible" | "controller" | "guardian" | "realm_admin" | "custom";
     "timeout"?: string;
@@ -386,8 +385,6 @@ export type CapabilityGrantObject = {
     "depends_on_moderation_state"?: boolean;
   }>;
   "issued_at": string;
-  "not_before"?: string;
-  "expires_at"?: string;
   "updated_by"?: string;
   "updated_at"?: string;
   "revoked_by"?: string;
@@ -485,7 +482,6 @@ export type InviteDeliveryRequestBody = {
     }>;
     "seal_ref"?: string;
     "auth_context"?: {
-      "actor_id": string;
       "key_id": string;
       "key_epoch": number;
       "credential_epoch"?: number;
@@ -1022,7 +1018,6 @@ export type EventFederationSubmission = {
     }>;
     "seal_ref"?: string;
     "auth_context"?: {
-      "actor_id": string;
       "key_id": string;
       "key_epoch": number;
       "credential_epoch"?: number;
@@ -1154,17 +1149,36 @@ export type EventFederationSubmission = {
     }>;
   };
   "ingress_receipts": Array<{
-    "lease_basis": string;
+    "receipt_id": string;
     "event_digest": string;
+    "authorization_lease_id": string;
     "qualified_ingress_id": string;
     "received_at": string;
-    "ingress_frontier": string[];
-    "issuer": string;
-    "signature": {
-      "verification_method": string;
-      "created_at": string;
-      "jws": string;
+    "ingress_basis": string | {
+      "leaves": string[];
+    } | {
+      "anchor_unit": {
+        "realm_id": string;
+        "event_digests": string[];
+        "unit_digest": string;
+      };
     };
+    "ingress_frontier": string[];
+    "service_id": string;
+    "authority_set_ref": {
+      "authority_set_id": string;
+      "authority_set_digest": string;
+    };
+    "proofs": Array<{
+      "kind": "detached_jws";
+      "verification_method": string;
+      "payload_digest": string;
+      "created_at": string;
+      "domain"?: string;
+      "audience"?: string | string[];
+      "proof_purpose"?: "issuer_attestation" | "holder_acceptance" | "governance_authorization";
+      "jws": string;
+    }>;
   }>;
   "control_proposal_ack"?: {
     "kind": "signed_ack";

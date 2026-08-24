@@ -71,7 +71,11 @@ test.describe("calls — canonical wire", () => {
     expect(iceAuth.status(), await iceAuth.text()).toBe(200);
     const body = await iceAuth.json();
     expect(Array.isArray(body.ice_servers)).toBe(true);
-    expect(body.signature.signature_input).toBe("ak.media.ice_config.v1");
+    expect(body.signature.signature_algorithm).toBe("Ed25519");
+    expect(typeof body.signature.kid).toBe("string");
+    expect(typeof body.signature.sig).toBe("string");
+    expect(body.signature).not.toHaveProperty("signature_input");
+    expect(body.signature).not.toHaveProperty("payload_digest");
   });
 
   test("1:1 invite -> answer -> candidate -> hangup relays verbatim with proof + monotonic per-sender seq", async ({

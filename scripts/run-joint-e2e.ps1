@@ -3176,7 +3176,8 @@ try {
         Wait-HttpReady -Url "$mockPushGatewayBaseUrl/jwks" -TimeoutSeconds 30
     }
     if ($StartMockAppletRegistry) {
-        $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'"
+        $mockAppletRegistryStateFile = Join-Path $serviceLogDir "mock-applet-registry-state.json"
+        $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile)
         if ($MockAppletRegistryDid) {
             $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
         }

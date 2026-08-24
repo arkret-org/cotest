@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证一个外部集成服务以 **applet** 形态接入 arkret 时的完整生命周期:applet registry 提交 controller-signed `ak.schema.applet_package.v1` → soland 通过 `self/applets/install/preview` 生成安装计划 → admin caller 按 plan 签署完整 `ak.applet.registration` 与 `ak.capability.grant` Events 并通过 `self/applets/install` commit → soland 校验并幂等提交这些 formal Events → applet service 提交自己签名的 accountability grant + ghost profile aggregate，再用 ghost actor 签名写 portal 消息 → Realm 成员看到 ghost 消息且能追溯 install/accountability 链 → admin 撤销 applet install 后,后续 ingress 被拒。
+验证一个外部集成服务以 **applet** 形态接入 arkret 时的完整生命周期：install 原子接受 registration/grants、Bot managed-actor provision、Bot PCR genesis、accountability/profile；Ghost provision 原子接受同构的四事件单元；Bot/Ghost runtime current resolution 从各自 authority pair 的 PCR cell 派生；Realm 成员看到 Ghost 消息并能追溯 immutable creation/accountability anchors；admin 撤销后，Applet ingress 与绕过该路由的 actor 自签普通 Event 都被通用门禁拒绝。
 
 不验证:applet 间消息编排(后续 `extensions/applet-orchestration`)、applet 跨 server 联邦(后续 `federation/applet-federation`)、portal realm 的 RBAC 细节(后续 `authz/portal-realm-rbac`)、applet 计费 / 配额(spec 还在草案)。
 
@@ -29,10 +29,9 @@
 | ghost_actor | `ak:did_core:<method>:<core>` | 外部用户 X 在 portal realm 内的稳定代理 actor id;由 applet_service 在 Phase C 现场选择并 provision | Phase C 首次遇到该外部用户时 |
 
 > `bot_actor_id` / `ghost_actor_id` 都是不可直接解析的 `did_core_id`，不能靠字符串模板反拼 bare
-> `full_id`。Ghost 的权威初始问责是 accepted Actor Profile 的
-> `accountable_principal_ids=[applet_service]` 加同一 aggregate 的 accountability grant；controller 关系由
-> registration/install 表达。Ghost full-id resolution carrier 尚未被规范闭合，见
-> `arkret-work/review/spec-open/2026-08-24-1459-ghost-actor-full-id-resolution-carrier-undefined.md`。
+> `full_id`。测试必须为每个主体构造并发布独立 did:webvh inception，提交完整 method-history evidence，
+> 并验证 `project(initial_resolution.full_id)==actor_id`。durable record 保存 provision/PCR creation anchors，
+> current resolution 只从 `(actor_id, actor_principal_server_id)` PCR cell 取得。
 
 ## Pre-conditions
 
@@ -53,11 +52,11 @@
    - `requested_scopes = ["ak.message.create", "ak.applet.ghost.provision"]`
    - `proof` 由 mock 内置 controller key 生成
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
-3. 测试以 alice 的 admin token 调 soland `POST /_arkret/self/applets/install/preview`，读取返回的 canonical registration payload 与 approved actions；随后以 alice 的 Event signer、当前 actor frontier 和 accepted Seal basis 构造同一 actor chain 上的完整 `registration_event` 与 `capability_grant_events[]`（grant 同时带 issuer payload proof、typed Realm-root authority ref 和标准 `authority_control.applet_authority` 绑定），连同 `plan_digest` 调 `POST /_arkret/self/applets/install`
+3. 测试先构造 caller-signed `registration_event` 与 `capability_grant_events[]` 作为 preview authoring basis；soland 返回 target-PS-signed、短期且确定性标识的 `authoring_request`，client 将其原样 relay 到 Applet 标准 `POST /_arkret/edge/applet/install/author`，取得 Applet service/Bot 真实签名的四 Event closed bundle，再以 `{applet_package, authoring_request, managed_actor_bundle}` 调 `POST /_arkret/self/applets/install`
    - commit 不发送已删除的 `approved_scopes` 旧字段；soland 只验证、记录和提交 caller-signed Events，不代签或重建 Event
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
    - 记录 `applet_id`、`bot_actor_id`、`registration_event_ref`
-4. **断言**:`bot_actor_id` 形如 `did:web:bot-bridge-demo-...`;projection events 中出现 `ak.applet.registration`
+4. **断言**：`bot_actor_id` 为从独立 did:webvh SCID 投影的 `ak:did_core:webvh:*`；outcome 返回完整 authority pair、provision ref 与 PCR realm id；六类事实和 record 要么全部可见，要么全部不可见。
 
 ### Phase B — bot 加入 Realm
 
@@ -87,8 +86,9 @@
     }
     ```
 11. mock 内部:
-    - 用 applet service session 调 `POST /_arkret/self/applets/{applet_id}/ghosts/provision`
-    - 请求携带由 registration epoch key 签名的完整 `ak.identity.accountability_grant` + `ak.profile.create` Event 对；Principal Server 只验证和原子提交，不代签、不重建
+    - 正向 provision 前，把同一 `applet_managed_control` PCR genesis 分别投递到普通 `/_arkret/self/events` 与 peer federation 单 Event 入口；两者都必须以 `applet_managed_pcr_genesis_requires_closed_aggregate` 拒绝，证明只能由固定四事件 formal aggregate 注入
+    - 用 active registration service key 对 exact body/path/Idempotency-Key 生成 RFC 9421 `service_signature`，调 `POST /_arkret/self/applets/{applet_id}/ghosts/provision`；不得用 bearer session 替代
+    - 请求携带完整 `actor_principal_server_id`、service-signed managed provision、Ghost PCR genesis、accountability grant 与 profile 四事件；Principal Server 独立验证 DID method evidence 和 full-id namespace 后原子提交，不代签、不重建
     - ghost 消息通过 `POST /_arkret/edge/applet/transactions` 提交，`actor_id=ghost_actor_id`、`executed_by=applet_service.did`，并引用安装时颁发的 message capability
     - Realm 为私有明文时，必须在 `plaintext_visible_services` 中显式授权 applet service 的 `message_content`
     - 返回 `{ ghost_actor_id, message_id }`
@@ -119,6 +119,8 @@
     - 断言:mock 拿到的 soland 写消息响应 status = `403` 或 `409`,error code 含 `applet_revoked`
     - **断言**:alice timeline 不出现 `"after revoke ${stamp}"`
 19. 已接受的 registration、Profile 与 accountability grant 仍保留(historic accountability 不能事后被抹去)，同时 revoke outcome 的 `revoked_refs` 至少包含 bot/ghost actor ids，后续 runtime ingress 继续 fail closed
+20. 使用 revoke 前签好并取得 lease 的 Ghost 普通 Event 直接调用 `/_arkret/self/events`，断言 `403 applet_revoked`；这条负例绕过 Applet ingress，证明通用 admission gate 生效
+21. Applet service 查询 `(actor_id, PCR realm_id)` authoring frontier 得到 `404`，但仅按 actor 查询历史 aggregate frontier 仍为 `200` 且包含原 PCR realm；撤销只关闭 authoring，不删除历史 identity resolution
 
 ## Observable assertions (合并清单)
 
@@ -131,11 +133,12 @@
 - 步骤 17:revoke preview/commit 返回 200 + `status=complete`
 - 步骤 18:revoke 后再发的 ghost 消息被拒(403/409 + `applet_revoked`),timeline 不出现新文本
 - 步骤 19:历史 accepted 问责事实保留，revoke refs/fence 标记 runtime 已撤销
+- 步骤 20-21:绕过 Applet ingress 的普通 Event 仍被 revoke fence 拒绝；PCR authoring frontier 关闭而历史 aggregate frontier 保留
 
 ## Edge cases / sub-tests
 
 - **E4.1 namespace 冲突**:Phase A 之后,mock 再生成一个不同的 `package_id` 但相同 `namespace = "bridge.demo"` 的 package;soland install preview/commit 返回 `409`,error code 含 `applet_namespace_conflict`;首次 applet 不受影响
-- **E4.2 capability revoke**:revoke applet 后,bot actor id 仍保留在历史 registration/revoke refs 中,但 bot 试图通过 typed bot message route 继续写消息也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability/lifecycle 层而非只挡 ghost 路径
+- **E4.2 capability revoke**：revoke 后 Bot/Ghost creation anchors 与历史 resolution 仍可读；测试用正式通用 Event submit 构造 Ghost 自签写入并断言 `applet_revoked`，并断言 combined authoring frontier 关闭、actor-only 历史 frontier 保留；不得调用已删除的私有 typed bot message route。
 - **E4.3 idempotency**:同一 install body 用相同 `Idempotency-Key` 重复 commit 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_id }`;相同 key 但不同 body 返回 `409 idempotency_key_conflict`
 
 主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建 Realm 或共用 Phase A,以避免 namespace 状态干扰。
@@ -150,7 +153,7 @@
 
   通过证据：`artifacts/runs/20260726-033554/joint-e2e/playwright-report`。
 
-- soland 已提供 canonical applet runnable surface:`/_arkret/self/applets/install/preview`、`/_arkret/self/applets/install`、revoke preview/commit、`/_arkret/self/applets/{applet_id}/ghosts/provision` 与 `/_arkret/edge/applet/transactions`。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。Ghost full DID/DID Document 解析不作为当前合规断言，等待上述 spec-open 闭合。
+- canonical surface 包含 `/_arkret/self/applets/install/preview`、Applet service 的 `/_arkret/edge/applet/install/author`、`/_arkret/self/applets/install`、revoke preview/commit、`/_arkret/self/applets/{applet_id}/ghosts/provision` 与 `/_arkret/edge/applet/transactions`；不得以私有路由或 Principal Server 代签替代标准 co-sign relay。
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`

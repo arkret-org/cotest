@@ -10,11 +10,11 @@
 //!   * `MemberIdentity` no longer carries `primary_handle` / `handles[]`; handle lifecycle is
 //!     governed solely by `ak.schema.handle_claim.v1`. A payload that re-introduces those fields
 //!     MUST schema-reject (VECT-COT-8 — reason `member_identity_handle_field_forbidden`).
-//!   * Payload field `identity_state_digest` is renamed to `identity_payload_digest` (carrier cache
-//!     key, [`IdentityPayloadCarrier::carrier_sha256`]).
+//!   * The carrier cache digest is locally derived with [`IdentityPayloadCarrier::carrier_sha256`]
+//!     and is not echoed on wire.
 //!   * `expected_state_digest` is the writer-observed effective-set guard computed by
-//!     [`member_identity_effective_set_digest`] — it is NOT the `identity_payload_digest` and NOT
-//!     the roster `member_display_state_digest`.
+//!     [`member_identity_effective_set_digest`] — it is distinct from the locally derived carrier
+//!     digest and the roster `member_display_state_digest`.
 //!
 //! Each vector pins one wire-level invariant of the
 //! `MemberIdentityUpdatePayload` reducer model. The vectors are
@@ -143,8 +143,7 @@ fn build_member_identity(display_name: &str, signature: &str) -> Result<MemberId
 
 /// VECT-MID-1 — first `ak.member.identity.update` event for an actor in a
 /// Realm: empty `replaces[]`, plaintext `identity_payload`,
-/// `identity_payload_digest` matches the canonical digest of the payload
-/// carrier.
+/// the carrier digest remains locally derivable without a duplicate wire field.
 pub fn run_member_identity_update_initial_vector() -> Result<()> {
     let identity = build_member_identity("Alice Initial", "AAAA")?;
     let carrier = IdentityPayloadCarrier::MemberIdentity {
@@ -163,23 +162,11 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
-        // R3.2 rename: `identity_state_digest` → `identity_payload_digest`.
-        identity_payload_digest: Some(payload_digest_hash.clone()),
         expected_state_digest: None,
     };
 
     if !payload.replaces.is_empty() {
         bail!("VECT-MID-1: initial update MUST carry empty replaces[]");
-    }
-
-    // The serialised payload MUST carry the new field name and NOT the
-    // retired one.
-    let wire = serde_json::to_value(&payload).map_err(|e| anyhow!("serialise payload: {e}"))?;
-    if wire.get("identity_payload_digest").is_none() {
-        bail!("VECT-MID-1: payload MUST carry `identity_payload_digest`");
-    }
-    if wire.get("identity_state_digest").is_some() {
-        bail!("VECT-MID-1: payload MUST NOT carry the retired `identity_state_digest` field");
     }
 
     // Effective set after applying the single event MUST contain the
@@ -199,7 +186,7 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
 
     // `expected_state_digest` projection over the single effective entry
     // MUST be a sha256-prefixed digest. Per R3.2 it differs from the
-    // per-event `identity_payload_digest`.
+    // locally derived per-event carrier digest.
     let entry = EffectiveIdentityEntry {
         event_id: event_a.clone(),
         segment: MemberIdentitySegment::MemberIdentity,
@@ -217,7 +204,7 @@ pub fn run_member_identity_update_initial_vector() -> Result<()> {
     }
     if projected == carrier_digest {
         bail!(
-            "VECT-MID-1: expected_state_digest MUST differ from identity_payload_digest \
+            "VECT-MID-1: expected_state_digest MUST differ from the carrier digest \
              (distinct R3.2 digests)"
         );
     }
@@ -258,7 +245,6 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier_a,
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let payload_b = MemberIdentityUpdatePayload {
@@ -270,7 +256,6 @@ pub fn run_member_identity_update_replacement_vector() -> Result<()> {
             payload_digest: digest_a,
         }],
         identity_payload: carrier_b,
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
 
@@ -314,7 +299,6 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
         identity_payload: IdentityPayloadCarrier::MemberIdentity {
             member_identity: identity_v1,
         },
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let payload_b = MemberIdentityUpdatePayload {
@@ -328,7 +312,6 @@ pub fn run_member_identity_replacement_digest_mismatch_vector() -> Result<()> {
         identity_payload: IdentityPayloadCarrier::MemberIdentity {
             member_identity: identity_v2,
         },
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
 
@@ -405,7 +388,6 @@ pub fn run_member_identity_expected_state_digest_mismatch_vector() -> Result<()>
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
-        identity_payload_digest: None,
         expected_state_digest: Some(stale_digest.clone()),
     };
     if payload.expected_state_digest.as_ref() != Some(&stale_digest) {
@@ -488,7 +470,6 @@ pub fn run_member_identity_unknown_segment_rejected_vector() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier,
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let mut value =
@@ -549,7 +530,6 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
         identity_payload: IdentityPayloadCarrier::MemberIdentity {
             member_identity: identity_b,
         },
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let effective = effective_identity_events([(&event_b, &payload_b)])

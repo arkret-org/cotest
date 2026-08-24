@@ -19,6 +19,7 @@ import {
 } from "../../helpers/users";
 import { encodeEd25519PubkeyMultibase } from "../../helpers/encoding";
 import { projectFullDidToCoreId } from "../../helpers/soland-api";
+import { jwkThumbprintEd25519 } from "../../helpers/session-grant-dpop";
 
 type CapturedGrant = {
   jwt: string;
@@ -327,8 +328,11 @@ function grantJkt(jwt: string): string | undefined {
     const payload = JSON.parse(
       Buffer.from(parts[1], "base64url").toString("utf8"),
     );
-    const jkt = payload?.cnf?.jkt;
-    return typeof jkt === "string" && jkt.trim() ? jkt : undefined;
+    const encoded = payload?.session_public_key;
+    const jwk = typeof encoded === "string" ? JSON.parse(encoded) : encoded;
+    return jwk?.kty === "OKP" && jwk?.crv === "Ed25519" && typeof jwk?.x === "string"
+      ? jwkThumbprintEd25519(jwk.x)
+      : undefined;
   } catch {
     return undefined;
   }

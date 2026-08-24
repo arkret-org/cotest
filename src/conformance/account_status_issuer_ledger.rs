@@ -40,8 +40,8 @@ use arkret_models_collaboration::events_payloads::event_wire::ErasureTrigger;
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_signatures::PublicKeyMaterial;
 use arkret_signatures::account_status::{
-    sign_account_status_receipt, sign_account_status_record, verify_account_status_receipt,
-    verify_account_status_record,
+    sign_account_status_receipt, sign_account_status_record as sdk_sign_account_status_record,
+    verify_account_status_receipt, verify_account_status_record,
 };
 use arkret_wire::{
     AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, NonEmptyString, RealmId, ReasonCode,
@@ -68,6 +68,17 @@ const AUTHORITY_METHOD: &str = "did:web:coauth.example#account-status-key";
 /// controller, different key reference.
 const AUTHORITY_ROTATED_METHOD: &str = "did:web:coauth.example#account-status-key-2";
 const PRINCIPAL_ID: &str = "ak:did_core:web:alice.example";
+
+fn sign_account_status_record(
+    unsigned: UnsignedAccountStatusRecord,
+    signing_key: &SigningKey,
+) -> arkret_signatures::Result<AccountStatusRecord> {
+    sdk_sign_account_status_record(
+        unsigned,
+        DidUrl::new(AUTHORITY_METHOD).expect("constant Account Authority method"),
+        signing_key,
+    )
+}
 const PRINCIPAL_SERVER_ID: &str = "ak:did_core:web:soland.example";
 const RECEIVER_METHOD: &str = "did:web:soland.example#notary-key";
 const PRINCIPAL_CONTROL_REALM: &str = "ak:realm:AfTcej7ZFNg8uTbkOiUJT0KN1F_c9l1fmtil65CUwncm";
@@ -559,11 +570,15 @@ async fn assert_offline_and_hostile_holder_cannot_veto_deny(
         // must project to the Account Authority, so a holder-controlled
         // verification method is refused before any signature is even compared.
         let mut forged = deny.unsigned();
-        forged.verification_method =
-            DidUrl::new("did:web:alice.example#account-status-key").map_err(anyhow::Error::msg)?;
         forged.issued_at = at(base + 2)?;
         forged.effective_at = forged.issued_at;
-        if sign_account_status_record(forged, holder_key).is_ok() {
+        if sdk_sign_account_status_record(
+            forged,
+            DidUrl::new("did:web:alice.example#account-status-key").map_err(anyhow::Error::msg)?,
+            holder_key,
+        )
+        .is_ok()
+        {
             bail!(
                 "a holder-controlled verification method produced a valid {} record",
                 status.as_str()
@@ -639,7 +654,7 @@ async fn assert_service_key_rotation_keeps_records_verifiable(
         unsigned(account, 1, None, 1, AccountStatus::Active, 50)?,
         authority_key,
     )?;
-    let mut after_unsigned = unsigned(
+    let after_unsigned = unsigned(
         account,
         2,
         Some(before.account_status_record_id.clone()),
@@ -647,9 +662,11 @@ async fn assert_service_key_rotation_keeps_records_verifiable(
         AccountStatus::Suspended,
         51,
     )?;
-    after_unsigned.verification_method =
-        DidUrl::new(AUTHORITY_ROTATED_METHOD).map_err(anyhow::Error::msg)?;
-    let after = sign_account_status_record(after_unsigned, rotated_authority_key)?;
+    let after = sdk_sign_account_status_record(
+        after_unsigned,
+        DidUrl::new(AUTHORITY_ROTATED_METHOD).map_err(anyhow::Error::msg)?,
+        rotated_authority_key,
+    )?;
 
     for (record, key) in [(&before, authority_key), (&after, rotated_authority_key)] {
         verify_account_status_record(record, &public_key(key))?;
@@ -675,7 +692,7 @@ async fn assert_service_key_rotation_keeps_records_verifiable(
 
     // The rotated key still has to be controlled by the same Account
     // Authority; a rotation into a foreign controller is not a rotation.
-    let mut foreign_unsigned = unsigned(
+    let foreign_unsigned = unsigned(
         account,
         3,
         Some(after.account_status_record_id.clone()),
@@ -683,9 +700,13 @@ async fn assert_service_key_rotation_keeps_records_verifiable(
         AccountStatus::Deactivated,
         52,
     )?;
-    foreign_unsigned.verification_method =
-        DidUrl::new("did:web:evil.example#account-status-key").map_err(anyhow::Error::msg)?;
-    if sign_account_status_record(foreign_unsigned, rotated_authority_key).is_ok() {
+    if sdk_sign_account_status_record(
+        foreign_unsigned,
+        DidUrl::new("did:web:evil.example#account-status-key").map_err(anyhow::Error::msg)?,
+        rotated_authority_key,
+    )
+    .is_ok()
+    {
         bail!("an account-status record signed by a foreign controller was accepted");
     }
     Ok(())
@@ -1258,7 +1279,6 @@ fn unsigned(
         issued_at,
         effective_at: issued_at,
         expires_at: None,
-        verification_method: DidUrl::new(AUTHORITY_METHOD).map_err(anyhow::Error::msg)?,
     })
 }
 

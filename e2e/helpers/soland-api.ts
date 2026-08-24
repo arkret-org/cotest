@@ -54,6 +54,8 @@ export type SignedEventEnvelopeArgs = {
   prevRefs?: string[];
   scopeRef?: Record<string, unknown>;
   authorizationRef?: string;
+  executedBy?: string;
+  appletId?: string;
   /// The Principal Server this actor is anchored to. `event-envelope.schema.json`
   /// makes it a required envelope member, so it is part of the digest preimage
   /// every id derivation and proof covers. Defaults to the server the harness
@@ -1372,6 +1374,7 @@ function joinReceiptProof(args: {
   context: string;
   applicationRef?: string;
   applicationRevisionDigest?: string;
+  executedBy?: string;
 }): Record<string, unknown> {
   const registeredSigner = eventSignerFor(args.actorDid);
   const verificationMethod =
@@ -1383,6 +1386,7 @@ function joinReceiptProof(args: {
     application_ref: args.applicationRef,
     application_revision_digest: args.applicationRevisionDigest,
     actor_id: canonicalDidCoreId(args.actorDid),
+    executed_by: args.executedBy,
     verification_method: verificationMethod,
     created_at: args.createdAt,
   });
@@ -2312,6 +2316,7 @@ export function signedEventEnvelope(
       args.principalServerId ?? solandServiceId(args.server),
     ),
     authorization_ref: args.authorizationRef,
+    applet_id: args.appletId,
     actor_seq: args.actorSeq ?? nextActorSeq(),
     created_at: createdAt,
     hlc,
@@ -2999,7 +3004,7 @@ function isAuthorityAuthoredSelfPrincipalMove(
   return true;
 }
 
-async function issueAuthorizationLeasesApi(
+export async function issueAuthorizationLeasesApi(
   request: APIRequestContext,
   token: string,
   events: Array<Record<string, unknown>>,
@@ -3018,7 +3023,7 @@ async function issueAuthorizationLeasesApi(
   });
 }
 
-function authorizationLeasesFromIssueOutcome(
+export function authorizationLeasesFromIssueOutcome(
   text: string,
   expectedCount: number,
   context: string,
@@ -4053,6 +4058,12 @@ export async function rawPushFederationEvents(
 // `introduction_evidence` as opaque records and omitted the address members
 // the schema actually requires.
 export type InviteDeliveryRequestBodyBodyBody = InviteDeliveryRequestBody;
+export type SelfInviteDispatchRequestBody = Omit<
+  InviteDeliveryRequestBodyBodyBody,
+  "invite_event"
+> & {
+  invite_event_id: string;
+};
 
 // The closed `invite_delivery_outcome`
 // (`invite-delivery-request.schema.json#/$defs/invite_delivery_outcome`).
@@ -4069,15 +4080,13 @@ export type InviteDeliveryOutcomeView = {
 //
 // `ak.self.invites.command.dispatch` is the ONLY legal way for a client to
 // start private invite delivery. The client hands the raw
-// `introduction_evidence` plus the already accepted `ak.invite.create` Event to
-// its own Principal Server; that server owns every service-to-service hop from
+// `introduction_evidence` plus the accepted `ak.invite.create` Event id to its
+// own Principal Server; that server resolves the canonical Event and owns every service-to-service hop from
 // there. Local targets rerun the §7 receive verification from step 4, remote
 // targets enter the exact-body S2S outbox.
 
-// §7 requires the client to fill `invite_event` by reading the accepted Event
-// back through `ak.self.events.read.resolve`, and forbids re-authoring an
-// equivalent Event from local state: a locally rebuilt envelope cannot be
-// guaranteed byte-identical to the persisted canonical bytes.
+// Event resolution remains a general helper for peer-delivery tests. The self
+// dispatch wire body intentionally carries only invite_event_id.
 export async function resolveSelfEventsApi(
   request: APIRequestContext,
   token: string,
@@ -4118,30 +4127,22 @@ export async function resolveAcceptedEventApi(
   return event!;
 }
 
-// Build the §7 dispatch body from the server's own view of the accepted Event.
+// Build the §7 dispatch body from the accepted Event id. The Principal Server
+// resolves its own stored canonical Event bytes; clients never echo them.
 // `idempotency_key` defaults to the accepted `event_id` so an uncertain
 // transport outcome is retried with the same body and the same key, exactly as
 // §7 requires.
-export async function acceptedInviteDeliveryBodyApi(
-  request: APIRequestContext,
-  token: string,
+export function selfInviteDispatchBody(
   args: {
     eventId: string;
     inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
     evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
     idempotencyKey?: string;
   },
-  opts: { server?: SolandKey } = {},
-): Promise<InviteDeliveryRequestBodyBodyBody> {
-  const event = await resolveAcceptedEventApi(
-    request,
-    token,
-    args.eventId,
-    opts,
-  );
+): SelfInviteDispatchRequestBody {
   return {
     schema: "ak.schema.invite_delivery_request.v1",
-    invite_event: event as InviteDeliveryRequestBodyBodyBody["invite_event"],
+    invite_event_id: args.eventId,
     invite_address: args.inviteAddress,
     introduction_evidence: args.evidence,
     idempotency_key: args.idempotencyKey ?? args.eventId,
@@ -4151,7 +4152,7 @@ export async function acceptedInviteDeliveryBodyApi(
 export async function dispatchSelfInviteApi(
   request: APIRequestContext,
   token: string,
-  body: InviteDeliveryRequestBodyBodyBody,
+  body: SelfInviteDispatchRequestBody,
   opts: { server?: SolandKey } = {},
 ): Promise<InviteDeliveryOutcomeView> {
   const response = await rawDispatchSelfInviteApi(request, token, body, opts);
@@ -4164,7 +4165,7 @@ export async function dispatchSelfInviteApi(
 export async function rawDispatchSelfInviteApi(
   request: APIRequestContext,
   token: string,
-  body: InviteDeliveryRequestBodyBodyBody,
+  body: SelfInviteDispatchRequestBody,
   opts: { server?: SolandKey } = {},
 ) {
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/invites/dispatch`;

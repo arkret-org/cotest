@@ -13,7 +13,6 @@ import {
 } from "../../helpers/contact-api";
 import type { InviteDeliveryRequestBodyBodyBody } from "../../helpers/soland-api";
 import {
-  acceptedInviteDeliveryBodyApi,
   advanceEnvelopeToActorFrontier,
   canonicalServiceResolution,
   canonicalJson,
@@ -22,6 +21,7 @@ import {
   createRealmApi,
   dispatchSelfInviteApi,
   rawDispatchSelfInviteApi,
+  selfInviteDispatchBody,
   readRealmSealBasis,
   refreshEventEnvelopeProof,
   sha256CanonicalJson,
@@ -61,10 +61,10 @@ async function errorFingerprint(response: {
   };
 }
 
-// The three §7 `invite_event` preconditions are a closed rejection set:
+// The two §7 accepted-event preconditions are a closed rejection set:
 // `failed_precondition` plus one of `invite_event_unaccepted` /
-// `invite_event_actor_mismatch` / `invite_event_bytes_mismatch`. The reason is
-// the ErrorEnvelope sub-reason (error-code-registry.json marks all three
+// `invite_event_actor_mismatch`. The reason is the ErrorEnvelope sub-reason
+// (error-code-registry.json marks both
 // `applies_to: ["service_call"]`), which soland may carry either directly on
 // `error` or inside `error.details`.
 async function dispatchRejection(response: {
@@ -383,28 +383,19 @@ test.describe("invite addressing", () => {
 
   // invite-addressing.md §7 — `ak.self.invites.command.dispatch`. This is the
   // only conforming client entry point into private invite delivery: the client
-  // hands raw `introduction_evidence` plus the already accepted Event to its own
+  // hands raw `introduction_evidence` plus the accepted Event id to its own
   // Principal Server and never synthesizes federation trust material.
   test("self invite dispatch delivers a same-service invite and is retry-idempotent", async ({
     request,
   }) => {
     const fixture = await acceptedInviteFixture(request, "dispatch-local");
 
-    // §7 requires `invite_event` to be filled from
-    // `ak.self.events.read.resolve`, so `acceptedInviteDeliveryBodyApi` reads
-    // the server's canonical view instead of re-authoring an equivalent Event.
-    const body = await acceptedInviteDeliveryBodyApi(request, fixture.inviterToken, {
+    const body = selfInviteDispatchBody({
       eventId: fixture.acceptedEventId,
       inviteAddress: fixture.inviteAddress,
       evidence: fixture.evidence,
     });
-    expect(
-      body.invite_event.event_id,
-      "dispatch MUST carry the service's own view of the accepted Event",
-    ).toBe(fixture.acceptedEventId);
-    expect(body.invite_event.actor_id).toBe(fixture.inviter.did);
-    // §7 step 5 / §6: the durable target and the delivery address agree.
-    expect(body.invite_event.payload.invitee).toBe(fixture.inviteAddress.subject_id);
+    expect(body.invite_event_id).toBe(fixture.acceptedEventId);
 
     const outcome = await dispatchSelfInviteApi(
       request,
@@ -444,22 +435,18 @@ test.describe("invite addressing", () => {
     ).toBe(0);
   });
 
-  // §7 defines exactly three `invite_event` preconditions, and their rejection
+  // §7 defines the accepted-event lookup and authenticated-actor preconditions,
   // semantics are closed. None of them may produce a delivery, an outbox
   // enqueue, or a holder-private write.
-  test("self invite dispatch fails closed on the three invite_event preconditions", async ({
+  test("self invite dispatch fails closed on accepted-event preconditions", async ({
     request,
   }) => {
     const fixture = await acceptedInviteFixture(request, "dispatch-reject");
-    const accepted = await acceptedInviteDeliveryBodyApi(
-      request,
-      fixture.inviterToken,
-      {
-        eventId: fixture.acceptedEventId,
-        inviteAddress: fixture.inviteAddress,
-        evidence: fixture.evidence,
-      },
-    );
+    const accepted = selfInviteDispatchBody({
+      eventId: fixture.acceptedEventId,
+      inviteAddress: fixture.inviteAddress,
+      evidence: fixture.evidence,
+    });
 
     // §7: an Event this service has not accepted MUST be rejected with
     // `failed_precondition` / `invite_event_unaccepted`. The Event below is well
@@ -486,8 +473,7 @@ test.describe("invite addressing", () => {
       fixture.inviterToken,
       {
         ...accepted,
-        invite_event:
-          unsubmitted as InviteDeliveryRequestBodyBodyBody["invite_event"],
+        invite_event_id: String(unsubmitted.event_id),
         idempotency_key: `${accepted.idempotency_key}-unaccepted`,
       },
     );
@@ -514,34 +500,7 @@ test.describe("invite addressing", () => {
       reason: "invite_event_actor_mismatch",
     });
 
-    // §7: an `invite_event` that is not byte-for-byte equal to the persisted
-    // canonical bytes MUST be rejected with `failed_precondition` /
-    // `invite_event_bytes_mismatch`. The `event_id` still names the accepted
-    // Event, so the service can locate it; only the bytes were tampered with.
-    // The stored canonical bytes are the authority here, so the comparison MUST
-    // decide the outcome — reporting a generic signature failure instead would
-    // leave the §7 rejection set open.
-    const tampered = structuredClone(accepted);
-    tampered.invite_event.payload = {
-      ...tampered.invite_event.payload,
-      expires_at: canonicalTimestamp(
-        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-      ),
-    };
-    tampered.idempotency_key = `${accepted.idempotency_key}-tampered`;
-    const bytesMismatch = await rawDispatchSelfInviteApi(
-      request,
-      fixture.inviterToken,
-      tampered,
-    );
-    expect(await dispatchRejection(bytesMismatch)).toMatchObject({
-      // error-code-registry.json maps `failed_precondition` to HTTP 409.
-      status: 409,
-      code: "failed_precondition",
-      reason: "invite_event_bytes_mismatch",
-    });
-
-    // §7: none of these three rejections may produce a delivery, an outbox
+    // §7: neither rejection may produce a delivery, an outbox
     // enqueue, or a holder-private write.
     expect(
       countInvitesFor(

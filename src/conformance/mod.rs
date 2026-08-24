@@ -54,6 +54,7 @@ mod operation_clause_registry;
 mod operation_registry_gate;
 mod pcr_outward_exposure;
 mod policy_server;
+mod poll_reducer;
 mod presence_signal;
 mod primary_handle_vectors;
 mod principal_server_certification;
@@ -314,6 +315,7 @@ pub use operation_registry_gate::{
 };
 pub use pcr_outward_exposure::run_pcr_outward_exposure_suite;
 pub use policy_server::run_policy_server_fixture_suite;
+pub use poll_reducer::run_poll_reducer_fixture_suite;
 pub use presence_signal::{
     ALL_PRESENCE_SIGNAL_VECTOR_IDS, run_last_active_at_bucket_vector,
     run_multi_device_aggregation_vector, run_presence_signal_vector_suite,

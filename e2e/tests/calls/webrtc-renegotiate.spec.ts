@@ -59,13 +59,11 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     const signature = body.signature as Record<string, unknown>;
     expect(signature, "ICE config MUST be signed").toBeTruthy();
     expect(signature.signature_algorithm).toBe("Ed25519");
-    // The signing_input is prefixed by the spec domain label — distinct from
-    // ak.media.participant_binding.v1 (media-service-binding.md §3.1).
-    expect(signature.signature_input).toBe("ak.media.ice_config.v1");
-    expect(signature.signature_input).not.toBe(
-      "ak.media.participant_binding.v1",
-    );
-    expect(signature.payload_digest as string).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(typeof signature.kid).toBe("string");
+    // The domain label and payload digest are verifier-internal transcript
+    // inputs; the closed wire signature carries only kid/algorithm/signature.
+    expect(signature).not.toHaveProperty("signature_input");
+    expect(signature).not.toHaveProperty("payload_digest");
     expect(typeof signature.sig).toBe("string");
     expect((signature.sig as string).length).toBeGreaterThan(0);
   });

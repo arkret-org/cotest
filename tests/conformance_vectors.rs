@@ -20,8 +20,8 @@ use cotest::conformance::{
     run_handle_claim_rejection_vector_suite, run_list_handles_for_subject_vector_suite,
     run_media_binding_vector_suite, run_member_identity_vector_suite,
     run_member_roster_vector_suite, run_mention_rendering_vector_suite,
-    run_object_addressing_vector_suite, run_presence_signal_vector_suite,
-    run_primary_handle_vector_suite, run_sidecar_vector_suite,
+    run_object_addressing_vector_suite, run_poll_reducer_fixture_suite,
+    run_presence_signal_vector_suite, run_primary_handle_vector_suite, run_sidecar_vector_suite,
 };
 use serde_json::{Value, json};
 
@@ -158,6 +158,11 @@ fn account_stream_and_device_message_replay_vectors_converge() {
 fn container_realm_control_payload_vector_suite_runs_clean() {
     run_container_realm_control_payload_suite()
         .expect("container and Realm control payload vectors must pass");
+}
+
+#[test]
+fn poll_reducer_fixture_suite_runs_clean() {
+    run_poll_reducer_fixture_suite().expect("Poll reducer fixture must remain executable");
 }
 
 // ─── P0 / VECT-MB-1..10 — media binding vectors ─────────────────────────────
@@ -620,7 +625,6 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![],
         identity_payload: carrier_a,
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
     let payload_b = MemberIdentityUpdatePayload {
@@ -632,7 +636,6 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
             payload_digest: digest_a,
         }],
         identity_payload: carrier_b,
-        identity_payload_digest: None,
         expected_state_digest: None,
     };
 

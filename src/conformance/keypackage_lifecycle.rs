@@ -8,7 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_identifiers::{DeviceId, DidCoreId, DidFullId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::{
-    MlsKeypackagePayload, MlsWelcomePayload, validate_mls_welcome_claim_envelope,
+    MlsKeypackagePayload, MlsWelcomePayload, MlsWelcomeRecipient,
+    validate_mls_welcome_claim_envelope,
 };
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
 use arkret_wire::{DidUrl, ProfileId};
@@ -28,6 +29,8 @@ pub const VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY: &str =
 pub const VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH: &str = "ak.vector.mls.welcome_keypackage_hash.v1";
 pub const VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY: &str =
     "ak.vector.keypackage.self_claim_authorization_idempotency.v1";
+pub const VECTOR_ID_KEYPACKAGE_MINIMAL_METADATA_PAIRWISE_FULL_LIFECYCLE: &str =
+    "ak.vector.keypackage.minimal_metadata_pairwise_full_lifecycle.v1";
 
 pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS,
@@ -35,6 +38,7 @@ pub const ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_FORCED_ROTATION,
     VECTOR_ID_KEYPACKAGE_LAST_RESORT_AFFINITY_AND_OPTIONALITY,
     VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
+    VECTOR_ID_KEYPACKAGE_MINIMAL_METADATA_PAIRWISE_FULL_LIFECYCLE,
     VECTOR_ID_MLS_WELCOME_KEYPACKAGE_HASH,
 ];
 
@@ -188,12 +192,19 @@ fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
     Ok(())
 }
 
+fn schema_invalid(schema_ref: &str, value: &Value) -> Result<()> {
+    let env = SchemaEnv::load()?;
+    let validator = env.compile(schema_ref)?;
+    if validator.is_valid(value) {
+        bail!("value unexpectedly passed schema {schema_ref}");
+    }
+    Ok(())
+}
+
 struct ClaimRecordInput<'a> {
     claim_id: &'a str,
     keypackage_ref: &'a str,
-    keypackage_digest: &'a str,
     principal_id: &'a DidCoreId,
-    verification_method: &'a DidUrl,
     device_id: &'a DeviceId,
     last_resort: bool,
     expires_at: DateTime<Utc>,
@@ -203,9 +214,7 @@ fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
     let ClaimRecordInput {
         claim_id,
         keypackage_ref,
-        keypackage_digest,
         principal_id,
-        verification_method,
         device_id,
         last_resort,
         expires_at,
@@ -213,19 +222,12 @@ fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
     let mut value = json!({
         "claim_id": claim_id,
         "keypackage_ref": keypackage_ref,
-        "keypackage_digest": keypackage_digest,
         "principal_id": principal_id.as_str(),
         "device_id": device_id.as_str(),
         "keypackage": "AQID",
         "capabilities": ["ak.mls.profile.full"],
-        "capabilities_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
         "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
-        "device_signature": {
-            "kid": verification_method.as_str(),
-            "signature_algorithm": "Ed25519",
-            "sig": "c2ln"
-        },
         "revocation_status": "active"
     });
     if last_resort {
@@ -243,7 +245,6 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         "mls_group_id": "fixture-group",
         "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.mls.profile.full"],
-        "claim_nonce": "AAAAAAAAAAAAAAAAAAAAAA",
         "expires_at": "2026-01-01T00:05:00.000Z"
     });
     let request_digest = arkret_canonical::canonical_sha256(&request)
@@ -414,9 +415,7 @@ impl MiniKeypackage {
         claim_record_value(ClaimRecordInput {
             claim_id,
             keypackage_ref: &self.keypackage_ref,
-            keypackage_digest: &self.keypackage_digest,
             principal_id: &self.principal_id,
-            verification_method: &self.verification_method,
             device_id: &self.device_id,
             last_resort: self.last_resort,
             expires_at: self.expires_at,
@@ -924,6 +923,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "keypackage_id": "kp-1",
         "principal_id": "ak:did_core:web:alice.example",
         "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
+        "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
         "keypackage_ref": keypackage_ref,
         "keypackage_digest": keypackage_digest,
         "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
@@ -931,7 +931,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "state": "published",
         "expires_at": "2100-01-01T00:00:00.000Z",
         "created_at": "2026-06-19T00:00:00.000Z",
-        "device_signature": {
+        "endpoint_signature": {
             "kid": "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
             "signature_algorithm": "Ed25519",
             "sig": "c2ln"
@@ -942,7 +942,6 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
 #[derive(Clone, Copy)]
 struct WelcomePayloadFixture<'a> {
     keypackage_ref: &'a str,
-    top_digest: &'a str,
     claim_digest: &'a str,
     envelope_digest: &'a str,
     capabilities_digest: &'a str,
@@ -953,7 +952,7 @@ struct WelcomePayloadFixture<'a> {
     requester_actor_id: &'a str,
     requester_verification_method: &'a str,
     claim_receipt: &'a Value,
-    claim_nonce: &'a str,
+    claim_request_id: &'a str,
     welcome_digest: &'a str,
 }
 
@@ -964,7 +963,6 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
         "recipient_principal_id": "ak:did_core:web:alice.example",
         "recipient_device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "keypackage_ref": fixture.keypackage_ref,
-        "keypackage_digest": fixture.top_digest,
         "claim_id": fixture.claim_id,
         "claim_ref": {
             "claim_id": fixture.claim_id,
@@ -981,7 +979,7 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "requester_actor_id": fixture.requester_actor_id,
             "requester_device_id": fixture.requester_device_id,
             "requester_device_authorize_event_id": fixture.device_authorize_event_id,
-            "nonce": fixture.claim_nonce,
+            "nonce": fixture.claim_request_id,
             "welcome_digest": fixture.welcome_digest,
             "created_at": "2026-05-25T00:00:00.000Z",
             "signature": {
@@ -1024,7 +1022,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let intended_realm_id = required_str(vector, "intended_realm_id")?;
     let requester_actor_id = required_str(vector, "requester_actor_id")?;
     let requester_verification_method = required_str(vector, "requester_verification_method")?;
-    let claim_nonce = required_str(vector, "claim_nonce")?;
+    let claim_request_id = required_str(vector, "claim_request_id")?;
     let welcome_digest = required_str(vector, "welcome_digest")?;
     let device_authorize_event_id = required_str(vector, "device_authorization_event_id")?;
     let requester_device_id = required_str(vector, "requester_device_id")?;
@@ -1057,9 +1055,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let claim_record = claim_record_value(ClaimRecordInput {
         claim_id,
         keypackage_ref,
-        keypackage_digest: digest,
         principal_id: &principal_id,
-        verification_method: &verification_method,
         device_id: &device_id,
         last_resort: false,
         expires_at: parse_time("2100-01-01T00:00:00.000Z")?,
@@ -1077,7 +1073,6 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
 
     let good_welcome = WelcomePayloadFixture {
         keypackage_ref,
-        top_digest: digest,
         claim_digest: digest,
         envelope_digest: digest,
         capabilities_digest,
@@ -1088,7 +1083,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         requester_actor_id: requester_core_id.as_str(),
         requester_verification_method: requester_verification_method.as_str(),
         claim_receipt: &claim_receipt,
-        claim_nonce,
+        claim_request_id,
         welcome_digest: welcome_digest.as_str(),
     };
     let good_value = welcome_payload_value(good_welcome);
@@ -1101,7 +1096,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &intended_realm_id,
         &requester_core_id,
         &welcome_digest,
-        claim_nonce,
+        claim_request_id,
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
@@ -1109,32 +1104,6 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     )
     .map_err(|reason| anyhow!("good welcome rejected: {reason}"))?;
 
-    let bad_top_value = welcome_payload_value(WelcomePayloadFixture {
-        top_digest: mismatched_digest,
-        ..good_welcome
-    });
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_top_value)?;
-    let reason = match parse_welcome_with_early_binding_rejection(bad_top_value)? {
-        Ok(bad_top) => validate_mls_welcome_claim_envelope(
-            &bad_top,
-            &claim,
-            &published,
-            &intended_realm_id,
-            &requester_core_id,
-            &welcome_digest,
-            claim_nonce,
-            Some(device_authorize_event_id),
-            None,
-            Some(requester_device_id),
-            Some(device_authorize_event_id),
-        )
-        .err()
-        .ok_or_else(|| anyhow!("mismatched top-level welcome digest was accepted"))?,
-        Err(reason) => reason,
-    };
-    if reason != expected_str(vector, "reason")? {
-        bail!("welcome mismatch reason drifted: {reason}");
-    }
     if !expected_bool(vector, "reject_before_decrypt")? {
         bail!("welcome vector must reject before decrypt");
     }
@@ -1153,7 +1122,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &intended_realm_id,
             &requester_core_id,
             &welcome_digest,
-            claim_nonce,
+            claim_request_id,
             Some(device_authorize_event_id),
             None,
             Some(requester_device_id),
@@ -1164,6 +1133,11 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     };
     if !claim_ref_rejected {
         bail!("mismatched claim_ref keypackage_digest was accepted");
+    }
+    if expected_str(vector, "reason")?
+        != arkret_wire::ReasonCode::KEYPACKAGE_WELCOME_ENVELOPE_MISMATCH
+    {
+        bail!("welcome mismatch reason drifted");
     }
     let bad_realm_value = welcome_payload_value(WelcomePayloadFixture {
         intended_realm_id: "ak:realm:AYmzq24KUdbYXjZtMiyVdibogezW-fCFD3oy0iviR-UD",
@@ -1178,7 +1152,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &intended_realm_id,
         &requester_core_id,
         &welcome_digest,
-        claim_nonce,
+        claim_request_id,
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
@@ -1205,7 +1179,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &intended_realm_id,
         &requester_core_id,
         &welcome_digest,
-        claim_nonce,
+        claim_request_id,
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
@@ -1216,7 +1190,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         bail!("mismatched claim_envelope welcome_digest was accepted");
     }
     let bad_nonce_value = welcome_payload_value(WelcomePayloadFixture {
-        claim_nonce: "different-claim-nonce",
+        claim_request_id: "different-claim-request-id",
         ..good_welcome
     });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_nonce_value)?;
@@ -1228,7 +1202,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &intended_realm_id,
         &requester_core_id,
         &welcome_digest,
-        claim_nonce,
+        claim_request_id,
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
@@ -1239,9 +1213,9 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         bail!("mismatched claim_envelope nonce was accepted");
     }
     if expected_bool(vector, "all_digest_fields_equal")?
-        && good.keypackage_digest.as_str() != claim.keypackage_digest.as_str()
+        && good.claim_ref.keypackage_digest.as_str() != digest
     {
-        bail!("good welcome digest fields are not equal");
+        bail!("good welcome digest binding drifted");
     }
     Hash::new(digest.to_owned())?;
     Ok(())
@@ -1352,7 +1326,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         serde_json::from_value(conflict)?;
     let conflict_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&conflict)?)?;
     if conflict_digest == replay.0 {
-        bail!("same requester/nonce with a changed payload did not conflict");
+        bail!("same requester/claim_request_id with a changed payload did not conflict");
     }
     let conflict_binding = arkret_models_crypto::keypackage_claim_authorization_signing_bytes(
         &conflict.unsigned_request(),
@@ -1361,6 +1335,31 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     )?;
     if conflict_binding == binding {
         bail!("claim authorization transcript did not bind the changed target");
+    }
+
+    let mut next_attempt = serde_json::to_value(&typed)?;
+    next_attempt["claim_request_id"] = json!("AAAAAAAAAAAAAAAAAAAAAg");
+    let next_attempt: arkret_models_crypto::KeyPackagesClaimRequestBody =
+        serde_json::from_value(next_attempt)?;
+    next_attempt.validate_shape()?;
+    let next_identity = (
+        next_attempt
+            .service_binding
+            .source_service_id
+            .as_str()
+            .to_owned(),
+        next_attempt.claim_request_id.as_str().to_owned(),
+    );
+    if next_identity == identity || ledger.contains_key(&next_identity) {
+        bail!("a new claim attempt reused the prior claim_request_id ledger identity");
+    }
+
+    let mut legacy_nonce = serde_json::to_value(&typed)?;
+    legacy_nonce["claim_nonce"] = json!("BBBBBBBBBBBBBBBBBBBBBB");
+    if serde_json::from_value::<arkret_models_crypto::KeyPackagesClaimRequestBody>(legacy_nonce)
+        .is_ok()
+    {
+        bail!("legacy KeyPackage claim_nonce was accepted as a second random carrier");
     }
 
     let mut missing = serde_json::to_value(&typed)?;
@@ -1383,6 +1382,101 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     Ok(())
 }
 
+/// Closed-XOR model coverage for the pairwise publish/claim/Welcome/consume
+/// chain. Live cross-process coverage builds on the same SDK values; this
+/// runner prevents either endpoint branch from silently widening back to a
+/// Device/Account carrier.
+pub fn run_keypackage_minimal_metadata_pairwise_full_lifecycle_vector() -> Result<()> {
+    let fixture = keypackage_fixture()?;
+    let _vector = case(
+        &fixture,
+        VECTOR_ID_KEYPACKAGE_MINIMAL_METADATA_PAIRWISE_FULL_LIFECYCLE,
+    )?;
+    let cases = fixture["schema_validation_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("keypackage fixture missing schema_validation_cases[]"))?;
+    for name in [
+        "minimal_metadata_pairwise_keypackage_upload_valid",
+        "minimal_metadata_pairwise_claim_selects_exact_target_authority",
+        "minimal_metadata_pairwise_claim_record_has_reconstructible_facts_only",
+        "minimal_metadata_pairwise_consume_single_claim_valid",
+    ] {
+        let row = cases
+            .iter()
+            .find(|row| row.get("name").and_then(Value::as_str) == Some(name))
+            .ok_or_else(|| anyhow!("pairwise lifecycle fixture missing {name}"))?;
+        schema_valid(
+            required_str(row, "schema_ref")?,
+            row.get("instance")
+                .ok_or_else(|| anyhow!("pairwise lifecycle case {name} missing instance"))?,
+        )?;
+    }
+    for name in [
+        "minimal_metadata_pairwise_upload_rejects_device_mixture",
+        "claim_record_rejects_unreconstructible_upload_signature_echo",
+        "minimal_metadata_pairwise_consume_rejects_device_mixture",
+    ] {
+        let row = cases
+            .iter()
+            .find(|row| row.get("name").and_then(Value::as_str) == Some(name))
+            .ok_or_else(|| anyhow!("pairwise lifecycle fixture missing {name}"))?;
+        schema_invalid(
+            required_str(row, "schema_ref")?,
+            row.get("instance")
+                .ok_or_else(|| anyhow!("pairwise lifecycle case {name} missing instance"))?,
+        )?;
+    }
+
+    let claim_value = cases
+        .iter()
+        .find(|row| {
+            row.get("name").and_then(Value::as_str)
+                == Some("minimal_metadata_pairwise_claim_selects_exact_target_authority")
+        })
+        .and_then(|row| row.get("instance"))
+        .cloned()
+        .ok_or_else(|| anyhow!("pairwise claim instance is missing"))?;
+    let claim: arkret_models_crypto::KeyPackagesClaimRequestBody =
+        serde_json::from_value(claim_value)?;
+    claim.validate_shape().map_err(anyhow::Error::msg)?;
+    if !matches!(
+        claim.requester_authorization,
+        arkret_models_crypto::PeerKeyPackageRequesterAuthorization::MinimalMetadataPairwise { .. }
+    ) || claim.target_pairwise_verification_method.is_none()
+        || !claim.target_device_ids.is_empty()
+        || claim.target_agent_id.is_some()
+    {
+        bail!("pairwise claim did not deserialize to the exact pairwise endpoint branch");
+    }
+
+    let welcome_fixture = super::load_fixture_value("keypackage-pairwise-welcome-fixture.json")?;
+    super::validate_profile(&welcome_fixture, ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1)?;
+    let welcome_cases = welcome_fixture["schema_validation_cases"]
+        .as_array()
+        .ok_or_else(|| anyhow!("pairwise Welcome fixture missing schema_validation_cases[]"))?;
+    let valid_welcome = welcome_cases
+        .iter()
+        .find(|row| {
+            row.get("name").and_then(Value::as_str)
+                == Some("minimal_metadata_pairwise_welcome_valid")
+        })
+        .and_then(|row| row.get("instance"))
+        .cloned()
+        .ok_or_else(|| anyhow!("pairwise Welcome positive instance is missing"))?;
+    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &valid_welcome)?;
+    let welcome: MlsWelcomePayload = serde_json::from_value(valid_welcome.clone())?;
+    if !matches!(
+        welcome.recipient,
+        MlsWelcomeRecipient::MinimalMetadataPairwise { .. }
+    ) {
+        bail!("pairwise Welcome did not deserialize to the exact pairwise recipient branch");
+    }
+    let mut mixed_welcome = valid_welcome;
+    mixed_welcome["recipient_device_id"] = json!("ak:device:0196419b-0000-7000-8000-000000000001");
+    schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &mixed_welcome)?;
+    Ok(())
+}
+
 pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
     validate_keypackage_lifecycle_fixture_metadata(&keypackage_fixture()?)?;
 
@@ -1396,6 +1490,8 @@ pub fn run_keypackage_lifecycle_fixture_suite() -> Result<()> {
         .context("keypackage last-resort affinity/optionality vector")?;
     run_keypackage_self_claim_authorization_idempotency_vector()
         .context("keypackage self-claim authorization/idempotency vector")?;
+    run_keypackage_minimal_metadata_pairwise_full_lifecycle_vector()
+        .context("minimal-metadata pairwise KeyPackage full-lifecycle vector")?;
     run_mls_welcome_keypackage_hash_vector().context("MLS welcome KeyPackage hash vector")?;
     Ok(())
 }

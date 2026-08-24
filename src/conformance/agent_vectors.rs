@@ -582,23 +582,21 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     };
     let mut account_a = BTreeMap::<String, NotificationDelta>::new();
     let account_b = BTreeMap::<String, NotificationDelta>::new();
-    for action in ["add", "update"] {
-        let item = delta(action)?;
-        account_a.insert(item.id.as_str().to_owned(), item);
-    }
+    let item = delta("upsert")?;
+    account_a.insert(item.id.as_str().to_owned(), item);
     if account_a.len() != 1
         || account_a.values().next().map(|item| item.action)
-            != Some(NotificationDeltaAction::Update)
+            != Some(NotificationDeltaAction::Upsert)
         || !account_b.is_empty()
     {
-        bail!("account-scoped add/update projection did not converge or leaked across accounts");
+        bail!("account-scoped upsert projection did not converge or leaked across accounts");
     }
     let removed = delta("remove")?;
     account_a.remove(removed.id.as_str());
     if !account_a.is_empty() {
         bail!("remove projection did not converge after a missed wake");
     }
-    account_a.insert("stale".to_owned(), delta("add")?);
+    account_a.insert("stale".to_owned(), delta("upsert")?);
     let authoritative_baseline_ids = BTreeSet::<String>::new();
     account_a.retain(|id, _| authoritative_baseline_ids.contains(id));
     if !account_a.is_empty() {

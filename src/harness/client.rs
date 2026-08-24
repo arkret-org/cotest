@@ -714,8 +714,6 @@ impl TestActorClient {
                 authority_generation: 0,
             }],
             issued_at,
-            not_before: None,
-            expires_at: None,
         };
         let payload =
             arkret_models_collaboration::events_payloads::CapabilityGrantPayload { grant };
@@ -860,7 +858,6 @@ impl TestActorClient {
             // Capability coverage is per DataEvent: the reducer checks that a
             // named grant actually covers this action on this target.
             event.auth_context = Some(AuthContext {
-                actor_id: project_full_id_to_core_id(&DidFullId::new(self.actor.clone())?)?,
                 key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                 key_epoch: 0,
                 credential_epoch: None,
@@ -964,7 +961,6 @@ impl TestActorClient {
             } else {
                 event.seal_ref = Some(frontier.sole_leaf()?.clone());
                 event.auth_context = Some(AuthContext {
-                    actor_id: project_full_id_to_core_id(&DidFullId::new(self.actor.clone())?)?,
                     key_id: arkret_wire::OpaqueLocalId::new("cotest").expect("cotest key id"),
                     key_epoch: 0,
                     credential_epoch: None,

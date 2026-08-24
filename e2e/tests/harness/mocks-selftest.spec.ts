@@ -392,13 +392,14 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const body = await signed.json();
     expect(body.package_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(body.applet_package.schema).toBe("ak.schema.applet_package.v1");
-    expect(
-      body.applet_package.bot_actor_id.startsWith(
-        `ak:did_core:web:bot-${namespace}`,
-      ),
-    ).toBe(true);
+    expect(body.applet_package.bot_actor_id.startsWith(`did:web:bot-${namespace}`)).toBe(true);
     expect(body.applet_package.requested_scopes).toContain("ak.message.create");
     expect(Array.isArray(body.applet_package.endpoint_policy?.endpoints)).toBe(true);
+    expect(body.applet_package.endpoint_policy.endpoints).toContainEqual({
+      method: "POST",
+      path: "/_arkret/edge/applet/install/author",
+      auth: "none",
+    });
     expect(body.applet_package.endpoint_set).toBeUndefined();
     expect(body.applet_package.receive_signals).toBe(false);
     // The retired field must stay absent; this negative vector is the one place
@@ -408,13 +409,14 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(body.applet_package.ghost_policy.enabled).toBe(true);
     expect(body.applet_package.delegation_policy.enabled).toBe(false);
     expect(body.applet_package.e2ee_policy.enabled).toBe(false);
-    expect(body.applet_package.proof.event_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(body.applet_package.registration_epoch_evidence.full_id).toBe(
+    expect(body.applet_package.proof.payload_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(body.applet_package.registration_epoch_evidence).toBeUndefined();
+    // This harness-only sibling is source material used to build the signed
+    // registration Event below; it is never submitted as an install DTO field.
+    expect(body.registration_epoch_evidence.full_id).toBe(
       body.service_id_document.id,
     );
-    expect(body.applet_package.registration_epoch_evidence.did_document_digest).toMatch(
-      /^sha256:[0-9a-f]{64}$/,
-    );
+    expect(body.service_id_document.id).toBe(body.applet_package.service_id);
 
     const identity = await (await request.get(`${baseUrl}/identity`)).json();
     expect(typeof identity.did).toBe("string");

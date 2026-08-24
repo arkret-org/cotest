@@ -140,6 +140,7 @@ fn main() -> Result<()> {
         "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-derived-id" => event_derived_id(input)?,
+        "event-envelope-parse" => event_envelope_parse(input)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
         "webvh-placeholder-did" => webvh_placeholder_did_command(input)?,
@@ -156,6 +157,11 @@ fn main() -> Result<()> {
 
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+fn event_envelope_parse(input: Value) -> Result<Value> {
+    let _: Event = serde_json::from_value(input).context("parse closed Event envelope")?;
+    Ok(json!({ "valid": true }))
 }
 
 fn capability_action_registry_digest() -> Result<Value> {
@@ -1005,8 +1011,12 @@ fn event_derived_id(event: Value) -> Result<Value> {
         event.realm_id = arkret_wire::derive_genesis_realm_id(&event.event_id);
     }
     let object_id = arkret_schema::derived_object_id_for_kind(event.kind.as_str(), &event.event_id);
+    let event_digest = event
+        .event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)
+        .context("derive SDK Event digest")?;
     Ok(serde_json::json!({
         "event_id": event.event_id.to_string(),
+        "event_digest": event_digest,
         "realm_id": event.realm_id.to_string(),
         "object_id": object_id,
     }))

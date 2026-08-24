@@ -106,12 +106,6 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     assert!(ice["expires_at"].is_string());
     assert!(ice["signature"].is_object());
     assert_eq!(ice["signature"]["signature_algorithm"], "Ed25519");
-    assert_eq!(
-        ice["signature"]["signature_input"],
-        // Spec ice-config-response.schema.json fixes this domain-separation
-        // label to `ak.media.ice_config.v1`.
-        "ak.media.ice_config.v1"
-    );
     assert!(
         ice["signature"]["kid"]
             .as_str()

@@ -22,16 +22,33 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
         .build()?;
     let url = proc.url("/_arkret/find/directory/announce");
     let body = serde_json::to_vec(&json!({
-        "resource_kind": "space",
-        "resource_id": "cotest-d5-signed-negative-resource",
-        "principal_server_did": "did:web:soland.cotest.local",
-        "discovery_state": {
-            "discoverability": "public",
-            "directory_services": ["did:web:teabay.cotest.local"],
-            "proof": { "detached_jws": "unused-by-transport-negative" }
+        "discovery_event": {
+            "event_id": "ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2",
+            "kind": "ak.actor.discovery",
+            "realm_id": "ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa",
+            "scope_ref": {
+                "kind": "realm",
+                "realm_id": "ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa"
+            },
+            "actor_id": "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
+            "principal_server_id": "ak:did_core:web:soland.cotest.local",
+            "actor_seq": 1,
+            "created_at": "2026-05-18T00:00:00.000Z",
+            "prev_refs": [],
+            "refs": [],
+            "payload": {
+                "resource_id": "did:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
+                "value": {
+                    "resource_kind": "actor",
+                    "discoverability": "public",
+                    "directory_services": ["ak:did_core:web:teabay.cotest.local"]
+                }
+            },
+            "proofs": []
         },
-        "source_refs": ["urn:cotest:d5:source-ref:1"],
+        "source_refs": ["ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2"],
         "as_of": arkret_canonical::format_timestamp_canonical(Utc::now()),
+        "principal_server_service_id": "ak:did_core:web:soland.cotest.local"
     }))?;
 
     let now = Utc::now().timestamp();

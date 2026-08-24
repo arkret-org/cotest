@@ -206,9 +206,6 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
         event.auth_context = None;
     } else {
         event.auth_context = Some(arkret_wire::AuthContext {
-            actor_id: arkret_identifiers::project_full_id_to_core_id(
-                &arkret_identifiers::DidFullId::new(actor.to_owned())?,
-            )?,
             key_id: crate::harness::auth_context_key_id(&verification_method),
             key_epoch: 0,
             credential_epoch: None,

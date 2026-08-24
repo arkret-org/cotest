@@ -93,10 +93,13 @@ fn key_ref() -> EncryptedAttachmentKeyRef {
 fn params() -> StreamEncryptParams {
     StreamEncryptParams {
         key_ref: key_ref(),
-        epoch: 42,
         media_type: "video/mp4".to_owned(),
         segment_bytes: CONFORMANCE_SEGMENT_SIZE,
     }
+}
+
+fn winning_epoch(_group_state_ref: &EncryptedAttachmentGroupStateRef) -> Option<u64> {
+    Some(42)
 }
 
 fn protocol_reason(error: arkret_crypto::Error) -> Result<String> {
@@ -165,7 +168,7 @@ fn schema_ready_envelope_value(env: &EncryptedAttachment) -> Result<Value> {
 pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
     let key = key();
     let plaintext: Vec<u8> = (0..2050u32).map(|index| (index % 251) as u8).collect();
-    let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
+    let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params(), &winning_epoch)?;
 
     let stream = stream_fields(&env)?;
     let raw = serde_json::to_value(&env)?;
@@ -187,13 +190,13 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
         bail!("stream envelope must carry nonce_prefix and no whole-file nonce");
     }
 
-    let recovered = decrypt_stream(&ciphertext, &env, &key)?;
+    let recovered = decrypt_stream(&ciphertext, &env, &key, &winning_epoch)?;
     if recovered != plaintext {
         bail!("one-shot stream decrypt did not recover the original plaintext");
     }
 
     let segments = split_segments(&ciphertext, &env)?;
-    let mut decryptor = StreamDecryptor::new(&env, &key)?;
+    let mut decryptor = StreamDecryptor::new(&env, &key, &winning_epoch)?;
     let mut incremental = Vec::with_capacity(plaintext.len());
     for (index, segment) in segments.iter().enumerate() {
         incremental.extend(decryptor.push_segment(index as u32, segment)?);
@@ -208,8 +211,29 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
         Hash::new("sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
     let digest_mismatch = EncryptedAttachment::Stream(digest_mismatch_stream);
     expect_reason(
-        decrypt_stream(&ciphertext, &digest_mismatch, &key).unwrap_err(),
+        decrypt_stream(&ciphertext, &digest_mismatch, &key, &winning_epoch).unwrap_err(),
         "digest_mismatch",
+    )?;
+
+    let mut proof_params = params();
+    proof_params.key_ref.group_state_ref = EncryptedAttachmentGroupStateRef::Digest(Hash::new(
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+    )?);
+    let (proof_ciphertext, proof_envelope) =
+        encrypt_stream(&plaintext, &key, &proof_params, &winning_epoch)?;
+    if decrypt_stream(&proof_ciphertext, &proof_envelope, &key, &winning_epoch)? != plaintext {
+        bail!("proof-hash group state reference failed epoch-derived roundtrip");
+    }
+
+    let unresolved = |_group_state_ref: &EncryptedAttachmentGroupStateRef| None;
+    expect_reason(
+        decrypt_stream(&ciphertext, &env, &key, &unresolved).unwrap_err(),
+        "attachment_group_state_unresolved",
+    )?;
+    let wrong_epoch = |_group_state_ref: &EncryptedAttachmentGroupStateRef| Some(41);
+    expect_reason(
+        decrypt_stream(&ciphertext, &env, &key, &wrong_epoch).unwrap_err(),
+        "segment_aead_failed",
     )?;
 
     Ok(())
@@ -218,10 +242,10 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
 pub fn run_stream_aead_truncation_rejected_vector() -> Result<()> {
     let key = key();
     let plaintext = vec![7u8; 2500];
-    let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
+    let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params(), &winning_epoch)?;
     let segments = split_segments(&ciphertext, &env)?;
 
-    let mut decryptor = StreamDecryptor::new(&env, &key)?;
+    let mut decryptor = StreamDecryptor::new(&env, &key, &winning_epoch)?;
     for (index, segment) in segments.iter().enumerate().take(segments.len() - 1) {
         decryptor.push_segment(index as u32, segment)?;
     }
@@ -233,16 +257,16 @@ pub fn run_stream_aead_truncation_rejected_vector() -> Result<()> {
 pub fn run_stream_aead_reorder_rejected_vector() -> Result<()> {
     let key = key();
     let plaintext = vec![11u8; 2500];
-    let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
+    let (ciphertext, env) = encrypt_stream(&plaintext, &key, &params(), &winning_epoch)?;
     let segments = split_segments(&ciphertext, &env)?;
 
-    let mut reordered = StreamDecryptor::new(&env, &key)?;
+    let mut reordered = StreamDecryptor::new(&env, &key, &winning_epoch)?;
     expect_reason(
         reordered.push_segment(1, &segments[1]).unwrap_err(),
         "segment_sequence_invalid",
     )?;
 
-    let mut replayed = StreamDecryptor::new(&env, &key)?;
+    let mut replayed = StreamDecryptor::new(&env, &key, &winning_epoch)?;
     replayed.push_segment(0, &segments[0])?;
     expect_reason(
         replayed.push_segment(0, &segments[0]).unwrap_err(),
@@ -255,7 +279,7 @@ pub fn run_stream_aead_reorder_rejected_vector() -> Result<()> {
 pub fn run_stream_aead_scheme_closure_vector() -> Result<()> {
     let key = key();
     let plaintext = vec![13u8; 2050];
-    let (_ciphertext, env) = encrypt_stream(&plaintext, &key, &params())?;
+    let (_ciphertext, env) = encrypt_stream(&plaintext, &key, &params(), &winning_epoch)?;
 
     // The typed envelope enum is closed: an unknown scheme id cannot even
     // deserialize, so no decryptor can be constructed for it.

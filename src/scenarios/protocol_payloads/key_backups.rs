@@ -23,11 +23,10 @@ use arkret_identifiers::{
 };
 use arkret_models_crypto::{
     BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,
-    KeyBackupAeadName, KeyBackupContentItem, KeyBackupDomainSeparation,
-    KeyBackupDomainSeparationAad, KeyBackupEncryption, KeyBackupRecipientMethod,
-    KeyBackupRetention, KeyBackupSignatureAlgorithm, KeyBackupUnlockProof,
-    KeysBackupsUnlockRequestBody, ProofKind, UnsignedKeyBackup, UnsignedKeyBackupAuthData,
-    UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
+    KeyBackupAeadName, KeyBackupContentItem, KeyBackupDomainSeparation, KeyBackupEncryption,
+    KeyBackupRecipientMethod, KeyBackupRetention, KeyBackupSignatureAlgorithm,
+    KeyBackupUnlockProof, KeysBackupsUnlockRequestBody, ProofKind, UnsignedKeyBackup,
+    UnsignedKeyBackupAuthData, UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
 };
 use arkret_wire::{Base64UrlString, DidUrl, EpochRange, HistoryEffectiveScope, RealmId, ScopeRef};
 use base64::Engine as _;
@@ -122,21 +121,8 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
             extra: Default::default(),
         },
         domain_separation: KeyBackupDomainSeparation {
-            hkdf_info: "arkret-key-backup/mls_history/test/v1".to_owned(),
             subdomain: "test".to_owned(),
-            aead_aad: KeyBackupDomainSeparationAad {
-                schema: "ak.schema.key_backup.v1".to_owned(),
-                actor_id: did(actor_id)?,
-                device_id: Some(ENVELOPE_DEVICE_ID.to_owned()),
-                backup_kind: BackupKind::MlsHistory,
-                backup_version: "kb_1".to_owned(),
-                created_at,
-                item_kinds: vec!["history_secret_ranges".to_owned()],
-                recipient_method: Some(KeyBackupRecipientMethod::SecretStorageKey),
-                recipient_key_ref: Some("mls_group_secrets_backup_key".to_owned()),
-                extra: Default::default(),
-            },
-            extra: Default::default(),
+            aead_aad_extensions: Default::default(),
         },
         contents: vec![KeyBackupContentItem::HistorySecretRanges(
             HistorySecretRangeIndex {

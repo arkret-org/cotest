@@ -772,7 +772,6 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         } else {
             event.seal_ref = Some(frontier.sole_leaf()?.clone());
             event.auth_context = Some(AuthContext {
-                actor_id: project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?,
                 key_id: auth_context_key_id(verification_method.as_str()),
                 key_epoch: 0,
                 credential_epoch: None,
@@ -1169,6 +1168,7 @@ pub(crate) fn message_revise_text_payload(target_event_id: &str, body: &str) -> 
             metadata: None,
             encrypted_metadata: None,
             reason: None,
+            mimi_provenance: None,
         },
         "message revise payload",
     )
@@ -1181,6 +1181,7 @@ pub(crate) fn message_redact_payload(target_event_id: &str, reason: Option<&str>
             track_name: None,
             reason: reason.map(ToOwned::to_owned),
             preserve: None,
+            mimi_provenance: None,
         },
         "message redact payload",
     )
@@ -1270,7 +1271,6 @@ fn member_payload(
         actor_id: Some(arkret_identifiers::project_full_id_to_core_id(
             &DidFullId::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
         )?),
-        principal_authority: None,
         delivery_status,
         delivery_binding,
         gate_proofs: Vec::new(),

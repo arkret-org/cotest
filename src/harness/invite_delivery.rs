@@ -12,10 +12,9 @@
 
 use anyhow::{Context, Result, bail};
 use arkret_models_collaboration::governance::invite_addressing::{
-    IntroductionEvidence, InviteAddress, InviteDelivery, InviteDeliveryRequestBody,
-    InviteReceivePolicy,
+    IntroductionEvidence, InviteAddress, InviteDelivery, InviteReceivePolicy,
+    SelfInviteDispatchRequestBody,
 };
-use arkret_models_collaboration::http_bodies::EventsResolveRequestBody;
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_wire::AccountDataKey;
 use reqwest::StatusCode;
@@ -36,11 +35,10 @@ pub async fn dispatch_accepted_invite_and_read_token(
     introduction_evidence: IntroductionEvidence,
 ) -> Result<String> {
     opt_in_introduction_kind(invitee, introduction_evidence.kind()).await?;
-    let invite_event = resolve_accepted_event(inviter, invite_event_id).await?;
     dispatch_invite(
         inviter,
         invitee,
-        invite_event,
+        invite_event_id,
         introduction_evidence,
         invite_event_id,
     )
@@ -79,40 +77,10 @@ async fn opt_in_introduction_kind(invitee: &TestActorClient, kind: &str) -> Resu
     Ok(())
 }
 
-/// §7 — the client fills `invite_event` by reading the accepted Event back
-/// through `ak.self.events.read.resolve`; re-authoring from local state cannot
-/// be guaranteed byte-identical to the persisted canonical bytes.
-async fn resolve_accepted_event(
-    inviter: &TestActorClient,
-    event_id: &str,
-) -> Result<arkret_wire::Event> {
-    let resolved = expect_json(
-        inviter
-            .query("/_arkret/self/events/resolve")
-            .json(&EventsResolveRequestBody {
-                event_ids: vec![arkret_identifiers::EventId::new(event_id.to_owned())?],
-                event_digests: Vec::new(),
-                include_payload: Some(true),
-                history_traversal_access: None,
-                max_response_bytes: None,
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    let event = resolved["events"]
-        .as_array()
-        .and_then(|events| events.first())
-        .cloned()
-        .ok_or_else(|| {
-            anyhow::anyhow!("accepted invite Event {event_id} did not resolve: {resolved}")
-        })?;
-    serde_json::from_value(event).context("resolved invite Event is not a wire Event")
-}
-
 async fn dispatch_invite(
     inviter: &TestActorClient,
     invitee: &TestActorClient,
-    invite_event: arkret_wire::Event,
+    invite_event_id: &str,
     introduction_evidence: IntroductionEvidence,
     idempotency_key: &str,
 ) -> Result<()> {
@@ -128,12 +96,17 @@ async fn dispatch_invite(
         pinned_record_digest: None,
     };
     let invitee_core = arkret_identifiers::DidCoreId::new(actor_core_id(&invitee.actor)?)?;
-    let delivery = InviteDeliveryRequestBody::new(
-        invite_event,
-        InviteAddress::principal_server(invitee_core, service_id, service_resolution),
+    let delivery = SelfInviteDispatchRequestBody {
+        schema: arkret_wire::SchemaId::INVITE_DELIVERY_REQUEST_V1.to_owned(),
+        invite_event_id: arkret_identifiers::EventId::new(invite_event_id.to_owned())?,
+        invite_address: InviteAddress::principal_server(
+            invitee_core,
+            service_id,
+            service_resolution,
+        ),
         introduction_evidence,
-        idempotency_key,
-    );
+        idempotency_key: idempotency_key.to_owned(),
+    };
     let dispatched = expect_json(
         inviter
             .post("/_arkret/self/invites/dispatch")

@@ -22,7 +22,6 @@ import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
   alignSignedEventToActorFrontierApi,
   acceptInviteApi,
-  acceptedInviteDeliveryBodyApi,
   authHeaders,
   base64url,
   canonicalJson,
@@ -30,6 +29,7 @@ import {
   canonicalTimestamp,
   currentActorDidApi,
   dispatchSelfInviteApi,
+  selfInviteDispatchBody,
   expectJsonOk,
   principalControlRealmForDid,
   readRealmSealBasis,
@@ -606,8 +606,7 @@ async function uploadDirectConversationKeyPackage(
     {
       keypackage_id: keypackageId,
       keypackage_ref: keypackageDigest,
-      key_package: keyPackage,
-      keypackage_digest: keypackageDigest,
+      keypackage: keyPackage,
       cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
       capabilities: ["ak.content.v1", "ak.mls.rfc9420", "ak.mls.profile.full"],
       created_at: canonicalTimestamp(),
@@ -617,7 +616,7 @@ async function uploadDirectConversationKeyPackage(
   const unsigned = {
     principal_id: user.did,
     device_id: user.deviceId,
-    key_packages: keyPackages,
+    keypackages: keyPackages,
   };
   const signingInput = `ak.self.keys.keypackages.upload.create\n${canonicalJson(unsigned)}`;
   const signature = signWithRegisteredEventSigner(
@@ -628,9 +627,9 @@ async function uploadDirectConversationKeyPackage(
   if (!signature) {
     throw new Error(`no accepted device signer registered for ${user.did}`);
   }
-  const deviceSignature = {
+  const endpointSignature = {
     kid: `${user.did}#${user.deviceId}`,
-    alg: "Ed25519",
+    signature_algorithm: "Ed25519",
     sig: signature,
   };
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`;
@@ -640,7 +639,7 @@ async function uploadDirectConversationKeyPackage(
       headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
       data: canonicalJson({
         ...unsigned,
-        device_signature: deviceSignature,
+        endpoint_signature: endpointSignature,
       }),
     },
   );
@@ -829,17 +828,12 @@ async function deliverInvite(
     args.idempotencyKey ?? `${args.idempotencyKeyPrefix}:${inviteId}`;
 
   if (args.originServer === args.recipientServer) {
-    const body = await acceptedInviteDeliveryBodyApi(
-      request,
-      args.inviterToken,
-      {
-        eventId: acceptedEventId,
-        inviteAddress,
-        evidence: args.evidence,
-        idempotencyKey,
-      },
-      { server: args.originServer },
-    );
+    const body = selfInviteDispatchBody({
+      eventId: acceptedEventId,
+      inviteAddress,
+      evidence: args.evidence,
+      idempotencyKey,
+    });
     return {
       outcome: await dispatchSelfInviteApi(request, args.inviterToken, body, {
         server: args.originServer,

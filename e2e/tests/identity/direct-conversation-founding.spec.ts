@@ -489,7 +489,6 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
         founder_id: bobCoreId,
         realm_id: accepted.realmId,
         main_strand_id: accepted.mainStrandId,
-        slot_committed: true,
       },
     });
 
