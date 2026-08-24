@@ -50,10 +50,11 @@ param(
     [string]$CoauthBaseUrl,
     [string]$SolandCommand,
     [string]$SolandBin,
-    # Optional PostgreSQL store for the managed process-mode Soland. The
-    # decision-fence race lane requires this; an empty value keeps the normal
-    # lightweight joint stack unchanged.
+    # Optional externally provisioned PostgreSQL store for one managed
+    # process-mode Soland. When omitted, the harness starts an isolated
+    # ephemeral PostgreSQL instance (two independent instances for DualSoland).
     [string]$SolandDatabaseUrl,
+    [string]$SolandPostgresImage = "postgres:16-alpine",
     [switch]$RequireDecisionRace,
     [ValidateSet("process", "docker")]
     [string]$SolandRuntime = "process",
@@ -650,6 +651,8 @@ function Invoke-JointE2ePreflight {
         [string]$SolandBaseUrl,
         [string]$SolandCommand,
         [string]$SolandBin,
+        [string]$SolandDatabaseUrl,
+        [string]$SolandPostgresImage = "postgres:16-alpine",
         [bool]$WillStartDefaultSoland = $false,
         [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
         [string]$SolandImage,
@@ -759,6 +762,27 @@ function Invoke-JointE2ePreflight {
             } catch {
                 Add-PreflightResult $results "soland binary" "fail" $_.Exception.Message
             }
+        }
+    }
+
+    if ($WillStartDefaultSoland -and -not $SolandDatabaseUrl) {
+        $docker = Find-CommandPath @("docker.exe", "docker")
+        if ($docker) {
+            Add-PreflightResult $results "soland postgres docker" "pass" $docker
+            $dockerInfo = (Invoke-NativeCapture -FilePath $docker -Arguments @("info")) -join "`n"
+            if ($LASTEXITCODE -eq 0) {
+                Add-PreflightResult $results "soland postgres daemon" "pass" "daemon reachable"
+            } else {
+                Add-PreflightResult $results "soland postgres daemon" "fail" $dockerInfo
+            }
+            $imageInspect = (Invoke-NativeCapture -FilePath $docker -Arguments @("image", "inspect", $SolandPostgresImage)) -join "`n"
+            if ($LASTEXITCODE -eq 0) {
+                Add-PreflightResult $results "soland postgres image" "pass" $SolandPostgresImage
+            } else {
+                Add-PreflightResult $results "soland postgres image" "warn" "$SolandPostgresImage not present locally; docker run may pull it"
+            }
+        } else {
+            Add-PreflightResult $results "soland postgres docker" "fail" "docker is required for managed Soland PostgreSQL"
         }
     }
 
@@ -2488,9 +2512,6 @@ if ($SolandDatabaseUrl -and ($SolandRuntime -ne "process" -or $SolandCommand -or
 if ($SolandDatabaseUrl -and $DualSoland) {
     throw "-SolandDatabaseUrl cannot be shared by -DualSoland; provision independent databases instead."
 }
-if ($RequireDecisionRace -and -not $SolandDatabaseUrl) {
-    throw "-RequireDecisionRace requires -SolandDatabaseUrl so the shared fence is exercised in PostgreSQL."
-}
 if ($SkipInkson -and ($InksonCommand -or $InksonBetaCommand -or $PSBoundParameters.ContainsKey("InksonBaseUrl") -or $PSBoundParameters.ContainsKey("InksonBetaBaseUrl"))) {
     throw "-SkipInkson cannot be combined with Inkson URLs or commands."
 }
@@ -2728,6 +2749,10 @@ if ($StartMockChallengeProvider) {
 $managedServices = New-Object System.Collections.Generic.List[object]
 $managedServiceFailures = @()
 $ephemeralPostgres = $null
+$ephemeralSolandPostgres = $null
+$ephemeralSolandBetaPostgres = $null
+$solandDatabaseDsn = $SolandDatabaseUrl
+$solandBetaDatabaseDsn = $null
 # Durable protocol stores exported for the secret scan. Kept apart from the log
 # roots because the verdict differs by artifact class: signed authorization
 # evidence is expected here, recovery private material never is.
@@ -3011,6 +3036,8 @@ try {
             -SolandBaseUrl $SolandBaseUrl `
             -SolandCommand $SolandCommand `
             -SolandBin $SolandBin `
+            -SolandDatabaseUrl $SolandDatabaseUrl `
+            -SolandPostgresImage $SolandPostgresImage `
             -WillStartDefaultSoland $willStartDefaultSoland `
             -SolandRuntime $SolandRuntime `
             -SolandImage $SolandImage `
@@ -3374,9 +3401,25 @@ try {
         }
     }
 
+    if ($willStartDefaultSoland -and -not $solandDatabaseDsn) {
+        $ephemeralSolandPostgres = Start-EphemeralPostgres `
+            -Image $SolandPostgresImage `
+            -NamePrefix "cotest-soland-$timestamp" `
+            -TimeoutSeconds $StartupTimeoutSeconds
+        $solandDatabaseDsn = $ephemeralSolandPostgres.Url
+    }
+    if ($DualSoland) {
+        $ephemeralSolandBetaPostgres = Start-EphemeralPostgres `
+            -Image $SolandPostgresImage `
+            -NamePrefix "cotest-soland-beta-$timestamp" `
+            -TimeoutSeconds $StartupTimeoutSeconds
+        $solandBetaDatabaseDsn = $ephemeralSolandBetaPostgres.Url
+    }
+
     function Build-SolandDockerEnvironment {
         param(
             [Parameter(Mandatory = $true)][string]$BaseUrl,
+            [Parameter(Mandatory = $true)][string]$DatabaseUrl,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
             [Parameter(Mandatory = $true)][string]$LogFileName,
             [Parameter(Mandatory = $true)][string]$CorsAllowOrigin,
@@ -3392,7 +3435,7 @@ try {
         }
         $map = [ordered]@{
             RUST_LOG = $rustLog
-            DATABASE_URL = ""
+            DATABASE_URL = (Convert-ToContainerReachableUrl $DatabaseUrl)
             SOLAND_BIND = "0.0.0.0:$SolandContainerPort"
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
             SOLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
@@ -3443,6 +3486,7 @@ try {
             [Parameter(Mandatory = $true)][string]$BinaryPath,
             [Parameter(Mandatory = $true)][string]$ConfigPath,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
+            [Parameter(Mandatory = $true)][string]$DatabaseUrl,
             [Parameter(Mandatory = $true)][string]$ObjectsRoot,
             [Parameter(Mandatory = $true)][string]$StateRoot,
             [Parameter(Mandatory = $true)][int]$Port,
@@ -3457,7 +3501,7 @@ try {
         $rustLog = if ($env:RUST_LOG -and -not [string]::IsNullOrWhiteSpace($env:RUST_LOG)) { $env:RUST_LOG } else { "info" }
         $values = [ordered]@{
             RUST_LOG = $rustLog
-            DATABASE_URL = if ($SolandDatabaseUrl) { $SolandDatabaseUrl } else { "" }
+            DATABASE_URL = $DatabaseUrl
             SOLAND_PUBLIC_BASE_URL = $BaseUrl
             SOLAND_TRUST_DOMAIN = "ak:trust_domain:local.host"
             SOLAND_DEVELOPMENT_MODE = "true"
@@ -3535,6 +3579,7 @@ try {
             -BinaryPath $solandBinary `
             -ConfigPath (Join-Path $jointDir "soland.env") `
             -BaseUrl $SolandBaseUrl `
+            -DatabaseUrl $solandDatabaseDsn `
             -ObjectsRoot (Join-Path $jointDir "soland-objects") `
             -StateRoot (Join-Path $jointDir "soland-state") `
             -Port $solandPort `
@@ -3557,6 +3602,7 @@ try {
         $solandMetricsPort = Get-FreeTcpPort
         $solandDockerEnv = Build-SolandDockerEnvironment `
             -BaseUrl $SolandBaseUrl `
+            -DatabaseUrl $solandDatabaseDsn `
             -MetricsPort $solandMetricsPort `
             -LogFileName ([System.IO.Path]::GetFileName($solandTraceFile)) `
             -CorsAllowOrigin $solandCorsAllowOrigin `
@@ -3585,6 +3631,7 @@ try {
         if ($SolandRuntime -eq "docker") {
             $solandBetaDockerEnv = Build-SolandDockerEnvironment `
                 -BaseUrl $solandBetaBaseUrl `
+                -DatabaseUrl $solandBetaDatabaseDsn `
                 -MetricsPort $solandBetaMetricsPort `
                 -LogFileName ([System.IO.Path]::GetFileName($solandBetaTraceFile)) `
                 -CorsAllowOrigin $solandBetaCorsAllowOrigin `
@@ -3605,6 +3652,7 @@ try {
                 -BinaryPath $solandBinary `
                 -ConfigPath (Join-Path $jointDir "soland-beta.env") `
                 -BaseUrl $solandBetaBaseUrl `
+                -DatabaseUrl $solandBetaDatabaseDsn `
                 -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
                 -StateRoot (Join-Path $jointDir "soland-beta-state") `
                 -Port $solandBetaPort `
@@ -3775,7 +3823,7 @@ try {
     } else {
         Remove-Item Env:COTEST_SKIP_INKSON -ErrorAction SilentlyContinue
     }
-    if ($generatedSolandCommand -and $SolandDatabaseUrl) {
+    if ($generatedSolandCommand -and $solandDatabaseDsn) {
         $env:COTEST_SOLAND_CHAOS_CONTROL_FILE = $solandChaosControlFile
         $env:COTEST_SOLAND_STORAGE = "postgres"
         if ($RequireDecisionRace) {
@@ -4226,6 +4274,24 @@ finally {
                 Write-Host "postgres dump: $postgresDump"
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralPostgres.ContainerName
+        }
+        if ($ephemeralSolandPostgres) {
+            $postgresDump = Export-EphemeralPostgresDump `
+                -ContainerName $ephemeralSolandPostgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir "soland-postgres.sql")
+            if ($postgresDump) {
+                Write-Host "postgres dump: $postgresDump"
+            }
+            Stop-EphemeralPostgres -ContainerName $ephemeralSolandPostgres.ContainerName
+        }
+        if ($ephemeralSolandBetaPostgres) {
+            $postgresDump = Export-EphemeralPostgresDump `
+                -ContainerName $ephemeralSolandBetaPostgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir "soland-beta-postgres.sql")
+            if ($postgresDump) {
+                Write-Host "postgres dump: $postgresDump"
+            }
+            Stop-EphemeralPostgres -ContainerName $ephemeralSolandBetaPostgres.ContainerName
         }
         if ($jointTlsEnabled) {
             # 0530-C: revert the hosts entries and delete private keys.
@@ -4961,6 +5027,8 @@ $summary = [pscustomobject]@{
     coauth_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
     coauth_config = $coauthConfigPath
     coauth_postgres_container = if ($ephemeralPostgres) { $ephemeralPostgres.ContainerName } else { $null }
+    soland_postgres_container = if ($ephemeralSolandPostgres) { $ephemeralSolandPostgres.ContainerName } else { $null }
+    soland_beta_postgres_container = if ($ephemeralSolandBetaPostgres) { $ephemeralSolandBetaPostgres.ContainerName } else { $null }
     teabay_base_url = if ($TeabayBaseUrl) { $TeabayBaseUrl } else { $null }
     teabay_service_id = if ($TeabayBaseUrl) { $TeabayServiceId } else { $null }
     teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
