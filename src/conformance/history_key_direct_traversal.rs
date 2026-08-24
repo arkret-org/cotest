@@ -12,6 +12,8 @@ use arkret_models_collaboration::history_key::{
     HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequest,
     HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt, HistoryKeyResponseSendRequest,
     HistoryKeyResponseSigningInput, HistoryResponseId, HistorySourceAgentObservationInput,
+    OrganizationRecoveryArchiveListOutcome, OrganizationRecoveryArchiveListQuery,
+    OrganizationRecoveryArchiveReplica, OrganizationRecoveryArchiveReplicaOutcome,
     PeerHistoryTraversalAccess, ResponseSenderOriginRef, ResponseSenderQuotaDomain,
     SelfHistoryTraversalAccess, history_release_predicate_registry_digest,
     response_capability_commitment,
@@ -20,6 +22,9 @@ use arkret_models_identity::AuthenticatedSignerResolutionEvidence;
 use arkret_state::direct_traversal::{
     BoundedDirectTraversalJournal, DirectCutDescriptorIndex, DirectCutMaterial, DirectCutRequest,
     SealPredecessorDescriptor, discover_direct_cut, verify_direct_traversal_cut_with_registry,
+};
+use arkret_state::history_backup::{
+    OrganizationRecoveryArchiveGcLedger, OrganizationRecoveryArchiveReplicaAdmission,
 };
 use arkret_state::history_store::HistoryMaterialLedger;
 use arkret_state::lattice::{CasRegister, Lattice, SealedOp};
@@ -106,6 +111,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     verify_governance_dependency_kats(&fixture)?;
     verify_rrk_method_evaluator(&fixture)?;
     verify_rrk_production_projection_and_join(&fixture)?;
+    verify_rrk_durable_before_gc(&fixture)?;
     verify_response_stream_fixture(&fixture)?;
     verify_history_candidate_store_kat(&fixture)?;
     verify_history_static_gates(&fixture)?;
@@ -225,6 +231,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             "history_digest_and_sender_kats_valid": true,
             "governance_dependency_kats_valid": true,
             "rrk_method_evaluator_valid": true,
+            "rrk_durable_before_gc_valid": true,
             "candidate_store_kat_valid": true,
             "history_static_gates_valid": true,
             "scope_and_endpoint_kats_valid": true,
@@ -320,6 +327,104 @@ fn verify_rrk_production_projection_and_join(fixture: &Value) -> Result<()> {
         )
     {
         bail!("RRK missing exact signed head_eq did not fail closed");
+    }
+    Ok(())
+}
+
+fn verify_rrk_durable_before_gc(fixture: &Value) -> Result<()> {
+    let kat = fixture
+        .get("organization_recovery_archive_durable_before_gc_kat")
+        .context("history-key fixture omits RRK durable-before-GC KAT")?;
+    let replica: OrganizationRecoveryArchiveReplica =
+        serde_json::from_value(kat["replica"].clone())?;
+    let receipt: OrganizationRecoveryArchiveReplicaOutcome =
+        serde_json::from_value(kat["first_receipt"].clone())?;
+    let query: OrganizationRecoveryArchiveListQuery =
+        serde_json::from_value(kat["barrier_query"].clone())?;
+    let outcome: OrganizationRecoveryArchiveListOutcome =
+        serde_json::from_value(kat["barrier_resolve_outcome"].clone())?;
+    outcome.validate_for_query(&query)?;
+    if outcome.items[0].archive_replica_digest != receipt.archive_replica_digest {
+        bail!("RRK holder list did not expose the exact accepted replica digest");
+    }
+
+    let mut missing_digest = kat["barrier_resolve_outcome"].clone();
+    missing_digest["items"][0]
+        .as_object_mut()
+        .context("RRK list fixture item is not an object")?
+        .remove("archive_replica_digest");
+    if serde_json::from_value::<OrganizationRecoveryArchiveListOutcome>(missing_digest).is_ok() {
+        bail!("RRK holder list accepted a row without archive_replica_digest");
+    }
+
+    let mut ledger = OrganizationRecoveryArchiveGcLedger::new(&replica)?;
+    if serde_json::to_value(&ledger)? != kat["coverage_ledger"]["initial"]
+        || ledger.gc_local_history_secret().is_ok()
+    {
+        bail!("RRK local GC did not fail closed before durable holder acceptance");
+    }
+    if ledger.record_durable_holder_acceptance(&replica, &receipt)?
+        != OrganizationRecoveryArchiveReplicaAdmission::FirstAccepted
+        || serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_first_accept"]
+    {
+        bail!("RRK first durable holder acceptance did not update exact coverage evidence");
+    }
+    if ledger.record_durable_holder_acceptance(&replica, &receipt)?
+        != OrganizationRecoveryArchiveReplicaAdmission::ExactDuplicate
+        || arkret_wire::canonical::canonical_json_bytes(&receipt)?
+            != URL_SAFE_NO_PAD.decode(
+                kat["first_receipt_jcs_b64u"]
+                    .as_str()
+                    .context("RRK KAT omits receipt canonical bytes")?,
+            )?
+    {
+        bail!("RRK exact duplicate did not return the first byte-identical receipt");
+    }
+
+    let mut changed_replica = replica.clone();
+    changed_replica.replicated_at += chrono::Duration::seconds(3);
+    if ledger
+        .record_durable_holder_acceptance(&changed_replica, &receipt)
+        .is_ok()
+    {
+        bail!("RRK semantic retry with changed replica bytes did not conflict");
+    }
+
+    let mut changed_outcome = outcome.clone();
+    let ciphertext = &mut changed_outcome.items[0].archive.ciphertext;
+    ciphertext.replace_range(
+        0..1,
+        if ciphertext.starts_with('A') {
+            "B"
+        } else {
+            "A"
+        },
+    );
+    if ledger
+        .record_exact_holder_reread(&query, &changed_outcome)
+        .is_ok()
+        || serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_first_accept"]
+    {
+        bail!("RRK barrier accepted changed archive bytes or mutated coverage state");
+    }
+
+    let mut substituted_digest = outcome.clone();
+    substituted_digest.items[0].archive_replica_digest =
+        substituted_digest.items[0].archive.archive_digest()?;
+    if ledger
+        .record_exact_holder_reread(&query, &substituted_digest)
+        .is_ok()
+    {
+        bail!("RRK barrier accepted archive_digest as replica access coordinate");
+    }
+
+    ledger.record_exact_holder_reread(&query, &outcome)?;
+    if serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_exact_reread"] {
+        bail!("RRK exact holder reread did not close the local coverage barrier");
+    }
+    ledger.gc_local_history_secret()?;
+    if serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_local_gc"] {
+        bail!("RRK GC changed more than the source-local history secret");
     }
     Ok(())
 }
@@ -599,6 +704,21 @@ fn verify_governance_dependency_kats(fixture: &Value) -> Result<()> {
     let receipt: AvailabilityReceipt =
         serde_json::from_value(dependency_kat["availability_receipt"].clone())?;
     receipt.validate_structural()?;
+    let expected_receipt_digest = Hash::new(
+        dependency_kat["availability_receipt_digest"]
+            .as_str()
+            .context("governance dependency KAT omits availability_receipt_digest")?,
+    )?;
+    let receipt_digest_suite = expected_receipt_digest.digest_suite()?;
+    let computed_receipt_digest = receipt.full_receipt_digest(|bytes| {
+        Ok(Hash::new(arkret_canonical::canonical::digest(
+            receipt_digest_suite,
+            bytes,
+        ))?)
+    })?;
+    if computed_receipt_digest != expected_receipt_digest {
+        bail!("availability receipt full digest drifted");
+    }
     receipt.validate_signature_payload_digest(sha256_hash)?;
 
     let outcome: GovernanceDependencyResolveOutcome =
