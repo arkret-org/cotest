@@ -30,17 +30,19 @@
 //! A typed draft exposes no runtime kind override:
 //!
 //! ```compile_fail
+//! use std::collections::BTreeMap;
+//!
 //! use arkret_event_draft::TypedEventDraft;
-//! use arkret_models_collaboration::events_payloads::StatePayload;
+//! use arkret_models_collaboration::events_payloads::RealmModerationPolicyStatePayload;
 //! use arkret_wire::{DidCoreId, EventKind, RealmId, ScopeRef, event_spec};
 //!
-//! let draft = TypedEventDraft::<event_spec::RealmPolicy>::new(
+//! let draft = TypedEventDraft::<event_spec::RealmModerationPolicy>::new(
 //!     ScopeRef::Realm {
 //!         realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
 //!     },
 //!     DidCoreId::new("ak:did_core:webvh:z6mkfixture").unwrap(),
 //!     DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
-//!     StatePayload { value: None, state: Some("active".to_owned()), reason: None },
+//!     RealmModerationPolicyStatePayload { value: BTreeMap::new() },
 //! ).unwrap();
 //! let _ = draft.with_kind(EventKind::MessageCreate);
 //! ```

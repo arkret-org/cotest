@@ -1,7 +1,4 @@
-//! Round 2+3 / T01 — Seal canonical bytes self-reference exclusion.
-//!
-//! Spec (round 2+3 cleanup, T01; Anchor→Seal rename per
-//! `migration/renames.json`):
+//! Seal canonical bytes self-reference exclusion.
 //!
 //! `seal.schema.json` explicitly excludes `id` and `notary_signature`
 //! from the canonical bytes used to compute the Seal id and the

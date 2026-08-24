@@ -7,34 +7,10 @@
 
 use anyhow::Result;
 use cotest::scenarios::_helpers::coauth_bootstrap::{
-    bootstrap_coauth_config, spawn_coauth_with_db, spawn_ephemeral_postgres,
+    spawn_coauth_with_db, spawn_ephemeral_postgres,
 };
 use cotest::scenarios::_helpers::floria_bootstrap::spawn_floria_with_config;
 use cotest::scenarios::joint_service_smoke::joint_service_smoke_run;
-
-/// Gating: manual debug helper — needs a built coauth binary at the
-/// hard-coded sibling path. Not for CI.
-/// Issue: C34.3 (coauth bootstrap config debug)
-/// Tier: live
-#[tokio::test(flavor = "multi_thread")]
-#[ignore]
-async fn dump_patched_coauth_config() -> Result<()> {
-    use std::path::Path;
-    let bin = Path::new("D:/Works/arkret/coauth/target/debug/coauth.exe");
-    if !bin.exists() {
-        eprintln!("skip: coauth binary not found");
-        return Ok(());
-    }
-    let bundle = bootstrap_coauth_config(
-        bin,
-        "postgresql://arkret:arkret@127.0.0.1:5432/arkret",
-        "127.0.0.1:9999",
-    )?;
-    eprintln!("internal_addr: {}", bundle.internal_addr);
-    eprintln!("---");
-    eprintln!("{}", std::fs::read_to_string(bundle.file.path())?);
-    Ok(())
-}
 
 /// Gating: needs Docker daemon for the ephemeral Postgres image; soft-skips
 /// (prints `skip:`) when docker is unavailable.

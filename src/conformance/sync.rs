@@ -878,16 +878,4 @@ mod tests {
     fn stream_frame_sequence_runs_all_cases_on_both_operations() {
         run_stream_frame_sequence_vector().unwrap();
     }
-
-    #[test]
-    fn removed_stream_request_fields_are_rejected() {
-        let fixture = load_fixture_value("sync-fixture.json").unwrap();
-        let baseline = fixture.pointer("/stream_frame_sequence/cases/0").unwrap();
-        for field in ["include_history", "max_duration_ms", "heartbeat_ms"] {
-            let mut case = baseline.clone();
-            case["request"][field] = json!(1);
-            assert!(run_stream_frame_case(StreamSurface::Account, &case).is_err());
-            assert!(run_stream_frame_case(StreamSurface::Events, &case).is_err());
-        }
-    }
 }

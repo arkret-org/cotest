@@ -39,15 +39,15 @@ use arkret::{
     AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, DidCoreId,
     DidFullId, DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata,
     MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliationItem,
-    PendingSidecarAccessReconciliationStage, RealmId, ScopeRef, SidecarId, SidecarMlsBinding,
-    StrandId, agent_sidecar_exchange_event_set_digest, agent_sidecar_participant_authority_digest,
-    recover_agent_sidecar_context_locators,
+    PendingSidecarAccessReconciliationStage, PreparedEventDraft, RealmId, ScopeRef, SidecarId,
+    SidecarMlsBinding, StrandId, agent_sidecar_exchange_event_set_digest,
+    agent_sidecar_participant_authority_digest, recover_agent_sidecar_context_locators,
 };
 use arkret_models_collaboration::sidecar_operations::{
     SidecarAcceptedOk, SidecarAcceptedPhase, SidecarAttachPhase, SidecarCommitPhase,
     SidecarContextAttachPayload, SidecarContextRef, SidecarEnsureAttachRequestBody,
     SidecarEnsureCommitRequestBody, SidecarEnsureOutcome, SidecarEnsurePrepareRequestBody,
-    SidecarPreparePhase, SidecarPreparedEventDraft, SidecarPreparedOutcome,
+    SidecarPreparePhase, SidecarPreparedOutcome,
 };
 use arkret_models_identity::agent_signer_evidence::AgentLifecycleStatus;
 use arkret_signatures::{
@@ -982,14 +982,14 @@ fn sidecar_actor_id(actor_id: &DidCoreId) -> SidecarModelResult<DidCoreId> {
     Ok(actor_id.clone())
 }
 
-fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEventDraft> {
+fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<PreparedEventDraft> {
     let unsigned = arkret_canonical::canonical_json_bytes(
         &event
             .digest_payload()
             .map_err(|_| SidecarModelError::ModelInvariant)?,
     )
     .map_err(|_| SidecarModelError::ModelInvariant)?;
-    Ok(SidecarPreparedEventDraft {
+    Ok(PreparedEventDraft {
         unsigned_event_bytes: Base64UrlString::new(URL_SAFE_NO_PAD.encode(unsigned))
             .map_err(|_| SidecarModelError::ModelInvariant)?,
         event_digest: Hash::new(
@@ -1001,7 +1001,7 @@ fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<SidecarPreparedEvent
     })
 }
 
-fn decode_prepared_event(draft: &SidecarPreparedEventDraft) -> SidecarModelResult<Event> {
+fn decode_prepared_event(draft: &PreparedEventDraft) -> SidecarModelResult<Event> {
     draft
         .unsigned_event()
         .map(|event| event.into_event())
@@ -1123,7 +1123,7 @@ fn validate_new_after_link(create: &Event, attach: &Event) -> SidecarModelResult
 }
 
 fn sign_prepared_draft(
-    draft: &SidecarPreparedEventDraft,
+    draft: &PreparedEventDraft,
     signer: &Ed25519PayloadSigner,
     verification_method: &DidUrl,
 ) -> SidecarModelResult<Event> {
@@ -1168,7 +1168,7 @@ fn sign_prepared_draft(
 
 fn validate_signed_draft(
     event: &Event,
-    draft: &SidecarPreparedEventDraft,
+    draft: &PreparedEventDraft,
     public_key: &PublicKeyMaterial,
 ) -> SidecarModelResult<()> {
     let actual_unsigned = arkret_canonical::canonical_json_bytes(
@@ -1544,8 +1544,8 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     }
     let concurrent_commit = |operation_id: ProtocolOperationId,
                              reservation_handle: ReservationHandle,
-                             create_draft: &SidecarPreparedEventDraft,
-                             attach_draft: &SidecarPreparedEventDraft|
+                             create_draft: &PreparedEventDraft,
+                             attach_draft: &PreparedEventDraft|
      -> Result<SidecarEnsureCommitRequestBody> {
         Ok(SidecarEnsureCommitRequestBody {
             phase: SidecarCommitPhase::Commit,

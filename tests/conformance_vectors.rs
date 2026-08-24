@@ -466,92 +466,6 @@ fn object_addressing_vector_suite_runs_clean() {
     assert_eq!(ALL_OBJECT_ADDRESSING_VECTOR_IDS.len(), 11);
 }
 
-// ─── R3.3 / OA-COT-5 — live share→resolve→open integration ────────────────
-//
-// The SDK-pure OA-COT-1..4 vectors above lock the wire grammar + token target
-// binding + resolve_target response shape. The full live leg (a client mints a
-// shareable link, teabay's resolve_target resolves it, and the recipient opens
-// the strand/message subject through the access gate) lands once teabay's
-// strand/message access-gate is reachable end-to-end.
-
-/// Gating: R3.3-followup — needs teabay strand/message access-gate reachable
-/// end-to-end.
-/// Tier: live
-#[test]
-#[ignore = "R3.3-followup: needs teabay strand/message access-gate"]
-fn test_oa_cot_5_share_resolve_open_live() {
-    // Live integration (client ↔ teabay resolve_target ↔ soland subject gate):
-    //   1. Author shares a strand as `web+arkret:realm/<r>/strand/<f>?via=<teabay>
-    //      &lt=invite&tok=<minted>` (and the equivalent HTTPS landing URL).
-    //   2. Recipient POSTs `ak.find.directory.read.resolve_target { address, token }`.
-    //   3. teabay parses the address, verify_token_target() binds the token to the resolved object
-    //      (scope-confusion replay rejected), and returns `DirectoryTargetResolutionOutcome {
-    //      target_kind=strand, object_preview, join_rule, as_of, source_refs, via_services }`.
-    //   4. Recipient opens the strand; soland's access gate honors the invite address_link_kind
-    //      (NOT the URL `lt` hint) for the join decision.
-    unreachable!("integration target gated on teabay strand/message access-gate (R3.3)");
-}
-
-// ─── R3.2 / TEST-COT-1 — live integration scenarios (shape-level only) ────
-//
-// These pin the full cross-service strands that the R3.2 wire changes enable.
-// The SDK-pure vector suites above already lock the wire shapes; the live
-// wiring (soland MID reducer + teabay list_handles_for_subject endpoint +
-// inkson §3.8.2 renderer transitions) lands as the upstream services finish
-// their R3.2 work, so the live legs stay `#[ignore]` with a reason string
-// (cotest CI enforces ignore-comment hygiene).
-
-/// Gating: R3.2-followup — needs soland MID reducer + coauth issuer +
-/// inkson/floria refresh wiring live.
-/// Tier: live
-#[test]
-#[ignore = "R3.2-followup: soland MID reducer + coauth issuer + inkson/floria refresh \
-            not yet wired for the end-to-end handle reassignment strand"]
-fn test_cot_1_handle_reassignment_full_strand_live() {
-    // Live integration (soland ↔ SDK ↔ inkson ↔ coauth):
-    //   1. coauth issues handle claim H1 for subject S (binding_state=verified).
-    //   2. All views (roster member_display_state_digest, list_handles_for_subject, inkson mention
-    //      render) reflect H1 as the §3.2.1 primary handle.
-    //   3. coauth revokes H1 and issues H2 for S.
-    //   4. roster member_display_state_digest changes (claim digest set folded);
-    //      list_handles_for_subject drops H1, surfaces H2; inkson re-renders the mention to H2 with
-    //      no `ak.member.identity.update` forged.
-    unreachable!("integration target gated on soland/coauth/inkson R3.2 P0 wiring");
-}
-
-/// Gating: R3.2-followup — needs teabay
-/// `POST /_arkret/find/directory/list-handles-for-subject` live.
-/// Tier: live
-#[test]
-#[ignore = "R3.2-followup: teabay POST /_arkret/find/directory/list-handles-for-subject \
-            endpoint not yet reachable end-to-end across services"]
-fn test_cot_1_teabay_list_handles_for_subject_end_to_end_live() {
-    // Live integration (teabay directory):
-    //   1. Seed teabay with two verified claims for subject S under distinct audiences + issuers.
-    //   2. POST list-handles-for-subject with realm context R1 → only the audience/issuer-trusted
-    //      claim is visible; response.primary_handle = select_primary_handle() output;
-    //      claims[].subject == subject.
-    //   3. Paginate with limit=1 → has_more=true + opaque next_cursor; the follow-up page
-    //      terminates with has_more=false.
-    unreachable!("integration target gated on teabay DIR-TBY-1 P0 wiring");
-}
-
-/// Gating: R3.2-followup — inkson §3.8.2 mention renderer fallback
-/// transitions not yet observable live.
-/// Tier: live
-#[test]
-#[ignore = "R3.2-followup: inkson §3.8.2 mention renderer fallback transitions \
-            (verified → cached → name-only → unresolved) not yet observable live"]
-fn test_cot_1_mention_render_fallback_transitions_live() {
-    // Live integration (inkson renderer):
-    //   1. Verified projection → render @localpart:domain (Verified tier).
-    //   2. Directory unreachable but local cache present → Cached tier badge.
-    //   3. Cache evicted, display_name_at_time present → NameOnly tier badge.
-    //   4. Nothing resolvable → Unresolved truncated-DID tier badge.
-    // Each transition MUST carry a distinct visual-degradation marker.
-    unreachable!("integration target gated on inkson YG-MENT-2 P0 wiring");
-}
-
 // ─── P0 / FIX-1 — fixture presence + shape ────────────────────────────────
 
 #[test]
@@ -583,47 +497,6 @@ fn agent_payloads_fixture_loads_and_has_canonical_shape() {
             "agent_payloads.json missing event_kind {required}"
         );
     }
-}
-
-// ─── P0 / TEST-1 — Agent FSM scenario ──────────────────────────────────────
-//
-// Drives the live `POST /agents/{id}/{pause,resume,deactivate}` route
-// matrix against soland and asserts the FSM bottom-reject contract +
-// terminal deactivate. Soland's reducer FSM is `TODO(R3.1)` so the
-// integration path is ignored.
-
-/// Gating: R3.1 — soland agent FSM reducer wiring not yet implemented.
-/// Tier: live
-#[test]
-#[ignore = "R3.1: soland agent FSM reducer wiring not yet implemented"]
-fn test_1_agent_fsm_active_paused_active_deactivated_terminal() {
-    // Wire-shape transitions are pinned by
-    // `run_agent_controller_lifecycle_vector` above. Live integration:
-    //   1. Provision agent.
-    //   2. POST /agents/{id}/pause → 200.
-    //   3. POST /agents/{id}/resume → 200.
-    //   4. POST /agents/{id}/deactivate → 200.
-    //   5. POST /agents/{id}/resume → 403 agent_deactivated.
-    unreachable!("integration target gated on soland P2-impl reducer");
-}
-
-// ─── P0 / TEST-2 — Media token exchange happy path + 4 negative paths ──────
-
-/// Gating: live cotest harness for media-token exchange is not wired yet.
-/// Tier: live
-#[test]
-#[ignore = "live cotest harness for media-token exchange is not wired yet"]
-fn test_2_media_token_exchange_happy_path_plus_negatives() {
-    // Negative-path matrix pinned at the SDK constant layer by
-    // VECT-MB-3 / VECT-MB-4 / VECT-MB-5. Soland issuer behavior is covered by
-    // its http_api suite; this live cotest scenario still needs provisioning:
-    //   - happy: 200 with backend_token + participant_binding, TTL ≤ 600s, issuer_kid anchored to
-    //     current `ak.realm.media_service.service_id`.
-    //   - neg-issuer: rogue issuer kid → 401 token_issuer_unauthorised.
-    //   - neg-focus:  off-focus token request → 422 focus_mismatch.
-    //   - neg-ttl:    server-issued TTL > 600s → 422 participant_binding_invalid.
-    //   - neg-binding: malformed participant_binding scheme → 422 participant_binding_invalid.
-    unreachable!("integration target gated on live cotest media-service provisioning");
 }
 
 // ─── P0 / TEST-4 — Cursor opaque round-trip + stateless-under-core reject ──
@@ -666,19 +539,6 @@ fn test_5_recovery_policy_fixture_state_machine_shape() -> Result<()> {
     cotest::conformance::run_identity_root_anchor_checkpoint_suite()?;
     cotest::conformance::run_identity_model_generation_fence_suite()?;
     Ok(())
-}
-
-/// Gating: root-anchored live registry + re-anchor harness is not yet wired.
-/// Tier: live
-#[test]
-#[ignore = "root-anchored live registry entry + atomic re-anchor harness not yet wired"]
-fn test_5_recovery_policy_state_machine_live() {
-    // Live integration:
-    //   1. Resolve an accepted policy snapshot with distinct signing/HPKE keys.
-    //   2. Publish the higher canonical DID registry entry.
-    //   3. Atomically submit root-signed re-anchor + replacement-device-signed authorize.
-    //   4. Verify the receipt and reject old-generation Event/Seal replay.
-    unreachable!("integration target gated on root-anchored registry/re-anchor harness");
 }
 
 // ─── P0 / TEST-6 — Internationalized identifier profiles ───────────────────
@@ -792,25 +652,6 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
     Ok(())
 }
 
-/// Gating: R3.1 — soland MID reducer + `ak.profile.update` field-level delta
-/// wiring not yet implemented.
-/// Tier: live
-#[test]
-#[ignore = "R3.1: soland MID reducer + ak.profile.update field-level delta wiring not yet implemented"]
-fn test_7_cx_member_identity_update_live() {
-    // Live integration:
-    //   1. Actor publishes initial `ak.member.identity.update` event with MemberIdentity v1
-    //      (display_name="Alice").
-    //   2. Actor publishes second event with `replaces[]` pointing at the first; payload carries
-    //      MemberIdentity v2 with display_name="Alice (work)".
-    //   3. Client `account.subscribe` frame surfaces a roster with only the second event in
-    //      `identity_event_ids[]`.
-    //   4. `ak.profile.update` field-level delta MUST drive the v2 display_name onto the projected
-    //      profile; the `ak.profile.realm_override` profile MUST take precedence when set
-    //      per-Space.
-    unreachable!("integration target gated on soland MID reducer (R3.1)");
-}
-
 // ─── R3.1 / TEST-8 — Handle rename round-trip ──────────────────────────────
 
 #[test]
@@ -913,22 +754,4 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         );
     }
     Ok(())
-}
-
-/// Gating: R3.1 — live coauth + soland + teabay handle wire rename not yet
-/// visible at runtime.
-/// Tier: live
-#[test]
-#[ignore = "R3.1: live coauth + soland + teabay handle wire rename not yet visible at runtime"]
-fn test_8_handle_rename_round_trip_live() {
-    // Live integration:
-    //   1. Client builds invite for canonical handle `alice:acme.example`.
-    //   2. soland reducer accepts member-add with `payload.handle = "alice:acme.example"` (NO
-    //      `handle_uri` field).
-    //   3. teabay's `ak.find.directory.read.resolve_handle(handle=...)` accepts the canonical
-    //      handle string in the request body and returns a candidate whose `handle` field is the
-    //      same canonical wire form.
-    //   4. coauth's handle-claim issuance + sync surface MUST NOT emit `handle_uri` anywhere on a
-    //      fresh R3.1 wire shape.
-    unreachable!("integration target gated on coauth+soland+teabay R3.1 rename");
 }

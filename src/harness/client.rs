@@ -3,9 +3,11 @@ use arkret::contact_operations::{
     ContactAcceptAction, ContactAcceptPrepareRequestBody, ContactAcceptRequestBody,
     ContactAcceptedOutcome, ContactCommitPhase, ContactCommitRequestBody, ContactOperationOutcome,
     ContactOperationRequestBody, ContactPeer, ContactPreparePhase, ContactPrepareRequestBody,
-    ContactPreparedEventDraft, ContactPreparedOutcome, ContactScope, RequestAcceptanceReceipt,
+    ContactPreparedOutcome, ContactScope, RequestAcceptanceReceipt,
 };
-use arkret::{ContactIntroductionEvidence, IdempotencyKey, ProtocolOperationId};
+use arkret::{
+    ContactIntroductionEvidence, IdempotencyKey, PreparedEventDraft, ProtocolOperationId,
+};
 use arkret_http_client::Client as SdkClient;
 use arkret_identifiers::{DidCoreId, DidFullId, Hash, Hlc, RealmId, project_full_id_to_core_id};
 use arkret_models_collaboration::events_payloads::{
@@ -228,7 +230,7 @@ impl TestActorClient {
 
     fn sign_prepared_contact_event(
         &self,
-        draft: &ContactPreparedEventDraft,
+        draft: &PreparedEventDraft,
     ) -> Result<arkret_wire::Event> {
         let mut event = draft.unsigned_event()?;
         let created_at = event.created_at;
