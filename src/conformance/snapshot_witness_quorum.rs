@@ -10,9 +10,8 @@
 //!    and MUST be rejected even when the JWS itself verifies;
 //!  - the projection may not contain `signature` or `witness_attestations`, otherwise a witness
 //!    would sign a transcript containing its own signature;
-//!  - quorum is counted per `witness_id` against the accepted Realm auth/policy state, never
-//!    against `verification_hints.witness_quorum`, which is a declared value the receiver only
-//!    cross-checks;
+//!  - quorum is counted per `witness_id` against the accepted Realm auth/policy state; the manifest
+//!    carries no duplicate quorum threshold;
 //!  - the issuer signature covers the final sorted witness list, so a rewritten list is detectable
 //!    and an unsorted list is rejected outright rather than normalized first.
 //!
@@ -49,7 +48,6 @@ const REQUIRED_CASE_NAMES: &[&str] = &[
     "unauthorized_witness_not_counted",
     "revoked_witness_not_counted",
     "below_threshold_rejected",
-    "declared_hint_below_policy_threshold_rejected",
     "wrong_context_rejected",
     "wrong_projection_rejected",
     "projection_must_not_contain_signature_fields",
@@ -266,14 +264,6 @@ fn run_case(
                 candidate.authority_binding.witness_attestations =
                     attestations_from(case, &candidate)?;
             }
-            let hints = candidate.verification_hints.as_mut().ok_or_else(|| {
-                anyhow!("case `{name}`: the manifest carries no verification hints")
-            })?;
-            hints.witness_quorum = case
-                .get("declared_witness_quorum")
-                .and_then(Value::as_u64)
-                .map(u32::try_from)
-                .transpose()?;
             // The issuer published this exact list, so the list gates are not
             // what the case is about.
             seal_issuer_signature(&mut candidate)?;
@@ -418,7 +408,6 @@ fn expect_error(
 fn manifest_from_fixture(vector: &Value) -> Result<SnapshotManifest> {
     let fixture_manifest = required_field(vector, "manifest")?;
     let binding = required_field(fixture_manifest, "authority_binding")?;
-    let hints = required_field(fixture_manifest, "verification_hints")?;
     let security_class = value_field_str(fixture_manifest, "security_class")?;
     let created_at = value_field_str(fixture_manifest, "created_at")?;
     let mut manifest: SnapshotManifest = serde_json::from_value(json!({
@@ -432,13 +421,11 @@ fn manifest_from_fixture(vector: &Value) -> Result<SnapshotManifest> {
         "event_set_commitment": required_field(fixture_manifest, "event_set_commitment")?,
         "verification_hints": {
             "verification_profile": security_class,
-            "witness_quorum": required_field(hints, "witness_quorum")?,
         },
         "chunks": [],
         "created_by": value_field_str(fixture_manifest, "created_by")?,
         "created_at": created_at,
         "authority_binding": {
-            "issuer": value_field_str(binding, "issuer")?,
             "authority_kind": value_field_str(binding, "authority_kind")?,
             "auth_state_digest": value_field_str(binding, "auth_state_digest")?,
             "auth_frontier": required_field(binding, "auth_frontier")?,

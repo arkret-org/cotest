@@ -92,8 +92,10 @@ pub fn run_long_text_content_fixture_suite() -> Result<()> {
             "long_text_e2ee_descriptor" => {
                 let size = generator["size_bytes"].as_u64().unwrap_or_default();
                 let segment = generator["segment_bytes"].as_u64().unwrap_or_default();
-                let count = generator["segment_count"].as_u64().unwrap_or_default();
-                if segment == 0 || size.div_ceil(segment) != count {
+                let expected = generator["expected_derived_segment_count"]
+                    .as_u64()
+                    .unwrap_or_default();
+                if segment == 0 || size.div_ceil(segment).max(1) != expected {
                     bail!("long-text E2EE segment matrix drifted");
                 }
             }

@@ -10,7 +10,7 @@ use arkret::{
 };
 use arkret_crypto::blob_aead::{
     ALG_STREAM_XCHACHA, SCHEME_STREAM, StreamDecryptor, StreamEncryptParams, decrypt_stream,
-    encrypt_stream,
+    encrypt_stream, stream_segment_count,
 };
 use arkret_models_crypto::{EncryptedAttachment, StreamEncryptedAttachment};
 use arkret_wire::ProfileId;
@@ -128,7 +128,7 @@ fn stream_fields(env: &EncryptedAttachment) -> Result<&StreamEncryptedAttachment
 fn split_segments(ciphertext: &[u8], env: &EncryptedAttachment) -> Result<Vec<Vec<u8>>> {
     let stream = stream_fields(env)?;
     let segment_bytes = stream.segment_bytes as usize;
-    let segment_count = stream.segment_count;
+    let segment_count = stream_segment_count(stream.size_bytes, stream.segment_bytes as u32)?;
     let mut out = Vec::with_capacity(segment_count as usize);
     let mut offset = 0usize;
     for index in 0..segment_count {
@@ -136,7 +136,7 @@ fn split_segments(ciphertext: &[u8], env: &EncryptedAttachment) -> Result<Vec<Ve
         let plaintext_len = if index < last_index {
             segment_bytes
         } else {
-            (stream.size_bytes - (segment_bytes as u64) * last_index) as usize
+            (stream.size_bytes - (segment_bytes as u64) * u64::from(last_index)) as usize
         };
         let ciphertext_len = plaintext_len + SEGMENT_TAG_LEN;
         let end = offset + ciphertext_len;
@@ -178,12 +178,10 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
             raw["encryption_algorithm"]
         );
     }
-    if stream.segment_bytes != u64::from(CONFORMANCE_SEGMENT_SIZE) || stream.segment_count != 3 {
-        bail!(
-            "expected segment_bytes={CONFORMANCE_SEGMENT_SIZE} segment_count=3, got {}/{}",
-            stream.segment_bytes,
-            stream.segment_count
-        );
+    if stream.segment_bytes != u64::from(CONFORMANCE_SEGMENT_SIZE)
+        || stream_segment_count(stream.size_bytes, stream.segment_bytes as u32)? != 3
+    {
+        bail!("unexpected stream descriptor bounds");
     }
     if raw.get("nonce").is_some() || raw.get("nonce_prefix").is_none() {
         bail!("stream envelope must carry nonce_prefix and no whole-file nonce");
@@ -228,15 +226,6 @@ pub fn run_stream_aead_truncation_rejected_vector() -> Result<()> {
         decryptor.push_segment(index as u32, segment)?;
     }
     expect_reason(decryptor.finish().unwrap_err(), "segment_stream_truncated")?;
-
-    let mut count_mismatch_stream = stream_fields(&env)?.clone();
-    count_mismatch_stream.segment_count += 1;
-    let count_mismatch = EncryptedAttachment::Stream(count_mismatch_stream);
-    let count_mismatch_err = match StreamDecryptor::new(&count_mismatch, &key) {
-        Ok(_) => bail!("segment_count mismatch unexpectedly constructed a decryptor"),
-        Err(error) => error,
-    };
-    expect_reason(count_mismatch_err, "segment_stream_truncated")?;
 
     Ok(())
 }

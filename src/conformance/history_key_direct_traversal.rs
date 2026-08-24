@@ -599,7 +599,6 @@ fn verify_governance_dependency_kats(fixture: &Value) -> Result<()> {
     let receipt: AvailabilityReceipt =
         serde_json::from_value(dependency_kat["availability_receipt"].clone())?;
     receipt.validate_structural()?;
-    receipt.validate_receipt_digest(sha256_hash)?;
     receipt.validate_signature_payload_digest(sha256_hash)?;
 
     let outcome: GovernanceDependencyResolveOutcome =

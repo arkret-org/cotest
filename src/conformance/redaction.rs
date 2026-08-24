@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
-use sha2::Digest;
 
 use super::schema_validation_fixture::SchemaEnv;
 use super::{RedactionFixture, load_artifact_json, load_fixture};
@@ -704,7 +703,6 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "outcome": "completed",
         "erased_classes": ["canonical_payload_bytes", "derived_plaintext"],
         "retained_stub_digest": digest,
-        "retained_stub": stub,
         "completed_at": "2026-04-29T00:00:00.000Z",
         "proofs": [{
             "verification_method": "did:web:erasure.example.com#erasure-key-1",
@@ -731,17 +729,8 @@ fn assert_hard_erasure_receipt() -> Result<()> {
     }
     verify_erasure_receipt_stub_digest(&receipt, &stub)?;
 
-    let canonical_receipt = arkret_canonical::canonical_json_bytes(&receipt)
-        .map_err(|err| anyhow!("hard_erasure_receipt: package digest input failed: {err}"))?;
-    let mut package_preimage = b"ak.erasure-receipt.v1\n".to_vec();
-    package_preimage.extend_from_slice(&canonical_receipt);
-    let receipt_digest = format!(
-        "sha256:{}",
-        hex::encode(sha2::Sha256::digest(package_preimage))
-    );
     let package = json!({
         "receipt": receipt.clone(),
-        "receipt_digest": receipt_digest,
         "retained_stub": stub.clone(),
     });
     let carrier_request = json!({"package": package});
@@ -757,10 +746,11 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         arkret_models_collaboration::governance::erasure::ErasureReceiptSubmitRequestBody,
     >(carrier_request.clone())?;
     typed_package.package.validate_bindings()?;
-    let mut tampered_package = typed_package.package.clone();
-    tampered_package.receipt_digest = arkret_wire::Hash::new(format!("sha256:{}", "0".repeat(64)))?;
-    if tampered_package.validate_bindings().is_ok() {
-        bail!("hard_erasure_receipt: tampered package digest was accepted");
+    let mut duplicated_stub_package = typed_package.package.clone();
+    duplicated_stub_package.receipt.retained_stub =
+        Some(duplicated_stub_package.retained_stub.clone());
+    if duplicated_stub_package.validate_bindings().is_ok() {
+        bail!("hard_erasure_receipt: nested package stub was accepted");
     }
     assert_erasure_receipt_operations_registered()?;
 
