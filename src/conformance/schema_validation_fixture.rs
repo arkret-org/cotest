@@ -215,9 +215,7 @@ pub fn run_schema_definition_validator_kat() -> Result<()> {
     for case in kat.cases {
         let result = catalog
             .validate_payload(event_kind.as_str(), &case.payload)
-            .and_then(|()| {
-                arkret_schema::validate_payload_validator_profile(&event_kind, &case.payload)
-            });
+            .and_then(|()| arkret_schema::validate_schema_definition_payload(&case.payload));
         if case.expected_valid != result.is_ok() {
             bail!(
                 "schema-definition KAT {} drifted: expected_valid={}, observed={}",
