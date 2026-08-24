@@ -679,8 +679,6 @@ fn candidate_attribution(
             source_record_digest: candidate_digest(0xf0 ^ response_index)?,
         },
         first_observed_at: now,
-        expires_at: now
-            + chrono::Duration::seconds(HISTORY_STORE_LIMITS.origin_attribution_ttl_seconds),
     })
 }
 
@@ -692,7 +690,6 @@ fn candidate_binding_key(
         mls_group_id: material_key.mls_group_id.clone(),
         epoch: material_key.epoch,
         event_id: EventId::new("ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")?,
-        event_digest: candidate_digest(0xaa)?,
         verified_sender_domain: "ak:device:sender".to_owned(),
     })
 }
@@ -827,7 +824,7 @@ fn verify_history_candidate_store_kat(fixture: &Value) -> Result<()> {
     ledger
         .admit_received_candidate(
             &expired_attribution,
-            expired_attribution.expires_at() + chrono::Duration::seconds(1),
+            expired_attribution.expires_at()? + chrono::Duration::seconds(1),
         )
         .expect_err("expired candidate attribution must not be renewed");
     Ok(())

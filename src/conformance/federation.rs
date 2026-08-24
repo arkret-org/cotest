@@ -262,7 +262,6 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
         "self_submit_outcome_omits_receipts": true,
         "receipt_binding_fields": [
             "event_id",
-            "event_digest",
             "realm_id",
             "producer_accepted_at",
             "accepted_at",

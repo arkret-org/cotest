@@ -43,7 +43,7 @@ function uuidv7Like(): string {
  * Build a schema-conforming `secret_storage` key-backup envelope
  * (`ak.schema.key_backup.v1`) for `recipient_method=passphrase_kdf`. Every
  * cross-field constraint soland's decode path enforces (hkdf_info,
- * aead_aad mirroring, signed_fields coverage, genesis series shape) is
+ * aead_aad mirroring, genesis series shape) is
  * satisfied so the test exercises the *profile* gate rather than tripping a
  * generic schema_violation first.
  */
@@ -59,18 +59,6 @@ function secretStorageEnvelope(opts: {
   const backupClass = "secret_storage";
   const subdomain = "account_keys";
   const itemTypes = ["mls_group_secrets_backup_key"];
-  const signedFields = [
-    "backup_id",
-    "actor_id",
-    "backup_kind",
-    "backup_version",
-    "series_id",
-    "series_seq",
-    "encryption",
-    "domain_separation",
-    "contents",
-    "ciphertext_digest",
-  ];
   const envelope: Record<string, unknown> = {
     backup_id: backupId,
     actor_id: opts.actorId,
@@ -127,7 +115,6 @@ function secretStorageEnvelope(opts: {
       // The PCR accepted-device Event is the sole device trust anchor.
       device_authorize_event_id:
         "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
-      signed_fields: signedFields,
     },
   };
   return { backupId, envelope };

@@ -141,7 +141,6 @@ struct ExecutableEvidence {
     audience: DidCoreId,
     challenge: NonEmptyString,
     event_id: EventId,
-    event_digest: Hash,
     realm_id: RealmId,
     producer_accepted_at: DateTime<Utc>,
     producer_signer_resolution_evidence_ref: SignerEvidenceRef,
@@ -789,7 +788,6 @@ fn historical_outcome_with(
                 &account_key,
             ),
             event_id: &fixture.event_id,
-            event_digest: &fixture.event_digest,
             realm_id: &fixture.realm_id,
             producer_accepted_at: fixture.producer_accepted_at,
             producer_signer_resolution_evidence_ref: &fixture
@@ -1157,7 +1155,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     sign_outer(&mut current, &authority_signing)?;
 
     let event_id = event_id(3)?;
-    let event_digest = hash_byte(0x51)?;
     let producer_accepted_at = now - Duration::seconds(1);
     let producer_signer_resolution_evidence_digest = hash_byte(0x71)?;
     let producer_signer_resolution_evidence_ref = SignerEvidenceRef::new(format!(
@@ -1167,7 +1164,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let mut receipt = AgentEventAdmissionReceipt {
         schema: nes(SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1)?,
         event_id: event_id.clone(),
-        event_digest: event_digest.clone(),
         realm_id: realm_id.clone(),
         producer_accepted_at,
         accepted_at: now,
@@ -1224,7 +1220,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         audience,
         challenge,
         event_id,
-        event_digest,
         realm_id,
         producer_accepted_at,
         producer_signer_resolution_evidence_ref,

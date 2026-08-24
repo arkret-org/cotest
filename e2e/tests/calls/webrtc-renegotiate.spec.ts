@@ -56,8 +56,6 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     expect(typeof body.ttl_seconds).toBe("number");
     // §4.1 — refresh_lead_seconds MUST be strictly less than ttl_seconds.
     expect(body.refresh_lead_seconds).toBeLessThan(body.ttl_seconds);
-    expect(body.bucket_seconds).toBe(300);
-
     const signature = body.signature as Record<string, unknown>;
     expect(signature, "ICE config MUST be signed").toBeTruthy();
     expect(signature.signature_algorithm).toBe("Ed25519");

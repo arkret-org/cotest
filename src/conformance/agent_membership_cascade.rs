@@ -166,7 +166,6 @@ fn validate_cleanup_intent_digest_and_states(
             principal_server_id: binding.controller_authority.principal_server_id.clone(),
         },
         controller_terminal_event_id: terminal_event_id,
-        controller_terminal_event_digest: Hash::new(format!("sha256:{}", "7".repeat(64)))?,
         expected_agent_ids: vec![DidCoreId::new("ak:did_core:webvh:z6mkfixtureagentexample")?],
         cleanup_intent_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         accepted_at,

@@ -666,7 +666,6 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                             anyhow!("privacy fixture {} has non-string display text", case.name)
                         })?,
                         256,
-                        arkret_wire::DISPLAY_TEXT_MAX_UTF8_OCTETS,
                     )?;
                 }
 
@@ -733,7 +732,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     let value = value.as_str().ok_or_else(|| {
                         anyhow!("privacy fixture {} has non-string rejection", case.name)
                     })?;
-                    if arkret_wire::validate_single_line_display_text(value, 256, 1024).is_ok() {
+                    if arkret_wire::validate_single_line_display_text(value, 256).is_ok() {
                         bail!(
                             "privacy fixture {} unexpectedly accepted display text",
                             case.name

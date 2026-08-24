@@ -201,11 +201,9 @@ test.describe("calls — canonical wire", () => {
     expect(refreshedResp.status()).toBe(200);
     const refreshed = await refreshedResp.json();
 
-    expect(issued.bucket_seconds).toBe(300);
-    expect(refreshed.bucket_seconds).toBe(300);
-    expect(iceBucketUnix(issued)).toBe(floorToBucketUnix(issued.issued_at, 300));
+    expect(iceBucketUnix(issued)).toBe(floorToBucketUnix(issued.issued_at));
     expect(iceBucketUnix(refreshed)).toBe(
-      floorToBucketUnix(refreshed.issued_at, 300),
+      floorToBucketUnix(refreshed.issued_at),
     );
     // §4.1/§4.2 — within the same pseudonym bucket an active leg keeps its
     // pseudonym. The REST username expiry can still move, which changes the
@@ -274,9 +272,7 @@ test.describe("calls — canonical wire", () => {
     // REST-style username = `<expiry-unix>:ak_pseudonym_call_<16hex>` (§4.1).
     const aliceParsed = parseTurnUsername(aliceUsername);
     const bobParsed = parseTurnUsername(bobUsername);
-    expect(aliceParsed.expiryUnix).toBe(
-      Math.floor(new Date(aliceIce.expires_at as string).getTime() / 1000),
-    );
+    expect(aliceParsed.expiryUnix).toBe(iceExpiryUnix(aliceIce));
     // credential = base64(HMAC-SHA256(turn_shared_secret, username)).
     expect(aliceTurn.credential).toMatch(/^[A-Za-z0-9+/]+=*$/);
     expect(bobTurn.credential).toMatch(/^[A-Za-z0-9+/]+=*$/);
@@ -292,15 +288,18 @@ test.describe("calls — canonical wire", () => {
   });
 });
 
-// `issued_at_bucket` is an RFC3339 timestamp; collapse it to the unix-second
-// bucket boundary for comparison.
-function iceBucketUnix(ice: { issued_at_bucket: string }): number {
-  return Math.floor(new Date(ice.issued_at_bucket).getTime() / 1000);
+// v1 fixes the privacy bucket at 300 seconds; the wire carries only issued_at.
+function iceBucketUnix(ice: { issued_at: string }): number {
+  return floorToBucketUnix(ice.issued_at);
 }
 
-function floorToBucketUnix(issuedAt: string, bucketSeconds: number): number {
+function floorToBucketUnix(issuedAt: string): number {
   const issuedUnix = Math.floor(new Date(issuedAt).getTime() / 1000);
-  return Math.floor(issuedUnix / bucketSeconds) * bucketSeconds;
+  return Math.floor(issuedUnix / 300) * 300;
+}
+
+function iceExpiryUnix(ice: { issued_at: string; ttl_seconds: number }): number {
+  return Math.floor(new Date(ice.issued_at).getTime() / 1000) + ice.ttl_seconds;
 }
 
 function turnOf(ice: any): any {

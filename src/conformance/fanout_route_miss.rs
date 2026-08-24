@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result, bail};
 use arkret_models_collaboration::http_bodies::{
-    EventDeliveryState, EventDeliveryStatusOutcome, EventDeliveryStatusRequestBody,
+    EventDeliveryStateView, EventDeliveryStatusOutcome, EventDeliveryStatusRequestBody,
     EventDeliveryTargetState, EventDeliveryTargetStatus, EventsSubmitOutcome,
 };
 use arkret_wire::{DidCoreId, EventId};
@@ -75,11 +75,14 @@ fn validate_sdk_delivery_contract() -> Result<()> {
     };
     let outcome = EventDeliveryStatusOutcome {
         event_id,
-        delivery_state: EventDeliveryState::Pending,
-        pending_delivery_count: 1,
         targets: vec![pending.clone(), delivered],
     };
     outcome.validate_for_request(&request)?;
+    if outcome.pending_delivery_count() != 1
+        || outcome.delivery_state() != EventDeliveryStateView::Pending
+    {
+        bail!("delivery status did not derive its pending aggregate from targets");
+    }
 
     let mut unsorted = outcome.clone();
     unsorted.targets.reverse();
@@ -88,7 +91,6 @@ fn validate_sdk_delivery_contract() -> Result<()> {
     }
     let mut duplicate = outcome.clone();
     duplicate.targets = vec![pending.clone(), pending];
-    duplicate.pending_delivery_count = 2;
     if duplicate.validate_for_request(&request).is_ok() {
         bail!("delivery status accepted duplicate opaque target ids");
     }
@@ -96,10 +98,11 @@ fn validate_sdk_delivery_contract() -> Result<()> {
     let submit: EventsSubmitOutcome = serde_json::from_value(serde_json::json!({
         "status": "accepted",
         "accepted": [request.event_id],
-        "delivery_state": "pending",
         "pending_delivery_count": 1
     }))?;
-    submit.validate_delivery_state()?;
+    if submit.delivery_state() != EventDeliveryStateView::Pending {
+        bail!("Event submit summary lost its non-zero pending count");
+    }
     let encoded = serde_json::to_value(submit)?;
     if encoded.get("targets").is_some() || encoded.get("service_id").is_some() {
         bail!("Event submit summary exposed target topology");
@@ -107,8 +110,6 @@ fn validate_sdk_delivery_contract() -> Result<()> {
 
     let complete = EventDeliveryStatusOutcome {
         event_id: request.event_id.clone(),
-        delivery_state: EventDeliveryState::Complete,
-        pending_delivery_count: 0,
         targets: vec![EventDeliveryTargetStatus {
             target_id: "opaque-target-0003".to_owned(),
             status: EventDeliveryTargetState::CancelledAuthorityLost,
@@ -116,5 +117,10 @@ fn validate_sdk_delivery_contract() -> Result<()> {
         }],
     };
     complete.validate_for_request(&request)?;
+    if complete.pending_delivery_count() != 0
+        || complete.delivery_state() != EventDeliveryStateView::Complete
+    {
+        bail!("terminal target set derived a pending aggregate");
+    }
     Ok(())
 }

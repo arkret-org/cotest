@@ -160,7 +160,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             .to_owned(),
     )?;
     ensure!(
-        first["delivery_state"] == "pending" && first["pending_delivery_count"] == 1,
+        first["pending_delivery_count"] == 1,
         "route miss did not return accepted+pending without topology: {first}"
     );
     ensure!(
@@ -199,7 +199,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     let delivered =
         wait_for_target_state(&alice, &first_event_id, EventDeliveryTargetState::Delivered).await?;
     ensure!(
-        delivered.pending_delivery_count == 0,
+        delivered.pending_delivery_count() == 0,
         "delivered Event retained a pending count"
     );
     let bob = group.server(1).demo_client(&bob_did, BOB_DEVICE).await?;

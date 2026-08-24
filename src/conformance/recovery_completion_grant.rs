@@ -53,7 +53,6 @@ fn completion_vector() -> Result<CompletionVector> {
     let transaction_request_digest = hash('1');
     let prepared_plan_digest = hash('2');
     let authorization_event_id = "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM";
-    let authorization_event_digest = hash('3');
     let previous_generation = 1;
     let result_generation = 2;
     let started_at = Utc
@@ -134,7 +133,6 @@ fn completion_vector() -> Result<CompletionVector> {
             terminal_receipt_digest: terminal_receipt_digest.parse()?,
             replacement_device_id: device_id.parse()?,
             device_authorization_event_id: authorization_event_id.parse()?,
-            device_authorization_event_digest: authorization_event_digest.parse()?,
             result_model_generation_ref: result_generation,
             completed_at,
         },

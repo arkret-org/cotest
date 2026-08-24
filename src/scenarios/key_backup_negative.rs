@@ -127,18 +127,6 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )
     .await?;
 
-    let accepted_value = serde_json::to_value(&accepted_body)?;
-    let signed_fields = accepted_value
-        .pointer("/auth_data/signed_fields")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("key backup auth_data.signed_fields is missing"))?;
-    assert!(
-        signed_fields
-            .iter()
-            .all(|field| field.as_str() != Some("idempotency_key")),
-        "Idempotency-Key is an HTTP replay header, not part of the backup content signature"
-    );
-
     let bob_backups = expect_json(bob.get("/_arkret/self/keys/backups"), StatusCode::OK).await?;
     assert!(
         bob_backups["backups"]
