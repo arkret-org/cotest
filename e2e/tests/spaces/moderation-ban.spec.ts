@@ -11,11 +11,16 @@ import { expect, test } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,
+  advanceEnvelopeToActorFrontier,
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalJson,
   createRealmApi,
+  grantCapabilityEventApi,
   prepareSignedEventCbaApi,
   queryRealmEventsApi,
+  readRealmSealBasis,
+  refreshEventEnvelopeProof,
   resolveDefaultStrandId,
   sendMessageApi,
   signedEventEnvelope,
@@ -65,6 +70,16 @@ test.describe("moderation and ban", () => {
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
     await addRealmMemberApi(request, aliceToken, realmId, carol.did);
+    // The first message below is authored by a non-owner. Establish the
+    // ordinary Realm's explicit default discussion Strand as the root
+    // controller before that member write.
+    await resolveDefaultStrandId(request, aliceToken, realmId);
+    await grantCapabilityEventApi(request, aliceToken, {
+      ownerDid: alice.did,
+      realmId,
+      subjectDid: mallory.did,
+      actions: ["ak.message.create"],
+    });
 
     const abusive = `S5 abusive content ${stamp}`;
     const postBan = `S5 after ban ${stamp}`;
@@ -75,9 +90,11 @@ test.describe("moderation and ban", () => {
     const beforeRedaction = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
 
-    const reportResp = await request.post(`${solandBaseUrl()}/_arkret/self/moderation/report`, {
-      headers: authHeaders(bobToken),
-      data: {
+    const reportEvent = signedEventEnvelope({
+      actorDid: bob.did,
+      realmId,
+      kind: "ak.self.moderation.report",
+      payload: {
         realm_id: realmId,
         target_ref: sent.event_id,
         report_reason_code: "harassment",
@@ -86,8 +103,35 @@ test.describe("moderation and ban", () => {
         evidence_refs: [sent.event_id],
       },
     });
-    expect(reportResp.ok()).toBeTruthy();
-    const reportBody = await reportResp.json();
+    await advanceEnvelopeToActorFrontier(request, bobToken, reportEvent);
+    const sealBasis = await readRealmSealBasis(request, bobToken, realmId);
+    const sealRef = Array.isArray(sealBasis.leaves) ? sealBasis.leaves[0] : undefined;
+    expect(typeof sealRef, "moderation report Seal reference").toBe("string");
+    reportEvent.seal_ref = sealRef;
+    const proof = Array.isArray(reportEvent.proofs)
+      ? (reportEvent.proofs[0] as Record<string, unknown> | undefined)
+      : undefined;
+    const verificationMethod = String(proof?.verification_method ?? "");
+    const keyIdFragment = verificationMethod.split("#").at(-1) ?? verificationMethod;
+    reportEvent.auth_context = {
+      actor_id: bob.did,
+      key_id: keyIdFragment.startsWith("ak:")
+        ? keyIdFragment.slice(3)
+        : keyIdFragment,
+      key_epoch: 0,
+    };
+    refreshEventEnvelopeProof(reportEvent, verificationMethod);
+    const reportUrl = `${solandBaseUrl()}/_arkret/self/moderation/report`;
+    const reportResp = await request.post(reportUrl, {
+      headers: {
+        ...authHeaders(bobToken, "POST", reportUrl),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({ report_event: { event: reportEvent } }),
+    });
+    const reportText = await reportResp.text();
+    expect(reportResp.ok(), reportText).toBeTruthy();
+    const reportBody = JSON.parse(reportText);
     expect(reportBody.report_id).toMatch(/^ak:report:/);
     expect(reportBody.status).toBe("submitted");
 
@@ -132,12 +176,22 @@ test.describe("moderation and ban", () => {
       bobToken,
       unauthorizedBanEvent,
     );
-    const unauthorizedBan = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(bobToken),
-      data: unauthorizedBanEvent,
+    const leaseUrl = `${solandBaseUrl()}/_arkret/self/authorization-leases`;
+    const unauthorizedBan = await request.post(leaseUrl, {
+      headers: {
+        ...authHeaders(bobToken, "POST", leaseUrl),
+        "content-type": "application/json",
+        "idempotency-key": `cotest-unauthorized-ban-${unauthorizedBanEvent.event_id}`,
+      },
+      data: canonicalJson({ events: [unauthorizedBanEvent] }),
     });
-    expect(unauthorizedBan.status()).toBe(403);
-    expect(JSON.stringify(await unauthorizedBan.json())).toContain("missing_capability");
+    // Lease issuance runs the same read-only admission as final submission;
+    // it may narrow existing authority but must never mint Realm admin rights.
+    const unauthorizedText = await unauthorizedBan.text();
+    expect(unauthorizedBan.status(), unauthorizedText).toBe(403);
+    expect(unauthorizedText).toContain(
+      "missing_capability",
+    );
 
     const reports = await request.get(`${solandBaseUrl()}/_soland/admin/reports`, {
       headers: authHeaders(aliceToken),

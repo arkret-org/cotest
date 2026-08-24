@@ -175,7 +175,7 @@ export async function grantInviteConsentArkret(
       async () => {
         const cellUrl =
           `${solandBaseUrl(opts.server)}/_arkret/self/consent/cells/${encodeURIComponent(holder.did)}` +
-          `?peer=${encodeURIComponent(peerDid)}&scope=invite`;
+          `?peer=${encodeURIComponent(peerDid)}&consent_scope=invite`;
         const response = await request.get(
           cellUrl,
           { headers: authHeaders(token, "GET", cellUrl) },
@@ -788,7 +788,11 @@ async function deliverInvite(
     idempotencyKeyPrefix: string;
     context: string;
   },
-): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
+): Promise<{
+  outcome: InviteDeliveryOutcome;
+  inviteId: string;
+  sealBasis: Record<string, unknown>;
+}> {
   const recipientServiceId = solandServiceId(args.recipientServer);
   const { event } = buildInviteCreateEvent({
     inviterDid: args.inviterDid,
@@ -808,6 +812,7 @@ async function deliverInvite(
     args.originServer,
   );
   refreshEventEnvelopeProof(event);
+  const sealBasis = event.seal_basis as Record<string, unknown>;
   await submitSignedEventApi(request, args.inviterToken, event, {
     server: args.originServer,
     context: args.context,
@@ -840,6 +845,7 @@ async function deliverInvite(
         server: args.originServer,
       }),
       inviteId,
+      sealBasis,
     };
   }
 
@@ -859,6 +865,7 @@ async function deliverInvite(
       server: args.recipientServer,
     }),
     inviteId,
+    sealBasis,
   };
 }
 
@@ -876,7 +883,11 @@ export async function deliverInviteWithConsentGrant(
     recipientServer: SolandKey;
     idempotencyKey?: string;
   },
-): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
+): Promise<{
+  outcome: InviteDeliveryOutcome;
+  inviteId: string;
+  sealBasis: Record<string, unknown>;
+}> {
   return await deliverInvite(request, {
     ...args,
     evidence: {
@@ -901,7 +912,11 @@ export async function deliverInviteExplicitAddress(
     recipientServer: SolandKey;
     idempotencyKey?: string;
   },
-): Promise<{ outcome: InviteDeliveryOutcome; inviteId: string }> {
+): Promise<{
+  outcome: InviteDeliveryOutcome;
+  inviteId: string;
+  sealBasis: Record<string, unknown>;
+}> {
   return await deliverInvite(request, {
     ...args,
     evidence: { kind: "explicit_address" },
@@ -971,6 +986,7 @@ export async function acceptInviteArkret(
     inviteId: string;
     server?: SolandKey;
     candidateTokens?: Partial<Record<SolandKey, string>>;
+    sealBasis?: Record<string, unknown>;
   },
 ) {
   return await acceptInviteApi(
@@ -979,6 +995,10 @@ export async function acceptInviteArkret(
     args.accepterDid,
     args.realmId,
     args.inviteId,
-    { server: args.server, candidateTokens: args.candidateTokens },
+    {
+      server: args.server,
+      candidateTokens: args.candidateTokens,
+      sealBasis: args.sealBasis,
+    },
   );
 }

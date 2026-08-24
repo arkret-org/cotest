@@ -11,6 +11,7 @@ import {
 import {
   acceptInviteApi,
   authHeaders,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   listInvitesApi,
@@ -255,38 +256,37 @@ test.describe("GDPR / audit / retention", () => {
     // (a reference to a policy object) — never an inline `retention_policy`.
     // The deployment-local TTL is configured through the same admin surface the
     // sweep below uses, which is where soland actually stores it.
-    const configured = await request.post(
-      `${solandBaseUrl()}/_soland/admin/retention/policy`,
-      {
-        headers: authHeaders(aliceToken),
-        data: { realm_id: realmId, ttl: "30d" },
+    const policyUrl = `${solandBaseUrl()}/_soland/admin/retention/policy`;
+    const configured = await request.post(policyUrl, {
+      headers: {
+        ...authHeaders(aliceToken, "POST", policyUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson({ realm_id: realmId, ttl: "30d" }),
+    });
     expect(configured.status()).toBe(200);
     const oldBody = `retention ttl should expire ${stamp}`;
-    const oldCreatedAt = canonicalTimestamp(
-      new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
-    );
-    const sent = await sendMessageApi(
-      request,
-      aliceToken,
-      realmId,
-      oldBody,
-      { createdAt: oldCreatedAt },
-    );
+    const sent = await sendMessageApi(request, aliceToken, realmId, oldBody);
 
     const before = await queryRealmEventsApi(request, aliceToken, realmId);
     expect(JSON.stringify(before)).toContain(oldBody);
 
-    const sweep = await request.post(
-      `${solandBaseUrl()}/_soland/admin/retention/sweep`,
-      {
-        headers: authHeaders(aliceToken),
-        data: { realm_id: realmId },
+    const sweepUrl = `${solandBaseUrl()}/_soland/admin/retention/sweep`;
+    const sweep = await request.post(sweepUrl, {
+      headers: {
+        ...authHeaders(aliceToken, "POST", sweepUrl),
+        "content-type": "application/json",
       },
-    );
-    expect(sweep.status()).toBe(200);
-    const sweepBody = await sweep.json();
+      data: canonicalJson({
+        realm_id: realmId,
+        now: canonicalTimestamp(
+          new Date(Date.now() + 31 * 24 * 60 * 60 * 1000),
+        ),
+      }),
+    });
+    const sweepText = await sweep.text();
+    expect(sweep.status(), sweepText).toBe(200);
+    const sweepBody = JSON.parse(sweepText);
     expect(sweepBody.physical_delete_count).toBe(0);
     const tombstone = (
       sweepBody.tombstoned as Array<{

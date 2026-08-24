@@ -49,8 +49,14 @@ function expectRedactedPayload(
 ): void {
   expect(event, "redacted event must be present").toBeTruthy();
   const payload = eventPayload(event);
-  expect(payload).toMatchObject({ redacted: true, state: "redacted" });
-  expect(JSON.stringify(payload)).not.toContain(leakedBody);
+  // A normal member has no `redacted_history_allowed=true` read grant, so the
+  // projection may suppress payload entirely. If a deployment does expose the
+  // permitted stub, it must carry the canonical tombstone markers. Neither
+  // form may leak the original body.
+  if (Object.keys(payload).length > 0) {
+    expect(payload).toMatchObject({ redacted: true, state: "redacted" });
+  }
+  expect(JSON.stringify(event)).not.toContain(leakedBody);
 }
 
 function visibleMemberDids(realm: Record<string, unknown>): string[] {
@@ -108,7 +114,7 @@ test.describe("single-server triad collaboration", () => {
         realmId: realmId,
         kind: "ak.message.revise",
         payload: {
-          target_ref: messageRef,
+          message_id: messageRef,
           content: { kind: "ak.content.text", body: revisedBody },
         },
       }),
@@ -120,7 +126,7 @@ test.describe("single-server triad collaboration", () => {
       expect.arrayContaining(["ak.message.create", "ak.message.revise"]),
     );
     expect(eventPayload(beforeRedact.find((event) => eventKind(event) === "ak.message.revise")))
-      .toMatchObject({ target_ref: messageRef });
+      .toMatchObject({ message_id: messageRef });
 
     await submitSignedEventApi(
       request,
@@ -130,8 +136,7 @@ test.describe("single-server triad collaboration", () => {
         realmId: realmId,
         kind: "ak.message.redact",
         payload: {
-          target_event_id: created.event_id,
-          target_ref: messageRef,
+          message_id: messageRef,
           reason: "author_redaction",
         },
       }),

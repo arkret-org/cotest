@@ -5,6 +5,7 @@ import {
   acceptInviteApi,
   canonicalJson,
   createRealmApi,
+  grantCapabilityEventApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -117,6 +118,10 @@ export async function createSharedRealmViaApi(
     ...opts,
     ownerDid: owner.did,
   });
+  // A normal Realm has no implicit discussion Strand. This fixture promises a
+  // shared messaging Realm, so establish the explicit Strand + default pointer
+  // while the root controller is still the author.
+  await resolveDefaultStrandId(request, ownerToken, realmId);
   await submitSignedEventApi(
     request,
     ownerToken,
@@ -133,7 +138,16 @@ export async function createSharedRealmViaApi(
     }),
     { server: opts.server, context: `join ${member.did}` },
   );
-  // The helper writes the member join as the realm owner.
+  // Membership is not an authorization source. This fixture promises only
+  // that both participants can author messages; tests exercising reactions,
+  // revisions, or moderation must grant those independent actions explicitly.
+  await grantCapabilityEventApi(request, ownerToken, {
+    ownerDid: owner.did,
+    realmId,
+    subjectDid: member.did,
+    actions: ["ak.message.create"],
+    server: opts.server,
+  });
   return realmId;
 }
 

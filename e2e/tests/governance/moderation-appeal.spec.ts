@@ -445,7 +445,6 @@ async function banMemberViaApi(
 
 function appealPayload(fixture: AppealFixture) {
   return {
-    appeal_id: `ak:appeal:${uuidV7()}`,
     realm_id: fixture.realmId,
     decision_ref: fixture.decisionId,
     target_ref: fixture.targetRef,
@@ -466,10 +465,10 @@ async function submitAppeal(request: APIRequestContext, fixture: AppealFixture) 
     payload,
   );
   await submitSignedEventApi(request, fixture.appellantToken, envelope, {
-    context: `submit appeal ${payload.appeal_id}`,
+    context: `submit appeal ${envelope.event_id}`,
   });
   return {
-    appeal_id: String(payload.appeal_id),
+    appeal_id: String(envelope.event_id).replace(/^ak:event:/, "ak:appeal:"),
     event_id: String(envelope.event_id),
     state: "submitted",
   };

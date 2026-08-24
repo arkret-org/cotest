@@ -251,7 +251,7 @@ test.describe("contact graph (same principal server)", () => {
       ownerDid: alice.did,
     });
 
-    const { outcome: delivery, inviteId } = await deliverInviteWithConsentGrant(
+    const { outcome: delivery, inviteId, sealBasis } = await deliverInviteWithConsentGrant(
       request,
       {
         inviterDid: alice.did,
@@ -280,6 +280,7 @@ test.describe("contact graph (same principal server)", () => {
       accepterDid: bob.did,
       realmId,
       inviteId: invite!.id,
+      sealBasis,
     });
     await expect
       .poll(

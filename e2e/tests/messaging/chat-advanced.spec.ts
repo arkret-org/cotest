@@ -20,6 +20,7 @@ import { stepShot } from "../../helpers/screenshots";
 import {
   accountSubscribeFramesApi,
   createRealmApi,
+  grantCapabilityEventApi,
   resolveDefaultStrandId,
   sendMessageApi,
   signedEventEnvelope,
@@ -89,6 +90,12 @@ test.describe("chat advanced", () => {
     request,
   }) => {
     const fixture = await createChatApiFixture(request, "reaction-api");
+    await grantCapabilityEventApi(request, fixture.aliceToken, {
+      ownerDid: fixture.alice.did,
+      realmId: fixture.realmId,
+      subjectDid: fixture.bob.did,
+      actions: ["ak.reaction.add", "ak.reaction.remove"],
+    });
     const message = await sendPlaintextMessageViaApi(
       request,
       fixture.aliceToken,

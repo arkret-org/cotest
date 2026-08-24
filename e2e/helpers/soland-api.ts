@@ -878,15 +878,12 @@ export async function addRealmMemberApi(
 // `additionalProperties: false`) — not a `{value: ...}` state-payload wrapper,
 // and it carries no `realm_id`: the governed Realm is the envelope's.
 //
-// `content_scheme` is deliberately NOT restated. The cell is a `cas_register`,
-// so a revision clears every component it omits, and restating a component
-// this helper never wrote would be inventing a value — `content_scheme` has a
-// one-way ratchet in the reducer, so an invented one risks a downgrade
-// rejection that presents as an unrelated join-policy failure. The
-// `createRealmApi` genesis already occupies `policy_revision: 1`
-// (`federation_policy` + encryption floors) and the reducer enforces strict
-// prev+1, so revisions here start at 2 (see `nextJoinPolicyRevision`). A
-// caller that starts writing other components must restate them here.
+// The cell is a `cas_register`: every revision is a complete replacement and
+// must carry a `head_eq` guard over the exact current value. Preserve every
+// current component and change only `policy_revision` + `join_policy`; omitting
+// the guard admits concurrent candidates and correctly collapses the cell to
+// Bottom, while omitting current components can violate one-way policy
+// ratchets.
 export async function writeJoinPolicyApi(
   request: APIRequestContext,
   token: string,
@@ -902,15 +899,38 @@ export async function writeJoinPolicyApi(
     realmId,
     opts.server,
   );
-  const policyRevision = nextJoinPolicyRevision(opts.server, realmId);
+  const policyCell = "ak:cell:ak.component.realm.policy_bundle.v1:null";
+  const currentResponse = await request.get(
+    `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(token) },
+  );
+  const currentText = await currentResponse.text();
+  expect(currentResponse.status(), currentText).toBe(200);
+  const currentCell = JSON.parse(currentText) as {
+    state?: string;
+    value?: Record<string, unknown>;
+  };
+  expect(currentCell.state, currentText).toBe("value");
+  expect(currentCell.value, currentText).toBeTruthy();
+  const currentPolicy = currentCell.value!;
+  const currentRevision = currentPolicy.policy_revision;
+  expect(typeof currentRevision, currentText).toBe("number");
+  const policyRevision = Number(currentRevision) + 1;
   const policyEvent = signedEventEnvelope({
     actorDid,
     realmId,
     kind: "ak.realm.policy_bundle",
     payload: {
+      ...currentPolicy,
       policy_revision: policyRevision,
       join_policy: joinPolicy,
     },
+    preconditions: [
+      {
+        cell: policyCell,
+        predicate: { op: "head_eq", value: currentPolicy },
+      },
+    ],
   });
   await submitSignedEventApi(request, token, policyEvent, {
     server: opts.server,
@@ -950,9 +970,8 @@ export async function writeJoinPolicyApi(
   await expect
     .poll(
       async () => {
-        const cellId = "ak:cell:ak.component.realm.policy_bundle.v1:null";
         const response = await request.get(
-          `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(cellId)}?realm_id=${encodeURIComponent(realmId)}`,
+          `${solandBaseUrl(opts.server)}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
           { headers: authHeaders(token) },
         );
         if (!response.ok()) {
@@ -1601,6 +1620,7 @@ export async function submitJoinWithProofsApi(
   opts: {
     server?: SolandKey;
     createdAt?: string;
+    sealBasis?: Record<string, unknown>;
     invisibleActorFrontier?: {
       nextActorSeq: number;
       frontierEventIds: string[];
@@ -1612,6 +1632,7 @@ export async function submitJoinWithProofsApi(
     realmId,
     kind: "ak.member.state",
     createdAt: opts.createdAt,
+    sealBasis: opts.sealBasis,
     payload: {
       realm_id: realmId,
       actor_id: canonicalDidCoreId(actorDid),
@@ -1759,12 +1780,14 @@ export async function acceptInviteApi(
   opts: {
     server?: SolandKey;
     candidateTokens?: Partial<Record<SolandKey, string>>;
+    sealBasis?: Record<string, unknown>;
   } = {},
 ) {
-  let sealBasis: Record<string, unknown> | undefined;
+  let sealBasis: Record<string, unknown> | undefined = opts.sealBasis;
   let candidateServiceId: string | undefined;
-  await expect
-    .poll(
+  if (!sealBasis) {
+    await expect
+      .poll(
       async () => {
         const resolveUrl = `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`;
         const resolutionResponse = await request.post(
@@ -1796,17 +1819,26 @@ export async function acceptInviteApi(
         timeout: 30_000,
         intervals: [250, 500, 1_000, 2_000],
       },
-    )
-    .toBeTruthy();
-  const candidateServer = (["alpha", "beta"] as const).find(
-    (server) => solandServiceId(server) === candidateServiceId,
-  );
-  if (!candidateServer) {
+      )
+      .toBeTruthy();
+  } else {
+    // The signed invite Event already carries the exact Realm Seal basis.
+    // Same-service acceptance needs no Directory disclosure round-trip.
+    candidateServiceId = solandServiceId(opts.server);
+  }
+  const candidateServer = opts.sealBasis
+    ? opts.server
+    : (["alpha", "beta"] as const).find(
+        (server) => solandServiceId(server) === candidateServiceId,
+      );
+  if (!opts.sealBasis && !candidateServer) {
     throw new Error(
       `invite-accept candidate ${candidateServiceId ?? "<missing>"} is not a managed Soland service`,
     );
   }
-  const candidateToken = opts.candidateTokens?.[candidateServer] ?? token;
+  const candidateToken = candidateServer
+    ? (opts.candidateTokens?.[candidateServer] ?? token)
+    : token;
 
   return await submitSignedEventApi(
     request,
@@ -3441,11 +3473,14 @@ async function applyRegisteredCbaPlane(
   const canonicalRealm = realmAuthorityControllers.has(
     realmAuthorityControllerKey(server, realmId),
   );
-  if (
-    envelope.authorization_ref === undefined &&
+  const actorControlRealm = principalControlRealmForDidIfKnown(actorDid);
+  const actorControlsRealm =
     realmAuthorityControllers.get(
       realmAuthorityControllerKey(server, realmId),
-    ) === actorDid &&
+    ) === actorDid || actorControlRealm === realmId;
+  if (
+    envelope.authorization_ref === undefined &&
+    actorControlsRealm &&
     realmRootMayAuthorEventKind(kind)
   ) {
     // realm-and-space.md section 2.5: the creator identity is only audit
@@ -3470,7 +3505,7 @@ async function applyRegisteredCbaPlane(
           server,
         );
       } catch {
-        if (canonicalRealm) {
+        if (canonicalRealm && actorControlsRealm) {
           envelope.seal_basis = await waitForRealmSealBasis(
             request,
             token,
@@ -4720,7 +4755,7 @@ export function base64urlJsonRaw(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
-function sdkEventEnvelopeProof(args: {
+export function sdkEventEnvelopeProof(args: {
   actorDid: string;
   event: Record<string, unknown>;
   verificationMethod: string;

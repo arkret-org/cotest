@@ -28,6 +28,7 @@ import {
   canonicalTimestamp,
   canonicalJson,
   sdkEventDerivedIds,
+  sdkEventEnvelopeProof,
   createRealmApi,
   currentActorDidApi,
   grantCapabilityEventApi,
@@ -760,6 +761,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
     appletId?: string;
     authorizationRef?: string;
     strandId?: string;
+    sealRef?: string;
+    verificationMethod?: string;
     signingKey?: KeyObject;
   }) {
     const sourceServiceId =
@@ -771,15 +774,38 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const actorDid =
       args.actorDid ??
       `ak:did_core:web:bot-applet-${args.stamp}.joint-e2e.local`;
+    const verificationMethod =
+      args.verificationMethod ?? `${sourceServiceId}#applet-service-key`;
+    const authKeyId = verificationMethod.includes("#")
+      ? verificationMethod.slice(verificationMethod.indexOf("#") + 1)
+      : verificationMethod;
     const unidentified = {
       kind: "ak.message.create",
       realm_id: realmId,
+      scope_ref: {
+        kind: "realm",
+        realm_id: realmId,
+      },
       actor_id: actorDid,
+      // The Applet service authenticates the producer proof and transport;
+      // the receiving Arkret node is still the Event's Principal Server and
+      // adds the admission proof before accepting the durable Event.
+      principal_server_id: solandServiceId(),
       actor_seq: 0,
       created_at: canonicalEventTimestamp(),
       hlc: hlcForStamp(args.stamp),
       prev_refs: [],
       refs: [],
+      ...(args.sealRef
+        ? {
+            seal_ref: args.sealRef,
+            auth_context: {
+              actor_id: actorDid,
+              key_id: authKeyId,
+              key_epoch: 0,
+            },
+          }
+        : {}),
       requirements: {
         schema: ["ak.schema.message.v1"],
       },
@@ -811,7 +837,13 @@ test.describe("applet inbound transaction push — per-delivery source signature
       events: [
         {
           ...event,
-          proofs: [appletEventProof(sourceServiceId, event, args.signingKey)],
+          proofs: [
+            appletEventProof(
+              verificationMethod,
+              event,
+              args.signingKey,
+            ),
+          ],
         },
       ],
     };
@@ -878,6 +910,11 @@ test.describe("applet inbound transaction push — per-delivery source signature
       `inbound-install-${stamp}`,
     );
     await addRealmMemberApi(request, token, realmId, registration.bot_actor_id);
+    const sealBasis = await readRealmSealBasis(request, token, realmId);
+    const sealRef = Array.isArray(sealBasis.leaves)
+      ? sealBasis.leaves[0]
+      : undefined;
+    expect(sealRef, "applet transaction fixture requires a current Seal leaf").toBeTruthy();
 
     const idempotencyKey = `inbound-ok-${stamp}`;
     const body = transactionPushBody({
@@ -891,6 +928,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
         "ak.message.create",
       ),
       strandId: await resolveDefaultStrandId(request, token, realmId),
+      sealRef: String(sealRef),
+      verificationMethod: String(
+        (signed.applet_package.webhook_auth as Record<string, unknown>).key_ref,
+      ),
       signingKey: signed.service_signing_private_key,
     });
     const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
@@ -901,6 +942,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
           body,
           targetUri,
           sourceServiceId,
+          keyId: String(
+            (signed.applet_package.webhook_auth as Record<string, unknown>)
+              .key_ref,
+          ),
           destinationServiceId: solandServiceId(),
           idempotencyKey,
           signingKey: signed.service_signing_private_key,
@@ -1000,6 +1045,7 @@ function signedAppletTransactionHeaders(args: {
   body: Record<string, unknown>;
   targetUri: string;
   sourceServiceId: string;
+  keyId?: string;
   destinationServiceId: string;
   idempotencyKey: string;
   created?: number;
@@ -1010,7 +1056,7 @@ function signedAppletTransactionHeaders(args: {
   const contentDigest = `sha-256=:${createHash("sha256").update(canonicalBody).digest("base64")}:`;
   const created = args.created ?? Math.floor(Date.now() / 1000);
   const expires = args.expires ?? created + 300;
-  const keyid = `${args.sourceServiceId}#applet-service-key`;
+  const keyid = args.keyId ?? `${args.sourceServiceId}#applet-service-key`;
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" ` +
     `"source-service-id" "destination-service-id" "idempotency-key");` +
@@ -1429,37 +1475,22 @@ function typedAppletId(): string {
 }
 
 function appletEventProof(
-  sourceServiceId: string,
+  verificationMethod: string,
   event: Record<string, unknown>,
   signingKey?: KeyObject,
 ): Record<string, unknown> {
-  const canonicalEvent = canonicalJson(event);
-  const eventDigest = `sha256:${createHash("sha256").update(canonicalEvent).digest("hex")}`;
-  const verificationMethod = `${sourceServiceId}#applet-service-key`;
-  const createdAt = canonicalEventTimestamp();
-  const binding = canonicalJson({
-    context: "ak.event_proof.v1",
-    event_digest: eventDigest,
-    actor_id: event.actor_id,
-    verification_method: verificationMethod,
-    created_at: canonicalTimestamp(new Date(createdAt)),
+  const actorId = String(event.actor_id);
+  const actorDid = actorId.startsWith("ak:did_core:")
+    ? `did:${actorId.slice("ak:did_core:".length)}`
+    : actorId;
+  const signingSeedB64url = signingKey?.export({ format: "jwk" }).d;
+  return sdkEventEnvelopeProof({
+    actorDid,
+    event,
+    verificationMethod,
+    createdAt: canonicalEventTimestamp(),
+    signingSeedB64url,
   });
-  const jwsHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString(
-    "base64url",
-  );
-  const signingInput = `${jwsHeader}.${Buffer.from(binding, "utf8").toString("base64url")}`;
-  const signature = sign(
-    null,
-    Buffer.from(signingInput, "utf8"),
-    signingKey ?? developmentAppletPrivateKey(verificationMethod),
-  );
-  return {
-    kind: "detached_jws",
-    verification_method: verificationMethod,
-    event_digest: eventDigest,
-    created_at: createdAt,
-    jws: `${jwsHeader}..${signature.toString("base64url")}`,
-  };
 }
 
 function hlcForStamp(stamp: number): string {

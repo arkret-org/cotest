@@ -7,6 +7,10 @@ import {
   type JointUserPage,
   openDpopUserPage,
 } from "../../helpers/users";
+import {
+  grantCapabilityEventApi,
+  resolveDefaultStrandId,
+} from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -58,9 +62,29 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
         historyAccess: "since_join",
         encryptionProfile: "none",
       });
+      // Ordinary Realm bootstrap intentionally has no implicit discussion
+      // Strand. Author the two explicit Events required by the spec before
+      // exercising the chat surface.
+      await resolveDefaultStrandId(
+        request,
+        aliceFlow.session.grantJwt,
+        realmId,
+        { authorityRootController: alice.did },
+      );
       await alicePage.inviteFromAdmin(realmId, bob.did);
 
       await bobPage.acceptInviteFromNotifications(realmId);
+      // Membership and message authority are intentionally independent.
+      await grantCapabilityEventApi(
+        request,
+        aliceFlow.session.grantJwt,
+        {
+          ownerDid: alice.did,
+          realmId,
+          subjectDid: bob.did,
+          actions: ["ak.message.create"],
+        },
+      );
 
       await sendChatMessage(alicePage, realmId, aliceMessage);
       await gotoChat(bobPage, realmId);
@@ -76,7 +100,22 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
 });
 
 async function gotoChat(userPage: JointUserPage, realmId: string) {
-  await userPage.page.goto(`/chat/${realmId}`, { waitUntil: "domcontentloaded" });
+  // Keep the authenticated shell mounted. A browser-generated back/forward
+  // transition emits the native popstate that Dioxus consumes; directly
+  // constructing PopStateEvent does not exercise the browser history source.
+  await userPage.page.evaluate(async (nextPath) => {
+    const nextPop = () =>
+      new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+    window.history.pushState({}, "", nextPath);
+    const back = nextPop();
+    window.history.back();
+    await back;
+    const forward = nextPop();
+    window.history.forward();
+    await forward;
+  }, `/chat/${realmId}`);
   await expect(userPage.page.getByTestId("chat-panel")).toBeVisible({ timeout: 120_000 });
   await expect(userPage.page.getByTestId("channel-item").first()).toBeVisible({ timeout: 30_000 });
 }

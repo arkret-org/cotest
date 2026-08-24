@@ -16,6 +16,7 @@ import {
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 import {
   createRealmApi,
+  readRealmSealBasis,
   submitJoinWithProofsApi,
   submitLeaveApi,
   wireErrCode,
@@ -126,6 +127,35 @@ function captchaGate(providerDid: string): Record<string, unknown> {
   };
 }
 
+async function submitCandidateJoin(
+  request: APIRequestContext,
+  ownerToken: string,
+  applicantToken: string,
+  actorDid: string,
+  realmId: string,
+  gateProofs: Array<Record<string, unknown>>,
+  opts: {
+    invisibleActorFrontier?: {
+      nextActorSeq: number;
+      frontierEventIds: string[];
+    };
+  } = {},
+) {
+  // Directory join_candidates are optional forwarding hints. The scenario
+  // fixture therefore supplies the canonical candidate basis obtained from
+  // the Realm owner instead of inventing a conformance basis or assuming the
+  // directory has opted in to ingest this Realm.
+  const sealBasis = await readRealmSealBasis(request, ownerToken, realmId);
+  return submitJoinWithProofsApi(
+    request,
+    applicantToken,
+    actorDid,
+    realmId,
+    gateProofs,
+    { ...opts, sealBasis },
+  );
+}
+
 test.describe("knock auto-resolve path", () => {
   test("alice sets join_rule=knock_restricted with gates=[claim_required(auto), challenge_response(auto)]; bob submits ak.member.state{join, gate_proofs[]} and joins directly", async ({
     request,
@@ -144,6 +174,7 @@ test.describe("knock auto-resolve path", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `AR happy ${Date.now()}`,
+      discoverability: "listed",
       default_join_rule: "knock_restricted",
     });
 
@@ -158,7 +189,7 @@ test.describe("knock auto-resolve path", () => {
       "acme:employee",
     ]);
 
-    const resp = await submitJoinWithProofsApi(request, bobToken, bob.did, realmId, [
+    const resp = await submitCandidateJoin(request, aliceToken, bobToken, bob.did, realmId, [
       { gate_id: "g-vc", claim_presentation: claimPresentation },
       { gate_id: "g-captcha", challenge_proof: challengeProof },
     ]);
@@ -185,6 +216,7 @@ test.describe("knock auto-resolve path", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `AR no-vc ${Date.now()}`,
+      discoverability: "listed",
       default_join_rule: "knock_restricted",
     });
 
@@ -198,8 +230,9 @@ test.describe("knock auto-resolve path", () => {
     // acme:employee, so the g-vc gate fails under combinator=all.
     const wrongClaim = await issueClaim(request, mallory.did, ["acme:other"]);
 
-    const resp = await submitJoinWithProofsApi(
+    const resp = await submitCandidateJoin(
       request,
+      aliceToken,
       malloryToken,
       mallory.did,
       realmId,
@@ -229,6 +262,7 @@ test.describe("knock auto-resolve path", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `AR stale ${Date.now()}`,
+      discoverability: "listed",
       default_join_rule: "knock_restricted",
     });
 
@@ -247,7 +281,7 @@ test.describe("knock auto-resolve path", () => {
       issuedAtOffsetSeconds: 400,
     });
 
-    const resp = await submitJoinWithProofsApi(request, bobToken, bob.did, realmId, [
+    const resp = await submitCandidateJoin(request, aliceToken, bobToken, bob.did, realmId, [
       { gate_id: "g-vc", claim_presentation: claimPresentation },
       { gate_id: "g-captcha", challenge_proof: staleProof },
     ]);
@@ -272,6 +306,7 @@ test.describe("knock auto-resolve path", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `AR cooldown ${Date.now()}`,
+      discoverability: "listed",
       default_join_rule: "knock_restricted",
     });
 
@@ -292,8 +327,9 @@ test.describe("knock auto-resolve path", () => {
 
     // First join: bob has never left, so cooldown does not bite.
     const firstClaim = await issueClaim(request, bob.did, ["acme:employee"]);
-    const joinResp = await submitJoinWithProofsApi(
+    const joinResp = await submitCandidateJoin(
       request,
+      aliceToken,
       bobToken,
       bob.did,
       realmId,
@@ -308,8 +344,9 @@ test.describe("knock auto-resolve path", () => {
     const leave = await submitLeaveApi(request, bobToken, bob.did, realmId);
 
     const reapplyClaim = await issueClaim(request, bob.did, ["acme:employee"]);
-    const resp = await submitJoinWithProofsApi(
+    const resp = await submitCandidateJoin(
       request,
+      aliceToken,
       bobToken,
       bob.did,
       realmId,
@@ -345,6 +382,7 @@ test.describe("knock auto-resolve path", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `AR any ${Date.now()}`,
+      discoverability: "listed",
       default_join_rule: "knock_restricted",
     });
 
@@ -357,8 +395,9 @@ test.describe("knock auto-resolve path", () => {
 
     // bob satisfies only g-vc → accepted under combinator=any.
     const bobClaim = await issueClaim(request, bob.did, ["acme:employee"]);
-    const bobResp = await submitJoinWithProofsApi(
+    const bobResp = await submitCandidateJoin(
       request,
+      aliceToken,
       bobToken,
       bob.did,
       realmId,
@@ -371,8 +410,9 @@ test.describe("knock auto-resolve path", () => {
 
     // mallory satisfies only g-captcha → also accepted under combinator=any.
     const malloryProof = await issueChallenge(request, mallory.did);
-    const malloryResp = await submitJoinWithProofsApi(
+    const malloryResp = await submitCandidateJoin(
       request,
+      aliceToken,
       malloryToken,
       mallory.did,
       realmId,
