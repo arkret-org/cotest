@@ -21,7 +21,7 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
-test.describe("single device-authorization model", () => {
+test.describe("single device-authorization model @fully-implemented", () => {
   test("an accepted device authorizes a new device and the target proves possession", async ({
     request,
   }) => {
