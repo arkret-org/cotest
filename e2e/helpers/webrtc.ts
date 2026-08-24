@@ -9,7 +9,7 @@ import {
   sign as nodeSign,
   type KeyObject,
 } from "node:crypto";
-import { solandBaseUrl } from "./env";
+import { solandBaseUrl, solandServiceId } from "./env";
 import {
   addRealmMemberApi,
   authHeaders,
@@ -26,6 +26,7 @@ import {
   seedConformanceRealmBasisApi,
   signedEventEnvelope,
   sdkCapabilityActionRegistryDigest,
+  signWithRegisteredEventSigner,
   submitSignedEventApi,
   typedId,
   waitForRealmControlIdleApi,
@@ -318,16 +319,21 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
   const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
   const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const signature = base64url(
-    nodeSign(
-      null,
-      Buffer.from(signingInput, "utf8"),
-      deviceSigner(
-        String(envelope.sender_actor_id),
-        String(envelope.sender_device_id),
-      ).privateKey,
-    ),
-  );
+  const actorDid = String(envelope.sender_actor_id);
+  const deviceId = String(envelope.sender_device_id);
+  const signature =
+    signWithRegisteredEventSigner(
+      actorDid,
+      String(proof.verification_method),
+      signingInput,
+    ) ??
+    base64url(
+      nodeSign(
+        null,
+        Buffer.from(signingInput, "utf8"),
+        deviceSigner(actorDid, deviceId).privateKey,
+      ),
+    );
   proof.jws = `${protectedHeader}..${signature}`;
 }
 
@@ -387,6 +393,7 @@ export async function grantCallCapability(
     realm_id: realmId,
     issuer: ownerDid,
     subject: subjectDid,
+    subject_principal_server_id: solandServiceId(),
     actions: [action],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources,
@@ -578,20 +585,22 @@ export async function prepareSignalEnvelope(
   const realmId = String(envelope.realm_id);
   const actorDid = String(envelope.sender_actor_id);
   const deviceId = String(envelope.sender_device_id);
-  const keyResponse = await request.post(
-    `${solandBaseUrl()}/_arkret/_conformance/device-signing-key`,
-    {
-      data: {
-        actor_id: actorDid,
-        device_id: deviceId,
-        public_key_multibase: deviceVerifyingKeyMultibase(actorDid, deviceId),
+  if (!registeredEventVerificationMethod(actorDid, deviceId)) {
+    const keyResponse = await request.post(
+      `${solandBaseUrl()}/_arkret/_conformance/device-signing-key`,
+      {
+        data: {
+          actor_id: actorDid,
+          device_id: deviceId,
+          public_key_multibase: deviceVerifyingKeyMultibase(actorDid, deviceId),
+        },
       },
-    },
-  );
-  expect(
-    keyResponse.status(),
-    `seed Signal device key returned ${keyResponse.status()}: ${await keyResponse.text()}`,
-  ).toBe(200);
+    );
+    expect(
+      keyResponse.status(),
+      `seed Signal device key returned ${keyResponse.status()}: ${await keyResponse.text()}`,
+    ).toBe(200);
+  }
   try {
     const basis = await readRealmSealBasis(request, token, realmId);
     envelope.seal_ref = (basis.leaves as string[])[0];
@@ -771,7 +780,7 @@ export interface MediaFocusConfig {
 /**
  * Project a `ak.realm.media_service` epoch onto the realm so the token issuer
  * can resolve `service_id` and `foci[]`. `service_id` anchors every issued
- * `participant_binding.issuer_kid` / `service_signature.kid`
+ * `participant_binding.issuer_kid`
  * (media-service-binding.md §3): the deployment's media signing key
  * (`SOLAND_MEDIA_ISSUER_KID`, default `<service full id>#media-1`) must
  * project onto it, and each focus `token_endpoint` origin must be this

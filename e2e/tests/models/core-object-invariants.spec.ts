@@ -28,6 +28,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
+  readAcceptedSeal,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -108,9 +109,7 @@ async function fetchRealmSealBasis(
   const body = (await response.json()) as {
     frontier?: {
       kind?: unknown;
-      seal_id?: unknown;
-      control_event_set_root?: unknown;
-      state_root?: unknown;
+      seal_basis?: { leaves?: unknown };
     };
   };
   expect(
@@ -118,13 +117,20 @@ async function fetchRealmSealBasis(
     `read Realm Seal frontier returned ${response.status()}: ${JSON.stringify(body)}`,
   ).toBeTruthy();
   expect(body.frontier?.kind).toBe("realm_seal");
-  expect(body.frontier?.seal_id).toMatch(/^ak:seal:/);
-  expect(body.frontier?.control_event_set_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
-  expect(body.frontier?.state_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
+  const leaves = body.frontier?.seal_basis?.leaves as string[] | undefined;
+  expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
+  const seal = await readAcceptedSeal(
+    request,
+    token,
+    realmId,
+    leaves![0],
+  );
+  expect(seal.control_event_set_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
+  expect(seal.state_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
   return {
-    leaves: [String(body.frontier?.seal_id)],
-    control_event_set_root: String(body.frontier?.control_event_set_root),
-    state_root: String(body.frontier?.state_root),
+    leaves: [leaves![0]],
+    control_event_set_root: String(seal.control_event_set_root),
+    state_root: String(seal.state_root),
   };
 }
 

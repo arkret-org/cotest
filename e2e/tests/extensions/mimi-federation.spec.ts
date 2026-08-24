@@ -11,7 +11,11 @@
 
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, solandServiceId } from "../../helpers/env";
+import {
+  solandBaseUrl,
+  solandServiceFullId,
+  solandServiceId,
+} from "../../helpers/env";
 import {
   advanceEnvelopeToActorFrontier,
   canonicalDidCoreId,
@@ -238,6 +242,7 @@ async function createBoundMimiRoom(
   });
   const strandId = await resolveDefaultStrandId(request, token, realmId);
   const roomId = `MIMI-${suffix}-${stamp}`;
+  const mlsGroupId = mimiMlsGroupId(roomId);
   const updateUrl = `${solandBaseUrl()}/_arkret/open/mimi/strands/${roomId}/update`;
   const roomBinding = {
     kind: "ak.mimi.room_binding",
@@ -251,7 +256,7 @@ async function createBoundMimiRoom(
       hub_provider: solandServiceId(),
       local_provider_role: "hub",
       content_profile: "application/mimi-content",
-      mls_group_id: `mls:${roomId}`,
+      mls_group_id: mlsGroupId,
       status: "accepted",
     },
   };
@@ -264,7 +269,7 @@ async function createBoundMimiRoom(
   });
   await advanceEnvelopeToActorFrontier(request, token, bindingEvent);
   const updateBody = {
-    mls_group_id: `mls:${roomId}`,
+    mls_group_id: mlsGroupId,
     update: {
       kind: "ak.mimi.room_binding",
       payload: opaquePayload(
@@ -282,7 +287,7 @@ async function createBoundMimiRoom(
       Object.entries(updateBody).filter(([key]) => key !== "room_binding_event"),
     ),
     // The Event exists but does not bind the declared MLS group.
-    { ...updateBody, mls_group_id: `mls:${roomId}:mismatch` },
+    { ...updateBody, mls_group_id: mimiMlsGroupId(`${roomId}-mismatch`) },
     // Receipt-only semantics must not smuggle an Event into ordinary admission.
     {
       ...updateBody,
@@ -341,10 +346,11 @@ function mimiGovernanceBinding(
       kind: "realm",
       realm_id: realmId,
     },
-    mls_group_id: `mls:${roomId}`,
+    mls_group_id: mimiMlsGroupId(roomId),
     previous_epoch: 0,
     next_epoch: 1,
     security_frontier_digest: `sha256:${"2".repeat(64)}`,
+    content_scheme: "mls_rfc9420",
     binding_profile: "ak.profile.mls_governance_binding.full.v1",
     reducer_profile: "ak.reducer.core.v1",
   };
@@ -359,7 +365,7 @@ async function postSignedMimiMessage(
   const body = {
     sender_actor_id: canonicalDidCoreId(MIMI_SOURCE_SERVICE_ID),
     device_id: MIMI_DEVICE_ID,
-    mls_group_id: `mls:${roomId}`,
+    mls_group_id: mimiMlsGroupId(roomId),
     epoch: 1,
     ciphertext: ciphertextPayload(message, "application/mimi-content"),
   };
@@ -371,6 +377,10 @@ async function postSignedMimiMessage(
     }),
     data: canonicalJson(body),
   });
+}
+
+function mimiMlsGroupId(roomId: string): string {
+  return Buffer.from(`mimi:${roomId}`, "utf8").toString("base64url");
 }
 
 const MIMI_SOURCE_SERVICE_ID = "did:web:mimi.example";
@@ -472,15 +482,22 @@ function localMimiRoomUri(roomId: string): string {
 }
 
 function localMimiProviderId(): string {
-  const serviceId = solandServiceId();
+  const serviceId = solandServiceFullId();
   if (serviceId.startsWith("did:web:")) {
-    return `mimi://${serviceId.slice("did:web:".length).replaceAll(":", "/")}`;
+    return `mimi://${serviceId
+      .slice("did:web:".length)
+      .replaceAll(":", "/")
+      .replaceAll(/%3A/gi, ":")
+      .toLowerCase()}`;
   }
   // did:webvh:<scid>:<host>[:<path>...] — the HTTP authority starts after
   // the SCID segment.
   const webvh = serviceId.match(/^did:webvh:[^:]+:(.+)$/);
   if (webvh) {
-    return `mimi://${webvh[1].replaceAll(":", "/")}`;
+    return `mimi://${webvh[1]
+      .replaceAll(":", "/")
+      .replaceAll(/%3A/gi, ":")
+      .toLowerCase()}`;
   }
   return `mimi://${serviceId.replaceAll(":", ".")}`;
 }

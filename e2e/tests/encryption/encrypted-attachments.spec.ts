@@ -8,7 +8,7 @@
 import { createHash } from "node:crypto";
 
 import { expect, test } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   addRealmMemberApi,
   authHeaders,
@@ -129,7 +129,7 @@ test.describe("encrypted attachments", () => {
     expect(body.upload_receipt.blob_ref).toBe(body.blob_ref);
     expect(body.upload_receipt.content_digest).toBe(ciphertextDigest);
     expect(body.upload_receipt.size_bytes).toBe(ciphertext.length);
-    expect(body.upload_receipt.issuer_service_id).toMatch(/^did:/);
+    expect(body.upload_receipt.issuer_service_id).toBe(solandServiceId());
     expect(body.upload_receipt.signature).toBeTruthy();
     expect(JSON.stringify(body.upload_receipt)).not.toContain("cat.png");
     expect(JSON.stringify(body.upload_receipt)).not.toContain("image/png");

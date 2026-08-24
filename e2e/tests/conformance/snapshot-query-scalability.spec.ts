@@ -252,7 +252,18 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       headers: { "content-type": "application/json" },
       data: canonicalJson(page2Req),
     });
-    expect(await secondAgain.json()).toEqual(page2);
+    const page2Again = await secondAgain.json();
+    expect(page2Again.frontier.barrier_cursor).toMatch(/^ak:cursor:/);
+    // The barrier cursor is an opaque, freshly issued read barrier (§8), not
+    // an idempotency token. Repeating a read must preserve the result page and
+    // frontier facts, but need not reproduce the cursor bytes or timestamps.
+    expect({
+      ...page2Again,
+      frontier: { ...page2Again.frontier, barrier_cursor: "<opaque>" },
+    }).toEqual({
+      ...page2,
+      frontier: { ...page2.frontier, barrier_cursor: "<opaque>" },
+    });
   });
 
   test("Phase D — query schema fail-closed on unknown ops / conflicting sort / unauthorized fields", async ({

@@ -44,8 +44,10 @@ import {
   expectJsonOk,
   prepareSignedEventSubmissionApi,
   rawSubmitSignedEventApi,
+  readRealmSealBasis,
   resolveDefaultStrandId,
   signedEventEnvelope,
+  waitForRealmControlIdleApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -66,6 +68,7 @@ async function declarePolicyServer(
   opts: { cacheTtlSeconds?: number; timeoutMs?: number } = {},
 ): Promise<Record<string, unknown>> {
   const actorDid = await currentActorDidApi(request, token);
+  const sealBasis = await readRealmSealBasis(request, token, realmId);
   const payload = {
     policy_server_service_id: canonicalDidCoreId(did),
     policy_server_url: `${baseUrl}/_arkret/self/policy/check`,
@@ -110,6 +113,9 @@ async function declarePolicyServer(
     put,
     "declare realm policy server",
   );
+  await waitForRealmControlIdleApi(request, token, realmId, {
+    afterControlEventSetRoot: String(sealBasis.control_event_set_root),
+  });
   policyServerCellValues.set(realmId, payload);
   return projected;
 }
@@ -334,10 +340,13 @@ test.describe("policy server check", () => {
       data: canonicalJson({ realm_id: realmId }),
     });
     const frontierBody = await expectJsonOk<{
-      frontier?: { kind?: string; seal_id?: string };
+      frontier?: { kind?: string; seal_basis?: { leaves?: string[] } };
     }>(frontier, "read policy-server Seal frontier");
     expect(frontierBody.frontier?.kind).toBe("realm_seal");
-    expect(frontierBody.frontier?.seal_id).toMatch(/^ak:seal:/);
+    expect(frontierBody.frontier?.seal_basis?.leaves).toHaveLength(1);
+    expect(frontierBody.frontier?.seal_basis?.leaves?.[0]).toMatch(
+      /^ak:seal:/,
+    );
 
     const get = await request.get(
       `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,

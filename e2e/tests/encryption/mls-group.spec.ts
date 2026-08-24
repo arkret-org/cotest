@@ -30,14 +30,9 @@ test.describe("MLS group encryption", () => {
     const body = JSON.stringify(await exported.json());
     expect(body).toContain('"encryption_profile":"mls_rfc9420"');
     expect(body).not.toContain('"encryption_profile":"plaintext"');
-
-    await expect(
-      createRealmApi(request, token, {
-        title: "MLS incompatible visibility",
-        ownerDid: alice.did,
-        history_access: "all_history_for_current_members",
-        encryption_profile: "mls_rfc9420",
-      }),
-    ).rejects.toThrow("history_access_requires_history_capable_scheme");
+    // `content_scheme` is fixed only by an accepted `ak.mls.genesis`, never
+    // inferred from the Realm encryption mechanism or smuggled through the
+    // mutable policy bundle. This Realm has not created its group yet.
+    expect(body).not.toContain('"content_scheme"');
   });
 });

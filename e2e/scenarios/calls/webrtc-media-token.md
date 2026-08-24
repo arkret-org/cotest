@@ -14,7 +14,7 @@ a live soland instance.
    Issuance configuration (`issuer_kid`, TTL, e2ee key source) is deployment
    configuration of the issuing service, never Realm cell state: the joint
    runner leaves `SOLAND_MEDIA_ISSUER_KID` unset, so `issuer_kid` /
-   `service_signature.kid` anchor on `<service full id>#media-1`, and each
+   `participant_binding.issuer_kid` anchors on `<service full id>#media-1`, and each
    focus `token_endpoint` origin must equal the deployment's public base URL
    (`POST /_arkret/self/rtc/token`) or issuance fails closed
    (media-service-binding.md §2.1/§3).
@@ -33,8 +33,8 @@ a live soland instance.
   - `participant_binding.scheme = ak.media.participant_binding.v1` with the full
     bound tuple (issuer_kid / realm_id / call_id / focus_id / actor_id /
     device_id / participant_identity / issued_at / expires_at / sig).
-  - `service_signature` is a typed `{ kid, sig }` object; `kid` is the
-    Realm-anchored issuer kid (`<service full id>#media-1`).
+  - `participant_binding.sig` is the single Realm-anchored media service
+    assertion; the closed outcome has no redundant `service_signature`.
   - `backend_token` decodes to a LiveKit JWT: `iss` = the runner-configured
     `SOLAND_LIVEKIT_API_KEY` (`did:web:media.example#media-token`, a backend
     credential distinct from the Realm-anchored issuer kid), `sub` =

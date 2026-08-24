@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 
 import {
   solandBaseUrl,
+  solandServiceFullId,
   solandServiceId,
   solandServiceResolution,
 } from "../../helpers/env";
@@ -284,7 +285,7 @@ test.describe("invite addressing", () => {
       "recipient_service_acceptance",
     );
     expect(locator.proofs?.[0]?.proof?.verification_method).toBe(
-      `${solandServiceId()}#notary-key`,
+      `${solandServiceFullId()}#notary-key`,
     );
 
     const rotate = await request.post(rotateUrl, {

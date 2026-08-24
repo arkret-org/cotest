@@ -25,10 +25,14 @@
 |---|---|---|---|
 | alice | `did:webvh:z6mkfixture:alice-s-applet-<uuid>.example` | principal user / Realm 创建者 / 可对 applet 行使 revoke 的 admin | 测试开始前 |
 | applet_service | `did:webvh:z6mkfixture:applet-registry-<uuid>.example` | mock-applet-registry 暴露的开发者身份;签 manifest、为外部用户生成 ghost actor | 测试开始前(由 mock 启动注入) |
-| bot_actor | `did:web:bot-<applet_namespace>-<uuid>.example` | controller-signed package 声明、formal registration 接受后生效的 bot DID;以 member 身份加入 Realm | Phase A package 签署时声明 |
-| ghost_actor | `did:web:ghost-<external_user_x>-<uuid>.example` | 外部用户 X 在 portal realm 内的代理身份;由 applet_service 在 Phase C 现场生成 | Phase C 现场颁发(每次外部事件可能复用同一 ghost) |
+| bot_actor | `ak:did_core:<method>:<core>` | controller-signed package 声明、formal registration 接受后生效的稳定 bot actor id;以 member 身份加入 Realm | Phase A package 签署时声明 |
+| ghost_actor | `ak:did_core:<method>:<core>` | 外部用户 X 在 portal realm 内的稳定代理 actor id;由 applet_service 在 Phase C 现场选择并 provision | Phase C 首次遇到该外部用户时 |
 
-> 命名约定:`bot_actor_id` 是稳定的(每个 applet 实例一个);`ghost_actor_id` 与外部用户一一对应,跨事件复用,但其 DID Document 始终把 `accountability` 指向同一个 `bot_actor` + `applet_service`。
+> `bot_actor_id` / `ghost_actor_id` 都是不可直接解析的 `did_core_id`，不能靠字符串模板反拼 bare
+> `full_id`。Ghost 的权威初始问责是 accepted Actor Profile 的
+> `accountable_principal_ids=[applet_service]` 加同一 aggregate 的 accountability grant；controller 关系由
+> registration/install 表达。Ghost full-id resolution carrier 尚未被规范闭合，见
+> `arkret-work/review/spec-open/2026-08-24-1459-ghost-actor-full-id-resolution-carrier-undefined.md`。
 
 ## Pre-conditions
 
@@ -88,33 +92,33 @@
     - ghost 消息通过 `POST /_arkret/edge/applet/transactions` 提交，`actor_id=ghost_actor_id`、`executed_by=applet_service.did`，并引用安装时颁发的 message capability
     - Realm 为私有明文时，必须在 `plaintext_visible_services` 中显式授权 applet service 的 `message_content`
     - 返回 `{ ghost_actor_id, message_id }`
-12. 断言:返回的 `ghost_actor_id` 形如 `did:web:ghost-ext-user-x-...`
+12. 断言:返回的 `ghost_actor_id` 是合法 `did_core_id`，且与 provision/profile/message 三处逐字相同
 13. **alice** 进 `/timeline/${realmId}`,timeline 包含 `"hi from outside ${stamp}"` 文本
 14. **alice** 点击该 timeline-event,断言:
     - 消息卡片显示 ghost 标记(`ghost-actor-badge` testid),且文本含 `External X`
     - `actor_id` 字段 = `ghost_actor_id`
-15. 调 soland `GET /_arkret/root/identity/${ghost_actor_id}/did-document`,断言:
-    - `accountability` 数组非空
-    - 含一个 entry `kind = "bot_actor"`,`did = bot_actor_id`
-    - 含一个 entry `kind = "applet_registry"`,`did = applet_service.did`
+15. 查询 Realm accepted Events，断言:
+    - `ak.profile.create.payload.object.principal_id = ghost_actor_id`
+    - `actor_kind = "integration"`
+    - `accountable_principal_ids = [applet_service.service_id]`
+    - 同一 provisioning aggregate 的 `ak.identity.accountability_grant` 由该 service 签署，且
+      `issuer=applet_service.service_id`、`subject=ghost_actor_id`、`grant_status="active"`
 
 ### Phase D — 链路追溯 UI
 
-16. **alice** 在该消息卡片点 `accountability-trace-button`(inkson UI;若未实现,这一步降级为直接断言 §15 的 HTTP 返回)
-    - 断言:面板显示两级链路 — 第一级 bot `bot_actor_id`,第二级 registry `applet_service.did`
+16. **alice** 在该消息卡片点 `accountability-trace-button`(inkson UI;若未实现,这一步降级为直接断言 §15 的 accepted Event closure)
+    - 断言:面板显示 Ghost Profile → service accountability grant，并可由 registration/install 追溯 controller；不得从实现私有 DID Document `accountability` 字段取代该 closure
 
 ### Phase E — Revoke + 后续 ghost 消息被拒
 
 17. **alice** 在 `/realms/${realmId}/admin/access` 或 `/settings/applets`(以 inkson 实际路由为准)对 `applet_id` 执行 revoke:
-    - 调 soland `POST /_arkret/self/applets/${applet_id}/revoke`,带 alice token、`effective_scope`、`reason_code` 和 `revoke_mode`
-    - 断言:返回 `{ status: "revoked", revoked_at: <ISO> }`
+    - 先调 `POST /_arkret/self/applets/${applet_id}/revoke/preview`，按 plan 为每个 capability revoke intent 构造完整 `EventInitialSubmission`
+    - 再调 `POST /_arkret/self/applets/${applet_id}/revoke`，携 `revoke_plan_digest`、两类 submission 数组和 `Idempotency-Key`
+    - 断言:返回 `{ ok: true, status: "complete", revoked_refs: [...] }`
 18. 再调 `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/external-event`(同 §10,但 text = `"after revoke ${stamp}"`)
     - 断言:mock 拿到的 soland 写消息响应 status = `403` 或 `409`,error code 含 `applet_revoked`
     - **断言**:alice timeline 不出现 `"after revoke ${stamp}"`
-19. 已存在的 bot/ghost 记录保留(historic accountability 不能事后被抹去) — 断言:
-    - `GET /_arkret/root/identity/${bot_actor_id}/did-document` 仍 200
-    - `GET /_arkret/root/identity/${ghost_actor_id}/did-document` 仍 200
-    - 两者的 `status` 字段含 `revoked`
+19. 已接受的 registration、Profile 与 accountability grant 仍保留(historic accountability 不能事后被抹去)，同时 revoke outcome 的 `revoked_refs` 至少包含 bot/ghost actor ids，后续 runtime ingress 继续 fail closed
 
 ## Observable assertions (合并清单)
 
@@ -123,15 +127,15 @@
 - 步骤 8-9:bot 出现在 Realm members
 - 步骤 11-13:外部事件 30s 内在 alice timeline 出现
 - 步骤 14:UI 上 ghost 消息有 ghost badge,actor_id 是 ghost_actor_id
-- 步骤 15:DID Document `accountability` 链含 bot + registry
-- 步骤 17:revoke 返回 200 + 状态 `revoked`
+- 步骤 15:accepted Profile + accountability grant + registration/install 构成规范问责闭包
+- 步骤 17:revoke preview/commit 返回 200 + `status=complete`
 - 步骤 18:revoke 后再发的 ghost 消息被拒(403/409 + `applet_revoked`),timeline 不出现新文本
-- 步骤 19:历史 DID Document 保留,但 `status` 标记为 `revoked`
+- 步骤 19:历史 accepted 问责事实保留，revoke refs/fence 标记 runtime 已撤销
 
 ## Edge cases / sub-tests
 
 - **E4.1 namespace 冲突**:Phase A 之后,mock 再生成一个不同的 `package_id` 但相同 `namespace = "bridge.demo"` 的 package;soland install preview/commit 返回 `409`,error code 含 `applet_namespace_conflict`;首次 applet 不受影响
-- **E4.2 capability revoke**:revoke applet 后,bot DID 仍可被 `GET`,但 bot 试图通过 typed bot message route 继续写消息也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability 层而非只挡 ghost 路径
+- **E4.2 capability revoke**:revoke applet 后,bot actor id 仍保留在历史 registration/revoke refs 中,但 bot 试图通过 typed bot message route 继续写消息也被拒(403 + `bot_actor_revoked`) — 验证 revoke 是作用在 capability/lifecycle 层而非只挡 ghost 路径
 - **E4.3 idempotency**:同一 install body 用相同 `Idempotency-Key` 重复 commit 两次,第二次返回 200 + 与第一次完全相同的 `{ applet_id, bot_actor_id }`;相同 key 但不同 body 返回 `409 idempotency_key_conflict`
 
 主流程之外的 E4.x 子测试建议放在同一个 `tests/extensions/applet-bridge.spec.ts` 的 `test.describe` 内,各自独立建 Realm 或共用 Phase A,以避免 namespace 状态干扰。
@@ -146,7 +150,7 @@
 
   通过证据：`artifacts/runs/20260726-033554/joint-e2e/playwright-report`。
 
-- soland 已提供 canonical applet runnable surface:`/_arkret/self/applets/install/preview`、`/_arkret/self/applets/install`、`/_arkret/self/applets/{applet_id}/revoke`、`/_arkret/self/applets/{applet_id}/ghosts/provision`、`/_arkret/edge/applet/transactions`,以及 `GET /_arkret/root/identity/{did}/did-document` accountability 查询。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。
+- soland 已提供 canonical applet runnable surface:`/_arkret/self/applets/install/preview`、`/_arkret/self/applets/install`、revoke preview/commit、`/_arkret/self/applets/{applet_id}/ghosts/provision` 与 `/_arkret/edge/applet/transactions`。当前 portal realm 写入以 space timeline 投影为主,底层仍是本地参考实现。Ghost full DID/DID Document 解析不作为当前合规断言，等待上述 spec-open 闭合。
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`

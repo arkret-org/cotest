@@ -39,7 +39,7 @@ import {
 
 // The media service the Realm epoch names is this deployment itself:
 // media-service-binding.md §3 anchors every issued issuer_kid /
-// service_signature.kid on the cell's service_id, and the joint runner leaves
+// participant_binding.issuer_kid on the cell's service_id, and the joint runner leaves
 // SOLAND_MEDIA_ISSUER_KID unset, so the deployment default signing key is
 // `<service full id>#media-1`. The LiveKit JWT `iss` is instead the
 // runner-configured SOLAND_LIVEKIT_API_KEY, a backend credential that never
@@ -116,13 +116,9 @@ test.describe("media token exchange", () => {
     expect(typeof binding.sig).toBe("string");
     expect((binding.sig as string).length).toBeGreaterThan(0);
 
-    // service_signature is a typed { kid, sig } object: kid is the realm
-    // media-service anchor (`did:...#...`), sig is the detached signature.
-    const serviceSignature = body.service_signature as Record<string, unknown>;
-    expect(serviceSignature.kid).toBe(issuerKid());
-    expect(serviceSignature.kid).toMatch(/^did:[^#]+#.+$/);
-    expect(typeof serviceSignature.sig).toBe("string");
-    expect((serviceSignature.sig as string).length).toBeGreaterThan(0);
+    // participant_binding.sig is the single issuer assertion. The closed
+    // outcome deliberately has no redundant service_signature.
+    expect(body.service_signature).toBeUndefined();
 
     // LiveKit JWT claim shape (bindings/livekit.md §2/§5).
     const claims = decodeLiveKitToken(body.backend_token as string);

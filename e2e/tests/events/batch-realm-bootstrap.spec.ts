@@ -205,7 +205,30 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       realmId,
       "owner write after registered Realm genesis",
     );
-    expect(message.actor_seq).toBe(events.length);
-    expect(message.prev_refs).toEqual([events.at(-1)!.event_id]);
+    // An ordinary Realm bootstrap intentionally has no implicit Strand. The
+    // message helper must therefore author the default discussion Strand and
+    // the Realm's authoritative default-Strand pointer before the Message.
+    // All three writes must continue the same accepted actor frontier.
+    const afterMessage = await queryRealmEventsApi(request, aliceToken, realmId);
+    const continuedEvents = (
+      (afterMessage.events ?? []) as Array<Record<string, unknown>>
+    )
+      .filter((event) => event.actor_id === alice.did)
+      .sort((left, right) => Number(left.actor_seq) - Number(right.actor_seq));
+    expect(continuedEvents.slice(events.length).map((event) => event.kind)).toEqual([
+      "ak.strand.create",
+      "ak.realm.set_default_strand",
+      "ak.message.create",
+    ]);
+    continuedEvents.forEach((event, index) => {
+      expect(event.actor_seq).toBe(index);
+      expect(event.prev_refs).toEqual(
+        index === 0 ? [] : [continuedEvents[index - 1]!.event_id],
+      );
+    });
+    expect(message.actor_seq).toBe(events.length + 2);
+    expect(message.prev_refs).toEqual([
+      continuedEvents.at(-2)!.event_id,
+    ]);
   });
 });

@@ -550,7 +550,6 @@ export async function createRealmApi(
     discoverability?: RealmObject["default_discoverability"];
     history_access?: RealmObject["history_access"];
     encryption_profile?: RealmObject["encryption_profile"];
-    content_scheme?: RealmObject["content_scheme"];
     invitees?: string[];
     /**
      * Optional home Principal Server DID for directed invite-create events.
@@ -560,10 +559,10 @@ export async function createRealmApi(
      */
     invitee_service_ids?: Record<string, string>;
     /**
-     * Materialize the creator's home Principal Server as a canonical routable
-     * member binding inside the founding batch. Cross-server Realms need this
-     * so a remote member can route its accept/join and later Events back to
-     * the creator.
+     * Override the creator's home Principal Server. The helper defaults this
+     * to the selected Soland because the standard availability policy needs a
+     * joined-member Principal Server before any post-genesis Control Move can
+     * be sealed.
      */
     creator_service_id?: string;
     plaintext_visible_services?: string[];
@@ -686,7 +685,6 @@ export async function createRealmApi(
         data.encryption_profile === "mls_rfc9420"
           ? "e2ee_required"
           : "allow_plaintext",
-      ...(data.content_scheme ? { content_scheme: data.content_scheme } : {}),
     },
   );
   pushBootstrapEvent(
@@ -697,13 +695,23 @@ export async function createRealmApi(
   pushBootstrapEvent(
     "ak.realm.history_access",
     "ak:cell:ak.component.realm.history_access.v1:null",
-    { to: data.history_access ?? "since_join" },
+    {
+      // event-payload.schema.json#/$defs/history_access_payload models this
+      // facet as an explicit FSM transition. The ordinary Realm bootstrap is
+      // the one legal initial transition, so it must author null -> value
+      // rather than relying on the reducer to infer the missing predecessor.
+      from: null,
+      to: data.history_access ?? "since_join",
+    },
   );
   pushBootstrapEvent(
     "ak.realm.discovery",
     "ak:cell:ak.component.realm.discovery.v1:null",
     {
-      value: data.discoverability ?? (data.public ? "public" : "listed"),
+      value: {
+        discoverability:
+          data.discoverability ?? (data.public ? "public" : "listed"),
+      },
     },
   );
   if (plaintextVisibleServices.length > 0) {
@@ -713,41 +721,36 @@ export async function createRealmApi(
       { services: plaintextVisibleServices },
     );
   }
-  let creatorDeliveryBinding: Record<string, unknown> | undefined;
-  let deliveryPolicy: Record<string, unknown> = {
+  const creatorServiceId =
+    data.creator_service_id ?? solandServiceId(opts.server);
+  const creatorFullDid =
+    eventSignerFor(ownerDid)?.verificationMethod.split("#", 1)[0] ?? ownerDid;
+  const didDocumentResponse = await request.get(
+    `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(creatorFullDid)}/did-document`,
+  );
+  const didDocument = await expectJsonOk<Record<string, unknown>>(
+    didDocumentResponse,
+    `resolve creator DID document ${ownerDid}`,
+  );
+  const deliveryPolicy: Record<string, unknown> = {
     realm_id: realmId,
+    allowed_binding_sources: ["did_document_default"],
+    did_document_default_allowed: true,
+    allowed_recipient_services: [creatorServiceId],
+    required_endorsers: [],
     unroutable_membership_allowed: true,
+    rebind_authorization: "member",
   };
-  if (data.creator_service_id) {
-    const creatorFullDid =
-      eventSignerFor(ownerDid)?.verificationMethod.split("#", 1)[0] ?? ownerDid;
-    const didDocumentResponse = await request.get(
-      `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(creatorFullDid)}/did-document`,
-    );
-    const didDocument = await expectJsonOk<Record<string, unknown>>(
-      didDocumentResponse,
-      `resolve creator DID document ${ownerDid}`,
-    );
-    deliveryPolicy = {
-      realm_id: realmId,
-      allowed_binding_sources: ["did_document_default"],
-      did_document_default_allowed: true,
-      allowed_recipient_services: [data.creator_service_id],
-      required_endorsers: [],
-      unroutable_membership_allowed: true,
-      rebind_authorization: "member",
-    };
-    creatorDeliveryBinding = {
-      recipient_service_id: data.creator_service_id,
-      recipient_service_kind: "principal_server",
-      binding_scope: "realm",
-      binding_source: "did_document_default",
-      delivery_modes: ["events", "sync", "to_device", "push", "keypackages"],
-      service_endpoint: solandBaseUrl(opts.server),
-      did_document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
-      resolved_at: createdAt,
-    };
-  }
+  const creatorDeliveryBinding: Record<string, unknown> = {
+    recipient_service_id: creatorServiceId,
+    recipient_service_kind: "principal_server",
+    binding_scope: "realm",
+    binding_source: "did_document_default",
+    delivery_modes: ["events", "sync", "to_device", "push", "keypackages"],
+    service_resolution: canonicalServiceResolution(opts.server),
+    did_document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
+    resolved_at: createdAt,
+  };
   pushBootstrapEvent(
     "ak.realm.delivery_binding_policy",
     "ak:cell:ak.component.realm.delivery_binding_policy.v1:null",
@@ -760,10 +763,8 @@ export async function createRealmApi(
       realm_id: realmId,
       actor_id: canonicalDidCoreId(ownerDid),
       membership: "join",
-      delivery_status: creatorDeliveryBinding ? "routable" : "unroutable",
-      ...(creatorDeliveryBinding
-        ? { delivery_binding: creatorDeliveryBinding }
-        : {}),
+      delivery_status: "routable",
+      delivery_binding: creatorDeliveryBinding,
     },
   );
 
@@ -2591,6 +2592,86 @@ export async function prepareSignedEventSubmissionApi(
   throw new Error(`${context}: exhausted actor-frontier retry loop`);
 }
 
+export async function prepareSignedEventBatchSubmissionsApi(
+  request: APIRequestContext,
+  token: string,
+  events: Array<Record<string, unknown>>,
+  opts: { server?: SolandKey; context?: string } = {},
+): Promise<Array<Record<string, unknown>>> {
+  if (events.length === 0) {
+    return [];
+  }
+  const context = opts.context ?? "prepare Event batch";
+  for (const event of events) {
+    await applyRegisteredCbaPlane(request, token, event, opts.server);
+  }
+  await advanceEnvelopeToActorFrontier(
+    request,
+    token,
+    events[0],
+    opts.server,
+  );
+  refreshBatchActorChain(events);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const leaseResponse = await issueAuthorizationLeasesApi(
+      request,
+      token,
+      events,
+      opts.server,
+    );
+    const leaseText = await leaseResponse.text();
+    if (![200, 201].includes(leaseResponse.status())) {
+      const leaseBody = parseJsonOrRaw(leaseText);
+      if (
+        !requiresActorFrontierRefresh(
+          leaseResponse.status(),
+          leaseBody,
+          leaseText,
+        ) ||
+        attempt === 2
+      ) {
+        expect(
+          [200, 201],
+          `${context} lease issuance returned ${leaseResponse.status()}: ${leaseText}`,
+        ).toContain(leaseResponse.status());
+      }
+      await advanceEnvelopeToActorFrontier(
+        request,
+        token,
+        events[0],
+        opts.server,
+      );
+      refreshBatchActorChain(events);
+      continue;
+    }
+    const leases = authorizationLeasesFromIssueOutcome(
+      leaseText,
+      events.length,
+      context,
+    );
+    const submissions: Array<Record<string, unknown>> = [];
+    for (const [index, event] of events.entries()) {
+      const controlProposalAck = await issueControlProposalAckApi(
+        request,
+        token,
+        event,
+        leases[index],
+        opts.server,
+        context,
+      );
+      submissions.push({
+        event,
+        authorization_lease: leases[index],
+        ...(controlProposalAck
+          ? { control_proposal_ack: controlProposalAck }
+          : {}),
+      });
+    }
+    return submissions;
+  }
+  throw new Error(`${context}: exhausted actor-frontier retry loop`);
+}
+
 export async function submitSignedEventBatchApi(
   request: APIRequestContext,
   token: string,
@@ -3650,10 +3731,10 @@ export async function resolveDefaultStrandId(
   } = {},
 ): Promise<string> {
   // Primary: Realm projection carries the authoritative default_strand_id.
-  const realmResp = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token) },
-  );
+  const realmUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+  const realmResp = await request.get(realmUrl, {
+    headers: authHeaders(token, "GET", realmUrl),
+  });
   if (realmResp.ok()) {
     const realm = (await realmResp.json()) as { default_strand_id?: unknown };
     if (
@@ -3665,10 +3746,10 @@ export async function resolveDefaultStrandId(
   }
 
   // Fallback: discover via the Strand projection's derived is_default marker.
-  const flowsResp = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
-    { headers: authHeaders(token) },
-  );
+  const strandsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  const flowsResp = await request.get(strandsUrl, {
+    headers: authHeaders(token, "GET", strandsUrl),
+  });
   expect(
     flowsResp.ok(),
     `resolveDefaultStrandId: strand projection for ${realmId} returned ${flowsResp.status()}`,
@@ -3731,10 +3812,9 @@ export async function resolveDefaultStrandId(
   await expect
     .poll(
       async () => {
-        const response = await request.get(
-          `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
-          { headers: authHeaders(token) },
-        );
+        const response = await request.get(strandsUrl, {
+          headers: authHeaders(token, "GET", strandsUrl),
+        });
         if (!response.ok()) return false;
         const body = (await response.json()) as {
           strands?: Array<{ strand_id?: string }>;
@@ -3764,10 +3844,9 @@ export async function resolveDefaultStrandId(
   await expect
     .poll(
       async () => {
-        const response = await request.get(
-          `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`,
-          { headers: authHeaders(token) },
-        );
+        const response = await request.get(strandsUrl, {
+          headers: authHeaders(token, "GET", strandsUrl),
+        });
         if (!response.ok()) return false;
         const body = (await response.json()) as {
           strands?: Array<{ strand_id?: string; is_default?: boolean }>;

@@ -11,6 +11,11 @@
 
 import { expect, test } from "@playwright/test";
 import { stepShot } from "../../helpers/screenshots";
+import {
+  grantCapabilityEventApi,
+  resolveDefaultStrandId,
+  waitForRealmControlIdleApi,
+} from "../../helpers/soland-api";
 import { openDpopUserPage } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -52,10 +57,45 @@ test.describe("workflow: support escalation", () => {
         summary: "Backend escalation for checkout failures",
         discoverability: "listed",
         joinRule: "invite",
+        historyAccess: "all_history_for_current_members",
         encryptionProfile: "none",
         seedMembers: [sam.did],
       });
+      // invite.accept transitions the invite lifecycle from the accepted
+      // predecessor value written by invite.create. Seeing the pending invite
+      // projection is not finality; wait until the create Move is sealed so
+      // the accept cannot race into the same fixed-prestate notary batch.
+      await waitForRealmControlIdleApi(
+        request,
+        alexFlow.session.grantJwt,
+        realmId,
+        { timeoutMs: 60_000 },
+      );
       await samPage.acceptInvite(realmId);
+      // A default discussion Strand is optional and is never an implicit Realm
+      // bootstrap side effect. This workflow needs one, so create it and set
+      // the authoritative Realm pointer explicitly after all test members join.
+      const defaultStrandId = await resolveDefaultStrandId(
+        request,
+        alexFlow.session.grantJwt,
+        realmId,
+        {
+          authorityRootController: alexFlow.user.did,
+        },
+      );
+      expect(
+        await resolveDefaultStrandId(request, samFlow.session.grantJwt, realmId),
+      ).toBe(defaultStrandId);
+      // capabilities.md section 2.2 forbids treating Realm membership as an
+      // implicit permission bundle. Give Sam only the collaboration action
+      // this workflow exercises; grantCapabilityEventApi waits for the grant
+      // Control Move to reach the accepted Seal before Sam authors against it.
+      await grantCapabilityEventApi(request, alexFlow.session.grantJwt, {
+        ownerDid: alexFlow.user.did,
+        realmId,
+        subjectDid: sam.did,
+        actions: ["ak.message.create"],
+      });
       await alexPage.sendTimelineMessage(realmId, summary);
       await stepShot(alexPage.page, testInfo, "A-summary-in");
 
@@ -103,7 +143,6 @@ test.describe("workflow: support escalation", () => {
       await alexPage.waitForTimelineEventSettled(summaryEdited);
       await expect(alexPage.page.getByTestId("chat-status")).toContainText(/Message updated/i);
       await samPage.gotoTimelineRealm(realmId);
-      await samPage.page.reload({ waitUntil: "domcontentloaded" });
       await expect(samPage.timelineEvent(summaryEdited)).toBeVisible({ timeout: 30_000 });
       await stepShot(alexPage.page, testInfo, "C-summary-patched");
 

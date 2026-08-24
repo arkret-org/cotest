@@ -16,6 +16,9 @@ import {
 } from "../../helpers/api";
 import {
   accountSubscribeDeltaApi,
+  alignSignedEventToActorFrontierApi,
+  authHeaders,
+  canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -307,9 +310,8 @@ test.describe("private read marker", () => {
     const realmId = await createRealmApi(request, bobToken, {
       title: `read cursor e2ee ${stamp}`,
       discoverability: "listed",
-      history_access: "all_history_for_current_members",
+      history_access: "since_join",
       encryption_profile: "mls_rfc9420",
-      content_scheme: "mls_exporter_aead_v1",
       invitees: [alice.did],
       ownerDid: bob.did,
     });
@@ -475,9 +477,14 @@ async function postReadCursor(
       updated_at: updatedAt,
     },
   });
-  return await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-    headers: { authorization: `Bearer ${token}` },
-    data: { advance_event: { event } },
+  await alignSignedEventToActorFrontierApi(request, token, event);
+  const url = `${solandBaseUrl()}/_arkret/self/read-cursors`;
+  return await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ advance_event: { event } }),
   });
 }
 

@@ -64,7 +64,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       ) {
         try {
           const body = observed.postDataJSON() as Record<string, unknown>;
-          if (Array.isArray(body.events)) eventBatches.push({ body, ordinal });
+          eventBatches.push({ body, ordinal });
         } catch {
           // Non-JSON traffic is irrelevant to the Event batch contract.
         }
@@ -86,13 +86,14 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         );
       const bootstrapBatch = eventBatches.find(({ body }) => {
         const events = batchEvents(body);
-        return (
-          events[0]?.kind === "ak.realm.create" &&
-          events[0]?.realm_id === realmId
-        );
+        return events[0]?.kind === "ak.realm.create";
       });
       const bootstrap = bootstrapBatch && batchEvents(bootstrapBatch.body);
       expect(bootstrap, "Inkson Realm bootstrap POST batch").toBeTruthy();
+      expect(bootstrap![0].realm_id).toBeUndefined();
+      expect(bootstrap![0].event_id?.replace(/^ak:event:/, "ak:realm:")).toBe(
+        realmId,
+      );
       expect(bootstrap![0].actor_seq).toBe(0);
       expect(bootstrap![0].prev_refs).toEqual([]);
       // realm-and-space.md section 2.5: create is followed only by the closed

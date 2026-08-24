@@ -32,7 +32,7 @@ import {
 import {
   ensureRegistered,
   issueDevSession,
-  openUserPage,
+  openDpopUserPage,
   uniqueUser,
   type JointUser,
   type JointUserPage,
@@ -537,28 +537,33 @@ type BottomConflictFixture = {
 };
 
 async function createBottomConflictFixture(
-  browser: Parameters<typeof openUserPage>[0],
+  browser: Parameters<typeof openDpopUserPage>[0],
   request: APIRequestContext,
   label: string,
 ): Promise<BottomConflictFixture> {
   const stamp = Date.now();
   const alice = uniqueUser(`bottom-${label}-alice`);
-  const bob = uniqueUser(`bottom-${label}-bob`);
-  await Promise.all([
-    ensureRegistered(request, alice),
-    ensureRegistered(request, bob),
-  ]);
+  const bobFlow = await openDpopUserPage(
+    browser,
+    request,
+    `bottom-${label}-bob-${stamp}`,
+    { prepareMlsDevice: false },
+  );
+  expect(bobFlow, "bottom repair fixture requires the joint DPoP stack").toBeDefined();
+  const bob = bobFlow!.user;
+  await ensureRegistered(request, alice);
   const [aliceToken, bobToken] = await Promise.all([
     issueDevSession(request, alice),
     issueDevSession(request, bob),
   ]);
+  const initialTitle = `bottom conflict ${label} ${stamp}`;
   const realmId = await createSharedRealmViaApi(
     request,
     alice,
     aliceToken,
     bob,
     {
-      title: `bottom conflict ${label} ${stamp}`,
+      title: initialTitle,
       historyAccess: "all_history_for_current_members",
     },
   );
@@ -576,15 +581,21 @@ async function createBottomConflictFixture(
     alice.did,
     realmId,
     aliceTitle,
+    initialTitle,
   );
   await waitForRealmControlIdleApi(request, aliceToken, realmId, {
     afterControlEventSetRoot: String(beforeAliceUpdate.control_event_set_root),
   });
-  await submitRealmTitleUpdate(request, bobToken, bob.did, realmId, bobTitle);
+  await submitRealmTitleUpdate(
+    request,
+    bobToken,
+    bob.did,
+    realmId,
+    bobTitle,
+    aliceTitle,
+  );
   await waitForRealmControlIdleApi(request, bobToken, realmId);
-  const bobPage = await openUserPage(browser, bob, {
-    sessionCredential: bobToken,
-  });
+  const bobPage = bobFlow!.page;
   return { alice, bob, aliceToken, bobToken, bobPage, realmId, aliceTitle };
 }
 
@@ -594,6 +605,7 @@ async function submitRealmTitleUpdate(
   actorDid: string,
   realmId: string,
   title: string,
+  previousTitle: string,
 ) {
   await submitSignedEventApi(
     request,
@@ -602,6 +614,18 @@ async function submitRealmTitleUpdate(
       actorDid,
       realmId: realmId,
       kind: "ak.realm.profile",
+      preconditions: [
+        {
+          cell: "ak:cell:ak.component.realm.profile.v1:null",
+          predicate: {
+            op: "head_eq",
+            value: {
+              schema: "ak.schema.realm_profile.v1",
+              title: previousTitle,
+            },
+          },
+        },
+      ],
       payload: {
         schema: "ak.schema.realm_profile.v1",
         title,

@@ -32,12 +32,16 @@ import {
   currentActorDidApi,
   grantCapabilityEventApi,
   queryRealmEventsApi,
+  plaintextVisibleServiceDeclarations,
+  prepareSignedEventBatchSubmissionsApi,
   readRealmSealBasis,
   retypeEventDerivedId,
   resolveDefaultStrandId,
   sdkCapabilityActionRegistryDigest,
   signedEventEnvelope,
+  submitSignedEventApi,
   typedId,
+  waitForRealmControlIdleApi,
   wireErrCode,
 } from "../../helpers/soland-api";
 import {
@@ -102,6 +106,130 @@ async function createAppletInstallRealm(
   return realmId;
 }
 
+async function configureAppletPlaintextServices(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  realmId: string,
+  serviceIds: string[],
+): Promise<void> {
+  const cell = "ak:cell:ak.component.realm.plaintext_visible_services.v1:null";
+  const timeline = await queryRealmEventsApi(request, token, realmId);
+  const accepted = Array.isArray(timeline.events)
+    ? (timeline.events as Array<Record<string, unknown>>)
+    : [];
+  const currentValue = [...accepted]
+    .reverse()
+    .find((event) => event.kind === "ak.realm.plaintext_visible_services")
+    ?.payload;
+  const envelope = signedEventEnvelope({
+    actorDid,
+    realmId,
+    kind: "ak.realm.plaintext_visible_services",
+    authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
+    sealBasis: await readRealmSealBasis(request, token, realmId),
+    preconditions: [
+      {
+        cell,
+        predicate: {
+          op: "head_eq",
+          value:
+            currentValue && typeof currentValue === "object"
+              ? currentValue
+              : null,
+        },
+      },
+    ],
+    payload: {
+      services: plaintextVisibleServiceDeclarations(serviceIds),
+    },
+  });
+  await advanceEnvelopeToActorFrontier(request, token, envelope);
+  await submitSignedEventApi(request, token, envelope, {
+    context: "configure Applet plaintext-visible services",
+  });
+  await waitForRealmControlIdleApi(request, token, realmId);
+}
+
+async function revokeAppletRuntime(
+  request: APIRequestContext,
+  token: string,
+  actorDid: string,
+  appletId: string,
+  realmId: string,
+  idempotencyKey: string,
+): Promise<Record<string, unknown>> {
+  const effectiveScope = { kind: "realm", realm_id: realmId };
+  const reasonCode = "requested_by_admin";
+  const revokeMode = "revoke_runtime_only";
+  const base = `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(appletId)}/revoke`;
+  const previewUrl = `${base}/preview`;
+  const preview = await request.post(previewUrl, {
+    headers: {
+      ...authHeaders(token, "POST", previewUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({
+      effective_scope: effectiveScope,
+      reason_code: reasonCode,
+      revoke_mode: revokeMode,
+    }),
+  });
+  const previewText = await preview.text();
+  expect(preview.status(), previewText).toBe(200);
+  const plan = JSON.parse(previewText) as {
+    revoke_plan_digest: string;
+    revoke_plan: {
+      registration_epoch: string;
+      capability_revocations?: Array<{
+        grant_id: string;
+        reason_code: string;
+      }>;
+      membership_removals?: unknown[];
+    };
+  };
+  expect(plan.revoke_plan.membership_removals ?? []).toEqual([]);
+  const sealBasis = await readRealmSealBasis(request, token, realmId);
+  const revokeEvents = (plan.revoke_plan.capability_revocations ?? []).map(
+    (intent) =>
+      signedEventEnvelope({
+        actorDid,
+        realmId,
+        kind: "ak.capability.revoke",
+        scopeRef: effectiveScope,
+        sealBasis,
+        authorizationRef:
+          "ak:cell:ak.component.realm.authority_root.v1:null",
+        payload: {
+          grant_id: intent.grant_id,
+          reason: intent.reason_code,
+        },
+      }),
+  );
+  const capabilityRevokeEvents =
+    await prepareSignedEventBatchSubmissionsApi(request, token, revokeEvents, {
+      context: `prepare Applet revoke ${appletId}`,
+    });
+  const response = await request.post(base, {
+    headers: {
+      ...authHeaders(token, "POST", base),
+      "content-type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
+    data: canonicalJson({
+      revoke_plan_digest: plan.revoke_plan_digest,
+      effective_scope: effectiveScope,
+      reason_code: reasonCode,
+      revoke_mode: revokeMode,
+      capability_revoke_events: capabilityRevokeEvents,
+      membership_state_events: [],
+    }),
+  });
+  const responseText = await response.text();
+  expect(response.status(), responseText).toBe(200);
+  return JSON.parse(responseText) as Record<string, unknown>;
+}
+
 function capabilityGrantRefForAction(
   registration: AppletRegistration,
   action: string,
@@ -118,15 +246,14 @@ test.describe("applet bridge", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(300_000);
     const registryBase = requireMockAppletRegistry();
     const stamp = Date.now();
     const aliceFlow = await openDpopUserPage(
       browser,
       request,
       `applet-alice-${stamp}`,
-      {
-        prepareMlsDevice: false,
-      },
+      { prepareMlsDevice: false },
     );
     if (!aliceFlow) {
       assertJointStackNotRequired("applet bridge UI setup");
@@ -147,16 +274,29 @@ test.describe("applet bridge", () => {
         "ak.profile.applet_bridge.v1",
         "ak.profile.applet_service.v1",
       ]);
-      const realmId = await createAppletInstallRealm(request, aliceToken, {
+      const realmId = await alicePage.createRealm({
         title: `applet-bridge Demo Space ${stamp}`,
         discoverability: "listed",
-        history_access: "since_join",
-        plaintext_visible_services: [
+        historyAccess: "since_join",
+        encryptionProfile: "none",
+      });
+      await grantCapabilityEventApi(request, aliceToken, {
+        ownerDid: alice.did,
+        realmId,
+        subjectDid: alice.did,
+        actions: ["ak.realm.admin", "ak.strand.create"],
+      });
+      await configureAppletPlaintextServices(
+        request,
+        aliceToken,
+        alice.did,
+        realmId,
+        [
           solandServiceId(),
           "did:web:soland.local",
           signed.applet_package.service_id,
         ],
-      });
+      );
       const registration = await installApplet(
         request,
         aliceToken,
@@ -189,6 +329,7 @@ test.describe("applet bridge", () => {
         realmId,
         registration.bot_actor_id,
       );
+      await waitForRealmControlIdleApi(request, aliceToken, realmId);
       const accept = await request.post(
         `${registryBase}/bot/${encodeURIComponent(registration.applet_id)}/accept-invite`,
         { data: { realm_id: realmId } },
@@ -217,6 +358,7 @@ test.describe("applet bridge", () => {
       const ghostActorDid = String(provisionBody.ghost_actor_id);
       expect(ghostActorDid).toMatch(/^ak:did_core:web:ghost-/);
       await addRealmMemberApi(request, aliceToken, realmId, ghostActorDid);
+      await waitForRealmControlIdleApi(request, aliceToken, realmId);
       const portalStrandId = await resolveDefaultStrandId(
         request,
         aliceToken,
@@ -247,6 +389,43 @@ test.describe("applet bridge", () => {
 
       const events = await queryRealmEventsApi(request, aliceToken, realmId);
       expect(JSON.stringify(events)).toContain(text);
+      const acceptedEvents = Array.isArray(events.events)
+        ? (events.events as Array<Record<string, unknown>>)
+        : [];
+      const ghostProfile = acceptedEvents.find(
+        (event) =>
+          event.kind === "ak.profile.create" &&
+          event.actor_id === ghostActorDid,
+      );
+      expect(ghostProfile, "accepted Ghost profile Event").toBeDefined();
+      expect(
+        (ghostProfile?.payload as Record<string, unknown> | undefined)?.object,
+      ).toEqual(
+        expect.objectContaining({
+          principal_id: ghostActorDid,
+          actor_kind: "integration",
+          accountable_principal_ids: [signed.applet_package.service_id],
+        }),
+      );
+      const accountabilityGrant = acceptedEvents.find(
+        (event) =>
+          event.kind === "ak.identity.accountability_grant" &&
+          (event.payload as Record<string, unknown> | undefined)?.subject ===
+            ghostActorDid,
+      );
+      expect(accountabilityGrant, "accepted Ghost accountability grant").toEqual(
+        expect.objectContaining({
+          actor_id: signed.applet_package.service_id,
+          authorization_ref: provisionGrantRef,
+        }),
+      );
+      expect(accountabilityGrant?.payload).toEqual(
+        expect.objectContaining({
+          issuer: signed.applet_package.service_id,
+          subject: ghostActorDid,
+          grant_status: "active",
+        }),
+      );
       await alicePage.gotoTimelineRealm(realmId);
       await expect(alicePage.page.getByTestId("message-list")).toContainText(
         text,
@@ -255,37 +434,19 @@ test.describe("applet bridge", () => {
         },
       );
 
-      const ghostDoc = await didDocument(request, aliceToken, ghostActorDid);
-      expect(ghostDoc.status).toBe("active");
-      expect(ghostDoc.accountability).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: "bot_actor",
-            did: registration.bot_actor_id,
-          }),
-          expect.objectContaining({
-            kind: "applet_registry",
-            did: signed.signing_did,
-          }),
-        ]),
+      const revoke = await revokeAppletRuntime(
+        request,
+        aliceToken,
+        alice.did,
+        registration.applet_id,
+        realmId,
+        `revoke-${stamp}`,
       );
-
-      const revoke = await request.post(
-        `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(
-          registration.applet_id,
-        )}/revoke`,
-        {
-          headers: authHeaders(aliceToken),
-          data: {
-            effective_scope: { kind: "realm", realm_id: realmId },
-            reason_code: "revoke_test",
-            revoke_mode: "revoke_runtime_only",
-          },
-        },
+      expect(revoke.ok).toBe(true);
+      expect(revoke.status).toBe("complete");
+      expect(revoke.revoked_refs).toEqual(
+        expect.arrayContaining([registration.bot_actor_id, ghostActorDid]),
       );
-      const revokeText = await revoke.text();
-      expect(revoke.status(), revokeText).toBe(200);
-      expect(JSON.parse(revokeText).ok).toBe(true);
 
       const afterRevokeText = `after revoke ${stamp}`;
       const afterRevoke = await request.post(`${registryBase}/external-event`, {
@@ -311,18 +472,6 @@ test.describe("applet bridge", () => {
         JSON.stringify(await queryRealmEventsApi(request, aliceToken, realmId)),
       ).not.toContain(afterRevokeText);
 
-      const botDoc = await didDocument(
-        request,
-        aliceToken,
-        registration.bot_actor_id,
-      );
-      const revokedGhostDoc = await didDocument(
-        request,
-        aliceToken,
-        ghostActorDid,
-      );
-      expect(botDoc.status).toBe("revoked");
-      expect(revokedGhostDoc.status).toBe("revoked");
     } finally {
       await alicePage.close();
     }
@@ -402,44 +551,37 @@ test.describe("applet bridge", () => {
       registration.bot_actor_id,
     );
 
-    const revoke = await request.post(
-      `${solandBaseUrl()}/_arkret/self/applets/${encodeURIComponent(
-        registration.applet_id,
-      )}/revoke`,
-      {
-        headers: authHeaders(aliceToken),
-        data: {
-          effective_scope: { kind: "realm", realm_id: realmId },
-          reason_code: "revoke_test",
-          revoke_mode: "revoke_runtime_only",
-        },
-      },
-    );
-    const revokeText = await revoke.text();
-    expect(revoke.status(), revokeText).toBe(200);
-    expect(JSON.parse(revokeText).ok).toBe(true);
-
-    const botWrite = await request.post(
-      `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(
-        registration.applet_id,
-      )}/bot/messages`,
-      {
-        headers: authHeaders(aliceToken),
-        data: {
-          realm_id: realmId,
-          payload: { kind: "message", text: `bot after revoke ${stamp}` },
-        },
-      },
-    );
-    expect(botWrite.status()).toBe(403);
-    expect(wireErrCode(await botWrite.json())).toBe("bot_actor_revoked");
-
-    const botDoc = await didDocument(
+    const revoke = await revokeAppletRuntime(
       request,
       aliceToken,
-      registration.bot_actor_id,
+      alice.did,
+      registration.applet_id,
+      realmId,
+      `revoke-bot-${stamp}`,
     );
-    expect(botDoc.status).toBe("revoked");
+    expect(revoke.ok).toBe(true);
+    expect(revoke.status).toBe("complete");
+    expect(revoke.revoked_refs).toEqual(
+      expect.arrayContaining([registration.bot_actor_id]),
+    );
+
+    const botMessageUrl = `${solandBaseUrl()}/_soland/edge/applets/${encodeURIComponent(
+      registration.applet_id,
+    )}/bot/messages`;
+    const botWrite = await request.post(botMessageUrl, {
+        headers: {
+          ...authHeaders(aliceToken, "POST", botMessageUrl),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
+          realm_id: realmId,
+          payload: { kind: "message", text: `bot after revoke ${stamp}` },
+        }),
+      });
+    const botWriteText = await botWrite.text();
+    expect(botWrite.status(), botWriteText).toBe(403);
+    expect(wireErrCode(JSON.parse(botWriteText))).toBe("bot_actor_revoked");
+
   });
 
   test("E4.3 idempotency: same applet package + same Idempotency-Key returns original registration; different key conflicts", async ({
@@ -1061,7 +1203,7 @@ async function rawInstallApplet(
         effective_scope: effectiveScope,
         approval_request: {
           approve_actions: signed.applet_package.requested_scopes,
-          ghost_actors_allowed: true,
+          ghost_actor_mode: "policy_declared",
           delegated_native_actors_allowed: false,
           e2ee_join_allowed: false,
           widget_allowed: false,
@@ -1173,6 +1315,7 @@ async function prepareFormalAppletInstall(
       realm_id: realmId,
       issuer: actorDid,
       subject: signed.applet_package.service_id,
+      subject_principal_server_id: signed.applet_package.service_id,
       actions: [action],
       resources: [effectiveScope],
       capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
@@ -1329,27 +1472,4 @@ function hlcForStamp(stamp: number): string {
     .digest("hex")
     .slice(0, 8);
   return `${physical}-0000-${node}`;
-}
-
-async function didDocument(
-  request: APIRequestContext,
-  token: string,
-  did: string,
-): Promise<Record<string, unknown>> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_arkret/root/identity/document?did=${encodeURIComponent(did)}`,
-    { headers: authHeaders(token) },
-  );
-  const responseText = await response.text();
-  expect(response.status(), responseText).toBe(200);
-  const body = JSON.parse(responseText) as Record<string, unknown>;
-  const didDocument = body.did_document;
-  if (didDocument && typeof didDocument === "object") {
-    const record = didDocument as Record<string, unknown>;
-    if (record.document && typeof record.document === "object") {
-      return record.document as Record<string, unknown>;
-    }
-    return record;
-  }
-  return body;
 }

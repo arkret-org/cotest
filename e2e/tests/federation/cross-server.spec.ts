@@ -43,6 +43,7 @@ import {
   pushFederationEvents,
   rawPushFederationEvents,
   queryRealmEventsApi,
+  readAcceptedSeal,
   revokeCapabilityApi,
   sendMessageApi,
   signedEventEnvelope,
@@ -409,9 +410,7 @@ test.describe("cross-server federation", () => {
     const frontierBody = (await frontierResponse.json()) as {
       frontier?: {
         kind?: unknown;
-        seal_id?: unknown;
-        control_event_set_root?: unknown;
-        state_root?: unknown;
+        seal_basis?: { leaves?: unknown };
       };
     };
     expect(
@@ -419,17 +418,26 @@ test.describe("cross-server federation", () => {
       `read α Realm Seal frontier: ${JSON.stringify(frontierBody)}`,
     ).toBeTruthy();
     expect(frontierBody.frontier?.kind).toBe("realm_seal");
+    const leaves = frontierBody.frontier?.seal_basis?.leaves as
+      | string[]
+      | undefined;
+    expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
+    const acceptedSeal = await readAcceptedSeal(
+      request,
+      aliceToken,
+      realmId,
+      leaves![0],
+      "alpha",
+    );
     const inviteId = typedId("invite");
     const inviteEvent = makeFederationEvent({
       realmId,
       kind: "ak.invite.create",
       actorDid: alice.did,
       sealBasis: {
-        leaves: [String(frontierBody.frontier?.seal_id)],
-        control_event_set_root: String(
-          frontierBody.frontier?.control_event_set_root,
-        ),
-        state_root: String(frontierBody.frontier?.state_root),
+        leaves: [leaves![0]],
+        control_event_set_root: String(acceptedSeal.control_event_set_root),
+        state_root: String(acceptedSeal.state_root),
       },
       payload: {
         invite_id: inviteId,

@@ -259,6 +259,23 @@ export class JointUserPage {
           .then(() => true)
           .catch(() => false)
       ) {
+        // Session injection can mount the authenticated shell while the URL
+        // still names the transient `/login` route (whose authenticated
+        // content is Dashboard). Normalize it through the live router before
+        // handing the page to a scenario, so later feature navigation cannot
+        // be overwritten by login-route state.
+        if (new URL(this.page.url()).pathname !== "/") {
+          const homeLink = this.page
+            .locator('a[href="/"]:visible')
+            .filter({ hasText: /^Home$/ })
+            .first();
+          await expect(homeLink).toBeVisible({ timeout: 30_000 });
+          await homeLink.click();
+          await expect(this.page).toHaveURL(
+            (url) => url.pathname === "/",
+            { timeout: 30_000 },
+          );
+        }
         await this.dismissDeviceAuthorizationPrompt();
         return;
       }
@@ -278,7 +295,13 @@ export class JointUserPage {
   async gotoSetup() {
     // inkson's /setup is the Overview; the Realm wizard lives at the
     // /setup/realms section. inkson/src/routes.rs §SetupSection.
-    await this.page.goto("/setup/realms", { waitUntil: "domcontentloaded" });
+    // Drive the live Dioxus router so the authenticated session and secure-store
+    // bootstrap owned by the app shell survive the transition. The sidebar CTA
+    // can be continuously replaced while recovery diagnostics converge; a
+    // Playwright click then waits forever for element stability even though the
+    // route itself is available. Dispatching the same history navigation avoids
+    // coupling this helper to that unrelated render churn.
+    await this.navigateWithinApp("/setup/realms");
     await expect(this.page.getByTestId("realm-lifecycle-strand")).toBeVisible({
       timeout: 120_000,
     });
@@ -313,7 +336,14 @@ export class JointUserPage {
   }
 
   async gotoNotifications() {
-    await this.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+    const notificationsLink = this.page
+      .locator('a[href="/notifications"]:visible')
+      .first();
+    if (await notificationsLink.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await notificationsLink.click();
+    } else {
+      await this.page.goto("/notifications", { waitUntil: "domcontentloaded" });
+    }
     await expect(this.page.getByTestId("notifications-panel")).toBeVisible({
       timeout: 120_000,
     });
@@ -321,9 +351,7 @@ export class JointUserPage {
   }
 
   async gotoRealmAdmin(realmId: string) {
-    await this.page.goto(`/realms/${realmId}/settings`, {
-      waitUntil: "domcontentloaded",
-    });
+    await this.navigateWithinApp(`/realms/${realmId}/settings`);
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({
       timeout: 120_000,
     });
@@ -334,9 +362,7 @@ export class JointUserPage {
   // Members is its own route; other admin sections live under settings.
   async gotoRealmAdminSection(realmId: string, section: string) {
     if (section === "members") {
-      await this.page.goto(`/realms/${realmId}/members`, {
-        waitUntil: "domcontentloaded",
-      });
+      await this.navigateWithinApp(`/realms/${realmId}/members`);
       await expect(this.page.getByTestId("realm-members-panel")).toBeVisible({
         timeout: 120_000,
       });
@@ -344,9 +370,7 @@ export class JointUserPage {
       return;
     }
 
-    await this.page.goto(`/realms/${realmId}/settings/${section}`, {
-      waitUntil: "domcontentloaded",
-    });
+    await this.navigateWithinApp(`/realms/${realmId}/settings/${section}`);
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({
       timeout: 120_000,
     });
@@ -369,11 +393,38 @@ export class JointUserPage {
     }
   }
 
+  private async navigateWithinApp(path: string) {
+    if (this.page.url().startsWith("about:")) {
+      await this.gotoHome();
+    }
+    await this.page.evaluate((nextPath) => {
+      window.history.pushState({}, "", nextPath);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }, path);
+  }
+
   async gotoTimelineRealm(realmId: string) {
-    await this.page.goto(`/chat/${realmId}`, { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("message-list")).toBeVisible({
-      timeout: 120_000,
-    });
+    // Chat is a supported route but is no longer present in the Realm context
+    // navigation (Board is the only top-level product surface). Drive the SPA
+    // router through its browser-history channel without restarting the
+    // authenticated app and secure store.
+    const messageList = this.page.getByTestId("message-list");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await this.navigateWithinApp(`/chat/${realmId}`);
+      if (
+        await messageList
+          .waitFor({ state: "visible", timeout: 30_000 })
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        break;
+      }
+      // A Realm created through the API after this browser booted is not in
+      // the initial workspace discovery set. Reload the authenticated shell
+      // once, then drive the live router again with the refreshed projection.
+      await this.gotoHome();
+    }
+    await expect(messageList).toBeVisible({ timeout: 60_000 });
     await this.dismissDeviceAuthorizationPrompt();
     await this.dismissPassiveBlockingPrompts();
     await expect(this.page.getByTestId("message-list")).toBeVisible({
@@ -825,16 +876,18 @@ export class JointUserPage {
       await createButton.click();
     }
 
-    await expect(strand).toContainText(/created ak:realm:/, {
+    await expect(strand).toContainText(/created ak:realm:/i, {
       timeout: 30_000,
     });
     const text = await strand.innerText();
     expect(text, `realm bootstrap failed: ${text}`).not.toContain(" failed:");
-    const match = text.match(/created (ak:realm:[A-Za-z0-9_-]{44})\b/);
+    const match = text.match(/created (ak:realm:[A-Za-z0-9_-]{44})\b/i);
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     const realmId = match![1];
     if ((opts.seedMembers?.length ?? 0) > 0) {
-      await strand.getByRole("link", { name: "Open Realm" }).click();
+      await strand
+        .getByRole("link", { name: /Open (?:Realm|workspace)/i })
+        .click();
     }
     for (const member of opts.seedMembers ?? []) {
       await this.inviteFromAdmin(realmId, member);
@@ -870,14 +923,32 @@ export class JointUserPage {
         },
       });
     }
+    // The responsive shell renders desktop and compact Realm navigation at the
+    // same time. Selecting the first accessible-name match can pick the hidden
+    // copy and incorrectly fall back to a cold page load. Prefer the visible,
+    // Realm-bound link so the authenticated app/session stays mounted.
     const membersNav = this.page
-      .getByRole("link", { name: "Members", exact: true })
+      .locator(`a[href="/realms/${realmId}/members"]:visible`)
       .first();
-    if (await membersNav.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await membersNav.click();
-    } else {
-      await this.gotoRealmAdminSection(realmId, "members");
+    if (!(await membersNav.isVisible({ timeout: 15_000 }).catch(() => false))) {
+      // Realm creation updates projections and the responsive context bar
+      // asynchronously. Stay inside the mounted application: select the Realm
+      // from the sidebar, then wait for its context navigation to appear.
+      const realmNav = this.page
+        .locator(`a[href="/realms/${realmId}"]:visible`)
+        .first();
+      await expect(realmNav).toBeVisible({ timeout: 60_000 });
+      await realmNav.click();
+      if (!(await membersNav.isVisible({ timeout: 5_000 }).catch(() => false))) {
+        // Narrow viewports collapse Realm destinations into the context menu;
+        // its links are mounted only while the menu is open.
+        const contextMenu = this.page.getByTestId("realm-context-menu-button");
+        await expect(contextMenu).toBeVisible({ timeout: 30_000 });
+        await contextMenu.click();
+      }
+      await expect(membersNav).toBeVisible({ timeout: 30_000 });
     }
+    await membersNav.click();
     const members = this.page.getByTestId("realm-members-panel");
     await expect(members).toBeVisible({ timeout: 120_000 });
     await members.getByTestId("open-invite-modal-button").click();
@@ -992,6 +1063,10 @@ export class JointUserPage {
       /Joined Realm/,
       { timeout: 45_000 },
     );
+    await expect(this.page.getByTestId("notifications-status")).not.toContainText(
+      /Governance verification pending/,
+      { timeout: 1_000 },
+    );
   }
 
   // Send a message into realmId's chat feed. Asserts chat-status persistence.
@@ -1069,16 +1144,14 @@ export class JointUserPage {
       return;
     }
 
-    // The durable Event may already be visible to peers while the sender still
-    // holds an optimistic "Sending" row because its live cursor missed the
-    // acknowledgement edge. Rehydrate from authoritative history before
-    // classifying the operation as stuck.
-    await this.page.reload({ waitUntil: "domcontentloaded" });
-    await this.dismissPassiveBlockingPrompts();
-    const rehydrated = this.timelineEvent(body);
+    // The wasm events adapter returns each bounded stream window as one batch,
+    // so an accepted Event can legitimately settle after the first 15-second
+    // optimistic interval. Keep the live deep-link mounted until the full
+    // operation timeout instead of turning a slow acknowledgement into an
+    // unrelated cold-start navigation.
     const remainingTimeout = Math.max(5_000, timeout - initialTimeout);
-    await expect(rehydrated).toBeVisible({ timeout: remainingTimeout });
-    await expect(rehydrated.getByTestId("message-send-status")).toHaveCount(0, {
+    await expect(event).toBeVisible({ timeout: remainingTimeout });
+    await expect(pending).toHaveCount(0, {
       timeout: remainingTimeout,
     });
   }
@@ -1530,7 +1603,7 @@ export async function createDpopUserSessionForAccount(
   });
   expect(
     sealResponse.ok(),
-    `principal bootstrap Seal returned ${sealResponse.status()}: ${await sealResponse.text()}; account=${viewerText}`,
+    `principal bootstrap Seal returned ${sealResponse.status()}: ${await sealResponse.text()}`,
   ).toBeTruthy();
   return session;
 }
@@ -1627,8 +1700,14 @@ export async function openDpopUserPageFromSession(
     recoveryMaterialEvidence: session.recoveryMaterialEvidence,
     autoCompleteRecoveryKeySetup: opts.autoCompleteRecoveryKeySetup,
   });
+  // Session injection is applied asynchronously after Inkson acquires the
+  // browser-leader lock and initializes its IndexedDB secure store. Always let
+  // that boot reach the authenticated shell before a scenario deep-links to a
+  // feature route. `prepareMlsDevice: false` skips MLS/recovery preparation;
+  // it must not also skip session initialization and race the router's
+  // authenticated-login redirect.
+  await page.gotoHome();
   if (opts.prepareMlsDevice !== false) {
-    await page.gotoHome();
     await page.completeRecoveryKeySetupIfPrompted();
     await page.acknowledgeRecommendedEncryptionPromptIfVisible();
   }

@@ -3,6 +3,7 @@ import { solandBaseUrl, type SolandKey } from "./env";
 import {
   authHeaders,
   acceptInviteApi,
+  canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
   signedEventEnvelope,
@@ -189,16 +190,21 @@ export async function listRealmEventsViaApi(
   realmId: string,
   opts: { limit?: number; server?: SolandKey } = {},
 ): Promise<Array<Record<string, unknown>>> {
-  const response = await request.fetch(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-    {
-      method: "QUERY",
-      data: { realms: [realmId], limit: opts.limit ?? 50 },
-      headers: authHeaders(token),
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
+  const response = await request.fetch(url, {
+    method: "QUERY",
+    data: canonicalJson({ realms: [realmId], limit: opts.limit ?? 50 }),
+    headers: {
+      ...authHeaders(token, "QUERY", url),
+      "content-type": "application/json",
     },
-  );
-  expect(response.status()).toBe(200);
-  const body = await response.json();
+  });
+  const responseText = await response.text();
+  expect(
+    response.status(),
+    `list Realm events returned ${response.status()}: ${responseText}`,
+  ).toBe(200);
+  const body = JSON.parse(responseText);
   expect(Array.isArray(body.events)).toBe(true);
   return body.events;
 }

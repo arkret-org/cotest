@@ -447,9 +447,8 @@ test.describe("notifications", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S23 E2EE Blind Wake ${stamp}`,
       discoverability: "listed",
-      history_access: "all_history_for_current_members",
+      history_access: "since_join",
       encryption_profile: "mls_rfc9420",
-      content_scheme: "mls_exporter_aead_v1",
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.did);
     await replaceAccountDataApi(

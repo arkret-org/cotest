@@ -241,35 +241,40 @@ function currentHlc() {
   return `${Date.now().toString(16).padStart(12, "0")}-0000-00000000`;
 }
 
-function detachedEventProof(event, actorDid, verificationMethod, signingKey) {
-  const eventDigest = canonicalHash(event);
+function detachedEventProof(
+  event,
+  actorDid,
+  verificationMethod,
+  signingKey,
+  actorFullDid,
+) {
   const createdAt = rfc3339Now();
-  const binding = {
-    context: "ak.event_proof.v1",
-    event_digest: eventDigest,
-    actor_id: actorDid,
-    verification_method: verificationMethod,
-    created_at: createdAt,
-  };
-  const protectedHeader = Buffer.from('{"alg":"Ed25519"}', "utf8").toString(
-    "base64url",
-  );
-  const signingInput = `${protectedHeader}.${Buffer.from(
-    canonicalJson(binding),
-    "utf8",
-  ).toString("base64url")}`;
-  const signature = sign(
-    null,
-    Buffer.from(signingInput, "utf8"),
-    signingKey,
-  ).toString("base64url");
-  return {
-    kind: "detached_jws",
-    verification_method: verificationMethod,
-    event_digest: eventDigest,
-    created_at: createdAt,
-    jws: `${protectedHeader}..${signature}`,
-  };
+  const signingJwk = signingKey.export({ format: "jwk" });
+  if (typeof signingJwk.d !== "string") {
+    throw new Error("Applet Event signing key has no private seed");
+  }
+  const binary = process.env.COTEST_WIRE_BIN;
+  const command = binary ?? "cargo";
+  const args = binary
+    ? ["event-proof"]
+    : ["run", "--quiet", "--bin", "cotest-wire", "--", "event-proof"];
+  const result = spawnSync(command, args, {
+    cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
+    encoding: "utf8",
+    input: canonicalJson({
+      actor_did: actorFullDid ?? (actorDid.startsWith("ak:did_core:")
+        ? `did:${actorDid.slice("ak:did_core:".length)}`
+        : actorDid),
+      verification_method: verificationMethod,
+      created_at: createdAt,
+      event,
+      signing_seed_b64url: signingJwk.d,
+    }),
+  });
+  if (result.status !== 0) {
+    throw new Error(`derive Event proof failed: ${result.stderr}`);
+  }
+  return JSON.parse(result.stdout);
 }
 
 function detachedJws(binding, signingKey) {
@@ -305,22 +310,20 @@ async function readRealmFrontier(solandBase, authorization, realmId) {
   }
   const body = JSON.parse(responseText);
   const frontier = body?.frontier;
+  const leaves = frontier?.seal_basis?.leaves;
   if (
-    typeof frontier?.seal_id !== "string" ||
-    typeof frontier?.control_event_set_root !== "string" ||
-    typeof frontier?.state_root !== "string"
+    frontier?.kind !== "realm_seal" ||
+    !Array.isArray(leaves) ||
+    leaves.length !== 1 ||
+    typeof leaves[0] !== "string"
   ) {
     throw new Error(
       "Realm frontier response is missing the accepted Seal basis",
     );
   }
   return {
-    sealRef: frontier.seal_id,
-    sealBasis: {
-      leaves: [frontier.seal_id],
-      control_event_set_root: frontier.control_event_set_root,
-      state_root: frontier.state_root,
-    },
+    sealRef: leaves[0],
+    sealBasis: { leaves: [...leaves] },
   };
 }
 
@@ -376,6 +379,7 @@ function signedGhostProvisionEvents({
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: packageInfo.serviceId,
+    principal_server_id: packageInfo.serviceId,
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
     actor_seq: nextActorSequence(packageInfo.serviceId),
@@ -393,6 +397,7 @@ function signedGhostProvisionEvents({
       packageInfo.serviceId,
       verificationMethod,
       packageInfo.signingKey,
+      packageInfo.serviceFullId,
     ),
   ];
 
@@ -401,6 +406,7 @@ function signedGhostProvisionEvents({
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: ghostActorId,
+    principal_server_id: packageInfo.serviceId,
     executed_by: packageInfo.serviceId,
     authorization_ref: authorizationRef,
     applet_id: packageInfo.appletId,
@@ -427,7 +433,6 @@ function signedGhostProvisionEvents({
         profile_fields: {
           managed_by_applet: packageInfo.appletId,
           external_ref: {
-            schema: "ak.applet.ghost_actor.external_ref.v1",
             protocol: "bridge",
             tenant: "joint-e2e",
             external_user_id: externalId,
@@ -454,6 +459,7 @@ function signedGhostProvisionEvents({
 function signedGhostMessageEvent({
   packageInfo,
   provision,
+  principalServerId,
   authorizationRef,
   realmId,
   strandId,
@@ -469,6 +475,7 @@ function signedGhostMessageEvent({
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: provision.ghost_actor_id,
+    principal_server_id: principalServerId,
     actor_seq: nextActorSequence(provision.ghost_actor_id),
     created_at: createdAt,
     hlc: currentHlc(),
@@ -479,7 +486,7 @@ function signedGhostMessageEvent({
     applet_id: packageInfo.appletId,
     seal_ref: sealRef,
     auth_context: {
-      did: packageInfo.serviceId,
+      actor_id: packageInfo.serviceId,
       key_id: keyFragment ?? packageInfo.verificationMethod,
       key_epoch: 0,
     },
@@ -761,6 +768,7 @@ function signedPackage(body) {
     namespace,
     safe,
     serviceId,
+    serviceFullId,
     verificationMethod: webhookAuth.key_ref,
     signingKey: body.service_signing_private_jwk
       ? createPrivateKey({
@@ -1002,6 +1010,7 @@ const server = createServer(async (req, res) => {
     const signed = signedGhostMessageEvent({
       packageInfo,
       provision,
+      principalServerId: destinationServiceId,
       authorizationRef: body.authorization_ref ?? provision.authorization_ref,
       realmId: body.realm_id,
       strandId: body.strand_id,

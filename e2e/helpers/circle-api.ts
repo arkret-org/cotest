@@ -23,7 +23,7 @@
 // DID can be the `actor_id` of a signed Event.
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
-import { type SolandKey, solandBaseUrl } from "./env";
+import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import type { RealmObject } from "./generated/spec-wire-objects";
 import {
   authHeaders,
@@ -88,6 +88,7 @@ export async function grantCircleMemberManageCapability(
     realm_id: args.realmId,
     issuer: args.ownerDid,
     subject: args.subjectDid,
+    subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.member.manage"],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
@@ -147,6 +148,7 @@ export async function grantCircleManageCapability(
     realm_id: args.realmId,
     issuer: args.ownerDid,
     subject: args.subjectDid,
+    subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.manage"],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
@@ -233,6 +235,7 @@ function circleCreateObject(args: {
   encryptionProfile?: string;
   createdAt: string;
 }): Record<string, unknown> {
+  const encryptionProfile = args.encryptionProfile ?? "mls_rfc9420";
   return {
     schema: "ak.schema.circle.v1",
     realm_id: args.realmId,
@@ -242,7 +245,10 @@ function circleCreateObject(args: {
     directory_visibility: args.directoryVisibility ?? "members",
     join_rule: args.joinRule ?? "invite",
     history_access: args.historyAccess ?? "since_join",
-    encryption_profile: args.encryptionProfile ?? "mls_rfc9420",
+    encryption_profile: encryptionProfile,
+    ...(encryptionProfile === "mls_rfc9420"
+      ? { content_scheme: "mls_rfc9420" }
+      : {}),
     state: "active",
     created_by: args.actorDid,
     created_at: args.createdAt,

@@ -14,7 +14,7 @@
 // reintroduced (SPEC-CR-020: zero new operations).
 
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   authHeaders,
   addRealmMemberApi,
@@ -93,7 +93,7 @@ async function effectiveGrantIds(
   subjectDid: string,
   realmId: string,
 ): Promise<string[]> {
-  const url = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(canonicalDidCoreId(subjectDid))}&realm_id=${encodeURIComponent(realmId)}`;
+  const url = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(canonicalDidCoreId(subjectDid))}&subject_principal_server_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
   const response = await request.get(url, {
     headers: authHeaders(ownerToken, "GET", url),
   });
@@ -203,7 +203,7 @@ test.describe("capability chain (event wire)", () => {
 
     // GET /_arkret/self/authz/effective-grants — realm owner may query a
     // subject's direct grants (GrantList).
-    const grantsUrl = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(canonicalDidCoreId(bob.did))}&realm_id=${encodeURIComponent(realmId)}`;
+    const grantsUrl = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(canonicalDidCoreId(bob.did))}&subject_principal_server_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
     const grantsResp = await request.get(grantsUrl, {
       headers: authHeaders(aliceToken, "GET", grantsUrl),
     });
