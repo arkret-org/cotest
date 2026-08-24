@@ -274,6 +274,29 @@ function Find-CommandPath {
     return $null
 }
 
+function Find-OpenSslPath {
+    $command = Find-CommandPath @("openssl.exe", "openssl")
+    if ($command) {
+        return $command
+    }
+
+    # Git for Windows and the standard Win64 OpenSSL installer both keep the
+    # executable outside the default PATH on common installations. Resolve
+    # those stable locations explicitly so a non-interactive runner does not
+    # depend on a developer shell having amended PATH first.
+    $candidates = @()
+    if ($env:ProgramFiles) {
+        $candidates += (Join-Path $env:ProgramFiles "Git\usr\bin\openssl.exe")
+        $candidates += (Join-Path $env:ProgramFiles "OpenSSL-Win64\bin\openssl.exe")
+    }
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    return $null
+}
+
 function Invoke-NativeCapture {
     param(
         [Parameter(Mandatory = $true)][string]$FilePath,
@@ -895,7 +918,7 @@ function Invoke-JointE2ePreflight {
         } else {
             Add-PreflightResult $results "tls proxy (caddy)" "fail" "caddy is required for the joint TLS identity topology"
         }
-        $openssl = Find-CommandPath @("openssl.exe", "openssl")
+        $openssl = Find-OpenSslPath
         if ($openssl) {
             Add-PreflightResult $results "tls assets (openssl)" "pass" $openssl
         } else {
@@ -1065,7 +1088,7 @@ function New-JointTlsAssets {
         [Parameter(Mandatory = $true)][string]$RunLabel
     )
 
-    $openssl = Find-CommandPath @("openssl.exe", "openssl")
+    $openssl = Find-OpenSslPath
     if (-not $openssl) {
         throw "openssl is required to mint the joint TLS topology certificates"
     }
@@ -1073,7 +1096,21 @@ function New-JointTlsAssets {
     $caName = "cotest-joint-e2e-ca-$RunLabel"
     $caKey = Join-Path $Directory "ca.key"
     $caPem = Join-Path $Directory "ca.pem"
+    $requestConfig = Join-Path $Directory "request.cnf"
+    $requestConfigLines = @(
+        "[req]",
+        "distinguished_name=req_dn",
+        "prompt=no",
+        "[req_dn]",
+        "CN=cotest-joint-e2e"
+    )
+    [System.IO.File]::WriteAllLines(
+        $requestConfig,
+        $requestConfigLines,
+        [System.Text.UTF8Encoding]::new($false)
+    )
     & $openssl req -x509 -newkey rsa:2048 -keyout $caKey -out $caPem -days 2 -nodes `
+        -config $requestConfig `
         -subj "/CN=$caName" `
         -addext "basicConstraints=critical,CA:TRUE" `
         -addext "keyUsage=critical,keyCertSign,cRLSign"
@@ -1098,6 +1135,7 @@ function New-JointTlsAssets {
     )
     [System.IO.File]::WriteAllLines($sanFile, $sanLines, [System.Text.UTF8Encoding]::new($false))
     & $openssl req -newkey rsa:2048 -keyout $serverKey -out $serverCsr -nodes `
+        -config $requestConfig `
         -subj "/CN=$($DnsNames[0])"
     if ($LASTEXITCODE -ne 0) {
         throw "openssl server key generation failed (exit $LASTEXITCODE)"
@@ -1229,7 +1267,7 @@ function Assert-JointTlsTopology {
 
     $null = New-Item -ItemType Directory -Force -Path $EvidenceDir
 
-    $openssl = Find-CommandPath @("openssl.exe", "openssl")
+    $openssl = Find-OpenSslPath
     if (-not $openssl) {
         throw "joint TLS topology: openssl disappeared after preflight"
     }
@@ -2290,6 +2328,16 @@ function Invoke-RunnerSelfTest {
         }
         if (-not $secondRunnerRejected) {
             throw "runner lock self-test allowed a second workspace owner"
+        }
+
+        $tlsAssets = New-JointTlsAssets `
+            -Directory (Join-Path $tempRoot "tls") `
+            -DnsNames @("self-test.local.host") `
+            -RunLabel "self-test"
+        if (-not (Test-Path -LiteralPath $tlsAssets.CaPemPath -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $tlsAssets.ServerPemPath -PathType Leaf) -or
+            -not $tlsAssets.ServerSpkiSha256) {
+            throw "joint TLS asset self-test did not mint a CA and server certificate"
         }
 
         (Get-Item -LiteralPath $binaryPath).LastWriteTimeUtc = [DateTime]::UtcNow.AddYears(-10)
