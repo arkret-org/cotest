@@ -90,6 +90,7 @@ hpke-rs = {workspace = true}
 hpke-rs-crypto = {workspace = true}
 hpke-rs-rust-crypto = {workspace = true}
 jsonschema = {workspace = true,default-features = false,features = ["resolve-file"]}
+postgres = {workspace = true}
 reqwest = {workspace = true,features = ["json", "multipart", "rustls"]}
 salvo = {workspace = true,features = ["fix-http1-request-uri", "server", "server-handle", "http1", "affix-state"]}
 serde = {workspace = true,features = ["derive"]}
@@ -169,6 +170,7 @@ hpke-rs = "0.6"
 hpke-rs-crypto = "0.6"
 hpke-rs-rust-crypto = "0.6"
 jsonschema = {version = "0.46.5",default-features = false}
+postgres = "0.19.12"
 proptest = {version = "1",default-features = false}
 reqwest = {version = "0.13.4",default-features = false}
 salvo = {version = "=0.95.2",default-features = false}

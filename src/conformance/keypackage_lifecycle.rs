@@ -237,6 +237,11 @@ fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
 }
 
 fn claim_receipt_value(claims: &[Value]) -> Value {
+    let target_device_id = claims
+        .first()
+        .and_then(|claim| claim.get("device_id"))
+        .and_then(Value::as_str)
+        .expect("fixture claim record must carry its exact target device id");
     let request = json!({
         "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "target_principal_id": "ak:did_core:webvh:z6mkfixture",
@@ -245,7 +250,8 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         "mls_group_id": "fixture-group",
         "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.content.v1"],
-        "expires_at": "2026-01-01T00:05:00.000Z"
+        "expires_at": "2026-01-01T00:05:00.000Z",
+        "target_device_ids": [target_device_id]
     });
     let request_digest = arkret_canonical::canonical_sha256(&request)
         .expect("fixture claim request must be canonicalizable");
@@ -1309,7 +1315,8 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         typed.claim_request_id.as_str().to_owned(),
     );
     let outcome = arkret_canonical::canonical_json_bytes(&claim_outcome_value(json!({
-        "claim_id": "fixture"
+        "claim_id": "fixture",
+        "device_id": requester_device_id
     })))?;
     let mut ledger = BTreeMap::new();
     ledger.insert(identity.clone(), (request_digest.clone(), outcome.clone()));

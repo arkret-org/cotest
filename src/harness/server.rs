@@ -23,6 +23,7 @@ use super::assertions::expect_json;
 use super::canonical_device_id;
 use super::client::TestActorClient;
 use super::principal::ProvisionedTestPrincipal;
+use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
 use crate::scenarios::identity_test_support::{
     ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN, bootstrap_registered_actor,
     harness_account_authority_id,
@@ -50,6 +51,11 @@ pub struct ArkretServer {
     /// which publishes only the HTTP port.
     metrics_bind: Option<String>,
     _port_reservations: Vec<ReservedPort>,
+    /// Owns the isolated PostgreSQL instance provisioned by the default
+    /// harness spawn path. Soland runtime persistence is PostgreSQL-only; the
+    /// harness must therefore keep the database alive for exactly as long as
+    /// the child process rather than falling back to a test-only memory store.
+    _database: Option<EphemeralPg>,
 }
 
 #[derive(Clone)]
@@ -137,7 +143,16 @@ impl ArkretServer {
     }
 
     pub async fn spawn_with_env(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
-        Self::spawn_with_network_and_env(name, None, extra_env).await
+        let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+            .context(
+                "Soland Cotest runtime requires PostgreSQL; set COTEST_SOLAND_DATABASE_URL or make Docker available for an isolated test database",
+            )?;
+        let mut env = Vec::with_capacity(extra_env.len() + 1);
+        env.push(("DATABASE_URL", database.connect_url.as_str()));
+        env.extend_from_slice(extra_env);
+        let mut server = Self::spawn_with_network_and_env(name, None, &env).await?;
+        server._database = Some(database);
+        Ok(server)
     }
 
     pub async fn spawn_with_database_url(
@@ -148,7 +163,7 @@ impl ArkretServer {
         let mut env = Vec::with_capacity(extra_env.len() + 1);
         env.push(("DATABASE_URL", database_url));
         env.extend_from_slice(extra_env);
-        Self::spawn_with_env(name, &env).await
+        Self::spawn_with_network_and_env(name, None, &env).await
     }
 
     async fn spawn_with_network_and_env(
@@ -263,7 +278,9 @@ impl ArkretServer {
             )
         })?;
 
-        if let Err(error) = wait_until_healthy(base_url.clone()).await {
+        if let Err(error) =
+            wait_until_process_healthy(base_url.clone(), &mut child, log_path.as_deref()).await
+        {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);
@@ -294,6 +311,7 @@ impl ArkretServer {
             log_path,
             metrics_bind: Some(metrics_bind_for_handle),
             _port_reservations: vec![port, metrics_port],
+            _database: None,
         })
     }
 
@@ -365,7 +383,9 @@ impl ArkretServer {
             .spawn()
             .with_context(|| format!("failed to start SUT from {}", manifest.display()))?;
 
-        if let Err(error) = wait_until_healthy(base_url.clone()).await {
+        if let Err(error) =
+            wait_until_process_healthy(base_url.clone(), &mut child, log_path.as_deref()).await
+        {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);
@@ -386,6 +406,7 @@ impl ArkretServer {
             log_path,
             metrics_bind: Some(metrics_bind),
             _port_reservations: vec![port, metrics_port],
+            _database: None,
         })
     }
 
@@ -499,6 +520,7 @@ impl ArkretServer {
             // listener is unreachable from the host.
             metrics_bind: None,
             _port_reservations: vec![host_port],
+            _database: None,
         })
     }
 
@@ -648,7 +670,13 @@ impl ArkretServer {
                 config.bin_path.display()
             )
         })?;
-        if let Err(error) = wait_until_healthy(self.base_url.clone()).await {
+        if let Err(error) = wait_until_process_healthy(
+            self.base_url.clone(),
+            &mut restarted,
+            self.log_path.as_deref(),
+        )
+        .await
+        {
             let _ = restarted.kill();
             let _ = restarted.wait();
             return Err(error);
@@ -924,8 +952,25 @@ impl TestServerGroup {
         count: usize,
         bin_path: &Path,
     ) -> Result<Vec<ArkretServer>> {
-        let node_envs = vec![Vec::new(); count];
-        Self::spawn_external_federated_with_node_envs(name, &node_envs, bin_path).await
+        let mut databases = Vec::with_capacity(count);
+        let mut node_envs = Vec::with_capacity(count);
+        for _ in 0..count {
+            let database = spawn_ephemeral_postgres_for("COTEST_SOLAND_DATABASE_URL")?
+                .context(
+                    "federated Soland Cotest runtime requires one isolated PostgreSQL database per node",
+                )?;
+            node_envs.push(vec![(
+                "DATABASE_URL".to_owned(),
+                database.connect_url.clone(),
+            )]);
+            databases.push(database);
+        }
+        let mut servers =
+            Self::spawn_external_federated_with_node_envs(name, &node_envs, bin_path).await?;
+        for (server, database) in servers.iter_mut().zip(databases) {
+            server._database = Some(database);
+        }
+        Ok(servers)
     }
 
     async fn spawn_external_federated_with_node_envs(
@@ -1396,6 +1441,22 @@ fn cleanup_stale_port_reservations(dir: &Path) {
 }
 
 async fn wait_until_healthy(base_url: Url) -> Result<()> {
+    wait_until_healthy_inner(base_url, None, None).await
+}
+
+async fn wait_until_process_healthy(
+    base_url: Url,
+    child: &mut Child,
+    log_path: Option<&Path>,
+) -> Result<()> {
+    wait_until_healthy_inner(base_url, Some(child), log_path).await
+}
+
+async fn wait_until_healthy_inner(
+    base_url: Url,
+    mut child: Option<&mut Child>,
+    log_path: Option<&Path>,
+) -> Result<()> {
     let client = probe_http_client()?;
     let health_url = base_url.join("health")?;
     let mut last_error = None;
@@ -1406,6 +1467,26 @@ async fn wait_until_healthy(base_url: Url) -> Result<()> {
         .unwrap_or(480);
 
     for _ in 0..attempts {
+        if let Some(status) = child
+            .as_deref_mut()
+            .map(Child::try_wait)
+            .transpose()
+            .context("inspect Soland child status during startup")?
+            .flatten()
+        {
+            let log = log_path
+                .and_then(|path| fs::read_to_string(path).ok())
+                .unwrap_or_default();
+            let detail = log.trim();
+            if detail.is_empty() {
+                return Err(anyhow!(
+                    "Soland exited before becoming healthy with status {status}"
+                ));
+            }
+            return Err(anyhow!(
+                "Soland exited before becoming healthy with status {status}; service log:\n{detail}"
+            ));
+        }
         match client.get(health_url.clone()).send().await {
             Ok(response) if response.status().is_success() => return Ok(()),
             Ok(response) => {

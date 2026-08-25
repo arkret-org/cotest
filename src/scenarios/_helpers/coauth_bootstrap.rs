@@ -38,8 +38,9 @@
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
@@ -64,7 +65,13 @@ pub struct EphemeralPg {
     container_name: String,
     /// Set to `false` after a successful explicit shutdown so Drop is a no-op.
     cleanup: bool,
+    external_database: Option<ExternalDatabase>,
     _port_reservation: Option<ReservedPort>,
+}
+
+struct ExternalDatabase {
+    admin_url: String,
+    name: String,
 }
 
 /// Whether the generated-config coauth bootstrap can be attempted in this
@@ -73,7 +80,7 @@ pub struct EphemeralPg {
 /// Docker-backed ephemeral Postgres path.
 pub fn coauth_with_db_available() -> bool {
     locate_external_binary(&coauth_binary_probe_spec()).is_some()
-        && (external_database_url().is_some() || docker_available())
+        && (external_database_url("COTEST_COAUTH_DATABASE_URL").is_some() || docker_available())
 }
 
 impl EphemeralPg {
@@ -86,6 +93,23 @@ impl EphemeralPg {
 
 impl Drop for EphemeralPg {
     fn drop(&mut self) {
+        if let Some(database) = self.external_database.take() {
+            let _ = thread::spawn(move || {
+                if let Ok(mut client) =
+                    postgres::Client::connect(&database.admin_url, postgres::NoTls)
+                {
+                    let _ = client.execute(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
+                        &[&database.name],
+                    );
+                    let _ = client.batch_execute(&format!(
+                        "DROP DATABASE IF EXISTS \"{}\"",
+                        database.name
+                    ));
+                }
+            })
+            .join();
+        }
         if !self.cleanup {
             return;
         }
@@ -313,11 +337,23 @@ fn patch_principal_server_config(
 /// `Ok(None)` if Docker is unavailable. The caller is expected to degrade
 /// gracefully (skip the live row, keep the placeholder).
 pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
-    if let Some(connect_url) = external_database_url() {
+    spawn_ephemeral_postgres_for("COTEST_COAUTH_DATABASE_URL")
+}
+
+/// Use the database URL named by `database_url_env`, or provision an
+/// isolated Docker-backed PostgreSQL instance when it is unset.
+///
+/// Soland and Coauth deliberately use distinct configuration variables. A
+/// shared helper must therefore take the variable name explicitly instead of
+/// accidentally wiring one service to the other's database.
+pub fn spawn_ephemeral_postgres_for(database_url_env: &str) -> Result<Option<EphemeralPg>> {
+    if let Some(connect_url) = external_database_url(database_url_env) {
+        let (connect_url, external_database) = provision_external_database(&connect_url)?;
         return Ok(Some(EphemeralPg {
             connect_url,
             container_name: "external-postgres".to_owned(),
             cleanup: false,
+            external_database: Some(external_database),
             _port_reservation: None,
         }));
     }
@@ -363,6 +399,7 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
         ),
         container_name,
         cleanup: true,
+        external_database: None,
         _port_reservation: Some(host_port),
     };
 
@@ -377,10 +414,45 @@ pub fn spawn_ephemeral_postgres() -> Result<Option<EphemeralPg>> {
     Ok(Some(pg))
 }
 
-fn external_database_url() -> Option<String> {
-    std::env::var("COTEST_COAUTH_DATABASE_URL")
+fn external_database_url(name: &str) -> Option<String> {
+    std::env::var(name)
         .ok()
         .filter(|value| !value.trim().is_empty())
+}
+
+fn provision_external_database(admin_url: &str) -> Result<(String, ExternalDatabase)> {
+    static DATABASE_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock precedes Unix epoch")?
+        .as_millis();
+    let sequence = DATABASE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let name = format!("cotest_{}_{}_{}", std::process::id(), timestamp, sequence);
+    let admin_url_owned = admin_url.to_owned();
+    let database_name = name.clone();
+    thread::spawn(move || -> Result<()> {
+        let mut client = postgres::Client::connect(&admin_url_owned, postgres::NoTls)
+            .with_context(|| {
+                format!("connect to configured PostgreSQL administrator at {admin_url_owned}")
+            })?;
+        client
+            .batch_execute(&format!("CREATE DATABASE \"{database_name}\""))
+            .with_context(|| format!("create isolated Cotest database {database_name}"))?;
+        Ok(())
+    })
+    .join()
+    .map_err(|_| anyhow::anyhow!("isolated Cotest database provision thread panicked"))??;
+
+    let mut database_url = url::Url::parse(admin_url)
+        .with_context(|| format!("parse configured PostgreSQL URL {admin_url}"))?;
+    database_url.set_path(&format!("/{name}"));
+    Ok((
+        database_url.into(),
+        ExternalDatabase {
+            admin_url: admin_url.to_owned(),
+            name,
+        },
+    ))
 }
 
 /// Output of [`bootstrap_coauth_config`] — the rendered config plus the
@@ -915,6 +987,7 @@ pub fn spawn_ephemeral_postgres_testcontainers() -> Result<Option<EphemeralPg>> 
         connect_url: format!("postgresql://arkret:arkret@127.0.0.1:{host_port}/arkret"),
         container_name,
         cleanup: true,
+        external_database: None,
         _port_reservation: None,
     };
     if !wait_for_postgres_ready(&pg, Duration::from_secs(60)) {

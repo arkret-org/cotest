@@ -40,7 +40,9 @@ use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::{Response, StatusCode};
 use serde_json::{Value, json};
 
-use crate::harness::{ArkretServer, ProvisionedTestPrincipal, TestActorClient, expect_json};
+use crate::harness::{
+    ArkretServer, ProvisionedTestPrincipal, TestActorClient, events_query_for_realm, expect_json,
+};
 use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
 use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
@@ -130,13 +132,37 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         "pairwise coverage must not authenticate as either pairwise actor"
     );
 
-    let realm_id = create_pairwise_realm(&transport, "Pairwise KeyPackage live", true).await?;
-    let wrong_realm_id = create_pairwise_realm(&transport, "Pairwise wrong Realm", true).await?;
-    let ordinary_realm_id = create_pairwise_realm(&transport, "Ordinary MLS Realm", false).await?;
+    let (realm_id, realm_policy_event_ref) =
+        create_pairwise_realm(&transport, "Pairwise KeyPackage live", true).await?;
+    let (wrong_realm_id, _) =
+        create_pairwise_realm(&transport, "Pairwise wrong Realm", true).await?;
+    let (ordinary_realm_id, ordinary_realm_policy_event_ref) =
+        create_pairwise_realm(&transport, "Ordinary MLS Realm", false).await?;
     let service_record = current_service_record(&server).await?;
-    install_pairwise_membership(&transport, &realm_id, &target, &service_record).await?;
-    install_pairwise_membership(&transport, &realm_id, &requester, &service_record).await?;
-    install_pairwise_membership(&transport, &ordinary_realm_id, &target, &service_record).await?;
+    install_pairwise_membership(
+        &transport,
+        &realm_id,
+        &realm_policy_event_ref,
+        &target,
+        &service_record,
+    )
+    .await?;
+    install_pairwise_membership(
+        &transport,
+        &realm_id,
+        &realm_policy_event_ref,
+        &requester,
+        &service_record,
+    )
+    .await?;
+    install_pairwise_membership(
+        &transport,
+        &ordinary_realm_id,
+        &ordinary_realm_policy_event_ref,
+        &target,
+        &service_record,
+    )
+    .await?;
 
     let target_identity = target.identity(local_owner.clone(), TARGET_LOCAL_DEVICE)?;
     let last_resort_identity =
@@ -413,7 +439,7 @@ async fn create_pairwise_realm(
     client: &TestActorClient,
     title: &str,
     minimal_metadata: bool,
-) -> Result<String> {
+) -> Result<(String, EventId)> {
     let profiles = minimal_metadata
         .then(|| vec!["ak.profile.mls.minimal_metadata_realm.v1"])
         .unwrap_or_default();
@@ -426,9 +452,8 @@ async fn create_pairwise_realm(
             "encryption_profile": "mls_rfc9420",
             "plaintext_visible_services": [client.service_id()],
             "delivery_binding_policy": {
-                "allowed_binding_sources": ["did_document_default"],
-                "did_document_default_allowed": true,
-                "allowed_recipient_services": ["*"],
+                "allowed_binding_sources": ["realm_policy"],
+                "allowed_recipient_services": [client.service_id()],
                 "unroutable_membership_allowed": true
             }
         }))
@@ -438,7 +463,51 @@ async fn create_pairwise_realm(
         .context("pairwise Realm bootstrap omitted realm_id")?
         .to_owned();
     wait_for_bootstrap_seal(client, &realm_id).await?;
-    Ok(realm_id)
+    let listed = expect_json(
+        client
+            .query("/_arkret/self/events")
+            .json(&events_query_for_realm(&realm_id, 100)?),
+        StatusCode::OK,
+    )
+    .await?;
+    let policy_event_refs = listed["events"]
+        .as_array()
+        .context("pairwise Realm query omitted events")?
+        .iter()
+        .filter(|event| {
+            event["kind"]
+                .as_str()
+                .or_else(|| event["event_kind"].as_str())
+                == Some(EventKind::RealmDeliveryBindingPolicy.as_str())
+        })
+        .map(|event| {
+            EventId::new(
+                event["event_id"]
+                    .as_str()
+                    .context("accepted delivery-binding policy Event omitted event_id")?
+                    .to_owned(),
+            )
+            .map_err(anyhow::Error::from)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        policy_event_refs.len() == 1,
+        "pairwise Realm requires exactly one accepted delivery-binding policy Event, got {}",
+        policy_event_refs.len()
+    );
+    let policy_event_ref = policy_event_refs
+        .into_iter()
+        .next()
+        .context("delivery-binding policy Event disappeared")?;
+    ensure!(
+        bootstrap["event_response"]["accepted"]
+            .as_array()
+            .is_some_and(|accepted| accepted
+                .iter()
+                .any(|id| id.as_str() == Some(policy_event_ref.as_str()))),
+        "pairwise Realm policy reference was not accepted in the bootstrap fixed unit"
+    );
+    Ok((realm_id, policy_event_ref))
 }
 
 async fn current_service_record(server: &ArkretServer) -> Result<ServiceResolutionRecord> {
@@ -450,29 +519,18 @@ async fn current_service_record(server: &ArkretServer) -> Result<ServiceResoluti
 async fn install_pairwise_membership(
     client: &TestActorClient,
     realm_id: &str,
+    policy_event_ref: &EventId,
     pairwise: &PairwiseKey,
     service_record: &ServiceResolutionRecord,
 ) -> Result<()> {
-    let binding = MemberDeliveryBinding {
-        recipient_service_id: DidCoreId::new(client.service_id().to_owned())?,
-        recipient_service_kind: RecipientServiceKind::PrincipalServer,
-        binding_scope: BindingScope::Realm,
-        binding_source: BindingSource::DidDocumentDefault,
-        delivery_modes: BTreeSet::from([DeliveryMode::Events, DeliveryMode::KeyPackages]),
-        service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
-            current_record_url: service_record
-                .record
-                .current_record_url
-                .replacen("http://", "https://", 1),
-            pinned_record_digest: None,
-        },
-        did_document_digest: Some(Hash::new(format!("sha256:{}", "2".repeat(64)))?),
-        resolved_at: Utc::now(),
-        service_acceptance_ref: None,
-        holder_proof_ref: None,
-        policy_event_ref: None,
-        expires_at: None,
-    };
+    let binding = pairwise_member_binding(
+        DidCoreId::new(client.service_id().to_owned())?,
+        service_record
+            .record
+            .current_record_url
+            .replacen("http://", "https://", 1),
+        policy_event_ref.clone(),
+    )?;
     let payload = MembershipPayload::join(
         RealmId::new(realm_id.to_owned())?,
         pairwise.actor_id.clone(),
@@ -483,6 +541,32 @@ async fn install_pairwise_membership(
     .to_value()?;
     submit_and_settle_member_transition(client, realm_id, payload).await?;
     Ok(())
+}
+
+fn pairwise_member_binding(
+    recipient_service_id: DidCoreId,
+    current_record_url: String,
+    policy_event_ref: EventId,
+) -> Result<MemberDeliveryBinding> {
+    let binding = MemberDeliveryBinding {
+        recipient_service_id,
+        recipient_service_kind: RecipientServiceKind::PrincipalServer,
+        binding_scope: BindingScope::Realm,
+        binding_source: BindingSource::RealmPolicy,
+        delivery_modes: BTreeSet::from([DeliveryMode::Events, DeliveryMode::KeyPackages]),
+        service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
+            current_record_url,
+            pinned_record_digest: None,
+        },
+        did_document_digest: None,
+        resolved_at: Utc::now(),
+        service_acceptance_ref: None,
+        holder_proof_ref: None,
+        policy_event_ref: Some(policy_event_ref),
+        expires_at: None,
+    };
+    binding.validate()?;
+    Ok(binding)
 }
 
 async fn leave_pairwise_member(
@@ -1069,4 +1153,43 @@ async fn assert_rejected(response: Response) -> Result<()> {
         "expected a fail-closed protocol rejection, got {status}: {body}"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_binding() -> MemberDeliveryBinding {
+        let service_id = DidCoreId::new("ak:did_core:webvh:z6mkfixture".to_owned()).unwrap();
+        let current_record_url = format!(
+            "https://service.example{}",
+            arkret_models_identity::canonical_service_current_record_path(&service_id)
+        );
+        pairwise_member_binding(
+            service_id,
+            current_record_url,
+            EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x42; 32]),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn pairwise_member_binding_uses_the_exact_realm_policy_coordinate() {
+        let binding = fixture_binding();
+        assert_eq!(binding.binding_source, BindingSource::RealmPolicy);
+        assert_eq!(
+            binding.delivery_modes,
+            BTreeSet::from([DeliveryMode::Events, DeliveryMode::KeyPackages])
+        );
+        assert!(binding.did_document_digest.is_none());
+        assert!(binding.policy_event_ref.is_some());
+        binding.validate().unwrap();
+    }
+
+    #[test]
+    fn pairwise_realm_policy_binding_without_its_event_ref_is_rejected() {
+        let mut binding = fixture_binding();
+        binding.policy_event_ref = None;
+        assert!(binding.validate().is_err());
+    }
 }

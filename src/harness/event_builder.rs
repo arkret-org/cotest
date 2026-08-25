@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::atomic::Ordering;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -21,7 +21,11 @@ use arkret_models_collaboration::governance::membership_invite::{
 use arkret_models_collaboration::governance::moderation::{
     ModerationReportAcceptedTargetBasis, ModerationReportRequestBody,
 };
-use arkret_models_identity::delivery_binding::{DeliveryStatus, MemberDeliveryBinding};
+use arkret_models_identity::delivery_binding::{
+    BindingScope, BindingSource, DeliveryMode, DeliveryStatus, MemberDeliveryBinding,
+    RecipientServiceKind,
+};
+use arkret_models_identity::{ServiceResolutionCarrier, canonical_service_current_record_path};
 use arkret_wire::{AuthContext, DidUrl, Event, ScopeRef};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
@@ -483,8 +487,40 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         discovery,
         alias,
         plaintext_visible_services,
-        delivery_binding_policy,
+        mut delivery_binding_policy,
     } = draft;
+    if let Some(principal_server_id) = principal_server_id {
+        use arkret_models_collaboration::events_payloads::realm::AllowedRecipientServices;
+
+        match &delivery_binding_policy.allowed_binding_sources {
+            None => {
+                delivery_binding_policy.allowed_binding_sources =
+                    Some(BTreeSet::from([BindingSource::RealmPolicy]));
+            }
+            Some(sources) if sources.contains(&BindingSource::RealmPolicy) => {}
+            Some(_) => {
+                return Err(anyhow!(
+                    "device/account Realm bootstrap policy must allow realm_policy for the creator binding"
+                ));
+            }
+        }
+        match &delivery_binding_policy.allowed_recipient_services {
+            None => {
+                delivery_binding_policy.allowed_recipient_services =
+                    Some(AllowedRecipientServices::Allowlist(vec![
+                        principal_server_id.clone(),
+                    ]));
+            }
+            Some(AllowedRecipientServices::Unrestricted) => {}
+            Some(AllowedRecipientServices::Allowlist(services))
+                if services.contains(principal_server_id) => {}
+            Some(AllowedRecipientServices::Allowlist(_)) => {
+                return Err(anyhow!(
+                    "device/account Realm bootstrap policy does not allow the creator Principal Server"
+                ));
+            }
+        }
+    }
     // Genesis carries no Realm id at all — the scope is `realm_genesis` and the
     // id falls out of the signed Event. The placeholder below is never read.
     let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
@@ -507,10 +543,10 @@ fn realm_bootstrap_event_batch_with_signing_identity(
     // reports `out_of_order_bootstrap`.
     let derived_realm_id = realm_event.realm_id.to_string();
     let mut events = vec![realm_event];
-    let mut push_followup = |kind: &str, payload: Value, cell: String| -> Result<()> {
+    let mut push_followup = |kind: &str, payload: Value, cell: String| -> Result<EventId> {
         let actor_seq = events.len() as u64;
         let predecessor = events.last().expect("Realm create exists").event_id.clone();
-        events.push(realm_bootstrap_followup_event(
+        let event = realm_bootstrap_followup_event(
             actor,
             &derived_realm_id,
             kind,
@@ -521,8 +557,10 @@ fn realm_bootstrap_event_batch_with_signing_identity(
             signing_seed,
             verification_method,
             principal_server_id,
-        )?);
-        Ok(())
+        )?;
+        let event_id = event.event_id.clone();
+        events.push(event);
+        Ok(event_id)
     };
     push_followup(
         arkret_wire::event_kind_str::REALM_PROFILE,
@@ -565,7 +603,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
             ),
         )?;
     };
-    push_followup(
+    let delivery_binding_policy_event_id = push_followup(
         arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,
         delivery_binding_policy.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DELIVERY_BINDING_POLICY_V1),
@@ -573,7 +611,12 @@ fn realm_bootstrap_event_batch_with_signing_identity(
     let creator_core_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
     push_followup(
         arkret_wire::event_kind_str::MEMBER_STATE,
-        member_join_payload_value(&derived_realm_id, actor)?,
+        creator_member_join_payload_value(
+            &derived_realm_id,
+            actor,
+            principal_server_id,
+            Some(&delivery_binding_policy_event_id),
+        )?,
         format!("ak:cell:ak.component.member.state.v1:{creator_core_id}"),
     )?;
     for followup in &events[1..] {
@@ -1199,6 +1242,50 @@ pub(crate) fn member_join_payload_value(realm_id: &str, actor_id: &str) -> Resul
     )
 }
 
+fn creator_member_join_payload_value(
+    realm_id: &str,
+    actor_id: &str,
+    principal_server_id: Option<&DidCoreId>,
+    policy_event_ref: Option<&EventId>,
+) -> Result<Value> {
+    let Some(principal_server_id) = principal_server_id else {
+        return member_join_payload_value(realm_id, actor_id);
+    };
+    let policy_event_ref = policy_event_ref
+        .cloned()
+        .ok_or_else(|| anyhow!("routable creator binding requires the bootstrap policy Event"))?;
+    let binding = MemberDeliveryBinding {
+        recipient_service_id: principal_server_id.clone(),
+        recipient_service_kind: RecipientServiceKind::PrincipalServer,
+        binding_scope: BindingScope::Realm,
+        binding_source: BindingSource::RealmPolicy,
+        delivery_modes: BTreeSet::from([DeliveryMode::Events]),
+        service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
+            current_record_url: format!(
+                "https://cotest.invalid{}",
+                canonical_service_current_record_path(principal_server_id)
+            ),
+            pinned_record_digest: None,
+        },
+        did_document_digest: None,
+        resolved_at: Utc::now(),
+        service_acceptance_ref: None,
+        holder_proof_ref: None,
+        policy_event_ref: Some(policy_event_ref),
+        expires_at: None,
+    };
+    binding.validate()?;
+    member_payload(
+        realm_id,
+        actor_id,
+        MembershipPayloadState::Join,
+        Some(DeliveryStatus::Routable),
+        Some(serde_json::to_value(binding)?),
+        None,
+        None,
+    )
+}
+
 pub(crate) fn member_transition_payload(
     realm_id: &str,
     actor_id: &str,
@@ -1372,6 +1459,18 @@ mod realm_bootstrap_tests {
         .expect("valid Realm bootstrap unit")
     }
 
+    fn build_for_device(draft: RealmBootstrapDraft) -> (String, Vec<Event>) {
+        let principal_server_id = DidCoreId::new(SERVICE.to_owned()).expect("valid service id");
+        realm_bootstrap_event_batch_with_signing_identity(
+            ACTOR,
+            draft,
+            [7; 32],
+            &DidUrl::new(format!("{ACTOR}#device-1")).expect("valid verification method"),
+            Some(&principal_server_id),
+        )
+        .expect("valid device/account Realm bootstrap unit")
+    }
+
     #[test]
     fn ordinary_bootstrap_uses_the_registered_order_and_explicit_creator_member() {
         let (_, events) = build(draft(json!({
@@ -1431,6 +1530,63 @@ mod realm_bootstrap_tests {
             arkret_wire::cba::PredicateOp::HeadEq
         );
         assert_eq!(precondition.predicate.value, Some(Value::Null));
+        assert_eq!(
+            membership.payload.get("delivery_status"),
+            Some(&json!("unroutable")),
+            "a bootstrap without a known Principal Server cannot claim routability"
+        );
+    }
+
+    #[test]
+    fn device_bootstrap_binds_the_creator_to_its_principal_server() {
+        let (_, events) = build_for_device(draft(json!({})));
+        let policy = events
+            .iter()
+            .find(|event| {
+                event.kind.as_str() == arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY
+            })
+            .expect("delivery-binding policy event");
+        assert_eq!(
+            policy.payload.get("allowed_binding_sources"),
+            Some(&json!(["realm_policy"]))
+        );
+        assert_eq!(
+            policy.payload.get("allowed_recipient_services"),
+            Some(&json!([SERVICE]))
+        );
+
+        let membership = events.last().expect("creator membership slot");
+        assert_eq!(
+            membership.payload.get("delivery_status"),
+            Some(&json!("routable"))
+        );
+        let binding: MemberDeliveryBinding = serde_json::from_value(
+            membership
+                .payload
+                .get("delivery_binding")
+                .cloned()
+                .expect("routable creator binding"),
+        )
+        .expect("typed creator binding");
+        binding.validate().expect("valid creator binding");
+        assert_eq!(binding.recipient_service_id.as_str(), SERVICE);
+        assert_eq!(binding.binding_source, BindingSource::RealmPolicy);
+        assert_eq!(
+            binding.delivery_modes,
+            BTreeSet::from([DeliveryMode::Events])
+        );
+        assert_eq!(
+            binding.service_resolution,
+            ServiceResolutionCarrier::CurrentRecordUrl {
+                current_record_url: format!(
+                    "https://cotest.invalid{}",
+                    canonical_service_current_record_path(&binding.recipient_service_id)
+                ),
+                pinned_record_digest: None,
+            }
+        );
+        assert_eq!(binding.did_document_digest, None);
+        assert_eq!(binding.policy_event_ref.as_ref(), Some(&policy.event_id));
     }
 
     #[test]

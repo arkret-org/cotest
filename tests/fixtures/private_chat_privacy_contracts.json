@@ -36,7 +36,7 @@
         "jws": "eyJhbGciOiJFZERTQSJ9"
       }
     },
-    "expected_receipt_transcript_digest": "sha256:1643d771ce3a95f54e2a4cfbc9c8060e7dd59f6cf04c6a10ee9be38fb1b55772",
+    "expected_receipt_transcript_digest": "sha256:3551a9562315c8fd3a63ce234e9ce9692e1646a2bc92451c69d25b29a3fc7743",
     "expected_peer_verdict": "accept"
   },
   "account_data_cases": {
