@@ -1190,9 +1190,11 @@ export type CapabilityGrantEventArgs = {
   realmId: string;
   subjectDid: string;
   actions: string[];
-  // capabilities.md §8: optional finite validity upper bound. Child grants
-  // issued from grant refs MUST narrow: child effective_expires_at MUST be
-  // <= the issuer authority's (§10.1).
+  // capabilities.md §6.1 / §8: optional finite validity upper bound. The
+  // helper lowers this shorthand into a standalone global temporal
+  // constraint; the closed grant object has no top-level expires_at field.
+  // Child grants issued from grant refs MUST narrow: child
+  // effective_expires_at MUST be <= the issuer authority's (§10.1).
   expiresAt?: string;
   // capabilities.md §10: a grant can authorize a derived grant only when an
   // authority_control constraint explicitly permits it. Omitting this field
@@ -1215,6 +1217,19 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   eventId: string;
 } {
   const issuedAt = canonicalTimestamp();
+  const constraints: CapabilityGrantObject["constraints"] = [
+    ...(args.constraints ?? []),
+    ...(args.expiresAt
+      ? [
+          {
+            constraint_kind: "temporal" as const,
+            effect: "allow" as const,
+            evaluation_class: "stateless" as const,
+            expires_at: args.expiresAt,
+          },
+        ]
+      : []),
+  ];
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing, and
@@ -1236,8 +1251,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
-    ...(args.expiresAt ? { expires_at: args.expiresAt } : {}),
-    ...(args.constraints ? { constraints: args.constraints } : {}),
+    ...(constraints.length > 0 ? { constraints } : {}),
     issuer_authority_refs: args.issuerAuthorityRefs ?? [
       {
         kind: "realm_root",
