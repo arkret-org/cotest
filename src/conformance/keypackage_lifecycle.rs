@@ -926,7 +926,7 @@ pub fn run_keypackage_last_resort_affinity_and_optionality_vector() -> Result<()
 
 fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Value {
     json!({
-        "keypackage_id": "kp-1",
+        "keypackage_id": "ak:mls:kp:0196419b-0000-7000-8000-000000000001",
         "principal_id": "ak:did_core:web:alice.example",
         "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
         "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
