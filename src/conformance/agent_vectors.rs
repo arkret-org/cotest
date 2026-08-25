@@ -1,4 +1,4 @@
-//! Agent surface conformance vectors (§0.11 of `_before_todos.md`).
+//! Agent surface conformance vectors.
 //!
 //! 10 vectors:
 //!   - `ak.vector.agent.provision.v1`

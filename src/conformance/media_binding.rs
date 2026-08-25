@@ -1,6 +1,6 @@
 //! AKP-0010 media-binding conformance vectors.
 //!
-//! 10 vectors covering [§0.11 of `_before_todos.md`]:
+//! 10 vectors:
 //!
 //! - `ak.vector.media_binding.focus_selection_oldest_membership.v1`
 //! - `ak.vector.media_binding.session_focus_no_split_brain.v1`

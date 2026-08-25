@@ -1,34 +1,7 @@
-//! C.8 — smoke test for the chaos-injection framework + testcontainers
-//! bring-up wiring.
+//! C.8 — smoke test for testcontainers bring-up wiring.
 //!
-//! The chaos vocabulary smoke runs everywhere. The container path is
-//! Linux-only and only when the `test-with-containers` feature is on.
-
-use cotest::scenarios::chaos_inject::{
-    ChaosInjectable, ChaosKind, simulate_disk_full, simulate_network_timeout,
-    simulate_process_killed,
-};
-
-struct DummySubject {
-    last: Option<ChaosKind>,
-}
-
-impl ChaosInjectable for DummySubject {
-    fn inject(&mut self, kind: ChaosKind) -> anyhow::Result<()> {
-        self.last = Some(kind);
-        Ok(())
-    }
-}
-
-#[test]
-fn chaos_inject_smoke() {
-    let mut subject = DummySubject { last: None };
-    subject.inject(ChaosKind::DiskFull).unwrap();
-    assert_eq!(subject.last, Some(ChaosKind::DiskFull));
-    assert!(simulate_disk_full().to_string().contains("disk-full"));
-    assert!(simulate_network_timeout().to_string().contains("timeout"));
-    assert!(simulate_process_killed().to_string().contains("killed"));
-}
+//! The container path is Linux-only and only when the
+//! `test-with-containers` feature is on.
 
 /// Gating: requires Linux + the `test-with-containers` feature + a
 /// running Docker daemon. Skipped on Windows and on default-feature

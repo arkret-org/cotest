@@ -1,4 +1,4 @@
-//! Sidecar conformance vectors (§0.11 of `_before_todos.md`).
+//! Sidecar conformance vectors.
 //!
 //! 18 vectors:
 //!   - `ak.vector.sidecar.mls_bootstrap_binding.v1`

@@ -5,7 +5,6 @@ pub mod authz_policy_presence;
 pub mod bridge_contracts;
 pub mod calendar_rsvp_convergence;
 pub mod certification_report;
-pub mod chaos_inject;
 pub mod chaos_kill_midwrite;
 pub mod circle;
 pub mod coauth_session_grant_response_loss;

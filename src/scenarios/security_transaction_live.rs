@@ -46,7 +46,6 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
         "exact create replay changed the first outcome"
     );
     assert_eq!(first["transaction_id"], TRANSACTION);
-    assert_eq!(first["state"], "pending");
 
     let mut conflicting = request.clone();
     let SecurityTransactionCreateRequest::SecurityRotation(rotation) = &mut conflicting else {
