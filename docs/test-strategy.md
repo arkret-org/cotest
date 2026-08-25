@@ -89,20 +89,20 @@ cargo test --tests -- --nocapture
 Recommended scripted entrypoints:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime process
-.\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
-.\scripts\run-cotest.ps1 -Runtime process -Profile release-gate
-.\scripts\run-cotest.ps1 -Runtime process -Profile full-nightly
-.\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
-.\scripts\run-cotest.ps1 -Runtime docker -BuildImage
+.\scripts\run-server-conformance.ps1 -Runtime process
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile fast-smoke
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile release-gate
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile full-nightly
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile dual-soland
+.\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage
 ```
 
 The runner stores raw logs, a redacted request/response transcript, and
 Markdown/JSON summaries under `artifacts/`.
-`artifacts/latest/full/summary.md` is the primary complete-suite result view.
+`artifacts/latest/server-conformance/summary.md` is the primary complete-suite result view.
 Targeted runs remain only in their timestamped authoritative directories.
-`artifacts/latest/full/coverage-matrix.json` and
-`artifacts/latest/full/unresolved-gaps.json` are the stable machine-readable
+`artifacts/latest/server-conformance/coverage-matrix.json` and
+`artifacts/latest/server-conformance/unresolved-gaps.json` are the stable machine-readable
 complete-run artifacts.
 
 CI profile selection lives in `config/ci-profiles.json`. `fast-smoke` runs a
@@ -121,7 +121,7 @@ An opt-in ignored case sets `include_ignored: true` on its own entry; quarantine
 entries use the exact `test_target` plus `test_filter` pair.
 `all` and `full-nightly` intentionally remain one `--tests` invocation. Run
 `scripts/test-cotest-planner.ps1` for the no-build planner regression gate,
-`run-cotest.ps1 -Profile <profile> -PlanOnly` to inspect commands, or add
+`run-server-conformance.ps1 -Profile <profile> -PlanOnly` to inspect commands, or add
 `-ValidateProfile` to require each filter to match exactly one listed test.
 
 `dual-soland` is a local matrix profile, not a remote workflow. It delegates to
@@ -156,7 +156,7 @@ The joint E2E runner currently targets the first live-product slice:
   path because Playwright drives the packaged server shape instead of a local
   `cargo run` child
 - start or attach `inkson` web
-- start or attach `coauth`; `scripts/run-cotest.ps1 -Profile joint` enables
+- start or attach `coauth`; `scripts/run-server-conformance.ps1 -Profile joint` enables
   `-StartCoauth` by default so the local promoted profile always exercises the
   soland + coauth + inkson topology. Direct `run-joint-e2e.ps1` runs may still
   omit coauth for targeted soland-only debugging. `-StartCoauth` generates a
@@ -168,7 +168,7 @@ The joint E2E runner currently targets the first live-product slice:
   HTML report, and service logs under
   `artifacts/runs/joint-e2e/<timestamp>-<profile>/`
 - copy the latest non-targeted suite to `artifacts/latest/joint-e2e/`;
-  `run-cotest.ps1 -Profile joint` updates the same channel, while `-Grep`
+  `run-server-conformance.ps1 -Profile joint` updates the same channel, while `-Grep`
   selections remain only in their timestamped authoritative directory
 
 The smoke spec covers environment health, invalid server URL UI handling,
@@ -241,8 +241,8 @@ The coauth/soland test mapping is fixed by the runner:
 Recommended local run:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Profile joint
-.\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
+.\scripts\run-server-conformance.ps1 -Profile joint
+.\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1 -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -RunProfile joint-smoke
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
@@ -251,7 +251,7 @@ Recommended local run:
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -PreflightOnly -StartCoauth -CoauthPostgresUrl <dsn>
 .\scripts\run-joint-e2e.ps1 -RunnerSelfTest
-.\scripts\run-cotest.ps1 -Profile dual-soland
+.\scripts\run-server-conformance.ps1 -Profile dual-soland
 .\scripts\run-joint-e2e.ps1 -StartMockMimiFacade -Grep "mock-mimi-facade"
 ```
 
@@ -305,7 +305,7 @@ profile. An explicit `-Grep ...` overrides the auto-filter. Use the tag
 `@fully-implemented` on `test.describe(...)` (or individual tests) once a
 spec is wired end-to-end against real services.
 
-`scripts/run-cotest.ps1 -Profile release-gate` now invokes joint smoke as an
+`scripts/run-server-conformance.ps1 -Profile release-gate` now invokes joint smoke as an
 additional release-gate check and writes `joint-smoke-gate.*`. Use
 `-SkipJointSmokeGate` only for local protocol-only release-gate debugging.
 

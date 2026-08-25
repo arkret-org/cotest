@@ -107,6 +107,9 @@ Set-Content -Path $rawLog -Value "cotest local hygiene run $runStamp" -Encoding 
 
 $results = New-Object System.Collections.Generic.List[object]
 $cargoPath = Resolve-CommandPath "cargo"
+$pwshPath = Resolve-CommandPath "pwsh"
+$scenarioEvidenceGenerator = Join-Path $scriptDir "generate-scenario-evidence.ps1"
+$results.Add((Invoke-HygieneCommand -Label "scenario-evidence" -FilePath $pwshPath -Arguments @("-NoProfile", "-File", $scenarioEvidenceGenerator, "-Check") -RunDir $runDir -RawLog $rawLog))
 
 if (-not $SkipCargoDeny) {
     $results.Add((Invoke-HygieneCommand -Label "cargo-deny" -FilePath $cargoPath -Arguments @("deny", "check") -RunDir $runDir -RawLog $rawLog))
@@ -162,7 +165,6 @@ if (-not $SkipFixmeDebt) {
     # and the local copy silently went stale (it kept listing suites that had
     # already been deleted).
     $fixmeDebtGenerator = Join-Path $scriptDir "generate-fixme-debt.ps1"
-    $pwshPath = Resolve-CommandPath "pwsh"
     $results.Add((Invoke-HygieneCommand -Label "fixme-debt" -FilePath $pwshPath -Arguments @("-NoProfile", "-File", $fixmeDebtGenerator) -RunDir $runDir -RawLog $rawLog))
 }
 if (-not $SkipFixmeQuality) {

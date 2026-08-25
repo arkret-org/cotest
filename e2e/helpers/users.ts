@@ -145,6 +145,7 @@ export type CreateRealmOpts = {
   encryptionProfile?: string;
   seedMembers?: string[];
   completeRecoveryKeySetup?: boolean;
+  allowRecoveryOverride?: boolean;
 };
 
 function buildInviteLocatorUrl(
@@ -880,11 +881,9 @@ export class JointUserPage {
     await expect(createButton).toBeEnabled({ timeout: 30_000 });
     await this.clickCreateRealmControl(createButton, promptHandling);
 
-    // S6 recovery soft-gate (key-management §7.11): creating an end-to-end
-    // encrypted Realm with no recovery path configured prompts the user to set
-    // up the Recovery Key first. Test accounts generally have no recovery
-    // configured, so accept the personal_node override and re-create. The gate
-    // never appears for unencrypted Realms or when recovery is configured.
+    // A configured account must never need this gate. Recovery override changes
+    // the business outcome, so it is fail-closed unless the scenario declares
+    // the bypass explicitly in its source/evidence metadata.
     const recoveryGate = this.page
       .getByTestId("encrypted-realm-recovery-gate")
       .last();
@@ -893,6 +892,11 @@ export class JointUserPage {
       .then(() => true)
       .catch(() => false);
     if (gateAppeared) {
+      if (!opts.allowRecoveryOverride) {
+        throw new Error(
+          "encrypted-realm-recovery-gate appeared; refusing an undeclared recovery override",
+        );
+      }
       const override = this.page
         .getByTestId("encrypted-realm-recovery-gate-override")
         .last();

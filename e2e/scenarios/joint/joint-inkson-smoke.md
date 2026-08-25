@@ -24,7 +24,7 @@ coauth processes, including cross-principal chat projections.
 
 ## Acceptance
 
-- `run-cotest.ps1 -Profile joint` starts soland, coauth, and inkson through `run-joint-e2e.ps1`.
+- `run-server-conformance.ps1 -Profile joint` starts soland, coauth, and inkson through `run-joint-e2e.ps1`.
 - Playwright project `joint-inkson` discovers this scenario under `e2e/tests/joint`.
 - The smoke is tagged `@fully-implemented` so the joint-smoke profile includes it.
 - The UI-level request trace pins local Realm genesis authoring independently of

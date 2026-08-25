@@ -11,13 +11,12 @@
 
 use anyhow::{Context, Result, bail};
 use arkret::{
-    DeviceId, DidCoreId, Hash, KeyPackageConsumeReceipt, KeyPackageUploadEntry,
-    KeyPackagesConsumeUnsignedRequest, KeyPackagesRevokeUnsignedRequest,
-    KeyPackagesUploadUnsignedRequest, keypackage_upload_entry_signing_input,
+    Hash, KeyPackageConsumeReceipt, KeyPackagesConsumeUnsignedRequest,
+    KeyPackagesRevokeUnsignedRequest, KeyPackagesUploadUnsignedRequest,
     keypackages_consume_signing_input, keypackages_revoke_signing_input,
-    keypackages_upload_signing_input, late_device_join_steps, sign_keypackage_upload_entry,
-    sign_keypackages_consume_request, sign_keypackages_revoke_request,
-    sign_keypackages_upload_request, verify_keypackage_signing_input,
+    keypackages_upload_signing_input, late_device_join_steps, sign_keypackages_consume_request,
+    sign_keypackages_revoke_request, sign_keypackages_upload_request,
+    verify_keypackage_signing_input,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -80,33 +79,6 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                 (
                     keypackages_upload_signing_input(&unsigned)?,
                     sign_keypackages_upload_request(&unsigned, kid, &seed)?,
-                )
-            }
-            "upload_entry_signature" => {
-                let request = case
-                    .get("unsigned_request")
-                    .context("entry case missing unsigned_request")?;
-                let principal_id: DidCoreId = serde_json::from_value(
-                    request
-                        .get("principal_id")
-                        .cloned()
-                        .context("entry case missing principal_id")?,
-                )?;
-                let device_id: DeviceId = serde_json::from_value(
-                    request
-                        .get("device_id")
-                        .cloned()
-                        .context("entry case missing device_id")?,
-                )?;
-                let entry: KeyPackageUploadEntry = serde_json::from_value(
-                    request
-                        .get("keypackage")
-                        .cloned()
-                        .context("entry case missing keypackage")?,
-                )?;
-                (
-                    keypackage_upload_entry_signing_input(&principal_id, &device_id, &entry)?,
-                    sign_keypackage_upload_entry(&principal_id, &device_id, &entry, kid, &seed)?,
                 )
             }
             "consume_single_claim" => {

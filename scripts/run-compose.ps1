@@ -218,7 +218,7 @@ try {
         $runCotestArgs.FailOnCoverageRegression = $true
     }
 
-    & (Join-Path $PSScriptRoot "run-cotest.ps1") @runCotestArgs
+    & (Join-Path $PSScriptRoot "run-server-conformance.ps1") @runCotestArgs
     $exitCode = $LASTEXITCODE
 }
 finally {

@@ -35,7 +35,7 @@ param(
     # Exact directory that receives this run's joint outputs (junit.xml,
     # summary.json, playwright-report/, services/, ...). When set, the script
     # writes there directly and skips both the standalone `runs/joint-e2e/`
-    # layout and the `latest/joint-e2e` mirror — used by run-cotest.ps1 to
+    # layout and the `latest/joint-e2e` mirror — used by run-server-conformance.ps1 to
     # embed joint results inside its own run directory without nesting a
     # second runs/latest tree.
     [string]$JointDir,
@@ -1133,7 +1133,7 @@ function New-JointTlsAssets {
     $sanFile = Join-Path $Directory "server-san.cnf"
     # PowerShell 7.6.5 splits `"subjectAltName=" + (<pipeline> -join ",")` into
     # two array elements when written inline in the array literal; bind the
-    # string first (same class of regression as run-cotest's Parse-CotestLog).
+    # string first (same class of regression as Parse-CotestLog in the server runner).
     $subjectAltNameLine = "subjectAltName=" + (($DnsNames | ForEach-Object { "DNS:$_" }) -join ",")
     $sanLines = @(
         "[req_ext]",
@@ -4431,6 +4431,24 @@ function Get-StaticSpecStats {
 # even when junit.xml is absent (playwright crashed before reporting).
 $testsRoot = Join-Path $e2eRoot "tests"
 $staticStats = Get-StaticSpecStats -TestsRoot $testsRoot
+$scenarioEvidenceByKey = @{}
+$scenarioEvidenceManifestPath = Join-Path $repoRoot "e2e\scenarios\evidence-manifest.json"
+if (-not (Test-Path -LiteralPath $scenarioEvidenceManifestPath -PathType Leaf)) {
+    throw "scenario evidence manifest is missing: $scenarioEvidenceManifestPath"
+}
+$scenarioEvidenceManifest = Get-Content -Raw -LiteralPath $scenarioEvidenceManifestPath | ConvertFrom-Json
+if ($scenarioEvidenceManifest.schema -ne "arkret.scenario-evidence.v1" -or
+    $scenarioEvidenceManifest.suite_kind -ne "joint-e2e") {
+    throw "scenario evidence manifest has an unsupported schema or suite_kind"
+}
+foreach ($entry in @($scenarioEvidenceManifest.scenarios)) {
+    $scenarioEvidenceByKey[[string]$entry.scenario_key] = $entry
+}
+$missingEvidence = @($staticStats.Keys | Where-Object { -not $scenarioEvidenceByKey.ContainsKey($_) })
+$staleEvidence = @($scenarioEvidenceByKey.Keys | Where-Object { -not $staticStats.ContainsKey($_) })
+if ($missingEvidence.Count -gt 0 -or $staleEvidence.Count -gt 0) {
+    throw "scenario evidence manifest drift: missing=$($missingEvidence -join ',') stale=$($staleEvidence -join ',')"
+}
 
 $gapTodosDisplay = $gapTodosPath -replace '\\', '/'
 $fixmeChecklistDisplay = $fixmeChecklistPath -replace '\\', '/'
@@ -4584,6 +4602,25 @@ if ($junitParseError -and -not (Test-Path $junitPath)) {
     $scenarioLines += "- skipped: $($totals.skipped)"
     $scenarioLines += "- fixme (pending spec implementation): $($totals.fixme)"
 }
+$evidenceTotals = [ordered]@{
+    live_product_verified = 0
+    server_contract_verified = 0
+    fixture_only = 0
+}
+foreach ($scenarioKey in $junitByScenario.Keys) {
+    $passedCases = @($junitByScenario[$scenarioKey].cases | Where-Object status -eq "passed").Count
+    if ($passedCases -eq 0) { continue }
+    $evidenceClass = [string]$scenarioEvidenceByKey[$scenarioKey].evidence_class
+    switch ($evidenceClass) {
+        "live-product" { $evidenceTotals.live_product_verified += $passedCases }
+        "server-contract" { $evidenceTotals.server_contract_verified += $passedCases }
+        default { $evidenceTotals.fixture_only += $passedCases }
+    }
+}
+$scenarioLines += "- live product verified: $($evidenceTotals.live_product_verified)"
+$scenarioLines += "- server contract verified: $($evidenceTotals.server_contract_verified)"
+$scenarioLines += "- fixture-only: $($evidenceTotals.fixture_only)"
+$scenarioLines += "- evidence manifest: $scenarioEvidenceManifestPath"
 $scenarioLines += ""
 
 if ($junitByScenario.Count -gt 0) {
@@ -4600,6 +4637,14 @@ if ($junitByScenario.Count -gt 0) {
             }
             $scenarioLines += "- $marker ($($case.time)s) $($case.name)"
         }
+        $scenarioLines += "- evidence class: $($scenarioEvidenceByKey[$key].evidence_class)"
+        $scenarioLines += "- realism level: $($scenarioEvidenceByKey[$key].realism_level)"
+        $scenarioLines += "- real services: $(@($scenarioEvidenceByKey[$key].real_services) -join ', ')"
+        $scenarioLines += "- mocks: $(@($scenarioEvidenceByKey[$key].mocks) -join ', ')"
+        $scenarioLines += "- identity establishment: $(@($scenarioEvidenceByKey[$key].identity_establishment) -join ', ')"
+        $scenarioLines += "- protocol object producers: $(@($scenarioEvidenceByKey[$key].protocol_object_producers) -join ', ')"
+        $scenarioLines += "- declared test bypasses: $(@($scenarioEvidenceByKey[$key].declared_test_bypasses) -join ', ')"
+        $scenarioLines += "- claims excluded: $(@($scenarioEvidenceByKey[$key].claims_excluded) -join ', ')"
         $scenarioLines += ""
     }
 }
@@ -4661,8 +4706,15 @@ $requiredScenarios = @(
         ForEach-Object { $_.Trim() -replace '\\', '/' } |
         Where-Object { $_ }
 )
+$forbidRuntimeSkips = [bool]$ForbidSkippedTests -or $RunProfile -eq "joint-smoke"
+if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
+    $requiredScenarios = @(
+        $requiredScenarios
+        "identity/recovery-key-to-encrypted-realm"
+    ) | Sort-Object -Unique
+}
 $selectionGateFailures = New-Object System.Collections.Generic.List[string]
-if ($requiredScenarios.Count -gt 0 -or $ForbidSkippedTests) {
+if ($requiredScenarios.Count -gt 0 -or $forbidRuntimeSkips) {
     if ($junitParseError) {
         $selectionGateFailures.Add("junit evidence unavailable: $junitParseError") | Out-Null
     } else {
@@ -4680,7 +4732,7 @@ if ($requiredScenarios.Count -gt 0 -or $ForbidSkippedTests) {
                 $selectionGateFailures.Add("required scenario selected zero testcases: $requiredScenario") | Out-Null
             }
         }
-        if ($ForbidSkippedTests -and $totals.skipped -gt 0) {
+        if ($forbidRuntimeSkips -and $totals.skipped -gt 0) {
             $selectionGateFailures.Add("selected live tests skipped: $($totals.skipped)") | Out-Null
         }
     }
@@ -4692,7 +4744,7 @@ $scenarioLines += ""
 $scenarioLines += "## selection gate"
 $scenarioLines += ""
 $scenarioLines += "- required scenarios: $(if ($requiredScenarios.Count -gt 0) { $requiredScenarios -join ', ' } else { '-' })"
-$scenarioLines += "- skipped tests forbidden: $([bool]$ForbidSkippedTests)"
+$scenarioLines += "- skipped tests forbidden: $forbidRuntimeSkips"
 $scenarioLines += "- status: $(if ($selectionGateFailures.Count -eq 0) { 'passed' } else { 'failed' })"
 foreach ($failure in $selectionGateFailures) {
     $scenarioLines += "- failure: $failure"
@@ -4917,12 +4969,17 @@ if ($secretScan.counts.findings -eq 0) {
 $secretScanLines | Set-Content -LiteralPath $secretScanMd -Encoding UTF8
 
 $summary = [pscustomobject]@{
+    report_schema = "arkret.test-report.v1"
+    suite_kind = "joint-e2e"
+    suite_name = "Arkret Joint Product E2E"
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
     run_profile = if ($RunProfile) { $RunProfile } else { "custom" }
     playwright_projects = $playwrightProjects -join ","
     required_scenarios = $requiredScenarios
-    forbid_skipped_tests = [bool]$ForbidSkippedTests
+    forbid_skipped_tests = $forbidRuntimeSkips
     selection_gate_failures = $selectionGateFailures.ToArray()
+    evidence_counts = $evidenceTotals
+    scenario_evidence_manifest = $scenarioEvidenceManifestPath
     started_at = $startedAt.ToString("o")
     finished_at = $finishedAt.ToString("o")
     duration_seconds = [Math]::Round(($finishedAt - $startedAt).TotalSeconds, 2)
@@ -4993,8 +5050,11 @@ $summaryJson = Join-Path $jointDir "summary.json"
 $summaryMd = Join-Path $jointDir "summary.md"
 $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UTF8
 @"
-# joint e2e summary
+# Arkret Joint Product E2E summary
 
+- report_schema: $($summary.report_schema)
+- suite_kind: $($summary.suite_kind)
+- suite_name: $($summary.suite_name)
 - status: $($summary.status)
 - run_profile: $($summary.run_profile)
 - playwright_projects: $($summary.playwright_projects)
@@ -5067,7 +5127,7 @@ if ($isStandaloneJointSuite) {
 }
 
 Write-Host ""
-Write-Host "Joint E2E Summary"
+Write-Host "Arkret Joint Product E2E Summary"
 Write-Host "  status      : $($summary.status)"
 Write-Host "  profile     : $($summary.run_profile)"
 Write-Host "  projects    : $($summary.playwright_projects)"

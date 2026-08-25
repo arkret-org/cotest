@@ -1,0 +1,2241 @@
+{
+  "schema": "arkret.scenario-evidence.v1",
+  "suite_kind": "joint-e2e",
+  "scenarios": [
+    {
+      "scenario_key": "authz/capability-chain",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "authz/policy-server-check",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [
+        "policy_server"
+      ],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "calls/webrtc-call-sequence",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "calls/webrtc-media-token",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "calls/webrtc-moderation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "calls/webrtc-renegotiate",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "calls/webrtc-seq-monotonic",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "calls/webrtc-signals",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "calls/webrtc",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "conformance/canonical-cross-lang",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "conformance/encoding-vectors",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "conformance/profile-gates",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "conformance/registry-drift",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "conformance/snapshot-query-scalability",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "discovery/directory",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "discovery/notifications",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "discovery/organization-verified-badge",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "inkson",
+        "soland",
+        "teabay"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "encryption/audited-e2ee",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "encryption/encrypted-attachments",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "encryption/key-backup",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "oauth_authorization_ui",
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "encryption/mls-group",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "events/batch-realm-bootstrap",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "extensions/applet-bridge",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "extensions/mimi-federation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "extensions/platform-live",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "federation/contact-graph-federation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "federation/cross-server",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "federation/security-hardening",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "governance/gdpr-audit-retention",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "governance/moderation-appeal",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "governance/organization-bootstrap",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "governance/organization-policy",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "governance/personal-blocklist",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "harness/mocks-selftest",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [
+        "email",
+        "idp",
+        "witness"
+      ],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/account-device-auth",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/account-handoff",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "identity/account-states",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/circle-member",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "identity/consent-grant",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/contact-graph",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/device-key-lifecycle",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/direct-conversation-founding",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/multi-device",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/oidc-login-chain",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/oidc-login-flow",
+      "suite_kind": "joint-e2e",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [
+        "email"
+      ],
+      "identity_establishment": [
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "identity/onboarding",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/passkey-login-flow",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/recovery-key-to-encrypted-realm",
+      "suite_kind": "joint-e2e",
+      "realism_level": "live-product",
+      "evidence_class": "live-product",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "coauth_registration_ui",
+        "inkson_identity_onboarding_ui",
+        "oauth_authorization_ui"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [],
+      "claims_excluded": []
+    },
+    {
+      "scenario_key": "identity/recovery",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/session-grant-dpop",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/tsp-bootstrap",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [
+        "tsp_endpoint"
+      ],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "invites/invite-addressing",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "invites/third-party",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [
+        "email"
+      ],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "joint/agent-savfox-split-live",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "savfox",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "joint/build-identity",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "joint/circle-sidecar-boundary",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "joint/contact-agent-sidebar",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "joint/did-boundary-call-counts",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland",
+        "teabay"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "joint/joint-inkson-smoke",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "joint/multi-profile-same-server",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "joint/service-resolution-bootstrap",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "fixture_or_not_applicable"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle"
+      ],
+      "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "kanban/cross-member-encrypted",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "kanban/end-to-end",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "kanban/project-simulation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "messaging/chat-advanced",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "messaging/discussion-upgrade",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "messaging/read-receipts",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "messaging/triad-collaboration",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "models/core-object-invariants",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "models/private-read-marker",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "models/realm-links",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "spaces/admin-section-route",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "spaces/knock-application",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "spaces/knock-auto-resolve",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "spaces/moderation-ban",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "sync/account-stream-device-message",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "fixture_or_not_applicable"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "sync/offline-conflict",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "sync/offline-queue-replay",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "sync/service-surface-contract",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "coauth",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "sync/sovereign-deployment",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "sync/transport-negotiation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "workflows/daily-standup",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "workflows/incident-response",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "cotest_wire_oracle",
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection",
+        "test_only_signer_or_wire_builder"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "product_protocol_object_generation",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "workflows/kanban-week",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "workflows/sprint-planning",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "prepare_mls_device_false",
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_device_and_keypackage_readiness",
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "workflows/support-escalation",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    },
+    {
+      "scenario_key": "workflows/team-onboarding",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization"
+      ]
+    }
+  ]
+}

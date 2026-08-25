@@ -12,7 +12,7 @@
 #      redactor clears it from the artifact, a re-scan of the redacted artifact
 #      is clean, and the report still carries file / line / pattern evidence.
 #
-# run-cotest.ps1 executes this script before every secret scan and fails the
+# run-server-conformance.ps1 executes this script before every secret scan and fails the
 # gate when it fails; it can also be run directly:
 #   powershell -ExecutionPolicy Bypass -File scripts\tests\secret-scan.tests.ps1
 # Exits 0 on success, 1 with a failure list otherwise.

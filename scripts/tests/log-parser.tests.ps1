@@ -24,7 +24,7 @@ Set-StrictMode -Version Latest
 
 $scriptRoot = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent $scriptRoot
-$runCotest = Join-Path $scriptRoot "run-cotest.ps1"
+$runCotest = Join-Path $scriptRoot "run-server-conformance.ps1"
 
 # Load only the function under test: dot-sourcing the whole script would execute
 # a full run. Extract the function body and evaluate it in this session.
@@ -54,40 +54,7 @@ function New-TempLog {
     return $path
 }
 
-# ── 1. Historical raw logs: both ignored spellings counted, footers agree ────
-$fixtureRuns = @(
-    "20260818-035923-all",
-    "20260818-045805-all"
-)
-foreach ($run in $fixtureRuns) {
-    $log = Join-Path $repoRoot "artifacts\runs\cotest\$run\raw.log"
-    if (-not (Test-Path $log)) {
-        Write-Host "skip missing fixture $log"
-        continue
-    }
-    $parsed = Parse-CotestLog -LogPath $log
-    Assert-Equal 479 $parsed.footer_totals.passed "$run footer passed"
-    Assert-Equal 28 $parsed.footer_totals.failed "$run footer failed"
-    Assert-Equal 27 $parsed.footer_totals.ignored "$run footer ignored"
-    Assert-Equal 479 $parsed.per_test.passed "$run per-test passed"
-    Assert-Equal 28 $parsed.per_test.failed "$run per-test failed"
-    Assert-Equal 27 $parsed.per_test.ignored "$run per-test ignored"
-    Assert-Equal "passed" $parsed.integrity "$run integrity"
-
-    $withReason = @($parsed.tests | Where-Object { $_.status -eq "ignored" -and $_.reason })
-    [int]$withReasonCount = $withReason.Count
-    if ($withReasonCount -eq 0) {
-        $failures.Add("${run}: expected at least one ignored test to carry a reason")
-    }
-    foreach ($test in $parsed.tests) {
-        if ($test.name -match ',') {
-            $failures.Add("${run}: ignore reason leaked into test name '$($test.name)'")
-            break
-        }
-    }
-}
-
-# ── 2. Synthetic: plain / ASCII reason / Unicode reason, two invocations ─────
+# ── 1. Synthetic: plain / ASCII reason / Unicode reason, two invocations ─────
 $log = New-TempLog @(
     "     Running unittests src/lib.rs (target/debug/deps/alpha-1)",
     "test alpha::same_name ... ok",

@@ -1,11 +1,11 @@
-# Secret-scan primitives shared by run-cotest.ps1 and the synthetic-secret
+# Secret-scan primitives shared by run-server-conformance.ps1 and the synthetic-secret
 # regression test (scripts/tests/secret-scan.tests.ps1). Dot-source this file;
 # it defines functions only and has no side effects.
 #
 # Invariant: every pattern Find-SecretLeaks can match MUST have a matching
 # redaction in ConvertTo-SecretPreview, so a real hit never lands verbatim in
 # secret-scan.json/md (which are copied into a stable latest channel). The invariant
-# is enforced by the synthetic-secret regression test, which run-cotest.ps1
+# is enforced by the synthetic-secret regression test, which run-server-conformance.ps1
 # executes before every scan.
 #
 # `secret_b64u` is the exact field name key-management.md section 7.7.1

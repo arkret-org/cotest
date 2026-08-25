@@ -548,26 +548,28 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         .get("keypackage_min_available")
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("exhaustion vector missing keypackage_min_available"))?;
-    let available_count = vector
-        .get("available_count")
+    let local_usable_count = vector
+        .get("local_usable_count")
         .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("exhaustion vector missing available_count"))?;
-    if available_count >= min_available {
+        .ok_or_else(|| anyhow!("exhaustion vector missing local_usable_count"))?;
+    if local_usable_count >= min_available {
         bail!("exhaustion vector must start below keypackage_min_available");
+    }
+    let refill_count = min_available - local_usable_count;
+    if vector
+        .pointer("/expected/bounded_refill_count")
+        .and_then(Value::as_u64)
+        != Some(refill_count)
+    {
+        bail!("local KeyPackage refill must equal the startup deficit");
     }
 
     let upload_value = json!({
-        "accepted": 0,
-        "available_count": available_count,
+        "accepted": refill_count,
         "keypackage_refs": ["sha256:5555555555555555555555555555555555555555555555555555555555555555"]
     });
     schema_valid(KEY_PACKAGES_UPLOAD_OUTCOME_SCHEMA, &upload_value)?;
-    let upload: KeyPackagesUploadOutcome = serde_json::from_value(upload_value)?;
-    if expected_bool(vector, "available_count_visible")?
-        && upload.available_count != Some(available_count)
-    {
-        bail!("visible keypackage response did not expose available_count");
-    }
+    let _: KeyPackagesUploadOutcome = serde_json::from_value(upload_value)?;
 
     let limit = vector
         .pointer("/claim_rate_limit/max_claims")

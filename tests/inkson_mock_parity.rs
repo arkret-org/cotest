@@ -1436,7 +1436,7 @@ fn normalize_string(value: &str) -> String {
 }
 
 fn write_report(root: &Path, results: &[CaseResult]) -> Result<()> {
-    // Bare `cargo test` (no COTEST_ARTIFACT_DIR from run-cotest.ps1) lands in
+    // Bare `cargo test` (no COTEST_ARTIFACT_DIR from run-server-conformance.ps1) lands in
     // the canonical runs/ tree instead of scattering files at artifacts/ root.
     let artifact_dir = std::env::var_os("COTEST_ARTIFACT_DIR")
         .map(PathBuf::from)

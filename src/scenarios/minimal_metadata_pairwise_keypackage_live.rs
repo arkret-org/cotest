@@ -17,6 +17,7 @@ use arkret::{
     PeerKeyPackageClaimPurpose, PeerKeyPackageRequesterAuthorization,
     PeerKeyPackagesClaimUnsignedRequest, RealmId, RecipientMlsDurableReceipt,
     RecipientMlsDurableSigner, keypackage_claim_authorization_signing_bytes,
+    keypackages_upload_signing_input, mls_key_package_record_upload_entry,
 };
 use arkret_models_collaboration::events_payloads::{
     MlsClaimTrustBinding, MlsRequesterTrustBinding, MlsWelcomeCarrier, MlsWelcomeClaimEnvelope,
@@ -55,6 +56,7 @@ const CONSUME_PATH: &str = "/_arkret/self/keys/keypackages/consume";
 const TRANSPORT_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001423";
 const TARGET_LOCAL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001424";
 const TARGET_LAST_RESORT_LOCAL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001426";
+const OTHER_ORDINARY_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001427";
 const TARGET_SEED: [u8; 32] = [0x42; 32];
 const REQUESTER_SEED: [u8; 32] = [0x24; 32];
 const OTHER_SEED: [u8; 32] = [0x66; 32];
@@ -206,6 +208,70 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     })
     .await
     .context("ordinary MLS Realm accepted the minimal-metadata pairwise branch")?;
+    reject_upload_mutation(&transport, &upload, |value| {
+        value["keypackages"]
+            .as_array_mut()
+            .expect("typed batch")
+            .reverse();
+    })
+    .await
+    .context("batch entry order tamper")?;
+    reject_upload_mutation(&transport, &upload, |value| {
+        value["keypackages"]
+            .as_array_mut()
+            .expect("typed batch")
+            .pop();
+    })
+    .await
+    .context("batch entry count tamper")?;
+
+    let other_identity = other.identity(local_owner.clone(), TARGET_LOCAL_DEVICE)?;
+    let other_record = other_identity.key_package_record()?;
+    let wrong_credential = signed_pairwise_upload_with_records(
+        &target,
+        std::slice::from_ref(&other_record),
+        &realm_id,
+    )?;
+    assert_upload_entries_rejected(&transport, &wrong_credential)
+        .await
+        .context("batch-authorized KeyPackage credential from another actor")?;
+
+    let wrong_key_identity = ArkretMlsIdentity::from_minimal_metadata_ed25519_signing_seed(
+        local_owner.clone(),
+        DeviceId::new(TARGET_LOCAL_DEVICE.to_owned())?,
+        target.actor_id.clone(),
+        other.verification_method.clone(),
+        OTHER_SEED,
+    )?;
+    let wrong_key_record = wrong_key_identity.key_package_record()?;
+    let wrong_key = signed_pairwise_upload_with_records(
+        &target,
+        std::slice::from_ref(&wrong_key_record),
+        &realm_id,
+    )?;
+    assert_upload_entries_rejected(&transport, &wrong_key)
+        .await
+        .context("batch-authorized KeyPackage with a different Leaf signature key")?;
+
+    let mut invalid_self_signature_record = target
+        .identity(local_owner.clone(), TARGET_LOCAL_DEVICE)?
+        .key_package_record()?;
+    let mut invalid_bytes = URL_SAFE_NO_PAD.decode(&invalid_self_signature_record.keypackage)?;
+    let last = invalid_bytes
+        .last_mut()
+        .context("real KeyPackage bytes are empty")?;
+    *last ^= 0x01;
+    invalid_self_signature_record.keypackage = URL_SAFE_NO_PAD.encode(&invalid_bytes);
+    invalid_self_signature_record.keypackage_ref =
+        Hash::new(arkret_canonical::sha256_digest(&invalid_bytes))?;
+    let invalid_self_signature = signed_pairwise_upload_with_records(
+        &target,
+        std::slice::from_ref(&invalid_self_signature_record),
+        &realm_id,
+    )?;
+    assert_upload_entries_rejected(&transport, &invalid_self_signature)
+        .await
+        .context("batch-authorized KeyPackage with an invalid RFC 9420 self-signature")?;
 
     let upload_outcome: KeyPackagesUploadOutcome = serde_json::from_value(
         expect_json(transport.post(UPLOAD_PATH).json(&upload), StatusCode::OK).await?,
@@ -229,10 +295,11 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         .as_ref()
         .context("pairwise transport omitted its provisioned principal")?
         .clone();
-    let requester_identity = ArkretMlsIdentity::from_ed25519_signing_seed(
+    verify_ordinary_keypackage_binding_matrix(&transport, &principal, &ordinary_realm_id).await?;
+    let requester_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
         principal.core_id.clone(),
         principal.device_id.clone(),
-        principal.device_signing_key.to_bytes(),
+        &principal.device_signing_key,
     )?;
     let canonical_group_id = ScopeRef::Realm {
         realm_id: RealmId::new(realm_id.clone())?,
@@ -435,6 +502,91 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     .await
     .context("revoked current pairwise membership still authorized upload")?;
 
+    Ok(())
+}
+
+async fn verify_ordinary_keypackage_binding_matrix(
+    client: &TestActorClient,
+    principal: &ProvisionedTestPrincipal,
+    realm_id: &str,
+) -> Result<()> {
+    let valid_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
+        principal.core_id.clone(),
+        principal.device_id.clone(),
+        &principal.device_signing_key,
+    )?;
+    let valid_record = valid_identity.key_package_record()?;
+    let valid = signed_ordinary_upload_with_records(
+        principal,
+        std::slice::from_ref(&valid_record),
+        realm_id,
+    )?;
+
+    reject_upload_mutation(client, &valid, |value| {
+        value["keypackages"][0]["endpoint_signature"] = json!({
+            "kid": format!("{}#{}", principal.full_id, principal.device_id),
+            "signature_algorithm": "Ed25519",
+            "sig": "AA"
+        });
+    })
+    .await
+    .context("deprecated per-entry endpoint_signature")?;
+
+    let wrong_device_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
+        principal.core_id.clone(),
+        DeviceId::new(OTHER_ORDINARY_DEVICE.to_owned())?,
+        &principal.device_signing_key,
+    )?;
+    let wrong_device = signed_ordinary_upload_with_records(
+        principal,
+        &[wrong_device_identity.key_package_record()?],
+        realm_id,
+    )?;
+    assert_upload_entries_rejected(client, &wrong_device)
+        .await
+        .context("batch-authorized ordinary KeyPackage credential from another DeviceId")?;
+
+    let wrong_key_signer = SigningKey::from_bytes(&OTHER_SEED);
+    let wrong_key_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
+        principal.core_id.clone(),
+        principal.device_id.clone(),
+        &wrong_key_signer,
+    )?;
+    let wrong_key = signed_ordinary_upload_with_records(
+        principal,
+        &[wrong_key_identity.key_package_record()?],
+        realm_id,
+    )?;
+    assert_upload_entries_rejected(client, &wrong_key)
+        .await
+        .context("batch-authorized ordinary KeyPackage with the wrong Leaf signature key")?;
+
+    let mut invalid_self_signature_record = valid_identity.key_package_record()?;
+    let mut invalid_bytes = URL_SAFE_NO_PAD.decode(&invalid_self_signature_record.keypackage)?;
+    *invalid_bytes
+        .last_mut()
+        .context("real ordinary KeyPackage bytes are empty")? ^= 0x01;
+    invalid_self_signature_record.keypackage = URL_SAFE_NO_PAD.encode(&invalid_bytes);
+    invalid_self_signature_record.keypackage_ref =
+        Hash::new(arkret_canonical::sha256_digest(&invalid_bytes))?;
+    let invalid_self_signature =
+        signed_ordinary_upload_with_records(principal, &[invalid_self_signature_record], realm_id)?;
+    assert_upload_entries_rejected(client, &invalid_self_signature)
+        .await
+        .context("batch-authorized ordinary KeyPackage with invalid RFC 9420 self-signature")?;
+
+    let outcome_value = expect_json(client.post(UPLOAD_PATH).json(&valid), StatusCode::OK).await?;
+    ensure!(
+        outcome_value.get("available_count").is_none(),
+        "ordinary upload response exposed deprecated available_count"
+    );
+    let outcome: KeyPackagesUploadOutcome = serde_json::from_value(outcome_value)?;
+    ensure!(
+        outcome.accepted == 1
+            && outcome.rejected.is_empty()
+            && outcome.key_package_refs == [valid_record.keypackage_ref.to_string()],
+        "ordinary RFC 9420 KeyPackage was not accepted: {outcome:?}"
+    );
     Ok(())
 }
 
@@ -1214,6 +1366,80 @@ async fn reject_upload_mutation(
     let mut value = serde_json::to_value(upload)?;
     mutate(&mut value);
     assert_rejected(client.post(UPLOAD_PATH).json(&value).send().await?).await
+}
+
+fn signed_pairwise_upload_with_records(
+    signer: &PairwiseKey,
+    records: &[MlsKeyPackageRecord],
+    realm_id: &str,
+) -> Result<arkret::KeyPackagesUploadRequestBody> {
+    let unsigned = arkret::KeyPackagesUploadUnsignedRequest {
+        principal_id: signer.actor_id.clone(),
+        device_id: None,
+        pairwise_verification_method: Some(signer.verification_method.clone()),
+        intended_realm_id: Some(RealmId::new(realm_id.to_owned())?),
+        agent_verification_method: None,
+        agent_key_authorize_event_id: None,
+        keypackages: records
+            .iter()
+            .map(|record| mls_key_package_record_upload_entry(record).map_err(anyhow::Error::msg))
+            .collect::<Result<Vec<_>>>()?,
+        expires_at: None,
+        strand_id: None,
+        mls_group_id: None,
+    };
+    let signature = signer.signature(&keypackages_upload_signing_input(&unsigned)?)?;
+    Ok(unsigned.into_signed(signature))
+}
+
+fn signed_ordinary_upload_with_records(
+    signer: &ProvisionedTestPrincipal,
+    records: &[MlsKeyPackageRecord],
+    _realm_id: &str,
+) -> Result<arkret::KeyPackagesUploadRequestBody> {
+    let unsigned = arkret::KeyPackagesUploadUnsignedRequest {
+        principal_id: signer.core_id.clone(),
+        device_id: Some(signer.device_id.clone()),
+        pairwise_verification_method: None,
+        intended_realm_id: None,
+        agent_verification_method: None,
+        agent_key_authorize_event_id: None,
+        keypackages: records
+            .iter()
+            .map(|record| mls_key_package_record_upload_entry(record).map_err(anyhow::Error::msg))
+            .collect::<Result<Vec<_>>>()?,
+        expires_at: None,
+        strand_id: None,
+        mls_group_id: None,
+    };
+    let signing_bytes = keypackages_upload_signing_input(&unsigned)?;
+    let signature = KeyOperationSignature {
+        kid: wire_value(NonEmptyString::new(format!(
+            "{}#{}",
+            signer.full_id, signer.device_id
+        )))?,
+        signature_algorithm: Some(wire_value(NonEmptyString::new("Ed25519"))?),
+        sig: wire_value(Base64UrlString::new(
+            URL_SAFE_NO_PAD.encode(signer.device_signing_key.sign(&signing_bytes).to_bytes()),
+        ))?,
+    };
+    Ok(unsigned.into_signed(signature))
+}
+
+async fn assert_upload_entries_rejected(
+    client: &TestActorClient,
+    upload: &arkret::KeyPackagesUploadRequestBody,
+) -> Result<()> {
+    let response = client.post(UPLOAD_PATH).json(upload).send().await?;
+    if response.status() == StatusCode::OK {
+        let outcome: KeyPackagesUploadOutcome = serde_json::from_slice(&response.bytes().await?)?;
+        ensure!(
+            outcome.accepted == 0 && !outcome.rejected.is_empty(),
+            "invalid KeyPackage entry was accepted: {outcome:?}"
+        );
+        return Ok(());
+    }
+    assert_rejected(response).await
 }
 
 async fn assert_rejected(response: Response) -> Result<()> {

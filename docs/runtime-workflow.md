@@ -123,19 +123,19 @@ To build with a custom tag:
 ### Run in local process mode
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime process
+.\scripts\run-server-conformance.ps1 -Runtime process
 ```
 
 To point at a different checkout:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime process -SutManifest E:\path\to\server\Cargo.toml
+.\scripts\run-server-conformance.ps1 -Runtime process -SutManifest E:\path\to\server\Cargo.toml
 ```
 
 To run the PR-sized smoke profile:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile fast-smoke
 ```
 
 ### Run the compose profile
@@ -167,13 +167,13 @@ then stops those processes after the run:
 ### Run in Docker mode
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime docker -BuildImage
+.\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage
 ```
 
 With BuildKit cache wiring:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime docker -BuildImage `
+.\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage `
   -DockerCacheFrom type=registry,ref=registry.example/cotest-soland:buildcache `
   -DockerCacheTo type=registry,ref=registry.example/cotest-soland:buildcache,mode=max
 ```
@@ -181,13 +181,13 @@ With BuildKit cache wiring:
 If the image already exists:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
+.\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-soland:latest
 ```
 
 ### Run a filtered subset
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime docker `
+.\scripts\run-server-conformance.ps1 -Runtime docker `
   -CargoTestTarget federation_contract `
   -CargoTestFilter federation_replay_snapshot_and_redaction_contracts_work
 ```
@@ -199,8 +199,8 @@ reported `broad-scan` and scan every integration target.
 Inspect or validate a profile without starting the SUT:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Profile fast-smoke -PlanOnly
-.\scripts\run-cotest.ps1 -Profile release-gate -ValidateProfile
+.\scripts\run-server-conformance.ps1 -Profile fast-smoke -PlanOnly
+.\scripts\run-server-conformance.ps1 -Profile release-gate -ValidateProfile
 .\scripts\test-cotest-planner.ps1
 ```
 
@@ -241,11 +241,11 @@ mode.
 ### Coverage gate
 
 ```powershell
-.\scripts\run-cotest.ps1 -Profile full-nightly -FailOnCoverageRegression
+.\scripts\run-server-conformance.ps1 -Profile full-nightly -FailOnCoverageRegression
 ```
 
 When `-CoverageBaselinePath` is omitted, the runner compares against the
-previous `artifacts/latest/full/coverage-matrix.json` if it exists. Targeted
+previous `artifacts/latest/server-conformance/coverage-matrix.json` if it exists. Targeted
 runs therefore cannot silently become the next complete-suite baseline. The
 comparison is limited to the selected profile's `required_coverage_profiles`, unless
 `-RequiredCoverageProfiles` is supplied.
@@ -300,22 +300,22 @@ it names change.
 
 ## How results are shown
 
-`run-cotest.ps1` does three things:
+`run-server-conformance.ps1` does three things:
 
 1. streams the normal `cargo test` output to the terminal
 2. saves the full raw log
 3. writes machine-readable and human-readable summaries
 
 Artifacts are written to
-`artifacts/runs/cotest/<timestamp>-<profile>/`, including `raw.log`,
+`artifacts/runs/server-conformance/<timestamp>-<profile>/`, including `raw.log`,
 `transcript.ndjson`, summaries, JUnit, metadata, coverage/gate/gap reports,
 CI-profile reports, secret-scan reports, and `services/<service>.log`.
 
 Stable mirrors are:
 
-- `artifacts/latest/full/` for the most recent unfiltered complete run
+- `artifacts/latest/server-conformance/` for the most recent unfiltered complete run
 - `artifacts/latest/joint-e2e/` for the most recent non-targeted joint-e2e
-  suite, including the dedicated `run-cotest.ps1 -Profile joint` entrypoint
+  suite, including the dedicated `run-server-conformance.ps1 -Profile joint` entrypoint
 
 The Markdown summary is the primary “show me the result” artifact. It includes:
 
@@ -354,7 +354,7 @@ The runner now also emits:
 - Use `run-joint-e2e.ps1 -SolandRuntime docker` for release-quality browser/API
   verification, especially when checking that the built image still exposes the
   expected `/_arkret/*` service surface.
-- Use `artifacts/latest/full/summary.md` for the latest complete result.
+- Use `artifacts/latest/server-conformance/summary.md` for the latest complete result.
   Targeted/profile runs remain in their timestamped authoritative directories.
 - `process` mode is the authoritative path for validating the current local
   `soland` checkout.

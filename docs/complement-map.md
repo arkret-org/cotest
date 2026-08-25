@@ -21,7 +21,7 @@ applies the same pattern to Arkret.
   and [scripts/build-soland-image.ps1](../scripts/build-soland-image.ps1),
   including Docker cache controls for CI builds.
 - Complement's result-formatting story maps to
-  [scripts/run-cotest.ps1](../scripts/run-cotest.ps1),
+  [scripts/run-server-conformance.ps1](../scripts/run-server-conformance.ps1),
   which emits raw logs, redacted HTTP transcripts, and Markdown/JSON summaries
   under `artifacts/`.
 
@@ -63,12 +63,12 @@ optionally pretty-prints `go test -json` output with `gotestfmt`.
 - host-side `cargo test`
 - SUT spawned as either child process or Docker container
 - one script entrypoint for execution:
-  [scripts/run-cotest.ps1](../scripts/run-cotest.ps1)
+  [scripts/run-server-conformance.ps1](../scripts/run-server-conformance.ps1)
 - persisted result artifacts:
-  `artifacts/runs/cotest/<timestamp>-<profile>/` for authoritative logs,
+  `artifacts/runs/server-conformance/<timestamp>-<profile>/` for authoritative logs,
   transcripts, summaries, JUnit, coverage/gate/gap reports, CI-profile and
   secret-scan reports, and service logs; stable mirrors live at
-  `artifacts/latest/full/` and `artifacts/latest/joint-e2e/`
+  `artifacts/latest/server-conformance/` and `artifacts/latest/joint-e2e/`
 
 The Markdown summary is the primary human-readable report. That gives `cotest`
 an explicit result surface comparable to Complement's formatter pipeline,

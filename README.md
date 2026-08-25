@@ -68,11 +68,11 @@ in [docs/server-config-contract.md](./docs/server-config-contract.md).
 Recommended entrypoints:
 
 ```powershell
-.\scripts\run-cotest.ps1 -Runtime process
-.\scripts\run-cotest.ps1 -Runtime process -Profile fast-smoke
-.\scripts\run-cotest.ps1 -Profile fast-smoke -PlanOnly
+.\scripts\run-server-conformance.ps1 -Runtime process
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile fast-smoke
+.\scripts\run-server-conformance.ps1 -Profile fast-smoke -PlanOnly
 .\scripts\test-cotest-planner.ps1
-.\scripts\run-cotest.ps1 -Runtime process -Profile dual-soland
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile dual-soland
 .\scripts\run-hygiene.ps1
 .\scripts\demote-test.ps1 -SpecPath e2e\tests\path\spec.ts:42 -Reason "GAP-Px-yyy blocked by backing feature"
 .\scripts\promote-fixme.ps1 -SpecPath e2e\tests\path\spec.ts:42 -FeatureId cotest#local-feature `
@@ -80,8 +80,8 @@ Recommended entrypoints:
   -EvidencePath artifacts\latest\joint-e2e\playwright-report -NewBody $body
 .\scripts\run-compose.ps1
 .\scripts\build-soland-image.ps1
-.\scripts\run-cotest.ps1 -Runtime docker -SutImage cotest-soland:latest
-.\scripts\run-cotest.ps1 -Runtime docker -BuildImage -Profile joint
+.\scripts\run-server-conformance.ps1 -Runtime docker -SutImage cotest-soland:latest
+.\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage -Profile joint
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson `
   -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
 ```
@@ -101,7 +101,7 @@ Recommended entrypoints:
 - Each scripted run writes `raw.log`, `transcript.ndjson`, `summary.json`,
   `summary.md`, `summary.html`, `junit.xml`, coverage/gap reports, and
   CI profile, coverage gate, secret scan, and per-service logs to
-  its timestamped directory under `artifacts/runs/cotest/` or
+  its timestamped directory under `artifacts/runs/server-conformance/` or
   `artifacts/runs/joint-e2e/`, then publishes eligible stable mirrors under
   `artifacts/latest/`.
 - `.\scripts\run-hygiene.ps1` is the local hygiene gate for dependency
@@ -118,7 +118,8 @@ Recommended entrypoints:
   feature id, one local single-spec pass command, and one screenshot/HAR/trace
   artifact path. See `docs/fixme-promotion-checklist.md`.
 
-The latest complete cotest report is `artifacts/latest/full/summary.md`.
+The latest complete Arkret Server Conformance report is
+`artifacts/latest/server-conformance/summary.md`.
 The latest unfiltered standalone joint-e2e report is
 `artifacts/latest/joint-e2e/summary.md`. Targeted runs never replace either
 stable result.
@@ -134,7 +135,7 @@ easy to find:
 ```
 artifacts/
   runs/
-    cotest/<timestamp>-<profile>[-selection]/ # run-cotest.ps1 authoritative outputs
+    cotest/<timestamp>-<profile>[-selection]/ # run-server-conformance.ps1 authoritative outputs
       summary.*, junit.xml, ...
       services/
       joint-smoke/ | joint/ | ...   # embedded joint gate outputs
@@ -151,16 +152,16 @@ artifacts/
 
 Rules:
 
-- `latest/full/` changes only after a profile with `include_all_tests: true`
+- `latest/server-conformance/` changes only after a profile with `include_all_tests: true`
   completes without `-CargoTestTarget` or `-CargoTestFilter`.
-- `latest/joint-e2e/` changes after `run-cotest.ps1 -Profile joint` or a
+- `latest/joint-e2e/` changes after `run-server-conformance.ps1 -Profile joint` or a
   standalone suite run without `-Grep` or `-PreflightOnly`.
 - Targeted cotest and joint selections remain only in their timestamped run
   directories and never modify a stable `latest/` channel. Each stable mirror
   contains `run-location.json` pointing to its authoritative run.
 - Embedded joint gates place their outputs directly in
-  `runs/cotest/<timestamp>-<profile>/<gate-name>/`; they do not replace the
-  stable joint result except for the dedicated `run-cotest.ps1 -Profile joint`
+  `runs/server-conformance/<timestamp>-<profile>/<gate-name>/`; they do not replace the
+  stable joint result except for the dedicated `run-server-conformance.ps1 -Profile joint`
   suite. The targeted `dual-soland` and `release-gate` legs never replace it.
 - Both scripts keep the newest 20 runs in their own family (`-KeepRuns`, `0`
   disables), so cotest and joint-e2e retention cannot prune one another.
@@ -403,7 +404,7 @@ for the full startup model, Docker image contract, and result artifacts.
 ## Result Artifacts
 
 The runner script writes under
-`artifacts/runs/cotest/<timestamp>-<profile>/`:
+`artifacts/runs/server-conformance/<timestamp>-<profile>/`:
 
 - `raw.log` and `transcript.ndjson`
 - `summary.json`, `summary.md`, and `summary.html`
@@ -411,7 +412,7 @@ The runner script writes under
 - coverage, gate, gap, CI-profile, and secret-scan JSON/Markdown reports
 - `services/`
 
-Stable mirrors are `artifacts/latest/full/` and
+Stable mirrors are `artifacts/latest/server-conformance/` and
 `artifacts/latest/joint-e2e/`.
 
 This gives `cotest` an explicit result surface instead of relying only on
@@ -477,14 +478,14 @@ counters; coauth, inkson and bridges have no metrics endpoint, so rows that
 belong to them are reported as uncovered rather than approximated.
 `-FailOnCoverageRegression` compares required coverage profiles against
 `-CoverageBaselinePath` or the previous
-`artifacts/latest/full/coverage-matrix.json`.
+`artifacts/latest/server-conformance/coverage-matrix.json`.
 Secret-shaped fields in raw logs, transcripts, and service logs fail the run
 unless `-AllowSecretLeaks` is supplied. That switch permits reported log hits
 only; it never bypasses a failed scanner self-test.
 
 ### Secret scan patterns (P5.1)
 
-`scripts/lib/secret-scan.ps1` (dot-sourced by `scripts/run-cotest.ps1` and
+`scripts/lib/secret-scan.ps1` (dot-sourced by `scripts/run-server-conformance.ps1` and
 `scripts/run-joint-e2e.ps1`) defines `Find-SecretLeaks`, which flags unredacted
 secret-shaped content when scanning `raw.log`, `transcript.ndjson`, and
 `services/*.log`. Field patterns are matched case-insensitively. Before every
@@ -624,14 +625,14 @@ anywhere in the harness or in a service log MUST be accompanied by:
 2. Adding a planted vector to `scripts/tests/secret-scan.tests.ps1` plus a
    positive and negative example to the table above. The self-test asserts each
    detector's category, so a new pattern without a category assertion fails.
-3. Re-running `.\scripts\run-cotest.ps1` and confirming `secret-scan.md`
+3. Re-running `.\scripts\run-server-conformance.ps1` and confirming `secret-scan.md`
    reports `status: passed`, `self_test: passed`, with the redacted preview
    rendered as `[redacted]`.
 
 **Failure example:**
 
 A run that fails the gate emits
-`artifacts/runs/cotest/<ts>-<profile>/secret-scan.md`
+`artifacts/runs/server-conformance/<ts>-<profile>/secret-scan.md`
 similar to:
 
 ```

@@ -14,7 +14,7 @@ function ConvertTo-ArtifactPathSegment {
     return $segment
 }
 
-function Test-IsCompleteCotestRun {
+function Test-IsCompleteServerConformanceRun {
     param(
         [Parameter(Mandatory = $true)][bool]$ProfileIncludesAllTests,
         [string]$CargoTestTarget,
@@ -116,8 +116,8 @@ function Write-LatestArtifactIndex {
     $latestRoot = Join-Path $OutputRoot "latest"
     $null = New-Item -ItemType Directory -Force -Path $latestRoot
     $descriptions = [ordered]@{
-        "full"      = "Most recent unfiltered complete cotest run."
-        "joint-e2e" = "Most recent non-targeted joint-e2e suite run; grep-selected runs do not replace it."
+        "server-conformance" = "Most recent unfiltered Arkret Server Conformance suite run."
+        "joint-e2e"          = "Most recent non-targeted Arkret Joint Product E2E suite run; grep-selected runs do not replace it."
     }
     $entries = @()
     foreach ($channel in $descriptions.Keys) {
@@ -145,7 +145,7 @@ function Write-LatestArtifactIndex {
     } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $indexJson -Encoding UTF8
 
     $markdown = @(
-        "# Latest cotest artifacts",
+        "# Latest Arkret test artifacts",
         "",
         "Stable result channels are directories below this file. Timestamped directories under ``../runs/`` are authoritative.",
         ""
@@ -159,6 +159,35 @@ function Write-LatestArtifactIndex {
     $markdown | Set-Content -LiteralPath (Join-Path $latestRoot "README.md") -Encoding UTF8
 }
 
+function Assert-ArtifactReportIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceDirectory,
+        [Parameter(Mandatory = $true)][string]$Channel
+    )
+
+    if ($Channel -notin @("server-conformance", "joint-e2e")) {
+        return
+    }
+    $summaryPath = Join-Path $SourceDirectory "summary.json"
+    if (-not (Test-Path -LiteralPath $summaryPath -PathType Leaf)) {
+        throw "Artifact channel '$Channel' requires summary.json with an explicit suite identity"
+    }
+    try {
+        $summary = Get-Content -Raw -LiteralPath $summaryPath | ConvertFrom-Json
+    }
+    catch {
+        throw "Artifact summary is not valid JSON: $summaryPath"
+    }
+    $reportSchema = if ($summary.PSObject.Properties.Name -contains "report_schema") { $summary.report_schema } else { $null }
+    $suiteKind = if ($summary.PSObject.Properties.Name -contains "suite_kind") { $summary.suite_kind } else { $null }
+    if ($reportSchema -ne "arkret.test-report.v1") {
+        throw "Artifact summary uses an unsupported report_schema for '$Channel': $reportSchema"
+    }
+    if ($suiteKind -ne $Channel) {
+        throw "Artifact summary suite_kind '$suiteKind' does not match channel '$Channel'"
+    }
+}
+
 function Publish-ArtifactMirror {
     param(
         [Parameter(Mandatory = $true)][string]$SourceDirectory,
@@ -169,6 +198,8 @@ function Publish-ArtifactMirror {
     if (-not (Test-Path -LiteralPath $SourceDirectory -PathType Container)) {
         throw "Artifact source directory not found: $SourceDirectory"
     }
+
+    Assert-ArtifactReportIdentity -SourceDirectory $SourceDirectory -Channel $Channel
 
     $resolvedSourceDirectory = [System.IO.Path]::GetFullPath($SourceDirectory)
     $channelSegment = ConvertTo-ArtifactPathSegment -Value $Channel

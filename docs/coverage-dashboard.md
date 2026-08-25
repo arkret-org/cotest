@@ -1,13 +1,14 @@
-# journey coverage
+# journey implementation inventory
 
 Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverage.ps1`.
+This static inventory does not claim runtime verification; use an Arkret Joint Product E2E run report for executed evidence.
 
-| Journey | Verified | Promised | Coverage | Blocking fixme |
+| Journey | Implemented | Promised | Coverage | Blocking fixme |
 |---|---:|---:|---:|---:|
-| UJ-A - First login and multi-device recovery | 65 | 65 | 100.0% | 0 |
+| UJ-A - First login and multi-device recovery | 66 | 66 | 100.0% | 0 |
 | UJ-B - Workspace creation, invites, and archive visibility | 27 | 27 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
-| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 11 | 11 | 100.0% | 0 |
+| UJ-D - Encrypted realm lifecycle and cross-device decrypt | 10 | 11 | 90.9% | 1 |
 | UJ-E - Federation and cross-domain collaboration | 19 | 19 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 45 | 45 | 100.0% | 0 |
 | UJ-G - Privacy rights, governance, appeal, and GDPR | 37 | 44 | 84.1% | 7 |
@@ -15,7 +16,7 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 
 ## UJ-A - First login and multi-device recovery
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
 | encryption/mls-group | domain-fallback | 1 | 1 | 0 |
@@ -33,12 +34,13 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 | identity/onboarding | domain-fallback | 3 | 3 | 0 |
 | identity/passkey-login-flow | domain-fallback | 1 | 1 | 0 |
 | identity/recovery | domain-fallback | 4 | 4 | 0 |
+| identity/recovery-key-to-encrypted-realm | domain-fallback | 1 | 1 | 0 |
 | identity/session-grant-dpop | domain-fallback | 2 | 2 | 0 |
 | identity/tsp-bootstrap | domain-fallback | 4 | 4 | 0 |
 
 ## UJ-B - Workspace creation, invites, and archive visibility
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | invites/invite-addressing | domain-fallback | 4 | 4 | 0 |
 | invites/third-party | domain-fallback | 6 | 6 | 0 |
@@ -49,7 +51,7 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 
 ## UJ-C - Daily messaging, edits, reactions, receipts, and mentions
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | discovery/notifications | domain-fallback | 2 | 2 | 0 |
 | messaging/chat-advanced | domain-fallback | 11 | 11 | 0 |
@@ -59,16 +61,16 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 
 ## UJ-D - Encrypted realm lifecycle and cross-device decrypt
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
-| encryption/audited-e2ee | domain-fallback | 3 | 3 | 0 |
+| encryption/audited-e2ee | domain-fallback | 2 | 3 | 1 |
 | encryption/encrypted-attachments | domain-fallback | 2 | 2 | 0 |
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
 | encryption/mls-group | domain-fallback | 1 | 1 | 0 |
 
 ## UJ-E - Federation and cross-domain collaboration
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | extensions/mimi-federation | domain-fallback | 2 | 2 | 0 |
 | federation/contact-graph-federation | domain-fallback | 5 | 5 | 0 |
@@ -77,7 +79,7 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 
 ## UJ-F - Kanban collaboration and concurrent work
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | kanban/cross-member-encrypted | domain-fallback | 3 | 3 | 0 |
 | kanban/end-to-end | domain-fallback | 9 | 9 | 0 |
@@ -92,7 +94,7 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 
 ## UJ-G - Privacy rights, governance, appeal, and GDPR
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | governance/gdpr-audit-retention | domain-fallback | 7 | 7 | 0 |
 | governance/moderation-appeal | domain-fallback | 9 | 9 | 0 |
@@ -104,7 +106,7 @@ Generated from `e2e/scenarios/user-journeys.md` by `scripts/generate-e2e-coverag
 
 ## UJ-H - Calls, push, and cross-platform sync
 
-| spec | mapping | verified | promised | blocking |
+| spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | calls/webrtc | domain-fallback | 4 | 4 | 0 |
 | calls/webrtc-call-sequence | domain-fallback | 2 | 2 | 0 |

@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$runner = Join-Path $PSScriptRoot "run-cotest.ps1"
+$runner = Join-Path $PSScriptRoot "run-server-conformance.ps1"
 $pwsh = (Get-Process -Id $PID).Path
 
 function Assert-Equal {

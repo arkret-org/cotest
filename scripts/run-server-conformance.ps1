@@ -695,7 +695,7 @@ function New-SummaryMarkdown {
     )
 
     $lines = New-Object System.Collections.Generic.List[string]
-    $lines.Add("# cotest run summary")
+    $lines.Add("# Arkret Server Conformance summary")
     $lines.Add("")
     if ($Summary.PSObject.Properties.Name -contains "e2e_coverage_status") {
         $ratio = if ($null -ne $Summary.e2e_coverage_verified_ratio) { "{0:P1}" -f [double]$Summary.e2e_coverage_verified_ratio } else { "n/a" }
@@ -791,7 +791,7 @@ function New-SummaryHtml {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>cotest summary</title>
+  <title>Arkret Server Conformance summary</title>
   <style>
     body { font-family: Segoe UI, Arial, sans-serif; margin: 24px; background: #f5f7fb; color: #172033; }
     .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 6px 24px rgba(23,32,51,0.08); margin-bottom: 20px; }
@@ -809,7 +809,7 @@ function New-SummaryHtml {
 </head>
 <body>
   <div class="card">
-    <h1>cotest run summary</h1>
+    <h1>Arkret Server Conformance summary</h1>
     <p>Status: <strong>$(ConvertTo-HtmlSafe $Summary.status)</strong></p>
     <p>Profile: <code>$(ConvertTo-HtmlSafe $Summary.profile)</code></p>
     <p>Runtime: <code>$(ConvertTo-HtmlSafe $Summary.runtime)</code></p>
@@ -857,13 +857,13 @@ function New-JUnitXml {
         $name = ConvertTo-XmlSafe $test.name
         switch ($test.status) {
             "failed" {
-                "<testcase classname='cotest' name='$name'><failure message='test failed'>See raw log: $([System.Security.SecurityElement]::Escape($Summary.raw_log))</failure></testcase>"
+                "<testcase classname='server-conformance' name='$name'><failure message='test failed'>See raw log: $([System.Security.SecurityElement]::Escape($Summary.raw_log))</failure></testcase>"
             }
             "ignored" {
-                "<testcase classname='cotest' name='$name'><skipped /></testcase>"
+                "<testcase classname='server-conformance' name='$name'><skipped /></testcase>"
             }
             default {
-                "<testcase classname='cotest' name='$name' />"
+                "<testcase classname='server-conformance' name='$name' />"
             }
         }
     }
@@ -871,7 +871,12 @@ function New-JUnitXml {
     @"
 <?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="cotest" tests="$($Tests.Count)" failures="$($Summary.failed)" skipped="$($Summary.ignored)" time="$($Summary.duration_seconds)">
+  <testsuite name="Arkret Server Conformance" tests="$($Tests.Count)" failures="$($Summary.failed)" skipped="$($Summary.ignored)" time="$($Summary.duration_seconds)">
+    <properties>
+      <property name="report_schema" value="arkret.test-report.v1" />
+      <property name="suite_kind" value="server-conformance" />
+      <property name="profile" value="$([System.Security.SecurityElement]::Escape($Summary.profile))" />
+    </properties>
     $($testCases -join [Environment]::NewLine)
   </testsuite>
 </testsuites>
@@ -1979,11 +1984,11 @@ if ($CargoTestTarget -or $CargoTestFilter) {
 }
 $runDir = New-ArtifactRunDirectory `
     -OutputRoot $OutputRoot `
-    -Family "cotest" `
+    -Family "server-conformance" `
     -Label $cotestRunLabel `
     -Timestamp $timestamp
 $serviceLogDir = Join-Path $runDir "services"
-Remove-StaleArtifactRuns -OutputRoot $OutputRoot -Family "cotest" -KeepRuns $KeepRuns
+Remove-StaleArtifactRuns -OutputRoot $OutputRoot -Family "server-conformance" -KeepRuns $KeepRuns
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
 
 $rawLog = Join-Path $runDir "raw.log"
@@ -2028,6 +2033,9 @@ if ($Profile -eq "joint") {
         -DockerNoCache ([bool]$DockerNoCache)
 
     $summary = [pscustomobject]@{
+        report_schema          = "arkret.test-report.v1"
+        suite_kind             = "joint-e2e"
+        suite_name             = "Arkret Joint Product E2E"
         generated_at           = (Get-Date).ToString("o")
         profile                = $Profile
         status                 = $jointRun.status
@@ -2039,7 +2047,7 @@ if ($Profile -eq "joint") {
     }
     $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJson -Encoding UTF8
     @(
-        "# cotest joint profile",
+        "# Arkret Joint Product E2E profile",
         "",
         "- status: $($summary.status)",
         "- exit_code: $($summary.exit_code)",
@@ -2053,7 +2061,7 @@ if ($Profile -eq "joint") {
         -OutputRoot $OutputRoot `
         -Channel "joint-e2e"
     Write-Host ""
-    Write-Host "Cotest joint profile complete:"
+    Write-Host "Arkret Joint Product E2E profile complete:"
     Write-Host "  status   : $($summary.status)"
     Write-Host "  summary  : $summaryMd"
     Write-Host "  joint    : $($summary.joint_summary_markdown)"
@@ -2081,6 +2089,9 @@ if ($Profile -eq "dual-soland") {
         -DockerNoCache ([bool]$DockerNoCache)
 
     $summary = [pscustomobject]@{
+        report_schema          = "arkret.test-report.v1"
+        suite_kind             = "joint-e2e"
+        suite_name             = "Arkret Joint Product E2E"
         generated_at           = (Get-Date).ToString("o")
         profile                = $Profile
         status                 = $dualRun.status
@@ -2092,7 +2103,7 @@ if ($Profile -eq "dual-soland") {
     }
     $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJson -Encoding UTF8
     @(
-        "# cotest dual-soland profile",
+        "# Arkret Joint Product E2E dual-soland profile",
         "",
         "- status: $($summary.status)",
         "- exit_code: $($summary.exit_code)",
@@ -2102,7 +2113,7 @@ if ($Profile -eq "dual-soland") {
         "- raw_log: $($summary.raw_log)"
     ) | Set-Content -Path $summaryMd -Encoding UTF8
     Write-Host ""
-    Write-Host "Cotest dual-soland profile complete:"
+    Write-Host "Arkret Joint Product E2E dual-soland profile complete:"
     Write-Host "  status   : $($summary.status)"
     Write-Host "  summary  : $summaryMd"
     Write-Host "  joint    : $($summary.joint_summary_markdown)"
@@ -2110,21 +2121,20 @@ if ($Profile -eq "dual-soland") {
 }
 
 if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -ImageTag $SutImage))) {
-    $buildArgs = @("-ImageTag", $SutImage)
+    $buildParams = @{ ImageTag = $SutImage }
     if ($DockerCacheFrom.Count -gt 0) {
-        $buildArgs += "-CacheFrom"
-        $buildArgs += $DockerCacheFrom
+        $buildParams.CacheFrom = $DockerCacheFrom
     }
     if ($DockerCacheTo) {
-        $buildArgs += @("-CacheTo", $DockerCacheTo)
+        $buildParams.CacheTo = $DockerCacheTo
     }
     if ($DockerPull) {
-        $buildArgs += "-Pull"
+        $buildParams.Pull = $true
     }
     if ($DockerNoCache) {
-        $buildArgs += "-NoCache"
+        $buildParams.NoCache = $true
     }
-    & (Join-Path $PSScriptRoot "build-soland-image.ps1") @buildArgs
+    & (Join-Path $PSScriptRoot "build-soland-image.ps1") @buildParams
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to build Docker image $SutImage"
     }
@@ -2229,7 +2239,7 @@ $e2eCoverage = [pscustomobject]@{
 }
 $resolvedCoverageBaseline = $CoverageBaselinePath
 if (-not $resolvedCoverageBaseline) {
-    $candidateBaseline = Join-Path $OutputRoot "latest\full\coverage-matrix.json"
+    $candidateBaseline = Join-Path $OutputRoot "latest\server-conformance\coverage-matrix.json"
     if (Test-Path $candidateBaseline) {
         $resolvedCoverageBaseline = $candidateBaseline
     }
@@ -2275,6 +2285,9 @@ if ($specSyncGate.status -eq "failed") {
 $sutMetadata = Get-SutMetadata -Runtime $Runtime -SutManifest $SutManifest -SutImage $SutImage
 $specMetadata = Get-SpecMetadata -RepoRoot $repoRoot
 $metadata = [pscustomobject]@{
+    report_schema = "arkret.test-report.v1"
+    suite_kind    = "server-conformance"
+    suite_name    = "Arkret Server Conformance"
     generated_at = $finishedAt.ToString("o")
     sut          = $sutMetadata
     spec         = $specMetadata
@@ -2365,6 +2378,9 @@ if ($Profile -eq "release-gate" -and $releaseGate.status -eq "failed") {
 }
 
 $summary = [pscustomobject]@{
+    report_schema        = "arkret.test-report.v1"
+    suite_kind           = "server-conformance"
+    suite_name           = "Arkret Server Conformance"
     status               = if ($exitCode -eq 0) { "success" } else { "failure" }
     profile              = $Profile
     runtime              = $Runtime
@@ -2456,16 +2472,16 @@ $ciProfileMarkdown | Set-Content -Path $ciProfileMd -Encoding UTF8
 $secretScanMarkdown = New-SecretScanMarkdown -SecretScan $secretScan
 $secretScanMarkdown | Set-Content -Path $secretScanMd -Encoding UTF8
 
-$isFullCotestRun = Test-IsCompleteCotestRun `
+$isFullServerConformanceRun = Test-IsCompleteServerConformanceRun `
     -ProfileIncludesAllTests ([bool]$ciProfile.include_all_tests) `
     -CargoTestTarget $CargoTestTarget `
     -CargoTestFilter $CargoTestFilter
-if ($isFullCotestRun) {
-    Publish-ArtifactMirror -SourceDirectory $runDir -OutputRoot $OutputRoot -Channel "full"
+if ($isFullServerConformanceRun) {
+    Publish-ArtifactMirror -SourceDirectory $runDir -OutputRoot $OutputRoot -Channel "server-conformance"
 }
 
 Write-Host ""
-Write-Host "Summary"
+Write-Host "Arkret Server Conformance Summary"
 Write-Host "  status   : $($summary.status)"
 Write-Host "  profile  : $($summary.profile)"
 Write-Host "  runtime  : $($summary.runtime)"
