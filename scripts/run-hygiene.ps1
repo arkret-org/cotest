@@ -7,8 +7,7 @@ param(
     [switch]$SkipE2eTypecheck,
     [switch]$SkipE2eWireTypes,
     [switch]$SkipFixmeDebt,
-    [switch]$SkipFixmeQuality,
-    [switch]$SkipAgentJourneyTests
+    [switch]$SkipFixmeQuality
 )
 
 $ErrorActionPreference = "Stop"
@@ -181,11 +180,6 @@ if (-not $SkipFixmeQuality) {
         Add-Content -Path $rawLog -Value "=== e2e-fixme-quality (skipped) ==="
         Add-Content -Path $rawLog -Value "checker not found at $fixmeQuality"
     }
-}
-if (-not $SkipAgentJourneyTests) {
-    $nodePath = Resolve-CommandPath "node"
-    $journeyTests = Join-Path $repoRoot "agent-journeys\scripts\journey.tests.mjs"
-    $results.Add((Invoke-HygieneCommand -Label "agent-journey-tests" -FilePath $nodePath -Arguments @("--test", $journeyTests) -RunDir $runDir -RawLog $rawLog))
 }
 if ($results.Count -eq 0) {
     throw "No hygiene checks were selected"

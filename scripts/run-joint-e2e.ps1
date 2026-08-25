@@ -151,13 +151,7 @@ param(
     # Dedicated release lanes use this when every selected live test is a hard
     # requirement. Ordinary broad joint runs may still contain attributed,
     # topology-dependent skips and therefore do not enable it by default.
-    [switch]$ForbidSkippedTests,
-    # Run a non-Playwright driver while the managed stack is alive. This is
-    # used by agent-journeys so the browser agent can operate the real stack
-    # while this runner retains lifecycle ownership and deterministic cleanup.
-    [string]$ExternalDriverScript,
-    [string[]]$ExternalDriverArgument = @(),
-    [string]$RuntimeManifestPath
+    [switch]$ForbidSkippedTests
 )
 
 if ($StartMocks) {
@@ -212,13 +206,6 @@ $CoauthEnrollmentAuthorityDid = "did:key:z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G
 if ($PreflightOnly -and $SkipPreflight) {
     throw "-PreflightOnly cannot be combined with -SkipPreflight"
 }
-if ($ExternalDriverArgument.Count -gt 0 -and -not $ExternalDriverScript) {
-    throw "-ExternalDriverArgument requires -ExternalDriverScript"
-}
-if ($ExternalDriverScript -and -not (Test-Path -LiteralPath $ExternalDriverScript -PathType Leaf)) {
-    throw "External driver script not found: $ExternalDriverScript"
-}
-
 function Resolve-PlaywrightProjects {
     param(
         [string]$RunProfile,
@@ -2502,8 +2489,6 @@ if ($JointDir) {
     $jointRunLabel = if ($RunProfile) { $RunProfile } else { "custom" }
     if ($Grep) {
         $jointRunLabel += "-selection"
-    } elseif ($ExternalDriverScript) {
-        $jointRunLabel += "-external-driver"
     } elseif ($PreflightOnly) {
         $jointRunLabel += "-preflight"
     }
@@ -4129,135 +4114,6 @@ try {
         Remove-Item Env:COTEST_MOCK_DID_HOST_SCID -ErrorAction SilentlyContinue
     }
 
-    if (-not $RuntimeManifestPath) {
-        $RuntimeManifestPath = Join-Path $jointDir "runtime-manifest.json"
-    } else {
-        $RuntimeManifestPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($RuntimeManifestPath)
-    }
-    $alphaManagedServiceName = if ($DualSoland) { "soland-alpha" } else { "soland" }
-    $alphaManagedService = @($managedServices | Where-Object { $_.Name -eq $alphaManagedServiceName }) | Select-Object -First 1
-    $betaManagedService = @($managedServices | Where-Object { $_.Name -eq "soland-beta" }) | Select-Object -First 1
-    $alphaRuntimeInstance = if ($alphaManagedService -and $alphaManagedService.Kind -eq "process") {
-        "process:$($alphaManagedService.Process.Id)"
-    } elseif ($alphaManagedService -and $alphaManagedService.Kind -eq "docker") {
-        "docker:$($alphaManagedService.ContainerName)"
-    } else {
-        $null
-    }
-    $betaRuntimeInstance = if ($betaManagedService -and $betaManagedService.Kind -eq "process") {
-        "process:$($betaManagedService.Process.Id)"
-    } elseif ($betaManagedService -and $betaManagedService.Kind -eq "docker") {
-        "docker:$($betaManagedService.ContainerName)"
-    } else {
-        $null
-    }
-    $alphaStateRoot = Join-Path $jointDir "soland-state"
-    $alphaObjectRoot = Join-Path $jointDir "soland-objects"
-    $betaStateRoot = Join-Path $jointDir "soland-beta-state"
-    $betaObjectRoot = Join-Path $jointDir "soland-beta-objects"
-    $runtimeManifestParent = Split-Path -Parent $RuntimeManifestPath
-    $null = New-Item -ItemType Directory -Force -Path $runtimeManifestParent
-    $runtimeManifest = [ordered]@{
-        schema_version = "v1"
-        generated_at = (Get-Date).ToUniversalTime().ToString("o")
-        topology = if ($DualSoland) { "federated" } else { "single" }
-        soland_runtime = $startedSolandRuntime
-        account_authority_mode = if ($DualSoland -and $CoauthBaseUrl) { "shared-external-authority" } elseif ($CoauthBaseUrl) { "single" } else { "none" }
-        services = [ordered]@{
-            alpha = [ordered]@{
-                soland_base_url = $SolandBaseUrl
-                soland_service_id = $SolandServiceId
-                runtime_instance = $alphaRuntimeInstance
-                inkson_base_url = $InksonBaseUrl
-                state_root = $alphaStateRoot
-                object_root = $alphaObjectRoot
-                federation_peer = $alphaPeer
-            }
-            beta = if ($DualSoland) {
-                [ordered]@{
-                    soland_base_url = $solandBetaBaseUrl
-                    soland_service_id = $SolandBetaServiceId
-                    runtime_instance = $betaRuntimeInstance
-                    inkson_base_url = $inksonBetaBaseUrl
-                    state_root = $betaStateRoot
-                    object_root = $betaObjectRoot
-                    federation_peer = $SolandBaseUrl
-                }
-            } else {
-                $null
-            }
-            coauth = if ($CoauthBaseUrl) {
-                [ordered]@{
-                    base_url = $CoauthBaseUrl
-                    service_id = $CoauthServiceId
-                }
-            } else {
-                $null
-            }
-            savfox = if ($StartSavfox) {
-                # Serialized straight off the probe objects, so a probe cannot
-                # appear in the manifest with fields that belong to another one.
-                $savfoxProbeManifest = {
-                    param($probe)
-                    $gateway = @($probe.Services | Where-Object { $_.Name -eq $probe.Name }) | Select-Object -First 1
-                    [ordered]@{
-                        base_url = $probe.BaseUrl
-                        runtime_instance = if ($gateway) { "process:$($gateway.Process.Id)" } else { $null }
-                        model_receipts = $probe.ReceiptPath
-                    }
-                }
-                $addressed = & $savfoxProbeManifest $savfoxAddressedProbe
-                $addressed["unaddressed_probe"] = & $savfoxProbeManifest $savfoxUnaddressedProbe
-                $addressed
-            } else {
-                $null
-            }
-        }
-        tls_proxy = if ($jointTlsEnabled) {
-            [ordered]@{
-                port = $jointTlsPort
-                hosts = @($jointTlsHostNames)
-                ca_subject = if ($jointTlsAssets) { $jointTlsAssets.CaSubjectName } else { $null }
-            }
-        } else {
-            $null
-        }
-        isolation = [ordered]@{
-            distinct_principal_server_processes = [bool]($DualSoland -and $alphaRuntimeInstance -and $betaRuntimeInstance -and $alphaRuntimeInstance -ne $betaRuntimeInstance)
-            distinct_service_identities = [bool]($DualSoland -and $SolandServiceId -and $SolandBetaServiceId -and $SolandServiceId -ne $SolandBetaServiceId)
-            distinct_state_roots = [bool]($DualSoland -and $alphaStateRoot -ne $betaStateRoot)
-            distinct_object_roots = [bool]($DualSoland -and $alphaObjectRoot -ne $betaObjectRoot)
-            distinct_browser_origins = [bool]($DualSoland -and $InksonBaseUrl -and $inksonBetaBaseUrl -and $InksonBaseUrl -ne $inksonBetaBaseUrl)
-            explicit_federation_peer_links = [bool]($DualSoland -and $alphaPeer -eq $solandBetaBaseUrl)
-        }
-        artifacts = [ordered]@{
-            root = $jointDir
-            services = $serviceLogDir
-            screenshots = $screenshotDir
-        }
-    }
-    $runtimeManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $RuntimeManifestPath -Encoding UTF8
-    $env:COTEST_RUNTIME_MANIFEST = $RuntimeManifestPath
-
-    if ($ExternalDriverScript) {
-        $playwrightStdout = Join-Path $jointDir "external-driver.stdout.log"
-        $playwrightStderr = Join-Path $jointDir "external-driver.stderr.log"
-        $previousErrorActionPreference = $ErrorActionPreference
-        try {
-            $ErrorActionPreference = "Continue"
-            $driverOutput = & $ExternalDriverScript @ExternalDriverArgument 2>&1
-            $exitCode = $LASTEXITCODE
-            $persistedDriverOutput = @($driverOutput | ForEach-Object { [string]$_ } | Where-Object {
-                    $_ -notmatch '(?i)^\s*(?:-\s*)?authorization\s*:'
-                })
-            $persistedDriverOutput | Set-Content -LiteralPath $playwrightStdout -Encoding UTF8
-            "" | Set-Content -LiteralPath $playwrightStderr -Encoding UTF8
-            $persistedDriverOutput | ForEach-Object { Write-Host $_ }
-        }
-        finally {
-            $ErrorActionPreference = $previousErrorActionPreference
-        }
-    } else {
         $playwrightArgs = @("test", "--config", "playwright.config.ts")
         foreach ($project in $playwrightProjects) {
             $playwrightArgs += @("--project", $project)
@@ -4318,7 +4174,6 @@ try {
             }
             Pop-Location
         }
-    }
 }
 finally {
     $managedServiceFailures = @(Get-ManagedServiceFailures -Services $managedServices)
@@ -5203,7 +5058,6 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 $isStandaloneJointSuite = Test-IsStandaloneJointSuite `
     -IsStandalone (-not [bool]$JointDir) `
     -Grep $Grep `
-    -ExternalDriverScript $ExternalDriverScript `
     -PreflightOnly ([bool]$PreflightOnly)
 if ($isStandaloneJointSuite) {
     Publish-ArtifactMirror `

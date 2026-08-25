@@ -107,9 +107,9 @@ Recommended entrypoints:
 - `.\scripts\run-hygiene.ps1` is the local hygiene gate for dependency
   advisories/licensing (`cargo deny check`), spelling drift (`typos`), RustSec
   vulnerabilities (`cargo audit`), e2e wire/type drift, `fixme-debt.md`
-  freshness, Playwright fixme quality, and the Agent Journey
-  scenario contract. It writes `raw.log`, `summary.json`, `summary.md`, and
-  per-tool stdout/stderr logs to `artifacts/hygiene/<timestamp>/`.
+  freshness, and Playwright fixme quality. It writes `raw.log`, `summary.json`,
+  `summary.md`, and per-tool stdout/stderr logs to
+  `artifacts/hygiene/<timestamp>/`.
 - `.\scripts\demote-test.ps1` is the inverse of `promote-fixme.ps1`: it
   temporarily converts a concrete Playwright `test(...)` line into
   `test.fixme(...)` and inserts the reason comment required by the local
@@ -154,8 +154,7 @@ Rules:
 - `latest/full/` changes only after a profile with `include_all_tests: true`
   completes without `-CargoTestTarget` or `-CargoTestFilter`.
 - `latest/joint-e2e/` changes after `run-cotest.ps1 -Profile joint` or a
-  standalone suite run without `-Grep`, `-ExternalDriverScript`, or
-  `-PreflightOnly`.
+  standalone suite run without `-Grep` or `-PreflightOnly`.
 - Targeted cotest and joint selections remain only in their timestamped run
   directories and never modify a stable `latest/` channel. Each stable mirror
   contains `run-location.json` pointing to its authoritative run.
@@ -167,38 +166,6 @@ Rules:
   disables), so cotest and joint-e2e retention cannot prune one another.
 - CI sets `COTEST_JOINT_RUN_DIR` to fixed names under `runs/` (e.g.
   `runs/integration-playwright/joint-e2e`).
-
-## Agent-driven user journeys
-
-`agent-journeys/` is a separate goal-driven acceptance layer. It reuses the
-joint runner's real service lifecycle, but an agent operates Inkson through
-isolated agent-browser sessions instead of replaying a predefined locator
-sequence. Required checkpoints retain screenshots, hard checks, action
-transcripts, and explicit product/agent/harness failure classification.
-
-The catalog contains focused single-site journeys for first-Realm continuity
-and device recovery, focused federated journeys for invitation/history and
-Direct Conversation repair, plus the broader federated incident story. Run
-`node --test .\agent-journeys\scripts\journey.tests.mjs` to validate every
-scenario without starting the service stack.
-
-The federated topology starts two isolated principal servers on one physical
-machine with distinct service identities, ports, state/object roots, and
-Inkson origins:
-
-```powershell
-$run = .\scripts\run-agent-journey.ps1 `
-  -Action Prepare `
-  -Scenario federated-team-incident `
-  -Topology federated
-
-# The agent now uses agent-journeys/scripts/invoke-agent-browser.ps1,
-# records all required checkpoints, and then releases the stack:
-.\scripts\run-agent-journey.ps1 -Action Finalize -RunDir $run.run_dir
-```
-
-Use `-SolandRuntime docker` when container isolation is preferred. See
-[`agent-journeys/README.md`](./agent-journeys/README.md).
 
 ## Recording manual flows into one-key replay (codegen → smoke)
 
@@ -695,4 +662,3 @@ Docker networking, host-side execution, and result formatting, see
 [docs/complement-map.md](./docs/complement-map.md).
 
 The suite is organized by protocol and behavior, not milestone folders.
-

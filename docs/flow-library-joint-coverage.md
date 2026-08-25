@@ -1,9 +1,9 @@
 # `arkret-work/docs/flows` 与 joint-e2e 覆盖矩阵
 
 > as_of：2026-08-24
-> 审计范围：`arkret-work/docs/flows` 的 12 篇流程/模型文档、60 个 Mermaid 图，以及 cotest Playwright、Rust conformance/scenario 和 agent journey 入口。
+> 审计范围：`arkret-work/docs/flows` 的 12 篇流程/模型文档、60 个 Mermaid 图，以及 cotest Playwright 与 Rust conformance/scenario 入口。
 > “joint smoke”专指 `scripts/run-cotest.ps1 -Profile joint`：启动 Soland、Inkson、Coauth，以 `joint-inkson` project 运行 `@fully-implemented` 用例。
-> “full/分层”表示证据存在于完整 Playwright、双 Soland、Rust conformance/scenario 或 agent journey 中，不等于标准 joint smoke 会执行。
+> “full/分层”表示证据存在于完整 Playwright、双 Soland 或 Rust conformance/scenario 中，不等于标准 joint smoke 会执行。
 
 ## 结论
 
@@ -22,7 +22,7 @@
 
 ## 覆盖矩阵
 
-| 流程文档 | 标准 joint smoke 直接证据 | full / Rust / journey 分层证据 | 判断与主要缺口 |
+| 流程文档 | 标准 joint smoke 直接证据 | full / Rust 分层证据 | 判断与主要缺口 |
 | --- | --- | --- | --- |
 | `account-authentication-and-session-lifecycle.md` | `identity/oidc-login-flow.spec.ts`、`passkey-login-flow.spec.ts`、`session-grant-dpop.spec.ts`、`device-key-lifecycle.spec.ts` | `identity/account-device-auth.spec.ts`、`account-states.spec.ts`；`auth_session_proof.rs`、issuer-ledger conformance | **较强但非全流程**：登录、handoff、DPoP、refresh/relogin 主链已进 smoke；全部撤销/失效竞态仍是分层证据。 |
 | `registration-pcr-genesis.md` | `identity/account-handoff.spec.ts`、`identity/onboarding.spec.ts` | `identity/account-states.spec.ts`、`coauth-account-lifecycle-fixture.json` | **主链覆盖**：真实 Coauth+Soland 注册与 PCR genesis 已进 smoke；故障注入/saga 恢复不是一条浏览器闭环。 |
@@ -33,8 +33,8 @@
 | `realm-event-server-fanout.md` | `joint/joint-inkson-smoke.spec.ts` 覆盖单服务 author/sync | `federation/cross-server.spec.ts`、`invite_service_fanout_live.rs`、`fanout_route_miss_live.rs`；`dual-soland` lane | **双服务 lane 覆盖**，不进入标准 joint smoke；route miss/repair 与跨服务 fanout 需专用双 Soland 拓扑。 |
 | `message-authoring-seal-sync.md` | `joint/joint-inkson-smoke.spec.ts`、`joint/multi-profile-same-server.spec.ts` | `sync/offline-conflict.spec.ts`、`offline-queue-replay.spec.ts`、`messaging/*`、`account_subscribe_long_poll.rs` | **主链覆盖，边界分层**：author/seal/read/sync 有 live；offline、stream/backfill、冲突修复由 full/Rust 覆盖。 |
 | `contact-direct-conversation-lifecycle.md` | `identity/direct-conversation-founding.spec.ts` | `federation/contact-graph-federation.spec.ts`、`governance/personal-blocklist.spec.ts`、`direct_conversation_flow.rs` | **founding 覆盖、repair 未闭环**：跨服务 contact/DC 与 block 有分层证据；Commit/Welcome successor Seal 受 1102 阻断，真实 lost-state repair/rejoin 仍缺。 |
-| `personal-agent-sidecar-strand-relay.md` | `joint/circle-sidecar-boundary.spec.ts`、`contact-agent-sidebar.spec.ts`；`agent-savfox-split-live.spec.ts` 仅在 Savfox 可用时执行 | Agent/Sidecar conformance、`agent_encrypted_realm_member_e2e.rs`、agent journeys | **部分且条件化**：对象边界进 smoke；successor Seal 受 1102 阻断，native Sidecar/Agent 生产入口、完整 relay 与恢复没有无条件闭环。 |
-| `device-pairing-and-recovery.md` | `identity/device-key-lifecycle.spec.ts`、`identity/multi-device.spec.ts` | `identity/recovery.spec.ts`、`recovery_completion_grant.rs`、`recovery_transaction_faults.rs`；`device-pairing-revocation-recovery` journey | **配对/第二设备授权覆盖，完整恢复未覆盖**：撤销、re-anchor、全设备丢失和恢复后 grant 尚未组合成标准 live 闭环。 |
+| `personal-agent-sidecar-strand-relay.md` | `joint/circle-sidecar-boundary.spec.ts`、`contact-agent-sidebar.spec.ts`；`agent-savfox-split-live.spec.ts` 仅在 Savfox 可用时执行 | Agent/Sidecar conformance、`agent_encrypted_realm_member_e2e.rs` | **部分且条件化**：对象边界进 smoke；successor Seal 受 1102 阻断，native Sidecar/Agent 生产入口、完整 relay 与恢复没有无条件闭环。 |
+| `device-pairing-and-recovery.md` | `identity/device-key-lifecycle.spec.ts`、`identity/multi-device.spec.ts` | `identity/recovery.spec.ts`、`recovery_completion_grant.rs`、`recovery_transaction_faults.rs` | **配对/第二设备授权覆盖，完整恢复未覆盖**：撤销、re-anchor、全设备丢失和恢复后 grant 尚未组合成标准 live 闭环。 |
 | `contact-lineage-model.md` | `identity/direct-conversation-founding.spec.ts`、`joint/contact-agent-sidebar.spec.ts` | `identity/contact-graph.spec.ts`、`federation/contact-graph-federation.spec.ts`、`direct_conversation_flow.rs` | **模型不变量有分层覆盖**；跨域 lineage repair、合并/冲突和完整生命周期未形成单条 joint 场景。 |
 
 ## 本轮 joint-smoke 选择面

@@ -30,13 +30,11 @@ function Test-IsStandaloneJointSuite {
     param(
         [Parameter(Mandatory = $true)][bool]$IsStandalone,
         [string]$Grep,
-        [string]$ExternalDriverScript,
         [bool]$PreflightOnly
     )
 
     return $IsStandalone -and
         -not $Grep -and
-        -not $ExternalDriverScript -and
         -not $PreflightOnly
 }
 

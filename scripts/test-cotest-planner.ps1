@@ -82,7 +82,7 @@ foreach ($invocation in $fast.invocations) {
 }
 
 $release = Invoke-Planner -Arguments @("-Profile", "release-gate", "-PlanOnly")
-Assert-Equal -Actual $release.invocations.Count -Expected 31 -Message "release-gate invocation count drifted"
+Assert-Equal -Actual $release.invocations.Count -Expected 30 -Message "release-gate invocation count drifted"
 Assert-Equal -Actual @($release.invocations | Select-Object -ExpandProperty target -Unique).Count -Expected 12 -Message "release-gate target count drifted"
 
 $all = Invoke-Planner -Arguments @("-Profile", "all", "-PlanOnly")
