@@ -6,7 +6,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::{Duration, Utc};
-use cotest::harness::{ArkretServer, events_frontier_request_body, expect_json, query_method};
+use cotest::harness::{ArkretServer, expect_json, query_method};
 use cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
 use cotest::scenarios::bridge_contracts::session_grant::mock_session_grant_jwt;
 use cotest::scenarios::identity_test_support::{

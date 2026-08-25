@@ -34,6 +34,7 @@ use arkret_models_identity::delivery_binding::{
 use arkret_models_identity::{
     AuthenticatedServiceResolution, ServiceResolutionCarrier, ServiceResolutionRecord,
 };
+use arkret_wire::cba::{Precondition, Predicate, PredicateOp};
 use arkret_wire::{Event, EventId, EventKind, Hash, MlsGroupId, ScopeRef};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -327,7 +328,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
             "ratchet_tree_ref": format!("ak:blob:sha256:{}", "4".repeat(64)),
             "ratchet_tree_digest": format!("sha256:{}", "4".repeat(64)),
             "governance_binding": genesis_binding,
-            "created_at": Utc::now()
+            "created_at": Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         }),
     )
     .await?;
@@ -354,7 +355,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         &target_record,
         &ordinary_outcome,
         0,
-        genesis_event.event_id.clone(),
+        &genesis_event,
     )
     .await?;
     // Rotate the first pairwise leaf out before exercising the reusable
@@ -366,7 +367,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         &target,
         &mut requester_group,
         1,
-        first_commit.event_id,
+        &first_commit,
     )
     .await?;
 
@@ -392,7 +393,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         &last_resort_record,
         &last_resort_outcome,
         2,
-        removal_commit.event_id,
+        &removal_commit,
     )
     .await?;
 
@@ -442,15 +443,16 @@ async fn create_pairwise_realm(
     title: &str,
     minimal_metadata: bool,
 ) -> Result<(String, EventId)> {
-    let profiles = minimal_metadata
-        .then(|| vec!["ak.profile.mls.minimal_metadata_realm.v1"])
-        .unwrap_or_default();
+    let mut schema_refs = vec![arkret_wire::SchemaId::REALM_V1.to_owned()];
+    if minimal_metadata {
+        schema_refs.push(arkret_wire::ProfileId::MLS_MINIMAL_METADATA_REALM_V1.to_owned());
+    }
     let bootstrap = client
         .create_realm_bootstrap_with(json!({
             "title": title,
             "summary": title,
             "public": false,
-            "profiles": profiles,
+            "schema_refs": schema_refs,
             "encryption_profile": "mls_rfc9420",
             "plaintext_visible_services": [client.service_id()],
             "delivery_binding_policy": {
@@ -608,11 +610,24 @@ async fn submit_and_settle_control_event(
     kind: &str,
     payload: Value,
 ) -> Result<Event> {
+    submit_and_settle_control_event_with_preconditions(client, realm_id, kind, payload, Vec::new())
+        .await
+}
+
+async fn submit_and_settle_control_event_with_preconditions(
+    client: &TestActorClient,
+    realm_id: &str,
+    kind: &str,
+    payload: Value,
+    preconditions: Vec<Precondition>,
+) -> Result<Event> {
     let before = client.realm_seal_frontier(realm_id).await?;
     let before = before["frontier"]["seal_basis"]["leaves"][0]
         .as_str()
         .context("pairwise control transition predecessor Seal")?;
-    let event = client.author_event(realm_id, kind, payload).await?;
+    let event = client
+        .author_event_with_preconditions(realm_id, kind, payload, preconditions)
+        .await?;
     let response = expect_json(
         client
             .post("/_arkret/self/events")
@@ -808,7 +823,7 @@ async fn remove_pairwise_leaf(
     target: &PairwiseKey,
     requester_group: &mut ArkretMlsGroup,
     base_epoch: u64,
-    base_epoch_ref: EventId,
+    base_transition: &Event,
 ) -> Result<Event> {
     let binding = governance_binding(
         realm_id,
@@ -822,16 +837,17 @@ async fn remove_pairwise_leaf(
     )?;
     let commit_payload = MlsCommitPayload::new(
         base_epoch,
-        base_epoch_ref.to_string(),
+        base_transition.event_id.to_string(),
         Vec::new(),
         &removal.commit,
         binding,
     )?;
-    submit_and_settle_control_event(
+    submit_and_settle_control_event_with_preconditions(
         client,
         realm_id,
         EventKind::MlsCommit.as_str(),
         serde_json::to_value(commit_payload)?,
+        mls_cas_preconditions(base_transition)?,
     )
     .await
 }
@@ -847,7 +863,7 @@ async fn accept_welcome_and_consume(
     target_record: &MlsKeyPackageRecord,
     claim_outcome: &KeyPackagesClaimOutcome,
     base_epoch: u64,
-    base_epoch_ref: EventId,
+    base_transition: &Event,
 ) -> Result<Event> {
     let claimed = &claim_outcome.claims[0];
     let mut claimed_record = target_record.clone();
@@ -875,16 +891,17 @@ async fn accept_welcome_and_consume(
 
     let commit_payload = MlsCommitPayload::new(
         base_epoch,
-        base_epoch_ref.to_string(),
+        base_transition.event_id.to_string(),
         Vec::new(),
         &add.commit,
         binding.clone(),
     )?;
-    let commit_event = submit_and_settle_control_event(
+    let commit_event = submit_and_settle_control_event_with_preconditions(
         client,
         realm_id,
         EventKind::MlsCommit.as_str(),
         serde_json::to_value(commit_payload)?,
+        mls_cas_preconditions(base_transition)?,
     )
     .await?;
 
@@ -968,7 +985,22 @@ async fn accept_welcome_and_consume(
     )
     .await?;
 
-    let welcome_value = serde_json::to_value(&welcome_event)?;
+    let accepted_welcome = expect_json(
+        client.get(&format!("/_arkret/self/events/{}", welcome_event.event_id)),
+        StatusCode::OK,
+    )
+    .await?;
+    let accepted_welcome: Event = serde_json::from_value(
+        accepted_welcome
+            .get("event")
+            .cloned()
+            .context("accepted Welcome resource omitted event")?,
+    )?;
+    ensure!(
+        accepted_welcome.event_id == welcome_event.event_id,
+        "accepted Welcome resource returned a different Event"
+    );
+    let welcome_value = serde_json::to_value(&accepted_welcome)?;
     let welcome_digest = Hash::new(arkret_canonical::canonical_sha256(&welcome_value)?)?;
     let durable_receipt =
         joined
@@ -1043,6 +1075,46 @@ async fn accept_welcome_and_consume(
         "consume outcome drifted from the accepted Welcome and exact claim"
     );
     Ok(commit_event)
+}
+
+fn mls_cas_preconditions(base_transition: &Event) -> Result<Vec<Precondition>> {
+    let preconditions = crate::publication::project_cells(base_transition)
+        .map_err(anyhow::Error::msg)?
+        .into_iter()
+        .filter(|write| {
+            write
+                .cell
+                .as_str()
+                .starts_with("ak:cell:ak.component.mls.epoch.v1:")
+                || write
+                    .cell
+                    .as_str()
+                    .starts_with("ak:cell:ak.component.mls.key_schedule.v1:")
+        })
+        .map(|write| {
+            let effect = write
+                .as_direct()
+                .context("MLS transition cell write unexpectedly requires mutable pre-state")?;
+            let value = effect
+                .op
+                .value
+                .context("MLS transition cell write omitted its full register value")?;
+            Ok(Precondition {
+                cell: effect.cell,
+                predicate: Predicate {
+                    op: PredicateOp::HeadEq,
+                    value: Some(value),
+                    values: None,
+                    predicate_id: None,
+                },
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    ensure!(
+        preconditions.len() == 2,
+        "MLS transition must guard exactly the epoch and key-schedule CAS cells"
+    );
+    Ok(preconditions)
 }
 
 fn signed_pairwise_claim(
@@ -1154,6 +1226,7 @@ async fn assert_rejected(response: Response) -> Result<()> {
                 | StatusCode::FORBIDDEN
                 | StatusCode::CONFLICT
                 | StatusCode::PRECONDITION_FAILED
+                | StatusCode::UNPROCESSABLE_ENTITY
         ),
         "expected a fail-closed protocol rejection, got {status}: {body}"
     );

@@ -172,8 +172,6 @@ fn mirror_entry(
 struct ProductionFetcher {
     current: Option<ServiceResolutionRecord>,
     notice: Option<ServiceResolutionRecord>,
-    peer: Option<ServiceResolutionRecord>,
-    configured: Option<ServiceResolutionRecord>,
     calls: Mutex<Vec<RouteSource>>,
 }
 
@@ -232,22 +230,6 @@ impl ServiceRouteFetcher for ProductionFetcher {
         _: &str,
     ) -> ServiceResult<Option<VerifiedRouteCandidate>> {
         Ok(self.take_candidate(RouteSource::ScheduledNotice, &self.notice))
-    }
-
-    async fn fetch_realm_peer_mirror(
-        &self,
-        _: &DidCoreId,
-        _: &str,
-    ) -> ServiceResult<Option<VerifiedRouteCandidate>> {
-        Ok(self.take_candidate(RouteSource::RealmPeerMirror, &self.peer))
-    }
-
-    async fn fetch_configured_mirror(
-        &self,
-        _: &DidCoreId,
-        _: &str,
-    ) -> ServiceResult<Option<VerifiedRouteCandidate>> {
-        Ok(self.take_candidate(RouteSource::ConfiguredMirror, &self.configured))
     }
 }
 
