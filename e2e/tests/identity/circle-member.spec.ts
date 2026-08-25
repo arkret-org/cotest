@@ -249,7 +249,7 @@ test.describe("circle membership (same principal server)", () => {
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(422);
-    expect(await errorWireCode(response)).toBe(
+    expect(await errorWireCode(response), await response.text()).toBe(
       "circle_member_must_be_realm_member",
     );
 
@@ -322,7 +322,7 @@ test.describe("circle membership (same principal server)", () => {
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(403);
-    expect(await errorWireCode(response)).toBe(
+    expect(await errorWireCode(response), await response.text()).toBe(
       "circle_member_manage_capability_required",
     );
 

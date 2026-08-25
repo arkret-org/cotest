@@ -184,7 +184,10 @@ test.describe("account states", () => {
       `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/suspend`,
       {
         headers: authHeaders(adminToken),
-        data: { reason: "abuse", duration: "30d" },
+        // Suspension expiry is only a management review hint in the protocol;
+        // lifting it always requires an explicit successor status record. The
+        // closed admin command therefore carries the audit reason only.
+        data: { reason: "abuse" },
       },
     );
     expect(suspend.status()).toBe(200);

@@ -77,7 +77,10 @@ const registeredRequestAuth = new Map<
   (method: string, url: string) => Record<string, string>
 >();
 const realmAuthorityControllers = new Map<string, string>();
-const principalControlEvents = new Map<string, Array<Record<string, unknown>>>();
+const principalControlEvents = new Map<
+  string,
+  Array<Record<string, unknown>>
+>();
 
 const REALM_AUTHORITY_ROOT_CELL =
   "ak:cell:ak.component.realm.authority_root.v1:null";
@@ -296,7 +299,9 @@ export function registerPrincipalControlEvents(
 ): void {
   principalControlEvents.set(
     canonicalDidCoreId(did),
-    events.map((event) => JSON.parse(canonicalJson(event)) as Record<string, unknown>),
+    events.map(
+      (event) => JSON.parse(canonicalJson(event)) as Record<string, unknown>,
+    ),
   );
 }
 
@@ -312,7 +317,9 @@ export async function submitPrincipalSuccessorSealApi(
   const signer = eventSignerFor(actorId);
   const realmId = principalControlRealmForDid(actorId);
   if (!events || !signer?.signingSeedB64url) {
-    throw new Error(`principal successor Seal material is unavailable for ${actorId}`);
+    throw new Error(
+      `principal successor Seal material is unavailable for ${actorId}`,
+    );
   }
   if (events.some((known) => known.event_id === event.event_id)) {
     return;
@@ -330,7 +337,11 @@ export async function submitPrincipalSuccessorSealApi(
     frontier: { seal_basis?: { leaves?: unknown } };
   }>(frontierResponse, `read principal Seal frontier for ${actorId}`);
   const leaves = frontier.frontier?.seal_basis?.leaves;
-  if (!Array.isArray(leaves) || leaves.length !== 1 || typeof leaves[0] !== "string") {
+  if (
+    !Array.isArray(leaves) ||
+    leaves.length !== 1 ||
+    typeof leaves[0] !== "string"
+  ) {
     throw new Error(
       `principal Seal frontier for ${actorId} is not a single accepted leaf`,
     );
@@ -1043,7 +1054,9 @@ export async function grantRealmReviewCapabilityApi(
     subject: canonicalDidCoreId(args.subjectDid),
     // `capability_grant_payload` requires the subject's Principal Server
     // whenever `subject` is a plain principal id.
-    subject_principal_server_id: canonicalDidCoreId(solandServiceId(args.server)),
+    subject_principal_server_id: canonicalDidCoreId(
+      solandServiceId(args.server),
+    ),
     actions: ["ak.realm.join.review"],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -1147,7 +1160,9 @@ export async function grantServiceCapabilityApi(
     subject: canonicalDidCoreId(args.subjectServiceId),
     // `capability_grant_payload` requires the subject's Principal Server
     // whenever `subject` is a plain principal id.
-    subject_principal_server_id: canonicalDidCoreId(solandServiceId(args.server)),
+    subject_principal_server_id: canonicalDidCoreId(
+      solandServiceId(args.server),
+    ),
     actions: [action],
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -1173,15 +1188,10 @@ export async function grantServiceCapabilityApi(
       grant: unsignedGrant,
     },
   });
-  await submitSignedEventApi(
-    request,
-    ownerToken,
-    grantEvent,
-    {
-      server: args.server,
-      context: `grant ${action} service capability to ${args.subjectServiceId}`,
-    },
-  );
+  await submitSignedEventApi(request, ownerToken, grantEvent, {
+    server: args.server,
+    context: `grant ${action} service capability to ${args.subjectServiceId}`,
+  });
   const grantId = retypeEventDerivedId(String(grantEvent.event_id), "grant");
   return grantId;
 }
@@ -1252,7 +1262,9 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
     // `capability_grant_payload` makes `subject_principal_server_id` required
     // whenever `subject` is a plain principal id: the authority pair is
     // (subject, subject Principal Server), not the subject alone.
-    subject_principal_server_id: canonicalDidCoreId(solandServiceId(args.server)),
+    subject_principal_server_id: canonicalDidCoreId(
+      solandServiceId(args.server),
+    ),
     actions: args.actions,
     capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
@@ -1812,37 +1824,37 @@ export async function acceptInviteApi(
   if (!sealBasis) {
     await expect
       .poll(
-      async () => {
-        const resolveUrl = `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`;
-        const resolutionResponse = await request.post(
-          resolveUrl,
-          {
+        async () => {
+          const resolveUrl = `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`;
+          const resolutionResponse = await request.post(resolveUrl, {
             headers: {
               ...authHeaders(token, "POST", resolveUrl),
               "content-type": "application/json",
             },
             data: canonicalJson({ realm_id: realmId, requester: actorDid }),
-          },
-        );
-        const resolution = await expectJsonOk<{
-          join_candidates?: Array<{
-            service_id?: string;
-            join_methods?: string[];
-            seal_basis?: Record<string, unknown>;
-          }>;
-        }>(resolutionResponse, `resolve invite join candidate for ${realmId}`);
-        const candidate = resolution.join_candidates?.find((candidate) =>
-          candidate.join_methods?.includes("invite_accept"),
-        );
-        sealBasis = candidate?.seal_basis;
-        candidateServiceId = candidate?.service_id;
-        return sealBasis;
-      },
-      {
-        message: "invite-accept join candidate Seal basis",
-        timeout: 30_000,
-        intervals: [250, 500, 1_000, 2_000],
-      },
+          });
+          const resolution = await expectJsonOk<{
+            join_candidates?: Array<{
+              service_id?: string;
+              join_methods?: string[];
+              seal_basis?: Record<string, unknown>;
+            }>;
+          }>(
+            resolutionResponse,
+            `resolve invite join candidate for ${realmId}`,
+          );
+          const candidate = resolution.join_candidates?.find((candidate) =>
+            candidate.join_methods?.includes("invite_accept"),
+          );
+          sealBasis = candidate?.seal_basis;
+          candidateServiceId = candidate?.service_id;
+          return sealBasis;
+        },
+        {
+          message: "invite-accept join candidate Seal basis",
+          timeout: 30_000,
+          intervals: [250, 500, 1_000, 2_000],
+        },
       )
       .toBeTruthy();
   } else {
@@ -2186,7 +2198,7 @@ export function accountDataSetSubmission(args: {
 }): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     key: args.key,
-    owner: args.actorDid,
+    holder_id: args.actorDid,
     expected_revision: args.expectedRevision,
   };
   if (args.value === undefined) {
@@ -2206,6 +2218,22 @@ export function accountDataSetSubmission(args: {
   };
 }
 
+export async function prepareAccountDataSetSubmissionApi(
+  request: APIRequestContext,
+  token: string,
+  args: Parameters<typeof accountDataSetSubmission>[0],
+  opts: { server?: SolandKey; context?: string } = {},
+): Promise<Record<string, unknown>> {
+  const draft = accountDataSetSubmission(args);
+  const event = draft.event as Record<string, unknown>;
+  // actor_private_event is outside the shared Realm Data/Control planes: the
+  // spec forbids seal_ref, seal_basis, CBA and shared-reducer coverage here.
+  // It still participates in the holder's signed actor chain, so align that
+  // frontier but do not ask the shared Event lease endpoint to authorize it.
+  await advanceEnvelopeToActorFrontier(request, token, event, opts.server);
+  return { event };
+}
+
 export async function replaceAccountDataApi(
   request: APIRequestContext,
   token: string,
@@ -2218,18 +2246,27 @@ export async function replaceAccountDataApi(
   const content = privateAccountDataKeys.has(key)
     ? encryptedAccountDataValue(actorDid, key, body)
     : body;
+  const setEvent = await prepareAccountDataSetSubmissionApi(
+    request,
+    token,
+    {
+      actorDid,
+      key,
+      expectedRevision,
+      value: content,
+    },
+    opts,
+  );
   const response = await request.put(
     `${solandBaseUrl(opts.server)}/_arkret/self/account_data/${encodeURIComponent(key)}`,
     {
-      headers: authHeaders(token),
-      data: {
-        set_event: accountDataSetSubmission({
-          actorDid,
-          key,
-          expectedRevision,
-          value: content,
-        }),
+      headers: {
+        ...authHeaders(token),
+        "content-type": "application/json",
       },
+      data: canonicalJson({
+        set_event: setEvent,
+      }),
     },
   );
   const text = await response.text();
@@ -2662,12 +2699,7 @@ export async function prepareSignedEventBatchSubmissionsApi(
   for (const event of events) {
     await applyRegisteredCbaPlane(request, token, event, opts.server);
   }
-  await advanceEnvelopeToActorFrontier(
-    request,
-    token,
-    events[0],
-    opts.server,
-  );
+  await advanceEnvelopeToActorFrontier(request, token, events[0], opts.server);
   refreshBatchActorChain(events);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const leaseResponse = await issueAuthorizationLeasesApi(
@@ -3608,7 +3640,7 @@ async function applyRegisteredCbaPlane(
         : undefined;
       const verificationMethod =
         stringValue(proof?.verification_method) ?? `${actorDid}#device`;
-      envelope.auth_context = eventAuthContext(actorDid, verificationMethod);
+      envelope.auth_context = eventAuthContext(verificationMethod);
       changed = true;
     }
   }
@@ -3703,7 +3735,7 @@ async function forceConformanceCbaBasis(
       : undefined;
     const verificationMethod =
       stringValue(proof?.verification_method) ?? `${actorDid}#device`;
-    envelope.auth_context = eventAuthContext(actorDid, verificationMethod);
+    envelope.auth_context = eventAuthContext(verificationMethod);
     delete envelope.seal_basis;
   }
   const proof = Array.isArray(envelope.proofs)
@@ -3712,10 +3744,7 @@ async function forceConformanceCbaBasis(
   refreshEventEnvelopeProof(envelope, stringValue(proof?.verification_method));
 }
 
-function eventAuthContext(
-  actorDid: string,
-  verificationMethod: string,
-): Record<string, unknown> {
+function eventAuthContext(verificationMethod: string): Record<string, unknown> {
   // `auth_context.key_id` is an opaque local key label
   // (`event-envelope.schema.json` closes it over `^(?!ak:)[A-Za-z0-9._:-]{1,128}$`),
   // decoupled from the verification-method fragment: the fragment may stay a
@@ -3728,7 +3757,6 @@ function eventAuthContext(
       ? verificationMethod.slice(fragmentIndex + 1)
       : verificationMethod;
   return {
-    actor_id: actorDid,
     key_id: fragment.startsWith("ak:") ? fragment.slice(3) : fragment,
     key_epoch: 0,
   };
@@ -4152,14 +4180,12 @@ export async function resolveAcceptedEventApi(
 // `idempotency_key` defaults to the accepted `event_id` so an uncertain
 // transport outcome is retried with the same body and the same key, exactly as
 // §7 requires.
-export function selfInviteDispatchBody(
-  args: {
-    eventId: string;
-    inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
-    evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
-    idempotencyKey?: string;
-  },
-): SelfInviteDispatchRequestBody {
+export function selfInviteDispatchBody(args: {
+  eventId: string;
+  inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
+  evidence: InviteDeliveryRequestBodyBodyBody["introduction_evidence"];
+  idempotencyKey?: string;
+}): SelfInviteDispatchRequestBody {
   return {
     schema: "ak.schema.invite_delivery_request.v1",
     invite_event_id: args.eventId,

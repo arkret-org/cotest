@@ -92,9 +92,7 @@ test.describe("notifications", () => {
       await alicePage.sendTimelineMessage(realmId, msg);
 
       // bob navigates to /notifications and should see the new message in the list.
-      await bobPage.page.goto("/notifications", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobPage.gotoNotifications();
       await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible(
         {
           timeout: 30_000,
@@ -157,9 +155,7 @@ test.describe("notifications", () => {
         authorityRootController: aliceSession.user.did,
       });
 
-      await bobPage.page.goto("/notifications/settings", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobPage.gotoNotificationSettings();
       await expect(
         bobPage.page.getByTestId("notification-settings-panel"),
       ).toBeVisible({
@@ -181,9 +177,7 @@ test.describe("notifications", () => {
       ).toBeVisible({ timeout: 30_000 });
 
       await alicePage.sendTimelineMessage(realmId, normalMsg);
-      await bobPage.page.goto("/notifications", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobPage.gotoNotifications();
       await expect(bobPage.page.getByTestId("notifications-panel")).toBeVisible(
         {
           timeout: 30_000,
@@ -270,9 +264,7 @@ test.describe("notifications", () => {
       });
       await bobDeviceA.acceptInvite(realmId);
 
-      await bobDeviceA.page.goto("/notifications/settings", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobDeviceA.gotoNotificationSettings();
       await expect(
         bobDeviceA.page.getByTestId("notification-settings-panel"),
       ).toBeVisible({
@@ -321,18 +313,14 @@ test.describe("notifications", () => {
         mentions: [bob.did],
         actorSeq: apiActorSeq,
       });
-      await bobDeviceA.page.goto("/notifications", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobDeviceA.gotoNotifications();
       await expect(
         bobDeviceA.page
           .getByTestId("notification-item")
           .filter({ hasText: suppressedMsg }),
       ).toHaveCount(0);
 
-      await bobDeviceA.page.goto("/notifications/settings", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobDeviceA.gotoNotificationSettings();
       await bobDeviceA.uncheckWithPassivePromptRetry(
         bobDeviceA.page.getByTestId("dnd-enabled-toggle"),
       );
@@ -347,9 +335,7 @@ test.describe("notifications", () => {
         mentions: [bob.did],
         actorSeq: apiActorSeq + 1,
       });
-      await bobDeviceA.page.goto("/notifications", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobDeviceA.gotoNotifications();
       await expect(
         bobDeviceA.page
           .getByTestId("notification-item")
@@ -495,7 +481,9 @@ test.describe("notifications", () => {
     });
 
     const body = await accountSubscribeDeltaApi(request, bobToken);
-    const notifications = isRecord(body.notifications) ? body.notifications : {};
+    const notifications = isRecord(body.notifications)
+      ? body.notifications
+      : {};
     const items = Array.isArray(notifications.items)
       ? notifications.items.filter(isRecord)
       : [];
@@ -611,9 +599,7 @@ test.describe("notifications", () => {
         mentions: [bob.did],
       });
 
-      await bobDevice1.page.goto("/notifications", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobDevice1.gotoNotifications();
       const device1Row = bobDevice1.page
         .getByTestId("notification-item")
         .filter({ hasText: msg });
@@ -622,9 +608,7 @@ test.describe("notifications", () => {
         timeout: 30_000,
       });
 
-      await bobDevice2Page.page.goto("/notifications", {
-        waitUntil: "domcontentloaded",
-      });
+      await bobDevice2Page.gotoNotifications();
       const device2Row = bobDevice2Page.page
         .getByTestId("notification-item")
         .filter({ hasText: msg });
@@ -656,10 +640,7 @@ test.describe("notifications", () => {
         "device1-cleared-after-device2-read",
       );
     } finally {
-      await Promise.allSettled([
-        bobDevice2Page.close(),
-        bobDevice1.close(),
-      ]);
+      await Promise.allSettled([bobDevice2Page.close(), bobDevice1.close()]);
     }
   });
 });
@@ -699,8 +680,7 @@ function encryptedEnvelope(
     content_type: "application/vnd.arkret.message+json",
     encryption_context: {
       epoch: 1,
-      group_state_ref:
-        "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+      group_state_ref: "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
     },
     ciphertext,
   };

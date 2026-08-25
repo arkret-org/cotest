@@ -7,7 +7,6 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   addRealmMemberApi,
-  accountDataSetSubmission,
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
   authHeaders,
@@ -68,52 +67,34 @@ test.describe("personal blocklist", () => {
     const alice = uniqueUser("s31-accountdata");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
-    const dataType = `client.complement_probe.${stamp}`;
+    // Account Data v1 is a closed registry, not an arbitrary client key/value
+    // bag. Use a registered encrypted private key while exercising the same
+    // CAS and sync semantics this complement test is meant to cover.
+    const dataType = BLOCKLIST_DATA_TYPE;
     const first = { version: 1, label: `first-${stamp}` };
     const second = { version: 2, label: `second-${stamp}` };
 
-    const firstPut = await request.put(
-      `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
-      {
-        headers: authHeaders(token),
-        data: {
-          set_event: accountDataSetSubmission({
-            actorDid: alice.did,
-            key: dataType,
-            expectedRevision: 0,
-            value: first,
-          }),
-        },
-      },
+    const firstEntry = await replaceAccountDataApi(
+      request,
+      token,
+      alice.did,
+      dataType,
+      first,
+      0,
     );
-    expect(firstPut.status()).toBe(201);
-    const firstEntry = (await firstPut.json()) as {
-      content?: Record<string, unknown>;
-      revision?: number;
-    };
-    expect(firstEntry.content).toMatchObject(first);
+    expect(firstEntry.content).toBeTruthy();
     expect(firstEntry.revision).toBe(1);
 
-    const secondPut = await request.put(
-      `${solandBaseUrl()}/_arkret/self/account_data/${encodeURIComponent(dataType)}`,
-      {
-        headers: authHeaders(token),
-        data: {
-          set_event: accountDataSetSubmission({
-            actorDid: alice.did,
-            key: dataType,
-            expectedRevision: firstEntry.revision ?? 1,
-            value: second,
-          }),
-        },
-      },
+    const secondEntry = await replaceAccountDataApi(
+      request,
+      token,
+      alice.did,
+      dataType,
+      second,
+      Number(firstEntry.revision ?? 1),
     );
-    expect(secondPut.status()).toBe(200);
-    const secondEntry = (await secondPut.json()) as {
-      content?: Record<string, unknown>;
-      revision?: number;
-    };
-    expect(secondEntry.content).toMatchObject(second);
+    expect(secondEntry.content).toBeTruthy();
+    expect(secondEntry.content).not.toEqual(firstEntry.content);
     expect(secondEntry.revision).toBe(2);
 
     const get = await request.get(
@@ -123,7 +104,7 @@ test.describe("personal blocklist", () => {
     expect(get.status()).toBe(200);
     expect(
       ((await get.json()) as { content?: Record<string, unknown> }).content,
-    ).toMatchObject(second);
+    ).toEqual(secondEntry.content);
 
     const list = await request.get(
       `${solandBaseUrl()}/_arkret/self/account_data`,
@@ -141,25 +122,26 @@ test.describe("personal blocklist", () => {
     expect(listEntries).toHaveLength(1);
     const listEntry = listEntries[0];
     expect(listEntry).toBeTruthy();
-    expect(listEntry!.content).toMatchObject(second);
+    expect(listEntry!.content).toEqual(secondEntry.content);
 
     const sync = await accountSubscribeDeltaApi(request, token);
     const accountData = sync.account_data as
-      | { events?: Array<Record<string, unknown>> }
-      | undefined;
+      { events?: Array<Record<string, unknown>> } | undefined;
     const syncEntries = (accountData?.events ?? []).filter(
       (entry) =>
         entry.kind === "ak.account_data.set" &&
-        (entry.payload as Record<string, unknown> | undefined)?.key === dataType,
+        (entry.payload as Record<string, unknown> | undefined)?.key ===
+          dataType,
     );
     expect(syncEntries).toHaveLength(1);
     const syncEntry = syncEntries[0];
     expect(syncEntry).toBeTruthy();
-    expect(
-      (syncEntry!.payload as Record<string, unknown>).body,
-    ).toMatchObject(second);
+    const syncPayload = syncEntry!.payload as Record<string, unknown>;
+    expect(syncPayload.encrypted_payload).toEqual(secondEntry.content);
+    expect(syncPayload.body).toBeUndefined();
     expect(syncEntry!.proofs).toEqual(expect.any(Array));
     expect(JSON.stringify(syncEntry)).not.toContain(first.label);
+    expect(JSON.stringify(syncEntry)).not.toContain(second.label);
   });
 
   test("alice blocks bob; bob's messages filtered from alice's timeline; unblock restores visibility; federation propagates block", async ({
@@ -182,7 +164,8 @@ test.describe("personal blocklist", () => {
     const bobPage = bobFlow.page;
     const aliceToken = aliceFlow.session.grantJwt;
     const bobToken = await issueDevSession(request, bob);
-    const aliceSubscribeOpts = () => accountSubscribeDpopOpts(aliceFlow.session);
+    const aliceSubscribeOpts = () =>
+      accountSubscribeDpopOpts(aliceFlow.session);
     const bobDidVisiblePrefix = bob.did.slice(0, 16);
     const apiActorSeq = 8_000_000_200_000_000 + (stamp % 100_000);
 
@@ -351,7 +334,8 @@ test.describe("personal blocklist", () => {
     ] as const) {
       await expect
         .poll(
-          async () => eventsText(await queryRealmEventsApi(request, token, realmId)),
+          async () =>
+            eventsText(await queryRealmEventsApi(request, token, realmId)),
           {
             timeout: 30_000,
             message: `${label} sees the accepted message before moderation`,
@@ -375,7 +359,8 @@ test.describe("personal blocklist", () => {
 
     await expect
       .poll(
-        async () => eventsText(await queryRealmEventsApi(request, carolToken, realmId)),
+        async () =>
+          eventsText(await queryRealmEventsApi(request, carolToken, realmId)),
         {
           timeout: 30_000,
           message: "carol observes the moderation redaction projection",
@@ -616,10 +601,13 @@ async function blocklistAccountDataRow(
   token: string,
   subscribeOpts?: () => AccountSubscribeOpts,
 ): Promise<Record<string, unknown> | undefined> {
-  const body = await accountSubscribeDeltaApi(request, token, subscribeOpts?.());
+  const body = await accountSubscribeDeltaApi(
+    request,
+    token,
+    subscribeOpts?.(),
+  );
   const accountData = body.account_data as
-    | { events?: Array<Record<string, unknown>> }
-    | undefined;
+    { events?: Array<Record<string, unknown>> } | undefined;
   const entry = (accountData?.events ?? []).find((candidate) => {
     const payload = candidate.payload as Record<string, unknown> | undefined;
     return (
@@ -637,7 +625,9 @@ async function blocklistAccountDataRow(
   };
 }
 
-function accountSubscribeDpopOpts(session: DpopUserSession): AccountSubscribeOpts {
+function accountSubscribeDpopOpts(
+  session: DpopUserSession,
+): AccountSubscribeOpts {
   const url = new URL(`${solandBaseUrl()}/_arkret/self/account/subscribe`);
   url.searchParams.set("catchup", "true");
   return {

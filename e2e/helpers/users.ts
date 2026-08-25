@@ -271,10 +271,9 @@ export class JointUserPage {
             .first();
           await expect(homeLink).toBeVisible({ timeout: 30_000 });
           await homeLink.click();
-          await expect(this.page).toHaveURL(
-            (url) => url.pathname === "/",
-            { timeout: 30_000 },
-          );
+          await expect(this.page).toHaveURL((url) => url.pathname === "/", {
+            timeout: 30_000,
+          });
         }
         await this.dismissDeviceAuthorizationPrompt();
         return;
@@ -301,10 +300,23 @@ export class JointUserPage {
     // Playwright click then waits forever for element stability even though the
     // route itself is available. Dispatching the same history navigation avoids
     // coupling this helper to that unrelated render churn.
-    await this.navigateWithinApp("/setup/realms");
-    await expect(this.page.getByTestId("realm-lifecycle-strand")).toBeVisible({
-      timeout: 120_000,
-    });
+    const lifecycle = this.page.getByTestId("realm-lifecycle-strand");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await this.navigateWithinApp("/setup/realms");
+      if (
+        await lifecycle
+          .waitFor({ state: "visible", timeout: 30_000 })
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        break;
+      }
+      // Initial account sync can finish after the history event and restore
+      // the Home route once. Re-enter through a settled authenticated shell
+      // instead of waiting on a page that is visibly no longer the wizard.
+      await this.gotoHome();
+    }
+    await expect(lifecycle).toBeVisible({ timeout: 60_000 });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
@@ -317,7 +329,10 @@ export class JointUserPage {
   }
 
   async gotoDirectory() {
-    await this.page.goto("/directory", { waitUntil: "domcontentloaded" });
+    // Preserve Inkson's authenticated in-memory session. A document reload can
+    // race secure-store restoration and leave the router on its transient
+    // login/home surface even though the injected grant is valid.
+    await this.navigateWithinApp("/directory");
     await expect(this.page.getByTestId("directory-panel")).toBeVisible({
       timeout: 120_000,
     });
@@ -336,17 +351,18 @@ export class JointUserPage {
   }
 
   async gotoNotifications() {
-    const notificationsLink = this.page
-      .locator('a[href="/notifications"]:visible')
-      .first();
-    if (await notificationsLink.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await notificationsLink.click();
-    } else {
-      await this.page.goto("/notifications", { waitUntil: "domcontentloaded" });
-    }
+    await this.navigateWithinApp("/notifications");
     await expect(this.page.getByTestId("notifications-panel")).toBeVisible({
       timeout: 120_000,
     });
+    await this.dismissDeviceAuthorizationPrompt();
+  }
+
+  async gotoNotificationSettings() {
+    await this.navigateWithinApp("/notifications/settings");
+    await expect(
+      this.page.getByTestId("notification-settings-panel"),
+    ).toBeVisible({ timeout: 120_000 });
     await this.dismissDeviceAuthorizationPrompt();
   }
 
@@ -766,7 +782,6 @@ export class JointUserPage {
   }
 
   async createRealm(opts: CreateRealmOpts): Promise<string> {
-    await this.gotoSetup();
     // Always complete the 24-word recovery-key setup modal when it appears — for
     // BOTH plaintext and encrypted realms. Historically this was suppressed for
     // `mls_rfc9420` (the encrypted path was assumed to use the post-create
@@ -780,14 +795,33 @@ export class JointUserPage {
     const promptHandling = {
       completeRecoveryKeySetup: opts.completeRecoveryKeySetup ?? true,
     };
-    await this.dismissCreateRealmBlockingPrompts(promptHandling);
-    const strand = this.page.getByTestId("realm-lifecycle-strand").last();
+    let strand = this.page.getByTestId("realm-lifecycle-strand").last();
+    let titleInput = strand.getByTestId("realm-title-input");
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await this.gotoSetup();
+      await this.dismissCreateRealmBlockingPrompts(promptHandling);
+      strand = this.page.getByTestId("realm-lifecycle-strand").last();
+      titleInput = strand.getByTestId("realm-title-input");
+      if (await titleInput.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        break;
+      }
+      const basicsStep = strand
+        .getByRole("button", { name: /^Basics/ })
+        .first();
+      if (await basicsStep.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await basicsStep.click();
+      }
+      if (await titleInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        break;
+      }
+      // Account bootstrap may restore Home after the wizard first appears.
+      // Re-run the full setup entry and prompt drain once in that case.
+    }
     // The setup wizard remembers its last step in some Inkson builds. A page
     // reload can therefore land on Boundary/Policy while this helper expects
     // the Basics form. Explicitly select Basics when the title field is not
     // immediately present; this keeps the helper resilient to that harmless
     // UI state without weakening the subsequent field assertions.
-    const titleInput = strand.getByTestId("realm-title-input");
     if (!(await titleInput.isVisible({ timeout: 1_000 }).catch(() => false))) {
       const basicsStep = strand
         .getByRole("button", { name: /^Basics/ })
@@ -939,7 +973,9 @@ export class JointUserPage {
         .first();
       await expect(realmNav).toBeVisible({ timeout: 60_000 });
       await realmNav.click();
-      if (!(await membersNav.isVisible({ timeout: 5_000 }).catch(() => false))) {
+      if (
+        !(await membersNav.isVisible({ timeout: 5_000 }).catch(() => false))
+      ) {
         // Narrow viewports collapse Realm destinations into the context menu;
         // its links are mounted only while the menu is open.
         const contextMenu = this.page.getByTestId("realm-context-menu-button");
@@ -1063,10 +1099,9 @@ export class JointUserPage {
       /Joined Realm/,
       { timeout: 45_000 },
     );
-    await expect(this.page.getByTestId("notifications-status")).not.toContainText(
-      /Governance verification pending/,
-      { timeout: 1_000 },
-    );
+    await expect(
+      this.page.getByTestId("notifications-status"),
+    ).not.toContainText(/Governance verification pending/, { timeout: 1_000 });
   }
 
   // Send a message into realmId's chat feed. Asserts chat-status persistence.
