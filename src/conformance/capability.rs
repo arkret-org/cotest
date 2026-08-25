@@ -56,6 +56,9 @@ pub fn run_capability_fixture_suite() -> Result<()> {
         }
         match name {
             "authority_chain_multi_level" => evaluate_authority_chain_fixture(fixture)?,
+            "authority_regrant_terminal_child_carrier" => {
+                evaluate_authority_regrant_terminal_child_fixture(fixture)?;
+            }
             "membership_without_capability_denies_core_writes" => {
                 evaluate_membership_without_capability_fixture(fixture)?;
             }
@@ -610,6 +613,223 @@ fn evaluate_authority_chain_fixture(fixture: &Value) -> Result<()> {
             },
         }),
     );
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+struct OrdinaryAuthorityControl {
+    max_depth: Option<u64>,
+    regrant_allowed: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RegrantDecision {
+    Accepted,
+    Rejected { reason_code: &'static str },
+}
+
+impl RegrantDecision {
+    fn as_json(self) -> Value {
+        match self {
+            Self::Accepted => json!({"accepted": true}),
+            Self::Rejected { reason_code } => json!({
+                "accepted": false,
+                "error_code": "failed_precondition",
+                "reason_code": reason_code,
+            }),
+        }
+    }
+}
+
+fn ordinary_authority_controls(
+    grant: &Value,
+    context: &str,
+) -> Result<Vec<OrdinaryAuthorityControl>> {
+    let constraints = grant
+        .get("constraints")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{context} missing constraints array"))?;
+    constraints
+        .iter()
+        .enumerate()
+        .filter(|(_, constraint)| {
+            constraint.get("constraint_kind").and_then(Value::as_str)
+                == Some("authority_control")
+                && constraint.get("constraint_subkind").is_none()
+        })
+        .map(|(index, constraint)| {
+            let max_depth = match constraint.get("max_authority_depth") {
+                Some(value) => Some(value.as_u64().ok_or_else(|| {
+                    anyhow!(
+                        "{context} constraints[{index}].max_authority_depth must be an unsigned integer"
+                    )
+                })?),
+                None => None,
+            };
+            let regrant_allowed = match constraint.get("authority_regrant_allowed") {
+                Some(value) => value.as_bool().ok_or_else(|| {
+                    anyhow!(
+                        "{context} constraints[{index}].authority_regrant_allowed must be a boolean"
+                    )
+                })?,
+                None => false,
+            };
+            Ok(OrdinaryAuthorityControl {
+                max_depth,
+                regrant_allowed,
+            })
+        })
+        .collect()
+}
+
+fn evaluate_regrant_candidate(
+    accepted_grants: &BTreeMap<&str, &Value>,
+    candidate: &Value,
+    context: &str,
+) -> Result<RegrantDecision> {
+    let child_controls = ordinary_authority_controls(candidate, context)?;
+    let authority_refs = candidate
+        .get("issuer_authority_refs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{context} missing issuer_authority_refs array"))?;
+    let grant_refs = authority_refs
+        .iter()
+        .filter(|authority_ref| authority_ref.get("kind").and_then(Value::as_str) == Some("grant"))
+        .collect::<Vec<_>>();
+    if grant_refs.is_empty() {
+        bail!("{context} must contain at least one grant authority ref");
+    }
+
+    for authority_ref in grant_refs {
+        let parent_id = required_str(authority_ref, "grant_id")?;
+        let parent = accepted_grants
+            .get(parent_id)
+            .ok_or_else(|| anyhow!("{context} references unresolved accepted grant {parent_id}"))?;
+        let parent_controls =
+            ordinary_authority_controls(parent, &format!("{context} accepted grant {parent_id}"))?;
+        if parent_controls.is_empty() {
+            return Ok(RegrantDecision::Rejected {
+                reason_code: "authority_regrant_denied",
+            });
+        }
+
+        let parent_depth = parent_controls
+            .iter()
+            .filter_map(|control| control.max_depth)
+            .min();
+        let parent_allows_regrant = parent_controls
+            .iter()
+            .all(|control| control.regrant_allowed);
+        if parent_depth == Some(0) {
+            return Ok(RegrantDecision::Rejected {
+                reason_code: if parent_allows_regrant {
+                    "authority_depth_exceeded"
+                } else {
+                    "authority_regrant_denied"
+                },
+            });
+        }
+
+        if !parent_allows_regrant {
+            let explicitly_terminal = !child_controls.is_empty()
+                && child_controls
+                    .iter()
+                    .all(|control| control.max_depth == Some(0) && !control.regrant_allowed);
+            if !explicitly_terminal {
+                return Ok(RegrantDecision::Rejected {
+                    reason_code: "authority_regrant_denied",
+                });
+            }
+        } else if let Some(parent_depth) = parent_depth {
+            let child_depth = child_controls
+                .iter()
+                .filter_map(|control| control.max_depth)
+                .min();
+            if child_depth.is_none_or(|depth| depth >= parent_depth) {
+                return Ok(RegrantDecision::Rejected {
+                    reason_code: "authority_depth_exceeded",
+                });
+            }
+        }
+    }
+
+    Ok(RegrantDecision::Accepted)
+}
+
+/// Vector `ak.vector.capability.authority_regrant_terminal_child.v1`.
+///
+/// This evaluator is deliberately data-driven and independent from Soland's
+/// reducer. It treats only ordinary `authority_control` constraints as
+/// regrant carriers, defaults `authority_regrant_allowed` to false, and
+/// applies every referenced accepted grant as a fail-closed parent boundary.
+fn evaluate_authority_regrant_terminal_child_fixture(fixture: &Value) -> Result<()> {
+    const VECTOR_ID: &str = "ak.vector.capability.authority_regrant_terminal_child.v1";
+    const REQUIRED_CASES: [&str; 9] = [
+        "ordinary_parent_without_authority_control_is_not_a_grant_ref",
+        "applet_authority_only_parent_is_not_an_ordinary_grant_ref",
+        "false_parent_rejects_child_without_control_carrier",
+        "false_parent_rejects_positive_child_depth",
+        "false_parent_rejects_child_that_reopens_regrant",
+        "false_parent_accepts_wire_explicit_terminal_child",
+        "terminal_child_cannot_be_referenced_by_a_grandchild",
+        "true_parent_accepts_depth_narrowing",
+        "true_parent_rejects_non_narrowed_depth",
+    ];
+
+    let vector_id = required_str(fixture, "vector_id")?;
+    if vector_id != VECTOR_ID {
+        bail!("authority regrant fixture vector id {vector_id} does not match {VECTOR_ID}");
+    }
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("authority regrant fixture missing cases"))?;
+    let mut observed_cases = BTreeSet::new();
+
+    for case in cases {
+        let case_name = required_str(case, "name")?;
+        if !observed_cases.insert(case_name) {
+            bail!("authority regrant fixture repeats case {case_name}");
+        }
+        let accepted_values = case
+            .get("accepted_grants")
+            .and_then(Value::as_array)
+            .ok_or_else(|| anyhow!("{case_name}: missing accepted_grants array"))?;
+        let mut accepted_grants = BTreeMap::new();
+        for grant in accepted_values {
+            let grant_id = required_str(grant, "grant_id")?;
+            if accepted_grants.insert(grant_id, grant).is_some() {
+                bail!("{case_name}: duplicate accepted grant {grant_id}");
+            }
+        }
+        let candidate = case
+            .get("candidate")
+            .ok_or_else(|| anyhow!("{case_name}: missing candidate"))?;
+        let actual = evaluate_regrant_candidate(&accepted_grants, candidate, case_name)?.as_json();
+        let expected = case
+            .get("expected")
+            .ok_or_else(|| anyhow!("{case_name}: missing expected outcome"))?;
+        if actual != *expected {
+            bail!(
+                "{case_name}: regrant decision {} did not match expected {}",
+                actual,
+                expected
+            );
+        }
+
+        record_vector_event(
+            "capability.authority_regrant_terminal_child",
+            candidate,
+            expected,
+            &actual,
+        );
+    }
+
+    for required_case in REQUIRED_CASES {
+        if !observed_cases.contains(required_case) {
+            bail!("authority regrant fixture missing required case {required_case}");
+        }
+    }
     Ok(())
 }
 
