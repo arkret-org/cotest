@@ -706,7 +706,35 @@ function validAdminEventEnvelope(event, basis, expectedKind, resolvedAdmin) {
   );
 }
 
-function registrationPayloadFromPackage(packageInfo) {
+function validRegistrationEpochEvidence(packageInfo, evidence) {
+  if (
+    !exactObjectKeys(evidence, [
+      "full_id",
+      "did_document_digest",
+      "method_version_evidence",
+      "accepted_signing_keys",
+    ]) ||
+    evidence.full_id !== packageInfo.serviceFullId ||
+    typeof evidence.did_document_digest !== "string" ||
+    !evidence.method_version_evidence ||
+    !Array.isArray(evidence.accepted_signing_keys) ||
+    evidence.accepted_signing_keys.length === 0 ||
+    !evidence.accepted_signing_keys.every(
+      (key) =>
+        exactObjectKeys(key, ["key_ref", "public_key_digest"]) &&
+        key.key_ref === packageInfo.verificationMethod &&
+        typeof key.public_key_digest === "string",
+    )
+  ) {
+    return false;
+  }
+  return (
+    registrationEpochHash(packageInfo.appletPackage, evidence) ===
+    packageInfo.registrationEpoch
+  );
+}
+
+function registrationPayloadFromPackage(packageInfo, evidence) {
   const pkg = packageInfo.appletPackage;
   const manifest = {
     claimed_profiles: pkg.claimed_profiles,
@@ -714,7 +742,7 @@ function registrationPayloadFromPackage(packageInfo) {
     ghost_policy: pkg.ghost_policy,
     delegation_policy: pkg.delegation_policy,
     e2ee_policy: pkg.e2ee_policy,
-    registration_epoch_evidence: packageInfo.registrationEpochEvidence,
+    registration_epoch_evidence: evidence,
   };
   if (pkg.widget !== undefined) manifest.widget = pkg.widget;
   return {
@@ -890,6 +918,8 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
   const resolvedAdmin = await resolveCurrentAdminKey(basis);
   if (!resolvedAdmin) return "authoring_request_admin_key_untrusted";
   const registration = basis.registration_event;
+  const registrationEvidence =
+    registration?.payload?.manifest?.registration_epoch_evidence;
   if (
     !validAdminEventEnvelope(
       registration,
@@ -897,8 +927,11 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
       "ak.applet.registration",
       resolvedAdmin,
     ) ||
+    !validRegistrationEpochEvidence(packageInfo, registrationEvidence) ||
     canonicalJson(registration?.payload) !==
-      canonicalJson(registrationPayloadFromPackage(packageInfo)) ||
+      canonicalJson(
+        registrationPayloadFromPackage(packageInfo, registrationEvidence),
+      ) ||
     !Array.isArray(basis.capability_grant_events) ||
     basis.capability_grant_events.length === 0
   ) {
@@ -1643,7 +1676,6 @@ function signedPackage(body) {
     serviceFullId,
     packageDigest,
     registrationEpoch: packageBase.registration_epoch,
-    registrationEpochEvidence,
     botInitialResolution: body.bot_actor_initial_resolution,
     botMethodHistoryEvidence: body.bot_actor_method_history_evidence,
     botVerificationMethod: body.bot_signing_verification_method,
@@ -1660,9 +1692,11 @@ function signedPackage(body) {
       : developmentAppletPrivateKey(webhookAuth.key_ref),
   });
   persistDurableAuthoringState();
+  // The caller derives epoch evidence from its formal DID operation and puts
+  // it only in the signed registration Event. This response intentionally has
+  // no evidence sibling or helper projection.
   return {
     applet_package: appletPackage,
-    registration_epoch_evidence: registrationEpochEvidence,
     package_digest: packageDigest,
     signing_did: registryDid,
     service_id_document: serviceIdDocument,

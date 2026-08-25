@@ -81,7 +81,6 @@ type SignedPackage = {
     requested_scopes: string[];
     registration_epoch: string;
   };
-  registration_epoch_evidence: Record<string, unknown>;
   package_digest: string;
   signing_did: string;
   service_id_document?: Record<string, unknown>;
@@ -971,6 +970,10 @@ test.describe("applet bridge", () => {
       realmId,
       { kind: "realm", realm_id: realmId },
     );
+    const canonicalManifest = registrationManifestFromBasis(prepared.basis);
+    const registrationEvidence = structuredClone(
+      canonicalManifest.registration_epoch_evidence as Record<string, unknown>,
+    );
     const missingBasis = structuredClone(prepared.basis);
     const missingManifest = (
       (missingBasis.registration_event as Record<string, unknown>)
@@ -1000,14 +1003,17 @@ test.describe("applet bridge", () => {
       data: canonicalJson({
         applet_package: signed.applet_package,
         authoring_request_basis: prepared.basis,
-        registration_epoch_evidence: signed.registration_epoch_evidence,
+        // Negative-only closed-shape probe: the canonical carrier is nested in
+        // `authoring_request_basis.registration_event.payload.manifest`.
+        registration_epoch_evidence: registrationEvidence, // stale-literal-allow
       }),
     });
     expect(duplicateSibling.status()).toBe(400);
 
     const misplacedPackage = {
       ...signed.applet_package,
-      registration_epoch_evidence: signed.registration_epoch_evidence,
+      // Negative-only package probe; no positive helper carries this sibling.
+      registration_epoch_evidence: registrationEvidence, // stale-literal-allow
     };
     const misplaced = await request.fetch(previewUrl, {
       method: "POST",
@@ -1026,16 +1032,16 @@ test.describe("applet bridge", () => {
       label: string,
       evidence: Record<string, unknown>,
     ) => {
-      const variant: SignedPackage = {
-        ...signed,
-        registration_epoch_evidence: evidence,
-      };
       const candidate = await prepareAppletInstallAuthoringBasis(
         request,
         aliceToken,
-        variant,
+        signed,
         realmId,
         { kind: "realm", realm_id: realmId },
+        2 * 60 * 1000,
+        (manifest) => {
+          manifest.registration_epoch_evidence = evidence;
+        },
       );
       const denied = await request.fetch(previewUrl, {
         method: "POST",
@@ -1054,15 +1060,15 @@ test.describe("applet bridge", () => {
       );
     };
 
-    const emptyKeys = structuredClone(signed.registration_epoch_evidence);
+    const emptyKeys = structuredClone(registrationEvidence);
     emptyKeys.accepted_signing_keys = [];
     await expectNestedEvidenceRejected("empty accepted key set", emptyKeys);
 
-    const swappedService = structuredClone(signed.registration_epoch_evidence);
+    const swappedService = structuredClone(registrationEvidence);
     swappedService.full_id = "did:web:swapped-applet.example";
     await expectNestedEvidenceRejected("swapped service DID", swappedService);
 
-    const rotatedSnapshot = structuredClone(signed.registration_epoch_evidence);
+    const rotatedSnapshot = structuredClone(registrationEvidence);
     rotatedSnapshot.did_document_digest = `sha256:${"44".repeat(32)}`;
     const rotatedKeys = rotatedSnapshot.accepted_signing_keys;
     if (!Array.isArray(rotatedKeys) || rotatedKeys.length === 0) {
@@ -2056,6 +2062,9 @@ async function prepareAppletInstallAuthoringBasis(
   realmId: string,
   effectiveScope: Record<string, unknown>,
   requestedWindowMs = 2 * 60 * 1000,
+  mutateRegistrationManifest?: (
+    manifest: Record<string, unknown>,
+  ) => void,
 ): Promise<{
   basis: Record<string, unknown>;
   grantActionsById: Map<string, string[]>;
@@ -2063,6 +2072,17 @@ async function prepareAppletInstallAuthoringBasis(
   const actorDid = await currentActorDidApi(request, token);
   const sealBasis = await readRealmSealBasis(request, token, realmId);
   const registrationPayload = appletRegistrationPayload(signed);
+  const registrationManifest = registrationPayload.manifest;
+  if (
+    !registrationManifest ||
+    typeof registrationManifest !== "object" ||
+    Array.isArray(registrationManifest)
+  ) {
+    throw new Error("Applet registration payload has no manifest");
+  }
+  mutateRegistrationManifest?.(
+    registrationManifest as Record<string, unknown>,
+  );
   const approvedActions = Array.from(
     new Set(signed.applet_package.requested_scopes),
   );
@@ -2187,13 +2207,45 @@ function appletRegistrationPayload(
   signed: SignedPackage,
 ): Record<string, unknown> {
   const pkg = signed.applet_package;
+  const operation = signed.service_id_operation;
+  const signingKey = signed.service_signing_private_key;
+  if (!operation || !signingKey) {
+    throw new Error(
+      "Applet registration Event requires the formal service DID operation and signing key",
+    );
+  }
+  const versionTime = operation.didDocument.updated;
+  if (typeof versionTime !== "string") {
+    throw new Error("Applet service DID document has no version timestamp");
+  }
+  const webhookAuth = pkg.webhook_auth as Record<string, unknown> | undefined;
+  const verificationMethod = webhookAuth?.key_ref;
+  if (typeof verificationMethod !== "string") {
+    throw new Error("Applet package webhook auth has no verification method");
+  }
+  const publicJwk = createPublicKey(signingKey).export({ format: "jwk" });
   const manifest: Record<string, unknown> = {
     claimed_profiles: pkg.claimed_profiles,
     limits: pkg.limits,
     ghost_policy: pkg.ghost_policy,
     delegation_policy: pkg.delegation_policy,
     e2ee_policy: pkg.e2ee_policy,
-    registration_epoch_evidence: signed.registration_epoch_evidence,
+    registration_epoch_evidence: {
+      full_id: operation.did,
+      did_document_digest: canonicalHash(operation.didDocument),
+      method_version_evidence: {
+        method: "did:webvh",
+        version_id: operation.versionId,
+        version_time: versionTime,
+        unversioned_refetch: false,
+      },
+      accepted_signing_keys: [
+        {
+          key_ref: verificationMethod,
+          public_key_digest: canonicalHash(publicJwk),
+        },
+      ],
+    },
   };
   if (pkg.widget !== undefined) manifest.widget = pkg.widget;
   return {
@@ -2215,6 +2267,30 @@ function appletRegistrationPayload(
     proof: pkg.proof,
     created_at: pkg.created_at,
   };
+}
+
+function registrationManifestFromBasis(
+  basis: Record<string, unknown>,
+): Record<string, unknown> {
+  const registrationEvent = basis.registration_event as
+    | Record<string, unknown>
+    | undefined;
+  const payload = registrationEvent?.payload as
+    | Record<string, unknown>
+    | undefined;
+  const manifest = payload?.manifest as Record<string, unknown> | undefined;
+  const evidence = manifest?.registration_epoch_evidence;
+  if (
+    !manifest ||
+    !evidence ||
+    typeof evidence !== "object" ||
+    Array.isArray(evidence)
+  ) {
+    throw new Error(
+      "Prepared registration Event has no registration epoch evidence",
+    );
+  }
+  return manifest;
 }
 
 function webvhManagedActorEvidence(built: BuiltWebvhGenesis) {
