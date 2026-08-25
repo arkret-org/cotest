@@ -77,7 +77,25 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         "invite event was not accepted: {}",
         serde_json::to_string_pretty(&invite_event)?
     );
+    let invite_event_id = invite_event["event_id"]
+        .as_str()
+        .ok_or_else(|| anyhow!("invite submit outcome omitted event_id: {invite_event}"))?;
+    let invite_id = arkret_identifiers::InviteId::from_event_id(&arkret_identifiers::EventId::new(
+        invite_event_id.to_owned(),
+    )?)
+    .to_string();
+    let invite_token = dispatch_accepted_invite_and_read_token(
+        &alice,
+        &bob,
+        invite_event_id,
+        &invite_id,
+        introduction_evidence,
+    )
+    .await?;
 
+    // The shared Event alone is not holder-private delivery. The invite only
+    // appears after the accepted dispatch materializes Bob's invite-delivery
+    // account-data cell.
     let invites = expect_json(bob.get("/_arkret/self/authz/invites"), StatusCode::OK).await?;
     assert_eq!(
         invites["invites"].as_array().unwrap().len(),
@@ -93,21 +111,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         invites["invites"][0].get("invite_token").is_none(),
         "invite read model must not surface the private delivery token: {invites}"
     );
-    let invite_id = invites["invites"][0]["id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("invite list entry omitted its id: {invites}"))?
-        .to_owned();
-    let invite_event_id = invite_event["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("invite submit outcome omitted event_id: {invite_event}"))?;
-    let invite_token = dispatch_accepted_invite_and_read_token(
-        &alice,
-        &bob,
-        invite_event_id,
-        &invite_id,
-        introduction_evidence,
-    )
-    .await?;
+    assert_eq!(invites["invites"][0]["id"], invite_id);
 
     expect_status(
         server

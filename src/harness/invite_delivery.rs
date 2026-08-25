@@ -26,7 +26,8 @@ use super::{TestActorClient, actor_core_id, expect_json};
 /// invitee's actor-private account-data cell.
 ///
 /// `invite_event_id` is the accepted Event id; `invite_id` is its
-/// Event-derived Invite id as listed by `/_arkret/self/authz/invites`.
+/// `InviteId::from_event_id` projection. The holder list is intentionally not
+/// visible until this dispatch materializes the private delivery cell.
 pub async fn dispatch_accepted_invite_and_read_token(
     inviter: &TestActorClient,
     invitee: &TestActorClient,
