@@ -782,6 +782,11 @@ pub(crate) fn canonical_proof_payload(event: &Value) -> Result<Map<String, Value
     Ok(payload)
 }
 
+// Deliberately independent reference codecs: cotest is the conformance oracle
+// for the SDK cursor/rank implementations. Reusing `arkret-wire` or
+// `arkret-event-draft` here would only prove that an implementation agrees
+// with itself. Canonical JSON below is shared because RFC 8785 byte production
+// is covered by its own cross-language KAT.
 pub(crate) fn encode_cursor_shape(shape: &CursorShape) -> Result<String> {
     let canonical = canonical_json(&serde_json::to_value(shape)?)?;
     Ok(format!(
@@ -806,6 +811,8 @@ pub(crate) const RANK_ALPHABET: &str =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 pub(crate) const RANK_MAX_LENGTH: usize = 128;
 
+/// Reference fractional-rank implementation used to check SDK output.
+/// Keep this algorithm structurally independent from `arkret-event-draft`.
 pub(crate) fn rank_between(left: Option<&str>, right: Option<&str>) -> Result<String> {
     let left = left.unwrap_or("");
     let right = right.unwrap_or("");
