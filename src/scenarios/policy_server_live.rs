@@ -88,16 +88,10 @@ async fn policy_server_events(client: &TestActorClient, realm_id: &str) -> Resul
 
 async fn accepted_seal_id(client: &TestActorClient, realm_id: &str) -> Result<String> {
     let frontier = client.realm_seal_frontier(realm_id).await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::SealFrontierState =
         serde_json::from_value(frontier.clone())
             .map_err(|error| anyhow!("invalid Realm frontier `{frontier}`: {error}"))?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
-        state.frontier
-    else {
-        return Err(anyhow!(
-            "Realm selector returned the wrong frontier variant"
-        ));
-    };
+    let frontier = state.frontier;
     Ok(frontier.sole_leaf()?.to_string())
 }
 

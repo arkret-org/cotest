@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use arkret_models_collaboration::event_sync::{
-    EventsFrontierAccountClientState, EventsFrontierView,
+    EventsFrontierState, EventsFrontierView, SealFrontierState,
 };
 use cotest::harness::{
     ArkretServer, create_realm_with_signing_seed, default_event_verification_method,
@@ -32,12 +32,12 @@ async fn frontier(
         server
             .http()
             .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(Some(actor), Some(realm_id))?)
+            .json(&events_frontier_request_body(actor, Some(realm_id))?)
             .bearer_auth(token),
         StatusCode::OK,
     )
     .await?;
-    let state: EventsFrontierAccountClientState = serde_json::from_value(value)?;
+    let state: EventsFrontierState = serde_json::from_value(value)?;
     let EventsFrontierView::RealmActor(frontier) = state.frontier else {
         return Err(anyhow!(
             "combined selector returned a non-authoring frontier"
@@ -55,17 +55,14 @@ async fn seal_basis(
     let value = expect_json(
         server
             .http()
-            .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(None, Some(realm_id))?)
+            .request(query_method(), server.url("/_arkret/self/seals/frontier"))
+            .json(&serde_json::json!({"realm_id": realm_id}))
             .bearer_auth(token),
         StatusCode::OK,
     )
     .await?;
-    let state: EventsFrontierAccountClientState = serde_json::from_value(value)?;
-    let EventsFrontierView::RealmSeal(frontier) = state.frontier else {
-        return Err(anyhow!("Realm selector returned a non-Seal frontier"));
-    };
-    Ok(frontier.seal_basis())
+    let state: SealFrontierState = serde_json::from_value(value)?;
+    Ok(state.frontier.seal_basis())
 }
 
 fn bind_seal_ref(

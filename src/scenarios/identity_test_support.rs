@@ -523,13 +523,9 @@ pub async fn seal_current_principal_control_frontier(
         .collect::<Result<Vec<_>>>()?;
     events.sort_by_key(|event| event.actor_seq);
     let frontier_state = serde_json::from_value::<
-        arkret_models_collaboration::event_sync::EventsFrontierAccountClientState,
+        arkret_models_collaboration::event_sync::SealFrontierState,
     >(client.realm_seal_frontier(realm_id.as_str()).await?)?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
-        frontier_state.frontier
-    else {
-        anyhow::bail!("PCR Realm selector returned a non-Seal frontier");
-    };
+    let frontier = frontier_state.frontier;
     // The successor Seal binds the predecessor's own signed roots, so the
     // frontier's single accepted leaf is resolved instead of trusting the
     // service view.

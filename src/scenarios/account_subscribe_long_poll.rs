@@ -734,13 +734,13 @@ async fn submit_event_now(
         actor
             .query("/_arkret/self/events/frontier")
             .json(&events_frontier_request_body(
-                Some(actor.actor.as_str()),
+                actor.actor.as_str(),
                 Some(realm_id),
             )?),
         StatusCode::OK,
     )
     .await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::EventsFrontierState =
         serde_json::from_value(frontier)?;
     let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
         state.frontier
@@ -769,15 +769,9 @@ async fn submit_event_now(
     let mut previous_control_seal_id = None;
     if is_control_move || is_data_event {
         let seal_frontier = seal_source.realm_seal_frontier(realm_id).await?;
-        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+        let state: arkret_models_collaboration::event_sync::SealFrontierState =
             serde_json::from_value(seal_frontier)?;
-        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
-            state.frontier
-        else {
-            return Err(anyhow::anyhow!(
-                "Realm selector returned the wrong frontier variant"
-            ));
-        };
+        let frontier = state.frontier;
         if is_data_event {
             // A DataEvent anchors on `seal_ref`; carrying `seal_basis` is what
             // marks an Event as a Control Move.

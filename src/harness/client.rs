@@ -270,12 +270,30 @@ impl TestActorClient {
     /// frontier_unavailable`. That is a transient state a client waits out,
     /// not an error — every Realm-scoped Seal read here therefore retries it.
     pub async fn realm_seal_frontier(&self, realm_id: &str) -> Result<Value> {
-        self.events_frontier_with_retry(None, Some(realm_id)).await
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let response = expect_response(
+                self.query("/_arkret/self/seals/frontier")
+                    .json(&serde_json::json!({"realm_id": realm_id})),
+                StatusCode::OK,
+            )
+            .await;
+            match response {
+                Ok(response) => return response.json(),
+                Err(error) if std::time::Instant::now() < deadline => {
+                    if !format!("{error}").contains("frontier_unavailable") {
+                        return Err(error);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+                Err(error) => return Err(error),
+            }
+        }
     }
 
     async fn events_frontier_with_retry(
         &self,
-        actor_id: Option<&str>,
+        actor_id: &str,
         realm_id: Option<&str>,
     ) -> Result<Value> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
@@ -376,21 +394,17 @@ impl TestActorClient {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
         loop {
             if let Ok(frontier) = self.realm_seal_frontier(realm_id).await {
-                let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                let state: arkret_models_collaboration::event_sync::SealFrontierState =
                     serde_json::from_value(frontier)?;
-                if let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
-                    frontier,
-                ) = state.frontier
-                {
-                    let pending = frontier
-                        .governance_health
-                        .pending_proposals
-                        .iter()
-                        .any(|pending| pending.proposal_digest.as_str() == proposal_digest);
-                    let leaf = frontier.sole_leaf()?.clone();
-                    if !pending && leaf.as_str() != previous_seal_id {
-                        return Ok(leaf.to_string());
-                    }
+                let frontier = state.frontier;
+                let pending = frontier
+                    .governance_health
+                    .pending_proposals
+                    .iter()
+                    .any(|pending| pending.proposal_digest.as_str() == proposal_digest);
+                let leaf = frontier.sole_leaf()?.clone();
+                if !pending && leaf.as_str() != previous_seal_id {
+                    return Ok(leaf.to_string());
                 }
             }
             if std::time::Instant::now() >= deadline {
@@ -797,9 +811,9 @@ impl TestActorClient {
         capability_refs: Vec<String>,
     ) -> Result<Event> {
         let frontier = self
-            .events_frontier_with_retry(Some(self.actor.as_str()), Some(realm_id))
+            .events_frontier_with_retry(self.actor.as_str(), Some(realm_id))
             .await?;
-        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+        let state: arkret_models_collaboration::event_sync::EventsFrontierState =
             serde_json::from_value(frontier)?;
         let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
             state.frontier
@@ -831,17 +845,11 @@ impl TestActorClient {
             .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
         if is_data_event {
             let seal_frontier = self.realm_seal_frontier(realm_id).await?;
-            let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+            let state: arkret_models_collaboration::event_sync::SealFrontierState =
                 serde_json::from_value(seal_frontier.clone()).map_err(|error| {
                     anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
                 })?;
-            let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
-                state.frontier
-            else {
-                return Err(anyhow!(
-                    "Realm selector returned the wrong frontier variant"
-                ));
-            };
+            let frontier = state.frontier;
             // A DataEvent anchors its effects with `seal_ref`, not
             // `seal_basis`: carrying a Seal basis is what marks an Event as a
             // Control Move, and a Control Move may not write a data-plane cell.
@@ -899,9 +907,9 @@ impl TestActorClient {
     ) -> Result<Event> {
         self.ensure_authority_for_kind(realm_id, kind).await?;
         let frontier = self
-            .events_frontier_with_retry(Some(self.actor.as_str()), Some(realm_id))
+            .events_frontier_with_retry(self.actor.as_str(), Some(realm_id))
             .await?;
-        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+        let state: arkret_models_collaboration::event_sync::EventsFrontierState =
             serde_json::from_value(frontier)?;
         let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
             state.frontier
@@ -934,17 +942,11 @@ impl TestActorClient {
             .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
         if is_control_move || is_data_event {
             let seal_frontier = self.realm_seal_frontier(realm_id).await?;
-            let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+            let state: arkret_models_collaboration::event_sync::SealFrontierState =
                 serde_json::from_value(seal_frontier.clone()).map_err(|error| {
                     anyhow!("invalid Realm frontier response `{seal_frontier}`: {error}")
                 })?;
-            let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
-                state.frontier
-            else {
-                return Err(anyhow!(
-                    "Realm selector returned the wrong frontier variant"
-                ));
-            };
+            let frontier = state.frontier;
             if is_control_move {
                 event.seal_basis = Some(frontier.seal_basis());
                 let physical_millis = chrono::Utc::now().timestamp_millis();

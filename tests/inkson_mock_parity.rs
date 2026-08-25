@@ -1182,27 +1182,22 @@ async fn wait_for_realm_seal(
     loop {
         let response = server
             .http()
-            .request(query_method(), server.url("/_arkret/self/events/frontier"))
+            .request(query_method(), server.url("/_arkret/self/seals/frontier"))
             .bearer_auth(&ctx.alice_token)
-            .json(&events_frontier_request_body(None, Some(realm_id))?)
+            .json(&serde_json::json!({"realm_id": realm_id}))
             .send()
             .await?;
         let status = response.status();
         let observation = if status == reqwest::StatusCode::OK {
             let body: Value = response.json().await?;
-            match serde_json::from_value::<
-                arkret_models_collaboration::event_sync::EventsFrontierAccountClientState,
-            >(body.clone())
-            {
+            match serde_json::from_value::<arkret_models_collaboration::event_sync::SealFrontierState>(
+                body.clone(),
+            ) {
                 Ok(state) => {
-                    if let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
-                        frontier,
-                    ) = state.frontier
-                        && let Ok(seal_id) = frontier.sole_leaf()
-                    {
+                    if let Ok(seal_id) = state.frontier.sole_leaf() {
                         return Ok(seal_id.to_string());
                     }
-                    format!("unexpected frontier variant: {body}")
+                    format!("unexpected Seal frontier: {body}")
                 }
                 Err(error) => format!("invalid frontier response ({error}): {body}"),
             }

@@ -67,18 +67,13 @@ pub fn actor_core_id(actor: &str) -> Result<String> {
 }
 
 pub fn events_frontier_request_body(
-    actor_id: Option<&str>,
+    actor_id: &str,
     realm_id: Option<&str>,
 ) -> Result<arkret_models_collaboration::event_query::EventsFrontierRequestBody> {
     Ok(
         arkret_models_collaboration::event_query::EventsFrontierRequestBody {
-            actor_id: actor_id
-                .map(|value| {
-                    arkret_identifiers::DidFullId::new(value.to_owned()).and_then(|full_id| {
-                        arkret_identifiers::project_full_id_to_core_id(&full_id)
-                    })
-                })
-                .transpose()?,
+            actor_id: arkret_identifiers::DidFullId::new(actor_id.to_owned())
+                .and_then(|full_id| arkret_identifiers::project_full_id_to_core_id(&full_id))?,
             realm_id: realm_id
                 .map(|value| arkret_identifiers::RealmId::new(value.to_owned()))
                 .transpose()?,

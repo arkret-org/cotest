@@ -167,13 +167,9 @@ async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Re
         Duration::from_millis(100),
         || async {
             let frontier = client.realm_seal_frontier(realm_id).await?;
-            let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+            let state: arkret_models_collaboration::event_sync::SealFrontierState =
                 serde_json::from_value(frontier)?;
-            let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
-                state.frontier
-            else {
-                return Err(anyhow!("Realm selector returned a non-Seal frontier"));
-            };
+            let frontier = state.frontier;
             frontier
                 .sole_leaf()
                 .map(ToString::to_string)

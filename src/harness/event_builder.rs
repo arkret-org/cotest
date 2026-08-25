@@ -761,12 +761,12 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         server
             .http()
             .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(Some(actor), Some(realm_id))?)
+            .json(&events_frontier_request_body(actor, Some(realm_id))?)
             .bearer_auth(token),
         StatusCode::OK,
     )
     .await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::EventsFrontierState =
         serde_json::from_value(frontier.clone())?;
     let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(frontier) =
         state.frontier
@@ -799,15 +799,9 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
     if is_control_move || is_data_event {
         let seal_frontier =
             realm_seal_frontier_for(server, token, realm_id, Duration::from_secs(10)).await?;
-        let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+        let state: arkret_models_collaboration::event_sync::SealFrontierState =
             serde_json::from_value(seal_frontier)?;
-        let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(frontier) =
-            state.frontier
-        else {
-            return Err(anyhow!(
-                "Realm selector returned the wrong frontier variant"
-            ));
-        };
+        let frontier = state.frontier;
         if is_control_move {
             event.seal_basis = Some(frontier.seal_basis());
             let physical_millis = chrono::Utc::now().timestamp_millis();
@@ -835,8 +829,8 @@ async fn realm_seal_frontier_for(
     loop {
         let response = server
             .http()
-            .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(None, Some(realm_id))?)
+            .request(query_method(), server.url("/_arkret/self/seals/frontier"))
+            .json(&serde_json::json!({"realm_id": realm_id}))
             .bearer_auth(token)
             .send()
             .await?;

@@ -60,16 +60,10 @@ async fn observe(
         .filter_map(|event| event["event_id"].as_str().map(ToOwned::to_owned))
         .collect();
     let frontier = client.realm_seal_frontier(realm_id).await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::SealFrontierState =
         serde_json::from_value(frontier.clone())
             .map_err(|error| anyhow!("invalid Realm frontier `{frontier}`: {error}"))?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(seal_frontier) =
-        state.frontier
-    else {
-        return Err(anyhow!(
-            "Realm selector returned the wrong frontier variant"
-        ));
-    };
+    let seal_frontier = state.frontier;
     let invites = expect_json(
         client
             .get("/_arkret/self/authz/invites")
@@ -113,13 +107,13 @@ async fn author_invite_move(
         actor
             .query("/_arkret/self/events/frontier")
             .json(&events_frontier_request_body(
-                Some(actor.actor.as_str()),
+                actor.actor.as_str(),
                 Some(realm_id),
             )?),
         StatusCode::OK,
     )
     .await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::EventsFrontierState =
         serde_json::from_value(frontier)?;
     let arkret_models_collaboration::event_sync::EventsFrontierView::RealmActor(actor_frontier) =
         state.frontier
@@ -139,15 +133,9 @@ async fn author_invite_move(
     event.prev_refs = actor_frontier.frontier_event_ids;
     event.created_at = DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc);
     let seal_frontier = actor.realm_seal_frontier(realm_id).await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::SealFrontierState =
         serde_json::from_value(seal_frontier)?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(seal_frontier) =
-        state.frontier
-    else {
-        return Err(anyhow!(
-            "Realm selector returned the wrong frontier variant"
-        ));
-    };
+    let seal_frontier = state.frontier;
     event.seal_basis = Some(seal_frontier.seal_basis());
     let physical_millis = chrono::Utc::now().timestamp_millis();
     event.hlc = Some(arkret_identifiers::Hlc::new(format!(
@@ -164,15 +152,9 @@ async fn submit_invite_move(
     payload: Value,
 ) -> Result<(StatusCode, Value)> {
     let before = actor.realm_seal_frontier(realm_id).await?;
-    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+    let state: arkret_models_collaboration::event_sync::SealFrontierState =
         serde_json::from_value(before)?;
-    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(before) =
-        state.frontier
-    else {
-        return Err(anyhow!(
-            "Realm selector returned the wrong frontier variant"
-        ));
-    };
+    let before = state.frontier;
     let before_seal_id = before.sole_leaf()?.to_string();
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
     let event_id = event.event_id.clone();
@@ -198,16 +180,9 @@ async fn submit_invite_move(
                 let before_seal_id = before_seal_id.clone();
                 async move {
                     let frontier = actor.realm_seal_frontier(realm_id).await?;
-                    let state: arkret_models_collaboration::event_sync::EventsFrontierAccountClientState =
+                    let state: arkret_models_collaboration::event_sync::SealFrontierState =
                         serde_json::from_value(frontier)?;
-                    let arkret_models_collaboration::event_sync::EventsFrontierView::RealmSeal(
-                        frontier,
-                    ) = state.frontier
-                    else {
-                        return Err(anyhow!(
-                            "Realm selector returned the wrong frontier variant"
-                        ));
-                    };
+                    let frontier = state.frontier;
                     if frontier.sole_leaf()?.to_string() == before_seal_id {
                         Err(anyhow!(
                             "Realm Seal frontier has not advanced from {before_seal_id}"
