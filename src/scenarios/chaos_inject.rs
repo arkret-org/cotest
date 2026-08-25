@@ -7,13 +7,10 @@
 //!
 //! ## Why this exists
 //!
-//! Before C.8, each chaos scenario (`chaos_kill_midwrite`,
-//! `presign_blob_fail_closed`, the soak harness) reimplemented its own
-//! kill / timeout / disk-full simulation against `std::process::Child`
-//! or `std::io::Error::other`. Three problems:
+//! Before C.8, each chaos scenario (`chaos_kill_midwrite`, the soak
+//! harness) reimplemented its own fault simulation against
+//! `std::process::Child` or `std::io::Error::other`. Two problems:
 //!
-//! * No shared graceful-shutdown helper, so a scenario that forgot to wait for SIGTERM-with-timeout
-//!   would leave a zombie process between `cargo test --test-threads=1` invocations.
 //! * Errors were shaped inconsistently (`ErrorKind::Other` vs `StorageFull` vs a hand-rolled
 //!   `anyhow!`), making the "did we actually trigger the failure mode" assertion fuzzy.
 //! * No place to register new chaos kinds — every new fault type meant another bespoke helper
@@ -47,16 +44,8 @@
 //! }
 //! ```
 //!
-//! For the kill case, use [`graceful_shutdown_test`] against the
-//! `std::process::Child` so the scenario stays consistent with
-//! `chaos_kill_midwrite`: SIGTERM (or `taskkill` on Windows), wait up
-//! to five seconds, then assert a clean exit code surfaced through the
-//! returned [`ShutdownOutcome`]. Tests should assert the variant they
-//! expect (graceful exit code vs `TimedOutKilled` vs `WaitFailed`).
 
 use std::io;
-use std::process::{Child, ExitStatus};
-use std::time::{Duration, Instant};
 
 /// The set of fault classes the framework knows how to simulate. New
 /// variants should be added here rather than invented per-scenario so
@@ -73,9 +62,10 @@ pub enum ChaosKind {
     /// connection refusal — i.e. simulate the slow-loris shape, not
     /// the "endpoint moved" shape.
     NetworkTimeout,
-    /// The subject's child process was killed unexpectedly. Drivers
-    /// should use [`graceful_shutdown_test`] when they actually own a
-    /// `Child` handle.
+    /// The subject's child process was killed unexpectedly. Scenarios
+    /// emulate the kill via an in-process callback
+    /// ([`simulate_process_killed`]) when they do not own a real
+    /// `std::process::Child` handle.
     ProcessKilled,
 }
 
@@ -131,118 +121,8 @@ pub fn simulate_process_killed() -> io::Error {
     )
 }
 
-/// Five-second default for [`graceful_shutdown_test`]. Picked to match
-/// `chaos_kill_midwrite`'s historical 5s budget — long enough that a
-/// real shutdown hook (which flushes WAL + writes a final receipt) can
-/// finish on a slow CI runner, short enough that a hung subprocess is
-/// surfaced before the surrounding `cargo test` timeout.
-pub const DEFAULT_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// Outcome of a [`graceful_shutdown_test`] cycle. Scenarios assert on
-/// the variant they expect rather than the raw exit code — a clean
-/// shutdown can legitimately exit either 0 or with a SIGTERM-bound
-/// platform-specific status, and we don't want every chaos scenario
-/// reinventing the platform delta.
-#[derive(Debug)]
-pub enum ShutdownOutcome {
-    /// The child exited within the timeout. Carries the raw status so
-    /// scenarios can assert clean (code 0 / non-fatal signal) vs
-    /// crash-loop (code != 0).
-    Graceful(ExitStatus),
-    /// The child did not respond to the term signal before the
-    /// deadline, so the framework escalated to `Child::kill`. The
-    /// status reflects the SIGKILL path.
-    TimedOutKilled(ExitStatus),
-    /// `Child::wait` itself failed (the OS lost track of the pid, or
-    /// the child was already reaped under us). The error is preserved
-    /// for the scenario to log.
-    WaitFailed(io::Error),
-}
-
-impl ShutdownOutcome {
-    /// True when the subject came down cleanly — graceful exit, code
-    /// 0, no SIGKILL escalation. Useful as a single-line
-    /// `assert!(outcome.is_clean_exit())` in scenarios that don't care
-    /// about the platform-specific signal vs code split.
-    pub fn is_clean_exit(&self) -> bool {
-        match self {
-            ShutdownOutcome::Graceful(status) => status.success(),
-            ShutdownOutcome::TimedOutKilled(_) | ShutdownOutcome::WaitFailed(_) => false,
-        }
-    }
-}
-
-/// Run the canonical kill-with-timeout shutdown sequence against a
-/// child process and report the outcome. Drivers should call this
-/// from the [`ChaosKind::ProcessKilled`] branch of their
-/// [`ChaosInjectable`] impl when they actually own the `Child`.
-///
-/// The sequence is:
-///
-/// 1. Send a graceful termination signal (SIGTERM on Unix, gentle `Child::kill` on Windows — the
-///    platform doesn't expose anything softer for an arbitrary subprocess that we didn't create
-///    with a job-object).
-/// 2. Wait up to `timeout` for the child to exit, polling every 50ms so a fast graceful shutdown
-///    returns promptly.
-/// 3. If the wait deadline elapses, escalate to `Child::kill` and wait for the SIGKILL path.
-pub fn graceful_shutdown_test(child: &mut Child, timeout: Duration) -> ShutdownOutcome {
-    kill_with_term(child);
-    match wait_with_timeout(child, timeout) {
-        Ok(Some(status)) => ShutdownOutcome::Graceful(status),
-        Ok(None) => {
-            // Deadline elapsed — escalate to SIGKILL and try to reap.
-            let _ = child.kill();
-            match child.wait() {
-                Ok(status) => ShutdownOutcome::TimedOutKilled(status),
-                Err(error) => ShutdownOutcome::WaitFailed(error),
-            }
-        }
-        Err(error) => ShutdownOutcome::WaitFailed(error),
-    }
-}
-
-/// Best-effort graceful termination. On Unix we shell out to `kill
-/// -TERM` (rather than going through `nix` or a raw libc binding) so
-/// the helper compiles on any host stdlib. On Windows we fall back to
-/// `Child::kill`, which is the only termination path the platform
-/// gives us for an arbitrary child.
-pub fn kill_with_term(child: &mut Child) {
-    #[cfg(unix)]
-    {
-        let pid = child.id().to_string();
-        let _ = std::process::Command::new("kill")
-            .args(["-TERM", &pid])
-            .status();
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = child.kill();
-    }
-}
-
-/// Poll `child.try_wait()` until either the process exits or the
-/// deadline elapses. Returns `Ok(Some(status))` on exit, `Ok(None)` on
-/// timeout, or the underlying `io::Error` from `try_wait` if the OS
-/// lost the pid.
-pub fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<Option<ExitStatus>> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait()? {
-            Some(status) => return Ok(Some(status)),
-            None => {
-                if Instant::now() >= deadline {
-                    return Ok(None);
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::process::Command;
-
     use super::*;
 
     #[test]
@@ -304,50 +184,5 @@ mod tests {
                 ChaosKind::ProcessKilled
             ]
         );
-    }
-
-    #[test]
-    fn graceful_shutdown_test_reaps_fast_exit() {
-        // Use a portable noop subprocess: rustc-target-independent
-        // `cargo` is in PATH on every cotest CI runner, but we don't
-        // want to depend on it here. Fall back to spawning the
-        // current test binary with a sentinel arg that immediately
-        // exits — except that's also fragile. The simplest portable
-        // choice is `std::process::Command::new(<self>)` where self is
-        // either `cmd /C exit 0` on Windows or `true` on Unix.
-        #[cfg(windows)]
-        let mut child = Command::new("cmd")
-            .args(["/C", "exit 0"])
-            .spawn()
-            .expect("spawn cmd /C exit");
-        #[cfg(not(windows))]
-        let mut child = Command::new("true").spawn().expect("spawn /bin/true");
-
-        let outcome = graceful_shutdown_test(&mut child, DEFAULT_SHUTDOWN_TIMEOUT);
-        // Either the child finished cleanly before we even sent the
-        // term signal (fast path) or we killed it — both are
-        // acceptable for a process that immediately exits. We only
-        // require that `wait` did not fail.
-        assert!(
-            !matches!(outcome, ShutdownOutcome::WaitFailed(_)),
-            "wait should not fail for a fast-exit child: {outcome:?}"
-        );
-    }
-
-    #[test]
-    fn shutdown_outcome_is_clean_exit_only_for_graceful_success() {
-        // We can't easily construct an `ExitStatus` directly across
-        // platforms in stable Rust, so spin up a real fast-exit child
-        // and re-read its status.
-        #[cfg(windows)]
-        let mut child = Command::new("cmd")
-            .args(["/C", "exit 0"])
-            .spawn()
-            .expect("spawn cmd /C exit");
-        #[cfg(not(windows))]
-        let mut child = Command::new("true").spawn().expect("spawn /bin/true");
-
-        let status = child.wait().expect("child wait");
-        assert!(ShutdownOutcome::Graceful(status).is_clean_exit());
     }
 }

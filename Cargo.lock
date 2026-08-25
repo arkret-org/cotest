@@ -8508,6 +8508,7 @@ dependencies = [
  "soland-domain",
  "soland-storage",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
  "uuid",
 ]
@@ -8546,6 +8547,7 @@ dependencies = [
  "arkret-event-draft",
  "arkret-identity",
  "arkret-models-collaboration",
+ "arkret-models-crypto",
  "arkret-models-identity",
  "arkret-models-integration",
  "arkret-state",
