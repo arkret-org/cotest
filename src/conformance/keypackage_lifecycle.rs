@@ -225,7 +225,7 @@ fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
         "principal_id": principal_id.as_str(),
         "device_id": device_id.as_str(),
         "keypackage": "AQID",
-        "capabilities": ["ak.mls.profile.full"],
+        "capabilities": ["ak.content.v1"],
         "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
         "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
         "revocation_status": "active"
@@ -244,7 +244,7 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         "requester": "ak:did_core:webvh:z6mkfixture",
         "mls_group_id": "fixture-group",
         "claim_purpose": "realm_membership",
-        "required_capabilities": ["ak.mls.profile.full"],
+        "required_capabilities": ["ak.content.v1"],
         "expires_at": "2026-01-01T00:05:00.000Z"
     });
     let request_digest = arkret_canonical::canonical_sha256(&request)
@@ -927,7 +927,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "keypackage_ref": keypackage_ref,
         "keypackage_digest": keypackage_digest,
         "cipher_suites": ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-        "capabilities": ["ak.mls.profile.full"],
+        "capabilities": ["ak.content.v1"],
         "state": "published",
         "expires_at": "2100-01-01T00:00:00.000Z",
         "created_at": "2026-06-19T00:00:00.000Z",

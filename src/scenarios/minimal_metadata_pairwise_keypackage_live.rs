@@ -610,7 +610,7 @@ fn signed_device_claim(
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
         mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
-        required_capabilities: ["mimi.content.v1", "ak.content.v1"]
+        required_capabilities: ["ak.content.v1", "mimi.content.v1"]
             .into_iter()
             .map(|value| wire_value(NonEmptyString::new(value)))
             .collect::<Result<Vec<_>>>()?,
@@ -982,7 +982,7 @@ fn signed_pairwise_claim(
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
         mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
-        required_capabilities: ["mimi.content.v1", "ak.content.v1"]
+        required_capabilities: ["ak.content.v1", "mimi.content.v1"]
             .into_iter()
             .map(|value| wire_value(NonEmptyString::new(value)))
             .collect::<Result<Vec<_>>>()?,

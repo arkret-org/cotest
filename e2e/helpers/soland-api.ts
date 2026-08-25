@@ -157,6 +157,12 @@ export function registeredEventVerificationMethod(
   return `${did}#${deviceId}`;
 }
 
+export function registeredEventSigningSeedB64url(
+  actorDid: string,
+): string | undefined {
+  return eventSignerFor(actorDid)?.signingSeedB64url;
+}
+
 export function signWithRegisteredEventSigner(
   actorDid: string,
   verificationMethod: string,
@@ -4703,6 +4709,7 @@ type CotestWireCommand =
   | "event-envelope-proof"
   | "event-derived-id"
   | "mimi-consent-proof"
+  | "mls-keypackage-upload-entry"
   | "principal-control-realm-id"
   | "webvh-placeholder-did"
   | "webvh-genesis"

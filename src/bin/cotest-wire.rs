@@ -44,6 +44,13 @@ struct MimiConsentProofInput {
 }
 
 #[derive(Debug, Deserialize)]
+struct MlsKeyPackageUploadEntryInput {
+    principal_id: String,
+    device_id: DeviceId,
+    signing_seed_b64url: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct PrincipalControlRealmInput {
     principal_id: String,
 }
@@ -142,6 +149,7 @@ fn main() -> Result<()> {
         "event-derived-id" => event_derived_id(input)?,
         "event-envelope-parse" => event_envelope_parse(input)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
+        "mls-keypackage-upload-entry" => mls_keypackage_upload_entry(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
         "webvh-placeholder-did" => webvh_placeholder_did_command(input)?,
         "webvh-genesis" => webvh_genesis(input)?,
@@ -157,6 +165,30 @@ fn main() -> Result<()> {
 
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
+    let input: MlsKeyPackageUploadEntryInput =
+        serde_json::from_value(input).context("parse MLS KeyPackage upload-entry input")?;
+    let principal_id = if input.principal_id.starts_with("ak:did_core:") {
+        DidCoreId::new(input.principal_id).context("parse core principal id")?
+    } else {
+        project_full_id_to_core_id(
+            &DidFullId::new(input.principal_id).context("parse full principal id")?,
+        )?
+    };
+    let seed = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(input.signing_seed_b64url)
+        .context("decode MLS signing seed")?;
+    let seed: [u8; 32] = seed
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("MLS signing seed must be 32 bytes"))?;
+    let identity =
+        arkret::ArkretMlsIdentity::from_ed25519_signing_seed(principal_id, input.device_id, seed)?;
+    let record = identity.key_package_record()?;
+    let entry = arkret_models_crypto::mls_key_package_record_upload_entry(&record)
+        .map_err(anyhow::Error::msg)?;
+    serde_json::to_value(entry).context("serialize MLS KeyPackage upload entry")
 }
 
 fn event_envelope_parse(input: Value) -> Result<Value> {

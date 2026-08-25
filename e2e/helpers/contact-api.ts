@@ -23,7 +23,6 @@ import {
   alignSignedEventToActorFrontierApi,
   acceptInviteApi,
   authHeaders,
-  base64url,
   canonicalJson,
   canonicalServiceResolution,
   canonicalTimestamp,
@@ -33,6 +32,7 @@ import {
   expectJsonOk,
   principalControlRealmForDid,
   readRealmSealBasis,
+  registeredEventSigningSeedB64url,
   retypeEventDerivedId,
   refreshEventEnvelopeProof,
   signWithRegisteredEventSigner,
@@ -40,7 +40,7 @@ import {
   submitPeerInviteDeliveryApi,
   submitPrincipalSuccessorSealApi,
   submitSignedEventApi,
-  typedId,
+  cotestWire,
   type InviteDeliveryOutcomeView,
   type InviteDeliveryRequestBodyBodyBody,
   uuidV7,
@@ -596,22 +596,16 @@ async function uploadDirectConversationKeyPackage(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
-  const stamp = `${Date.now()}-${Math.random()}`;
-  const keypackageId = typedId("mls_keypackage");
-  const keyPackage = base64url(`direct-conversation-keypackage-${stamp}`);
-  const keypackageDigest = `sha256:${createHash("sha256")
-    .update(Buffer.from(keyPackage, "base64url"))
-    .digest("hex")}`;
+  const signingSeedB64url = registeredEventSigningSeedB64url(user.did);
+  if (!signingSeedB64url) {
+    throw new Error(`no accepted device signing seed registered for ${user.did}`);
+  }
   const keyPackages = [
-    {
-      keypackage_id: keypackageId,
-      keypackage_ref: keypackageDigest,
-      keypackage: keyPackage,
-      cipher_suites: ["MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519"],
-      capabilities: ["ak.content.v1", "ak.mls.rfc9420", "ak.mls.profile.full"],
-      created_at: canonicalTimestamp(),
-      expires_at: canonicalTimestamp(new Date(Date.now() + 60 * 60 * 1000)),
-    },
+    cotestWire<Record<string, unknown>>("mls-keypackage-upload-entry", {
+      principal_id: user.did,
+      device_id: user.deviceId,
+      signing_seed_b64url: signingSeedB64url,
+    }),
   ];
   const unsigned = {
     principal_id: user.did,
