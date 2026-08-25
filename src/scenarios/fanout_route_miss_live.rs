@@ -15,7 +15,9 @@ use arkret_models_identity::delivery_binding::{
     BindingScope, BindingSource, DeliveryMode, DeliveryStatus, MemberDeliveryBinding,
     RecipientServiceKind,
 };
-use arkret_models_identity::{ServiceResolutionCarrier, ServiceResolutionRecord};
+use arkret_models_identity::{
+    AuthenticatedServiceResolution, ServiceResolutionCarrier, ServiceResolutionRecord,
+};
 use arkret_wire::{DidCoreId, DidFullId, Event, EventId, EventKind, Hash};
 use chrono::Utc;
 use reqwest::StatusCode;
@@ -295,8 +297,11 @@ async fn current_service_record(
     server: &crate::harness::ArkretServer,
 ) -> Result<ServiceResolutionRecord> {
     let path = arkret_models_identity::canonical_service_current_record_path(server.service_id());
-    serde_json::from_value(expect_json(server.http().get(server.url(&path)), StatusCode::OK).await?)
-        .context("decode target service resolution record")
+    let resolution: AuthenticatedServiceResolution = serde_json::from_value(
+        expect_json(server.http().get(server.url(&path)), StatusCode::OK).await?,
+    )
+    .context("decode authenticated target service resolution")?;
+    Ok(resolution.service_resolution_record)
 }
 
 async fn install_fixture_events(

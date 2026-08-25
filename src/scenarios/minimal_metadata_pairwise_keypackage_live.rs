@@ -31,7 +31,9 @@ use arkret_models_identity::delivery_binding::{
     BindingScope, BindingSource, DeliveryMode, DeliveryStatus, MemberDeliveryBinding,
     RecipientServiceKind,
 };
-use arkret_models_identity::{ServiceResolutionCarrier, ServiceResolutionRecord};
+use arkret_models_identity::{
+    AuthenticatedServiceResolution, ServiceResolutionCarrier, ServiceResolutionRecord,
+};
 use arkret_wire::{Event, EventId, EventKind, Hash, MlsGroupId, ScopeRef};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -512,8 +514,11 @@ async fn create_pairwise_realm(
 
 async fn current_service_record(server: &ArkretServer) -> Result<ServiceResolutionRecord> {
     let path = arkret_models_identity::canonical_service_current_record_path(server.service_id());
-    serde_json::from_value(expect_json(server.http().get(server.url(&path)), StatusCode::OK).await?)
-        .context("decode pairwise target service record")
+    let resolution: AuthenticatedServiceResolution = serde_json::from_value(
+        expect_json(server.http().get(server.url(&path)), StatusCode::OK).await?,
+    )
+    .context("decode authenticated pairwise target service resolution")?;
+    Ok(resolution.service_resolution_record)
 }
 
 async fn install_pairwise_membership(

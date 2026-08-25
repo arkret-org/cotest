@@ -10,6 +10,7 @@
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, anyhow};
+use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
 use base64::Engine as _;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
@@ -17,9 +18,9 @@ use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{
-    account_subscribe_delta_from_text, actor_core_id, events_frontier_request_body, eventually,
-    expect_account_subscribe_delta, expect_account_subscribe_realm_delta, invite_create_payload,
-    message_create_text_payload,
+    account_subscribe_delta_from_text, actor_core_id, dispatch_accepted_invite_and_read_token,
+    events_frontier_request_body, eventually, expect_account_subscribe_delta,
+    expect_account_subscribe_realm_delta, invite_create_payload, message_create_text_payload,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, spawn_with_harness_account_authority,
@@ -643,26 +644,42 @@ async fn create_invite_now(
     invitee: &crate::harness::TestActorClient,
 ) -> Result<String> {
     let expires_at = chrono::Utc::now() + ChronoDuration::days(7);
-    let accepted = submit_event_now(
-        inviter,
-        inviter,
-        realm_id,
-        "ak.invite.create",
-        invite_create_payload(
-            invitee.actor.as_str(),
-            invitee.service_id(),
-            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-            expires_at,
-        )?,
-    )
-    .await?;
+    let (payload, introduction_evidence) =
+        same_service_invite_payload(invitee.actor.as_str(), invitee.service_id(), expires_at)?;
+    let accepted =
+        submit_event_now(inviter, inviter, realm_id, "ak.invite.create", payload).await?;
     let event_id = accepted["event_id"]
         .as_str()
         .ok_or_else(|| anyhow!("accepted invite create omitted event_id: {accepted}"))?;
-    Ok(
+    let invite_id =
         arkret_identifiers::InviteId::from_event_id(&arkret_identifiers::EventId::new(event_id)?)
-            .to_string(),
+            .to_string();
+    let invite_token = dispatch_accepted_invite_and_read_token(
+        inviter,
+        invitee,
+        event_id,
+        &invite_id,
+        introduction_evidence,
     )
+    .await?;
+    if invite_token.is_empty() {
+        return Err(anyhow!(
+            "formal invite dispatch returned an empty private token for {invite_id}"
+        ));
+    }
+    Ok(invite_id)
+}
+
+fn same_service_invite_payload(
+    invitee: &str,
+    recipient_service_id: &str,
+    expires_at: DateTime<Utc>,
+) -> Result<(Value, IntroductionEvidence)> {
+    let evidence = IntroductionEvidence::SamePrincipalServer;
+    let evidence_digest = arkret_canonical::canonical_sha256(&evidence)?;
+    let payload =
+        invite_create_payload(invitee, recipient_service_id, &evidence_digest, expires_at)?;
+    Ok((payload, evidence))
 }
 
 async fn accept_invite_join_now(
@@ -823,4 +840,27 @@ async fn submit_event_now(
             .await?;
     }
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_service_invite_commits_to_the_evidence_used_by_formal_dispatch() {
+        let expires_at = DateTime::parse_from_rfc3339("2026-09-01T00:00:00.000Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let (payload, evidence) = same_service_invite_payload(
+            "did:webvh:z6mkinvitee:invitee.example",
+            "ak:did_core:webvh:z6mkservice",
+            expires_at,
+        )
+        .unwrap();
+        assert_eq!(evidence, IntroductionEvidence::SamePrincipalServer);
+        assert_eq!(
+            payload["introduction_evidence_digest"],
+            arkret_canonical::canonical_sha256(&evidence).unwrap()
+        );
+    }
 }
