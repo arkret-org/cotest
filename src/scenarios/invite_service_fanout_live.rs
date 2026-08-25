@@ -21,19 +21,16 @@ use arkret_models_collaboration::account_lifecycle::{
 };
 use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
 use arkret_models_collaboration::governance::invite_addressing::{
-    IntroductionEvidence, InviteAddress, InviteDeliveryRequestBody, InviteReceivePolicy,
+    IntroductionEvidence, InviteAddress, InviteReceivePolicy, SelfInviteDispatchRequestBody,
 };
 use arkret_models_collaboration::governance_payloads::{ConsentObservedDot, ConsentRevokePayload};
-use arkret_models_collaboration::http_bodies::EventsResolveRequestBody;
 use arkret_models_collaboration::sync_frames::account_sync::{
     ActorPrivateAccountDataOperation, ActorPrivateAccountDataUpdate, DeviceMessageSender,
     DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome,
 };
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
-use arkret_wire::{
-    AccountDataKey, ConsentScope, Event, EventInitialSubmission, InviteReceiveAction,
-};
+use arkret_wire::{AccountDataKey, ConsentScope, EventInitialSubmission, InviteReceiveAction};
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -89,28 +86,6 @@ async fn set_explicit_address_behavior(
     Ok(())
 }
 
-async fn resolve_accepted_event(inviter: &TestActorClient, event_id: &EventId) -> Result<Event> {
-    let resolved = expect_json(
-        inviter
-            .query("/_arkret/self/events/resolve")
-            .json(&EventsResolveRequestBody {
-                event_ids: vec![event_id.clone()],
-                event_digests: Vec::new(),
-                include_payload: Some(true),
-                history_traversal_access: None,
-                max_response_bytes: None,
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    let event = resolved["events"]
-        .as_array()
-        .and_then(|events| events.first())
-        .cloned()
-        .ok_or_else(|| anyhow!("accepted invite Event {event_id} did not resolve: {resolved}"))?;
-    serde_json::from_value(event).context("resolved invite Event is not a wire Event")
-}
-
 async fn create_and_dispatch_explicit_invite(
     inviter: &TestActorClient,
     holder: &TestActorClient,
@@ -133,7 +108,6 @@ async fn create_and_dispatch_explicit_invite(
             .ok_or_else(|| anyhow!("invite create omitted event_id: {accepted}"))?
             .to_owned(),
     )?;
-    let invite_event = resolve_accepted_event(inviter, &event_id).await?;
     let service_id = DidCoreId::new(inviter.service_id().to_owned())?;
     let service_resolution = ServiceResolutionCarrier::CurrentRecordUrl {
         current_record_url: format!(
@@ -142,16 +116,17 @@ async fn create_and_dispatch_explicit_invite(
         ),
         pinned_record_digest: None,
     };
-    let request = InviteDeliveryRequestBody::new(
-        invite_event,
-        InviteAddress::principal_server(
+    let request = SelfInviteDispatchRequestBody {
+        schema: arkret_wire::SchemaId::INVITE_DELIVERY_REQUEST_V1.to_owned(),
+        invite_event_id: event_id.clone(),
+        invite_address: InviteAddress::principal_server(
             DidCoreId::new(actor_core_id(&holder.actor)?)?,
             service_id,
             service_resolution,
         ),
-        evidence,
-        event_id.as_str(),
-    );
+        introduction_evidence: evidence,
+        idempotency_key: event_id.to_string(),
+    };
     let outcome = expect_json(
         inviter
             .post("/_arkret/self/invites/dispatch")
