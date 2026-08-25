@@ -95,9 +95,9 @@ async function fetchRealmSealBasis(
   token: string,
   realmId: string,
 ): Promise<RealmSealBasis> {
-  // `ak.self.events.read.frontier` registers a QUERY binding only
-  // (service-http-binding.md); a GET falls through to `events/{event_id}`.
-  const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+  // `ak.self.seals.read.frontier` is the only registered Realm Seal
+  // discovery surface and accepts a closed QUERY body.
+  const frontierUrl = `${solandBaseUrl()}/_arkret/self/seals/frontier`;
   const response = await request.fetch(frontierUrl, {
     method: "QUERY",
     headers: {
@@ -119,12 +119,7 @@ async function fetchRealmSealBasis(
   expect(body.frontier?.kind).toBe("realm_seal");
   const leaves = body.frontier?.seal_basis?.leaves as string[] | undefined;
   expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
-  const seal = await readAcceptedSeal(
-    request,
-    token,
-    realmId,
-    leaves![0],
-  );
+  const seal = await readAcceptedSeal(request, token, realmId, leaves![0]);
   expect(seal.control_event_set_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
   expect(seal.state_root).toMatch(/^(sha256|blake3):[0-9a-f]{64}$/);
   return {
@@ -157,120 +152,125 @@ function relationObject(args: {
 test.describe.configure({ mode: "serial" });
 
 test.describe("core object invariants", () => {
-  test(
-    "Phase A — newly created Realm exposes spec §3 common fields (id, created_at, actor, lifecycle_state equivalents) on the read-back wire",
-    async ({ browser, request }, testInfo) => {
-      const stamp = Date.now();
-      const aliceFlow = await openDpopUserPage(
-        browser,
-        request,
-        `s-coinv-alice-${stamp}`,
-      );
-      if (!aliceFlow) {
-        assertJointStackNotRequired("core object invariants browser login");
-        test.skip(true, "coauth DPoP session-grant login is unavailable");
-        return;
-      }
-      const alice = aliceFlow.user;
-      const alicePage = aliceFlow.page;
-      const authFor = (method: string, url: string) =>
-        selfPathHeadersForDpopSession(aliceFlow.session, method, url);
+  test("Phase A — newly created Realm exposes spec §3 common fields (id, created_at, actor, lifecycle_state equivalents) on the read-back wire", async ({
+    browser,
+    request,
+  }, testInfo) => {
+    const stamp = Date.now();
+    const aliceFlow = await openDpopUserPage(
+      browser,
+      request,
+      `s-coinv-alice-${stamp}`,
+    );
+    if (!aliceFlow) {
+      assertJointStackNotRequired("core object invariants browser login");
+      test.skip(true, "coauth DPoP session-grant login is unavailable");
+      return;
+    }
+    const alice = aliceFlow.user;
+    const alicePage = aliceFlow.page;
+    const authFor = (method: string, url: string) =>
+      selfPathHeadersForDpopSession(aliceFlow.session, method, url);
 
-      try {
-        // ── Step 1-2: alice creates Realm R via the standard setup wizard
-        // (same path messaging/triad-collaboration uses).
-        const realmId = await alicePage.createRealm({
-          title: `models/core-object-invariants Realm ${stamp}`,
-          summary: "core object invariants coverage",
-          discoverability: "listed",
-          joinRule: "invite",
-          historyAccess: "since_join",
-        });
-        expect(realmId).toMatch(/^ak:realm:/);
-        await stepShot(alicePage.page, testInfo, "A-alice-realm-created");
+    try {
+      // ── Step 1-2: alice creates Realm R via the standard setup wizard
+      // (same path messaging/triad-collaboration uses).
+      const realmId = await alicePage.createRealm({
+        title: `models/core-object-invariants Realm ${stamp}`,
+        summary: "core object invariants coverage",
+        discoverability: "listed",
+        joinRule: "invite",
+        historyAccess: "since_join",
+      });
+      expect(realmId).toMatch(/^ak:realm:/);
+      await stepShot(alicePage.page, testInfo, "A-alice-realm-created");
 
-        // ── Step 3: read back the Realm via the soland API and verify the
-        // spec §3 common-field equivalents on the RealmLifecycleResponse
-        // serializer. Current wire shape (soland/src/wire.rs
-        // RealmLifecycleResponse): { ok, realm_id, owner, members, deleted }.
-        //   - realm_id  ↔ spec `id`              (typed ak:realm: prefix)
-        //   - owner     ↔ spec `created_by`      (DID, actor reference)
-        //   - members   ↔ membership invariant   (must contain owner)
-        //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
-        const realmUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
-        const realmRes = await request.get(realmUrl, {
-          headers: authFor("GET", realmUrl),
-        });
-        expect(realmRes.status()).toBe(200);
-        const realmBody = (await realmRes.json()) as {
-          ok?: boolean;
+      // ── Step 3: read back the Realm via the soland API and verify the
+      // spec §3 common-field equivalents on the RealmLifecycleResponse
+      // serializer. Current wire shape (soland/src/wire.rs
+      // RealmLifecycleResponse): { ok, realm_id, owner, members, deleted }.
+      //   - realm_id  ↔ spec `id`              (typed ak:realm: prefix)
+      //   - owner     ↔ spec `created_by`      (DID, actor reference)
+      //   - members   ↔ membership invariant   (must contain owner)
+      //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
+      const realmUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
+      const realmRes = await request.get(realmUrl, {
+        headers: authFor("GET", realmUrl),
+      });
+      expect(realmRes.status()).toBe(200);
+      const realmBody = (await realmRes.json()) as {
+        ok?: boolean;
+        realm_id?: string;
+        owner?: string;
+        members?: string[];
+        deleted?: boolean;
+      };
+      // Common-field 1: `id` (typed ak:realm: prefix).
+      expect(realmBody.realm_id).toBe(realmId);
+      expect(realmBody.realm_id).toMatch(/^ak:realm:/);
+      // Common-field 2: actor reference (`created_by` equivalent → `owner`).
+      expect(realmBody.owner).toBe(alice.did);
+      // Membership invariant: owner must always appear in members.
+      expect(Array.isArray(realmBody.members)).toBe(true);
+      expect(realmBody.members ?? []).toContain(alice.did);
+      // Common-field 3: `lifecycle_state` equivalent (deleted=false ⇒ active).
+      expect(realmBody.deleted).toBe(false);
+
+      // ── Step 4: read the event log for this Realm to recover the
+      // `created_at` + `event_id` + `actor_id` + `kind` fields that
+      // RealmLifecycleResponse does not currently surface. The events
+      // query response item shape follows the Event Envelope projection:
+      // { event_id, realm_id, kind, actor_id, payload, created_at, ... }.
+      const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const eventsRes = await request.fetch(eventsUrl, {
+        method: "QUERY",
+        data: { realms: [realmId], limit: 20 },
+        headers: authFor("QUERY", eventsUrl),
+      });
+      expect(eventsRes.status()).toBe(200);
+      const eventsBody = (await eventsRes.json()) as {
+        events?: Array<{
+          event_id?: string;
+          kind?: string;
+          actor_id?: string;
+          created_at?: string;
           realm_id?: string;
-          owner?: string;
-          members?: string[];
-          deleted?: boolean;
-        };
-        // Common-field 1: `id` (typed ak:realm: prefix).
-        expect(realmBody.realm_id).toBe(realmId);
-        expect(realmBody.realm_id).toMatch(/^ak:realm:/);
-        // Common-field 2: actor reference (`created_by` equivalent → `owner`).
-        expect(realmBody.owner).toBe(alice.did);
-        // Membership invariant: owner must always appear in members.
-        expect(Array.isArray(realmBody.members)).toBe(true);
-        expect(realmBody.members ?? []).toContain(alice.did);
-        // Common-field 3: `lifecycle_state` equivalent (deleted=false ⇒ active).
-        expect(realmBody.deleted).toBe(false);
+        }>;
+      };
+      const events = eventsBody.events ?? [];
+      expect(events.length).toBeGreaterThan(0);
 
-        // ── Step 4: read the event log for this Realm to recover the
-        // `created_at` + `event_id` + `actor_id` + `kind` fields that
-        // RealmLifecycleResponse does not currently surface. The events
-        // query response item shape follows the Event Envelope projection:
-        // { event_id, realm_id, kind, actor_id, payload, created_at, ... }.
-        const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
-        const eventsRes = await request.fetch(eventsUrl, {
-          method: "QUERY",
-          data: { realms: [realmId], limit: 20 },
-          headers: authFor("QUERY", eventsUrl),
-        });
-        expect(eventsRes.status()).toBe(200);
-        const eventsBody = (await eventsRes.json()) as {
-          events?: Array<{
-            event_id?: string;
-            kind?: string;
-            actor_id?: string;
-            created_at?: string;
-            realm_id?: string;
-          }>;
-        };
-        const events = eventsBody.events ?? [];
-        expect(events.length).toBeGreaterThan(0);
+      // Find the Realm lifecycle / create event — soland writes lifecycle
+      // ops via record_space_lifecycle_operation, so the kind is in the
+      // ak.realm.* family. We accept any ak.realm.* kind to stay
+      // resilient to soland's exact lifecycle op naming.
+      const lifecycleEvent =
+        events.find((event) => event.kind?.startsWith("ak.realm.")) ??
+        events[0];
+      expect(lifecycleEvent).toBeTruthy();
+      // Common-field (Event Envelope §2.2): event_id.
+      expect(lifecycleEvent.event_id).toMatch(/^ak:event:/);
+      // Common-field (§2.2 / §3): created_at (RFC 3339, MUST end with Z).
+      expect(lifecycleEvent.created_at).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
+      );
+      // Common-field (§2.2): actor_id.
+      expect(lifecycleEvent.actor_id).toBe(alice.did);
+      // Common-field: kind (§2.2 — Event Envelope `kind`).
+      expect(typeof lifecycleEvent.kind).toBe("string");
+      expect(lifecycleEvent.kind?.length ?? 0).toBeGreaterThan(0);
+      // Realm scoping: event must reference the Realm we just created.
+      expect(lifecycleEvent.realm_id).toBe(realmId);
 
-        // Find the Realm lifecycle / create event — soland writes lifecycle
-        // ops via record_space_lifecycle_operation, so the kind is in the
-        // ak.realm.* family. We accept any ak.realm.* kind to stay
-        // resilient to soland's exact lifecycle op naming.
-        const lifecycleEvent =
-          events.find((event) => event.kind?.startsWith("ak.realm.")) ?? events[0];
-        expect(lifecycleEvent).toBeTruthy();
-        // Common-field (Event Envelope §2.2): event_id.
-        expect(lifecycleEvent.event_id).toMatch(/^ak:event:/);
-        // Common-field (§2.2 / §3): created_at (RFC 3339, MUST end with Z).
-        expect(lifecycleEvent.created_at).toMatch(
-          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
-        );
-        // Common-field (§2.2): actor_id.
-        expect(lifecycleEvent.actor_id).toBe(alice.did);
-        // Common-field: kind (§2.2 — Event Envelope `kind`).
-        expect(typeof lifecycleEvent.kind).toBe("string");
-        expect(lifecycleEvent.kind?.length ?? 0).toBeGreaterThan(0);
-        // Realm scoping: event must reference the Realm we just created.
-        expect(lifecycleEvent.realm_id).toBe(realmId);
-
-        await stepShot(alicePage.page, testInfo, "A-alice-common-fields-verified");
-      } finally {
-        await alicePage.close();
-      }
-    },
-  );
+      await stepShot(
+        alicePage.page,
+        testInfo,
+        "A-alice-common-fields-verified",
+      );
+    } finally {
+      await alicePage.close();
+    }
+  });
 
   // ── Phase B — registered Control Move CAS.
   // `ak.strand.update` is a data-plane Event in the event-kind registry and
@@ -279,130 +279,145 @@ test.describe("core object invariants", () => {
   // `ak.component.strand.position.v1:<board_space_id>:<strand_id>` cas_register.
   // A stale head_eq MUST reject the whole Move; a subsequent fresh Move from
   // the same accepted position proves that the rejected effect did not land.
-  test.fixme(
-    // @blocking-on: soland#accepted-control-move-seal-finalization
-    // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase B)
-    // @expected-live-by: 2026Q3
-    "Phase B — stale ak.strand.move head_eq rejects atomically; the same seal basis admits a fresh position CAS",
-    async ({ request }) => {
-      const stamp = Date.now();
-      const alice = uniqueUser(`s-coinv-b-${stamp}`);
-      await ensureRegistered(request, alice);
-      const aliceToken = await issueDevSession(request, alice);
-      const realmId = await createRealmApi(request, aliceToken, {
-        title: `core-invariants B ${stamp}`,
-        ownerDid: alice.did,
-      });
+  test.fixme(// @blocking-on: soland#accepted-control-move-seal-finalization
+  // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase B)
+  // @expected-live-by: 2026Q3
+  "Phase B — stale ak.strand.move head_eq rejects atomically; the same seal basis admits a fresh position CAS", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s-coinv-b-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `core-invariants B ${stamp}`,
+      ownerDid: alice.did,
+    });
 
-      const strandId = await createStrandApi(
-        request,
-        aliceToken,
-        alice.did,
-        realmId,
-        `core-invariants strand ${stamp}`,
-        { status: "open" },
-      );
-      const boardSpaceId = typedId("space");
-      const sourceListId = typedId("space");
-      const staleExpectedListId = typedId("space");
-      const targetListId = typedId("space");
-      const positionCell =
-        `ak:cell:ak.component.strand.position.v1:${boardSpaceId}:${strandId}`;
+    const strandId = await createStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      `core-invariants strand ${stamp}`,
+      { status: "open" },
+    );
+    const boardSpaceId = typedId("space");
+    const sourceListId = typedId("space");
+    const staleExpectedListId = typedId("space");
+    const targetListId = typedId("space");
+    const positionCell = `ak:cell:ak.component.strand.position.v1:${boardSpaceId}:${strandId}`;
 
-      const initialBasis = await fetchRealmSealBasis(request, aliceToken, realmId);
-      const initialPosition = { list_space_id: sourceListId, rank: "m" };
-      const initialMove = signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.strand.move",
-        preconditions: [
-          {
-            cell: positionCell,
-            predicate: { op: "head_eq", value: null },
-          },
-        ],
-        sealBasis: initialBasis,
-        payload: {
-          board_space_id: boardSpaceId,
-          strand_id: strandId,
-          target_space_id: sourceListId,
-          rank: "m",
+    const initialBasis = await fetchRealmSealBasis(
+      request,
+      aliceToken,
+      realmId,
+    );
+    const initialPosition = { list_space_id: sourceListId, rank: "m" };
+    const initialMove = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.strand.move",
+      preconditions: [
+        {
+          cell: positionCell,
+          predicate: { op: "head_eq", value: null },
         },
-      });
-      await alignSignedEventToActorFrontierApi(request, aliceToken, initialMove);
-      await submitSignedEventApi(request, aliceToken, initialMove, {
-        context: "establish initial Strand position",
-      });
+      ],
+      sealBasis: initialBasis,
+      payload: {
+        board_space_id: boardSpaceId,
+        strand_id: strandId,
+        target_space_id: sourceListId,
+        rank: "m",
+      },
+    });
+    await alignSignedEventToActorFrontierApi(request, aliceToken, initialMove);
+    await submitSignedEventApi(request, aliceToken, initialMove, {
+      context: "establish initial Strand position",
+    });
 
-      await expect
-        .poll(
-          () => fetchRealmSealBasis(request, aliceToken, realmId),
-          {
-            message: "initial Strand position Control Move becomes covered by a later Seal",
-            timeout: 30_000,
+    await expect
+      .poll(() => fetchRealmSealBasis(request, aliceToken, realmId), {
+        message:
+          "initial Strand position Control Move becomes covered by a later Seal",
+        timeout: 30_000,
+      })
+      .not.toEqual(initialBasis);
+    const acceptedBasis = await fetchRealmSealBasis(
+      request,
+      aliceToken,
+      realmId,
+    );
+    const staleMoveEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.strand.move",
+      preconditions: [
+        {
+          cell: positionCell,
+          predicate: {
+            op: "head_eq",
+            value: { list_space_id: staleExpectedListId, rank: "m" },
           },
-        )
-        .not.toEqual(initialBasis);
-      const acceptedBasis = await fetchRealmSealBasis(request, aliceToken, realmId);
-      const staleMoveEnvelope = signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.strand.move",
-        preconditions: [
-          {
-            cell: positionCell,
-            predicate: {
-              op: "head_eq",
-              value: { list_space_id: staleExpectedListId, rank: "m" },
-            },
-          },
-        ],
-        sealBasis: acceptedBasis,
-        payload: {
-          board_space_id: boardSpaceId,
-          strand_id: strandId,
-          from_space_id: staleExpectedListId,
-          target_space_id: targetListId,
-          rank: "z",
-          expected_position: { space_id: staleExpectedListId, rank: "m" },
         },
-      });
-      await alignSignedEventToActorFrontierApi(request, aliceToken, staleMoveEnvelope);
-      const staleMove = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+      ],
+      sealBasis: acceptedBasis,
+      payload: {
+        board_space_id: boardSpaceId,
+        strand_id: strandId,
+        from_space_id: staleExpectedListId,
+        target_space_id: targetListId,
+        rank: "z",
+        expected_position: { space_id: staleExpectedListId, rank: "m" },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      staleMoveEnvelope,
+    );
+    const staleMove = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
         headers: authHeaders(aliceToken),
         data: staleMoveEnvelope,
-      });
-      expect(staleMove.status()).toBe(412);
-      expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
+      },
+    );
+    expect(staleMove.status()).toBe(412);
+    expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
 
-      const basisAfterReject = await fetchRealmSealBasis(request, aliceToken, realmId);
-      expect(basisAfterReject).toEqual(acceptedBasis);
-      const freshMove = signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.strand.move",
-        preconditions: [
-          {
-            cell: positionCell,
-            predicate: { op: "head_eq", value: initialPosition },
-          },
-        ],
-        sealBasis: basisAfterReject,
-        payload: {
-          board_space_id: boardSpaceId,
-          strand_id: strandId,
-          from_space_id: sourceListId,
-          target_space_id: targetListId,
-          rank: "z",
-          expected_position: { space_id: sourceListId, rank: "m" },
+    const basisAfterReject = await fetchRealmSealBasis(
+      request,
+      aliceToken,
+      realmId,
+    );
+    expect(basisAfterReject).toEqual(acceptedBasis);
+    const freshMove = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.strand.move",
+      preconditions: [
+        {
+          cell: positionCell,
+          predicate: { op: "head_eq", value: initialPosition },
         },
-      });
-      await alignSignedEventToActorFrontierApi(request, aliceToken, freshMove);
-      await submitSignedEventApi(request, aliceToken, freshMove, {
-        context: "fresh Strand position CAS after stale rejection",
-      });
-    },
-  );
+      ],
+      sealBasis: basisAfterReject,
+      payload: {
+        board_space_id: boardSpaceId,
+        strand_id: strandId,
+        from_space_id: sourceListId,
+        target_space_id: targetListId,
+        rank: "z",
+        expected_position: { space_id: sourceListId, rank: "m" },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(request, aliceToken, freshMove);
+    await submitSignedEventApi(request, aliceToken, freshMove, {
+      context: "fresh Strand position CAS after stale rejection",
+    });
+  });
 
   // ── Phase C — Cascade / archive / delete.
   // Retained as fixme: this asserts the spec §3.4 "archive does NOT cascade"
@@ -418,48 +433,50 @@ test.describe("core object invariants", () => {
   // live-dependents refusal is also not wired. Both halves require reducer
   // changes that cannot be validated without breaking the existing,
   // separately-owned tombstone/archive flows.
-  test.fixme(
-    // @blocking-on: soland#space-lifecycle-spec-convergence
-    // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase C)
-    // @expected-live-by: 2026Q3
-    "Phase C — ak.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected",
-    async ({ request }) => {
-      const stamp = Date.now();
-      const alice = uniqueUser(`s-coinv-c-${stamp}`);
-      await ensureRegistered(request, alice);
-      const aliceToken = await issueDevSession(request, alice);
-      const realmId = await createRealmApi(request, aliceToken, {
-        title: `core-invariants C ${stamp}`,
-        ownerDid: alice.did,
-      });
-      const createdAt = canonicalTimestamp();
-      const parentSpaceId = typedId("space");
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.space.create",
-          createdAt,
-          payload: {
-            object: {
-              id: parentSpaceId,
-              schema: "ak.schema.space.v1",
-              realm_id: realmId,
-              kind: "board",
-              metadata: { title: `core-invariants parent ${stamp}` },
-              created_by: alice.did,
-              created_at: createdAt,
-            },
+  test.fixme(// @blocking-on: soland#space-lifecycle-spec-convergence
+  // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase C)
+  // @expected-live-by: 2026Q3
+  "Phase C — ak.space.archive does NOT cascade; tombstone with live dependents fails; post-tombstone writes are rejected", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s-coinv-c-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `core-invariants C ${stamp}`,
+      ownerDid: alice.did,
+    });
+    const createdAt = canonicalTimestamp();
+    const parentSpaceId = typedId("space");
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.space.create",
+        createdAt,
+        payload: {
+          object: {
+            id: parentSpaceId,
+            schema: "ak.schema.space.v1",
+            realm_id: realmId,
+            kind: "board",
+            metadata: { title: `core-invariants parent ${stamp}` },
+            created_by: alice.did,
+            created_at: createdAt,
           },
-        }),
-        { context: "create parent board space" },
-      );
+        },
+      }),
+      { context: "create parent board space" },
+    );
 
-      // Archiving the parent MUST NOT cascade to the child per spec §3.4;
-      // soland's cascade behaviour means this assertion does not yet hold.
-      const archiveRes = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+    // Archiving the parent MUST NOT cascade to the child per spec §3.4;
+    // soland's cascade behaviour means this assertion does not yet hold.
+    const archiveRes = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -467,12 +484,15 @@ test.describe("core object invariants", () => {
           kind: "ak.space.archive",
           payload: { space_id: parentSpaceId },
         }),
-      });
-      expect(archiveRes.ok()).toBeTruthy();
+      },
+    );
+    expect(archiveRes.ok()).toBeTruthy();
 
-      // Tombstone with a live dependent MUST fail with space_has_live_dependents
-      // (not yet enforced by soland).
-      const tombFail = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+    // Tombstone with a live dependent MUST fail with space_has_live_dependents
+    // (not yet enforced by soland).
+    const tombFail = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
           actorDid: alice.did,
@@ -480,11 +500,13 @@ test.describe("core object invariants", () => {
           kind: "ak.space.tombstone",
           payload: { space_id: parentSpaceId },
         }),
-      });
-      expect(tombFail.status()).toBeGreaterThanOrEqual(400);
-      expect(wireErrCode(await tombFail.json())).toBe("space_has_live_dependents");
-    },
-  );
+      },
+    );
+    expect(tombFail.status()).toBeGreaterThanOrEqual(400);
+    expect(wireErrCode(await tombFail.json())).toBe(
+      "space_has_live_dependents",
+    );
+  });
 
   // ── Phase D — Relation cardinality (PROMOTED).
   // soland's relation reducer (reducer/apply_relations.rs) is fully wired:
@@ -495,154 +517,161 @@ test.describe("core object invariants", () => {
   // - structural `contains` across Realms is rejected with
   //   `cross_realm_structural_relation` (HTTP 412) — relation.md §4.4.
   // Reads use the product-private `/_soland/self/relations` projection list.
-  test(
-    "Phase D — has_default_view enforces many_to_one; duplicate Relation create is idempotent; cross-Realm contains rejected",
-    async ({ request }) => {
-      const stamp = Date.now();
-      const alice = uniqueUser(`s-coinv-d-${stamp}`);
-      await ensureRegistered(request, alice);
-      const aliceToken = await issueDevSession(request, alice);
-      const realmId = await createRealmApi(request, aliceToken, {
-        title: `core-invariants D ${stamp}`,
-        ownerDid: alice.did,
-      });
+  test("Phase D — has_default_view enforces many_to_one; duplicate Relation create is idempotent; cross-Realm contains rejected", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s-coinv-d-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `core-invariants D ${stamp}`,
+      ownerDid: alice.did,
+    });
 
-      // `has_default_view` is many_to_one on (from_ref, relation_kind). The
-      // relation reducer requires a structural from_ref endpoint
-      // (`ak:strand:`/`ak:space:`) to be projected, so anchor the edges on a
-      // real Strand created via the proven ak.strand.create path. The
-      // `ak:view:` to_ref does not need a local projection (View objects are
-      // not reduced today), so two synthetic view ids are valid targets.
-      const sourceRef = await createStrandApi(
+    // `has_default_view` is many_to_one on (from_ref, relation_kind). The
+    // relation reducer requires a structural from_ref endpoint
+    // (`ak:strand:`/`ak:space:`) to be projected, so anchor the edges on a
+    // real Strand created via the proven ak.strand.create path. The
+    // `ak:view:` to_ref does not need a local projection (View objects are
+    // not reduced today), so two synthetic view ids are valid targets.
+    const sourceRef = await createStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      `has_default_view anchor ${stamp}`,
+    );
+    const v1 = typedId("view");
+    const v2 = typedId("view");
+
+    const createDefaultView = async (viewId: string, relationId: string) =>
+      submitSignedEventApi(
         request,
         aliceToken,
-        alice.did,
-        realmId,
-        `has_default_view anchor ${stamp}`,
+        signedEventEnvelope({
+          actorDid: alice.did,
+          realmId,
+          kind: "ak.relation.create",
+          payload: {
+            relation: relationObject({
+              id: relationId,
+              realmId,
+              relationKind: "has_default_view",
+              fromRef: sourceRef,
+              toRef: viewId,
+              actorDid: alice.did,
+            }),
+          },
+        }),
+        { context: `has_default_view -> ${viewId}` },
       );
-      const v1 = typedId("view");
-      const v2 = typedId("view");
 
-      const createDefaultView = async (viewId: string, relationId: string) =>
-        submitSignedEventApi(
-          request,
-          aliceToken,
-          signedEventEnvelope({
-            actorDid: alice.did,
-            realmId,
-            kind: "ak.relation.create",
-            payload: {
-              relation: relationObject({
-                id: relationId,
-                realmId,
-                relationKind: "has_default_view",
-                fromRef: sourceRef,
-                toRef: viewId,
-                actorDid: alice.did,
-              }),
-            },
-          }),
-          { context: `has_default_view -> ${viewId}` },
-        );
+    // First default-view edge succeeds.
+    await createDefaultView(v1, typedId("relation"));
+    // Second default-view edge for the same source: many_to_one means one
+    // edge is auto-tombstoned, leaving exactly 1 active edge. The surviving
+    // concurrent mutually exclusive edges cannot acquire active status from
+    // digest ordering. The projection exposes at most one active edge and
+    // normally none until an explicit complete-head resolution.
+    await createDefaultView(v2, typedId("relation"));
 
-      // First default-view edge succeeds.
-      await createDefaultView(v1, typedId("relation"));
-      // Second default-view edge for the same source: many_to_one means one
-      // edge is auto-tombstoned, leaving exactly 1 active edge. The surviving
-      // concurrent mutually exclusive edges cannot acquire active status from
-      // digest ordering. The projection exposes at most one active edge and
-      // normally none until an explicit complete-head resolution.
-      await createDefaultView(v2, typedId("relation"));
+    const activeEdges = await request.get(
+      `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`,
+      { headers: authHeaders(aliceToken) },
+    );
+    expect(activeEdges.ok()).toBeTruthy();
+    const edgesBody = await activeEdges.json();
+    const activeItems = (edgesBody.items ?? []) as Array<{ to_ref?: string }>;
+    // many_to_one: at most one active edge for this (from_ref, relation_kind).
+    expect(activeItems.length).toBeLessThanOrEqual(1);
+    if (activeItems.length === 1) {
+      expect([v1, v2]).toContain(activeItems[0].to_ref);
+    }
 
-      const activeEdges = await request.get(
-        `${solandBaseUrl()}/_soland/self/relations?from_ref=${encodeURIComponent(sourceRef)}&relation_kind=has_default_view&state=active`,
-        { headers: authHeaders(aliceToken) },
-      );
-      expect(activeEdges.ok()).toBeTruthy();
-      const edgesBody = await activeEdges.json();
-      const activeItems = (edgesBody.items ?? []) as Array<{ to_ref?: string }>;
-      // many_to_one: at most one active edge for this (from_ref, relation_kind).
-      expect(activeItems.length).toBeLessThanOrEqual(1);
-      if (activeItems.length === 1) {
-        expect([v1, v2]).toContain(activeItems[0].to_ref);
-      }
-
-      // A fully-duplicate edge (same relation_id) is idempotent — re-submitting
-      // the same signed envelope is accepted by the events submit surface.
-      const dupRelationId = typedId("relation");
-      const duplicateEnvelope = signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.relation.create",
-        payload: {
-          relation: relationObject({
-            id: dupRelationId,
-            realmId,
-            relationKind: "has_default_view",
-            fromRef: sourceRef,
-            toRef: v2,
-            actorDid: alice.did,
-          }),
-        },
-      });
-      await submitSignedEventApi(request, aliceToken, duplicateEnvelope, {
-        context: `create duplicate relation ${dupRelationId}`,
-      });
-      const dupAgain = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+    // A fully-duplicate edge (same relation_id) is idempotent — re-submitting
+    // the same signed envelope is accepted by the events submit surface.
+    const dupRelationId = typedId("relation");
+    const duplicateEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.relation.create",
+      payload: {
+        relation: relationObject({
+          id: dupRelationId,
+          realmId,
+          relationKind: "has_default_view",
+          fromRef: sourceRef,
+          toRef: v2,
+          actorDid: alice.did,
+        }),
+      },
+    });
+    await submitSignedEventApi(request, aliceToken, duplicateEnvelope, {
+      context: `create duplicate relation ${dupRelationId}`,
+    });
+    const dupAgain = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
         headers: authHeaders(aliceToken),
         data: duplicateEnvelope,
-      });
-      expect([200, 201, 409]).toContain(dupAgain.status());
+      },
+    );
+    expect([200, 201, 409]).toContain(dupAgain.status());
 
-      // Cross-Realm structural `contains` MUST fail (relation.md §4.4). Create a
-      // strand in another Realm and try to `contains` it from this Realm.
-      const realmB = await createRealmApi(request, aliceToken, {
-        title: `core-invariants D other ${stamp}`,
-        ownerDid: alice.did,
-      });
-      const strandInA = await createStrandApi(
-        request,
-        aliceToken,
-        alice.did,
-        realmId,
-        `card in A ${stamp}`,
-      );
-      const strandInB = await createStrandApi(
-        request,
-        aliceToken,
-        alice.did,
-        realmB,
-        `card in B ${stamp}`,
-      );
-      const crossRealmEnvelope = signedEventEnvelope({
-        actorDid: alice.did,
-        realmId,
-        kind: "ak.relation.create",
-        payload: {
-          relation: relationObject({
-            id: typedId("relation"),
-            realmId,
-            relationKind: "contains",
-            fromRef: strandInA,
-            toRef: strandInB,
-            actorDid: alice.did,
-          }),
-        },
-      });
-      await prepareSignedEventCbaApi(request, aliceToken, crossRealmEnvelope);
-      await alignSignedEventToActorFrontierApi(
-        request,
-        aliceToken,
-        crossRealmEnvelope,
-      );
-      const crossRealm = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
+    // Cross-Realm structural `contains` MUST fail (relation.md §4.4). Create a
+    // strand in another Realm and try to `contains` it from this Realm.
+    const realmB = await createRealmApi(request, aliceToken, {
+      title: `core-invariants D other ${stamp}`,
+      ownerDid: alice.did,
+    });
+    const strandInA = await createStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmId,
+      `card in A ${stamp}`,
+    );
+    const strandInB = await createStrandApi(
+      request,
+      aliceToken,
+      alice.did,
+      realmB,
+      `card in B ${stamp}`,
+    );
+    const crossRealmEnvelope = signedEventEnvelope({
+      actorDid: alice.did,
+      realmId,
+      kind: "ak.relation.create",
+      payload: {
+        relation: relationObject({
+          id: typedId("relation"),
+          realmId,
+          relationKind: "contains",
+          fromRef: strandInA,
+          toRef: strandInB,
+          actorDid: alice.did,
+        }),
+      },
+    });
+    await prepareSignedEventCbaApi(request, aliceToken, crossRealmEnvelope);
+    await alignSignedEventToActorFrontierApi(
+      request,
+      aliceToken,
+      crossRealmEnvelope,
+    );
+    const crossRealm = await request.post(
+      `${solandBaseUrl()}/_arkret/self/events`,
+      {
         headers: authHeaders(aliceToken),
         data: crossRealmEnvelope,
-      });
-      expect(crossRealm.status()).toBe(412);
-      expect(wireErrCode(await crossRealm.json())).toBe("cross_realm_structural_relation");
-    },
-  );
+      },
+    );
+    expect(crossRealm.status()).toBe(412);
+    expect(wireErrCode(await crossRealm.json())).toBe(
+      "cross_realm_structural_relation",
+    );
+  });
 
   // ── Phase E — View projection fallback.
   // Retained as fixme: soland has NO View object storage or Board projection
@@ -654,66 +683,67 @@ test.describe("core object invariants", () => {
   // fallback and unknown-renderer fail-closed — is a large new feature
   // spanning the View reducer + projection materializer + SDK DTOs. Promoting
   // it is out of scope for this pass.
-  test.fixme(
-    // @blocking-on: soland#view-projection-materializer
-    // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase E)
-    // @expected-live-by: 2026Q3
-    "Phase E — Board projection on a fresh Space with no registered View returns the derived default (NOT 404); unknown renderer fails closed",
-    async ({ request }) => {
-      const stamp = Date.now();
-      const alice = uniqueUser(`s-coinv-e-${stamp}`);
-      await ensureRegistered(request, alice);
-      const aliceToken = await issueDevSession(request, alice);
-      const realmId = await createRealmApi(request, aliceToken, {
-        title: `core-invariants E ${stamp}`,
-        ownerDid: alice.did,
-      });
-      const createdAt = canonicalTimestamp();
-      const spaceId = typedId("space");
-      await submitSignedEventApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId,
-          kind: "ak.space.create",
-          createdAt,
-          payload: {
-            object: {
-              id: spaceId,
-              schema: "ak.schema.space.v1",
-              realm_id: realmId,
-              kind: "board",
-              metadata: { title: `core-invariants E ${stamp}` },
-              created_by: alice.did,
-              created_at: createdAt,
-            },
+  test.fixme(// @blocking-on: soland#view-projection-materializer
+  // @user-promise: e2e/scenarios/models/core-object-invariants.md (Phase E)
+  // @expected-live-by: 2026Q3
+  "Phase E — Board projection on a fresh Space with no registered View returns the derived default (NOT 404); unknown renderer fails closed", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s-coinv-e-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createRealmApi(request, aliceToken, {
+      title: `core-invariants E ${stamp}`,
+      ownerDid: alice.did,
+    });
+    const createdAt = canonicalTimestamp();
+    const spaceId = typedId("space");
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId,
+        kind: "ak.space.create",
+        createdAt,
+        payload: {
+          object: {
+            id: spaceId,
+            schema: "ak.schema.space.v1",
+            realm_id: realmId,
+            kind: "board",
+            metadata: { title: `core-invariants E ${stamp}` },
+            created_by: alice.did,
+            created_at: createdAt,
           },
-        }),
-        { context: "create board space" },
-      );
+        },
+      }),
+      { context: "create board space" },
+    );
 
-      // A board projection on a Space that has never had ak.view.create called
-      // MUST be derived (kind=collection, renderer=board), not 404. Endpoint
-      // does not exist yet.
-      const proj = await request.get(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
-        { headers: authHeaders(aliceToken) },
-      );
-      expect(proj.status()).toBe(200);
-      const projBody = await proj.json();
-      expect(projBody.kind).toBe("collection");
-      expect(projBody.renderer).toBe("board");
-      expect(projBody.view_id).toMatch(/^ak:view:/);
-      expect(Array.isArray(projBody.groups)).toBe(true);
+    // A board projection on a Space that has never had ak.view.create called
+    // MUST be derived (kind=collection, renderer=board), not 404. Endpoint
+    // does not exist yet.
+    const proj = await request.get(
+      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=board`,
+      { headers: authHeaders(aliceToken) },
+    );
+    expect(proj.status()).toBe(200);
+    const projBody = await proj.json();
+    expect(projBody.kind).toBe("collection");
+    expect(projBody.renderer).toBe("board");
+    expect(projBody.view_id).toMatch(/^ak:view:/);
+    expect(Array.isArray(projBody.groups)).toBe(true);
 
-      // Unknown renderer MUST fail-closed (views.md §2.2).
-      const bogus = await request.get(
-        `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=bogus_renderer_${stamp}`,
-        { headers: authHeaders(aliceToken) },
-      );
-      expect(bogus.status()).toBeGreaterThanOrEqual(400);
-      expect(wireErrCode(await bogus.json())).toMatch(/unknown_renderer|unsupported_renderer/);
-    },
-  );
+    // Unknown renderer MUST fail-closed (views.md §2.2).
+    const bogus = await request.get(
+      `${solandBaseUrl()}/_soland/self/spaces/${encodeURIComponent(spaceId)}/views/projection?renderer=bogus_renderer_${stamp}`,
+      { headers: authHeaders(aliceToken) },
+    );
+    expect(bogus.status()).toBeGreaterThanOrEqual(400);
+    expect(wireErrCode(await bogus.json())).toMatch(
+      /unknown_renderer|unsupported_renderer/,
+    );
+  });
 });

@@ -33,6 +33,7 @@ import {
   principalControlRealmForDid,
   readRealmSealBasis,
   registeredEventSigningSeedB64url,
+  registeredEventVerificationMethod,
   retypeEventDerivedId,
   refreshEventEnvelopeProof,
   signWithRegisteredEventSigner,
@@ -81,7 +82,7 @@ export type ContactListRow = {
   request_event_ref?: string;
   response_event_ref?: string;
   next_prepare_input?: {
-    basis_id: string;
+    contact_round_id: string;
     version: number;
     predecessor_event_ref: string;
   };
@@ -116,15 +117,22 @@ export type ContactTombstoneOutcome = {
 
 export type DirectConversationResolveOutcome = {
   state:
-    "found" | "authoring_required" | "not_found" | "retired" | "non_canonical";
-  realm_id?: string;
-  main_strand_id?: string;
-  binding_event_ref?: string;
-  created?: boolean;
-  authoring_kind?:
-    "remote_keypackage_claim" | "direct_conversation_materialization";
-  claim_authorization_draft?: Record<string, unknown>;
-  materialization_draft?: Record<string, unknown>;
+    | "creation_required"
+    | "creation_blocked"
+    | "awaiting_founder"
+    | "provisional"
+    | "found"
+    | "suspended"
+    | "temporarily_unavailable";
+  next_founding_input?: {
+    founding_authority_evidence: Record<string, unknown>;
+  };
+  coordinates?: Record<string, unknown>;
+  blockers?: Array<Record<string, unknown>>;
+  send_blockers?: Array<Record<string, unknown>>;
+  group_state_ref?: string;
+  group_state_digest?: string;
+  retry_after_ms?: number;
 };
 
 // invite-addressing.md §5.1: `disclosed_outcome` is a closed two-value enum
@@ -154,7 +162,9 @@ export async function grantInviteConsentArkret(
       consent_id: consentId,
       peer: peerDid,
       consent_scope: "invite",
-      expires_at: canonicalTimestamp(new Date(Date.now() + 24 * 60 * 60 * 1000)),
+      expires_at: canonicalTimestamp(
+        new Date(Date.now() + 24 * 60 * 60 * 1000),
+      ),
     },
   });
   await submitSignedEventApi(request, token, envelope, {
@@ -176,10 +186,9 @@ export async function grantInviteConsentArkret(
         const cellUrl =
           `${solandBaseUrl(opts.server)}/_arkret/self/consent/cells/${encodeURIComponent(holder.did)}` +
           `?peer=${encodeURIComponent(peerDid)}&consent_scope=invite`;
-        const response = await request.get(
-          cellUrl,
-          { headers: authHeaders(token, "GET", cellUrl) },
-        );
+        const response = await request.get(cellUrl, {
+          headers: authHeaders(token, "GET", cellUrl),
+        });
         if (!response.ok()) return false;
         const body = (await response.json()) as {
           state?: string;
@@ -254,12 +263,16 @@ export async function requestContactArkret(
     idempotency_key: idempotencyKey,
     peer: { kind: "human", principal_id: target },
     granted_to_peer_scopes: opts.requestedScopes,
-    introduction_evidence:
-      opts.introductionEvidence ?? { kind: "same_principal_server" },
+    introduction_evidence: opts.introductionEvidence ?? {
+      kind: "same_principal_server",
+    },
     ...(opts.message !== undefined ? { message: opts.message } : {}),
   };
   const preparedResponse = await request.post(url, {
-    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
     data: canonicalJson(prepareBody),
   });
   const prepared = await expectJsonOk<{
@@ -268,32 +281,30 @@ export async function requestContactArkret(
     event_draft: { unsigned_event_bytes: string };
   }>(preparedResponse, `prepare contact request -> ${target}`);
   const signedEvent = JSON.parse(
-    Buffer.from(prepared.event_draft.unsigned_event_bytes, "base64url").toString(
-      "utf8",
-    ),
+    Buffer.from(
+      prepared.event_draft.unsigned_event_bytes,
+      "base64url",
+    ).toString("utf8"),
   ) as Record<string, unknown>;
   refreshEventEnvelopeProof(signedEvent);
-  const response = await request.post(
-    url,
-    {
-      headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
-      data: canonicalJson({
-        phase: "commit",
-        operation_id: operationId,
-        idempotency_key: idempotencyKey,
-        reservation_handle: prepared.reservation_handle,
-        signed_event: signedEvent,
-      }),
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson({
+      phase: "commit",
+      operation_id: operationId,
+      idempotency_key: idempotencyKey,
+      reservation_handle: prepared.reservation_handle,
+      signed_event: signedEvent,
+    }),
+  });
   const accepted = await expectJsonOk<{
     request_acceptance_receipt: Record<string, unknown> & {
       core: { request_event_ref: string };
     };
-  }>(
-    response,
-    `contact request -> ${target}`,
-  );
+  }>(response, `contact request -> ${target}`);
   await submitPrincipalSuccessorSealApi(
     request,
     token,
@@ -324,13 +335,13 @@ export async function resolvePrincipalLocator(
   sessionToken: string,
 ): Promise<Record<string, unknown>> {
   const issueUrl = `${solandBaseUrl(server)}/_arkret/self/invite-locators`;
-  const issue = await request.post(
-    issueUrl,
-    {
-      headers: { ...authHeaders(sessionToken, "POST", issueUrl), "content-type": "application/json" },
-      data: canonicalJson({ ttl_seconds: 900 }),
+  const issue = await request.post(issueUrl, {
+    headers: {
+      ...authHeaders(sessionToken, "POST", issueUrl),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson({ ttl_seconds: 900 }),
+  });
   const issued = await expectJsonOk<{
     locator_token: string;
   }>(issue, `issue principal locator for ${subjectDid}`);
@@ -361,7 +372,9 @@ export async function respondContactArkret(
     requesterServiceId?: string;
   },
 ): Promise<ContactRespondOutcome> {
-  const rows = await listContactsArkret(request, token, { server: opts.server });
+  const rows = await listContactsArkret(request, token, {
+    server: opts.server,
+  });
   const row = rows.find((candidate) => candidate.peer === opts.requester);
   if (!row?.request_receipt) {
     throw new Error(`contact ${opts.requester} exposes no request_receipt`);
@@ -380,7 +393,10 @@ export async function respondContactArkret(
       : {}),
   };
   const preparedResponse = await request.post(url, {
-    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
     data: canonicalJson(prepareBody),
   });
   const prepared = await expectJsonOk<{
@@ -388,24 +404,25 @@ export async function respondContactArkret(
     event_draft: { unsigned_event_bytes: string };
   }>(preparedResponse, `prepare contact ${opts.action} <- ${opts.requester}`);
   const signedEvent = JSON.parse(
-    Buffer.from(prepared.event_draft.unsigned_event_bytes, "base64url").toString(
-      "utf8",
-    ),
+    Buffer.from(
+      prepared.event_draft.unsigned_event_bytes,
+      "base64url",
+    ).toString("utf8"),
   ) as Record<string, unknown>;
   refreshEventEnvelopeProof(signedEvent);
-  const response = await request.post(
-    url,
-    {
-      headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
-      data: canonicalJson({
-        phase: "commit",
-        operation_id: operationId,
-        idempotency_key: nonce,
-        reservation_handle: prepared.reservation_handle,
-        signed_event: signedEvent,
-      }),
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson({
+      phase: "commit",
+      operation_id: operationId,
+      idempotency_key: nonce,
+      reservation_handle: prepared.reservation_handle,
+      signed_event: signedEvent,
+    }),
+  });
   const accepted = await expectJsonOk<Record<string, unknown>>(
     response,
     `contact respond ${opts.action} <- ${opts.requester}`,
@@ -419,13 +436,14 @@ export async function respondContactArkret(
   );
   const receipt =
     (accepted.normal_response_acceptance_receipt as
-      | Record<string, unknown>
-      | undefined) ??
+      Record<string, unknown> | undefined) ??
     (accepted.reject_acceptance_receipt as Record<string, unknown> | undefined);
   const core = receipt?.core as Record<string, unknown> | undefined;
   return {
     response_event_ref: String(
-      core?.response_event_ref ?? core?.reject_event_ref ?? signedEvent.event_id,
+      core?.response_event_ref ??
+        core?.reject_event_ref ??
+        signedEvent.event_id,
     ),
     acceptance_receipt: receipt ?? {},
     state: opts.action === "accept" ? "accepted" : "rejected",
@@ -454,8 +472,10 @@ export async function listContactsArkret(
         typeof peer === "string"
           ? peer
           : String(peer.principal_id ?? peer.agent_id ?? ""),
-      granted_by_me: (wire.granted_to_peer_scopes as string[] | undefined) ?? [],
-      granted_to_me: (wire.granted_by_peer_scopes as string[] | undefined) ?? [],
+      granted_by_me:
+        (wire.granted_to_peer_scopes as string[] | undefined) ?? [],
+      granted_to_me:
+        (wire.granted_by_peer_scopes as string[] | undefined) ?? [],
     };
   });
 }
@@ -485,15 +505,21 @@ export async function tombstoneContactArkret(
     server?: SolandKey;
   } = {},
 ): Promise<ContactTombstoneOutcome> {
-  const row = await contactRow(request, token, contact, { server: opts.server });
+  const row = await contactRow(request, token, contact, {
+    server: opts.server,
+  });
   if (!row) {
     throw new Error(`contact ${contact} is unavailable for tombstone`);
   }
   const next = row.next_prepare_input;
-  const basisId = String(next?.basis_id ?? "");
+  const contactRoundId = String(next?.contact_round_id ?? "");
   const version = Number(next?.version ?? 0);
   const predecessorEventRef = String(next?.predecessor_event_ref ?? "");
-  if (!basisId || version < 2 || !predecessorEventRef.startsWith("ak:event:")) {
+  if (
+    !contactRoundId ||
+    version < 2 ||
+    !predecessorEventRef.startsWith("ak:event:")
+  ) {
     throw new Error(`contact ${contact} omits its tombstone lineage`);
   }
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/contacts/tombstone`;
@@ -504,13 +530,16 @@ export async function tombstoneContactArkret(
     event_draft: { unsigned_event_bytes: string };
   }>(
     await request.post(url, {
-      headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+      headers: {
+        ...authHeaders(token, "POST", url),
+        "content-type": "application/json",
+      },
       data: canonicalJson({
         phase: "prepare",
         operation_id: operationId,
         idempotency_key: nonce,
         peer: { kind: "human", principal_id: contact },
-        basis_id: basisId,
+        contact_round_id: contactRoundId,
         version,
         predecessor_event_ref: predecessorEventRef,
         block_peer: opts.blockPeer ?? false,
@@ -519,11 +548,16 @@ export async function tombstoneContactArkret(
     `prepare tombstone contact ${contact}`,
   );
   const signedEvent = JSON.parse(
-    Buffer.from(prepare.event_draft.unsigned_event_bytes, "base64url").toString("utf8"),
+    Buffer.from(prepare.event_draft.unsigned_event_bytes, "base64url").toString(
+      "utf8",
+    ),
   ) as Record<string, unknown>;
   refreshEventEnvelopeProof(signedEvent);
   const response = await request.post(url, {
-    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
     data: canonicalJson({
       phase: "commit",
       operation_id: operationId,
@@ -552,19 +586,18 @@ export async function resolveDirectConversationArkret(
   request: APIRequestContext,
   token: string,
   peer: string,
-  opts: { create?: boolean; server?: SolandKey } = {},
+  opts: { server?: SolandKey } = {},
 ): Promise<DirectConversationResolveOutcome> {
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/direct-conversations/resolve`;
-  const response = await request.post(
-    url,
-    {
-      headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
-      data: canonicalJson({
-        peer,
-        ...(opts.create !== undefined ? { create: opts.create } : {}),
-      }),
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson({
+      peer: { kind: "human", principal_id: peer },
+    }),
+  });
   return await expectJsonOk<DirectConversationResolveOutcome>(
     response,
     `resolve direct conversation with ${peer}`,
@@ -598,7 +631,9 @@ async function uploadDirectConversationKeyPackage(
 ): Promise<void> {
   const signingSeedB64url = registeredEventSigningSeedB64url(user.did);
   if (!signingSeedB64url) {
-    throw new Error(`no accepted device signing seed registered for ${user.did}`);
+    throw new Error(
+      `no accepted device signing seed registered for ${user.did}`,
+    );
   }
   const keyPackages = [
     cotestWire<Record<string, unknown>>("mls-keypackage-upload-entry", {
@@ -613,30 +648,39 @@ async function uploadDirectConversationKeyPackage(
     keypackages: keyPackages,
   };
   const signingInput = `ak.self.keys.keypackages.upload.create\n${canonicalJson(unsigned)}`;
+  const verificationMethod = registeredEventVerificationMethod(
+    user.did,
+    user.deviceId,
+  );
+  if (!verificationMethod) {
+    throw new Error(
+      `no accepted device verification method registered for ${user.did}`,
+    );
+  }
   const signature = signWithRegisteredEventSigner(
     user.did,
-    `${user.did}#${user.deviceId}`,
+    verificationMethod,
     signingInput,
   );
   if (!signature) {
     throw new Error(`no accepted device signer registered for ${user.did}`);
   }
   const endpointSignature = {
-    kid: `${user.did}#${user.deviceId}`,
+    kid: verificationMethod,
     signature_algorithm: "Ed25519",
     sig: signature,
   };
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/keys/keypackages/upload`;
-  const response = await request.post(
-    url,
-    {
-      headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
-      data: canonicalJson({
-        ...unsigned,
-        endpoint_signature: endpointSignature,
-      }),
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson({
+      ...unsigned,
+      endpoint_signature: endpointSignature,
+    }),
+  });
   const body = await expectJsonOk<{
     accepted: number;
     rejected?: Array<Record<string, unknown>>;
@@ -685,13 +729,13 @@ export async function setInviteReceivePolicyArkret(
   opts: { server?: SolandKey } = {},
 ): Promise<InviteReceivePolicy> {
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/invite-receive-policy`;
-  const response = await request.put(
-    url,
-    {
-      headers: { ...authHeaders(token, "PUT", url), "content-type": "application/json" },
-      data: canonicalJson(policy),
+  const response = await request.put(url, {
+    headers: {
+      ...authHeaders(token, "PUT", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson(policy),
+  });
   return await expectJsonOk<InviteReceivePolicy>(
     response,
     "set invite-receive-policy",
@@ -750,7 +794,9 @@ export function buildInviteCreateEvent(args: {
   });
   const inviteId = retypeEventDerivedId(String(event.event_id), "invite");
   if (args.inviteId !== undefined && args.inviteId !== inviteId) {
-    throw new Error("invite id override must equal the create Event-derived id");
+    throw new Error(
+      "invite id override must equal the create Event-derived id",
+    );
   }
   return { event, inviteId };
 }

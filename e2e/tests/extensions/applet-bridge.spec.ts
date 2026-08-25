@@ -135,8 +135,9 @@ async function configureAppletPlaintextServices(
     : [];
   const currentValue = [...accepted]
     .reverse()
-    .find((event) => event.kind === "ak.realm.plaintext_visible_services")
-    ?.payload;
+    .find(
+      (event) => event.kind === "ak.realm.plaintext_visible_services",
+    )?.payload;
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
@@ -213,18 +214,21 @@ async function revokeAppletRuntime(
         kind: "ak.capability.revoke",
         scopeRef: effectiveScope,
         sealBasis,
-        authorizationRef:
-          "ak:cell:ak.component.realm.authority_root.v1:null",
+        authorizationRef: "ak:cell:ak.component.realm.authority_root.v1:null",
         payload: {
           grant_id: intent.grant_id,
           reason: intent.reason_code,
         },
       }),
   );
-  const capabilityRevokeEvents =
-    await prepareSignedEventBatchSubmissionsApi(request, token, revokeEvents, {
+  const capabilityRevokeEvents = await prepareSignedEventBatchSubmissionsApi(
+    request,
+    token,
+    revokeEvents,
+    {
       context: `prepare Applet revoke ${appletId}`,
-    });
+    },
+  );
   const response = await request.post(base, {
     headers: {
       ...authHeaders(token, "POST", base),
@@ -314,9 +318,13 @@ test.describe("applet bridge", () => {
       );
       await publishAppletServiceIdDocument(request, signed);
       const botVerificationMethod = `${signed.bot_actor_operation?.did}#bot-event-key`;
-      const botSigningJwk = signed.bot_signing_private_key?.export({ format: "jwk" });
+      const botSigningJwk = signed.bot_signing_private_key?.export({
+        format: "jwk",
+      });
       if (!botSigningJwk?.d || !signed.bot_actor_operation) {
-        throw new Error("Applet Bot is missing its durable runtime signing custody");
+        throw new Error(
+          "Applet Bot is missing its durable runtime signing custody",
+        );
       }
       registerEventSigner({
         actorDid: signed.applet_package.bot_actor_id,
@@ -400,10 +408,11 @@ test.describe("applet bridge", () => {
           idempotencyKey: `applet-bot-membership-peer-replay-${stamp}`,
         },
       );
-      const federatedMembershipOutcome = (await federatedMembershipReplay.json()) as {
-        accepted?: string[];
-        duplicate?: string[];
-      };
+      const federatedMembershipOutcome =
+        (await federatedMembershipReplay.json()) as {
+          accepted?: string[];
+          duplicate?: string[];
+        };
       expect(federatedMembershipReplay.status()).toBe(200);
       expect([
         ...(federatedMembershipOutcome.accepted ?? []),
@@ -415,7 +424,9 @@ test.describe("applet bridge", () => {
         realmId,
       );
       expect(
-        ((membershipTimeline.events ?? []) as Array<Record<string, unknown>>).some(
+        (
+          (membershipTimeline.events ?? []) as Array<Record<string, unknown>>
+        ).some(
           (event) =>
             event.kind === "ak.member.state" &&
             event.actor_id === registration.bot_actor_id &&
@@ -423,14 +434,16 @@ test.describe("applet bridge", () => {
             (event.payload as Record<string, unknown>)?.actor_id ===
               registration.bot_actor_id &&
             (event.payload as Record<string, unknown>)?.membership === "join" &&
-            ((event.proofs as Array<Record<string, unknown>>)?.[0]
-              ?.verification_method === botVerificationMethod),
+            (event.proofs as Array<Record<string, unknown>>)?.[0]
+              ?.verification_method === botVerificationMethod,
         ),
       ).toBe(true);
 
       const externalUser = { id: "ext-user-X", display_name: "External X" };
       if (!signed.ghost_namespace_token) {
-        throw new Error("signed Applet package is missing its Ghost namespace token");
+        throw new Error(
+          "signed Applet package is missing its Ghost namespace token",
+        );
       }
       const ghostBuilt = buildWebvhGenesisEntry({
         baseUrl: solandBaseUrl(),
@@ -445,13 +458,19 @@ test.describe("applet bridge", () => {
         }),
       });
       await submitPrincipalGenesisEntry(request, solandBaseUrl(), ghostBuilt);
-      const preGhostTimeline = await queryRealmEventsApi(request, aliceToken, realmId);
-      const serviceEvents = (Array.isArray(preGhostTimeline.events)
-        ? preGhostTimeline.events
-        : []) as Array<Record<string, unknown>>;
+      const preGhostTimeline = await queryRealmEventsApi(
+        request,
+        aliceToken,
+        realmId,
+      );
+      const serviceEvents = (
+        Array.isArray(preGhostTimeline.events) ? preGhostTimeline.events : []
+      ) as Array<Record<string, unknown>>;
       const serviceHead = serviceEvents
         .filter((event) => event.actor_id === signed.applet_package.service_id)
-        .sort((left, right) => Number(right.actor_seq) - Number(left.actor_seq))[0];
+        .sort(
+          (left, right) => Number(right.actor_seq) - Number(left.actor_seq),
+        )[0];
       const ghostCreation = buildGhostManagedActorCreation({
         signed,
         registration,
@@ -462,7 +481,9 @@ test.describe("applet bridge", () => {
         createdAt: canonicalTimestamp(),
         serviceActorSeq: Number(serviceHead?.actor_seq ?? -1) + 1,
         servicePrevRef:
-          typeof serviceHead?.event_id === "string" ? serviceHead.event_id : undefined,
+          typeof serviceHead?.event_id === "string"
+            ? serviceHead.event_id
+            : undefined,
       });
       const leaseResponse = await issueAuthorizationLeasesApi(
         request,
@@ -582,7 +603,10 @@ test.describe("applet bridge", () => {
           (event.payload as Record<string, unknown> | undefined)?.subject ===
             ghostActorDid,
       );
-      expect(accountabilityGrant, "accepted Ghost accountability grant").toEqual(
+      expect(
+        accountabilityGrant,
+        "accepted Ghost accountability grant",
+      ).toEqual(
         expect.objectContaining({
           actor_id: signed.applet_package.service_id,
           authorization_ref: provisionGrantRef,
@@ -597,7 +621,9 @@ test.describe("applet bridge", () => {
       );
       const acceptedGhostHead = acceptedEvents
         .filter((event) => event.actor_id === ghostActorDid)
-        .sort((left, right) => Number(right.actor_seq) - Number(left.actor_seq))[0];
+        .sort(
+          (left, right) => Number(right.actor_seq) - Number(left.actor_seq),
+        )[0];
       expect(acceptedGhostHead, "accepted Ghost actor head").toBeDefined();
       const unsignedDirectWrite = structuredClone(acceptedGhostHead);
       delete unsignedDirectWrite.event_id;
@@ -701,43 +727,35 @@ test.describe("applet bridge", () => {
       expect(wireErrCode(directAfterRevokeBody)).toBe("applet_revoked");
 
       const pcrRealmId = String(provisionBody.principal_control_realm_id);
-      const combinedFrontierUrl = new URL(
-        "/_arkret/self/events/frontier",
-        solandBaseUrl(),
-      );
-      combinedFrontierUrl.searchParams.set("actor_id", ghostActorDid);
-      combinedFrontierUrl.searchParams.set("realm_id", pcrRealmId);
-      const revokedAuthoringFrontier = await request.get(
-        combinedFrontierUrl.toString(),
+      const combinedFrontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+      const revokedAuthoringFrontier = await request.fetch(
+        combinedFrontierUrl,
         {
-          headers: authHeaders(
-            appletServiceToken,
-            "GET",
-            combinedFrontierUrl.toString(),
-          ),
+          method: "QUERY",
+          headers: {
+            ...authHeaders(appletServiceToken, "QUERY", combinedFrontierUrl),
+            "content-type": "application/json",
+          },
+          data: canonicalJson({
+            actor_id: ghostActorDid,
+            realm_id: pcrRealmId,
+          }),
         },
       );
       expect(revokedAuthoringFrontier.status()).toBe(404);
 
-      const aggregateFrontierUrl = new URL(
-        "/_arkret/self/events/frontier",
-        solandBaseUrl(),
-      );
-      aggregateFrontierUrl.searchParams.set("actor_id", ghostActorDid);
-      const historicalFrontier = await request.get(
-        aggregateFrontierUrl.toString(),
-        {
-          headers: authHeaders(
-            appletServiceToken,
-            "GET",
-            aggregateFrontierUrl.toString(),
-          ),
+      const aggregateFrontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+      const historicalFrontier = await request.fetch(aggregateFrontierUrl, {
+        method: "QUERY",
+        headers: {
+          ...authHeaders(appletServiceToken, "QUERY", aggregateFrontierUrl),
+          "content-type": "application/json",
         },
-      );
+        data: canonicalJson({ actor_id: ghostActorDid }),
+      });
       const historicalFrontierText = await historicalFrontier.text();
       expect(historicalFrontier.status(), historicalFrontierText).toBe(200);
       expect(historicalFrontierText).toContain(pcrRealmId);
-
     } finally {
       await alicePage.close();
     }
@@ -846,7 +864,6 @@ test.describe("applet bridge", () => {
       },
     );
     expect(removedLegacyRoute.status()).toBe(404);
-
   });
 
   test("E4.3 idempotency: same applet package + same Idempotency-Key returns original registration; different key conflicts", async ({
@@ -1049,7 +1066,9 @@ test.describe("applet bridge", () => {
     rotatedSnapshot.did_document_digest = `sha256:${"44".repeat(32)}`;
     const rotatedKeys = rotatedSnapshot.accepted_signing_keys;
     if (!Array.isArray(rotatedKeys) || rotatedKeys.length === 0) {
-      throw new Error("fixture registration evidence has no accepted signing key");
+      throw new Error(
+        "fixture registration evidence has no accepted signing key",
+      );
     }
     (rotatedKeys[0] as Record<string, unknown>).public_key_digest =
       `sha256:${"55".repeat(32)}`;
@@ -1194,7 +1213,9 @@ test.describe("applet bridge", () => {
     expect([200, 201]).toContain(first.response.status());
     const firstOutcome = await first.response.json();
     if (!first.prepared) {
-      throw new Error("successful install omitted its exact prepared commit bytes");
+      throw new Error(
+        "successful install omitted its exact prepared commit bytes",
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 10_500));
     const replay = await rawInstallApplet(
@@ -1306,11 +1327,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         {
           ...event,
           proofs: [
-            appletEventProof(
-              verificationMethod,
-              event,
-              args.signingKey,
-            ),
+            appletEventProof(verificationMethod, event, args.signingKey),
           ],
         },
       ],
@@ -1382,7 +1399,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const sealRef = Array.isArray(sealBasis.leaves)
       ? sealBasis.leaves[0]
       : undefined;
-    expect(sealRef, "applet transaction fixture requires a current Seal leaf").toBeTruthy();
+    expect(
+      sealRef,
+      "applet transaction fixture requires a current Seal leaf",
+    ).toBeTruthy();
 
     const idempotencyKey = `inbound-ok-${stamp}`;
     const body = transactionPushBody({
@@ -1779,7 +1799,9 @@ async function rawInstallApplet(
     const previewOutcome = (await preview.json()) as Record<string, unknown>;
     const authoringRequest = previewOutcome.authoring_request;
     if (!authoringRequest || typeof authoringRequest !== "object") {
-      throw new Error("Applet install preview is missing its signed authoring request");
+      throw new Error(
+        "Applet install preview is missing its signed authoring request",
+      );
     }
     const authorBaseUrl = String(signed.applet_package.base_url ?? "").replace(
       /\/$/,
@@ -1808,13 +1830,15 @@ async function rawInstallApplet(
         { data: { rotated: false } },
       );
       expect(restorePrincipalServerTrust.status()).toBe(200);
-      const wrongTarget = structuredClone(
-        authoringRequest,
-      ) as Record<string, unknown>;
+      const wrongTarget = structuredClone(authoringRequest) as Record<
+        string,
+        unknown
+      >;
       const alternatePrincipalKey = generateWebvhKey();
       const alternatePrincipalDid = "did:web:wrong-principal.example";
-      (wrongTarget.basis as Record<string, unknown>).target_principal_server_id =
-        canonicalDidCoreId(alternatePrincipalDid);
+      (
+        wrongTarget.basis as Record<string, unknown>
+      ).target_principal_server_id = canonicalDidCoreId(alternatePrincipalDid);
       wrongTarget.authoring_request_id = derivedAuthoringRequestId(wrongTarget);
       const wrongTargetProof = wrongTarget.proof as Record<string, unknown>;
       wrongTargetProof.verification_method = `${alternatePrincipalDid}#notary-key`;
@@ -1844,11 +1868,13 @@ async function rawInstallApplet(
       expect((await wrongTargetResponse.json()).error).toBe(
         "authoring_request_coordinate_mismatch",
       );
-      const nestedUnknown = structuredClone(
-        authoringRequest,
-      ) as Record<string, unknown>;
+      const nestedUnknown = structuredClone(authoringRequest) as Record<
+        string,
+        unknown
+      >;
       const nestedUnknownBasis = nestedUnknown.basis as Record<string, unknown>;
-      (nestedUnknownBasis.approval_request as Record<string, unknown>).legacy = true;
+      (nestedUnknownBasis.approval_request as Record<string, unknown>).legacy =
+        true;
       const nestedUnknownResponse = await request.post(
         `${authorBaseUrl}/_arkret/edge/applet/install/author`,
         {
@@ -1861,12 +1887,15 @@ async function rawInstallApplet(
         "authoring_request_coordinate_mismatch",
       );
 
-      const invertedWindow = structuredClone(
-        authoringRequest,
-      ) as Record<string, unknown>;
+      const invertedWindow = structuredClone(authoringRequest) as Record<
+        string,
+        unknown
+      >;
       const invertedBasis = invertedWindow.basis as Record<string, unknown>;
       invertedBasis.requested_at = canonicalTimestamp(
-        new Date(Date.parse(String(invertedBasis.requested_expires_at)) + 1_000),
+        new Date(
+          Date.parse(String(invertedBasis.requested_expires_at)) + 1_000,
+        ),
       );
       const invertedWindowResponse = await request.post(
         `${authorBaseUrl}/_arkret/edge/applet/install/author`,
@@ -1945,9 +1974,10 @@ async function rawInstallApplet(
       expect(canonicalJson(await replayed.json())).toBe(
         canonicalJson(authorOutcome),
       );
-      const changedSameId = structuredClone(
-        authoringRequest,
-      ) as Record<string, unknown>;
+      const changedSameId = structuredClone(authoringRequest) as Record<
+        string,
+        unknown
+      >;
       changedSameId.plan_digest = `sha256:${"0".repeat(64)}`;
       const conflict = await request.post(
         `${authorBaseUrl}/_arkret/edge/applet/install/author`,
@@ -1963,7 +1993,9 @@ async function rawInstallApplet(
     }
     const managedActorBundle = authorOutcome.managed_actor_bundle;
     if (!managedActorBundle || typeof managedActorBundle !== "object") {
-      throw new Error("Applet install author endpoint omitted managed_actor_bundle");
+      throw new Error(
+        "Applet install author endpoint omitted managed_actor_bundle",
+      );
     }
     resolved = {
       commitBody: {
@@ -1994,7 +2026,9 @@ async function rawInstallApplet(
       data: canonicalJson(fifthRole),
     });
     expect(fifthRoleResponse.status()).toBe(400);
-    expect(wireErrCode(await fifthRoleResponse.json())).toBe("schema_violation");
+    expect(wireErrCode(await fifthRoleResponse.json())).toBe(
+      "schema_violation",
+    );
   }
   if (options.commitDelayMs) {
     await new Promise((resolve) => setTimeout(resolve, options.commitDelayMs));
@@ -2149,7 +2183,9 @@ async function prepareAppletInstallAuthoringBasis(
   return { basis, grantActionsById };
 }
 
-function appletRegistrationPayload(signed: SignedPackage): Record<string, unknown> {
+function appletRegistrationPayload(
+  signed: SignedPackage,
+): Record<string, unknown> {
   const pkg = signed.applet_package;
   const manifest: Record<string, unknown> = {
     claimed_profiles: pkg.claimed_profiles,
@@ -2304,7 +2340,11 @@ function buildGhostManagedActorCreation(args: {
     appletId: args.signed.applet_package.applet_id,
     authorizationRef: args.appletAuthorityRef,
     refs: [
-      { id: provisionEventId, role: "applet_managed_actor_provision", critical: true },
+      {
+        id: provisionEventId,
+        role: "applet_managed_actor_provision",
+        critical: true,
+      },
     ],
     requirementsSchema: ["ak.schema.realm_genesis.v1"],
     preconditions: [
@@ -2319,7 +2359,10 @@ function buildGhostManagedActorCreation(args: {
         purpose: "applet_managed_control",
         genesis_salt: Buffer.alloc(32, 11).toString("base64url"),
         trust_domain: "ak:trust_domain:soland.local",
-        schema_refs: ["ak.schema.realm.v1", "ak.profile.principal_control_realm.v1"],
+        schema_refs: [
+          "ak.schema.realm.v1",
+          "ak.profile.principal_control_realm.v1",
+        ],
         reducer_profile: "ak.reducer.core.v1",
         encryption_profile: "mls_rfc9420",
         security_class: "standard",
@@ -2330,7 +2373,10 @@ function buildGhostManagedActorCreation(args: {
       },
     },
   });
-  const pcrGenesisEvent = replaceWithAppletServiceProof(genesis.envelope, args.signed);
+  const pcrGenesisEvent = replaceWithAppletServiceProof(
+    genesis.envelope,
+    args.signed,
+  );
 
   const grantWithoutProof = {
     schema: "ak.schema.accountability_grant.v1",
@@ -2375,7 +2421,10 @@ function buildGhostManagedActorCreation(args: {
       },
     },
   });
-  accountabilityEvent = replaceWithAppletServiceProof(accountabilityEvent, args.signed);
+  accountabilityEvent = replaceWithAppletServiceProof(
+    accountabilityEvent,
+    args.signed,
+  );
   let profileEvent = signedEventEnvelope({
     actorDid: ghostId,
     realmId: args.realmId,
@@ -2385,7 +2434,13 @@ function buildGhostManagedActorCreation(args: {
     executedBy: serviceId,
     authorizationRef: args.appletAuthorityRef,
     appletId: args.signed.applet_package.applet_id,
-    refs: [{ id: accountabilityEvent.event_id, role: "accountability", critical: true }],
+    refs: [
+      {
+        id: accountabilityEvent.event_id,
+        role: "accountability",
+        critical: true,
+      },
+    ],
     payload: {
       object: {
         schema: "ak.schema.actor_profile.v1",

@@ -105,7 +105,10 @@ const packagesByApplet = new Map(
         format: "jwk",
       }),
       botSigningKey: packageInfo.botSigningPrivateJwk
-        ? createPrivateKey({ key: packageInfo.botSigningPrivateJwk, format: "jwk" })
+        ? createPrivateKey({
+            key: packageInfo.botSigningPrivateJwk,
+            format: "jwk",
+          })
         : undefined,
     },
   ]),
@@ -131,7 +134,9 @@ function persistDurableAuthoringState() {
       signingKey: undefined,
       signingPrivateJwk: packageInfo.signingKey.export({ format: "jwk" }),
       botSigningKey: undefined,
-      botSigningPrivateJwk: packageInfo.botSigningKey?.export({ format: "jwk" }),
+      botSigningPrivateJwk: packageInfo.botSigningKey?.export({
+        format: "jwk",
+      }),
     },
   ]);
   const state = {
@@ -159,7 +164,10 @@ function reloadDurableAuthoringState() {
         format: "jwk",
       }),
       botSigningKey: packageInfo.botSigningPrivateJwk
-        ? createPrivateKey({ key: packageInfo.botSigningPrivateJwk, format: "jwk" })
+        ? createPrivateKey({
+            key: packageInfo.botSigningPrivateJwk,
+            format: "jwk",
+          })
         : undefined,
     });
   }
@@ -289,7 +297,9 @@ function configuredPrincipalServerSeed() {
     "base64",
   );
   if (seed.length !== 32) {
-    throw new Error("COTEST_SOLAND_SERVICE_SIGNING_KEY must decode to 32 bytes");
+    throw new Error(
+      "COTEST_SOLAND_SERVICE_SIGNING_KEY must decode to 32 bytes",
+    );
   }
   return seed;
 }
@@ -310,11 +320,15 @@ function principalServerNotaryPrivateKey() {
 }
 
 function principalServerNotaryDescriptor() {
-  const publicKeyDer = createPublicKey(principalServerNotaryPrivateKey()).export({
+  const publicKeyDer = createPublicKey(
+    principalServerNotaryPrivateKey(),
+  ).export({
     format: "der",
     type: "spki",
   });
-  const publicKeyBytes = Buffer.from(publicKeyDer.subarray(publicKeyDer.length - 32));
+  const publicKeyBytes = Buffer.from(
+    publicKeyDer.subarray(publicKeyDer.length - 32),
+  );
   return {
     kind: "single_signer",
     signer: {
@@ -448,9 +462,11 @@ function detachedEventProof(
     cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
     encoding: "utf8",
     input: canonicalJson({
-      actor_did: actorFullDid ?? (actorDid.startsWith("ak:did_core:")
-        ? `did:${actorDid.slice("ak:did_core:".length)}`
-        : actorDid),
+      actor_did:
+        actorFullDid ??
+        (actorDid.startsWith("ak:did_core:")
+          ? `did:${actorDid.slice("ak:did_core:".length)}`
+          : actorDid),
       verification_method: verificationMethod,
       created_at: createdAt,
       event,
@@ -482,16 +498,20 @@ function detachedJws(binding, signingKey) {
 function exactObjectKeys(value, expected) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const actual = Object.keys(value).sort();
-  return actual.length === expected.length &&
-    actual.every((key, index) => key === [...expected].sort()[index]);
+  return (
+    actual.length === expected.length &&
+    actual.every((key, index) => key === [...expected].sort()[index])
+  );
 }
 
 function closedObjectKeys(value, required, optional = []) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const actual = Object.keys(value);
   const allowed = new Set([...required, ...optional]);
-  return required.every((key) => actual.includes(key)) &&
-    actual.every((key) => allowed.has(key));
+  return (
+    required.every((key) => actual.includes(key)) &&
+    actual.every((key) => allowed.has(key))
+  );
 }
 
 function verifyDetachedJws(jws, canonicalPayload, publicKey) {
@@ -540,7 +560,9 @@ function authoringRequestProjection(request) {
 }
 
 function derivedAuthoringRequestId(request) {
-  const hex = canonicalHash(authoringRequestProjection(request)).slice("sha256:".length);
+  const hex = canonicalHash(authoringRequestProjection(request)).slice(
+    "sha256:".length,
+  );
   const bytes = Buffer.from(hex.slice(0, 32), "hex");
   bytes[6] = (bytes[6] & 0x0f) | 0x70;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -566,10 +588,12 @@ function eventProofBinding(event, proof) {
     verification_method: proof.verification_method,
   };
   if (proof.signer_resolution_evidence_ref !== undefined) {
-    binding.signer_resolution_evidence_ref = proof.signer_resolution_evidence_ref;
+    binding.signer_resolution_evidence_ref =
+      proof.signer_resolution_evidence_ref;
   }
   if (proof.signer_resolution_evidence_digest !== undefined) {
-    binding.signer_resolution_evidence_digest = proof.signer_resolution_evidence_digest;
+    binding.signer_resolution_evidence_digest =
+      proof.signer_resolution_evidence_digest;
   }
   binding.created_at = proof.created_at;
   if (proof.domain !== undefined) binding.domain = proof.domain;
@@ -584,7 +608,9 @@ function publicKeyFromDidDocument(document, verificationMethod) {
   const methods = document.verificationMethod;
   let material;
   if (Array.isArray(methods)) {
-    const entry = methods.find((candidate) => candidate?.id === verificationMethod);
+    const entry = methods.find(
+      (candidate) => candidate?.id === verificationMethod,
+    );
     material = entry?.publicKeyJwk ?? entry?.public_key_jwk;
   } else if (methods && typeof methods === "object") {
     material = methods[verificationMethod];
@@ -608,7 +634,8 @@ async function resolveCurrentAdminKey(basis) {
   const fullDid = basis.install_actor_id.startsWith("ak:did_core:")
     ? `did:${basis.install_actor_id.slice("ak:did_core:".length)}`
     : basis.install_actor_id;
-  const baseUrl = process.env.SOLAND_BASE_URL ?? process.env.COTEST_SOLAND_BASE_URL;
+  const baseUrl =
+    process.env.SOLAND_BASE_URL ?? process.env.COTEST_SOLAND_BASE_URL;
   if (!baseUrl || typeof fullDid !== "string") return undefined;
   const requestedEvidenceKinds = fullDid.startsWith("did:webvh:")
     ? ["did_webvh"]
@@ -633,7 +660,8 @@ async function resolveCurrentAdminKey(basis) {
   const outcome = await response.json();
   if (
     fullDid.startsWith("did:webvh:") &&
-    (!outcome.method_evidence || outcome.method_evidence.version_id === undefined)
+    (!outcome.method_evidence ||
+      outcome.method_evidence.version_id === undefined)
   ) {
     return undefined;
   }
@@ -664,7 +692,8 @@ function validAdminEventEnvelope(event, basis, expectedKind, resolvedAdmin) {
     resolvedAdmin?.didDocument,
     proof?.verification_method,
   );
-  return proof?.kind === "detached_jws" &&
+  return (
+    proof?.kind === "detached_jws" &&
     proof.verification_method?.startsWith(`${actorFullId}#`) &&
     proof.event_digest === identity.event_digest &&
     event.event_id === identity.event_id &&
@@ -673,7 +702,8 @@ function validAdminEventEnvelope(event, basis, expectedKind, resolvedAdmin) {
       proof.jws,
       canonicalJson(eventProofBinding(event, proof)),
       publicKey,
-    );
+    )
+  );
 }
 
 function registrationPayloadFromPackage(packageInfo) {
@@ -723,7 +753,8 @@ function validEffectiveScope(scope) {
 
 function validAuthoringPolicies(basis) {
   const approval = basis.approval_request;
-  return validEffectiveScope(basis.effective_scope) &&
+  return (
+    validEffectiveScope(basis.effective_scope) &&
     exactObjectKeys(approval, [
       "approve_actions",
       "ghost_actor_mode",
@@ -733,10 +764,11 @@ function validAuthoringPolicies(basis) {
     ]) &&
     Array.isArray(approval.approve_actions) &&
     approval.approve_actions.length > 0 &&
-    approval.approve_actions.every((action) =>
-      typeof action === "string" && action.length > 0
+    approval.approve_actions.every(
+      (action) => typeof action === "string" && action.length > 0,
     ) &&
-    new Set(approval.approve_actions).size === approval.approve_actions.length &&
+    new Set(approval.approve_actions).size ===
+      approval.approve_actions.length &&
     ["disallowed", "controller_approved", "policy_declared"].includes(
       approval.ghost_actor_mode,
     ) &&
@@ -756,7 +788,8 @@ function validAuthoringPolicies(basis) {
     (basis.widget_policy === undefined ||
       (closedObjectKeys(basis.widget_policy, [], ["widget_allowed"]) &&
         (basis.widget_policy.widget_allowed === undefined ||
-          typeof basis.widget_policy.widget_allowed === "boolean")));
+          typeof basis.widget_policy.widget_allowed === "boolean")))
+  );
 }
 
 async function validateInstallAuthoringRequest(request, packageInfo) {
@@ -893,32 +926,31 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
         resolvedAdmin,
       ) ||
       !exactObjectKeys(event.payload, ["grant"]) ||
-      !closedObjectKeys(
-        grant,
-        [
-          "schema",
-          "realm_id",
-          "issuer",
-          "subject",
-          "subject_principal_server_id",
-          "actions",
-          "resources",
-          "capability_action_registry_digest",
-          "constraints",
-          "issued_at",
-          "expires_at",
-          "issuer_authority_refs",
-        ],
-      ) ||
+      !closedObjectKeys(grant, [
+        "schema",
+        "realm_id",
+        "issuer",
+        "subject",
+        "subject_principal_server_id",
+        "actions",
+        "resources",
+        "capability_action_registry_digest",
+        "constraints",
+        "issued_at",
+        "expires_at",
+        "issuer_authority_refs",
+      ]) ||
       grant.schema !== "ak.schema.capability.v1" ||
       grant.realm_id !== basis.effective_scope?.realm_id ||
       grant?.issuer !== basis.install_actor_id ||
       grant?.subject !== packageInfo.serviceId ||
       grant?.subject_principal_server_id !== basis.target_principal_server_id ||
-      canonicalJson(grant?.resources) !== canonicalJson([basis.effective_scope]) ||
+      canonicalJson(grant?.resources) !==
+        canonicalJson([basis.effective_scope]) ||
       grant.capability_action_registry_digest !==
         packageInfo.capabilityActionRegistryDigest ||
-      canonicalJson(grant.constraints) !== canonicalJson([expectedConstraint]) ||
+      canonicalJson(grant.constraints) !==
+        canonicalJson([expectedConstraint]) ||
       !Array.isArray(grant.issuer_authority_refs) ||
       grant.issuer_authority_refs.length !== 1 ||
       !exactObjectKeys(grant.issuer_authority_refs[0], [
@@ -929,12 +961,15 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
         "authority_generation",
       ]) ||
       grant.issuer_authority_refs[0]?.kind !== "realm_root" ||
-      grant.issuer_authority_refs[0]?.realm_id !== basis.effective_scope?.realm_id ||
+      grant.issuer_authority_refs[0]?.realm_id !==
+        basis.effective_scope?.realm_id ||
       typeof grant.issuer_authority_refs[0]?.cell_ref !== "string" ||
       !Number.isSafeInteger(
         grant.issuer_authority_refs[0]?.controller_epoch_at_issuance,
       ) ||
-      !Number.isSafeInteger(grant.issuer_authority_refs[0]?.authority_generation) ||
+      !Number.isSafeInteger(
+        grant.issuer_authority_refs[0]?.authority_generation,
+      ) ||
       event.actor_seq !== precedingActorSeq + 1 ||
       canonicalJson(event.prev_refs) !== canonicalJson([precedingEventId]) ||
       !Array.isArray(grant?.actions) ||
@@ -955,32 +990,43 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
 }
 
 function deterministicHlc(createdAt, label) {
-  const physical = Date.parse(createdAt).toString(16).padStart(12, "0").slice(-12);
+  const physical = Date.parse(createdAt)
+    .toString(16)
+    .padStart(12, "0")
+    .slice(-12);
   const node = createHash("sha256").update(label).digest("hex").slice(0, 8);
   return `${physical}-0000-${node}`;
 }
 
-function signedAppletEvent(packageInfo, fields, proofCreatedAt, signerAuthority) {
+function signedAppletEvent(
+  packageInfo,
+  fields,
+  proofCreatedAt,
+  signerAuthority,
+) {
   const event = {
     ...fields,
     actor_id: fields.actor_id,
     principal_server_id: principalServerId(),
     created_at: proofCreatedAt,
-    hlc: fields.hlc ?? deterministicHlc(proofCreatedAt, `${fields.kind}:${fields.actor_seq}`),
+    hlc:
+      fields.hlc ??
+      deterministicHlc(proofCreatedAt, `${fields.kind}:${fields.actor_seq}`),
     prev_refs: fields.prev_refs ?? [],
     refs: fields.refs ?? [],
     requirements: fields.requirements,
     payload: fields.payload,
   };
-  const signingAuthority = signerAuthority === "bot"
-    ? {
-        verificationMethod: packageInfo.botVerificationMethod,
-        signingKey: packageInfo.botSigningKey,
-      }
-    : {
-        verificationMethod: packageInfo.verificationMethod,
-        signingKey: packageInfo.signingKey,
-      };
+  const signingAuthority =
+    signerAuthority === "bot"
+      ? {
+          verificationMethod: packageInfo.botVerificationMethod,
+          signingKey: packageInfo.botSigningKey,
+        }
+      : {
+          verificationMethod: packageInfo.verificationMethod,
+          signingKey: packageInfo.signingKey,
+        };
   const eventId = deriveEventId(event);
   event.event_id = eventId;
   return {
@@ -1070,13 +1116,17 @@ function buildInstallManagedActorBundle(request, packageInfo) {
             .update(`${request.authoring_request_id}:bot-pcr`)
             .digest("base64url"),
           trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: ["ak.schema.realm.v1", "ak.profile.principal_control_realm.v1"],
+          schema_refs: [
+            "ak.schema.realm.v1",
+            "ak.profile.principal_control_realm.v1",
+          ],
           reducer_profile: "ak.reducer.core.v1",
           encryption_profile: "mls_rfc9420",
           security_class: "standard",
           digest_algorithm: "sha256",
           notary: principalServerNotaryDescriptor(),
-          capability_action_registry_digest: packageInfo.capabilityActionRegistryDigest,
+          capability_action_registry_digest:
+            packageInfo.capabilityActionRegistryDigest,
           initial_resolution: packageInfo.botInitialResolution,
         },
       },
@@ -1142,7 +1192,11 @@ function buildInstallManagedActorBundle(request, packageInfo) {
       executed_by: packageInfo.serviceId,
       ...common,
       refs: [
-        { id: accountabilityEvent.event_id, role: "accountability", critical: true },
+        {
+          id: accountabilityEvent.event_id,
+          role: "accountability",
+          critical: true,
+        },
       ],
       requirements: { schema: ["ak.schema.actor_profile.v1"] },
       payload: {
@@ -1186,7 +1240,7 @@ function buildInstallManagedActorBundle(request, packageInfo) {
 
 async function readRealmFrontier(solandBase, authorization, realmId) {
   const response = await fetch(
-    `${String(solandBase).replace(/\/$/, "")}/_arkret/self/events/frontier`,
+    `${String(solandBase).replace(/\/$/, "")}/_arkret/self/seals/frontier`,
     {
       method: "QUERY",
       headers: { authorization, "content-type": "application/json" },
@@ -1490,8 +1544,7 @@ function signedPackage(body) {
         {
           exclusive: true,
           pattern:
-            body.actor_namespace_pattern ??
-            `did:webvh:*:*:ghost-${safe}:*`,
+            body.actor_namespace_pattern ?? `did:webvh:*:*:ghost-${safe}:*`,
         },
       ],
       realms: [{ exclusive: true, pattern: `bridge:${safe}:*` }],
@@ -1626,12 +1679,20 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/inspect/principal-server-key-current" && req.method === "POST") {
+  if (
+    url.pathname === "/inspect/principal-server-key-current" &&
+    req.method === "POST"
+  ) {
     const body = await readJson(req);
     currentPrincipalServerVerificationMethod = body?.rotated
       ? `${principalServerFullId()}#notary-key-rotated`
       : `${principalServerFullId()}#notary-key`;
-    res.end(JSON.stringify({ ok: true, verification_method: currentPrincipalServerVerificationMethod }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        verification_method: currentPrincipalServerVerificationMethod,
+      }),
+    );
     return;
   }
 
@@ -1684,7 +1745,9 @@ const server = createServer(async (req, res) => {
       return;
     }
     const authoringRequest = body.authoring_request;
-    const packageInfo = packagesByApplet.get(authoringRequest?.basis?.applet_id);
+    const packageInfo = packagesByApplet.get(
+      authoringRequest?.basis?.applet_id,
+    );
     if (!packageInfo) {
       res.statusCode = 404;
       res.end(JSON.stringify({ error: "applet_package_not_found" }));
@@ -1708,7 +1771,8 @@ const server = createServer(async (req, res) => {
       packageInfo,
     );
     if (invalidReason) {
-      res.statusCode = invalidReason === "authoring_request_expired" ? 410 : 400;
+      res.statusCode =
+        invalidReason === "authoring_request_expired" ? 410 : 400;
       res.end(JSON.stringify({ error: invalidReason }));
       return;
     }
@@ -1720,7 +1784,9 @@ const server = createServer(async (req, res) => {
       !packageInfo.capabilityActionRegistryDigest
     ) {
       res.statusCode = 409;
-      res.end(JSON.stringify({ error: "applet_bot_authoring_material_missing" }));
+      res.end(
+        JSON.stringify({ error: "applet_bot_authoring_material_missing" }),
+      );
       return;
     }
     const outcome = {
@@ -1792,7 +1858,9 @@ const server = createServer(async (req, res) => {
         !ghostCreation?.profile_event
       ) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "missing_closed_ghost_creation_unit" }));
+        res.end(
+          JSON.stringify({ error: "missing_closed_ghost_creation_unit" }),
+        );
         return;
       }
       const provisionAuthorizationRef = body.provision_authorization_ref;
@@ -1816,8 +1884,7 @@ const server = createServer(async (req, res) => {
             applet_id: body.applet_id,
             service_id: packageInfo.serviceId,
             ghost_actor_id: ghostActorId,
-            actor_principal_server_id:
-              ghostCreation.actor_principal_server_id,
+            actor_principal_server_id: ghostCreation.actor_principal_server_id,
             ...(displayName ? { display_name: displayName } : {}),
             realm_id: body.realm_id,
             external_ref: ghostCreation.external_ref,

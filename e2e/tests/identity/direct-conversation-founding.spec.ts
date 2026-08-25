@@ -5,10 +5,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import {
-  solandBaseUrl,
-  solandServiceFullId,
-} from "../../helpers/env";
+import { solandBaseUrl, solandServiceFullId } from "../../helpers/env";
 import {
   base64url,
   canonicalDidCoreId,
@@ -48,7 +45,7 @@ async function sealPrincipalControlEvent(
     throw new Error("session omitted its accepted event-derived PCR create");
   }
   expect(realmId, "principal control Realm id").toBeTruthy();
-  const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+  const frontierUrl = `${solandBaseUrl()}/_arkret/self/seals/frontier`;
   const frontierResponse = await request.fetch(frontierUrl, {
     method: "QUERY",
     headers: {
@@ -86,14 +83,11 @@ async function sealPrincipalControlEvent(
   );
   expect(predecessorSeal, "resolved principal predecessor Seal").toBeTruthy();
   const events = [...session.principalControlEvents, event];
-  const seal = cotestWire<JsonObject>(
-    "principal-successor-seal",
-    {
-      events,
-      predecessor_seal: predecessorSeal,
-      device_signing_seed_b64url: session.eventSigningSeedB64url,
-    },
-  );
+  const seal = cotestWire<JsonObject>("principal-successor-seal", {
+    events,
+    predecessor_seal: predecessorSeal,
+    device_signing_seed_b64url: session.eventSigningSeedB64url,
+  });
   const sealUrl = `${solandBaseUrl()}/_arkret/self/seals`;
   const sealResponse = await request.post(sealUrl, {
     headers: {
@@ -102,7 +96,10 @@ async function sealPrincipalControlEvent(
     },
     data: canonicalJson(seal),
   });
-  await expectJsonOk<JsonObject>(sealResponse, "submit principal successor Seal");
+  await expectJsonOk<JsonObject>(
+    sealResponse,
+    "submit principal successor Seal",
+  );
   session.principalControlEvents.push(event);
 }
 
@@ -113,16 +110,13 @@ async function prepareAndCommitContactEvent(
   prepareBody: JsonObject,
 ): Promise<JsonObject> {
   const url = `${solandBaseUrl()}/_arkret/self/contacts/${path}`;
-  const prepareResponse = await request.post(
-    url,
-    {
-      headers: {
-        ...selfPathHeadersForDpopSession(session, "POST", url),
-        "content-type": "application/json",
-      },
-      data: canonicalJson(prepareBody),
+  const prepareResponse = await request.post(url, {
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson(prepareBody),
+  });
   const prepared = await expectJsonOk<JsonObject>(
     prepareResponse,
     `prepare Contact ${path}`,
@@ -136,23 +130,21 @@ async function prepareAndCommitContactEvent(
     Buffer.from(draft.unsigned_event_bytes, "base64url").toString("utf8"),
   ) as JsonObject;
   refreshEventEnvelopeProof(event);
-  expect(event.event_id).toBe(draft.event_id);
-  const commitResponse = await request.post(
-    url,
-    {
-      headers: {
-        ...selfPathHeadersForDpopSession(session, "POST", url),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({
-        phase: "commit",
-        operation_id: prepared.operation_id,
-        idempotency_key: prepareBody.idempotency_key,
-        reservation_handle: prepared.reservation_handle,
-        signed_event: event,
-      }),
+  expect(draft).not.toHaveProperty("event_id");
+  expect(String(event.event_id)).toMatch(/^ak:event:[A-Za-z0-9_-]{44}$/);
+  const commitResponse = await request.post(url, {
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "POST", url),
+      "content-type": "application/json",
     },
-  );
+    data: canonicalJson({
+      phase: "commit",
+      operation_id: prepared.operation_id,
+      idempotency_key: prepareBody.idempotency_key,
+      reservation_handle: prepared.reservation_handle,
+      signed_event: event,
+    }),
+  });
   const committed = await expectJsonOk<JsonObject>(
     commitResponse,
     `commit Contact ${path}`,
@@ -418,7 +410,9 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       createDpopUserSession(request, "dc-slot-bob"),
     ]);
     if (!aliceSession || !bobSession) {
-      throw new Error("Direct Conversation live test requires canonical Coauth PCR sessions");
+      throw new Error(
+        "Direct Conversation live test requires canonical Coauth PCR sessions",
+      );
     }
     const alice = aliceSession.user;
     const bob = bobSession.user;
@@ -431,7 +425,8 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     // Normal Contact round fixes the responder (Bob), not the requester, as
     // the only founder.
     const basisRef = String(
-      founderContactRoundEvidence.contact_round_evidence_bundle.contact_round.request_event_ref,
+      founderContactRoundEvidence.contact_round_evidence_bundle.contact_round
+        .request_event_ref,
     );
     const createdAt = canonicalTimestamp();
     const hlcMillis = Date.now().toString(16).padStart(12, "0").slice(-12);
@@ -465,16 +460,13 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       founder_contact_round_evidence: founderContactRoundEvidence,
     };
     const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
-    const firstResponse = await request.post(
-      eventsUrl,
-      {
-        headers: {
-          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson(acceptedBody),
+    const firstResponse = await request.post(eventsUrl, {
+      headers: {
+        ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson(acceptedBody),
+    });
     const firstText = await firstResponse.text();
     expect(
       firstResponse.status(),
@@ -492,16 +484,13 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       },
     });
 
-    const retryResponse = await request.post(
-      eventsUrl,
-      {
-        headers: {
-          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson(acceptedBody),
+    const retryResponse = await request.post(eventsUrl, {
+      headers: {
+        ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson(acceptedBody),
+    });
     const retryText = await retryResponse.text();
     expect(retryResponse.status(), retryText).toBe(200);
     const retry = JSON.parse(retryText) as JsonObject;
@@ -513,16 +502,13 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       idempotency_key: typedId("dc-founding"),
       events: losing.events.map((event) => ({ event })),
     };
-    const conflictResponse = await request.post(
-      eventsUrl,
-      {
-        headers: {
-          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson(conflictBody),
+    const conflictResponse = await request.post(eventsUrl, {
+      headers: {
+        ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson(conflictBody),
+    });
     const conflictText = await conflictResponse.text();
     const conflict = JSON.parse(conflictText) as JsonObject;
     expect(conflictResponse.status(), conflictText).toBe(409);
@@ -546,17 +532,14 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     expect(acceptedEvents.map((event) => event.event_id)).toEqual(
       accepted.events.map((event) => event.event_id),
     );
-    const losingHistory = await request.fetch(
-      eventsUrl,
-      {
-        method: "QUERY",
-        headers: {
-          ...selfPathHeadersForDpopSession(bobSession, "QUERY", eventsUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson({ realms: [losing.realmId], limit: 100 }),
+    const losingHistory = await request.fetch(eventsUrl, {
+      method: "QUERY",
+      headers: {
+        ...selfPathHeadersForDpopSession(bobSession, "QUERY", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson({ realms: [losing.realmId], limit: 100 }),
+    });
     const losingHistoryText = await losingHistory.text();
     expect(losingHistory.status(), losingHistoryText).toBe(404);
     expect(wireErrCode(JSON.parse(losingHistoryText) as JsonObject)).toBe(
@@ -564,16 +547,13 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     );
     expect(losingHistoryText).not.toContain(losing.realmId);
 
-    const postConflictRetry = await request.post(
-      eventsUrl,
-      {
-        headers: {
-          ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
-          "content-type": "application/json",
-        },
-        data: canonicalJson(acceptedBody),
+    const postConflictRetry = await request.post(eventsUrl, {
+      headers: {
+        ...selfPathHeadersForDpopSession(bobSession, "POST", eventsUrl),
+        "content-type": "application/json",
       },
-    );
+      data: canonicalJson(acceptedBody),
+    });
     const postConflictText = await postConflictRetry.text();
     expect(postConflictRetry.status(), postConflictText).toBe(200);
     const postConflict = JSON.parse(postConflictText) as JsonObject;

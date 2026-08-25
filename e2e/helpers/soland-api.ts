@@ -257,7 +257,30 @@ const EVENT_DERIVED_FIXTURE_TOKEN_BODIES = [
 let eventDerivedFixtureCursor = 0;
 
 export function typedId(kind: string): string {
-  if (["event", "realm", "circle", "strand", "call"].includes(kind)) {
+  if (
+    [
+      "actor_profile",
+      "appeal",
+      "audit_binding",
+      "audit_session",
+      "audit_release",
+      "call",
+      "circle",
+      "sidecar",
+      "strand",
+      "event",
+      "grant",
+      "invite",
+      "message",
+      "morph",
+      "relation",
+      "report",
+      "moderation_queue_item",
+      "space",
+      "realm",
+      "view",
+    ].includes(kind)
+  ) {
     const token = EVENT_DERIVED_FIXTURE_TOKEN_BODIES[eventDerivedFixtureCursor];
     if (!token) {
       throw new Error(
@@ -324,7 +347,7 @@ export async function submitPrincipalSuccessorSealApi(
   if (events.some((known) => known.event_id === event.event_id)) {
     return;
   }
-  const frontierUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events/frontier`;
+  const frontierUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals/frontier`;
   const frontierResponse = await request.fetch(frontierUrl, {
     method: "QUERY",
     headers: {
@@ -3374,7 +3397,7 @@ async function readRealmSealFrontier(
   realmId: string,
   server?: SolandKey,
 ): Promise<RealmSealFrontier> {
-  const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/events/frontier`;
+  const frontierUrl = `${solandBaseUrl(server)}/_arkret/self/seals/frontier`;
   const response = await request.fetch(frontierUrl, {
     method: "QUERY",
     data: canonicalJson({ realm_id: realmId }),

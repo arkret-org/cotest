@@ -332,38 +332,25 @@ export class JointUserPage {
     // Preserve Inkson's authenticated in-memory session. A document reload can
     // race secure-store restoration and leave the router on its transient
     // login/home surface even though the injected grant is valid.
-    await this.navigateWithinApp("/directory");
-    await expect(this.page.getByTestId("directory-panel")).toBeVisible({
-      timeout: 120_000,
-    });
-    await this.dismissDeviceAuthorizationPrompt();
+    await this.gotoAppPanel("/directory", "directory-panel");
     await this.dismissCreateRealmBlockingPrompts({
       completeRecoveryKeySetup: true,
     });
   }
 
   async gotoSettings() {
-    await this.page.goto("/settings", { waitUntil: "domcontentloaded" });
-    await expect(this.page.getByTestId("settings-panel")).toBeVisible({
-      timeout: 120_000,
-    });
-    await this.dismissDeviceAuthorizationPrompt();
+    await this.gotoAppPanel("/settings", "settings-panel");
   }
 
   async gotoNotifications() {
-    await this.navigateWithinApp("/notifications");
-    await expect(this.page.getByTestId("notifications-panel")).toBeVisible({
-      timeout: 120_000,
-    });
-    await this.dismissDeviceAuthorizationPrompt();
+    await this.gotoAppPanel("/notifications", "notifications-panel");
   }
 
   async gotoNotificationSettings() {
-    await this.navigateWithinApp("/notifications/settings");
-    await expect(
-      this.page.getByTestId("notification-settings-panel"),
-    ).toBeVisible({ timeout: 120_000 });
-    await this.dismissDeviceAuthorizationPrompt();
+    await this.gotoAppPanel(
+      "/notifications/settings",
+      "notification-settings-panel",
+    );
   }
 
   async gotoRealmAdmin(realmId: string) {
@@ -419,29 +406,34 @@ export class JointUserPage {
     }, path);
   }
 
+  async gotoAppPanel(path: string, testId: string) {
+    const panel = this.page.getByTestId(testId);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await this.navigateWithinApp(path);
+      if (
+        await panel
+          .waitFor({ state: "visible", timeout: 20_000 })
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        await this.dismissDeviceAuthorizationPrompt();
+        return;
+      }
+      // Account bootstrap and the first authoritative sync can each restore
+      // Home after a feature route was requested. Re-establish the durable
+      // authenticated shell, then re-enter through the live SPA router.
+      await this.gotoHome();
+    }
+    await expect(panel).toBeVisible({ timeout: 60_000 });
+    await this.dismissDeviceAuthorizationPrompt();
+  }
+
   async gotoTimelineRealm(realmId: string) {
     // Chat is a supported route but is no longer present in the Realm context
     // navigation (Board is the only top-level product surface). Drive the SPA
     // router through its browser-history channel without restarting the
     // authenticated app and secure store.
-    const messageList = this.page.getByTestId("message-list");
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      await this.navigateWithinApp(`/chat/${realmId}`);
-      if (
-        await messageList
-          .waitFor({ state: "visible", timeout: 30_000 })
-          .then(() => true)
-          .catch(() => false)
-      ) {
-        break;
-      }
-      // A Realm created through the API after this browser booted is not in
-      // the initial workspace discovery set. Reload the authenticated shell
-      // once, then drive the live router again with the refreshed projection.
-      await this.gotoHome();
-    }
-    await expect(messageList).toBeVisible({ timeout: 60_000 });
-    await this.dismissDeviceAuthorizationPrompt();
+    await this.gotoAppPanel(`/chat/${realmId}`, "message-list");
     await this.dismissPassiveBlockingPrompts();
     await expect(this.page.getByTestId("message-list")).toBeVisible({
       timeout: 30_000,
@@ -901,13 +893,23 @@ export class JointUserPage {
       .then(() => true)
       .catch(() => false);
     if (gateAppeared) {
-      await this.page
+      const override = this.page
         .getByTestId("encrypted-realm-recovery-gate-override")
-        .last()
-        .click();
+        .last();
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (await recoveryGate.isHidden({ timeout: 100 }).catch(() => false)) {
+          break;
+        }
+        await override.click({ timeout: 5_000 }).catch(() => undefined);
+      }
       await expect(recoveryGate).toBeHidden({ timeout: 10_000 });
-      await expect(createButton).toBeEnabled({ timeout: 30_000 });
-      await createButton.click();
+      const alreadyCreated = /created ak:realm:/i.test(
+        (await strand.textContent().catch(() => "")) ?? "",
+      );
+      if (!alreadyCreated) {
+        await expect(createButton).toBeEnabled({ timeout: 30_000 });
+        await this.clickCreateRealmControl(createButton, promptHandling);
+      }
     }
 
     await expect(strand).toContainText(/created ak:realm:/i, {
@@ -915,7 +917,9 @@ export class JointUserPage {
     });
     const text = await strand.innerText();
     expect(text, `realm bootstrap failed: ${text}`).not.toContain(" failed:");
-    const match = text.match(/created (ak:realm:[A-Za-z0-9_-]{44})\b/i);
+    const match = text.match(
+      /created (ak:realm:[A-Za-z0-9_-]{44})(?![A-Za-z0-9_-])/i,
+    );
     expect(match, `created realm id in: ${text}`).not.toBeNull();
     const realmId = match![1];
     if ((opts.seedMembers?.length ?? 0) > 0) {

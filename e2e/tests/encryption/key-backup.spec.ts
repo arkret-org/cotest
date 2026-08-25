@@ -120,9 +120,7 @@ test.describe("key backup + restore", () => {
       // response listener registered by this test; verify its durable state.
       const firstKey = session.recoveryKey ?? "";
       expect(firstKey.split(/\s+/)).toHaveLength(24);
-      await device.page.goto("/settings/recovery", {
-        waitUntil: "domcontentloaded",
-      });
+      await device.gotoAppPanel("/settings/recovery", "recovery-panel");
       await expect(device.page.getByTestId("recovery-key-section")).toBeVisible(
         {
           timeout: 120_000,

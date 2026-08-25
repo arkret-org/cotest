@@ -13,9 +13,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import { expectStructurallyIdentical } from "../../helpers/secret-safe";
-import {
-  createDpopUserSession,
-} from "../../helpers/users";
+import { createDpopUserSession } from "../../helpers/users";
 import { authHeaders, createRealmApi } from "../../helpers/soland-api";
 import {
   acceptInviteArkret,
@@ -38,10 +36,7 @@ import {
 
 // Each test provisions fresh DIDs, so parallel execution is safe.
 
-async function activeContactUser(
-  request: APIRequestContext,
-  prefix: string,
-) {
+async function activeContactUser(request: APIRequestContext, prefix: string) {
   const session = await createDpopUserSession(request, prefix);
   if (!session) {
     throw new Error("contact graph requires the joint Coauth stack");
@@ -132,10 +127,10 @@ test.describe("contact graph (same principal server)", () => {
     expect(bobRow?.bidirectional_scopes ?? []).toHaveLength(0);
   });
 
-  // S3: the API resolver reserves one immutable authoring plan. A headless
-  // API test must not fake RFC 9420 ciphertext or treat authoring_required as
-  // success; Inkson owns participant signing and MLS materialization.
-  test("S3 friends via direct_message -> immutable participant-authoring plan", async ({
+  // S3: resolve is query-only. It returns only the exact founding authority
+  // evidence the derived founder needs; it never allocates coordinates or
+  // returns unsigned Event/MLS materialization drafts.
+  test("S3 friends via direct_message -> founder authority input", async ({
     request,
   }) => {
     const [aliceSession, bobSession] = await Promise.all([
@@ -166,46 +161,38 @@ test.describe("contact graph (same principal server)", () => {
       grantedScopes: ["direct_message"],
     });
 
-    // Alice resolves: requires bob -> alice direct_message consent (granted on
-    // accept above).
-    const resolved = await resolveDirectConversationArkret(
+    // The normal Contact branch assigns founding authority to the responder.
+    // Alice is therefore required to wait; this state never transfers
+    // authority by timeout or recovery policy.
+    const waiting = await resolveDirectConversationArkret(
       request,
       aliceToken,
       bob.did,
-      { create: true },
     );
-    expect(resolved.state).toBe("authoring_required");
-    expect(resolved.created).toBe(false);
-    expect(resolved.authoring_kind).toBe("direct_conversation_materialization");
-    expect(resolved.realm_id).toMatch(/^ak:realm:/);
-    expect(resolved.main_strand_id).toMatch(/^ak:strand:/);
-    const draft = resolved.materialization_draft as Record<string, any>;
-    expect(draft).toBeTruthy();
-    expect(draft.realm_event?.proofs).toEqual([]);
-    expect(draft.creator_member_event?.proofs).toEqual([]);
-    expect(draft.peer_member_event?.proofs).toEqual([]);
-    expect(draft.main_strand_event?.proofs).toEqual([]);
-    expect(draft.binding_event?.proofs).toEqual([]);
-    expect(draft.binding_event?.payload?.realm_id).toBe(resolved.realm_id);
-    expect(draft.binding_event?.payload?.main_strand_id).toBe(
-      resolved.main_strand_id,
+    expect(waiting.state).toBe("awaiting_founder");
+
+    const resolved = await resolveDirectConversationArkret(
+      request,
+      bobToken,
+      alice.did,
     );
-    expect(draft.binding_event?.payload?.mls_group_id).toBe(draft.mls_group_id);
+    expect(resolved.state).toBe("creation_required");
+    expect(
+      resolved.next_founding_input?.founding_authority_evidence,
+    ).toBeTruthy();
+    expect(resolved).not.toHaveProperty("realm_id");
+    expect(resolved).not.toHaveProperty("main_strand_id");
+    expect(resolved).not.toHaveProperty("materialization_draft");
 
     const retry = await resolveDirectConversationArkret(
       request,
-      aliceToken,
-      bob.did,
-      { create: true },
+      bobToken,
+      alice.did,
     );
-    // The draft carries MLS group state and the unsigned founding Events, so
-    // handing it to `toEqual` would publish the whole object into stdout and
-    // error-context.md on any drift. The determinism claim only needs the two
-    // drafts to be the same structure.
     expectStructurallyIdentical(
-      retry.materialization_draft,
-      resolved.materialization_draft,
-      "direct-conversation materialization draft must be deterministic across retries",
+      retry.next_founding_input,
+      resolved.next_founding_input,
+      "direct-conversation founding input must be deterministic across retries",
     );
   });
 
@@ -251,18 +238,19 @@ test.describe("contact graph (same principal server)", () => {
       ownerDid: alice.did,
     });
 
-    const { outcome: delivery, inviteId, sealBasis } = await deliverInviteWithConsentGrant(
-      request,
-      {
-        inviterDid: alice.did,
-        inviterToken: aliceToken,
-        realmId,
-        inviteeDid: bob.did,
-        consentGrantRef: grantRef!,
-        originServer: "default",
-        recipientServer: "default",
-      },
-    );
+    const {
+      outcome: delivery,
+      inviteId,
+      sealBasis,
+    } = await deliverInviteWithConsentGrant(request, {
+      inviterDid: alice.did,
+      inviterToken: aliceToken,
+      realmId,
+      inviteeDid: bob.did,
+      consentGrantRef: grantRef!,
+      originServer: "default",
+      recipientServer: "default",
+    });
     // High-trust consent_grant: accepted + disclosed_outcome=delivered.
     expect(delivery.status).toBe("accepted");
     expect(delivery.disclosed_outcome).toBe("delivered");

@@ -250,7 +250,9 @@ test.describe("policy server check", () => {
     request,
   }) => {
     const stamp = Date.now();
-    const describeResp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
+    const describeResp = await request.get(
+      `${solandBaseUrl()}/_arkret/describe`,
+    );
     const describe = await expectJsonOk<Record<string, unknown>>(
       describeResp,
       "server describe authz self surface",
@@ -272,7 +274,10 @@ test.describe("policy server check", () => {
       expect.arrayContaining(["policy_unavailable"]),
     );
     expect(authzCheck.usable_as_event_auth_context).toBe(false);
-    const effectiveGrants = authzPolicy.effective_grants as Record<string, unknown>;
+    const effectiveGrants = authzPolicy.effective_grants as Record<
+      string,
+      unknown
+    >;
     expect(effectiveGrants.path).toBe("/_arkret/self/authz/effective-grants");
     const invites = authzPolicy.invites as Record<string, unknown>;
     expect(invites.path).toBe("/_arkret/self/authz/invites");
@@ -295,7 +300,8 @@ test.describe("policy server check", () => {
       public: true,
     });
     const policyServerDid = "did:web:policy.example.com";
-    const policyServerUrl = "https://policy.example.com/_arkret/self/policy/check";
+    const policyServerUrl =
+      "https://policy.example.com/_arkret/self/policy/check";
 
     const projected = await declarePolicyServer(
       request,
@@ -319,18 +325,20 @@ test.describe("policy server check", () => {
     const declaration = canonicalEvents.find(
       (event) =>
         event.payload?.policy_server_url === policyServerUrl ||
-        (
-          event.payload?.policy_server as Record<string, unknown> | undefined
-        )?.url === policyServerUrl,
+        (event.payload?.policy_server as Record<string, unknown> | undefined)
+          ?.url === policyServerUrl,
     );
-    expect(declaration, "PUT must append a canonical policy-server Event").toBeTruthy();
+    expect(
+      declaration,
+      "PUT must append a canonical policy-server Event",
+    ).toBeTruthy();
     expect(declaration?.event_id).toMatch(/^ak:event:/);
     expect(declaration?.actor_id).toBe(alice.did);
     expect(declaration?.executed_by).toBeUndefined();
     expect(declaration?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
     expect(declaration?.proofs?.length ?? 0).toBeGreaterThan(0);
 
-    const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;
+    const frontierUrl = `${solandBaseUrl()}/_arkret/self/seals/frontier`;
     const frontier = await request.fetch(frontierUrl, {
       method: "QUERY",
       headers: {
@@ -344,9 +352,7 @@ test.describe("policy server check", () => {
     }>(frontier, "read policy-server Seal frontier");
     expect(frontierBody.frontier?.kind).toBe("realm_seal");
     expect(frontierBody.frontier?.seal_basis?.leaves).toHaveLength(1);
-    expect(frontierBody.frontier?.seal_basis?.leaves?.[0]).toMatch(
-      /^ak:seal:/,
-    );
+    expect(frontierBody.frontier?.seal_basis?.leaves?.[0]).toMatch(/^ak:seal:/);
 
     const get = await request.get(
       `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/policy-server`,
@@ -379,10 +385,7 @@ test.describe("policy server check", () => {
     const decision = await expectJsonOk<{
       decision: string;
       reason_code?: string;
-    }>(
-      denied,
-      "authz check without grant",
-    );
+    }>(denied, "authz check without grant");
     expect(decision.decision).toBe("hard_deny");
     expect(decision.reason_code).toBeTruthy();
   });
@@ -463,7 +466,8 @@ test.describe("policy server check", () => {
     expect(inspect.kinds?.checks?.length ?? 0).toBeGreaterThan(0);
     const lastCheck = inspect.kinds.checks[inspect.kinds.checks.length - 1];
     expect(
-      typeof lastCheck.signed_transcript === "string" || Boolean(lastCheck.decision),
+      typeof lastCheck.signed_transcript === "string" ||
+        Boolean(lastCheck.decision),
     ).toBeTruthy();
   });
 
@@ -530,174 +534,182 @@ test.describe("policy server check", () => {
     await request.delete(`${baseUrl}/scenarios`);
   });
 
-  test(
-    "E3.2 multi-source priority: org policy_server applies via governed_by fallback when realm declares none",
-    async ({ request }) => {
-      const stamp = Date.now();
-      const alice = uniqueUser(`s30-policy-fallback-alice-${stamp}`);
-      await ensureRegistered(request, alice);
-      const aliceToken = await issueDevSession(request, alice);
-      const orgRealmId = await createRealmApi(request, aliceToken, {
-        title: `S30 policy fallback org ${stamp}`,
-        discoverability: "listed",
-        history_access: "all_history_for_current_members",
-        public: true,
-      });
-      const childRealmId = await createRealmApi(request, aliceToken, {
-        title: `S30 policy fallback child ${stamp}`,
-        discoverability: "listed",
-        history_access: "all_history_for_current_members",
-        public: true,
-      });
+  test("E3.2 multi-source priority: org policy_server applies via governed_by fallback when realm declares none", async ({
+    request,
+  }) => {
+    const stamp = Date.now();
+    const alice = uniqueUser(`s30-policy-fallback-alice-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const orgRealmId = await createRealmApi(request, aliceToken, {
+      title: `S30 policy fallback org ${stamp}`,
+      discoverability: "listed",
+      history_access: "all_history_for_current_members",
+      public: true,
+    });
+    const childRealmId = await createRealmApi(request, aliceToken, {
+      title: `S30 policy fallback child ${stamp}`,
+      discoverability: "listed",
+      history_access: "all_history_for_current_members",
+      public: true,
+    });
 
-      const orgDid = "did:web:policy-org.example.com";
-      const orgBaseUrl = "https://policy-org.example.com";
-      const orgUrl = `${orgBaseUrl}/_arkret/self/policy/check`;
-      await declarePolicyServer(request, aliceToken, orgRealmId, orgBaseUrl, orgDid, {
+    const orgDid = "did:web:policy-org.example.com";
+    const orgBaseUrl = "https://policy-org.example.com";
+    const orgUrl = `${orgBaseUrl}/_arkret/self/policy/check`;
+    await declarePolicyServer(
+      request,
+      aliceToken,
+      orgRealmId,
+      orgBaseUrl,
+      orgDid,
+      {
         cacheTtlSeconds: 17,
         timeoutMs: 1200,
-      });
+      },
+    );
 
-      const noFallbackYet = await request.get(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
-        { headers: authHeaders(aliceToken) },
-      );
-      expect(noFallbackYet.status()).toBe(404);
+    const noFallbackYet = await request.get(
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+      { headers: authHeaders(aliceToken) },
+    );
+    expect(noFallbackYet.status()).toBe(404);
 
-      const linkEvent = await prepareSignedEventSubmissionApi(
-        request,
-        aliceToken,
-        signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: childRealmId,
-          kind: "ak.realm.link",
-          payload: {
-            target_realm_id: orgRealmId,
-            link_kind: "governed_by",
-            status: "active",
-          },
-        }),
-        { context: "prepare child governed_by policy fallback link" },
-      );
-      const link = await request.post(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/links`,
-        {
-          headers: {
-            ...authHeaders(aliceToken),
-            "content-type": "application/json",
-          },
-          data: canonicalJson({
-            link_event: linkEvent,
-          }),
+    const linkEvent = await prepareSignedEventSubmissionApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorDid: alice.did,
+        realmId: childRealmId,
+        kind: "ak.realm.link",
+        payload: {
+          target_realm_id: orgRealmId,
+          link_kind: "governed_by",
+          status: "active",
         },
-      );
-      const linkBody = await expectJsonOk<Record<string, unknown>>(
-        link,
-        "create child governed_by policy fallback link",
-      );
-      expect(linkBody.realm_id).toBe(childRealmId);
-      expect(linkBody.target_realm_id).toBe(orgRealmId);
-      expect(linkBody.link_kind).toBe("governed_by");
-      expect(linkBody.status).toBe("active");
+      }),
+      { context: "prepare child governed_by policy fallback link" },
+    );
+    const link = await request.post(
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/links`,
+      {
+        headers: {
+          ...authHeaders(aliceToken),
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
+          link_event: linkEvent,
+        }),
+      },
+    );
+    const linkBody = await expectJsonOk<Record<string, unknown>>(
+      link,
+      "create child governed_by policy fallback link",
+    );
+    expect(linkBody.realm_id).toBe(childRealmId);
+    expect(linkBody.target_realm_id).toBe(orgRealmId);
+    expect(linkBody.link_kind).toBe("governed_by");
+    expect(linkBody.status).toBe("active");
 
-      const fallback = await request.get(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
-        { headers: authHeaders(aliceToken) },
-      );
-      const fallbackBody = await expectJsonOk<Record<string, unknown>>(
-        fallback,
-        "read child policy_server through governed_by fallback",
-      );
-      expect(fallbackBody.realm_id).toBe(orgRealmId);
-      expect(fallbackBody.policy_server_service_id).toBe(
-        canonicalDidCoreId(orgDid),
-      );
-      expect(fallbackBody.policy_server_url).toBe(orgUrl);
-      expect(fallbackBody.cache_ttl_seconds).toBe(17);
-      expect(fallbackBody.timeout_ms).toBe(1200);
-      expect(fallbackBody.from_organization_fallback).toBe(true);
+    const fallback = await request.get(
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+      { headers: authHeaders(aliceToken) },
+    );
+    const fallbackBody = await expectJsonOk<Record<string, unknown>>(
+      fallback,
+      "read child policy_server through governed_by fallback",
+    );
+    expect(fallbackBody.realm_id).toBe(orgRealmId);
+    expect(fallbackBody.policy_server_service_id).toBe(
+      canonicalDidCoreId(orgDid),
+    );
+    expect(fallbackBody.policy_server_url).toBe(orgUrl);
+    expect(fallbackBody.cache_ttl_seconds).toBe(17);
+    expect(fallbackBody.timeout_ms).toBe(1200);
+    expect(fallbackBody.from_organization_fallback).toBe(true);
 
-      const inheritedOnlyDelete = await deletePolicyServer(
-        request,
-        aliceToken,
-        childRealmId,
-      );
-      expect(
-        inheritedOnlyDelete.status(),
-        "inherited policy server is not a direct declaration to tombstone",
-      ).toBe(404);
+    const inheritedOnlyDelete = await deletePolicyServer(
+      request,
+      aliceToken,
+      childRealmId,
+    );
+    expect(
+      inheritedOnlyDelete.status(),
+      "inherited policy server is not a direct declaration to tombstone",
+    ).toBe(404);
 
-      const childDid = "did:web:policy-child.example.com";
-      const childBaseUrl = "https://policy-child.example.com";
-      const childUrl = `${childBaseUrl}/_arkret/self/policy/check`;
-      await declarePolicyServer(request, aliceToken, childRealmId, childBaseUrl, childDid, {
+    const childDid = "did:web:policy-child.example.com";
+    const childBaseUrl = "https://policy-child.example.com";
+    const childUrl = `${childBaseUrl}/_arkret/self/policy/check`;
+    await declarePolicyServer(
+      request,
+      aliceToken,
+      childRealmId,
+      childBaseUrl,
+      childDid,
+      {
         cacheTtlSeconds: 3,
         timeoutMs: 900,
-      });
+      },
+    );
 
-      const direct = await request.get(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
-        { headers: authHeaders(aliceToken) },
-      );
-      const directBody = await expectJsonOk<Record<string, unknown>>(
-        direct,
-        "read child direct policy_server overriding fallback",
-      );
-      expect(directBody.realm_id).toBe(childRealmId);
-      expect(directBody.policy_server_service_id).toBe(
-        canonicalDidCoreId(childDid),
-      );
-      expect(directBody.policy_server_url).toBe(childUrl);
-      expect(directBody.cache_ttl_seconds).toBe(3);
-      expect(directBody.timeout_ms).toBe(900);
-      expect(directBody.from_organization_fallback).toBe(false);
+    const direct = await request.get(
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+      { headers: authHeaders(aliceToken) },
+    );
+    const directBody = await expectJsonOk<Record<string, unknown>>(
+      direct,
+      "read child direct policy_server overriding fallback",
+    );
+    expect(directBody.realm_id).toBe(childRealmId);
+    expect(directBody.policy_server_service_id).toBe(
+      canonicalDidCoreId(childDid),
+    );
+    expect(directBody.policy_server_url).toBe(childUrl);
+    expect(directBody.cache_ttl_seconds).toBe(3);
+    expect(directBody.timeout_ms).toBe(900);
+    expect(directBody.from_organization_fallback).toBe(false);
 
-      const deleted = await deletePolicyServer(
-        request,
-        aliceToken,
-        childRealmId,
-      );
-      expect(deleted.status(), "tombstone direct child policy server").toBe(200);
+    const deleted = await deletePolicyServer(request, aliceToken, childRealmId);
+    expect(deleted.status(), "tombstone direct child policy server").toBe(200);
 
-      const restoredFallback = await request.get(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
-        { headers: authHeaders(aliceToken) },
-      );
-      const restoredFallbackBody = await expectJsonOk<Record<string, unknown>>(
-        restoredFallback,
-        "read organization policy_server after child tombstone",
-      );
-      expect(restoredFallbackBody.realm_id).toBe(orgRealmId);
-      expect(restoredFallbackBody.policy_server_service_id).toBe(
-        canonicalDidCoreId(orgDid),
-      );
-      expect(restoredFallbackBody.from_organization_fallback).toBe(true);
+    const restoredFallback = await request.get(
+      `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(childRealmId)}/policy-server`,
+      { headers: authHeaders(aliceToken) },
+    );
+    const restoredFallbackBody = await expectJsonOk<Record<string, unknown>>(
+      restoredFallback,
+      "read organization policy_server after child tombstone",
+    );
+    expect(restoredFallbackBody.realm_id).toBe(orgRealmId);
+    expect(restoredFallbackBody.policy_server_service_id).toBe(
+      canonicalDidCoreId(orgDid),
+    );
+    expect(restoredFallbackBody.from_organization_fallback).toBe(true);
 
-      const childPolicyEvents = await policyServerEvents(
-        request,
-        aliceToken,
-        childRealmId,
-      );
-      expect(childPolicyEvents.length).toBeGreaterThanOrEqual(2);
-      const tombstone = childPolicyEvents.find(
-        (event) => event.payload?.tombstone === true,
-      );
-      expect(
-        tombstone,
-        "DELETE must append a canonical policy-server tombstone Event",
-      ).toBeTruthy();
-      expect(tombstone?.actor_id).toBe(alice.did);
-      expect(tombstone?.executed_by).toBeUndefined();
-      expect(tombstone?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
-      expect(tombstone?.proofs?.length ?? 0).toBeGreaterThan(0);
+    const childPolicyEvents = await policyServerEvents(
+      request,
+      aliceToken,
+      childRealmId,
+    );
+    expect(childPolicyEvents.length).toBeGreaterThanOrEqual(2);
+    const tombstone = childPolicyEvents.find(
+      (event) => event.payload?.tombstone === true,
+    );
+    expect(
+      tombstone,
+      "DELETE must append a canonical policy-server tombstone Event",
+    ).toBeTruthy();
+    expect(tombstone?.actor_id).toBe(alice.did);
+    expect(tombstone?.executed_by).toBeUndefined();
+    expect(tombstone?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
+    expect(tombstone?.proofs?.length ?? 0).toBeGreaterThan(0);
 
-      const repeatedDelete = await deletePolicyServer(
-        request,
-        aliceToken,
-        childRealmId,
-      );
-      expect(repeatedDelete.status(), "repeat policy server tombstone").toBe(200);
-    },
-  );
-
+    const repeatedDelete = await deletePolicyServer(
+      request,
+      aliceToken,
+      childRealmId,
+    );
+    expect(repeatedDelete.status(), "repeat policy server tombstone").toBe(200);
+  });
 });

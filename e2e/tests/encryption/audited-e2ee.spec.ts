@@ -29,7 +29,14 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("moderation reports and audited E2EE", () => {
-  test("encrypted messages receive a local franking proof without an Audit Applet binding", async ({
+  test.fixme(// @blocking-on: arkret-work/spec-open/2026-08-25-1348-franking-digest-input-contract-uninhabitable
+  // @user-promise: legal encrypted messages receive a verifiable local franking proof without plaintext disclosure
+  // @expected-live-by: 2026-09-15
+  // The moderation spec requires encrypted_content.payload_digest, while the
+  // authoritative closed envelope schema forbids that member and the crypto
+  // spec explicitly forbids an inline payload_digest. No legal wire Event can
+  // currently inhabit the franking input contract.
+  "encrypted messages receive a local franking proof without an Audit Applet binding", async ({
     request,
   }) => {
     const setup = await setupEncryptedMessage(request, "s25-frank");
@@ -51,10 +58,13 @@ test.describe("moderation reports and audited E2EE", () => {
     expect(proofText).not.toContain("audit_disclosure_policy");
     expect(proofText).toContain("proof_digest");
 
-    const verify = await request.post(`${solandBaseUrl()}/_soland/self/audit/franking/verify`, {
-      headers: authHeaders(setup.aliceToken),
-      data: (proof as Record<string, unknown>).payload,
-    });
+    const verify = await request.post(
+      `${solandBaseUrl()}/_soland/self/audit/franking/verify`,
+      {
+        headers: authHeaders(setup.aliceToken),
+        data: (proof as Record<string, unknown>).payload,
+      },
+    );
     expect(verify.ok(), await verify.text()).toBeTruthy();
   });
 
@@ -89,7 +99,10 @@ test.describe("moderation reports and audited E2EE", () => {
         setup.realmId,
         kind,
       );
-      expect(events, `${kind} must not be derived from a moderation report`).toEqual([]);
+      expect(
+        events,
+        `${kind} must not be derived from a moderation report`,
+      ).toEqual([]);
     }
   });
 
@@ -106,14 +119,17 @@ test.describe("moderation reports and audited E2EE", () => {
     const proof = events[0]?.payload as Record<string, unknown>;
     expect(proof?.proof_digest).toBeTruthy();
 
-    const verify = await request.post(`${solandBaseUrl()}/_soland/self/audit/franking/verify`, {
-      headers: authHeaders(setup.aliceToken),
-      data: {
-        ...proof,
-        ciphertext_digest:
-          "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    const verify = await request.post(
+      `${solandBaseUrl()}/_soland/self/audit/franking/verify`,
+      {
+        headers: authHeaders(setup.aliceToken),
+        data: {
+          ...proof,
+          ciphertext_digest:
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        },
       },
-    });
+    );
     expect(verify.status()).toBe(409);
     expect(wireErrCode(await verify.json())).toBe("franking_tampered");
   });
@@ -190,17 +206,15 @@ async function setupEncryptedMessage(
     /^ak:event:/,
     "ak:strand:",
   );
-  await submitSignedEventApi(
-    request,
-    aliceToken,
-    strandEvent,
-    { context: "create encrypted moderation Strand" },
-  );
+  await submitSignedEventApi(request, aliceToken, strandEvent, {
+    context: "create encrypted moderation Strand",
+  });
 
   const plaintext = `moderation evidence must not leak ${Date.now()}`;
-  const ciphertext = Buffer.from(`opaque-ciphertext-${label}-${Date.now()}`, "utf8").toString(
-    "base64url",
-  );
+  const ciphertext = Buffer.from(
+    `opaque-ciphertext-${label}-${Date.now()}`,
+    "utf8",
+  ).toString("base64url");
   const encryptedContent = encryptedEnvelope(ciphertext, realmId);
   const message = signedEventEnvelope({
     actorDid: bob.did,
@@ -269,7 +283,8 @@ async function fileModerationReport(
   // `auth_context.key_id` is an opaque local key label, not the
   // verification-method fragment itself: strip the typed-id `ak:` sigil
   // (same mapping as `eventAuthContext` in soland-api.ts).
-  const keyIdFragment = verificationMethod.split("#").at(-1) ?? verificationMethod;
+  const keyIdFragment =
+    verificationMethod.split("#").at(-1) ?? verificationMethod;
   reportEvent.auth_context = {
     actor_id: setup.reporterDid,
     key_id: keyIdFragment.startsWith("ak:")

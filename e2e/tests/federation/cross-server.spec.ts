@@ -34,6 +34,7 @@ import {
   acceptInviteApi,
   advanceEnvelopeToActorFrontier,
   authHeaders,
+  canonicalJson,
   queryPeerEventsApi,
   createRealmApi,
   grantServiceCapabilityApi,
@@ -97,8 +98,7 @@ async function waitForInvite(
         const invites = await listInvitesApi(request, token, { server });
         found = invites.find(
           (invite) =>
-            invite.invitee === inviteeDid &&
-            invite.realm_id === realmId,
+            invite.invitee === inviteeDid && invite.realm_id === realmId,
         );
         return Boolean(found);
       },
@@ -301,7 +301,7 @@ test.describe("cross-server federation", () => {
       request,
       `s2-alice-${stamp}`,
       {
-      server: "alpha",
+        server: "alpha",
       },
     );
     test.skip(!alice, "canonical DPoP session requires managed Coauth");
@@ -386,27 +386,28 @@ test.describe("cross-server federation", () => {
       (left, right) =>
         Number(left.actor_seq ?? 0) - Number(right.actor_seq ?? 0),
     );
-    const bootstrapPush = await pushFederationEvents(
-      request,
-      bootstrapEvents,
-      {
-        origin: solandServiceId("alpha"),
-        destination: solandServiceId("beta"),
-        server: "beta",
-        realmId,
-        idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-bootstrap`,
-      },
-    );
+    const bootstrapPush = await pushFederationEvents(request, bootstrapEvents, {
+      origin: solandServiceId("alpha"),
+      destination: solandServiceId("beta"),
+      server: "beta",
+      realmId,
+      idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-bootstrap`,
+    });
     expect(bootstrapPush.rejected ?? []).toEqual([]);
     expect([
       ...(bootstrapPush.accepted ?? []),
       ...(bootstrapPush.duplicate ?? []),
     ]).toHaveLength(bootstrapEvents.length);
 
-    const frontierResponse = await request.get(
-      `${solandBaseUrl("alpha")}/_arkret/self/events/frontier?realm_id=${encodeURIComponent(realmId)}`,
-      { headers: authHeaders(aliceToken) },
-    );
+    const frontierUrl = `${solandBaseUrl("alpha")}/_arkret/self/seals/frontier`;
+    const frontierResponse = await request.fetch(frontierUrl, {
+      method: "QUERY",
+      headers: {
+        ...authHeaders(aliceToken, "QUERY", frontierUrl),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({ realm_id: realmId }),
+    });
     const frontierBody = (await frontierResponse.json()) as {
       frontier?: {
         kind?: unknown;
@@ -419,8 +420,7 @@ test.describe("cross-server federation", () => {
     ).toBeTruthy();
     expect(frontierBody.frontier?.kind).toBe("realm_seal");
     const leaves = frontierBody.frontier?.seal_basis?.leaves as
-      | string[]
-      | undefined;
+      string[] | undefined;
     expect(leaves).toEqual([expect.stringMatching(/^ak:seal:/)]);
     const acceptedSeal = await readAcceptedSeal(
       request,
@@ -493,9 +493,9 @@ test.describe("cross-server federation", () => {
       realmId,
       limit: 10,
     });
-    expect(
-      (pullBody.events ?? []).map((event) => event.event_id),
-    ).toContain(inviteEvent.event_id);
+    expect((pullBody.events ?? []).map((event) => event.event_id)).toContain(
+      inviteEvent.event_id,
+    );
     expect(
       (pullBody.events ?? []).filter(
         (event) => event.event_id === inviteEvent.event_id,
@@ -543,7 +543,7 @@ test.describe("cross-server federation", () => {
       request,
       `s2-auto-alice-${stamp}`,
       {
-      server: "alpha",
+        server: "alpha",
         prepareMlsDevice: false,
       },
     );
@@ -581,12 +581,9 @@ test.describe("cross-server federation", () => {
           invite_id: betaInvite.id,
         },
       });
-      await submitSignedEventApi(
-        request,
-        bobToken,
-        acceptanceEvent,
-        { server: "beta" },
-      );
+      await submitSignedEventApi(request, bobToken, acceptanceEvent, {
+        server: "beta",
+      });
       const alphaEventsUrl = `${solandBaseUrl("alpha")}/_arkret/self/events`;
       const alphaEventsResponse = await request.fetch(alphaEventsUrl, {
         method: "QUERY",
@@ -851,10 +848,9 @@ test.describe("cross-server federation", () => {
     );
     expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
     const betaBeforeIds = new Set(
-      (
-        Array.isArray(betaBeforeEvents.events)
-          ? (betaBeforeEvents.events as Array<Record<string, unknown>>)
-          : []
+      (Array.isArray(betaBeforeEvents.events)
+        ? (betaBeforeEvents.events as Array<Record<string, unknown>>)
+        : []
       ).map((event) => String(event.event_id)),
     );
 
@@ -907,10 +903,9 @@ test.describe("cross-server federation", () => {
       limit: 100,
     });
     const betaAfterIds = new Set(
-      (
-        Array.isArray(betaAfter.events)
-          ? (betaAfter.events as Array<Record<string, unknown>>)
-          : []
+      (Array.isArray(betaAfter.events)
+        ? (betaAfter.events as Array<Record<string, unknown>>)
+        : []
       ).map((event) => String(event.event_id)),
     );
     for (const event of backfilledEvents) {

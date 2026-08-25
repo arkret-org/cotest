@@ -36,10 +36,10 @@
 
 ## Actors
 
-| 名字 | DID | 在 models/core-object-invariants 中的角色 | 注册时机 |
-|---|---|---|---|
-| alice | `did:webvh:z6mkfixture:alice-coinv-<uuid>.example` | Space 创建者；patch / archive / tombstone 的发起者；Relation 与 View 的写入端 | 测试开始前 |
-| bob | `did:webvh:z6mkfixture:bob-coinv-<uuid>.example` | 第二个 actor；用于 Phase D 中验证 `assigned_to` / `has_default_view` 等需要第二主体的基数边 | 测试开始前 |
+| 名字  | DID                                                | 在 models/core-object-invariants 中的角色                                                   | 注册时机   |
+| ----- | -------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------- |
+| alice | `did:webvh:z6mkfixture:alice-coinv-<uuid>.example` | Space 创建者；patch / archive / tombstone 的发起者；Relation 与 View 的写入端               | 测试开始前 |
+| bob   | `did:webvh:z6mkfixture:bob-coinv-<uuid>.example`   | 第二个 actor；用于 Phase D 中验证 `assigned_to` / `has_default_view` 等需要第二主体的基数边 | 测试开始前 |
 
 ## Pre-conditions
 
@@ -77,7 +77,7 @@
 
 6. **alice** 创建 Strand `F`，并准备 Board Space `B`、源 List `L1`、错误前像 List
    `L_stale` 与目标 List `L2`。
-7. 查询 `GET /_arkret/self/events/frontier?realm_id=<realmId>`，取得当前 Realm Seal
+7. 查询 `QUERY /_arkret/self/seals/frontier`，以闭合 JSON body `{realm_id}` 取得当前 Realm Seal
    view；提交完整 Control Move，把 position cell 从 `null` 写为
    `{list_space_id:L1, rank:"m"}`：
    - 顶层 `seal_basis={leaves}`；Seal 根仅存在于被引用的 Seal 上，由接收方解析叶子后重算；

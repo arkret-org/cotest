@@ -199,9 +199,7 @@ test.describe("account recovery", () => {
       // which generates the 24-word Recovery Key and uploads the
       // recovery_public_key envelope before it returns. Verify the durable
       // result rather than waiting for an already-completed browser request.
-      await page.page.goto("/settings/recovery", {
-        waitUntil: "domcontentloaded",
-      });
+      await page.gotoAppPanel("/settings/recovery", "recovery-panel");
       await expect(page.page.getByTestId("recovery-key-section")).toBeVisible({
         timeout: 120_000,
       });
@@ -252,7 +250,8 @@ test.describe("account recovery", () => {
               ? backups.filter(
                   (backup: any) =>
                     backup?.backup_kind === "secret_storage" &&
-                    backup?.encryption?.recipient_method === "recovery_public_key",
+                    backup?.encryption?.recipient_method ===
+                      "recovery_public_key",
                 ).length
               : -1;
           },

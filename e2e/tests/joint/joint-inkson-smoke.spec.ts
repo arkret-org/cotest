@@ -4,7 +4,7 @@
 import { randomBytes } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
 import { test, expect } from "../../helpers/joint-fixture";
-import { signedEventEnvelope } from "../../helpers/soland-api";
+import { canonicalJson, signedEventEnvelope } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
@@ -43,7 +43,10 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       return;
     }
 
-    const frontierRequests: Array<{ url: string; ordinal: number }> = [];
+    const frontierRequests: Array<{
+      body: Record<string, unknown>;
+      ordinal: number;
+    }> = [];
     const eventBatches: Array<{
       body: Record<string, unknown>;
       ordinal: number;
@@ -53,10 +56,17 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       const ordinal = requestOrdinal++;
       const url = new URL(observed.url());
       if (
-        observed.method() === "GET" &&
+        observed.method() === "QUERY" &&
         url.pathname === "/_arkret/self/events/frontier"
       ) {
-        frontierRequests.push({ url: url.toString(), ordinal });
+        try {
+          frontierRequests.push({
+            body: observed.postDataJSON() as Record<string, unknown>,
+            ordinal,
+          });
+        } catch {
+          // A malformed request is not a valid registered frontier preflight.
+        }
       }
       if (
         observed.method() === "POST" &&
@@ -136,14 +146,12 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         "genesis carries exactly one membership write",
       ).toHaveLength(1);
 
-      const preflightForNewRealm = frontierRequests.filter((observed) => {
-        const url = new URL(observed.url);
-        return (
+      const preflightForNewRealm = frontierRequests.filter(
+        (observed) =>
           observed.ordinal < bootstrapBatch!.ordinal &&
-          url.searchParams.get("realm_id") === realmId &&
-          url.searchParams.has("actor_id")
-        );
-      });
+          observed.body.realm_id === realmId &&
+          typeof observed.body.actor_id === "string",
+      );
       expect(
         preflightForNewRealm,
         "registered Realm genesis must be authored locally before submit",
@@ -531,12 +539,14 @@ async function readRealmActorFrontier(
   serverUrl: string,
   realmId: string,
 ): Promise<{ nextActorSeq: number; frontierEventIds: string[] }> {
-  const url = new URL("/_arkret/self/events/frontier", serverUrl);
-  url.searchParams.set("actor_id", actorDid);
-  url.searchParams.set("realm_id", realmId);
-  const href = url.toString();
-  const response = await request.get(href, {
-    headers: selfPathHeadersForDpopSession(session, "GET", href),
+  const href = new URL("/_arkret/self/events/frontier", serverUrl).toString();
+  const response = await request.fetch(href, {
+    method: "QUERY",
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "QUERY", href),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ actor_id: actorDid, realm_id: realmId }),
   });
   const text = await response.text();
   expect(

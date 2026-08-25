@@ -71,10 +71,12 @@ async function requestContact(
         if (statusText && /Request sent|请求已发送/.test(statusText)) {
           return "submitted";
         }
-        const state = await pendingRow.getAttribute("data-state").catch(() => null);
+        const state = await pendingRow
+          .getAttribute("data-state")
+          .catch(() => null);
         return state === "pending_outgoing" || state === "accepted"
           ? "submitted"
-          : state ?? statusText;
+          : (state ?? statusText);
       },
       {
         timeout: 60_000,
@@ -105,10 +107,7 @@ async function expectContactState(
 async function gotoConsentSettings(
   actor: Awaited<ReturnType<typeof openUserPage>>,
 ) {
-  await actor.page.goto("/settings/consent", { waitUntil: "domcontentloaded" });
-  await expect(actor.page.getByTestId("consent-settings-panel")).toBeVisible({
-    timeout: 120_000,
-  });
+  await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
 }
 
 async function expectConsentCell(
