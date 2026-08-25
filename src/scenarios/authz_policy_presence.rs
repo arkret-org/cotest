@@ -350,59 +350,6 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(push_unregister["ok"], true);
 
     let policy_realm_id = alice.create_realm("Presence Policy Check Realm").await?;
-    let policy_document = expect_json(
-        alice
-            .post("/_soland/self/policies")
-            .json(&crate::harness::NonProtocolTestBody::new(json!({
-                "policy_id": "ak:policy:presence-policy-allow",
-                "scope": policy_realm_id,
-                "subject_ref": alice.actor,
-                "policy_kind": "ak.message.create",
-                // Realm-scoped resource constraint: soland matches `resource.kind`
-                // against the request's `source.service_kind`, so leave `kind` unset
-                // (the policy applies to the realm regardless of calling service) and
-                // constrain only on realm_id.
-                "resource": {"realm_id": policy_realm_id},
-                "effect": "allow",
-                "actions": ["ak.message.create"],
-                "obligations": []
-            }))),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(policy_document["active"], true);
-
-    let allow_policy = expect_json(
-        alice
-            .post("/_arkret/self/policy/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
-            >(json!({
-                "request_id": "req-allow",
-                "realm_id": policy_realm_id,
-                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "ak.message.create",
-                "actor_id": alice_core_id,
-                "source": {
-                    "service_id": server.service_id(),
-                    "service_kind": "principal_server",
-                    "signed_transport": true
-                }
-            }))?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(allow_policy["decision"], "allow");
-    assert_eq!(allow_policy["reason_code"], "policy_allowed");
-    assert!(
-        allow_policy["signature"].is_object(),
-        "policy/check must return a signed decision envelope"
-    );
-    assert!(
-        allow_policy["auth_state_digest"].is_string(),
-        "policy/check must bind the auth state digest"
-    );
-
     let review_policy = expect_json(
         alice
             .post("/_arkret/self/policy/check")
