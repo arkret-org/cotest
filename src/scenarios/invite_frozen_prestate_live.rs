@@ -151,13 +151,9 @@ async fn submit_invite_move(
     kind: &str,
     payload: Value,
 ) -> Result<(StatusCode, Value)> {
-    let before = actor.realm_seal_frontier(realm_id).await?;
-    let state: arkret_models_collaboration::event_sync::SealFrontierState =
-        serde_json::from_value(before)?;
-    let before = state.frontier;
-    let before_seal_id = before.sole_leaf()?.to_string();
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
     let event_id = event.event_id.clone();
+    let event_digest = event_id.event_digest();
     let response = actor
         .post("/_arkret/self/events")
         .canonical_json(&crate::publication::initial_submission(event, "")?)?
@@ -172,24 +168,44 @@ async fn submit_invite_move(
         object.insert("event_id".to_owned(), Value::String(event_id.to_string()));
     }
     if status.is_success() {
+        let realm_id = arkret_identifiers::RealmId::new(realm_id.to_owned())?;
         eventually(
-            "accepted invite Control Move advances the Realm Seal frontier",
+            "accepted invite Control Move is covered by the Realm Seal frontier",
             std::time::Duration::from_secs(10),
             std::time::Duration::from_millis(50),
             || {
-                let before_seal_id = before_seal_id.clone();
+                let realm_id = realm_id.clone();
+                let event_digest = event_digest.clone();
                 async move {
-                    let frontier = actor.realm_seal_frontier(realm_id).await?;
+                    let frontier = actor.realm_seal_frontier(realm_id.as_str()).await?;
                     let state: arkret_models_collaboration::event_sync::SealFrontierState =
                         serde_json::from_value(frontier)?;
-                    let frontier = state.frontier;
-                    if frontier.sole_leaf()?.to_string() == before_seal_id {
-                        Err(anyhow!(
-                            "Realm Seal frontier has not advanced from {before_seal_id}"
-                        ))
-                    } else {
-                        Ok(())
+                    let leaf = state.frontier.sole_leaf()?.clone();
+                    let resolved: arkret_models_collaboration::http_bodies::SealResolveOutcome =
+                        serde_json::from_value(
+                            expect_json(
+                                actor.query("/_arkret/self/seals/resolve").json(
+                                    &arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody {
+                                        realm_id,
+                                        seal_refs: vec![leaf.clone()],
+                                        history_traversal_access: None,
+                                    },
+                                ),
+                                StatusCode::OK,
+                            )
+                            .await?,
+                        )?;
+                    let seal = resolved
+                        .seals
+                        .into_iter()
+                        .find(|seal| seal.id == leaf)
+                        .ok_or_else(|| anyhow!("Realm frontier leaf {leaf} did not resolve"))?;
+                    if !seal.delta.contains(&event_digest) {
+                        return Err(anyhow!(
+                            "Realm frontier leaf {leaf} does not cover accepted Event digest {event_digest}"
+                        ));
                     }
+                    Ok(())
                 }
             },
         )
