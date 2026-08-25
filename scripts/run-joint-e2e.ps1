@@ -198,6 +198,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
+. (Join-Path $PSScriptRoot "lib\build-freshness.ps1")
 . (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
 . (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
 
@@ -408,7 +409,8 @@ function Add-BinaryFreshnessPreflight {
         [Parameter(Mandatory = $true)]$Results,
         [Parameter(Mandatory = $true)][string]$Name,
         [Parameter(Mandatory = $true)][string]$BinaryPath,
-        [Parameter(Mandatory = $true)][string[]]$RepositoryRoots
+        [Parameter(Mandatory = $true)][string[]]$RepositoryRoots,
+        [bool]$RequireBuildStamp = $true
     )
 
     try {
@@ -420,12 +422,15 @@ function Add-BinaryFreshnessPreflight {
             }
         )
         $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
+        $stamp = Test-ArtifactBuildStamp -ArtifactPath $BinaryPath -RepositoryStates $states
         $shortHead = if ($newest.Head.Length -gt 12) { $newest.Head.Substring(0, 12) } else { $newest.Head }
         $detail = "binary=$($newest.BinaryTimeUtc.ToString('o')); newest_input=$($newest.RequiredTimeUtc.ToString('o')); repo=$($newest.RepositoryName); head=$shortHead; input=$($newest.RequiredBy)"
         if ($newest.BinaryTimeUtc -lt $newest.RequiredTimeUtc) {
             Add-PreflightResult $Results $Name "fail" "stale binary; $detail"
+        } elseif ($RequireBuildStamp -and -not $stamp.Matches) {
+            Add-PreflightResult $Results $Name "fail" "$detail; $($stamp.Detail)"
         } else {
-            Add-PreflightResult $Results $Name "pass" $detail
+            Add-PreflightResult $Results $Name "pass" "$detail; $($stamp.Detail)"
         }
     }
     catch {
@@ -449,9 +454,10 @@ function Get-ArtifactFreshness {
             }
         )
         $newest = $states | Sort-Object RequiredTimeUtc -Descending | Select-Object -First 1
+        $stamp = Test-ArtifactBuildStamp -ArtifactPath $ArtifactPath -RepositoryStates $states
         return [pscustomobject]@{
-            Fresh = $newest.BinaryTimeUtc -ge $newest.RequiredTimeUtc
-            Detail = "artifact=$($newest.BinaryTimeUtc.ToString('o')); newest_input=$($newest.RequiredTimeUtc.ToString('o')); repo=$($newest.RepositoryName); input=$($newest.RequiredBy)"
+            Fresh = $newest.BinaryTimeUtc -ge $newest.RequiredTimeUtc -and $stamp.Matches
+            Detail = "artifact=$($newest.BinaryTimeUtc.ToString('o')); newest_input=$($newest.RequiredTimeUtc.ToString('o')); repo=$($newest.RepositoryName); input=$($newest.RequiredBy); $($stamp.Detail)"
         }
     } catch {
         return [pscustomobject]@{ Fresh = $false; Detail = $_.Exception.Message }
@@ -781,7 +787,8 @@ function Invoke-JointE2ePreflight {
                     -RepositoryRoots @(
                         (Join-Path $WorkspaceRoot "soland"),
                         (Join-Path $WorkspaceRoot "arkret-rust-sdk")
-                    )
+                    ) `
+                    -RequireBuildStamp (-not [bool]$SolandBin)
             } catch {
                 Add-PreflightResult $results "soland binary" "fail" $_.Exception.Message
             }
@@ -833,6 +840,19 @@ function Invoke-JointE2ePreflight {
     if ($WillStartDefaultInkson -or (-not $InksonBaseUrl -and -not $InksonCommand)) {
         if ($InksonStaticIndex -and (Test-Path -LiteralPath $InksonStaticIndex -PathType Leaf)) {
             Add-PreflightResult $results "inkson web bundle" "pass" $InksonStaticIndex
+            $inksonFreshness = Get-ArtifactFreshness `
+                -ArtifactPath $InksonStaticIndex `
+                -RepositoryRoots @(
+                    (Join-Path $WorkspaceRoot "inkson"),
+                    (Join-Path $WorkspaceRoot "arkret-rust-sdk"),
+                    (Join-Path $WorkspaceRoot "garth"),
+                    (Join-Path $WorkspaceRoot "chime")
+                )
+            if ($inksonFreshness.Fresh) {
+                Add-PreflightResult $results "inkson bundle freshness" "pass" $inksonFreshness.Detail
+            } else {
+                Add-PreflightResult $results "inkson bundle freshness" "fail" $inksonFreshness.Detail
+            }
             $inksonWasm = Join-Path (Split-Path -Parent $InksonStaticIndex) "wasm\inkson_bg.wasm"
             if (Test-BinaryContainsAsciiMarker -Path $inksonWasm -Marker "inkson.test.session_injection.v1") {
                 Add-PreflightResult $results "inkson test-session feature" "pass" $inksonWasm
@@ -852,10 +872,11 @@ function Invoke-JointE2ePreflight {
                 -Results $results `
                 -Name "teabay binary freshness" `
                 -BinaryPath $teabayBinary `
-                -RepositoryRoots @(
-                    (Join-Path $WorkspaceRoot "teabay"),
-                    (Join-Path $WorkspaceRoot "arkret-rust-sdk")
-                )
+                    -RepositoryRoots @(
+                        (Join-Path $WorkspaceRoot "teabay"),
+                        (Join-Path $WorkspaceRoot "arkret-rust-sdk")
+                    ) `
+                    -RequireBuildStamp $false
         } catch {
             Add-PreflightResult $results "teabay binary" "fail" $_.Exception.Message
         }
@@ -875,10 +896,11 @@ function Invoke-JointE2ePreflight {
                 -Results $results `
                 -Name "coauth binary freshness" `
                 -BinaryPath $coauthBinary `
-                -RepositoryRoots @(
-                    (Join-Path $WorkspaceRoot "coauth"),
-                    (Join-Path $WorkspaceRoot "arkret-rust-sdk")
-                )
+                    -RepositoryRoots @(
+                        (Join-Path $WorkspaceRoot "coauth"),
+                        (Join-Path $WorkspaceRoot "arkret-rust-sdk")
+                    ) `
+                    -RequireBuildStamp (-not [bool]$CoauthBin)
         } catch {
             Add-PreflightResult $results "coauth binary" "fail" $_.Exception.Message
         }
@@ -2871,7 +2893,7 @@ try {
                 -Command ("cargo build --manifest-path {0} --bin soland" -f (Quote-PsLiteral $SutManifest)) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary; AllowUnchangedArtifact = $true })
+            $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "soland"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "soland"; status = "cache-hit"; duration_seconds = 0; detail = $freshness.Detail })
         }
@@ -2903,7 +2925,7 @@ try {
                 -Command ("cargo build --manifest-path {0} --bin cotest-wire" -f (Quote-PsLiteral $cotestManifest)) `
                 -WorkingDirectory $repoRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true })
+            $preparationTasks.Add([pscustomobject]@{ Name = "cotest-wire"; Service = $service; Started = $started; Artifact = $cotestWireBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($repoRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "cotest-wire"; status = "cache-hit"; duration_seconds = 0; detail = $wireFreshness.Detail })
         }
@@ -2931,7 +2953,7 @@ try {
                 -Command "just frontend-assets" `
                 -WorkingDirectory $coauthRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coauth-frontend"; Service = $service; Started = $started; Artifact = $coauthFrontendArtifact; AllowUnchangedArtifact = $true })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth-frontend"; Service = $service; Started = $started; Artifact = $coauthFrontendArtifact; AllowUnchangedArtifact = $true; RepositoryRoots = @($coauthRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth-frontend"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFrontendFreshness.Detail })
         }
@@ -2952,7 +2974,7 @@ try {
                 -Command ("cargo build --manifest-path {0} --bin coauth" -f (Quote-PsLiteral $coauthManifest)) `
                 -WorkingDirectory (Split-Path -Parent $coauthManifest) `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "coauth"; Service = $service; Started = $started; Artifact = $defaultCoauthBinary; AllowUnchangedArtifact = $true })
+            $preparationTasks.Add([pscustomobject]@{ Name = "coauth"; Service = $service; Started = $started; Artifact = $defaultCoauthBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "coauth"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFreshness.Detail })
         }
@@ -2983,7 +3005,7 @@ try {
             -Command $buildCommand `
             -WorkingDirectory $SavfoxRoot `
             -LogDirectory $serviceLogDir
-        $preparationTasks.Add([pscustomobject]@{ Name = "savfox"; Service = $service; Started = $started; Artifact = $defaultSavfoxBinary; AllowUnchangedArtifact = $true })
+        $preparationTasks.Add([pscustomobject]@{ Name = "savfox"; Service = $service; Started = $started; Artifact = $defaultSavfoxBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @($SavfoxRoot, (Join-Path $workspaceRoot "arkret-rust-sdk")) })
     }
 
     if (-not $SkipBuild -and $willStartDefaultInkson) {
@@ -3023,7 +3045,7 @@ try {
                 -Command $buildCommand `
                 -WorkingDirectory $InksonRoot `
                 -LogDirectory $serviceLogDir
-            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false })
+            $preparationTasks.Add([pscustomobject]@{ Name = "inkson"; Service = $service; Started = $started; Artifact = $inksonStaticIndex; AllowUnchangedArtifact = $false; RepositoryRoots = @($InksonRoot, (Join-Path $workspaceRoot "arkret-rust-sdk"), (Join-Path $workspaceRoot "garth"), (Join-Path $workspaceRoot "chime")) })
         } else {
             $preparationTimings.Add([pscustomobject]@{ name = "inkson"; status = "cache-hit"; duration_seconds = 0; detail = $inksonFreshness.Detail })
         }
@@ -3054,6 +3076,12 @@ try {
             (Get-Item -LiteralPath $task.Artifact).LastWriteTimeUtc = [DateTime]::UtcNow
             $status = "verified-cargo-cache-hit"
         }
+        $repositoryStates = @(
+            foreach ($repositoryRoot in $task.RepositoryRoots) {
+                Get-RepositoryBuildInputState -RepositoryRoot $repositoryRoot -BinaryPath $task.Artifact
+            }
+        )
+        Write-ArtifactBuildStamp -ArtifactPath $task.Artifact -RepositoryStates $repositoryStates | Out-Null
         $preparationTimings.Add([pscustomobject]@{ name = $task.Name; status = $status; duration_seconds = $duration; detail = $task.Artifact })
     }
     if ($willStartDefaultInkson) {

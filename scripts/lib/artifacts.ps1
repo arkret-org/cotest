@@ -99,7 +99,16 @@ function Remove-StaleArtifactRuns {
             )) {
             throw "Refusing to prune artifact run outside family root: $resolvedDirectory"
         }
-        Remove-Item -LiteralPath $resolvedDirectory -Recurse -Force
+        try {
+            Remove-Item -LiteralPath $resolvedDirectory -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            # Retention is best-effort housekeeping. A previous runner or an
+            # artifact viewer may still hold a file handle on Windows; that
+            # must not prevent the new test run from starting. Leave the
+            # locked run intact and continue pruning the remaining candidates.
+            Write-Warning "Unable to prune stale artifact run '$resolvedDirectory': $($_.Exception.Message)"
+        }
     }
 }
 

@@ -37,12 +37,13 @@ New-Item -ItemType Directory -Path $scanRoot -Force | Out-Null
 try {
     $mnemonic = "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual"
     $bearer = "synthetic-bearer-token-AAAABBBBCCCC"
+    $dpop = "synthetic.dpop.proof-AAAABBBBCCCC"
     $hexSecret = "deadbeefdeadbeefdeadbeefdeadbeef"
     $didValue = "did:webvh:QmSynthetic:host.example:webvh:alice"
     # b64url of a synthetic 32-byte seed: the exact shape a private OKP JWK's
     # `d` member and a plaintext keybag entry carry.
     $jwkPrivateScalar = "c3ludGhldGljLXNlZWQtdmFsdWUtZm9yLXNjYW5uZXItdGVzdHM"
-    $plantedSecrets = @($mnemonic, $bearer, $hexSecret, $didValue, $jwkPrivateScalar)
+    $plantedSecrets = @($mnemonic, $bearer, $dpop, $hexSecret, $didValue, $jwkPrivateScalar)
 
     # One planted secret per line; the file name documents the vector.
     $planted = @(
@@ -61,6 +62,8 @@ try {
         [pscustomobject]@{ name = "punctuated-mnemonic-string.log"; line = "{`"message`":`"recovery phrase: $mnemonic`"}"; pattern = "bip39_mnemonic_sequence" },
         [pscustomobject]@{ name = "did-in-credential-field.log"; line = "{`"credential`":`"$didValue`"}"; pattern = "did_in_token_field" },
         [pscustomobject]@{ name = "authorization-bearer.log"; line = "authorization: bearer $bearer"; pattern = "authorization_header" },
+        [pscustomobject]@{ name = "authorization-dpop.log"; line = "    - authorization: DPoP $bearer"; pattern = "authorization_header" },
+        [pscustomobject]@{ name = "dpop-proof-header.log"; line = "    - dpop: $dpop"; pattern = "dpop_header" },
         [pscustomobject]@{ name = "redaction-prefix-is-not-marker.log"; line = "{`"jws`":`"[redacted]$bearer`"}"; pattern = "json_secret_field" },
         [pscustomobject]@{ name = "pem-private-key.log"; line = "-----BEGIN PRIVATE KEY-----$hexSecret-----END PRIVATE KEY-----"; pattern = "private_key_block" },
         [pscustomobject]@{ name = "pem-encrypted-private-key-header.log"; line = "-----BEGIN ENCRYPTED PRIVATE KEY-----"; pattern = "private_key_block" },
@@ -171,7 +174,7 @@ try {
             Assert-True ($leak.category -eq "recovery_private_material") "$privatePattern must be recovery_private_material, got '$($leak.category)'"
         }
     }
-    foreach ($credentialPattern in @("authorization_header", "json_secret_field", "query_secret_field", "did_in_token_field")) {
+    foreach ($credentialPattern in @("authorization_header", "dpop_header", "json_secret_field", "query_secret_field", "did_in_token_field")) {
         $categorised = @($leaks | Where-Object { $_.pattern -eq $credentialPattern })
         Assert-True ($categorised.Count -ge 1) "expected at least one $credentialPattern finding to categorise"
         foreach ($leak in $categorised) {

@@ -144,7 +144,8 @@ function ConvertTo-RedactedLine {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Line)
 
     $preview = $Line
-    $preview = $preview -replace "(?i)((?:^|\s)authorization\s*:\s*bearer\s+)(?!$($script:RedactedValuePattern)(?:\s|$))\S+", '$1[redacted]'
+    $preview = $preview -replace "(?i)((?:^|\s)authorization\s*:\s*(?:bearer|dpop)\s+)(?!$($script:RedactedValuePattern)(?:\s|$))\S+", '$1[redacted]'
+    $preview = $preview -replace "(?i)((?:^|\s)dpop\s*:\s*)(?!$($script:RedactedValuePattern)(?:\s|$))\S+", '$1[redacted]'
     $preview = $preview -replace "(?i)(`"($script:JsonSecretFieldNames)`"\s*:\s*`")(?!$($script:RedactedValuePattern)`")([^`"]+)(`")", '$1[redacted]$4'
     $preview = $preview -replace "(?i)((?:^|[?&\s])($script:QuerySecretFieldNames)=)(?!$($script:RedactedValuePattern)(?:$script:QueryValueDelimiterPattern)|%5[Bb]redacted%5[Dd](?:$script:QueryValueDelimiterPattern))([^&\s`"\\]+)", '$1[redacted]'
     $preview = $preview -replace "(?i)(\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*)(?!$($script:RedactedValuePattern)(?:\s|;|$))(?:'[^']*'|`"[^`"]*`"|\S+)", '$1[redacted]'
@@ -176,7 +177,8 @@ function ConvertTo-SecretPreview {
 
 function Get-SecretLeakPatterns {
     @(
-        [pscustomobject]@{ name = "authorization_header"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|\s)authorization\s*:\s*bearer\s+(?!$($script:RedactedValuePattern)(?:\s|$))\S+"; validate = $null },
+        [pscustomobject]@{ name = "authorization_header"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|\s)authorization\s*:\s*(?:bearer|dpop)\s+(?!$($script:RedactedValuePattern)(?:\s|$))\S+"; validate = $null },
+        [pscustomobject]@{ name = "dpop_header"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|\s)dpop\s*:\s*(?!$($script:RedactedValuePattern)(?:\s|$))\S+"; validate = $null },
         [pscustomobject]@{ name = "recovery_private_material_field"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)`"($script:RecoveryPrivateMaterialFieldNames)`"\s*:\s*`"(?!$($script:RedactedValuePattern)`")[^`"]+`""; validate = $null },
         [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!$($script:RedactedValuePattern)(?:\s|;|$))(?:'[^']+'|`"[^`"]+`"|[A-Za-z0-9_-]{16,})"; validate = $null },
         [pscustomobject]@{ name = "jwk_private_member"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:JwkPrivateMemberPattern; validate = $null },
