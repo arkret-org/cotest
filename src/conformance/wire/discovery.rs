@@ -310,6 +310,7 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
 /// regression so stale Morph/View query shapes do not silently reappear.
 pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
     let schema = crate::conformance::load_artifact_json("schemas/view.schema.json")?;
+    let query_schema = crate::conformance::load_artifact_json("schemas/query.schema.json")?;
     let required = schema
         .get("required")
         .and_then(Value::as_array)
@@ -331,10 +332,17 @@ pub fn run_facet_renderer_query_fixture_suite() -> Result<()> {
         }
     }
 
-    let renderer_enum = schema
+    if schema
+        .pointer("/$defs/view_renderer/$ref")
+        .and_then(Value::as_str)
+        != Some("./query.schema.json#/$defs/view_renderer")
+    {
+        bail!("view schema must reference the canonical query view_renderer definition");
+    }
+    let renderer_enum = query_schema
         .pointer("/$defs/view_renderer/enum")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("view schema missing $defs.view_renderer.enum"))?;
+        .ok_or_else(|| anyhow!("query schema missing $defs.view_renderer.enum"))?;
     for renderer in [
         "board", "list", "table", "timeline", "graph", "document", "custom",
     ] {
