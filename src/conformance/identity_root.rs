@@ -23,9 +23,7 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
-use arkret_wire::{
-    Audience, DidUrl, Event, EventRef, NonEmptyString, PrincipalAuthorityKey, ProducerEventProof,
-};
+use arkret_wire::{Audience, DidUrl, Event, EventRef, NonEmptyString, ProducerEventProof};
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{Value, json};
@@ -338,13 +336,10 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
 
 fn validate_reanchor_helpers() -> Result<()> {
     let principal = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
-    let authority = PrincipalAuthorityKey::new(
-        principal.clone(),
-        DidCoreId::new("ak:did_core:web:principal.example")?,
-    );
+    let principal_server_id = DidCoreId::new("ak:did_core:web:principal.example")?;
     let value = json!({
         "principal_id": principal,
-        "authority": authority,
+        "principal_server_id": principal_server_id,
         "recovery_authority_kind": "pcr_policy",
         "recovery_policy_id": "ak:policy:01904100-0000-7000-8000-000000000001",
         "recovery_policy_version": 1,

@@ -3,6 +3,7 @@ use arkret::{
     AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody,
     DidFullId, PrincipalAuthorityKey, project_full_id_to_core_id,
 };
+use arkret_models_discovery::ServiceDescribe;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -48,14 +49,22 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
     )
     .await?;
     assert_eq!(ping["ok"], true);
-    let applet_describe = expect_json(
-        server
-            .http()
-            .get(server.url("/_arkret/edge/applet/describe")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(applet_describe["contract"], "ak.applet.v1");
+    let applet_describe: ServiceDescribe = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .get(server.url("/_arkret/edge/applet/describe")),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    applet_describe.validate()?;
+    assert!(
+        applet_describe
+            .supported_operations
+            .iter()
+            .any(|operation| operation == "ak.edge.applet.read.describe")
+    );
 
     expect_api_error(
         alice
