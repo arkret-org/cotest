@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail, ensure};
-use arkret::mls::{ArkretMlsGroup, ArkretMlsIdentity};
+use arkret::mls::{ArkretMlsGroup, ArkretMlsIdentity, ArkretMlsSigner};
 use arkret::{
     Base64UrlString, ContentScheme, DeviceId, DidCoreId, DidFullId, DidUrl, KeyOperationSignature,
     KeyPackagesClaimOutcome, KeyPackagesClaimRequestBody, KeyPackagesClaimServiceBinding,
@@ -54,8 +54,6 @@ const UPLOAD_PATH: &str = "/_arkret/self/keys/keypackages/upload";
 const CLAIM_PATH: &str = "/_arkret/self/keys/keypackages/claim";
 const CONSUME_PATH: &str = "/_arkret/self/keys/keypackages/consume";
 const TRANSPORT_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001423";
-const TARGET_LOCAL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001424";
-const TARGET_LAST_RESORT_LOCAL_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001426";
 const OTHER_ORDINARY_DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000001427";
 const TARGET_SEED: [u8; 32] = [0x42; 32];
 const REQUESTER_SEED: [u8; 32] = [0x24; 32];
@@ -87,13 +85,11 @@ impl PairwiseKey {
         })
     }
 
-    fn identity(&self, local_owner: DidCoreId, device_id: &str) -> Result<ArkretMlsIdentity> {
-        ArkretMlsIdentity::from_minimal_metadata_ed25519_signing_seed(
-            local_owner,
-            DeviceId::new(device_id.to_owned())?,
+    fn identity(&self) -> Result<ArkretMlsIdentity> {
+        ArkretMlsIdentity::new_minimal_metadata_pairwise(
             self.actor_id.clone(),
             self.verification_method.clone(),
-            self.seed,
+            ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&self.seed)),
         )
         .map_err(anyhow::Error::from)
     }
@@ -126,8 +122,6 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     let transport = server
         .register_client(&transport_did, "pairwise-transport", TRANSPORT_DEVICE)
         .await?;
-    let local_owner = arkret_wire::project_full_id_to_core_id(&DidFullId::new(transport_did)?)?;
-
     let target = PairwiseKey::from_seed(TARGET_SEED)?;
     let requester = PairwiseKey::from_seed(REQUESTER_SEED)?;
     let other = PairwiseKey::from_seed(OTHER_SEED)?;
@@ -169,9 +163,8 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     )
     .await?;
 
-    let target_identity = target.identity(local_owner.clone(), TARGET_LOCAL_DEVICE)?;
-    let last_resort_identity =
-        target.identity(local_owner.clone(), TARGET_LAST_RESORT_LOCAL_DEVICE)?;
+    let target_identity = target.identity()?;
+    let last_resort_identity = target.identity()?;
     let target_record = target_identity.key_package_record()?;
     let mut last_resort_record = last_resort_identity.key_package_record()?;
     last_resort_record.last_resort = true;
@@ -225,7 +218,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     .await
     .context("batch entry count tamper")?;
 
-    let other_identity = other.identity(local_owner.clone(), TARGET_LOCAL_DEVICE)?;
+    let other_identity = other.identity()?;
     let other_record = other_identity.key_package_record()?;
     let wrong_credential = signed_pairwise_upload_with_records(
         &target,
@@ -236,12 +229,10 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         .await
         .context("batch-authorized KeyPackage credential from another actor")?;
 
-    let wrong_key_identity = ArkretMlsIdentity::from_minimal_metadata_ed25519_signing_seed(
-        local_owner.clone(),
-        DeviceId::new(TARGET_LOCAL_DEVICE.to_owned())?,
+    let wrong_key_identity = ArkretMlsIdentity::new_minimal_metadata_pairwise(
         target.actor_id.clone(),
         other.verification_method.clone(),
-        OTHER_SEED,
+        ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&OTHER_SEED)),
     )?;
     let wrong_key_record = wrong_key_identity.key_package_record()?;
     let wrong_key = signed_pairwise_upload_with_records(
@@ -253,9 +244,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         .await
         .context("batch-authorized KeyPackage with a different Leaf signature key")?;
 
-    let mut invalid_self_signature_record = target
-        .identity(local_owner.clone(), TARGET_LOCAL_DEVICE)?
-        .key_package_record()?;
+    let mut invalid_self_signature_record = target.identity()?.key_package_record()?;
     let mut invalid_bytes = URL_SAFE_NO_PAD.decode(&invalid_self_signature_record.keypackage)?;
     let last = invalid_bytes
         .last_mut()
@@ -296,10 +285,10 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         .context("pairwise transport omitted its provisioned principal")?
         .clone();
     verify_ordinary_keypackage_binding_matrix(&transport, &principal, &ordinary_realm_id).await?;
-    let requester_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
+    let requester_identity = ArkretMlsIdentity::new_human_device(
         principal.core_id.clone(),
         principal.device_id.clone(),
-        &principal.device_signing_key,
+        ArkretMlsSigner::from_ed25519_signing_key(principal.device_signing_key.clone()),
     )?;
     let canonical_group_id = ScopeRef::Realm {
         realm_id: RealmId::new(realm_id.clone())?,
@@ -485,7 +474,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     );
 
     leave_pairwise_member(&transport, &realm_id, &target).await?;
-    let replacement_identity = target.identity(local_owner, TARGET_LOCAL_DEVICE)?;
+    let replacement_identity = target.identity()?;
     let replacement = replacement_identity.key_package_record()?;
     let replacement_upload = replacement_identity.signed_key_packages_upload_request(
         &[replacement],
@@ -510,10 +499,10 @@ async fn verify_ordinary_keypackage_binding_matrix(
     principal: &ProvisionedTestPrincipal,
     realm_id: &str,
 ) -> Result<()> {
-    let valid_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
+    let valid_identity = ArkretMlsIdentity::new_human_device(
         principal.core_id.clone(),
         principal.device_id.clone(),
-        &principal.device_signing_key,
+        ArkretMlsSigner::from_ed25519_signing_key(principal.device_signing_key.clone()),
     )?;
     let valid_record = valid_identity.key_package_record()?;
     let valid = signed_ordinary_upload_with_records(
@@ -532,10 +521,10 @@ async fn verify_ordinary_keypackage_binding_matrix(
     .await
     .context("deprecated per-entry endpoint_signature")?;
 
-    let wrong_device_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
+    let wrong_device_identity = ArkretMlsIdentity::new_human_device(
         principal.core_id.clone(),
         DeviceId::new(OTHER_ORDINARY_DEVICE.to_owned())?,
-        &principal.device_signing_key,
+        ArkretMlsSigner::from_ed25519_signing_key(principal.device_signing_key.clone()),
     )?;
     let wrong_device = signed_ordinary_upload_with_records(
         principal,
@@ -547,10 +536,10 @@ async fn verify_ordinary_keypackage_binding_matrix(
         .context("batch-authorized ordinary KeyPackage credential from another DeviceId")?;
 
     let wrong_key_signer = SigningKey::from_bytes(&OTHER_SEED);
-    let wrong_key_identity = ArkretMlsIdentity::from_authorized_device_signing_key(
+    let wrong_key_identity = ArkretMlsIdentity::new_human_device(
         principal.core_id.clone(),
         principal.device_id.clone(),
-        &wrong_key_signer,
+        ArkretMlsSigner::from_ed25519_signing_key(wrong_key_signer),
     )?;
     let wrong_key = signed_ordinary_upload_with_records(
         principal,

@@ -127,6 +127,9 @@ test.describe(
           );
           const entries = upload.requestBody?.keypackages;
           expect(entries).toHaveLength(8);
+          for (const entry of entries as Array<Record<string, unknown>>) {
+            expect(entry).not.toHaveProperty("endpoint_signature");
+          }
           expect(upload.responseBody?.accepted).toBeGreaterThan(0);
           expect(upload.responseBody?.rejected ?? []).toEqual([]);
           expect(upload.responseBody).not.toHaveProperty("available_count");
@@ -203,6 +206,43 @@ test.describe(
             ),
             "healthy local KeyPackage inventory reload must perform zero uploads",
           ).toHaveLength(uploadCountBeforeReload);
+        });
+
+        await test.step("manual recovery performs one bounded batch-only refill", async () => {
+          await jointPage.gotoSettings();
+          await page.getByTestId("settings-nav-item-encryption").click();
+          await expect(page.getByTestId("encryption-settings")).toBeVisible();
+          await page
+            .getByTestId("settings-mls-keypackages-refill-button")
+            .click();
+          await expect(
+            page.getByTestId("settings-mls-keypackages-refill-status"),
+          ).toContainText(/published|已发布|补充/, { timeout: 120_000 });
+
+          await expect
+            .poll(
+              () =>
+                protocolHits.filter(
+                  (hit) =>
+                    hit.path === "/_arkret/self/keys/keypackages/upload",
+                ).length,
+              { timeout: 30_000 },
+            )
+            .toBe(uploadCountBeforeReload + 1);
+          const refill = protocolHits
+            .filter(
+              (hit) => hit.path === "/_arkret/self/keys/keypackages/upload",
+            )
+            .at(-1)!;
+          expect(refill.requestBody).toHaveProperty("endpoint_signature");
+          const entries = refill.requestBody?.keypackages as Array<
+            Record<string, unknown>
+          >;
+          expect(entries).toHaveLength(8);
+          for (const entry of entries) {
+            expect(entry).not.toHaveProperty("endpoint_signature");
+          }
+          expect(refill.responseBody).not.toHaveProperty("available_count");
         });
 
         expect(

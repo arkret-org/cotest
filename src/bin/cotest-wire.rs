@@ -183,10 +183,12 @@ fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
     let seed: [u8; 32] = seed
         .try_into()
         .map_err(|_| anyhow::anyhow!("MLS signing seed must be 32 bytes"))?;
-    let identity = arkret::ArkretMlsIdentity::from_authorized_device_signing_key(
+    let identity = arkret::ArkretMlsIdentity::new_human_device(
         principal_id,
         input.device_id,
-        &ed25519_dalek::SigningKey::from_bytes(&seed),
+        arkret::ArkretMlsSigner::from_ed25519_signing_key(ed25519_dalek::SigningKey::from_bytes(
+            &seed,
+        )),
     )?;
     let record = identity.key_package_record()?;
     let entry = arkret_models_crypto::mls_key_package_record_upload_entry(&record)

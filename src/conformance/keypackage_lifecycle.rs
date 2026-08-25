@@ -938,12 +938,7 @@ fn keypackage_payload_value(keypackage_ref: &str, keypackage_digest: &str) -> Va
         "capabilities": ["ak.content.v1"],
         "state": "published",
         "expires_at": "2100-01-01T00:00:00.000Z",
-        "created_at": "2026-06-19T00:00:00.000Z",
-        "endpoint_signature": {
-            "kid": "did:web:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
-            "signature_algorithm": "Ed25519",
-            "sig": "c2ln"
-        }
+        "created_at": "2026-06-19T00:00:00.000Z"
     })
 }
 

@@ -70,7 +70,9 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
                 .context("KeyPackage transcript case missing signing input")?,
         )?;
         let (actual_input, signature) = match name {
-            "upload_batch_required_fields" => {
+            "upload_batch_device"
+            | "upload_batch_native_agent"
+            | "upload_batch_minimal_metadata_pairwise" => {
                 let unsigned: KeyPackagesUploadUnsignedRequest = serde_json::from_value(
                     case.get("unsigned_request")
                         .cloned()
