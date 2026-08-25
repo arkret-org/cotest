@@ -220,12 +220,9 @@ async fn submit_operation(
         accepted["status"], "accepted",
         "the authored create must be accepted: {accepted}"
     );
-    let accepted_id = accepted["accepted"][0]
-        .as_str()
-        .or_else(|| accepted["event_id"].as_str())
-        .ok_or_else(|| anyhow!("accepted response names no Event: {accepted}"))?;
+    let accepted_id = crate::harness::submitted_event_id(&accepted)?;
     assert_eq!(
-        accepted_id,
+        accepted_id.as_str(),
         authored_event_id.as_str(),
         "the receipt must name the authored identity verbatim"
     );

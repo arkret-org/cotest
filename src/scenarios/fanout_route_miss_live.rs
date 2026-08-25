@@ -155,12 +155,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             member_join_payload(&realm_id, "did:web:fanout-carol.example"),
         )
         .await?;
-    let first_event_id = EventId::new(
-        first["event_id"]
-            .as_str()
-            .context("first fanout Event id")?
-            .to_owned(),
-    )?;
+    let first_event_id = crate::harness::submitted_event_id(&first)?;
     ensure!(
         first["pending_delivery_count"] == 1,
         "route miss did not return accepted+pending without topology: {first}"
@@ -221,12 +216,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             member_join_payload(&realm_id, "did:web:fanout-david.example"),
         )
         .await?;
-    let second_event_id = EventId::new(
-        second["event_id"]
-            .as_str()
-            .context("second fanout Event id")?
-            .to_owned(),
-    )?;
+    let second_event_id = crate::harness::submitted_event_id(&second)?;
     let bob_leave = member_payload(
         &realm_id,
         &bob_did,
@@ -382,12 +372,7 @@ async fn submit_and_settle_member_transition(
     let response = client
         .submit_event(realm_id, EventKind::MemberState.as_str(), payload)
         .await?;
-    let event_id = EventId::new(
-        response["event_id"]
-            .as_str()
-            .context("member transition Event id")?
-            .to_owned(),
-    )?;
+    let event_id = crate::harness::submitted_event_id(&response)?;
     let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
         .as_str()
         .context("member transition Control Proposal Ack")?;

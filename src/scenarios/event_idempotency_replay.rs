@@ -366,15 +366,10 @@ fn projected_events(listed: &Value) -> Result<&Vec<Value>> {
 
 fn submitted_event_id(response: &Value) -> Option<&str> {
     response
-        .get("event_id")
+        .get("accepted")
+        .and_then(Value::as_array)
+        .and_then(|accepted| accepted.first())
         .and_then(Value::as_str)
-        .or_else(|| {
-            response
-                .get("accepted")
-                .and_then(Value::as_array)
-                .and_then(|accepted| accepted.first())
-                .and_then(Value::as_str)
-        })
         .or_else(|| {
             response
                 .get("duplicate")

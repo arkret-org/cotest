@@ -34,10 +34,7 @@ const BOB_LOCAL: &str = "cotest-rsvp-bob";
 /// read the id back. Carrying a pre-minted id in the create payload is
 /// `object_id_not_event_derived`.
 fn created_strand_id(submitted: &Value) -> Result<String> {
-    let event_id = submitted["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("Strand create response carries no accepted event_id"))?;
-    let event_id = arkret_identifiers::EventId::new(event_id.to_owned())?;
+    let event_id = crate::harness::submitted_event_id(submitted)?;
     Ok(arkret_identifiers::StrandId::from_event_id(&event_id).to_string())
 }
 

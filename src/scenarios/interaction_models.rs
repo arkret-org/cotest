@@ -1,11 +1,11 @@
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{EventId, MessageId, ReadCursorId};
+use arkret_identifiers::{MessageId, ReadCursorId};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
     actor_core_id, events_query_for_realm, expect_json, expect_response, expect_status,
-    message_redact_payload, message_revise_text_payload, next_typed_id,
+    message_redact_payload, message_revise_text_payload, next_typed_id, submitted_event_id,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, spawn_with_harness_account_authority,
@@ -60,6 +60,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let sent = alice
         .send_message(&realm_id, &strand_id, "hello interaction")
         .await?;
+    let sent_event_id = submitted_event_id(&sent)?;
 
     expect_status(
         server.http().get(server.url(&format!(
@@ -87,10 +88,11 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     };
     let (subscribe_response, followup) = tokio::join!(live_subscribe, delayed_followup);
     let (subscribe_response, followup) = (subscribe_response?, followup?);
+    let followup_event_id = submitted_event_id(&followup)?;
     let subscribe_frames = ndjson_frames(&subscribe_response.text())?;
     let live_frame = subscribe_frames
         .iter()
-        .find(|frame| frame["payload"]["event_id"] == followup["event_id"])
+        .find(|frame| frame["payload"]["event_id"].as_str() == Some(followup_event_id.as_str()))
         .ok_or_else(|| {
             anyhow!("live subscribe must deliver the follow-up event: {subscribe_frames:?}")
         })?;
@@ -102,6 +104,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let catchup_target = alice
         .send_message(&realm_id, &strand_id, "hello catchup")
         .await?;
+    let catchup_target_event_id = submitted_event_id(&catchup_target)?;
     let catchup_response = expect_response(
         alice.get(&format!(
             "/_arkret/self/events/subscribe?realms={realm_id}&after={resume_cursor}&catchup=true&max_duration_ms=1500&heartbeat_ms=200"
@@ -111,9 +114,9 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     .await?;
     let catchup_frames = ndjson_frames(&catchup_response.text())?;
     assert!(
-        catchup_frames
-            .iter()
-            .any(|frame| frame["payload"]["event_id"] == catchup_target["event_id"]),
+        catchup_frames.iter().any(|frame| {
+            frame["payload"]["event_id"].as_str() == Some(catchup_target_event_id.as_str())
+        }),
         "catch-up replay must deliver the follow-up event: {catchup_frames:?}"
     );
     assert!(
@@ -128,7 +131,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             &realm_id,
             "ak.reaction.add",
             json!({
-                "target_ref": sent["event_id"],
+                "target_ref": sent_event_id,
                 "key": "like"
             }),
         )
@@ -140,7 +143,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             &realm_id,
             "ak.reaction.remove",
             json!({
-                "target_ref": sent["event_id"],
+                "target_ref": sent_event_id,
                 "key": "like"
             }),
         )
@@ -150,11 +153,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // Per read-cursor.schema.json, a `kind="thread"` read scope references the
     // thread's root *message* (`ak:message:<event-token>`), not an opaque
     // `ak:thread:` string. Derive it from the root message's event id.
-    let thread_root_event_id = sent["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("sent message missing event_id: {sent}"))?;
-    let thread_root_ref =
-        MessageId::from_event_id(&EventId::new(thread_root_event_id)?).to_string();
+    let thread_root_ref = MessageId::from_event_id(&sent_event_id).to_string();
     let read_cursor_id = ReadCursorId::new(next_typed_id("read_cursor"))?;
     let dave_core_id = actor_core_id(&dave.actor)?;
     let marker = dave
@@ -172,7 +171,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
                     "container_ref": thread_root_ref
                 },
                 "position": {
-                    "event_id": sent["event_id"],
+                    "event_id": sent_event_id,
                     "hlc": "019041000000-0001-1dae0001"
                 },
                 "updated_at": "2026-05-02T00:00:00.000Z"
@@ -180,9 +179,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         )
         .await?;
     assert_eq!(marker["status"], "accepted");
-    let marker_event_id = marker["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("read cursor submit response missing event_id: {marker}"))?;
+    let marker_event_id = submitted_event_id(&marker)?;
 
     let markers = expect_json(
         dave.query("/_arkret/self/events")
@@ -201,31 +198,29 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         .collect::<Vec<_>>();
     assert!(
         marker_events.iter().any(|event| {
-            event["event_id"] == marker_event_id
-                && event["payload"]["position"]["event_id"] == sent["event_id"]
+            event["event_id"].as_str() == Some(marker_event_id.as_str())
+                && event["payload"]["position"]["event_id"].as_str() == Some(sent_event_id.as_str())
                 && event["payload"]["read_scope"]["container_ref"] == thread_root_ref
                 && event["payload"]["read_scope"]["kind"] == "thread"
         }),
         "events query did not include accepted read cursor marker: {markers}"
     );
 
-    let sent_event_id = sent["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("sent message missing event_id: {sent}"))?;
     let revised = alice
         .submit_event(
             &realm_id,
             "ak.message.revise",
-            message_revise_text_payload(sent_event_id, "edited interaction")?,
+            message_revise_text_payload(sent_event_id.as_str(), "edited interaction")?,
         )
         .await?;
-    assert_ne!(revised["event_id"], sent["event_id"]);
+    let revised_event_id = submitted_event_id(&revised)?;
+    assert_ne!(revised_event_id, sent_event_id);
 
     let redacted = alice
         .submit_event(
             &realm_id,
             "ak.message.redact",
-            message_redact_payload(sent_event_id, None)?,
+            message_redact_payload(sent_event_id.as_str(), None)?,
         )
         .await?;
     assert_eq!(redacted["status"], "accepted");

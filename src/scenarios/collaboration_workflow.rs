@@ -180,14 +180,15 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .send_message(&realm_id, &strand_id, "hello from collaboration workflow")
         .await?;
     assert_eq!(sent["status"], "accepted");
-    assert!(sent["event_id"].as_str().unwrap().starts_with("ak:event:"));
+    let sent_event_id = crate::harness::submitted_event_id(&sent)?;
+    assert!(sent_event_id.as_str().starts_with("ak:event:"));
 
     let bob_sync = bob.sync().await?;
     let bob_events = timeline_events(&bob_sync, &realm_id)?;
     assert!(
         bob_events
             .iter()
-            .any(|event| event["event_id"] == sent["event_id"]),
+            .any(|event| event["event_id"].as_str() == Some(sent_event_id.as_str())),
         "bob sync did not include alice message {sent}; sync: {bob_sync}"
     );
 
@@ -203,19 +204,15 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         )
         .await?;
     assert_eq!(bob_reply["status"], "accepted");
-    assert!(
-        bob_reply["event_id"]
-            .as_str()
-            .unwrap()
-            .starts_with("ak:event:")
-    );
+    let bob_reply_event_id = crate::harness::submitted_event_id(&bob_reply)?;
+    assert!(bob_reply_event_id.as_str().starts_with("ak:event:"));
 
     let alice_sync = alice.sync().await?;
     let alice_timeline = timeline_events(&alice_sync, &realm_id)?;
     assert!(
         alice_timeline
             .iter()
-            .any(|event| event["event_id"] == bob_reply["event_id"]),
+            .any(|event| event["event_id"].as_str() == Some(bob_reply_event_id.as_str())),
         "alice sync did not include bob reply {bob_reply}; sync: {alice_sync}"
     );
     assert!(

@@ -7,6 +7,7 @@ use serde_json::json;
 use crate::harness::{
     account_subscribe_delta_from_text, dispatch_accepted_invite_and_read_token,
     expect_audit_action, expect_json, expect_response, expect_status, invite_create_payload,
+    submitted_event_id,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, seal_current_principal_control_frontier,
@@ -77,17 +78,12 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         "invite event was not accepted: {}",
         serde_json::to_string_pretty(&invite_event)?
     );
-    let invite_event_id = invite_event["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("invite submit outcome omitted event_id: {invite_event}"))?;
-    let invite_id = arkret_identifiers::InviteId::from_event_id(&arkret_identifiers::EventId::new(
-        invite_event_id.to_owned(),
-    )?)
-    .to_string();
+    let invite_event_id = submitted_event_id(&invite_event)?;
+    let invite_id = arkret_identifiers::InviteId::from_event_id(&invite_event_id).to_string();
     let invite_token = dispatch_accepted_invite_and_read_token(
         &alice,
         &bob,
-        invite_event_id,
+        invite_event_id.as_str(),
         &invite_id,
         introduction_evidence,
     )
@@ -148,6 +144,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
             "hello directory workflow",
         )
         .await?;
+    let sent_event_id = submitted_event_id(&sent)?;
 
     let exported = expect_json(
         alice.get(&format!("/_arkret/self/realms/{shared_realm_id}/export")),
@@ -155,14 +152,11 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     )
     .await?;
     assert_eq!(exported["schema"], "ak.export.realm.v1");
-    let sent_event_id = sent["event_id"]
-        .as_str()
-        .ok_or_else(|| anyhow!("message submit outcome omitted event_id: {sent}"))?;
     let exported_event = exported["events"]
         .as_array()
         .ok_or_else(|| anyhow!("Realm export omitted events array: {exported}"))?
         .iter()
-        .find(|event| event["event_id"].as_str() == Some(sent_event_id))
+        .find(|event| event["event_id"].as_str() == Some(sent_event_id.as_str()))
         .ok_or_else(|| anyhow!("Realm export omitted submitted Event {sent_event_id}"))?;
     let sent_operation_id = exported_event["operation_id"]
         .as_str()
@@ -197,7 +191,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     assert!(
         waited_events
             .iter()
-            .any(|event| event["event_id"] == sent["event_id"]),
+            .any(|event| event["event_id"].as_str() == Some(sent_event_id.as_str())),
         "waited sync did not include submitted message event: {waited_sync}"
     );
 

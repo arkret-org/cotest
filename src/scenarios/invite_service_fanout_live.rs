@@ -15,7 +15,7 @@
 //! exact revision/content returned by account-data CAS.
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
-use arkret_identifiers::{ConsentId, DidCoreId, EventId, InviteId};
+use arkret_identifiers::{ConsentId, DidCoreId, InviteId};
 use arkret_models_collaboration::account_lifecycle::{
     ConsentCellView, ConsentGrantRequestBody, ConsentRevokeRequestBody,
 };
@@ -102,12 +102,7 @@ async fn create_and_dispatch_explicit_invite(
     let accepted = inviter
         .submit_event(&realm_id, "ak.invite.create", payload)
         .await?;
-    let event_id = EventId::new(
-        accepted["event_id"]
-            .as_str()
-            .ok_or_else(|| anyhow!("invite create omitted event_id: {accepted}"))?
-            .to_owned(),
-    )?;
+    let event_id = crate::harness::submitted_event_id(&accepted)?;
     let service_id = DidCoreId::new(inviter.service_id().to_owned())?;
     let service_resolution = ServiceResolutionCarrier::CurrentRecordUrl {
         current_record_url: format!(

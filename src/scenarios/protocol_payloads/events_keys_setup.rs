@@ -63,11 +63,8 @@ async fn submit_adapter_event(
         )
         .await?;
     assert_eq!(submit["status"], "accepted");
-    let event_id = submit["event_id"]
-        .as_str()
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow::anyhow!("accepted adapter message lacks event_id: {submit}"))?;
-    Ok((actor, realm_id, event_id))
+    let event_id = crate::harness::submitted_event_id(&submit)?;
+    Ok((actor, realm_id, event_id.to_string()))
 }
 
 async fn upload_and_inspect_keys(
@@ -100,7 +97,7 @@ async fn upload_and_inspect_keys(
     .await?;
     assert_eq!(upload_keys["one_time_key_counts"]["total"], 1);
 
-    let query_keys = expect_json(
+    let query_keys_value = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/keys/query"))
@@ -113,13 +110,52 @@ async fn upload_and_inspect_keys(
         StatusCode::OK,
     )
     .await?;
-    // Query returns the accepted device directory projection and authorization
-    // link. The upload request signature authorizes the mutation; it is not a
-    // prekey algorithm entry and therefore is not echoed under `algorithms`.
-    let queried_device = &query_keys["device_keys"][&actor_core_id][KEYS_DEVICE_ID];
-    assert_eq!(queried_device["device_status"], "active");
+    let query_keys: arkret_models_crypto::KeysQueryOutcome =
+        serde_json::from_value(query_keys_value)
+            .context("keys/query response is not the closed SDK outcome")?;
+    // Query returns the accepted device projection. Device identity, signing
+    // material and generation live only inside the service attestation; the
+    // row itself carries just prekeys, trust algorithms and that attestation.
+    // The upload request signature authorizes the mutation; it is not a prekey
+    // algorithm entry and therefore is not echoed under `algorithms`.
+    let principal_id = arkret_identifiers::DidCoreId::new(actor_core_id.clone())?;
+    let device_id = arkret_identifiers::DeviceId::new(KEYS_DEVICE_ID.to_owned())?;
+    let queried_record = query_keys
+        .device_keys
+        .get(&principal_id)
+        .and_then(|devices| devices.get(&device_id))
+        .context("keys/query omitted the requested device record")?;
+    queried_record.validate_attestation_binding(&principal_id, &device_id)?;
+    let generation = query_keys
+        .device_generations
+        .get(&principal_id)
+        .context("keys/query omitted the principal generation fence")?;
     assert!(
-        queried_device["device_signing_key"]
+        queried_record.is_usable_in_generation(Some(generation)),
+        "attested device must match the active response generation fence"
+    );
+    let queried_device = serde_json::to_value(queried_record)?;
+    for retired_mirror in [
+        "principal_id",
+        "principal_server_id",
+        "device_id",
+        "device_status",
+        "device_signing_key",
+        "hpke_key",
+        "device_authorize_event_id",
+        "authorized_generation_ref",
+        "attested_at",
+        "expires_at",
+    ] {
+        assert!(
+            queried_device.get(retired_mirror).is_none(),
+            "keys/query row repeated attested identity field {retired_mirror}: {queried_device}"
+        );
+    }
+    let attestation = &queried_device["device_projection_attestation"];
+    assert_eq!(attestation["attestation"]["device_status"], "active");
+    assert!(
+        attestation["attestation"]["device_signing_key"]
             .as_str()
             .is_some_and(|key| key.starts_with("did:key:z6Mk")),
         "query must expose the authoritative active device signing key: {queried_device}"
@@ -128,17 +164,11 @@ async fn upload_and_inspect_keys(
     // the attestation covers this exact projection. That is the whole
     // verification closure of this cross-principal surface: PCR genesis
     // receipts, authorization chains and Seals MUST NOT appear here.
-    let attestation = &queried_device["device_projection_attestation"];
-    assert_eq!(
-        attestation["attestation"]["device_signing_key"], queried_device["device_signing_key"],
-        "attestation must cover the row's signing key: {queried_device}"
-    );
     assert_eq!(
         attestation["attestation"]["authorized_generation_ref"],
-        queried_device["authorized_generation_ref"],
-        "attestation must cover the row's generation: {queried_device}"
+        serde_json::to_value(generation.current_device_generation_ref)?,
+        "attestation generation must equal the response fence: {queried_device}"
     );
-    assert_eq!(attestation["attestation"]["device_status"], "active");
     assert!(
         attestation["proof"]["verification_method"]
             .as_str()
@@ -162,9 +192,6 @@ async fn upload_and_inspect_keys(
     }
     // The typed DTO is the contract: a row that is not complete and attested
     // fails to decode rather than being consumed as a partial projection.
-    serde_json::from_value::<arkret_models_crypto::QueryDeviceRecord>(queried_device.clone())
-        .expect("keys/query row must decode as a complete attested QueryDeviceRecord");
-
     let claimed = expect_json(
         server
             .http()

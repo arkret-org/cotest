@@ -158,13 +158,7 @@ async fn submit_invite_move(
         .send()
         .await?;
     let status = response.status();
-    let mut body = response.json::<Value>().await.unwrap_or(Value::Null);
-    if status.is_success()
-        && body.get("event_id").and_then(Value::as_str).is_none()
-        && let Some(object) = body.as_object_mut()
-    {
-        object.insert("event_id".to_owned(), Value::String(event_id.to_string()));
-    }
+    let body = response.json::<Value>().await.unwrap_or(Value::Null);
     if status.is_success() {
         actor.await_event_seal_coverage(realm_id, &event_id).await?;
     }
@@ -219,11 +213,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     let (status, body) =
         submit_invite_move(&alice, &realm_id, "ak.invite.create", create_payload).await?;
     assert_eq!(status, StatusCode::OK, "invite create: {body}");
-    let create_event_id = arkret_identifiers::EventId::new(
-        body["event_id"]
-            .as_str()
-            .ok_or_else(|| anyhow!("accepted invite create omitted event_id: {body}"))?,
-    )?;
+    let create_event_id = crate::harness::submitted_event_id(&body)?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&create_event_id).to_string();
 
     // Predicate 1 — a directed cancel with NO `payload.invitee`.

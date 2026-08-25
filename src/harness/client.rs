@@ -24,9 +24,8 @@ use url::Url;
 
 use super::assertions::{account_subscribe_delta_from_text, expect_json, expect_response};
 use super::event_builder::{
-    ensure_submit_event_id, event_envelope_with_causal_refs_for_device,
-    event_envelope_with_chain_for_device, event_signing_identity_for_device,
-    realm_bootstrap_event_batch_for_device,
+    event_envelope_with_causal_refs_for_device, event_envelope_with_chain_for_device,
+    event_signing_identity_for_device, realm_bootstrap_event_batch_for_device,
 };
 use super::{
     events_frontier_request_body, member_join_payload, message_create_text_payload, next_typed_id,
@@ -582,13 +581,8 @@ impl TestActorClient {
                 })?,
             )
             .await?;
-        let strand_event_id = created
-            .get("event_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("default Strand create response missing event_id: {created}"))?;
-        let strand_id = arkret_identifiers::StrandId::from_event_id(
-            &arkret_identifiers::EventId::new(strand_event_id.to_owned())?,
-        );
+        let strand_event_id = super::submitted_event_id(&created)?;
+        let strand_id = arkret_identifiers::StrandId::from_event_id(&strand_event_id);
         self.submit_event(
             realm_id.as_str(),
             arkret_wire::event_kind_str::REALM_SET_DEFAULT_STRAND,
@@ -791,13 +785,12 @@ impl TestActorClient {
             )
             .await?;
         let grant_id = arkret_identifiers::GrantId::from_event_id(&event.event_id);
-        let mut response = expect_json(
+        let response = expect_json(
             self.post("/_arkret/self/events")
                 .json(&crate::publication::initial_submission(event.clone(), "")?),
             StatusCode::OK,
         )
         .await?;
-        ensure_submit_event_id(&mut response, &event);
         Ok((grant_id.to_string(), response))
     }
 
@@ -812,13 +805,12 @@ impl TestActorClient {
 
     pub async fn submit_event(&self, realm_id: &str, kind: &str, payload: Value) -> Result<Value> {
         let event = self.author_event(realm_id, kind, payload).await?;
-        let mut body = expect_json(
+        let body = expect_json(
             self.post("/_arkret/self/events")
                 .json(&crate::publication::initial_submission(event.clone(), "")?),
             StatusCode::OK,
         )
         .await?;
-        ensure_submit_event_id(&mut body, &event);
         Ok(body)
     }
 
@@ -846,7 +838,6 @@ impl TestActorClient {
             StatusCode::OK,
         )
         .await?;
-        ensure_submit_event_id(&mut body, &event);
         // The digest is what a later response names to dominate this head, so
         // hand it back to the caller alongside the submit result.
         body["cotest_event_digest"] = json!(

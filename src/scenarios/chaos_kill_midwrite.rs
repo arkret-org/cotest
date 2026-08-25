@@ -222,7 +222,7 @@ fn assert_retry_matches_durable_state(
     let committed_event_id = after_retry["canonical_event"]["event_id"]
         .as_str()
         .ok_or_else(|| anyhow!("diagnostic missing canonical event_id: {after_retry}"))?;
-    if retry["event_id"].as_str() != Some(committed_event_id) {
+    if crate::harness::submitted_event_id(retry)?.as_str() != committed_event_id {
         bail!("retry event_id drifted from durable event: retry={retry} diagnostic={after_retry}");
     }
     match (had_committed, retry["status"].as_str()) {

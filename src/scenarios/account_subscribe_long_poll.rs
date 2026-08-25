@@ -557,13 +557,15 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
 
 fn submitted_event_id(response: &Value) -> Option<&str> {
     response
-        .get("event_id")
+        .get("accepted")
+        .and_then(Value::as_array)
+        .and_then(|accepted| accepted.first())
         .and_then(Value::as_str)
         .or_else(|| {
             response
-                .get("accepted")
+                .get("duplicate")
                 .and_then(Value::as_array)
-                .and_then(|accepted| accepted.first())
+                .and_then(|duplicate| duplicate.first())
                 .and_then(Value::as_str)
         })
 }
@@ -648,8 +650,7 @@ async fn create_invite_now(
         same_service_invite_payload(invitee.actor.as_str(), invitee.service_id(), expires_at)?;
     let accepted =
         submit_event_now(inviter, inviter, realm_id, "ak.invite.create", payload).await?;
-    let event_id = accepted["event_id"]
-        .as_str()
+    let event_id = submitted_event_id(&accepted)
         .ok_or_else(|| anyhow!("accepted invite create omitted event_id: {accepted}"))?;
     let invite_id =
         arkret_identifiers::InviteId::from_event_id(&arkret_identifiers::EventId::new(event_id)?)
@@ -766,7 +767,6 @@ async fn submit_event_now(
         .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("control"));
     let is_data_event = descriptor
         .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
-    let mut previous_control_seal_id = None;
     if is_control_move || is_data_event {
         let seal_frontier = seal_source.realm_seal_frontier(realm_id).await?;
         let state: arkret_models_collaboration::event_sync::SealFrontierState =
@@ -801,7 +801,6 @@ async fn submit_event_now(
                     .collect();
             }
         } else {
-            previous_control_seal_id = Some(frontier.sole_leaf()?.to_string());
             event.seal_basis = Some(frontier.seal_basis());
             let physical_millis = chrono::Utc::now().timestamp_millis();
             event.hlc = Some(arkret_identifiers::Hlc::new(format!(
@@ -810,27 +809,16 @@ async fn submit_event_now(
         }
     }
     crate::harness::refresh_typed_event_proof(&mut event)?;
-    let mut response = crate::harness::expect_json(
+    let response = crate::harness::expect_json(
         actor
             .post("/_arkret/self/events")
             .json(&crate::publication::initial_submission(event.clone(), "")?),
         StatusCode::OK,
     )
     .await?;
-    if response.get("event_id").and_then(Value::as_str).is_none()
-        && let Some(object) = response.as_object_mut()
-    {
-        object.insert(
-            "event_id".to_owned(),
-            Value::String(event.event_id.to_string()),
-        );
-    }
-    if let Some(previous_seal_id) = previous_control_seal_id {
-        let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
-            .as_str()
-            .ok_or_else(|| anyhow!("Control Move response omitted its proposal Ack: {response}"))?;
+    if is_control_move {
         seal_source
-            .await_control_proposal_settled(realm_id, proposal_digest, &previous_seal_id)
+            .await_event_seal_coverage(realm_id, &event.event_id)
             .await?;
     }
     Ok(response)

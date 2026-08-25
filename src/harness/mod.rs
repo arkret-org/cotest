@@ -66,6 +66,34 @@ pub fn actor_core_id(actor: &str) -> Result<String> {
     Ok(arkret_identifiers::project_full_id_to_core_id(&full_id)?.to_string())
 }
 
+/// Read the one canonical Event id from a single-Event submit outcome.
+///
+/// Exact replay reports the id in `duplicate[]`; first admission reports it in
+/// `accepted[]`. The retired top-level `event_id` mirror is deliberately not
+/// recognized.
+pub fn submitted_event_id(outcome: &Value) -> Result<arkret_identifiers::EventId> {
+    let accepted = outcome
+        .get("accepted")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten();
+    let duplicate = outcome
+        .get("duplicate")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten();
+    let mut ids = accepted.chain(duplicate);
+    let first = ids.next().and_then(Value::as_str).ok_or_else(|| {
+        anyhow::anyhow!("single-Event submit outcome names no accepted/duplicate Event: {outcome}")
+    })?;
+    if ids.next().is_some() {
+        anyhow::bail!(
+            "single-Event submit outcome names multiple accepted/duplicate Events: {outcome}"
+        );
+    }
+    Ok(arkret_identifiers::EventId::new(first.to_owned())?)
+}
+
 pub fn events_frontier_request_body(
     actor_id: &str,
     realm_id: Option<&str>,

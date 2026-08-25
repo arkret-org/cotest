@@ -726,7 +726,7 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         verification_method,
     )
     .await?;
-    let mut body = expect_json(
+    let body = expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
@@ -735,9 +735,6 @@ pub async fn submit_event_with_signing_seed_and_verification_method(
         status,
     )
     .await?;
-    if status.is_success() {
-        ensure_submit_event_id(&mut body, &event);
-    }
     Ok(body)
 }
 
@@ -1156,25 +1153,6 @@ pub(crate) fn event_envelope_with_chain_for_device(
         &verification_method,
         Some(principal_server_id),
     )
-}
-
-pub(crate) fn ensure_submit_event_id(body: &mut Value, event: &Event) {
-    let Some(object) = body.as_object_mut() else {
-        return;
-    };
-    if object.contains_key("event_id") {
-        return;
-    }
-    let accepted_id = object
-        .get("accepted")
-        .and_then(Value::as_array)
-        .and_then(|accepted| accepted.first())
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned);
-    let event_id = accepted_id.or_else(|| Some(event.event_id.to_string()));
-    if let Some(event_id) = event_id {
-        object.insert("event_id".to_owned(), Value::String(event_id));
-    }
 }
 
 pub(crate) fn message_create_text_payload(strand_id: &str, body: &str) -> Result<Value> {
