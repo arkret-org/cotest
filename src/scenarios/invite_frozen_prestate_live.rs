@@ -27,8 +27,7 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     CanonicalJsonBody, TestActorClient, TestServerGroup, actor_core_id, event_envelope_with_chain,
-    events_frontier_request_body, events_query_for_realm, eventually, expect_json,
-    refresh_typed_event_proof,
+    events_frontier_request_body, events_query_for_realm, expect_json, refresh_typed_event_proof,
 };
 use crate::transcripts::record_vector_event;
 
@@ -153,7 +152,6 @@ async fn submit_invite_move(
 ) -> Result<(StatusCode, Value)> {
     let event = author_invite_move(actor, realm_id, kind, payload).await?;
     let event_id = event.event_id.clone();
-    let event_digest = event_id.event_digest();
     let response = actor
         .post("/_arkret/self/events")
         .canonical_json(&crate::publication::initial_submission(event, "")?)?
@@ -168,48 +166,7 @@ async fn submit_invite_move(
         object.insert("event_id".to_owned(), Value::String(event_id.to_string()));
     }
     if status.is_success() {
-        let realm_id = arkret_identifiers::RealmId::new(realm_id.to_owned())?;
-        eventually(
-            "accepted invite Control Move is covered by the Realm Seal frontier",
-            std::time::Duration::from_secs(10),
-            std::time::Duration::from_millis(50),
-            || {
-                let realm_id = realm_id.clone();
-                let event_digest = event_digest.clone();
-                async move {
-                    let frontier = actor.realm_seal_frontier(realm_id.as_str()).await?;
-                    let state: arkret_models_collaboration::event_sync::SealFrontierState =
-                        serde_json::from_value(frontier)?;
-                    let leaf = state.frontier.sole_leaf()?.clone();
-                    let resolved: arkret_models_collaboration::http_bodies::SealResolveOutcome =
-                        serde_json::from_value(
-                            expect_json(
-                                actor.query("/_arkret/self/seals/resolve").json(
-                                    &arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody {
-                                        realm_id,
-                                        seal_refs: vec![leaf.clone()],
-                                        history_traversal_access: None,
-                                    },
-                                ),
-                                StatusCode::OK,
-                            )
-                            .await?,
-                        )?;
-                    let seal = resolved
-                        .seals
-                        .into_iter()
-                        .find(|seal| seal.id == leaf)
-                        .ok_or_else(|| anyhow!("Realm frontier leaf {leaf} did not resolve"))?;
-                    if !seal.delta.contains(&event_digest) {
-                        return Err(anyhow!(
-                            "Realm frontier leaf {leaf} does not cover accepted Event digest {event_digest}"
-                        ));
-                    }
-                    Ok(())
-                }
-            },
-        )
-        .await?;
+        actor.await_event_seal_coverage(realm_id, &event_id).await?;
     }
     Ok((status, body))
 }

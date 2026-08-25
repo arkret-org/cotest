@@ -9,7 +9,9 @@ use arkret::{
     ContactIntroductionEvidence, IdempotencyKey, PreparedEventDraft, ProtocolOperationId,
 };
 use arkret_http_client::Client as SdkClient;
-use arkret_identifiers::{DidCoreId, DidFullId, Hash, Hlc, RealmId, project_full_id_to_core_id};
+use arkret_identifiers::{
+    DidCoreId, DidFullId, EventId, Hash, Hlc, RealmId, project_full_id_to_core_id,
+};
 use arkret_models_collaboration::events_payloads::{
     RealmSetDefaultStrandPayload, StrandCreatePayload,
 };
@@ -410,6 +412,65 @@ impl TestActorClient {
             if std::time::Instant::now() >= deadline {
                 return Err(anyhow!(
                     "Control proposal {proposal_digest} did not settle into a successor Seal for {realm_id}"
+                ));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    }
+
+    /// Wait until the accepted Realm frontier Seal covers one exact Event.
+    ///
+    /// An unrelated pending Event can advance the frontier first, while an
+    /// admission response can also arrive before the Seal worker publishes
+    /// the successor that covers this Event. Resolving the current leaf and
+    /// checking its delta is therefore the finality witness; comparing Seal
+    /// ids alone is not.
+    pub(crate) async fn await_event_seal_coverage(
+        &self,
+        realm_id: &str,
+        event_id: &EventId,
+    ) -> Result<String> {
+        let realm_id = RealmId::new(realm_id.to_owned())?;
+        let event_digest = event_id.event_digest();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+        loop {
+            if let Ok(frontier) = self.realm_seal_frontier(realm_id.as_str()).await {
+                let state: arkret_models_collaboration::event_sync::SealFrontierState =
+                    serde_json::from_value(frontier)?;
+                let frontier_leaf = state.frontier.sole_leaf()?.clone();
+                let mut pending = vec![frontier_leaf.clone()];
+                let mut visited = std::collections::BTreeSet::new();
+                while let Some(seal_ref) = pending.pop() {
+                    if !visited.insert(seal_ref.to_string()) {
+                        continue;
+                    }
+                    let resolved: arkret_models_collaboration::http_bodies::SealResolveOutcome =
+                        serde_json::from_value(
+                            expect_json(
+                                self.query("/_arkret/self/seals/resolve").json(
+                                    &arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody {
+                                        realm_id: realm_id.clone(),
+                                        seal_refs: vec![seal_ref.clone()],
+                                        history_traversal_access: None,
+                                    },
+                                ),
+                                StatusCode::OK,
+                            )
+                            .await?,
+                        )?;
+                    let Some(seal) = resolved.seals.into_iter().find(|seal| seal.id == seal_ref)
+                    else {
+                        continue;
+                    };
+                    if seal.delta.contains(&event_digest) {
+                        return Ok(frontier_leaf.to_string());
+                    }
+                    pending.extend(seal.predecessor_refs);
+                }
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err(anyhow!(
+                    "accepted Event {event_id} was not covered by the Realm frontier Seal for {realm_id}"
                 ));
             }
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
