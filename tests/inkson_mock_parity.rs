@@ -465,7 +465,7 @@ fn assert_mock_contract_artifact_gate(
                         case.operation_id
                     )
                 })?;
-                assert_supported_operations_registered(&case.id, &snapshot.body, &registry)?;
+                assert_operation_bindings_registered(&case.id, &snapshot.body, &registry)?;
                 assert_json_shape_required_fields(
                     case,
                     "response",
@@ -477,7 +477,7 @@ fn assert_mock_contract_artifact_gate(
             let body = render_body(case, ctx, &setup_bootstrap_body)?;
             let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                 .with_context(|| format!("mock response for artifact gate case `{}`", case.id))?;
-            assert_supported_operations_registered(&case.id, &snapshot.body, &registry)?;
+            assert_operation_bindings_registered(&case.id, &snapshot.body, &registry)?;
         }
     }
 
@@ -615,29 +615,29 @@ fn assert_supported_operation_literals_registered(
     }
     if !rogue.is_empty() {
         bail!(
-            "mock supported_operations references unregistered operation_id(s): {}",
+            "mock operation_bindings reference unregistered operation_id(s): {}",
             rogue.join(", ")
         );
     }
     Ok(())
 }
 
-fn assert_supported_operations_registered(
+fn assert_operation_bindings_registered(
     case_id: &str,
     body: &Value,
     registry: &BTreeMap<String, RegistryOperation>,
 ) -> Result<()> {
-    let Some(operations) = body.get("supported_operations").and_then(Value::as_array) else {
+    let Some(bindings) = body.get("operation_bindings").and_then(Value::as_array) else {
         return Ok(());
     };
-    let rogue = operations
+    let rogue = bindings
         .iter()
-        .filter_map(Value::as_str)
+        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
         .filter(|operation_id| !registry.contains_key(*operation_id))
         .collect::<Vec<_>>();
     if !rogue.is_empty() {
         bail!(
-            "mock case `{case_id}` returned unregistered supported_operations: {}",
+            "mock case `{case_id}` returned unregistered operation_bindings: {}",
             rogue.join(", ")
         );
     }
@@ -646,14 +646,17 @@ fn assert_supported_operations_registered(
 
 fn extract_supported_operation_literals(source: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
-    let mut in_supported_operations = false;
+    let mut in_operation_bindings = false;
     let mut bracket_depth = 0i32;
     for (line_index, line) in source.lines().enumerate() {
-        if !in_supported_operations && line.contains("supported_operations") && line.contains('[') {
-            in_supported_operations = true;
+        if !in_operation_bindings
+            && line.contains("currentHttpDescribeBindings")
+            && line.contains('[')
+        {
+            in_operation_bindings = true;
             bracket_depth = 0;
         }
-        if in_supported_operations {
+        if in_operation_bindings {
             for literal in extract_string_literals(line) {
                 if literal.starts_with("ak.") {
                     out.push((line_index + 1, literal));
@@ -662,7 +665,7 @@ fn extract_supported_operation_literals(source: &str) -> Vec<(usize, String)> {
             bracket_depth += line.chars().filter(|ch| *ch == '[').count() as i32;
             bracket_depth -= line.chars().filter(|ch| *ch == ']').count() as i32;
             if bracket_depth <= 0 {
-                in_supported_operations = false;
+                in_operation_bindings = false;
             }
         }
     }
@@ -956,12 +959,17 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const contractPath = process.argv[1];
 const input = JSON.parse(fs.readFileSync(0, "utf8"));
+const helperPath = require("node:path").join(require("node:path").dirname(contractPath), "currentOperationBindings.ts");
+const helperSource = fs
+  .readFileSync(helperPath, "utf8")
+  .replace(/\bexport\s+(?=(function|const|let|var|class))/g, "");
 const source = fs
   .readFileSync(contractPath, "utf8")
+  .replace(/^import .*currentOperationBindings.*;\s*$/gm, "")
   .replace(/\bexport\s+(?=(function|const|let|var|class))/g, "");
 const context = { __input: input, __result: undefined, console };
 vm.createContext(context);
-vm.runInContext(`${source}
+vm.runInContext(`${helperSource}\n${source}
 if (typeof mockArkretContract !== "function") {
   throw new Error("mockArkretContract export was not a function after stripping ESM exports");
 }
@@ -1309,20 +1317,20 @@ fn normalize_server_describe(body: Value) -> Value {
                 })
             })
             .unwrap_or(false);
-    let supported_operations = body
-        .get("supported_operations")
+    let operation_bindings = body
+        .get("operation_bindings")
         .and_then(Value::as_array)
-        .map(|operations| {
-            operations
+        .map(|bindings| {
+            bindings
                 .iter()
-                .filter_map(Value::as_str)
-                .any(|operation| operation == "ak.self.events.command.submit")
+                .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
+                .any(|operation_id| operation_id == "ak.self.events.command.submit")
         })
         .unwrap_or(false);
     json!({
         "protocol_version": body.get("protocol_version").cloned().unwrap_or(Value::Null),
         "service_kind": body.get("service_kind").cloned().unwrap_or(Value::Null),
-        "supports_core_events": supported_features || supported_operations,
+        "supports_core_events": supported_features || operation_bindings,
     })
 }
 
@@ -1335,13 +1343,13 @@ fn normalize_server_describe(body: Value) -> Value {
 /// directory contract invariants.
 fn normalize_directory_describe(body: Value) -> Value {
     let supports_describe = body
-        .get("supported_operations")
+        .get("operation_bindings")
         .and_then(Value::as_array)
-        .map(|operations| {
-            operations
+        .map(|bindings| {
+            bindings
                 .iter()
-                .filter_map(Value::as_str)
-                .any(|operation| operation == "ak.find.directory.read.describe")
+                .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
+                .any(|operation_id| operation_id == "ak.find.directory.read.describe")
         })
         .unwrap_or(false);
     let accepts_did_web = body

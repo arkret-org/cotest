@@ -4,9 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload;
-use arkret_models_collaboration::governance_dependencies::{
-    GovernanceDependencyResolveOutcome, GovernanceRegistryArtifact, GovernanceRegistrySnapshot,
-};
+use arkret_models_collaboration::governance_dependencies::GovernanceDependencyResolveOutcome;
 use arkret_models_collaboration::history_key::{
     AuthorizationIncarnation, HistoryCandidateOriginAttribution, HistoryGovernanceTraversalIntent,
     HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequest,
@@ -15,8 +13,7 @@ use arkret_models_collaboration::history_key::{
     OrganizationRecoveryArchiveListOutcome, OrganizationRecoveryArchiveListQuery,
     OrganizationRecoveryArchiveReplica, OrganizationRecoveryArchiveReplicaOutcome,
     PeerHistoryTraversalAccess, ResponseSenderOriginRef, ResponseSenderQuotaDomain,
-    SelfHistoryTraversalAccess, history_release_predicate_registry_digest,
-    response_capability_commitment,
+    SelfHistoryTraversalAccess, response_capability_commitment,
 };
 use arkret_models_identity::AuthenticatedSignerResolutionEvidence;
 use arkret_state::direct_traversal::{
@@ -583,36 +580,6 @@ fn verify_history_digest_and_sender_kats(fixture: &Value) -> Result<()> {
         }
     }
 
-    let predicate_kat = fixture
-        .pointer("/predicate_registry_digest_kat")
-        .context("history-key fixture omits predicate_registry_digest_kat")?;
-    let registry = load_artifact_json("registry/history-release-attestation-registry.json")?;
-    let expected = predicate_kat["expected_digest"]
-        .as_str()
-        .context("history predicate registry KAT omits expected_digest")?;
-    let actual_registry_digest = history_release_predicate_registry_digest(&registry)?;
-    if actual_registry_digest.as_str() != expected {
-        bail!(
-            "history release predicate registry digest drifted: expected {expected}, got {}",
-            actual_registry_digest.as_str()
-        );
-    }
-    let mut omitted = registry.clone();
-    let omitted_name = omitted
-        .as_object()
-        .context("history release registry is not an object")?
-        .keys()
-        .find(|name| name.as_str() != "wire_registry_binding")
-        .cloned()
-        .context("history release registry has no digest-covered member")?;
-    omitted
-        .as_object_mut()
-        .context("history release registry is not an object")?
-        .remove(&omitted_name);
-    if history_release_predicate_registry_digest(&omitted)?.as_str() == expected {
-        bail!("history predicate digest ignored covered registry member {omitted_name}");
-    }
-
     let observation_kat = fixture
         .pointer("/history_source_agent_observation_digest_kat")
         .context("history-key fixture omits source Agent observation digest KAT")?;
@@ -648,34 +615,6 @@ fn verify_history_digest_and_sender_kats(fixture: &Value) -> Result<()> {
 }
 
 fn verify_governance_dependency_kats(fixture: &Value) -> Result<()> {
-    let snapshot_kat = fixture
-        .pointer("/governance_registry_artifact_kat")
-        .context("history-key fixture omits governance_registry_artifact_kat")?;
-    let snapshot: GovernanceRegistrySnapshot =
-        serde_json::from_value(snapshot_kat["snapshot"].clone())?;
-    snapshot.validate()?;
-
-    let artifact: GovernanceRegistryArtifact =
-        serde_json::from_value(snapshot_kat["sample_registry_artifact"].clone())?;
-    artifact.validate()?;
-    let decoded = URL_SAFE_NO_PAD.decode(&artifact.canonical_bytes_b64u)?;
-    let canonical: Value = serde_json::from_slice(&decoded)?;
-    if arkret_canonical::canonical::canonical_json_bytes(&canonical)? != decoded {
-        bail!("governance registry artifact KAT is not canonical JSON");
-    }
-    let mut tampered_artifact = artifact.clone();
-    let mut tampered_value = canonical;
-    tampered_value
-        .as_object_mut()
-        .context("sample governance artifact is not an object")?
-        .insert("tampered".to_owned(), json!(true));
-    tampered_artifact.canonical_bytes_b64u = URL_SAFE_NO_PAD.encode(
-        arkret_canonical::canonical::canonical_json_bytes(&tampered_value)?,
-    );
-    tampered_artifact
-        .validate()
-        .expect_err("changed registry artifact bytes must not retain the descriptor digest");
-
     let signer_kat = fixture
         .pointer("/authenticated_signer_resolution_evidence_kat")
         .context("history-key fixture omits authenticated signer evidence KAT")?;

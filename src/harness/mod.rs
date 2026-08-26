@@ -342,7 +342,6 @@ pub fn realm_create_payload_with_notary(
         serde_json::from_value(json!("standard"))?,
         serde_json::from_value(json!(encryption_profile))?,
         notary,
-        arkret::current_capability_action_registry_digest()?,
     )?;
     let mut profile = arkret_models_collaboration::events_payloads::RealmProfile::new(title)?;
     profile.summary = Some(summary.to_owned());

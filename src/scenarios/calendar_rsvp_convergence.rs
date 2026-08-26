@@ -395,7 +395,13 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Weekly sync",
-                        "fields": {"calendar": calendar_subtree(alice_did, bob_did)?}
+                        "fields": {
+                            "calendar": calendar_subtree(alice_did, bob_did)?,
+                            "x_future_display": {
+                                "badge": "preserve-me",
+                                "revision": 7
+                            }
+                        }
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
                     "created_by": alice_core_id,
@@ -407,6 +413,13 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         )
         .await?;
     let strand_id = created_strand_id(&created)?;
+    let projected = read_strand(&alice, &strand_id).await?;
+    let preserved_display = json!({"badge": "preserve-me", "revision": 7});
+    if projected["fields"]["x_future_display"] != preserved_display {
+        return Err(anyhow!(
+            "unknown namespaced display metadata was lost on decode/store/read: {projected}"
+        ));
+    }
 
     let create_frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
     if create_frontier.is_empty() {
@@ -731,7 +744,13 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Durable weekly sync",
-                        "fields": {"calendar": calendar_subtree(alice_did, bob_did)?}
+                        "fields": {
+                            "calendar": calendar_subtree(alice_did, bob_did)?,
+                            "x_future_display": {
+                                "badge": "preserve-me",
+                                "revision": 7
+                            }
+                        }
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
                     "created_by": alice_core_id,
@@ -743,6 +762,13 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         )
         .await?;
     let strand_id = created_strand_id(&created)?;
+    let preserved_display = json!({"badge": "preserve-me", "revision": 7});
+    let projected = read_strand(&alice, &strand_id).await?;
+    if projected["fields"]["x_future_display"] != preserved_display {
+        return Err(anyhow!(
+            "unknown namespaced display metadata was lost on decode/store/read: {projected}"
+        ));
+    }
     let frontier = inkson_schedule_frontier(&alice, &realm_id, &strand_id).await?;
     let accepted = alice
         .author_event_with_causal_refs(
@@ -795,6 +821,11 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d2")
         .await?;
     let restarted_strand = read_strand(&alice, &strand_id).await?;
+    if restarted_strand["fields"]["x_future_display"] != preserved_display {
+        return Err(anyhow!(
+            "unknown namespaced display metadata was lost across restart: {restarted_strand}"
+        ));
+    }
     let heads = heads_for(&restarted_strand, &alice_core_id);
     if heads.len() != 2
         || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]

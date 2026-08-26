@@ -13,8 +13,7 @@ by subsequent owner writes.
    before the Realm exists.
 3. Submit the complete registered founding unit: `ak.realm.create`, profile,
    policy bundle, join rule, history visibility, discovery, conditional
-   plaintext-visible services, delivery binding policy, and creator membership. The create
-   object carries the create-locked `capability_action_registry_digest`; v1 has
+   plaintext-visible services, delivery binding policy, and creator membership. v1 has
    **no** founding `ak.capability.grant` slot.
 4. Query accepted history and assert every registered slot forms one exact
    `actor_seq / prev_refs` chain, with no `ak.capability.grant` at all.
@@ -35,8 +34,6 @@ by subsequent owner writes.
   required by spec; the creator's root authority is the
   `ak.component.realm.authority_root.v1` cell the create Event's registered
   reducer contract writes, never a self-issued genesis grant.
-- The create object's `capability_action_registry_digest` is the basis the
-  reducer seeds that cell with, so it MUST equal the SDK's current digest.
 - The explicit default-Strand setup and owner Message continue the exact
   accepted bootstrap chain without a synthetic or skipped actor sequence.
 - An exact retry returns the original receipts and creates no second Event or

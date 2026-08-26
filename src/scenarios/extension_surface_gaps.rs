@@ -5,7 +5,7 @@ use arkret::{
 };
 use arkret_models_discovery::ServiceDescribe;
 use reqwest::StatusCode;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::harness::{NonProtocolTestBody, TestServerGroup, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
@@ -24,11 +24,11 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
         StatusCode::OK,
     )
     .await?;
-    let advertised = describe["supported_operations"]
+    let advertised = describe["operation_bindings"]
         .as_array()
-        .expect("supported_operations is an array")
+        .expect("operation_bindings is an array")
         .iter()
-        .filter_map(|operation| operation.as_str())
+        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
         .collect::<Vec<_>>();
     for required in [
         "ak.edge.applet.read.ping",
@@ -61,9 +61,9 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
     applet_describe.validate()?;
     assert!(
         applet_describe
-            .supported_operations
+            .operation_bindings
             .iter()
-            .any(|operation| operation == "ak.edge.applet.read.describe")
+            .any(|binding| binding.operation_id.as_str() == "ak.edge.applet.read.describe")
     );
 
     expect_api_error(
@@ -95,11 +95,11 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         StatusCode::OK,
     )
     .await?;
-    let advertised = describe["supported_operations"]
+    let advertised = describe["operation_bindings"]
         .as_array()
-        .expect("supported_operations is an array")
+        .expect("operation_bindings is an array")
         .iter()
-        .filter_map(|operation| operation.as_str())
+        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
         .collect::<Vec<_>>();
     for required in [
         "ak.self.agent.command.provision",

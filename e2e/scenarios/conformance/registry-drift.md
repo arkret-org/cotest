@@ -46,7 +46,7 @@
 ### Phase E — Claimed operation catalog coverage
 
 1. 从 `operation-registry.json.operations[*].operation_id` 建立 canonical operation set。
-2. 按 `implemented_features.operations` → `supported_operations` → `operations` 的顺序提取 describe 声明。
+2. 只从当前角色 `ServiceDescribe.operation_bindings[*].operation_id` 提取声明；旧扁平字段与推断路径必须被拒绝。
 3. 断言每个 claimed operation 都在 canonical set 中。不反向要求 soland 实现全部 registry operation。
 
 ### Phase F/G — Server-managed response scanning

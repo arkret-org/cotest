@@ -280,7 +280,6 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
                 DID_INCEPTION_REF_ROLE,
             ),
             founding_device_descriptor: descriptor,
-            capability_action_registry_digest: arkret::current_capability_action_registry_digest()?,
             created_at,
             hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         },

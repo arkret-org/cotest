@@ -32,7 +32,6 @@ import {
   expectJsonOk,
   prepareSignedEventSubmissionApi,
   signedEventEnvelope,
-  sdkCapabilityActionRegistryDigest,
   submitSignedEventApi,
   retypeEventDerivedId,
 } from "./soland-api";
@@ -90,7 +89,6 @@ export async function grantCircleMemberManageCapability(
     subject: args.subjectDid,
     subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.member.manage"],
-    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
     ],
@@ -150,7 +148,6 @@ export async function grantCircleManageCapability(
     subject: args.subjectDid,
     subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.manage"],
-    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
     ],

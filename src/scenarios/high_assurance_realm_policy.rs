@@ -77,10 +77,6 @@ fn build_realm(
         availability_policy: None,
         audit_policy: None,
         notary: crate::fixture_single_signer_notary(principal.clone()),
-        // Create-locked genesis basis for the Realm authority-root cell
-        // (realm-and-space.md section 2.5).
-        capability_action_registry_digest: arkret::current_capability_action_registry_digest()
-            .map_err(|err| anyhow!("capability action registry digest unavailable: {err}"))?,
         fields: Default::default(),
         // `max_anchor_staleness_ms` was retired by the dual-plane split
         // without a direct replacement; revocation staleness is governed by

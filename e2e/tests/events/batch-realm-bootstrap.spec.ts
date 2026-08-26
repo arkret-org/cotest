@@ -10,7 +10,6 @@ import {
   canonicalTimestamp,
   createRealmApi,
   queryRealmEventsApi,
-  sdkCapabilityActionRegistryDigest,
   sendMessageApi,
   submitSignedEventBatchApi,
   type AcceptedRealmBootstrap,
@@ -138,13 +137,6 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     expect(createObject).not.toHaveProperty("summary");
     expect(createObject).not.toHaveProperty("plaintext_visible_services");
     expect(String(createObject?.genesis_salt)).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    // The create-locked registry basis the reducer copies into the
-    // authority-root cell.
-    expect(
-      createObject,
-    ).toMatchObject({
-      capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
-    });
     events.forEach((event, index) => {
       expect(event.actor_seq).toBe(index);
       expect(event.prev_refs).toEqual(index === 0 ? [] : [events[index - 1]!.event_id]);

@@ -15,8 +15,8 @@
         "supported_profiles": [
           "ak.profile.principal_server.v1"
         ],
-        "supported_operations": [
-          "ak.server.read.describe"
+        "operation_bindings": [
+          {"operation_id": "ak.server.read.describe"}
         ],
         "limits": {
           "profile_status": {

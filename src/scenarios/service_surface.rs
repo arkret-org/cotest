@@ -51,9 +51,9 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     ] {
         assert!(
             description
-                .supported_operations
+                .operation_bindings
                 .iter()
-                .any(|op| op == required),
+                .any(|binding| binding.operation_id.as_str() == required),
             "missing supported operation {required}"
         );
     }

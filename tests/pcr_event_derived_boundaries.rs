@@ -61,8 +61,7 @@ fn realm_genesis_rejects_missing_genesis_salt() {
         "digest_algorithm": "sha256",
         "security_class": "standard",
         "encryption_profile": "mls_rfc9420",
-        "notary": notary,
-        "capability_action_registry_digest": format!("sha256:{}", "a".repeat(64))
+        "notary": notary
     });
     assert!(
         serde_json::from_value::<arkret_models_collaboration::events_payloads::RealmGenesis>(

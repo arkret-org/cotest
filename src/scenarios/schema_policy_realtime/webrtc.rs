@@ -103,7 +103,10 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
         "the default false value is omitted from the canonical response"
     );
     assert!(ice["issued_at"].is_string());
-    assert!(ice.get("expires_at").is_none());
+    assert!(
+        ice.get("expires_at").is_none(),
+        "the retired expires_at field must not re-enter the v1 ICE response"
+    );
     assert!(ice["signature"].is_object());
     assert_eq!(ice["signature"]["signature_algorithm"], "Ed25519");
     assert!(

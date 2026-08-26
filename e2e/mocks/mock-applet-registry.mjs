@@ -953,7 +953,6 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
         "subject_principal_server_id",
         "actions",
         "resources",
-        "capability_action_registry_digest",
         "constraints",
         "issued_at",
         "expires_at",
@@ -966,8 +965,6 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
       grant?.subject_principal_server_id !== basis.target_principal_server_id ||
       canonicalJson(grant?.resources) !==
         canonicalJson([basis.effective_scope]) ||
-      grant.capability_action_registry_digest !==
-        packageInfo.capabilityActionRegistryDigest ||
       canonicalJson(grant.constraints) !==
         canonicalJson([expectedConstraint]) ||
       !Array.isArray(grant.issuer_authority_refs) ||
@@ -1144,8 +1141,6 @@ function buildInstallManagedActorBundle(request, packageInfo) {
           security_class: "standard",
           digest_algorithm: "sha256",
           notary: { kind: "single_signer", signer: request.hosting_notary },
-          capability_action_registry_digest:
-            packageInfo.capabilityActionRegistryDigest,
           initial_resolution: packageInfo.botInitialResolution,
         },
       },
@@ -1673,7 +1668,6 @@ function signedPackage(body) {
     botSigningKey: body.bot_signing_private_jwk
       ? createPrivateKey({ key: body.bot_signing_private_jwk, format: "jwk" })
       : undefined,
-    capabilityActionRegistryDigest: body.capability_action_registry_digest,
     verificationMethod: webhookAuth.key_ref,
     signingKey: body.service_signing_private_jwk
       ? createPrivateKey({
@@ -1805,8 +1799,7 @@ const server = createServer(async (req, res) => {
       !packageInfo.botInitialResolution ||
       !packageInfo.botMethodHistoryEvidence ||
       !packageInfo.botVerificationMethod ||
-      !packageInfo.botSigningKey ||
-      !packageInfo.capabilityActionRegistryDigest
+      !packageInfo.botSigningKey
     ) {
       res.statusCode = 409;
       res.end(

@@ -14,8 +14,9 @@ use arkret_identifiers::{
 };
 use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::events_payloads::{
-    RealmSetDefaultStrandPayload, StrandCreatePayload,
+    CapabilityRevokePayload, RealmSetDefaultStrandPayload, StrandCreatePayload,
 };
+use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::objects::profiles::StrandTrack;
 use arkret_models_collaboration::objects::strand::Strand;
 use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
@@ -29,8 +30,9 @@ use super::event_builder::{
     event_signing_identity_for_device, realm_bootstrap_event_batch_for_device,
 };
 use super::{
-    events_frontier_request_body, member_join_payload, message_create_text_payload, next_typed_id,
-    query_method, realm_create_payload_with_notary, refresh_typed_event_proof_with_signing_seed,
+    events_frontier_request_body, member_join_payload, member_transition_payload,
+    message_create_text_payload, next_typed_id, query_method, realm_create_payload_with_notary,
+    refresh_typed_event_proof_with_signing_seed,
 };
 
 #[derive(Clone)]
@@ -659,6 +661,23 @@ impl TestActorClient {
         .await
     }
 
+    /// Remove one member through the current signed `ak.member.state{leave}`
+    /// carrier. This deliberately exercises owner Event authority; no helper
+    /// grant or server-authored compatibility write is inserted.
+    pub async fn remove_member(&self, realm_id: &str, member: &TestActorClient) -> Result<Value> {
+        self.submit_event(
+            realm_id,
+            "ak.member.state",
+            member_transition_payload(
+                realm_id,
+                &member.actor,
+                MembershipPayloadState::Leave,
+                Some("removed_by_realm_owner"),
+            )?,
+        )
+        .await
+    }
+
     /// Name the authority this Event is authored under.
     ///
     /// A grant this actor holds wins when one covers the kind; the Realm
@@ -766,9 +785,6 @@ impl TestActorClient {
                 "realm_id": realm_id,
                 "match_scope": "realm_wide"
             }))?],
-            capability_action_registry_digest: Some(
-                arkret::current_capability_action_registry_digest()?,
-            ),
             constraints,
             issuer_authority_refs: vec![arkret::IssuerAuthorityRef::RealmRoot {
                 realm_id: arkret_identifiers::RealmId::new(realm_id.to_owned())?,
@@ -795,6 +811,21 @@ impl TestActorClient {
         )
         .await?;
         Ok((grant_id.to_string(), response))
+    }
+
+    /// Revoke an exact accepted grant through the current Event carrier.
+    pub async fn revoke_realm_grant(&self, realm_id: &str, grant_id: &str) -> Result<Value> {
+        let grant_id = arkret_identifiers::GrantId::new(grant_id.to_owned())?;
+        self.submit_event(
+            realm_id,
+            arkret_wire::event_kind_str::CAPABILITY_REVOKE,
+            serde_json::to_value(CapabilityRevokePayload {
+                grant_ref: None,
+                grant_id,
+                reason: Some("revoked_by_realm_owner".to_owned()),
+            })?,
+        )
+        .await
     }
 
     pub async fn send_message(&self, realm_id: &str, strand_id: &str, body: &str) -> Result<Value> {
@@ -1044,12 +1075,7 @@ fn action_covers_kind(action: &str, kind: &str) -> bool {
 
 /// Whether the Realm owner aggregate authorizes authoring `kind` directly.
 fn owner_may_author_kind(kind: &str) -> bool {
-    arkret::current_capability_action_registry_digest()
-        .ok()
-        .and_then(|basis| {
-            arkret_policy::authz::owner_may_author_event_kind(kind, Some(&basis)).ok()
-        })
-        .unwrap_or(false)
+    arkret_policy::authz::owner_may_author_event_kind(kind).unwrap_or(false)
 }
 
 /// The action this harness self-grants so the Realm controller can author
@@ -1058,13 +1084,11 @@ fn owner_may_author_kind(kind: &str) -> bool {
 /// Smallest coverage set first, so a self-grant never quietly hands the
 /// creator an aggregate admin action when a narrow one would do.
 fn self_grant_action_for_kind(kind: &str) -> Option<&'static str> {
-    let basis = arkret::current_capability_action_registry_digest().ok()?;
     arkret_schema::REGISTERED_CAPABILITY_ACTIONS
         .iter()
         .filter(|descriptor| descriptor.target_event_kinds.contains(&kind))
         .filter(|descriptor| {
-            arkret_policy::authz::owner_may_grant(descriptor.action.as_str(), Some(&basis))
-                .unwrap_or(false)
+            arkret_policy::authz::owner_may_grant(descriptor.action.as_str()).unwrap_or(false)
         })
         .min_by_key(|descriptor| descriptor.target_event_kinds.len())
         .map(|descriptor| descriptor.action.as_str())

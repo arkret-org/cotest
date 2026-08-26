@@ -126,7 +126,7 @@ pub fn validate_principal_server_certification(
         bail!("full principal_server claim cannot carry non-empty limitations");
     }
 
-    require_all("supported_operations", describe, REQUIRED_OPERATIONS)?;
+    require_all_operation_bindings(describe, REQUIRED_OPERATIONS)?;
     require_all("supported_event_kinds", describe, REQUIRED_EVENT_KINDS)?;
     require_all("supported_schemas", describe, REQUIRED_SCHEMAS)?;
     require_federation_durability(describe)?;
@@ -156,6 +156,22 @@ fn require_all(field: &str, describe: &Value, required: &[&str]) -> Result<()> {
     for item in required {
         if !present.contains(item) {
             bail!("principal_server certification missing {field} entry {item}");
+        }
+    }
+    Ok(())
+}
+
+fn require_all_operation_bindings(describe: &Value, required: &[&str]) -> Result<()> {
+    let present = describe
+        .get("operation_bindings")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("principal_server certification missing operation_bindings[]"))?
+        .iter()
+        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
+        .collect::<BTreeSet<_>>();
+    for item in required {
+        if !present.contains(item) {
+            bail!("principal_server certification missing operation binding for {item}");
         }
     }
     Ok(())

@@ -13,6 +13,8 @@
 //! body `{proof: ak.schema.key_backup_unlock_proof.v1}` bound to the envelope;
 //! a bearer token without that body proof MUST be refused.
 
+use serde_json::Value;
+
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow};
@@ -187,9 +189,9 @@ async fn describe_backup_operations(server: &ArkretServer) -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let operations = description["supported_operations"]
+    let operations = description["operation_bindings"]
         .as_array()
-        .expect("supported operation list");
+        .expect("operation binding list");
     for operation_id in [
         "ak.self.keys.backups.resource.replace",
         "ak.self.keys.backups.read.list",
@@ -197,9 +199,9 @@ async fn describe_backup_operations(server: &ArkretServer) -> Result<()> {
         "ak.self.keys.backups.resource.delete",
     ] {
         assert!(
-            operations
-                .iter()
-                .any(|operation| operation.as_str() == Some(operation_id)),
+            operations.iter().any(
+                |binding| binding.get("operation_id").and_then(Value::as_str) == Some(operation_id)
+            ),
             "describe did not advertise {operation_id}: {description}"
         );
     }

@@ -14,7 +14,6 @@ import {
   cotestWire,
   expectJsonOk,
   refreshEventEnvelopeProof,
-  sdkCapabilityActionRegistryDigest,
   sdkEventDerivedObjectId,
   sha256CanonicalJson,
   signedEventEnvelope,
@@ -307,7 +306,6 @@ function foundingEvents(args: {
         security_class: "standard",
         digest_algorithm: "sha256",
         notary: singleSignerNotaryFromFullDid(solandServiceFullId()),
-        capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
       },
     },
   });

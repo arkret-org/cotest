@@ -679,7 +679,7 @@ fn registry_id_set(
 
 fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatrix) -> Result<()> {
     let claimed_profiles = string_set_field(describe, "supported_profiles")?;
-    let supported_operations = string_set_field(describe, "supported_operations")?;
+    let operation_ids = operation_binding_id_set(describe)?;
     let supported_event_kinds = optional_string_set_field(describe, "supported_event_kinds")?;
     let supported_schemas = optional_string_set_field(describe, "supported_event_schemas")?;
     let supported_features = optional_string_set_field(describe, "supported_features")?;
@@ -708,8 +708,8 @@ fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatri
         };
         ensure_subset(
             &requirement.required_operations,
-            &supported_operations,
-            &format!("{profile} supported_operations"),
+            &operation_ids,
+            &format!("{profile} operation_bindings"),
         )?;
         if let Some(supported_event_kinds) = &supported_event_kinds {
             let required_events = requirement
@@ -953,6 +953,22 @@ fn string_set_field(value: &Value, field: &str) -> Result<BTreeSet<String>> {
         .into_iter()
         .map(ToOwned::to_owned)
         .collect())
+}
+
+fn operation_binding_id_set(value: &Value) -> Result<BTreeSet<String>> {
+    let bindings = value
+        .get("operation_bindings")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("describe missing operation_bindings[]"))?;
+    let mut operation_ids = BTreeSet::new();
+    for binding in bindings {
+        let operation_id = binding
+            .get("operation_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("operation_bindings entry missing operation_id"))?;
+        operation_ids.insert(operation_id.to_owned());
+    }
+    Ok(operation_ids)
 }
 
 fn optional_string_set_field(value: &Value, field: &str) -> Result<Option<BTreeSet<String>>> {

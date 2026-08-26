@@ -86,7 +86,7 @@ one explicit evidence role:
 
 | Role | Commands | Allowed use |
 |---|---|---|
-| Independent oracle | `canonical-json`, `sha256-canonical-json`, `capability-action-registry-digest`, `event-derived-id`, `event-envelope-parse`, `principal-control-realm-id`, `webvh-verify-log`, `account-handoff-outcome` | Cross-language canonicalization, parsing, derived identifiers, registry/spec checks, and verification independent of the SUT. |
+| Independent oracle | `canonical-json`, `sha256-canonical-json`, `event-derived-id`, `event-envelope-parse`, `principal-control-realm-id`, `webvh-verify-log`, `account-handoff-outcome` | Cross-language canonicalization, parsing, derived identifiers, spec checks, and verification independent of the SUT. |
 | Protocol fixture or negative generator | `event-envelope-proof`, `mimi-consent-proof`, `principal-bootstrap-seal`, `principal-successor-seal` | Server-conformance inputs and mutation matrices. These commands may sign fixtures but cannot establish live-product evidence. |
 | Product bypass | `mls-keypackage-upload-entry`, `webvh-placeholder-did`, `webvh-genesis`, `account-handoff-request`, `principal-registration-fixture`, `identity-creation-register-request` | Fixture-only or server-contract setup. Scenario evidence must declare `test_only_signer_or_wire_builder`; live-product scenarios must not call them. |
 

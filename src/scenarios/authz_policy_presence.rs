@@ -58,26 +58,6 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         "authz/check is diagnostic and must not mint signed policy decisions"
     );
 
-    let actions = vec!["ak.realm.admin".to_owned()];
-    let current_registry_digest = arkret::current_capability_action_registry_digest()?;
-    let missing_basis = arkret::validate_capability_action_registry_binding(&actions, None)
-        .expect_err("aggregate-admin grant without registry basis must fail closed");
-    assert!(
-        missing_basis
-            .to_string()
-            .contains("capability_registry_basis_unavailable")
-    );
-    let wrong_registry_digest =
-        arkret_identifiers::Hash::new(format!("sha256:{}", "f".repeat(64)))?;
-    let wrong_basis =
-        arkret::validate_capability_action_registry_binding(&actions, Some(&wrong_registry_digest))
-            .expect_err("aggregate-admin grant with unknown registry basis must fail closed");
-    assert!(
-        wrong_basis
-            .to_string()
-            .contains("capability_registry_basis_unavailable")
-    );
-    arkret::validate_capability_action_registry_binding(&actions, Some(&current_registry_digest))?;
     let (manage_grant_id, manage_grant) = alice
         .grant_realm_actions_to(&realm_id, &bob.actor, &["ak.realm.admin"])
         .await?;

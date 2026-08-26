@@ -1226,20 +1226,6 @@ fn evaluate_authority_liveness_fixture(fixture: &Value) -> Result<()> {
                             .and_then(Value::as_bool)
                             == Some(true)
                 }
-                "basis_update_changes_only_registry_digest" => {
-                    case.get("snapshot_available").and_then(Value::as_bool) == Some(true)
-                        && case.get("snapshot_compatible").and_then(Value::as_bool) == Some(true)
-                        && case.pointer("/next_root/controller_id") == root.get("controller_id")
-                        && case.pointer("/next_root/controller_epoch")
-                            == root.get("controller_epoch")
-                        && root_generation == initial_generation
-                        && case.pointer("/next_root/capability_action_registry_digest")
-                            != root.get("capability_action_registry_digest")
-                }
-                "unknown_basis_update_rejected" => {
-                    case.get("snapshot_available").and_then(Value::as_bool) == Some(true)
-                        && case.get("snapshot_compatible").and_then(Value::as_bool) == Some(true)
-                }
                 "new_controller_can_revoke_old_controller_grant" => {
                     case.get("actor_is_target_realm_current_controller")
                         .and_then(Value::as_bool)
@@ -1334,8 +1320,7 @@ fn evaluate_relinquish_pending_fixture(fixture: &Value) -> Result<()> {
             }
             "subject_only_is_not_grantable" => {
                 let action = required_str(case, "action")?;
-                let basis = arkret_policy::current_capability_action_registry_digest()?;
-                if arkret_policy::owner_may_grant(action, Some(&basis))?
+                if arkret_policy::owner_may_grant(action)?
                     || arkret_policy::action_grants_authority_for("ak.realm.owner", action)?
                 {
                     bail!("subject-only action entered a grant-authority set");
@@ -1526,7 +1511,6 @@ fn evaluate_authority_audit_fixture(fixture: &Value) -> Result<()> {
 fn evaluate_derived_authority_fixture(fixture: &Value) -> Result<()> {
     let descriptor = arkret_schema::embedded_capability_action("ak.capability.derived")?
         .ok_or_else(|| anyhow!("derived capability action descriptor missing"))?;
-    let basis = arkret_policy::current_capability_action_registry_digest()?;
     let active = fixture.get("source_refs_active").and_then(Value::as_bool) == Some(true)
         && fixture
             .get("realm_link_policy_allows")
@@ -1545,7 +1529,7 @@ fn evaluate_derived_authority_fixture(fixture: &Value) -> Result<()> {
             .and_then(Value::as_bool)
             != Some(false)
         || !descriptor.reducer_only
-        || arkret_policy::owner_may_grant("ak.capability.derived", Some(&basis))?
+        || arkret_policy::owner_may_grant("ak.capability.derived")?
     {
         bail!("derived capability escaped reducer-only issuer-authority semantics");
     }

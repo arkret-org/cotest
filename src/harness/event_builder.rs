@@ -44,7 +44,7 @@ use super::{
 
 type RegisteredEventSigner = ([u8; 32], DidUrl, DidCoreId);
 
-static REGISTERED_EVENT_SIGNERS: LazyLock<Mutex<HashMap<String, RegisteredEventSigner>>> =
+static REGISTERED_EVENT_SIGNERS: LazyLock<Mutex<HashMap<String, Vec<RegisteredEventSigner>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 pub fn register_event_signing_identity(
@@ -55,13 +55,12 @@ pub fn register_event_signing_identity(
 ) {
     let verification_method = DidUrl::new(verification_method)
         .expect("registered Event signer verification method is a DID URL");
-    REGISTERED_EVENT_SIGNERS
+    let mut signers = REGISTERED_EVENT_SIGNERS
         .lock()
-        .expect("registered Event signer lock")
-        .insert(
-            actor.to_owned(),
-            (signing_seed, verification_method, principal_server_id),
-        );
+        .expect("registered Event signer lock");
+    let actor_signers = signers.entry(actor.to_owned()).or_default();
+    actor_signers.retain(|(_, registered_method, _)| registered_method != &verification_method);
+    actor_signers.push((signing_seed, verification_method, principal_server_id));
 }
 
 pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
@@ -69,6 +68,7 @@ pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
         .lock()
         .expect("registered Event signer lock")
         .get(actor)
+        .and_then(|signers| signers.last())
         .cloned()
         .map(|(seed, method, _)| (seed, method))
         .unwrap_or_else(|| {
@@ -84,6 +84,7 @@ fn event_principal_server_id(actor: &str) -> DidCoreId {
         .lock()
         .expect("registered Event signer lock")
         .get(actor)
+        .and_then(|signers| signers.last())
         .map(|(_, _, principal_server_id)| principal_server_id.clone())
         .unwrap_or_else(|| {
             DidCoreId::new("ak:did_core:web:principal.example")
@@ -95,15 +96,20 @@ pub(crate) fn event_signing_identity_for_device(
     actor: &str,
     device_id: &str,
 ) -> ([u8; 32], DidUrl) {
+    let verification_method = DidUrl::new(format!("{actor}#{}", canonical_device_id(device_id)))
+        .expect("cotest client Event signer verification method is a DID URL");
     REGISTERED_EVENT_SIGNERS
         .lock()
         .expect("registered Event signer lock")
         .get(actor)
+        .and_then(|signers| {
+            signers
+                .iter()
+                .find(|(_, registered_method, _)| registered_method == &verification_method)
+        })
         .cloned()
         .map(|(seed, method, _)| (seed, method))
         .unwrap_or_else(|| {
-            let verification_method = DidUrl::new(format!("{actor}#{device_id}"))
-                .expect("cotest client Event signer verification method is a DID URL");
             let signing_seed =
                 arkret::signatures::development_signing_key_seed(&verification_method);
             (signing_seed, verification_method)
@@ -137,7 +143,11 @@ pub(crate) fn registered_event_signing_seed(
         .lock()
         .expect("registered Event signer lock")
         .get(signer)
-        .filter(|(_, registered_method, _)| registered_method == verification_method)
+        .and_then(|signers| {
+            signers
+                .iter()
+                .find(|(_, registered_method, _)| registered_method == verification_method)
+        })
         .map(|(seed, ..)| *seed)
 }
 
@@ -1442,6 +1452,41 @@ mod realm_bootstrap_tests {
             Some(&principal_server_id),
         )
         .expect("valid device/account Realm bootstrap unit")
+    }
+
+    #[test]
+    fn registered_event_signers_are_scoped_by_actor_and_device() {
+        const MULTI_DEVICE_ACTOR: &str = "did:webvh:z6mkmultidevice:alice.soland.local";
+        const DEVICE_ONE: &str = "ak:device:01904100-0000-7000-8000-0000000000d1";
+        const DEVICE_TWO: &str = "ak:device:01904100-0000-7000-8000-0000000000d2";
+        let service = DidCoreId::new(SERVICE.to_owned()).expect("valid service id");
+        register_event_signing_identity(
+            MULTI_DEVICE_ACTOR,
+            [31; 32],
+            format!("{MULTI_DEVICE_ACTOR}#{DEVICE_ONE}"),
+            service.clone(),
+        );
+        register_event_signing_identity(
+            MULTI_DEVICE_ACTOR,
+            [32; 32],
+            format!("{MULTI_DEVICE_ACTOR}#{DEVICE_TWO}"),
+            service,
+        );
+
+        let (first_seed, first_method) =
+            event_signing_identity_for_device(MULTI_DEVICE_ACTOR, DEVICE_ONE);
+        let (second_seed, second_method) =
+            event_signing_identity_for_device(MULTI_DEVICE_ACTOR, DEVICE_TWO);
+        assert_eq!(first_seed, [31; 32]);
+        assert_eq!(second_seed, [32; 32]);
+        assert_eq!(
+            first_method.as_str(),
+            format!("{MULTI_DEVICE_ACTOR}#{DEVICE_ONE}")
+        );
+        assert_eq!(
+            second_method.as_str(),
+            format!("{MULTI_DEVICE_ACTOR}#{DEVICE_TWO}")
+        );
     }
 
     #[test]

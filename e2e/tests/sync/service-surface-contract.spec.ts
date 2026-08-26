@@ -208,7 +208,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     expect(body.service_kind, "service_kind").toBe("principal_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
     expect(Array.isArray(body.supported_profiles), "supported_profiles is array").toBe(true);
-    expect(Array.isArray(body.supported_operations), "supported_operations is array").toBe(true);
+    expect(Array.isArray(body.operation_bindings), "operation_bindings is array").toBe(true);
     expect(Array.isArray(body.supported_bindings), "supported_bindings is array").toBe(true);
     expect(body.supported_bindings.length, "≥1 binding").toBeGreaterThanOrEqual(1);
     expect(body.supported_bindings[0].kind, "http_json binding").toBe("http_json");
@@ -237,9 +237,12 @@ test.describe("describes soland surface @fully-implemented", () => {
     }
 
     // §4.2 + service-api-schema.mdx §2.1 — every principal server must surface
-    // at least ak.server.read.describe + ak.self.events.command.submit on supported_operations.
-    expect(body.supported_operations, "exposes ak.server.read.describe").toContain("ak.server.read.describe");
-    expect(body.supported_operations, "exposes ak.self.events.command.submit").toContain("ak.self.events.command.submit");
+    // exact carrier rows for ak.server.read.describe + ak.self.events.command.submit.
+    const operationIds = body.operation_bindings.map(
+      (binding: { operation_id: string }) => binding.operation_id,
+    );
+    expect(operationIds, "exposes ak.server.read.describe").toContain("ak.server.read.describe");
+    expect(operationIds, "exposes ak.self.events.command.submit").toContain("ak.self.events.command.submit");
 
     await testInfo.attach("soland-describe", {
       body: JSON.stringify(body, null, 2),
@@ -403,8 +406,8 @@ test.describe("shared public describe binding @fully-implemented", () => {
       expect(selectedPrincipalBody.service_kind).toBe("principal_server");
       expect(selectedAuthBody.service_kind).toBe("auth_server");
       expect(selectedPrincipalBody.service_id).not.toBe(selectedAuthBody.service_id);
-      expect(selectedPrincipalBody.supported_operations).not.toEqual(
-        selectedAuthBody.supported_operations,
+      expect(selectedPrincipalBody.operation_bindings).not.toEqual(
+        selectedAuthBody.operation_bindings,
       );
       expect(selectedPrincipalBody.claimed_profiles).not.toEqual(
         selectedAuthBody.claimed_profiles,

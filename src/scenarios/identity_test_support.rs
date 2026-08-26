@@ -94,11 +94,6 @@ pub async fn spawn_with_harness_account_authority(
     ArkretServer::spawn_with_env(name, &env).await
 }
 
-fn registry_digest() -> arkret_identifiers::Hash {
-    arkret::current_capability_action_registry_digest()
-        .expect("embedded capability-action registry")
-}
-
 fn test_device_record_signing_key() -> SigningKey {
     SigningKey::from_bytes(&[0x52; 32])
 }
@@ -810,7 +805,6 @@ async fn bootstrap_test_device_authorization(
             trust_domain: server.trust_domain().clone(),
             did_inception_ref: EventRef::new(prepared.version_id.clone(), DID_INCEPTION_REF_ROLE),
             founding_device_descriptor: descriptor,
-            capability_action_registry_digest: registry_digest(),
             created_at,
             hlc: Hlc::new("01970e589d21-0000-a13f9c2e")?,
         },

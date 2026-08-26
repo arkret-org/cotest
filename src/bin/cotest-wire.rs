@@ -143,7 +143,6 @@ fn main() -> Result<()> {
     let output = match command.as_str() {
         "canonical-json" => canonical_json(input)?,
         "sha256-canonical-json" => sha256_canonical_json(input)?,
-        "capability-action-registry-digest" => capability_action_registry_digest()?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-derived-id" => event_derived_id(input)?,
         "event-envelope-parse" => event_envelope_parse(input)?,
@@ -198,12 +197,6 @@ fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
 fn event_envelope_parse(input: Value) -> Result<Value> {
     let _: Event = serde_json::from_value(input).context("parse closed Event envelope")?;
     Ok(json!({ "valid": true }))
-}
-
-fn capability_action_registry_digest() -> Result<Value> {
-    let digest = arkret::current_capability_action_registry_digest()
-        .context("load SDK capability-action registry digest")?;
-    Ok(json!({ "digest": digest.as_str() }))
 }
 
 fn non_empty(value: impl Into<String>) -> Result<NonEmptyString> {
@@ -495,8 +488,6 @@ fn build_pcr_genesis_unit(
                 arkret_bootstrap::DID_INCEPTION_REF_ROLE,
             ),
             founding_device_descriptor: descriptor,
-            capability_action_registry_digest: arkret::current_capability_action_registry_digest()
-                .context("load SDK capability-action registry digest")?,
             created_at,
             hlc: arkret::Hlc::new(hlc.to_owned()).context("parse bootstrap HLC")?,
         },
@@ -1203,14 +1194,6 @@ mod tests {
                 "did:webvh:z6mkfixture:alice.example#other-device"
             )
         );
-    }
-
-    #[test]
-    fn capability_registry_digest_is_sdk_authoritative() {
-        let output = capability_action_registry_digest().unwrap();
-        let expected = arkret::current_capability_action_registry_digest().unwrap();
-
-        assert_eq!(output["digest"], expected.as_str());
     }
 
     #[test]

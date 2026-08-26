@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use anyhow::{Result, anyhow};
 use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::event_sync::{
@@ -53,17 +55,33 @@ async fn seal_basis(
     token: &str,
     realm_id: &str,
 ) -> Result<arkret_wire::SealBasis> {
-    let value = expect_json(
-        server
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let value = loop {
+        let response = server
             .http()
             .request(query_method(), server.url("/_arkret/self/seals/frontier"))
             .json(&SealFrontierRequestBody {
                 realm_id: arkret_wire::RealmId::new(realm_id.to_owned())?,
             })
-            .bearer_auth(token),
-        StatusCode::OK,
-    )
-    .await?;
+            .bearer_auth(token)
+            .send()
+            .await?;
+        let status = response.status();
+        if status == StatusCode::OK {
+            break response.json().await?;
+        }
+        let body = response.text().await.unwrap_or_default();
+        if status == StatusCode::SERVICE_UNAVAILABLE
+            && body.contains("frontier_unavailable")
+            && Instant::now() < deadline
+        {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            continue;
+        }
+        return Err(anyhow!(
+            "expected Realm Seal frontier HTTP 200, got {status}: {body}"
+        ));
+    };
     let state: SealFrontierState = serde_json::from_value(value)?;
     Ok(state.frontier.seal_basis())
 }

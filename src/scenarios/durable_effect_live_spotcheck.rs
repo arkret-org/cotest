@@ -200,19 +200,19 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         ),
     };
     let declaration = serde_json::to_value(declaration)?;
+    let replace_event = alice
+        .author_event(
+            &realm_id,
+            arkret_wire::event_kind_str::REALM_POLICY_SERVER,
+            declaration.clone(),
+        )
+        .await?;
+    let replace_event_id = replace_event.event_id.clone();
     let response = alice
         .put(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
         .canonical_json(
             &arkret_models_collaboration::governance::realm_governance::RealmPolicyServerReplaceRequestBody {
-                policy_server_event: arkret_wire::EventInitialSubmission::online(
-                    alice
-                        .author_event(
-                            &realm_id,
-                            arkret_wire::event_kind_str::REALM_POLICY_SERVER,
-                            declaration.clone(),
-                        )
-                        .await?,
-                ),
+                policy_server_event: arkret_wire::EventInitialSubmission::online(replace_event),
             },
         )?
         .send()
@@ -224,6 +224,9 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         StatusCode::OK,
         "policy replace: {replace_body}"
     );
+    alice
+        .await_event_seal_coverage(&realm_id, &replace_event_id)
+        .await?;
     let after = realm_event_kinds(&alice, &realm_id).await?;
     let replace_appended = assert_event_log_effect(
         "ak.self.realm_policy_server.resource.replace",
@@ -242,23 +245,23 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     // The removal is a signed Event too, so the DELETE carries a body, and the
     // caller attaches its own `head_eq`: a precondition is inside the bytes it
     // signs.
+    let delete_event = alice
+        .author_event_with_preconditions(
+            &realm_id,
+            arkret_wire::event_kind_str::REALM_POLICY_SERVER,
+            json!({ "tombstone": true }),
+            vec![crate::harness::head_eq_precondition(
+                "ak:cell:ak.component.realm.policy_server.v1:null",
+                declaration,
+            )],
+        )
+        .await?;
+    let delete_event_id = delete_event.event_id.clone();
     let response = alice
         .delete(&format!("/_arkret/self/realms/{realm_id}/policy-server"))
         .canonical_json(
             &arkret_models_collaboration::governance::realm_governance::RealmPolicyServerDeleteRequestBody {
-                policy_server_event: arkret_wire::EventInitialSubmission::online(
-                    alice
-                        .author_event_with_preconditions(
-                            &realm_id,
-                            arkret_wire::event_kind_str::REALM_POLICY_SERVER,
-                            json!({ "tombstone": true }),
-                            vec![crate::harness::head_eq_precondition(
-                                "ak:cell:ak.component.realm.policy_server.v1:null",
-                                declaration,
-                            )],
-                        )
-                        .await?,
-                ),
+                policy_server_event: arkret_wire::EventInitialSubmission::online(delete_event),
             },
         )?
         .send()
@@ -270,6 +273,9 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         StatusCode::OK,
         "policy delete: {delete_body}"
     );
+    alice
+        .await_event_seal_coverage(&realm_id, &delete_event_id)
+        .await?;
     let after = realm_event_kinds(&alice, &realm_id).await?;
     let delete_appended = assert_event_log_effect(
         "ak.self.realm_policy_server.resource.delete",

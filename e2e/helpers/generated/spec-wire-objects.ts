@@ -175,7 +175,6 @@ export type RealmObject = {
     "controller_organization"?: string;
     "recovery_controller_organizations"?: string[];
   };
-  "capability_action_registry_digest": string;
   "revocation_freshness_window_ms"?: number;
   "recovery_witness_freshness_window_ms"?: number;
   "proposal_intake_sla_ms"?: number;
@@ -272,7 +271,6 @@ export type CapabilityGrantObject = {
     "blob_ref"?: string;
     "match_scope"?: "exact" | "subtree" | "children" | "realm_wide";
   }>;
-  "capability_action_registry_digest"?: string;
   "constraints"?: Array<{
     "constraint_id"?: string;
     "constraint_kind": "temporal" | "field_access" | "kind_restriction" | "scope_limitation" | "authority_control" | "quota" | "claim_based" | "confidentiality";

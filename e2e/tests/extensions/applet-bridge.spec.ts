@@ -44,7 +44,6 @@ import {
   readRealmSealBasis,
   retypeEventDerivedId,
   resolveDefaultStrandId,
-  sdkCapabilityActionRegistryDigest,
   signedEventEnvelope,
   signedRealmGenesisEnvelope,
   singleSignerNotaryFromFullDid,
@@ -1659,7 +1658,6 @@ async function signPackage(
         webvhManagedActorEvidence(botBuilt).initialResolution,
       bot_actor_method_history_evidence:
         webvhManagedActorEvidence(botBuilt).methodHistoryEvidence,
-      capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
       webhook_auth: {
         kind: "http_message_signature",
         accepted_signature_algorithms: ["ed25519"],
@@ -2083,7 +2081,6 @@ async function prepareAppletInstallAuthoringBasis(
       subject_principal_server_id: solandServiceId(),
       actions: [action],
       resources: [effectiveScope],
-      capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
       constraints: [
         {
           constraint_kind: "authority_control",
@@ -2399,7 +2396,6 @@ function buildGhostManagedActorCreation(args: {
         security_class: "standard",
         digest_algorithm: "sha256",
         notary: singleSignerNotaryFromFullDid(solandServiceFullId()),
-        capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
         initial_resolution: evidence.initialResolution,
       },
     },

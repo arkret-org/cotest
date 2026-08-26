@@ -115,25 +115,19 @@ function* walkTree(
   }
 }
 
-/**
- * Best-effort pick of soland's "claimed operations" array from /server/describe.
- * Spec ref: sync/service-api-schema.mdx + service-surface.md. The exact key
- * has historically drifted; check the three most likely locations in order.
- */
+/** Exact current-v1 operation ids from role-scoped carrier rows. */
 function pickClaimedOperations(describe: unknown): string[] | null {
   if (!describe || typeof describe !== "object") return null;
   const d = describe as Record<string, unknown>;
-  const candidates: unknown[] = [
-    (d.implemented_features as Record<string, unknown> | undefined)?.operations,
-    d.supported_operations,
-    d.operations,
-  ];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate) && candidate.every((x) => typeof x === "string")) {
-      return candidate as string[];
-    }
-  }
-  return null;
+  if (!Array.isArray(d.operation_bindings)) return null;
+  const operationIds = d.operation_bindings.map((binding) =>
+    binding && typeof binding === "object"
+      ? (binding as Record<string, unknown>).operation_id
+      : undefined,
+  );
+  return operationIds.every((operationId) => typeof operationId === "string")
+    ? (operationIds as string[])
+    : null;
 }
 
 /**
@@ -388,7 +382,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     if (!claimedOps) {
       test.skip(
         true,
-        "describe did not expose implemented_features.operations / supported_operations / operations — cannot verify operation coverage",
+        "describe did not expose valid operation_bindings — cannot verify operation coverage",
       );
       return;
     }

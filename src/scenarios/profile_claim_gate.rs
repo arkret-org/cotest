@@ -1,4 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
+use arkret_models_discovery::OperationBinding;
+use arkret_wire::ServiceOperationId;
 use reqwest::StatusCode;
 use serde_json::Value;
 use url::Url;
@@ -47,13 +49,13 @@ pub async fn live_describe_profile_claim_gate_from_env() -> Result<()> {
 pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let unknown = serde_json::json!({
         "supported_profiles": ["ak.profile.not_registered.v1"],
-        "supported_operations": [],
+        "operation_bindings": operation_bindings(&[]),
     });
     expect_profile_rejected(&unknown, "unknown claimed profile")?;
 
     let failed = serde_json::json!({
         "supported_profiles": ["ak.profile.core_event_store.v1"],
-        "supported_operations": [
+        "operation_bindings": operation_bindings(&[
             "ak.server.read.describe",
             "ak.self.events.read.describe",
             "ak.self.events.command.submit",
@@ -61,7 +63,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
             "ak.self.events.read.resolve",
             "ak.self.events.read.scan",
             "ak.self.events.read.frontier"
-        ],
+        ]),
         "supported_event_kinds": [
             "ak.space.create",
             "ak.member.state"
@@ -84,13 +86,13 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
 
     let limited = serde_json::json!({
         "supported_profiles": ["org.arkret.soland.profile.limited_server.v1"],
-        "supported_operations": [],
+        "operation_bindings": operation_bindings(&[]),
     });
     expect_profile_rejected(&limited, "limited profile")?;
 
     let missing_dependency = serde_json::json!({
         "supported_profiles": ["ak.profile.push_gateway.v1"],
-        "supported_operations": [],
+        "operation_bindings": operation_bindings(&[]),
     });
     expect_profile_rejected(&missing_dependency, "missing profile dependency")?;
 
@@ -100,29 +102,46 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
             "ak.profile.e2ee_client.v1",
             "ak.profile.mls_governance_binding.full.v1",
         ],
-        "supported_operations": [],
+        "operation_bindings": operation_bindings(&[]),
     });
     expect_profile_rejected(&mutually_exclusive, "mutually exclusive profiles")?;
 
     let missing_required_cells = serde_json::json!({
         "supported_profiles": ["ak.profile.mls_governance_binding.full.v1"],
-        "supported_operations": [
+        "operation_bindings": operation_bindings(&[
             "ak.self.keys.keypackages.command.claim",
             "ak.self.keys.keypackages.command.consume",
             "ak.self.events.read.scan",
-        ],
+        ]),
         "supported_cells": [],
     });
     expect_profile_rejected(&missing_required_cells, "missing required cells")?;
 
     let missing_required_fixture = serde_json::json!({
         "supported_profiles": ["ak.vector_group.capability.v1"],
-        "supported_operations": ["ak.self.authz.read.check"],
+        "operation_bindings": operation_bindings(&["ak.self.authz.read.check"]),
         "verified_fixtures": [],
     });
     expect_profile_rejected(&missing_required_fixture, "missing required fixture")?;
 
     Ok(())
+}
+
+fn operation_bindings(operation_ids: &[&str]) -> Value {
+    Value::Array(
+        operation_ids
+            .iter()
+            .map(|operation_id| {
+                let operation_id = ServiceOperationId::from_wire(operation_id)
+                    .expect("profile gate operation must be registered");
+                serde_json::to_value(
+                    OperationBinding::current_http_json(operation_id)
+                        .expect("profile gate operation must have an HTTP binding"),
+                )
+                .expect("operation binding serializes")
+            })
+            .collect(),
+    )
 }
 
 fn expect_profile_rejected(describe: &Value, label: &str) -> Result<()> {

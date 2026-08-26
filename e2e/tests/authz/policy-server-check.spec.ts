@@ -257,7 +257,10 @@ test.describe("policy server check", () => {
       describeResp,
       "server describe authz self surface",
     );
-    expect(describe.supported_operations).toEqual(
+    const operationIds = (describe.operation_bindings as Array<{ operation_id: string }>).map(
+      (binding) => binding.operation_id,
+    );
+    expect(operationIds).toEqual(
       expect.arrayContaining([
         "ak.self.authz.read.check",
         "ak.self.authz.grants.read.effective",

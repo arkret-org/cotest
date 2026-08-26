@@ -648,7 +648,6 @@ export async function createRealmApi(
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator
     // effective `ak.realm.owner`. v1 issues no genesis self-grant.
-    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
   };
   const realmCreateCell = "ak:cell:ak.component.realm.create.v1:null";
   const { envelope: realmCreateEvent, realmId } = signedRealmGenesisEnvelope({
@@ -1081,7 +1080,6 @@ export async function grantRealmReviewCapabilityApi(
       solandServiceId(args.server),
     ),
     actions: ["ak.realm.join.review"],
-    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
     issuer_authority_refs: [
@@ -1187,7 +1185,6 @@ export async function grantServiceCapabilityApi(
       solandServiceId(args.server),
     ),
     actions: [action],
-    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
     issuer_authority_refs: [
@@ -1289,7 +1286,6 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
       solandServiceId(args.server),
     ),
     actions: args.actions,
-    capability_action_registry_digest: sdkCapabilityActionRegistryDigest(),
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
     ...(constraints.length > 0 ? { constraints } : {}),
@@ -4753,7 +4749,6 @@ function nextActorSeq(): number {
 type CotestWireCommand =
   | "canonical-json"
   | "sha256-canonical-json"
-  | "capability-action-registry-digest"
   | "event-envelope-proof"
   | "event-derived-id"
   | "mimi-consent-proof"
@@ -4770,7 +4765,6 @@ type CotestWireCommand =
 
 type CotestWireCanonicalJson = { canonical: string };
 type CotestWireDigest = { digest: string; digest_hex: string };
-type CotestWireCapabilityRegistryDigest = { digest: string };
 const cotestRepoRoot = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -4795,18 +4789,6 @@ export function canonicalJson(value: unknown): string {
 /// replacement for the per-helper `canonicalBytes` thin wrappers.
 export function canonicalBytes(value: unknown): Buffer {
   return Buffer.from(canonicalJson(value), "utf8");
-}
-
-let capabilityActionRegistryDigest: string | undefined;
-
-/** The digest of the SDK-embedded complete capability-action registry. */
-export function sdkCapabilityActionRegistryDigest(): string {
-  capabilityActionRegistryDigest ??=
-    cotestWire<CotestWireCapabilityRegistryDigest>(
-      "capability-action-registry-digest",
-      {},
-    ).digest;
-  return capabilityActionRegistryDigest;
 }
 
 /// base64url of the *canonical* (JCS) JSON encoding of `value`. Use this for any
