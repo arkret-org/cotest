@@ -748,11 +748,9 @@ async fn submit_event_now(
     );
     event.prev_refs = frontier.frontier_event_ids;
     event.created_at = DateTime::parse_from_rfc3339(&created_at)?.with_timezone(&Utc);
-    let descriptor = arkret_wire::EventKind::from(kind).descriptor();
-    let is_control_move = descriptor
-        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("control"));
-    let is_data_event = descriptor
-        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+    let event_kind = arkret_wire::EventKind::from(kind);
+    let is_control_move = event_kind.is_control_plane();
+    let is_data_event = event_kind.is_data_plane();
     if is_control_move || is_data_event {
         let seal_frontier = seal_source.realm_seal_frontier(realm_id).await?;
         let state: arkret_models_collaboration::event_sync::SealFrontierState =

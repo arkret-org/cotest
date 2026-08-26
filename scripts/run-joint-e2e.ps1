@@ -2154,7 +2154,7 @@ function Stop-ManagedCommand {
 function Get-ManagedServiceRuntimePanic {
     param([Parameter(Mandatory = $true)]$Service)
 
-    $panicPattern = "(?i)(thread\s+['""][^'""]+['""]\s+panicked\s+at|panicked with message|fatal runtime error)"
+    $panicPattern = "(?i)(thread\s+['""][^'""]+['""]\s+panicked\s+at|panicked with message|fatal runtime error|overflowed its stack|stack overflow|STATUS_STACK_OVERFLOW|0xc00000fd)"
     foreach ($property in @("Stderr", "Stdout")) {
         if (-not ($Service.PSObject.Properties.Name -contains $property)) {
             continue
@@ -2361,6 +2361,14 @@ function Invoke-RunnerSelfTest {
         }
 
         (Get-Item -LiteralPath $binaryPath).LastWriteTimeUtc = [DateTime]::UtcNow.AddDays(1)
+        $freshRepositoryStates = @(
+            Get-RepositoryBuildInputState `
+                -RepositoryRoot $repositoryRoot `
+                -BinaryPath $binaryPath
+        )
+        Write-ArtifactBuildStamp `
+            -ArtifactPath $binaryPath `
+            -RepositoryStates $freshRepositoryStates | Out-Null
         $freshResults = New-Object System.Collections.Generic.List[object]
         Add-BinaryFreshnessPreflight `
             -Results $freshResults `
@@ -2433,6 +2441,24 @@ function Invoke-RunnerSelfTest {
         if ($panicFailures.Count -ne 1 -or
             $panicFailures[0].detail -notmatch "runtime panic") {
             throw "managed service runtime panic self-test was not classified as failed"
+        }
+        "thread 'tokio-runtime-worker' has overflowed its stack`nerror: process exited with 0xc00000fd, STATUS_STACK_OVERFLOW" |
+            Set-Content -LiteralPath $runningService.Stderr -Encoding UTF8
+        $stackFailures = @(Get-ManagedServiceFailures -Services @($runningService))
+        if ($stackFailures.Count -ne 1 -or
+            $stackFailures[0].detail -notmatch "overflowed its stack") {
+            throw "managed service stack overflow self-test was not classified as failed"
+        }
+
+        $eventPlaneGate = Join-Path $PSScriptRoot "tests\event-plane-classification.tests.ps1"
+        $gateWorkspaceRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+        & (Get-Process -Id $PID).Path `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $eventPlaneGate `
+            -WorkspaceRoot $gateWorkspaceRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "Event plane classification gate failed"
         }
 
         Write-Host "Joint E2E runner self-test passed."
@@ -3602,7 +3628,7 @@ try {
             $values.SOLAND_NOTARY_SIGNING_KEY = $NotarySigningKey
         }
         Write-DotEnvFile -Path $ConfigPath -Values $values
-        return "& {{ `$env:RUST_MIN_STACK='16777216'; `$env:SOLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:SOLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
+        return "& {{ Remove-Item Env:RUST_MIN_STACK -ErrorAction SilentlyContinue; `$env:SOLAND_ENABLE_TEST_ENDPOINTS='1'; `$env:SOLAND_TEST_CHAOS_CONTROL_FILE={0}; & {1} --config {2} --no-env-overrides --bind 127.0.0.1:{3} }}" -f `
             (Quote-PsLiteral $solandChaosControlFile),
             (Quote-PsLiteral $BinaryPath),
             (Quote-PsLiteral $ConfigPath),
@@ -4442,7 +4468,15 @@ if ($scenarioEvidenceManifest.schema -ne "arkret.scenario-evidence.v1" -or
     throw "scenario evidence manifest has an unsupported schema or suite_kind"
 }
 foreach ($entry in @($scenarioEvidenceManifest.scenarios)) {
-    $scenarioEvidenceByKey[[string]$entry.scenario_key] = $entry
+    $scenarioEvidenceKey = [string]$entry.scenario_key
+    # Manifest keys are canonical scenario ids (`domain/name`), while both the
+    # static source walk and Playwright JUnit use `domain/name.spec.ts`.
+    # Normalize once at ingestion so targeted runs still reach their process-
+    # liveness/report gates instead of failing on an all-scenarios false drift.
+    if (-not $scenarioEvidenceKey.EndsWith(".spec.ts")) {
+        $scenarioEvidenceKey += ".spec.ts"
+    }
+    $scenarioEvidenceByKey[$scenarioEvidenceKey] = $entry
 }
 $missingEvidence = @($staticStats.Keys | Where-Object { -not $scenarioEvidenceByKey.ContainsKey($_) })
 $staleEvidence = @($scenarioEvidenceByKey.Keys | Where-Object { -not $staticStats.ContainsKey($_) })
@@ -4727,7 +4761,9 @@ if ($requiredScenarios.Count -gt 0 -or $forbidRuntimeSkips) {
                 $selectionGateFailures.Add("required scenario was not selected: $requiredScenario") | Out-Null
                 continue
             }
-            $scenarioTotal = @($junitByScenario[$requiredScenario].cases).Count
+            # `cases` is a generic List[object]. Wrapping that list directly in
+            # `@(...)` trips PowerShell's dynamic binder on some 7.x builds.
+            $scenarioTotal = $junitByScenario[$requiredScenario].cases.Count
             if ($scenarioTotal -eq 0) {
                 $selectionGateFailures.Add("required scenario selected zero testcases: $requiredScenario") | Out-Null
             }

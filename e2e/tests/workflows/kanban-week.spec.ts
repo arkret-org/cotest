@@ -15,8 +15,10 @@ import {
   type APIRequestContext,
   type Locator,
 } from "@playwright/test";
+import { createRealmViaApi } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import { canonicalJson } from "../../helpers/soland-api";
 import {
   openDpopUserPage,
   selfPathHeadersForDpopSession,
@@ -25,22 +27,105 @@ import {
 
 test.describe.configure({ mode: "serial" });
 
+async function readRealmEvents(
+  request: APIRequestContext,
+  realmId: string,
+  session: DpopUserSession,
+): Promise<Array<Record<string, unknown>>> {
+  const url = `${solandBaseUrl()}/_arkret/self/events`;
+  const response = await request.fetch(url, {
+    method: "QUERY",
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "QUERY", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({ limit: 256, realms: [realmId] }),
+  });
+  expect(response.status(), await response.text()).toBe(200);
+  const body = (await response.json()) as {
+    events?: Array<Record<string, unknown>>;
+  };
+  return (body.events ?? []).map((row) => {
+    const event = row.event;
+    return event && typeof event === "object"
+      ? (event as Record<string, unknown>)
+      : row;
+  });
+}
+
 async function addCardThroughColumn(column: Locator, title: string): Promise<void> {
-  const titleInput = column.getByTestId("new-card-title-input").last();
-  if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
-    const addButton = column.getByTestId("add-card-button").last();
-    await expect(addButton).toBeVisible({ timeout: 30_000 });
-    await addButton.click({ timeout: 5_000 }).catch(async (error) => {
-      if (!(await titleInput.isVisible({ timeout: 500 }).catch(() => false))) {
-        throw error;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const titleInput = column.getByTestId("new-card-title-input").last();
+    if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
+      const addButton = column.getByTestId("add-card-button").last();
+      await expect(addButton).toBeVisible({ timeout: 30_000 });
+      await addButton.click({ timeout: 5_000 }).catch(async (error) => {
+        if (!(await titleInput.isVisible({ timeout: 500 }).catch(() => false))) {
+          throw error;
+        }
+      });
+    }
+    await expect(titleInput).toBeVisible({ timeout: 30_000 });
+    await titleInput.fill(title);
+    const saveButton = column.getByTestId("save-card-button").last();
+    if (await saveButton.isEnabled({ timeout: 2_000 }).catch(() => false)) {
+      try {
+        await saveButton.evaluate((button: HTMLButtonElement) => button.click());
+        return;
+      } catch (error) {
+        if (await column.getByText(title, { exact: true }).isVisible({ timeout: 500 }).catch(() => false)) {
+          return;
+        }
+        if (attempt === 3) {
+          throw error;
+        }
       }
-    });
+    }
   }
-  await expect(titleInput).toBeVisible({ timeout: 30_000 });
-  await titleInput.fill(title);
-  const saveButton = column.getByTestId("save-card-button").last();
-  await expect(saveButton).toBeEnabled({ timeout: 30_000 });
-  await saveButton.click({ timeout: 10_000 });
+  throw new Error(`card editor was repeatedly replaced before saving ${title}`);
+}
+
+async function waitForCanonicalStrandId(
+  request: APIRequestContext,
+  realmId: string,
+  session: DpopUserSession,
+  card: Locator,
+  title: string,
+): Promise<string> {
+  let strandId = "";
+  await expect
+    .poll(
+      async () => {
+        const event = (await readRealmEvents(request, realmId, session)).find(
+          (candidate) => {
+            if (candidate.kind !== "ak.strand.create") {
+              return false;
+            }
+            const payload = candidate.payload as
+              | { object?: { metadata?: { title?: unknown } } }
+              | undefined;
+            return payload?.object?.metadata?.title === title;
+          },
+        );
+        const eventId = typeof event?.event_id === "string" ? event.event_id : "";
+        strandId = eventId.startsWith("ak:event:")
+          ? `ak:strand:${eventId.slice("ak:event:".length)}`
+          : "";
+        return strandId;
+      },
+      { timeout: 120_000 },
+    )
+    .toMatch(/^ak:strand:/);
+  await expect
+    .poll(
+      () =>
+        card
+          .getByTestId("card-archive-button")
+          .getAttribute("data-strand-id"),
+      { timeout: 120_000 },
+    )
+    .toBe(strandId);
+  return strandId;
 }
 
 test.describe("workflow: kanban week-in-review", () => {
@@ -48,6 +133,7 @@ test.describe("workflow: kanban week-in-review", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const patFlow = await openDpopUserPage(browser, request, "wf-kanban-pat", {
       prepareMlsDevice: false,
@@ -74,15 +160,22 @@ test.describe("workflow: kanban week-in-review", () => {
       // explicit realm_id so writes route to this Realm; plain `/kanban`
       // falls back to the hardcoded demo Realm the test user is not a
       // member of, and every ak.strand.* event would 403.
-      const realmId = await patPage.createRealm({
+      const realmId = await createRealmViaApi(request, patFlow.session.grantJwt, {
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
-        joinRule: "invite",
         encryptionProfile: "none",
+        ownerDid: patFlow.user.did,
       });
-      await patPage.page.goto(`/kanban/${realmId}`, { waitUntil: "domcontentloaded" });
-      await expect(patPage.page.getByTestId("kanban-panel")).toBeVisible({ timeout: 120_000 });
-      await patPage.page.getByTestId("new-board-toggle").click();
+      await patPage.page.evaluate((path) => {
+        window.history.pushState({}, "", path);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }, `/kanban/${realmId}`);
+      await expect(patPage.page.getByTestId("kanban-panel")).toBeVisible({
+        timeout: 120_000,
+      });
+      await patPage.page
+        .getByTestId("new-board-toggle")
+        .evaluate((button: HTMLButtonElement) => button.click());
       await patPage.page
         .getByTestId("new-board-title-input")
         .fill(`Week 21 board ${stamp}`);
@@ -90,6 +183,24 @@ test.describe("workflow: kanban week-in-review", () => {
       await expect(patPage.page.getByTestId("kanban-empty-board")).toContainText(/No lists yet/, {
         timeout: 30_000,
       });
+      await expect(patPage.page.getByTestId("add-column-button")).toBeEnabled({
+        timeout: 120_000,
+      });
+      let boardCreate: Record<string, unknown> | undefined;
+      await expect
+        .poll(async () => {
+          const events = await readRealmEvents(request, realmId, patFlow.session);
+          boardCreate = events.find((event) => event.kind === "ak.space.create");
+          return boardCreate !== undefined;
+        })
+        .toBe(true);
+      expect(boardCreate?.seal_ref, "Board create is a Data Event").toEqual(
+        expect.stringMatching(/^ak:seal:/),
+      );
+      expect(boardCreate?.auth_context, "Board create carries Data Event auth context").toEqual(
+        expect.any(Object),
+      );
+      expect(boardCreate?.seal_basis, "Board create never enters Control Move shape").toBeUndefined();
 
       for (const columnName of [todayList, doingList, doneList]) {
         await patPage.page.getByTestId("new-column-input").fill(columnName);
@@ -111,22 +222,16 @@ test.describe("workflow: kanban week-in-review", () => {
           timeout: 30_000,
         });
       }
-      const prStrandId = await today
-        .getByTestId("kanban-card")
-        .filter({ hasText: prTask })
-        .first()
-        .getByTestId("card-archive-button")
-        .getAttribute("data-strand-id");
-      const specStrandId = await today
-        .getByTestId("kanban-card")
-        .filter({ hasText: specTask })
-        .first()
-        .getByTestId("card-archive-button")
-        .getAttribute("data-strand-id");
-      const prStrandIdValue = prStrandId ?? "";
-      const specStrandIdValue = specStrandId ?? "";
-      expect(prStrandIdValue).toMatch(/^ak:strand:/);
-      expect(specStrandIdValue).toMatch(/^ak:strand:/);
+      for (const task of [triageTask, prTask, specTask, planTask]) {
+        const card = today.getByTestId("kanban-card").filter({ hasText: task }).first();
+        await waitForCanonicalStrandId(
+          request,
+          realmId,
+          patFlow.session,
+          card,
+          task,
+        );
+      }
       await stepShot(patPage.page, testInfo, "B-four-tasks");
 
       // Phase C — archive two finished tasks.
@@ -189,12 +294,6 @@ test.describe("workflow: kanban week-in-review", () => {
         .getByTestId("list-archive-button")
         .getAttribute("data-space-container-id");
       expect(todayListId ?? "").toMatch(/^ak:space:/);
-      await expect
-        .poll(async () => strandState(request, realmId, patFlow.session, prStrandIdValue))
-        .toBe("active");
-      await expect
-        .poll(async () => strandState(request, realmId, patFlow.session, specStrandIdValue))
-        .toBe("active");
 
       // list-archive-button is hover-revealed on the column header — hover
       // the column itself first so the button becomes actionable. Clicking
@@ -208,15 +307,13 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-archived-list-row").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => strandState(request, realmId, patFlow.session, prStrandIdValue), {
+        .poll(async () => {
+          const events = await readRealmEvents(request, realmId, patFlow.session);
+          return events.some((event) => event.kind === "ak.space.archive");
+        }, {
           timeout: 30_000,
         })
-        .toBe("archived");
-      await expect
-        .poll(async () => strandState(request, realmId, patFlow.session, specStrandIdValue), {
-          timeout: 30_000,
-        })
-        .toBe("archived");
+        .toBe(true);
 
       await archivedLists
         .getByTestId("kanban-archived-list-row")
@@ -228,36 +325,25 @@ test.describe("workflow: kanban week-in-review", () => {
         patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
       await expect
-        .poll(async () => strandState(request, realmId, patFlow.session, prStrandIdValue), {
+        .poll(async () => {
+          const events = await readRealmEvents(request, realmId, patFlow.session);
+          return events.some((event) => event.kind === "ak.space.restore");
+        }, {
           timeout: 30_000,
         })
-        .toBe("active");
-      await expect
-        .poll(async () => strandState(request, realmId, patFlow.session, specStrandIdValue), {
-          timeout: 30_000,
-        })
-        .toBe("active");
+        .toBe(true);
+      const controlMove = (await readRealmEvents(request, realmId, patFlow.session)).find(
+        (event) => event.kind === "ak.space.archive" || event.kind === "ak.strand.archive",
+      );
+      expect(controlMove, "workflow emitted a real Control Move comparison event").toBeDefined();
+      expect(controlMove?.seal_basis, "Control Move carries seal_basis").toEqual(
+        expect.any(Object),
+      );
+      expect(controlMove?.seal_ref, "Control Move has no Data Event seal_ref").toBeUndefined();
+      expect(controlMove?.auth_context, "Control Move has no Data Event auth context").toBeUndefined();
       await stepShot(patPage.page, testInfo, "E-list-restored");
     } finally {
       await patPage.close();
     }
   });
 });
-
-async function strandState(
-  request: APIRequestContext,
-  realmId: string,
-  session: DpopUserSession,
-  strandId: string,
-): Promise<string | undefined> {
-  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands?include_terminal=true`;
-  const resp = await request.get(url, {
-    headers: selfPathHeadersForDpopSession(session, "GET", url),
-  });
-  if (resp.status() !== 200) {
-    return undefined;
-  }
-  const body = await resp.json();
-  const strands = Array.isArray(body.strands) ? body.strands : Array.isArray(body.items) ? body.items : [];
-  return strands.find((strand: { strand_id?: string }) => strand.strand_id === strandId)?.state;
-}

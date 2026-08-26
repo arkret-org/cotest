@@ -788,11 +788,9 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         verification_method,
         None,
     );
-    let descriptor = arkret_wire::EventKind::from(kind).descriptor();
-    let is_control_move = descriptor
-        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("control"));
-    let is_data_event = descriptor
-        .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+    let event_kind = arkret_wire::EventKind::from(kind);
+    let is_control_move = event_kind.is_control_plane();
+    let is_data_event = event_kind.is_data_plane();
     if is_control_move || is_data_event {
         let seal_frontier =
             realm_seal_frontier_for(server, token, realm_id, Duration::from_secs(10)).await?;

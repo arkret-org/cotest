@@ -202,7 +202,7 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
     event.actor_id = arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?;
     event.actor_seq = 0;
     event.prev_refs.clear();
-    if event.seal_basis.is_some() {
+    if event.kind.is_control_plane() {
         event.auth_context = None;
     } else {
         event.auth_context = Some(arkret_wire::AuthContext {

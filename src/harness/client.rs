@@ -892,9 +892,7 @@ impl TestActorClient {
                 .collect(),
             causal_refs,
         );
-        let is_data_event = arkret_wire::EventKind::from(kind)
-            .descriptor()
-            .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+        let is_data_event = arkret_wire::EventKind::from(kind).is_data_plane();
         if is_data_event {
             let seal_frontier = self.realm_seal_frontier(realm_id).await?;
             let state: arkret_models_collaboration::event_sync::SealFrontierState =
@@ -986,12 +984,9 @@ impl TestActorClient {
         );
         event.prev_refs = frontier.frontier_event_ids;
         event.preconditions = preconditions;
-        let descriptor = arkret_wire::EventKind::from(kind).descriptor();
-        let is_control_move = descriptor.is_some_and(|descriptor| {
-            descriptor.reducer_input && descriptor.plane == Some("control")
-        });
-        let is_data_event = descriptor
-            .is_some_and(|descriptor| descriptor.reducer_input && descriptor.plane == Some("data"));
+        let event_kind = arkret_wire::EventKind::from(kind);
+        let is_control_move = event_kind.is_control_plane();
+        let is_data_event = event_kind.is_data_plane();
         if is_control_move || is_data_event {
             let seal_frontier = self.realm_seal_frontier(realm_id).await?;
             let state: arkret_models_collaboration::event_sync::SealFrontierState =
