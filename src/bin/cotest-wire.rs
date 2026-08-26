@@ -404,9 +404,9 @@ fn build_pcr_genesis_unit(
     )
     .into();
     let device_key = SigningKey::from_bytes(&device_seed);
-    let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
-        &device_key.verifying_key().to_bytes(),
-    );
+    let device_public_key_bytes = device_key.verifying_key().to_bytes();
+    let device_multibase =
+        arkret_canonical::ed25519_pubkey_to_did_key_multibase(&device_public_key_bytes);
     let device_public_key = non_empty(format!("did:key:{device_multibase}"))?;
     let hpke_key = non_empty("z6LSCotestPcrGenesisHpkeKey")?;
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
@@ -440,6 +440,18 @@ fn build_pcr_genesis_unit(
             ),
         )?);
     let authorize_payload_value = serde_json::to_value(&authorize_payload)?;
+    let founding_notary = arkret::NotaryValue::single_signer(arkret::NotarySignerDescriptor {
+        actor_id: principal_id.clone(),
+        verification_method: arkret::DidUrl::new(format!("{principal}#{device_id}"))
+            .map_err(anyhow::Error::msg)?,
+        key_kind: arkret::NotaryKeyKind::Ed25519Raw32,
+        jose_algorithm: arkret::NotaryJoseAlgorithm::Ed25519,
+        frozen_public_key_b64u: arkret::base64url_encode(device_public_key_bytes),
+        frozen_public_key_digest: arkret::Hash::new(arkret_canonical::canonical::sha256_digest(
+            device_public_key_bytes,
+        ))?,
+    });
+    founding_notary.validate()?;
     let descriptor = arkret_models_collaboration::events_payloads::FoundingDeviceDescriptor {
         descriptor_version: 1,
         device_id: principal_device_id,
@@ -469,7 +481,7 @@ fn build_pcr_genesis_unit(
             principal_id: principal_id.clone(),
             principal_server_id,
             principal_full_id: principal.clone(),
-            notary: cotest::fixture_single_signer_notary(principal_id),
+            notary: founding_notary,
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 full_id: principal.clone(),
                 method_history_head: method_history_head.to_owned(),

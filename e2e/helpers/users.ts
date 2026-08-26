@@ -403,9 +403,23 @@ export class JointUserPage {
     if (this.page.url().startsWith("about:")) {
       await this.gotoHome();
     }
-    await this.page.evaluate((nextPath) => {
+    // Dioxus consumes the browser's native history notification. Constructing
+    // a PopStateEvent in script updates the address bar but does not traverse
+    // the browser history source observed by the router, leaving the rendered
+    // surface on Home. Push the destination, then traverse back/forward so the
+    // browser emits the real event while the authenticated shell stays mounted.
+    await this.page.evaluate(async (nextPath) => {
+      const nextPop = () =>
+        new Promise<void>((resolve) =>
+          window.addEventListener("popstate", () => resolve(), { once: true }),
+        );
       window.history.pushState({}, "", nextPath);
-      window.dispatchEvent(new PopStateEvent("popstate"));
+      const back = nextPop();
+      window.history.back();
+      await back;
+      const forward = nextPop();
+      window.history.forward();
+      await forward;
     }, path);
   }
 
@@ -432,14 +446,25 @@ export class JointUserPage {
   }
 
   async gotoTimelineRealm(realmId: string) {
-    // Chat is a supported route but is no longer present in the Realm context
-    // navigation (Board is the only top-level product surface). Drive the SPA
-    // router through its browser-history channel without restarting the
-    // authenticated app and secure store.
-    await this.gotoAppPanel(`/chat/${realmId}`, "message-list");
+    // Chat is a supported deep-link route but is no longer present in the
+    // Realm context navigation (Board is the only top-level product surface).
+    // Use a real same-origin document navigation so Dioxus initializes from
+    // the canonical route while the browser keeps the durable account store.
+    const destination = new URL(
+      `/chat/${encodeURIComponent(realmId)}`,
+      this.page.url(),
+    );
+    await this.page.goto(destination.toString(), { waitUntil: "domcontentloaded" });
+    await expect(this.page).toHaveURL(
+      (url) => url.pathname === `/chat/${realmId}`,
+      { timeout: 60_000 },
+    );
+    await expect(this.page.getByTestId("chat-panel")).toBeVisible({
+      timeout: 120_000,
+    });
     await this.dismissPassiveBlockingPrompts();
     await expect(this.page.getByTestId("message-list")).toBeVisible({
-      timeout: 30_000,
+      timeout: 120_000,
     });
   }
 
@@ -752,7 +777,10 @@ export class JointUserPage {
         .click({ timeout: 10_000 })
         .catch(() => undefined);
     }
-    await expect(dialog).toBeHidden({ timeout: 30_000 });
+    // Recovery policy publication intentionally retries a pending Control Seal
+    // frontier for up to 30 seconds.  Give that protocol retry a full window,
+    // plus one locator-handler retry and UI propagation time, before failing.
+    await expect(dialog).toBeHidden({ timeout: 90_000 });
     return keyReadable ? recoveryKey : undefined;
   }
 

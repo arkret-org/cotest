@@ -3,7 +3,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
-use crate::harness::{TestServerGroup, expect_json};
+use crate::harness::{TestServerGroup, expect_json, submitted_event_id};
 use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() -> Result<()> {
@@ -42,12 +42,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     ];
     let expected_message_ids = sent
         .iter()
-        .map(|event| {
-            event["event_id"]
-                .as_str()
-                .map(ToOwned::to_owned)
-                .ok_or_else(|| anyhow!("send response missing event_id: {event}"))
-        })
+        .map(|event| submitted_event_id(event).map(|event_id| event_id.to_string()))
         .collect::<Result<Vec<_>>>()?;
 
     let mut cursor = None;

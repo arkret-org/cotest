@@ -44,6 +44,43 @@ fn run_case(case: &Value) -> Result<()> {
         "accepted_event_envelope_canonical_bytes" => {
             decision(generator, "encoded_size_bytes", 1_048_576)?
         }
+        "mls_add_welcome_event_preflight" => {
+            if required_str(generator, "carrier")? != "canonical_unpadded_base64url_inline"
+                || generator["commit_network_write_started"].as_bool() != Some(false)
+            {
+                bail!("{name} MLS Welcome preflight input drifted");
+            }
+            let bytes = required_u64(generator, "accepted_welcome_event_bytes")?;
+            let actual = if bytes <= 1_048_576 {
+                "continue_commit_generation"
+            } else {
+                "reject"
+            };
+            if case.pointer("/expected/decision").and_then(Value::as_str) != Some(actual) {
+                bail!("{name} MLS Welcome preflight boundary drifted");
+            }
+            if actual == "continue_commit_generation"
+                && case
+                    .pointer("/expected/commit_network_write_allowed")
+                    .and_then(Value::as_bool)
+                    != Some(true)
+            {
+                bail!("{name} accepted MLS Welcome did not allow commit generation");
+            }
+            if actual == "reject"
+                && (case
+                    .pointer("/expected/commit_network_write_started")
+                    .and_then(Value::as_bool)
+                    != Some(false)
+                    || case
+                        .pointer("/expected/post_commit_state_installed")
+                        .and_then(Value::as_bool)
+                        != Some(false))
+            {
+                bail!("{name} rejected MLS Welcome crossed the preflight boundary");
+            }
+            return Ok(());
+        }
         "event_reducer_stamp_boundary" => {
             let producer = required_u64(generator, "producer_envelope_bytes")?;
             let accepted = required_u64(generator, "accepted_candidate_bytes")?;

@@ -12,6 +12,7 @@ use arkret_http_client::Client as SdkClient;
 use arkret_identifiers::{
     DidCoreId, DidFullId, EventId, Hash, Hlc, RealmId, project_full_id_to_core_id,
 };
+use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::events_payloads::{
     RealmSetDefaultStrandPayload, StrandCreatePayload,
 };
@@ -275,7 +276,9 @@ impl TestActorClient {
         loop {
             let response = expect_response(
                 self.query("/_arkret/self/seals/frontier")
-                    .json(&serde_json::json!({"realm_id": realm_id})),
+                    .json(&SealFrontierRequestBody {
+                        realm_id: RealmId::new(realm_id.to_owned())?,
+                    }),
                 StatusCode::OK,
             )
             .await;

@@ -561,12 +561,10 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     let delta = |action: &str| -> Result<NotificationDelta> {
         let data = if action == "remove" {
             serde_json::json!({
-                "kind": "agent_runtime_approval",
                 "reason": "approved"
             })
         } else {
             serde_json::json!({
-                "kind": "agent_runtime_approval",
                 "approval_request_id": "agent_runtime_approval:01964137-0000-7000-8000-000000000000",
                 "agent_id": "ak:did_core:webvh:z6mkagent",
                 "requested_at": "2026-07-13T10:00:00.000Z",
@@ -575,7 +573,6 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         };
         Ok(serde_json::from_value(serde_json::json!({
             "id": "ak:notification:01964137-0000-7000-8000-000000000001",
-            "notification_kind": "agent",
             "action": action,
             "data": data
         }))?)

@@ -1081,7 +1081,7 @@
           "markers": [
             "applet_protocol_describe_smoke",
             "applet_install_package_registers_bot_projection_smoke",
-            "applet_ghost_actor_provision_writes_durable_profile_and_grant_events",
+            "applet_ghost_actor_provision_writes_durable_four_event_unit",
             "applet_bridge_register_ghost_route_revoke_smoke"
           ]
         },
@@ -1153,8 +1153,14 @@
           "path": "../soland/crates/http/src/routing/governance_history.rs",
           "markers": [
             "ak.self.history_key_requests.command.create",
-            "ak.peer.history_key_responses.command.relay",
-            "ak.self.history_key_responses.command.ack"
+            "ak.peer.history_key_responses.command.relay"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../soland/crates/http/src/routing/governance_history/stream.rs",
+          "markers": [
+            "ack_history_key_responses"
           ]
         },
         {

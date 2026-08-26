@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
+use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use chrono::{Duration, Utc};
 use cotest::harness::{ArkretServer, expect_json, query_method};
 use cotest::scenarios::_helpers::bridge::MockCoauthIntrospectionServer;
@@ -1184,7 +1185,9 @@ async fn wait_for_realm_seal(
             .http()
             .request(query_method(), server.url("/_arkret/self/seals/frontier"))
             .bearer_auth(&ctx.alice_token)
-            .json(&serde_json::json!({"realm_id": realm_id}))
+            .json(&SealFrontierRequestBody {
+                realm_id: arkret_wire::RealmId::new(realm_id.to_owned())?,
+            })
             .send()
             .await?;
         let status = response.status();

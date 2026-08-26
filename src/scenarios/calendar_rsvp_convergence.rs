@@ -247,33 +247,48 @@ async fn grant_calendar_actions(
     realm_id: &str,
     bootstrap_seal: &str,
 ) -> Result<Vec<String>> {
-    // `ak.strand.update` is registered field-scoped: the capability-action
-    // registry lists `allowed_write_fields` in its required_constraints, so a
-    // bare grant can never cover it. The scenario only ever writes the
-    // calendar subtree, so the grant names exactly that field.
+    // A field-access constraint narrows every action in its grant. Keep the
+    // ordinary create/RSVP actions on an unconstrained grant and put the
+    // field-scoped Strand update on its own grant.
+    let (plain_grant_id, response) = client
+        .grant_realm_actions_to(
+            realm_id,
+            &client.actor,
+            &["ak.strand.create", "ak.rsvp.set"],
+        )
+        .await?;
+    let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
+        .as_str()
+        .ok_or_else(|| anyhow!("calendar plain grant response omitted its proposal digest"))?;
+    let subject = actor_core_id(&client.actor)?;
+    wait_for_projected_grant(client, realm_id, &subject, &plain_grant_id).await?;
+    client
+        .await_control_proposal_settled(realm_id, proposal_digest, bootstrap_seal)
+        .await?;
+    let plain_grant_seal = current_seal(client, realm_id).await?;
+
     let mut calendar_field_constraint =
         arkret_models_collaboration::governance::grant_constraint::GrantConstraint::new(
             arkret_models_collaboration::governance::grant_constraint::GrantConstraintKind::FieldAccess,
             arkret_models_collaboration::governance::grant_constraint::GrantConstraintEffect::Allow,
         );
     calendar_field_constraint.allowed_write_fields = vec!["metadata.fields.calendar".to_owned()];
-    let (calendar_grant_id, response) = client
+    let (field_grant_id, response) = client
         .grant_realm_actions_with_constraints_to(
             realm_id,
             &client.actor,
-            &["ak.strand.create", "ak.strand.update", "ak.rsvp.set"],
+            &["ak.strand.update"],
             vec![calendar_field_constraint],
         )
         .await?;
     let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
         .as_str()
         .ok_or_else(|| anyhow!("calendar grant response omitted its proposal digest"))?;
-    let subject = actor_core_id(&client.actor)?;
-    wait_for_projected_grant(client, realm_id, &subject, &calendar_grant_id).await?;
+    wait_for_projected_grant(client, realm_id, &subject, &field_grant_id).await?;
     client
-        .await_control_proposal_settled(realm_id, proposal_digest, bootstrap_seal)
+        .await_control_proposal_settled(realm_id, proposal_digest, &plain_grant_seal)
         .await?;
-    Ok(vec![calendar_grant_id])
+    Ok(vec![plain_grant_id, field_grant_id])
 }
 
 async fn grant_calendar_rsvp_to(
@@ -349,7 +364,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "title": "RSVP convergence",
             "summary": "RSVP convergence",
             "public": false,
-            "schema_refs": ["ak.schema.realm.v1", "ak.profile.calendar_event.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
@@ -695,7 +710,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             "title": "RSVP restart",
             "summary": "RSVP restart",
             "public": false,
-            "schema_refs": ["ak.schema.realm.v1", "ak.profile.calendar_event.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
@@ -857,7 +872,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
             "title": "RSVP effect contract",
             "summary": "RSVP effect contract",
             "public": false,
-            "schema_refs": ["ak.schema.realm.v1", "ak.profile.calendar_event.v1"],
+            "schema_refs": ["ak.schema.realm.v1"],
             "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;

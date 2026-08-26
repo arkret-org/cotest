@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::event_sync::{
     EventsFrontierState, EventsFrontierView, SealFrontierState,
 };
@@ -56,7 +57,9 @@ async fn seal_basis(
         server
             .http()
             .request(query_method(), server.url("/_arkret/self/seals/frontier"))
-            .json(&serde_json::json!({"realm_id": realm_id}))
+            .json(&SealFrontierRequestBody {
+                realm_id: arkret_wire::RealmId::new(realm_id.to_owned())?,
+            })
             .bearer_auth(token),
         StatusCode::OK,
     )

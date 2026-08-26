@@ -11,6 +11,7 @@ use arkret_identifiers::{
     DidCoreId, DidFullId, EventId, Hash, Hlc, MessageId, RealmId, StrandId,
     project_full_id_to_core_id,
 };
+use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
 };
@@ -825,7 +826,9 @@ async fn realm_seal_frontier_for(
         let response = server
             .http()
             .request(query_method(), server.url("/_arkret/self/seals/frontier"))
-            .json(&serde_json::json!({"realm_id": realm_id}))
+            .json(&SealFrontierRequestBody {
+                realm_id: RealmId::new(realm_id.to_owned())?,
+            })
             .bearer_auth(token)
             .send()
             .await?;

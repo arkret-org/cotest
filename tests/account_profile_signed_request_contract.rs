@@ -126,7 +126,7 @@ fn sdk_keeps_profile_event_closed_and_separates_wire_from_accepted_basis() {
         "pub async fn account_device_pair(",
     );
     assert!(method.contains("request: &AccountUpdateProfileRequestBody"));
-    assert!(method.contains("request.validate()?"));
+    assert!(method.contains("request.validate(digest_suite)?"));
     assert!(method.contains("self.post(\"/_arkret/self/account/profile\", request)"));
 
     let transport = read("arkret-rust-sdk/crates/http-client/src/request.rs");

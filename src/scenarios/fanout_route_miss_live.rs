@@ -342,9 +342,7 @@ fn member_payload(
             delivery_modes: BTreeSet::from([DeliveryMode::Events]),
             service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
                 current_record_url: target_record.record.current_record_url.clone(),
-                pinned_record_digest: Some(Hash::new(arkret_canonical::canonical_sha256(
-                    target_record,
-                )?)?),
+                pinned_record_digest: None,
             },
             did_document_digest: Some(Hash::new(format!("sha256:{}", "2".repeat(64)))?),
             resolved_at: Utc::now(),
@@ -461,7 +459,11 @@ async fn wait_for_target_state(
     expected: EventDeliveryTargetState,
 ) -> Result<EventDeliveryStatusOutcome> {
     let mut last = None;
-    for _ in 0..60 {
+    // A route miss can already be on its fifth transport attempt when the
+    // target finishes restarting. The registered exponential backoff then
+    // schedules the next attempt roughly three minutes later, so the live
+    // convergence window must extend beyond that valid retry boundary.
+    for _ in 0..180 {
         let outcome = delivery_status(client, event_id).await?;
         if outcome.targets.len() == 1 && outcome.targets[0].status == expected {
             return Ok(outcome);
