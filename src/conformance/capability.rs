@@ -1335,7 +1335,7 @@ fn evaluate_relinquish_pending_fixture(fixture: &Value) -> Result<()> {
             "subject_only_is_not_grantable" => {
                 let action = required_str(case, "action")?;
                 let basis = arkret_policy::current_capability_action_registry_digest()?;
-                if arkret_policy::owner_may_grant(action, Some(&basis), &[])?
+                if arkret_policy::owner_may_grant(action, Some(&basis))?
                     || arkret_policy::action_grants_authority_for("ak.realm.owner", action)?
                 {
                     bail!("subject-only action entered a grant-authority set");
@@ -1545,7 +1545,7 @@ fn evaluate_derived_authority_fixture(fixture: &Value) -> Result<()> {
             .and_then(Value::as_bool)
             != Some(false)
         || !descriptor.reducer_only
-        || arkret_policy::owner_may_grant("ak.capability.derived", Some(&basis), &[])?
+        || arkret_policy::owner_may_grant("ak.capability.derived", Some(&basis))?
     {
         bail!("derived capability escaped reducer-only issuer-authority semantics");
     }

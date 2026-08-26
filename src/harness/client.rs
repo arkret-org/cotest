@@ -1060,7 +1060,7 @@ fn self_grant_action_for_kind(kind: &str) -> Option<&'static str> {
         .iter()
         .filter(|descriptor| descriptor.target_event_kinds.contains(&kind))
         .filter(|descriptor| {
-            arkret_policy::authz::owner_may_grant(descriptor.action.as_str(), Some(&basis), &[])
+            arkret_policy::authz::owner_may_grant(descriptor.action.as_str(), Some(&basis))
                 .unwrap_or(false)
         })
         .min_by_key(|descriptor| descriptor.target_event_kinds.len())
