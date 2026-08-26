@@ -334,12 +334,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
@@ -366,12 +368,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
@@ -482,10 +486,12 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
@@ -558,12 +564,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
@@ -666,12 +674,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
@@ -833,11 +843,13 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
@@ -1032,9 +1044,11 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -1482,12 +1496,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
@@ -1511,9 +1527,11 @@
         "inkson_product_client"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "registration_login_authorization"
       ]
     },
@@ -1559,10 +1577,12 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
@@ -1587,12 +1607,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
@@ -1619,11 +1641,13 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
@@ -1647,11 +1671,13 @@
         "inkson_product_client"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization"
@@ -1731,11 +1757,13 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
@@ -1761,11 +1789,13 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
@@ -1841,9 +1871,11 @@
         "inkson_product_client"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "registration_login_authorization"
       ]
     },
@@ -2093,10 +2125,12 @@
         "inkson_product_client"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "registration_login_authorization"
       ]
@@ -2121,12 +2155,14 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection",
         "test_only_signer_or_wire_builder"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "product_protocol_object_generation",
         "registration_login_authorization",
@@ -2148,6 +2184,7 @@
         "session_injection"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "inkson_product_client",
         "raw_http_fixture"
       ],
@@ -2181,11 +2218,13 @@
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "mls_device_and_keypackage_readiness",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
@@ -2208,9 +2247,11 @@
         "inkson_product_client"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "registration_login_authorization"
       ]
     },
@@ -2231,9 +2272,11 @@
         "inkson_product_client"
       ],
       "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
         "session_injection"
       ],
       "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
         "registration_login_authorization"
       ]
     }

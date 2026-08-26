@@ -17,6 +17,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     $bypasses = New-Object System.Collections.Generic.List[string]
     if ($source -match 'prepareMlsDevice\s*:\s*false') { $bypasses.Add("prepare_mls_device_false") }
     if ($source -match 'allowRecoveryOverride\s*:\s*true') { $bypasses.Add("recovery_override") }
+    if ($source -match '\.createRealm\s*\(' -and $source -notmatch 'allowPassivePromptDismissal\s*:\s*false') { $bypasses.Add("create_realm_passive_prompt_dismissal") }
     if ($source -match 'issueDevSession|sessionCredential\s*:|openDpopUserPage|openDpopUserPageFromSession|createDpopUserSession') { $bypasses.Add("session_injection") }
     if ($source -match 'cotestWire|signedEventEnvelope|registerEventSigner') { $bypasses.Add("test_only_signer_or_wire_builder") }
     if ($usesRawHttp) { $bypasses.Add("raw_http_fixture_or_oracle") }
@@ -68,6 +69,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     if ($bypasses -contains "session_injection") { $excludedClaims.Add("registration_login_authorization") }
     if ($bypasses -contains "prepare_mls_device_false") { $excludedClaims.Add("mls_device_and_keypackage_readiness") }
     if ($bypasses -contains "recovery_override") { $excludedClaims.Add("recovery_configured_encrypted_realm_creation") }
+    if ($bypasses -contains "create_realm_passive_prompt_dismissal") { $excludedClaims.Add("mls_backup_unlock_and_missing_recovery_prompt_behavior") }
     if ($bypasses -contains "test_only_signer_or_wire_builder") { $excludedClaims.Add("product_protocol_object_generation") }
     if ($bypasses -contains "raw_http_fixture_or_oracle") { $excludedClaims.Add("ui_driven_business_flow_for_raw_http_steps") }
 

@@ -115,7 +115,7 @@ impl JointServiceStack {
 
         // soland's base_url already ends in `/`; trim before re-joining.
         let soland_health = format!("{}/health", self.soland_base_url().trim_end_matches('/'));
-        probe(&client, "soland", &soland_health).await?;
+        probe(&self.soland.http(), "soland", &soland_health).await?;
 
         if let Some(url) = self.coauth_base_url() {
             // coauth's `/health` lives on its internal listener, NOT the
@@ -247,6 +247,7 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
                     soland.service_id().as_str(),
                     &config.session_grant_introspection_bearer,
                     &config.embedded_webvh_registration_bearer,
+                    soland.tls_ca_path(),
                 )
                 .await
                 .context("joint service bootstrap: failed to spawn prepared coauth")?,

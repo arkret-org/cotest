@@ -4754,7 +4754,6 @@ type CotestWireCommand =
   | "canonical-json"
   | "sha256-canonical-json"
   | "capability-action-registry-digest"
-  | "event-proof"
   | "event-envelope-proof"
   | "event-derived-id"
   | "mimi-consent-proof"
@@ -4765,7 +4764,6 @@ type CotestWireCommand =
   | "account-handoff-outcome"
   | "account-handoff-request"
   | "principal-registration-fixture"
-  | "principal-service-binding-proof"
   | "identity-creation-register-request"
   | "principal-bootstrap-seal"
   | "principal-successor-seal";

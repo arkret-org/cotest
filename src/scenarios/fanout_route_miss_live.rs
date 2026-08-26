@@ -100,6 +100,8 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         eprintln!("skipping fanout route-miss live E2E: prebuilt Soland is unavailable");
         return Ok(());
     };
+    group.server(0).assert_tls_trust_boundaries().await?;
+    group.server(1).assert_tls_trust_boundaries().await?;
 
     let alice_did =
         actor_did_for_service_full_id(group.server(0).service_full_id(), "fanout-alice")?;
@@ -133,8 +135,13 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         .to_owned();
     let bootstrap_outcome: EventsSubmitOutcome =
         serde_json::from_value(bootstrap["event_response"].clone())?;
-    let bootstrap_events = resolve_events(&alice, bootstrap_outcome.accepted).await?;
-    install_fixture_events(group.server(1), &bootstrap_events).await?;
+    let bootstrap_events = resolve_events(&alice, bootstrap_outcome.accepted.clone()).await?;
+    install_fixture_events(
+        group.server(1),
+        &bootstrap_events,
+        &bootstrap_outcome.control_proposal_acks,
+    )
+    .await?;
 
     let bob_join = member_payload(
         &realm_id,
@@ -297,10 +304,14 @@ async fn current_service_record(
 async fn install_fixture_events(
     server: &crate::harness::ArkretServer,
     events: &[Event],
+    control_proposal_acks: &[arkret_wire::ControlProposalAck],
 ) -> Result<()> {
     let outcome = expect_json(
         server.http().post(server.url(INSTALL_PATH)).json(
-            &crate::harness::NonProtocolTestBody::new(json!({"events": events})),
+            &crate::harness::NonProtocolTestBody::new(json!({
+                "events": events,
+                "control_proposal_acks": control_proposal_acks
+            })),
         ),
         StatusCode::OK,
     )
@@ -329,8 +340,11 @@ fn member_payload(
             binding_scope: BindingScope::Realm,
             binding_source: BindingSource::DidDocumentDefault,
             delivery_modes: BTreeSet::from([DeliveryMode::Events]),
-            service_resolution: ServiceResolutionCarrier::Inline {
-                inline: target_record.clone(),
+            service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
+                current_record_url: target_record.record.current_record_url.clone(),
+                pinned_record_digest: Some(Hash::new(arkret_canonical::canonical_sha256(
+                    target_record,
+                )?)?),
             },
             did_document_digest: Some(Hash::new(format!("sha256:{}", "2".repeat(64)))?),
             resolved_at: Utc::now(),

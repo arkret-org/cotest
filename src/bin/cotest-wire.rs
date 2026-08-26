@@ -144,7 +144,6 @@ fn main() -> Result<()> {
         "canonical-json" => canonical_json(input)?,
         "sha256-canonical-json" => sha256_canonical_json(input)?,
         "capability-action-registry-digest" => capability_action_registry_digest()?,
-        "event-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-envelope-proof" => event_proof(input, EventDigestMode::RawCanonicalJson)?,
         "event-derived-id" => event_derived_id(input)?,
         "event-envelope-parse" => event_envelope_parse(input)?,

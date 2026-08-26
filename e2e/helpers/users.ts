@@ -145,6 +145,7 @@ export type CreateRealmOpts = {
   encryptionProfile?: string;
   seedMembers?: string[];
   completeRecoveryKeySetup?: boolean;
+  allowPassivePromptDismissal?: boolean;
   allowRecoveryOverride?: boolean;
 };
 
@@ -336,6 +337,7 @@ export class JointUserPage {
     await this.gotoAppPanel("/directory", "directory-panel");
     await this.dismissCreateRealmBlockingPrompts({
       completeRecoveryKeySetup: true,
+      allowPassivePromptDismissal: true,
     });
   }
 
@@ -493,6 +495,7 @@ export class JointUserPage {
 
   private async dismissCreateRealmBlockingPrompts(opts: {
     completeRecoveryKeySetup: boolean;
+    allowPassivePromptDismissal: boolean;
   }): Promise<boolean> {
     let handled = false;
     if (opts.completeRecoveryKeySetup) {
@@ -515,6 +518,11 @@ export class JointUserPage {
     ] as const) {
       const button = this.page.getByTestId(testId).last();
       if (await button.isVisible({ timeout: 250 }).catch(() => false)) {
+        if (!opts.allowPassivePromptDismissal) {
+          throw new Error(
+            `${modalTestId} appeared; refusing an undeclared passive prompt dismissal`,
+          );
+        }
         await button.click();
         await expect(this.page.getByTestId(modalTestId).last()).toBeHidden({
           timeout: 10_000,
@@ -527,7 +535,10 @@ export class JointUserPage {
 
   private async clickCreateRealmControl(
     locator: Locator,
-    promptHandling: { completeRecoveryKeySetup: boolean },
+    promptHandling: {
+      completeRecoveryKeySetup: boolean;
+      allowPassivePromptDismissal: boolean;
+    },
   ) {
     let lastError: unknown;
     for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -550,7 +561,10 @@ export class JointUserPage {
   private async selectCreateRealmOption(
     locator: Locator,
     value: string,
-    promptHandling: { completeRecoveryKeySetup: boolean },
+    promptHandling: {
+      completeRecoveryKeySetup: boolean;
+      allowPassivePromptDismissal: boolean;
+    },
   ) {
     let lastError: unknown;
     for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -787,6 +801,7 @@ export class JointUserPage {
     // so the post-create gate simply no-ops.
     const promptHandling = {
       completeRecoveryKeySetup: opts.completeRecoveryKeySetup ?? true,
+      allowPassivePromptDismissal: opts.allowPassivePromptDismissal ?? true,
     };
     let strand = this.page.getByTestId("realm-lifecycle-strand").last();
     let titleInput = strand.getByTestId("realm-title-input");
@@ -1248,6 +1263,7 @@ export class JointUserPage {
   private async dismissPassiveBlockingPrompts(): Promise<boolean> {
     return await this.dismissCreateRealmBlockingPrompts({
       completeRecoveryKeySetup: true,
+      allowPassivePromptDismissal: true,
     });
   }
 }

@@ -164,6 +164,7 @@ test.describe(
             historyAccess: "since_join",
             encryptionProfile: "mls_rfc9420",
             completeRecoveryKeySetup: false,
+            allowPassivePromptDismissal: false,
           });
           await expect(
             page.getByTestId("encrypted-realm-recovery-gate"),

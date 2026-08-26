@@ -4,7 +4,7 @@ use std::io::Write as _;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
@@ -57,6 +57,94 @@ pub struct ArkretServer {
     /// harness must therefore keep the database alive for exactly as long as
     /// the child process rather than falling back to a test-only memory store.
     _database: Option<EphemeralPg>,
+    /// Keeps the process-only TLS authority and certificate files alive for
+    /// exactly as long as at least one server from the run still needs them.
+    _tls: Option<Arc<HarnessTls>>,
+}
+
+struct HarnessTls {
+    _directory: tempfile::TempDir,
+    ca_path: PathBuf,
+    cert_path: PathBuf,
+    key_path: PathBuf,
+    ca_pem: Vec<u8>,
+}
+
+impl HarnessTls {
+    fn new() -> Result<Self> {
+        use rcgen::{
+            BasicConstraints, CertificateParams, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
+            KeyUsagePurpose,
+        };
+
+        let directory = tempfile::tempdir().context("create Cotest TLS authority directory")?;
+        let ca_path = directory.path().join("ca.pem");
+        let cert_path = directory.path().join("server-chain.pem");
+        let key_path = directory.path().join("server-key.pem");
+
+        let mut ca_params = CertificateParams::new(Vec::new())?;
+        ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        ca_params
+            .key_usages
+            .extend([KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign]);
+        let ca_key = KeyPair::generate()?;
+        let ca_cert = ca_params.self_signed(&ca_key)?;
+        let issuer = Issuer::new(ca_params, ca_key);
+
+        // Keep the SAN deliberately limited to the exact URL used by the
+        // harness. `localhost` must fail hostname verification even though it
+        // reaches the same loopback listener.
+        let mut server_params = CertificateParams::new(vec!["127.0.0.1".to_owned()])?;
+        server_params
+            .key_usages
+            .push(KeyUsagePurpose::DigitalSignature);
+        server_params
+            .extended_key_usages
+            .push(ExtendedKeyUsagePurpose::ServerAuth);
+        let server_key = KeyPair::generate()?;
+        let server_cert = server_params.signed_by(&server_key, &issuer)?;
+
+        let ca_pem = ca_cert.pem().into_bytes();
+        let mut server_chain = server_cert.pem();
+        server_chain.push_str(std::str::from_utf8(&ca_pem)?);
+        fs::write(&ca_path, &ca_pem).context("write Cotest TLS CA")?;
+        fs::write(&cert_path, server_chain).context("write Cotest TLS certificate chain")?;
+        fs::write(&key_path, server_key.serialize_pem()).context("write Cotest TLS private key")?;
+
+        Ok(Self {
+            _directory: directory,
+            ca_path,
+            cert_path,
+            key_path,
+            ca_pem,
+        })
+    }
+
+    fn http_client(&self) -> Result<HttpClient> {
+        let certificates =
+            reqwest::Certificate::from_pem_bundle(&self.ca_pem).context("parse Cotest TLS CA")?;
+        HttpClient::builder()
+            // This is a run-scoped test PKI, so validate it with rustls/webpki
+            // directly instead of routing the extra root through the platform
+            // verifier.  On Windows the latter delegates the chain signature
+            // check to CryptoAPI and rejects rcgen's ephemeral CA even though
+            // the same DER validates under webpki.  Keeping this root-only
+            // store also makes the negative trust-boundary checks exact.
+            .tls_backend_rustls()
+            .tls_certs_only(certificates)
+            .connect_timeout(HARNESS_CONNECT_TIMEOUT)
+            .timeout(HARNESS_HTTP_TIMEOUT)
+            .no_proxy()
+            .build()
+            .context("build Cotest TLS client")
+    }
+
+    fn apply_to_command(&self, command: &mut Command) {
+        command
+            .env("SOLAND_TLS_CERT_PATH", &self.cert_path)
+            .env("SOLAND_TLS_KEY_PATH", &self.key_path)
+            .env("SSL_CERT_FILE", &self.ca_path);
+    }
 }
 
 #[derive(Clone)]
@@ -206,14 +294,33 @@ impl ArkretServer {
     pub(crate) async fn spawn_external_binary_with_ports_and_env(
         name: &str,
         bin_path: &Path,
+        port: ReservedPort,
+        metrics_port: ReservedPort,
+        extra_env: &[(&str, &str)],
+    ) -> Result<Self> {
+        Self::spawn_external_binary_with_ports_env_and_tls(
+            name,
+            bin_path,
+            port,
+            metrics_port,
+            extra_env,
+            Arc::new(HarnessTls::new()?),
+        )
+        .await
+    }
+
+    async fn spawn_external_binary_with_ports_env_and_tls(
+        name: &str,
+        bin_path: &Path,
         mut port: ReservedPort,
         mut metrics_port: ReservedPort,
         extra_env: &[(&str, &str)],
+        tls: Arc<HarnessTls>,
     ) -> Result<Self> {
         let bind = format!("127.0.0.1:{}", port.port());
         let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
         let metrics_bind_for_handle = metrics_bind.clone();
-        let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
+        let base_url = Url::parse(&format!("https://127.0.0.1:{}/", port.port()))?;
         let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
         let log_path = service_log_path(name)?;
@@ -241,6 +348,7 @@ impl ArkretServer {
             .env("SOLAND_BLOB_ROOT", &blob_root)
             .stdout(stdout)
             .stderr(stderr);
+        tls.apply_to_command(&mut command);
         if extra_env.iter().any(|(key, _)| {
             matches!(
                 *key,
@@ -275,20 +383,26 @@ impl ArkretServer {
             )
         })?;
 
-        if let Err(error) =
-            wait_until_process_healthy(base_url.clone(), &mut child, log_path.as_deref()).await
+        if let Err(error) = wait_until_process_healthy(
+            base_url.clone(),
+            &mut child,
+            log_path.as_deref(),
+            Some(&tls),
+        )
+        .await
         {
             let _ = child.kill();
             let _ = child.wait();
             return Err(error);
         }
-        let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let (service_id, service_full_id, trust_domain) =
+            fetch_service_identity(&base_url, Some(&tls)).await?;
         let service_notary_signer =
             test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
-            http_client: probe_http_client()?,
+            http_client: probe_http_client(Some(&tls))?,
             external_restart: Some(ExternalRestartConfig {
                 bin_path: bin_path.to_owned(),
                 bind,
@@ -310,6 +424,7 @@ impl ArkretServer {
             metrics_bind: Some(metrics_bind_for_handle),
             _port_reservations: vec![port, metrics_port],
             _database: None,
+            _tls: Some(tls),
         })
     }
 
@@ -417,13 +532,14 @@ impl ArkretServer {
             };
             return Err(anyhow!("{error}{log_suffix}"));
         }
-        let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
+        let (service_id, service_full_id, trust_domain) =
+            fetch_service_identity(&base_url, None).await?;
         let service_notary_signer =
             test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
-            http_client: probe_http_client()?,
+            http_client: probe_http_client(None)?,
             external_restart: None,
             base_url,
             service_id,
@@ -437,11 +553,18 @@ impl ArkretServer {
             metrics_bind: None,
             _port_reservations: vec![host_port],
             _database: None,
+            _tls: None,
         })
     }
 
     pub fn base_url(&self) -> Url {
         self.base_url.clone()
+    }
+
+    /// Explicit trust anchor for subprocesses that call this harness-owned
+    /// HTTPS server. It is absent for ordinary production-style HTTP handles.
+    pub(crate) fn tls_ca_path(&self) -> Option<&Path> {
+        self._tls.as_ref().map(|tls| tls.ca_path.as_path())
     }
 
     pub fn service_id(&self) -> &DidCoreId {
@@ -558,6 +681,9 @@ impl ArkretServer {
             .env("SOLAND_BLOB_ROOT", blob_root)
             .stdout(stdout)
             .stderr(stderr);
+        if let Some(tls) = &self._tls {
+            tls.apply_to_command(&mut command);
+        }
         if config.extra_env.iter().any(|(key, _)| {
             matches!(
                 key.as_str(),
@@ -590,6 +716,7 @@ impl ArkretServer {
             self.base_url.clone(),
             &mut restarted,
             self.log_path.as_deref(),
+            self._tls.as_deref(),
         )
         .await
         {
@@ -598,7 +725,7 @@ impl ArkretServer {
             return Err(error);
         }
         let (service_id, service_full_id, trust_domain) =
-            fetch_service_identity(&self.base_url).await?;
+            fetch_service_identity(&self.base_url, self._tls.as_deref()).await?;
         if service_id != self.service_id
             || service_full_id != self.service_full_id
             || trust_domain != self.trust_domain
@@ -624,13 +751,16 @@ impl ArkretServer {
     }
 
     pub fn sdk(&self) -> Result<SdkClient> {
-        // Harness-only: cotest SUTs bind to loopback/self-signed local
-        // endpoints. Do not copy this into non-local service clients.
-        Ok(SdkClient::builder(self.base_url())
-            .allow_insecure_localhost()
-            .timeout(HARNESS_HTTP_TIMEOUT)
-            .connect_timeout(HARNESS_CONNECT_TIMEOUT)
-            .build()?)
+        let builder = SdkClient::builder(self.base_url());
+        Ok(if self._tls.is_some() {
+            builder.http_client(self.http()).build()?
+        } else {
+            builder
+                .allow_insecure_localhost()
+                .timeout(HARNESS_HTTP_TIMEOUT)
+                .connect_timeout(HARNESS_CONNECT_TIMEOUT)
+                .build()?
+        })
     }
 
     pub fn url(&self, path: &str) -> String {
@@ -638,6 +768,42 @@ impl ArkretServer {
             .join(path.trim_start_matches('/'))
             .expect("valid test path")
             .to_string()
+    }
+
+    pub async fn assert_tls_trust_boundaries(&self) -> Result<()> {
+        let Some(_) = &self._tls else {
+            return Err(anyhow!(
+                "TLS trust assertion requires the HTTPS process harness"
+            ));
+        };
+        let health_url = self.base_url.join("health")?;
+        let untrusted = HttpClient::builder()
+            .connect_timeout(HARNESS_CONNECT_TIMEOUT)
+            .timeout(HARNESS_CONNECT_TIMEOUT)
+            .no_proxy()
+            .build()?;
+        anyhow::ensure!(
+            untrusted.get(health_url).send().await.is_err(),
+            "Cotest HTTPS endpoint unexpectedly trusted without its run-scoped CA"
+        );
+
+        let mut wrong_hostname = self.base_url.clone();
+        wrong_hostname
+            .set_host(Some("localhost"))
+            .map_err(|_| anyhow!("failed to construct wrong-hostname TLS probe"))?;
+        let wrong_hostname_url = wrong_hostname.join("health")?;
+        anyhow::ensure!(
+            self.http().get(wrong_hostname_url).send().await.is_err(),
+            "Cotest HTTPS certificate unexpectedly accepted the localhost hostname"
+        );
+
+        self.http()
+            .get(self.base_url.join("health")?)
+            .send()
+            .await?
+            .error_for_status()
+            .context("Cotest HTTPS endpoint rejected its run-scoped CA and IP SAN")?;
+        Ok(())
     }
 
     pub async fn kill_immediately(&mut self) -> Result<()> {
@@ -770,14 +936,16 @@ impl ArkretServer {
         token: String,
         principal: Option<ProvisionedTestPrincipal>,
     ) -> Result<TestActorClient> {
-        // Harness-only: actor clients talk to the same loopback SUT created
-        // above, so insecure localhost TLS is acceptable for test traffic.
-        let sdk = SdkClient::builder(self.base_url())
-            .allow_insecure_localhost()
-            .auth(Auth::Bearer(token.clone()))
-            .timeout(HARNESS_HTTP_TIMEOUT)
-            .connect_timeout(HARNESS_CONNECT_TIMEOUT)
-            .build()?;
+        let builder = SdkClient::builder(self.base_url()).auth(Auth::Bearer(token.clone()));
+        let sdk = if self._tls.is_some() {
+            builder.http_client(self.http()).build()?
+        } else {
+            builder
+                .allow_insecure_localhost()
+                .timeout(HARNESS_HTTP_TIMEOUT)
+                .connect_timeout(HARNESS_CONNECT_TIMEOUT)
+                .build()?
+        };
         Ok(TestActorClient {
             http: self.http(),
             sdk,
@@ -899,6 +1067,7 @@ impl TestServerGroup {
             return Err(anyhow!("federated Soland group requires at least one node"));
         }
         let shared_trust_domain = test_trust_domain(name);
+        let tls = Arc::new(HarnessTls::new()?);
         struct Pending {
             name: String,
             port: ReservedPort,
@@ -911,7 +1080,7 @@ impl TestServerGroup {
             let node_name = format!("{name}-{index}");
             let port = reserve_port()?;
             let metrics = reserve_port()?;
-            let url = format!("http://127.0.0.1:{}", port.port());
+            let url = format!("https://127.0.0.1:{}", port.port());
             pending.push(Pending {
                 name: node_name,
                 port,
@@ -959,12 +1128,13 @@ impl TestServerGroup {
                 .iter()
                 .map(|(key, value)| (key.as_str(), value.as_str()))
                 .collect::<Vec<_>>();
-            match ArkretServer::spawn_external_binary_with_ports_and_env(
+            match ArkretServer::spawn_external_binary_with_ports_env_and_tls(
                 &node.name,
                 bin_path,
                 node.port,
                 node.metrics,
                 &extra_env,
+                tls.clone(),
             )
             .await
             {
@@ -1346,23 +1516,25 @@ fn cleanup_stale_port_reservations(dir: &Path) {
 }
 
 async fn wait_until_healthy(base_url: Url) -> Result<()> {
-    wait_until_healthy_inner(base_url, None, None).await
+    wait_until_healthy_inner(base_url, None, None, None).await
 }
 
 async fn wait_until_process_healthy(
     base_url: Url,
     child: &mut Child,
     log_path: Option<&Path>,
+    tls: Option<&HarnessTls>,
 ) -> Result<()> {
-    wait_until_healthy_inner(base_url, Some(child), log_path).await
+    wait_until_healthy_inner(base_url, Some(child), log_path, tls).await
 }
 
 async fn wait_until_healthy_inner(
     base_url: Url,
     mut child: Option<&mut Child>,
     log_path: Option<&Path>,
+    tls: Option<&HarnessTls>,
 ) -> Result<()> {
-    let client = probe_http_client()?;
+    let client = probe_http_client(tls)?;
     let health_url = base_url.join("health")?;
     let mut last_error = None;
     let attempts = std::env::var("COTEST_SUT_HEALTH_ATTEMPTS")
@@ -1419,9 +1591,12 @@ fn test_trust_domain(name: &str) -> String {
     )
 }
 
-async fn fetch_service_identity(base_url: &Url) -> Result<(DidCoreId, DidFullId, TrustDomainId)> {
+async fn fetch_service_identity(
+    base_url: &Url,
+    tls: Option<&HarnessTls>,
+) -> Result<(DidCoreId, DidFullId, TrustDomainId)> {
     let url = base_url.join("/_arkret/describe")?;
-    let response = probe_http_client()?
+    let response = probe_http_client(tls)?
         .get(url.clone())
         .send()
         .await
@@ -1445,10 +1620,14 @@ async fn fetch_service_identity(base_url: &Url) -> Result<(DidCoreId, DidFullId,
     Ok((service_id, service_full_id, trust_domain))
 }
 
-fn probe_http_client() -> Result<HttpClient> {
-    HttpClient::builder()
-        .connect_timeout(HARNESS_CONNECT_TIMEOUT)
-        .timeout(HARNESS_HTTP_TIMEOUT)
-        .build()
-        .context("build bounded Cotest health-probe client")
+fn probe_http_client(tls: Option<&HarnessTls>) -> Result<HttpClient> {
+    if let Some(tls) = tls {
+        tls.http_client()
+    } else {
+        HttpClient::builder()
+            .connect_timeout(HARNESS_CONNECT_TIMEOUT)
+            .timeout(HARNESS_HTTP_TIMEOUT)
+            .build()
+            .context("build bounded Cotest health-probe client")
+    }
 }

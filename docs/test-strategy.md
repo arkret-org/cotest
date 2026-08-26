@@ -79,6 +79,32 @@ asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
 - Prefer raw HTTP assertions for authoritative server-contract checks when the
   current SDK wire model lags the server's live JSON surface.
 
+### `cotest-wire` command inventory
+
+`cotest-wire` is test infrastructure, never a product client. Every command has
+one explicit evidence role:
+
+| Role | Commands | Allowed use |
+|---|---|---|
+| Independent oracle | `canonical-json`, `sha256-canonical-json`, `capability-action-registry-digest`, `event-derived-id`, `event-envelope-parse`, `principal-control-realm-id`, `webvh-verify-log`, `account-handoff-outcome` | Cross-language canonicalization, parsing, derived identifiers, registry/spec checks, and verification independent of the SUT. |
+| Protocol fixture or negative generator | `event-envelope-proof`, `mimi-consent-proof`, `principal-bootstrap-seal`, `principal-successor-seal` | Server-conformance inputs and mutation matrices. These commands may sign fixtures but cannot establish live-product evidence. |
+| Product bypass | `mls-keypackage-upload-entry`, `webvh-placeholder-did`, `webvh-genesis`, `account-handoff-request`, `principal-registration-fixture`, `identity-creation-register-request` | Fixture-only or server-contract setup. Scenario evidence must declare `test_only_signer_or_wire_builder`; live-product scenarios must not call them. |
+
+The retired `event-proof` alias was removed; all callers use the single
+`event-envelope-proof` command. The generated scenario evidence manifest
+classifies `cotestWire`, raw HTTP setup, session injection,
+`prepareMlsDevice: false`, and recovery overrides as declared bypasses. A test
+carrying any of those markers cannot be counted as a complete product journey.
+
+Shared UI helper behavior is classified separately from transport retry:
+
+| Helper action | Evidence treatment |
+|---|---|
+| Recovery gate override | Business-changing and fail-closed by default; a scenario must set `allowRecoveryOverride: true`, is marked `recovery_override`, and cannot claim configured-recovery Realm creation. |
+| MLS backup/unlock/missing-recovery prompt dismissal during `createRealm` | Declared as `create_realm_passive_prompt_dismissal` unless the scenario sets `allowPassivePromptDismissal: false`; affected evidence cannot claim those prompt flows. |
+| Recovery Key setup completion | A real product UI action. A scenario claiming Recovery setup drives and asserts it explicitly, then calls `createRealm` with `completeRecoveryKeySetup: false`. |
+| Exact HTTP retry and UI re-click after a non-semantic overlay | Stability handling only; it must reuse the same intent and cannot swallow Arkret 4xx/5xx outcomes. Actor-frontier rebasing remains explicit per call site. |
+
 ## Execution
 
 ```powershell

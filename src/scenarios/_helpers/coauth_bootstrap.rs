@@ -142,6 +142,7 @@ pub struct SpawnedCoauth {
     pub pg: EphemeralPg,
     restart_with_test_endpoints: bool,
     restart_chaos: Option<CoauthChaosConfig>,
+    principal_server_ca_path: Option<PathBuf>,
 }
 
 /// Debug-only post-commit pause injected into a spawned Coauth process.
@@ -186,6 +187,9 @@ impl SpawnedCoauth {
             self.restart_with_test_endpoints,
             self.restart_chaos.as_ref(),
         );
+        if let Some(ca_path) = &self.principal_server_ca_path {
+            command.env("SSL_CERT_FILE", ca_path);
+        }
         if std::env::var_os("COTEST_COAUTH_BOOTSTRAP_DEBUG").is_some() {
             command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
         } else {
@@ -227,6 +231,7 @@ impl PreparedCoauth {
         principal_server_service_id: &str,
         session_grant_introspection_bearer: &str,
         embedded_webvh_registration_bearer: &str,
+        principal_server_ca_path: Option<&Path>,
     ) -> Result<SpawnedCoauth> {
         let Self {
             coauth_bin,
@@ -245,6 +250,9 @@ impl PreparedCoauth {
         run_coauth_migrations(&coauth_bin, bundle.file.path())?;
 
         let mut command = coauth_server_command(&coauth_bin, bundle.file.path(), true, None);
+        if let Some(ca_path) = principal_server_ca_path {
+            command.env("SSL_CERT_FILE", ca_path);
+        }
         if std::env::var_os("COTEST_COAUTH_BOOTSTRAP_DEBUG").is_some() {
             command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
         } else {
@@ -268,6 +276,7 @@ impl PreparedCoauth {
             pg,
             restart_with_test_endpoints: true,
             restart_chaos: None,
+            principal_server_ca_path: principal_server_ca_path.map(Path::to_path_buf),
         })
     }
 }
@@ -861,6 +870,7 @@ async fn spawn_coauth_with_db_options(
         pg,
         restart_with_test_endpoints: chaos.is_some(),
         restart_chaos: chaos,
+        principal_server_ca_path: None,
     }))
 }
 

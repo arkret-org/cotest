@@ -17,7 +17,7 @@ export type RealmObject = {
   "security_class"?: "standard" | "high_assurance";
   "trust_domain": string;
   "owning_organizations"?: string[];
-  "schema_refs": string[];
+  "schema_refs": Array<string | "ak.profile.principal_control_realm.v1" | "ak.profile.direct_conversation_realm.v1" | "ak.profile.mls.minimal_metadata_realm.v1">;
   "fields"?: {
     "purpose"?: "principal_control" | "managed_agent_control" | "applet_managed_control";
     "collaboration_role"?: "direct_conversation";
@@ -1151,24 +1151,9 @@ export type EventFederationSubmission = {
   "ingress_receipts": Array<{
     "receipt_id": string;
     "event_digest": string;
-    "authorization_lease_id": string;
     "qualified_ingress_id": string;
     "received_at": string;
-    "ingress_basis": string | {
-      "leaves": string[];
-    } | {
-      "anchor_unit": {
-        "realm_id": string;
-        "event_digests": string[];
-        "unit_digest": string;
-      };
-    };
     "ingress_frontier": string[];
-    "service_id": string;
-    "authority_set_ref": {
-      "authority_set_id": string;
-      "authority_set_digest": string;
-    };
     "proofs": Array<{
       "kind": "detached_jws";
       "verification_method": string;

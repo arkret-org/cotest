@@ -456,8 +456,8 @@ function detachedEventProof(
   const binary = process.env.COTEST_WIRE_BIN;
   const command = binary ?? "cargo";
   const args = binary
-    ? ["event-proof"]
-    : ["run", "--quiet", "--bin", "cotest-wire", "--", "event-proof"];
+    ? ["event-envelope-proof"]
+    : ["run", "--quiet", "--bin", "cotest-wire", "--", "event-envelope-proof"];
   const result = spawnSync(command, args, {
     cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
     encoding: "utf8",
