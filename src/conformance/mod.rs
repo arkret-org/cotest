@@ -137,6 +137,7 @@ pub use agent_vectors::{
 };
 pub use applet_install::{
     run_applet_install_authoring_suite, run_applet_managed_actor_authority_suite,
+    run_applet_registration_epoch_kat_suite,
 };
 pub use arkret_private_kdf_and_durability::run_arkret_private_kdf_and_durability_suite;
 pub use audit_release::{

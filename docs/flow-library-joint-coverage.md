@@ -9,7 +9,7 @@
 
 - 不能宣称 joint-e2e 已包含流程库的全部流程。标准 joint smoke 现在直接覆盖账号注册/登录/会话、首设备与第二设备授权、普通 Realm bootstrap、Direct Conversation founding、基础消息同步、Agent/Sidecar 边界，以及当前 service route 认证。
 - planned route handover、ACK barrier/cutover、mirror 失联恢复、完整设备撤销/全设备 recovery、Direct Conversation repair、native Agent/Sidecar 生产链和完整 Invite+MLS+history 重启链仍没有单条标准 joint smoke 闭环。
-- `ordinary-realm-creation.md` 与 `realm-invitation-history-bootstrap.md` 的 `since_join` current-projection 问题是规范缺口，不应通过补测试把未定义行为固化。见 `arkret-work/review/spec-open/2026-08-24-0941-since-join-default-strand-current-projection-undefined.md`。
+- `ordinary-realm-creation.md` 与 `realm-invitation-history-bootstrap.md` 的 `since_join` current-projection 测试必须遵守已关闭裁决。见 `arkret-work/review/spec-done/2026-08-24-0941-since-join-default-strand-current-projection-undefined.md`。
 - 本轮把已有、适合标准拓扑的合同测试加入 `joint-inkson` 选择面，并新增 current service-resolution live 测试；需要双服务、Savfox 或尚不存在生产编排的流程继续留在专用 lane。
 
 ## 流程图复核结果

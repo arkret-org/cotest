@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use crate::transcripts::record_vector_event;
 
 const MANAGED_ACTOR_FIXTURE: &str = "applet-managed-actor-fixture.json";
+const REGISTRATION_EPOCH_FIXTURE: &str = "applet-registration-epoch-fixture.json";
 const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
 const MANAGED_ACTOR_CASES: [&str; 26] = [
     "bot_exact_pair_and_initial_resolution",
@@ -422,6 +423,122 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
             "unregistered_constraint_kind_rejected": true,
             "exact_scope_required": true,
             "ghost_pair_closed": true,
+        }),
+    );
+    Ok(())
+}
+
+pub fn run_applet_registration_epoch_kat_suite() -> Result<()> {
+    use arkret_models_integration::applet::AppletRegistrationEpochTranscript;
+
+    let fixture = super::load_fixture_value(REGISTRATION_EPOCH_FIXTURE)?;
+    let embedded =
+        arkret_schema::embedded_json_artifact(&format!("fixtures/{REGISTRATION_EPOCH_FIXTURE}"))
+            .context("embedded Applet registration-epoch fixture")?;
+    if fixture != embedded {
+        bail!("filesystem and SDK-embedded registration-epoch fixtures drifted");
+    }
+    if fixture["runner"]["kind"] != "named_suite"
+        || fixture["runner"]["entrypoint"] != "ak.suite.applet.registration_epoch.v1"
+        || fixture["domain_separator_utf8"].as_str()
+            != Some(
+                String::from_utf8_lossy(AppletRegistrationEpochTranscript::DOMAIN_SEPARATOR)
+                    .as_ref(),
+            )
+    {
+        bail!("Applet registration-epoch suite identity or domain separator drifted");
+    }
+
+    let transcript_value = fixture["positive"]["transcript"].clone();
+    let transcript_schema = super::schema_validation_fixture::SchemaEnv::load()?
+        .compile("schemas/applet-registration-epoch-transcript.schema.json")?;
+    if !transcript_schema.is_valid(&transcript_value) {
+        bail!("positive registration-epoch transcript fails the authoritative schema");
+    }
+    let transcript: AppletRegistrationEpochTranscript =
+        serde_json::from_value(transcript_value.clone())?;
+    transcript.validate_normalized()?;
+    let canonical = transcript.canonical_json_bytes()?;
+    let frozen_canonical = fixture["positive"]["canonical_bytes_utf8"]
+        .as_str()
+        .context("registration-epoch canonical bytes")?
+        .as_bytes();
+    if canonical != frozen_canonical {
+        bail!("registration-epoch canonical bytes drifted");
+    }
+    let expected_epoch = fixture["positive"]["expected_registration_epoch"]
+        .as_str()
+        .context("expected registration epoch")?;
+    if transcript.registration_epoch()?.as_str() != expected_epoch {
+        bail!("registration-epoch domain-separated digest drifted");
+    }
+
+    let mut unsorted = transcript_value.clone();
+    unsorted["accepted_signing_keys"]
+        .as_array_mut()
+        .context("accepted_signing_keys array")?
+        .reverse();
+    let unsorted: AppletRegistrationEpochTranscript = serde_json::from_value(unsorted)?;
+    if unsorted.validate_normalized().is_ok() {
+        bail!("unsorted accepted signing keys entered the digest boundary");
+    }
+
+    let mut duplicate = transcript_value.clone();
+    let first_key = duplicate["accepted_signing_keys"][0].clone();
+    duplicate["accepted_signing_keys"]
+        .as_array_mut()
+        .context("accepted_signing_keys array")?
+        .push(first_key);
+    let duplicate: AppletRegistrationEpochTranscript = serde_json::from_value(duplicate)?;
+    if duplicate.validate_normalized().is_ok() {
+        bail!("duplicate accepted signing key entered the digest boundary");
+    }
+
+    let mut optional_null = transcript_value.clone();
+    optional_null["service_did_document"]["method_version"]["version_time"] = Value::Null;
+    if transcript_schema.is_valid(&optional_null) {
+        bail!("authoritative schema accepted an explicit optional null");
+    }
+
+    let mut unversioned = transcript_value.clone();
+    unversioned["service_did_document"]["method_version"]["unversioned_refetch"] = json!(true);
+    if transcript_schema.is_valid(&unversioned) {
+        bail!("authoritative schema accepted unversioned evidence with version_id");
+    }
+    let unversioned: AppletRegistrationEpochTranscript = serde_json::from_value(unversioned)?;
+    if unversioned.validate_normalized().is_ok() {
+        bail!("unversioned DID evidence retained a version_id");
+    }
+
+    let mut security_change = transcript_value;
+    security_change["derived_registration"]["base_url"] = json!("https://other.example/cx");
+    let security_change: AppletRegistrationEpochTranscript =
+        serde_json::from_value(security_change)?;
+    security_change.validate_normalized()?;
+    if security_change.registration_epoch()?.as_str() == expected_epoch {
+        bail!("security-relevant registration change did not rotate the epoch");
+    }
+    if arkret_wire::ErrorCode::from_wire("applet_registration_epoch_evidence_deactivated")
+        != Some(arkret_wire::ErrorCode::AppletRegistrationEpochEvidenceDeactivated)
+    {
+        bail!("deactivated DID evidence lost its dedicated registered error code");
+    }
+
+    record_vector_event(
+        "applet.registration_epoch.kat",
+        &json!({
+            "entrypoint": "ak.suite.applet.registration_epoch.v1",
+            "canonical_bytes": String::from_utf8(canonical)?,
+            "expected_registration_epoch": expected_epoch,
+        }),
+        &json!({
+            "positive": true,
+            "negative_cases": fixture["negative"],
+        }),
+        &json!({
+            "filesystem_embedded_equal": true,
+            "canonical_and_digest_equal": true,
+            "negative_count": 6,
         }),
     );
     Ok(())

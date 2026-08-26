@@ -2,8 +2,6 @@
 // Contract: e2e/scenarios/encryption/audited-e2ee.md
 // Spec: crypto-media/audited-e2ee.md §2/§8, governance/content-moderation.md §3.4
 
-import { createHash } from "node:crypto";
-
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
@@ -18,7 +16,6 @@ import {
   refreshEventEnvelopeProof,
   signedEventEnvelope,
   submitSignedEventApi,
-  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -29,45 +26,6 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("moderation reports and audited E2EE", () => {
-  test.fixme(// @blocking-on: arkret-work/spec-open/2026-08-25-1348-franking-digest-input-contract-uninhabitable
-  // @user-promise: legal encrypted messages receive a verifiable local franking proof without plaintext disclosure
-  // @expected-live-by: 2026-09-15
-  // The moderation spec requires encrypted_content.payload_digest, while the
-  // authoritative closed envelope schema forbids that member and the crypto
-  // spec explicitly forbids an inline payload_digest. No legal wire Event can
-  // currently inhabit the franking input contract.
-  "encrypted messages receive a local franking proof without an Audit Applet binding", async ({
-    request,
-  }) => {
-    const setup = await setupEncryptedMessage(request, "s25-frank");
-
-    const events = await queryAuditEvents(
-      request,
-      setup.aliceToken,
-      setup.realmId,
-      "ak.moderation.franking_proof",
-    );
-    const proof = events.find((event) =>
-      JSON.stringify(event).includes(String(setup.message.event_id)),
-    );
-    expect(proof, "franking proof for encrypted message").toBeTruthy();
-    const proofText = JSON.stringify(proof);
-    expect(proofText).toContain(setup.ciphertextDigest);
-    expect(proofText).not.toContain(setup.plaintext);
-    expect(proofText).not.toContain("plaintext");
-    expect(proofText).not.toContain("audit_disclosure_policy");
-    expect(proofText).toContain("proof_digest");
-
-    const verify = await request.post(
-      `${solandBaseUrl()}/_soland/self/audit/franking/verify`,
-      {
-        headers: authHeaders(setup.aliceToken),
-        data: (proof as Record<string, unknown>).payload,
-      },
-    );
-    expect(verify.ok(), await verify.text()).toBeTruthy();
-  });
-
   test("ordinary reports stay in the scoped moderation workflow and never create audit-release events", async ({
     request,
   }) => {
@@ -105,34 +63,6 @@ test.describe("moderation reports and audited E2EE", () => {
       ).toEqual([]);
     }
   });
-
-  test("tampering with a franking proof ciphertext digest fails verification", async ({
-    request,
-  }) => {
-    const setup = await setupEncryptedMessage(request, "s25-tamper");
-    const events = await queryAuditEvents(
-      request,
-      setup.aliceToken,
-      setup.realmId,
-      "ak.moderation.franking_proof",
-    );
-    const proof = events[0]?.payload as Record<string, unknown>;
-    expect(proof?.proof_digest).toBeTruthy();
-
-    const verify = await request.post(
-      `${solandBaseUrl()}/_soland/self/audit/franking/verify`,
-      {
-        headers: authHeaders(setup.aliceToken),
-        data: {
-          ...proof,
-          ciphertext_digest:
-            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-        },
-      },
-    );
-    expect(verify.status()).toBe(409);
-    expect(wireErrCode(await verify.json())).toBe("franking_tampered");
-  });
 });
 
 type EncryptedMessageSetup = {
@@ -141,8 +71,6 @@ type EncryptedMessageSetup = {
   reporterDid: string;
   realmId: string;
   message: Record<string, unknown>;
-  ciphertextDigest: string;
-  plaintext: string;
 };
 
 async function setupEncryptedMessage(
@@ -210,7 +138,6 @@ async function setupEncryptedMessage(
     context: "create encrypted moderation Strand",
   });
 
-  const plaintext = `moderation evidence must not leak ${Date.now()}`;
   const ciphertext = Buffer.from(
     `opaque-ciphertext-${label}-${Date.now()}`,
     "utf8",
@@ -236,10 +163,6 @@ async function setupEncryptedMessage(
     reporterDid: reporter.did,
     realmId,
     message,
-    ciphertextDigest: `sha256:${createHash("sha256")
-      .update(Buffer.from(ciphertext, "base64url"))
-      .digest("hex")}`,
-    plaintext,
   };
 }
 

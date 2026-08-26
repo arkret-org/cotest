@@ -1229,6 +1229,7 @@ fn parse_welcome_with_early_binding_rejection(
 /// Exact runner for `ak.vector.keypackage.self_claim_authorization_idempotency.v1`.
 pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()> {
     let fixture = keypackage_fixture()?;
+    validate_unsigned_selector_transcripts(&fixture)?;
     let vector = case(
         &fixture,
         VECTOR_ID_KEYPACKAGE_SELF_CLAIM_AUTHORIZATION_IDEMPOTENCY,
@@ -1366,6 +1367,86 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         serde_json::from_value(wrong_branch)?;
     if wrong_branch.validate_shape().is_ok() {
         bail!("a requester authorization whose signature key differs from its method was accepted");
+    }
+    Ok(())
+}
+
+fn validate_unsigned_selector_transcripts(fixture: &Value) -> Result<()> {
+    let rows = fixture["unsigned_selector_transcripts"]
+        .as_array()
+        .ok_or_else(|| anyhow!("fixture omits unsigned_selector_transcripts[]"))?;
+    if rows.len() != 3 {
+        bail!("unsigned selector transcript fixture must cover exactly three branches");
+    }
+
+    let mut seen = BTreeSet::new();
+    for row in rows {
+        let branch = required_str(row, "branch")?;
+        let request_value = row
+            .get("unsigned_request")
+            .cloned()
+            .ok_or_else(|| anyhow!("{branch} omits unsigned_request"))?;
+        let request: arkret_models_crypto::PeerKeyPackagesClaimUnsignedRequest =
+            serde_json::from_value(request_value.clone())?;
+        let exact_branch = match branch {
+            "device" => {
+                !request.target_device_ids.is_empty()
+                    && request.target_agent_id.is_none()
+                    && request.target_agent_verification_method.is_none()
+                    && request.target_agent_key_authorize_event_id.is_none()
+                    && request.target_pairwise_verification_method.is_none()
+            }
+            "native_agent" => {
+                request.target_device_ids.is_empty()
+                    && request.target_agent_id.is_some()
+                    && request.target_agent_verification_method.is_some()
+                    && request.target_agent_key_authorize_event_id.is_some()
+                    && request.target_pairwise_verification_method.is_none()
+            }
+            "minimal_metadata_pairwise" => {
+                request.target_device_ids.is_empty()
+                    && request.target_agent_id.is_none()
+                    && request.target_agent_verification_method.is_none()
+                    && request.target_agent_key_authorize_event_id.is_none()
+                    && request.target_pairwise_verification_method.is_some()
+            }
+            other => bail!("unknown unsigned selector transcript branch {other}"),
+        };
+        if !exact_branch || !seen.insert(branch) {
+            bail!("{branch} does not preserve one exact selector branch");
+        }
+
+        let canonical = arkret_canonical::canonical_json_string(&request_value)?;
+        let digest = arkret_canonical::canonical_sha256(&request_value)?;
+        if canonical != required_str(row, "canonical_jcs")?
+            || digest != required_str(row, "request_digest")?
+        {
+            bail!("{branch} unsigned request transcript drifted");
+        }
+
+        let mut changed = request_value.clone();
+        match branch {
+            "device" => {
+                changed["target_device_ids"][0] =
+                    json!("ak:device:0196419b-0000-7000-8000-000000000099");
+            }
+            "native_agent" => {
+                changed["target_agent_key_authorize_event_id"] =
+                    json!("ak:event:Aao964Xuq1Q7PmnLt9I97ih00Qs2N6qMkBgKgYCvUFFe");
+            }
+            "minimal_metadata_pairwise" => {
+                changed["target_pairwise_verification_method"] = json!(
+                    "did:key:z6MkrJVnaZkeFzdQyUQ5mZKfNA8ZtQZVQzVQzVQzVQzVQzVQ#z6MkrJVnaZkeFzdQyUQ5mZKfNA8ZtQZVQzVQzVQzVQzVQzVQ"
+                );
+            }
+            _ => unreachable!(),
+        }
+        if arkret_canonical::canonical_sha256(&changed)? == digest {
+            bail!("{branch} selector mutation did not change the idempotency digest");
+        }
+    }
+    if seen != BTreeSet::from(["device", "native_agent", "minimal_metadata_pairwise"]) {
+        bail!("unsigned selector transcript branch set is incomplete");
     }
     Ok(())
 }

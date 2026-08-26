@@ -27,11 +27,18 @@
 
 1. alice 创建 `encryption_profile=mls_rfc9420` 的 Realm；不配置旧式 `audit_disclosure_policy`。
 2. bob 提交只含 ciphertext、AAD 与 digest 的 `ak.message.create`。
-3. alice 从部署本地审计查询面读取 `ak.moderation.franking_proof`：
-   - proof 绑定消息 event、ciphertext digest、接收服务与 canonical event digest；
+3. alice 以 exact scope moderation/governance capability 调用
+   `ak.self.moderation.read.franking_seal_observation`，读取 canonical
+   `ak.moderation.franking_proof` Event、目标 Event、首次 covering Seal、RFC 6962 inclusion path 与
+   historical service signer evidence：
+   - proof 只以目标 `event_id` 绑定完整 canonical Event commitment，并绑定 Realm、接收服务、历史验证方法、接收时间与
+     replay nonce；不得复制 ciphertext/canonical digest 镜像；
    - proof 不含 plaintext；
    - proof 不携带 `audit_disclosure_policy` 或 Audit Applet endpoint。
-4. 使用本地 verifier 验证 proof；篡改 `ciphertext_digest` 后必须返回 `franking_tampered`。
+4. 使用 SDK verifier 验证七字段 proof transcript、目标 Event commitment、covering Seal inclusion path 与历史
+   service signer evidence；分别篡改 `event_id`、`realm_id`、`received_by`、`verification_method`、
+   `received_at`、`replay_nonce`、signature 或 inclusion path 时必须拒绝。无 exact scope capability、未知对象、
+   binding 不匹配与未被 Seal 覆盖统一返回 `not_found`。
 5. reporter 对该消息调用 `POST /_arkret/self/moderation/report`。
 6. 响应为 `{report_id,status:"submitted"}`；普通 reporter 不获得具体 `routed_to` DID。
 7. reporter 从自身可见的部署本地审计查询面看到 `moderation.report` 留痕，确认举报已被本地受理。
