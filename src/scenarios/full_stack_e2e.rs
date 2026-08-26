@@ -45,7 +45,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_identifiers::{DidCoreId, DidFullId, EventId, Hash};
+use arkret_identifiers::{DidCoreId, DidFullId, EventId};
 use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
     CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
@@ -55,7 +55,7 @@ use arkret_models_identity::handle_claim::DeliveryBindingHint;
 use arkret_push_policy::blind_payload_sanitizer::{
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
-use arkret_wire::{Audience, PrincipalAuthorityKey, ProducerEventProof};
+use arkret_wire::PrincipalAuthorityKey;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -64,6 +64,7 @@ use crate::scenarios::_helpers::external_binary::{
     FLORIA_SPEC, SOLAND_SPEC, TEABAY_SPEC, skip_reason, try_spawn_with_extra_env,
 };
 use crate::scenarios::_helpers::joint_service_bootstrap::{JointServiceConfig, try_bootstrap};
+use crate::scenarios::_helpers::protocol_values::candidate_payload_proof;
 
 // ── Fixture knobs ──────────────────────────────────────────────────────────
 
@@ -680,19 +681,4 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
 fn future_expiry(window: ChronoDuration) -> DateTime<Utc> {
     Utc::now() + window
-}
-
-fn candidate_payload_proof(digest: &str, audience: &str, jws: &str) -> Result<ProducerEventProof> {
-    Ok(ProducerEventProof {
-        kind: "detached_jws".to_owned(),
-        verification_method: crate::fixture_did_url("did:web:principal.acme.example#key-1"),
-        event_digest: Hash::new(digest.to_owned())?,
-        signer_resolution_evidence_ref: None,
-        signer_resolution_evidence_digest: None,
-        created_at: DateTime::parse_from_rfc3339("2026-05-19T00:00:00.000Z")?.with_timezone(&Utc),
-        domain: None,
-        audience: Some(Audience::Single(audience.to_owned())),
-        proof_purpose: None,
-        jws: jws.to_owned(),
-    })
 }

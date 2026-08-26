@@ -22,6 +22,7 @@ use crate::harness::{
     events_frontier_request_body, eventually, expect_account_subscribe_delta,
     expect_account_subscribe_realm_delta, invite_create_payload, message_create_text_payload,
 };
+use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_full_id, spawn_with_harness_account_authority,
 };
@@ -553,21 +554,6 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     .await?;
 
     Ok(())
-}
-
-fn submitted_event_id(response: &Value) -> Option<&str> {
-    response
-        .get("accepted")
-        .and_then(Value::as_array)
-        .and_then(|accepted| accepted.first())
-        .and_then(Value::as_str)
-        .or_else(|| {
-            response
-                .get("duplicate")
-                .and_then(Value::as_array)
-                .and_then(|duplicate| duplicate.first())
-                .and_then(Value::as_str)
-        })
 }
 
 async fn fetch_account_subscribe(

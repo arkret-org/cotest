@@ -33,6 +33,7 @@ mod fanout_route_miss;
 mod federation;
 mod final_conformance_closure;
 mod handle_claim_rejection_vectors;
+mod helpers;
 mod history_key_direct_traversal;
 mod identity_root;
 mod inkson_client;

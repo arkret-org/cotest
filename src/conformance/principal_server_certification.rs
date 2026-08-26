@@ -4,6 +4,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_wire::ProfileId;
 use serde_json::{Value, json};
 
+use super::helpers::profile_claims;
 use super::{load_local_fixture_value, required_str, validate_profile, value_array};
 use crate::transcripts::record_vector_event;
 
@@ -142,47 +143,6 @@ fn certification_status(describe: &Value) -> Option<&str> {
     ]
     .into_iter()
     .find_map(|pointer| describe.pointer(pointer).and_then(Value::as_str))
-}
-
-fn profile_claims(describe: &Value) -> BTreeSet<String> {
-    let mut claims = BTreeSet::new();
-    for field in ["supported_profiles", "profiles", "claimed_profiles"] {
-        collect_profile_array(describe.get(field), &mut claims);
-    }
-    if let Some(claims_value) = describe.get("profile_claims") {
-        match claims_value {
-            Value::Array(_) => collect_profile_array(Some(claims_value), &mut claims),
-            Value::Object(object) => {
-                for (profile, value) in object {
-                    if value.as_bool().unwrap_or(true) {
-                        claims.insert(profile.to_owned());
-                    }
-                    collect_profile_array(Some(value), &mut claims);
-                }
-            }
-            _ => {}
-        }
-    }
-    claims
-}
-
-fn collect_profile_array(value: Option<&Value>, claims: &mut BTreeSet<String>) {
-    let Some(items) = value.and_then(Value::as_array) else {
-        return;
-    };
-    for item in items {
-        if let Some(profile) = item.as_str() {
-            claims.insert(profile.to_owned());
-            continue;
-        }
-        if let Some(profile) = item
-            .get("profile")
-            .or_else(|| item.get("id"))
-            .and_then(Value::as_str)
-        {
-            claims.insert(profile.to_owned());
-        }
-    }
 }
 
 fn require_all(field: &str, describe: &Value, required: &[&str]) -> Result<()> {

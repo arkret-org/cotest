@@ -10,6 +10,7 @@ use crate::harness::{
     message_create_text_payload_for_strand, message_redact_payload, message_revise_text_payload,
     parse_strand_id,
 };
+use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
 pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<()> {
@@ -362,19 +363,4 @@ fn projected_events(listed: &Value) -> Result<&Vec<Value>> {
     listed["events"]
         .as_array()
         .ok_or_else(|| anyhow!("events query response missing events array: {listed}"))
-}
-
-fn submitted_event_id(response: &Value) -> Option<&str> {
-    response
-        .get("accepted")
-        .and_then(Value::as_array)
-        .and_then(|accepted| accepted.first())
-        .and_then(Value::as_str)
-        .or_else(|| {
-            response
-                .get("duplicate")
-                .and_then(Value::as_array)
-                .and_then(|duplicate| duplicate.first())
-                .and_then(Value::as_str)
-        })
 }

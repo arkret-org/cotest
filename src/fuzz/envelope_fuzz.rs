@@ -20,6 +20,8 @@ use arkret_schema::{self as schema, ProtocolSchemaRegistry};
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
+use super::panic_guard::catch;
+
 /// Reusable schema registry. The artifact-backed registry is preferred (it
 /// has the published schemas mounted) but falls back to the empty default
 /// registry so the harness still runs in environments where the artifact
@@ -32,26 +34,6 @@ fn registry() -> &'static ProtocolSchemaRegistry {
             .flatten()
             .unwrap_or_default()
     })
-}
-
-/// Wraps a panic-safe call so a panic inside the validator surfaces as a
-/// fuzz finding rather than aborting the test process.
-fn catch<F: FnOnce() + panic::UnwindSafe>(f: F) -> Result<(), String> {
-    match panic::catch_unwind(f) {
-        Ok(()) => Ok(()),
-        Err(payload) => {
-            // Coerce the panic payload to a readable message so the caller
-            // can include the offending fuzz input in the failure report.
-            let message = if let Some(s) = payload.downcast_ref::<&'static str>() {
-                (*s).to_owned()
-            } else if let Some(s) = payload.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "<non-string panic payload>".to_owned()
-            };
-            Err(message)
-        }
-    }
 }
 
 // ── Event envelope ──────────────────────────────────────────────────────────

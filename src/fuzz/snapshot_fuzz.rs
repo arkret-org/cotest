@@ -11,34 +11,18 @@
 //! Both use the same panic-catch pattern as `envelope_fuzz` so a fuzz
 //! finding surfaces as `Err(message)` rather than aborting the harness.
 
-use std::panic;
-
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_schema as schema;
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
+
+use super::panic_guard::catch;
 
 fn registry() -> arkret_schema::ProtocolSchemaRegistry {
     schema::schema_registry_from_default_spec_artifacts()
         .ok()
         .flatten()
         .unwrap_or_default()
-}
-
-fn catch<F: FnOnce() + panic::UnwindSafe>(f: F) -> Result<(), String> {
-    match panic::catch_unwind(f) {
-        Ok(()) => Ok(()),
-        Err(payload) => {
-            let message = if let Some(s) = payload.downcast_ref::<&'static str>() {
-                (*s).to_owned()
-            } else if let Some(s) = payload.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "<non-string panic payload>".to_owned()
-            };
-            Err(message)
-        }
-    }
 }
 
 /// `arbitrary`-derived input shaped to the snapshot manifest. Field

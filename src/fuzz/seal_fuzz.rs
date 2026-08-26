@@ -8,34 +8,18 @@
 //! escaping the validator boundary surfaces as `Err(message)`; typed
 //! `Result::Err` is acceptable.
 
-use std::panic;
-
 use arbitrary::{Arbitrary, Unstructured};
 use arkret_schema as schema;
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
+
+use super::panic_guard::catch;
 
 fn registry() -> arkret_schema::ProtocolSchemaRegistry {
     schema::schema_registry_from_default_spec_artifacts()
         .ok()
         .flatten()
         .unwrap_or_default()
-}
-
-fn catch<F: FnOnce() + panic::UnwindSafe>(f: F) -> Result<(), String> {
-    match panic::catch_unwind(f) {
-        Ok(()) => Ok(()),
-        Err(payload) => {
-            let message = if let Some(s) = payload.downcast_ref::<&'static str>() {
-                (*s).to_owned()
-            } else if let Some(s) = payload.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "<non-string panic payload>".to_owned()
-            };
-            Err(message)
-        }
-    }
 }
 
 /// Wide-range Seal input. Predecessor refs are bounded to keep the

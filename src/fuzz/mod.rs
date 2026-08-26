@@ -12,5 +12,6 @@
 //! guard, not a search.
 
 pub mod envelope_fuzz;
+mod panic_guard;
 pub mod seal_fuzz;
 pub mod snapshot_fuzz;

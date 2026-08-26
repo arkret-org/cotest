@@ -14,7 +14,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
 use tempfile::NamedTempFile;
@@ -23,6 +23,7 @@ use crate::harness::reserve_port;
 use crate::scenarios::_helpers::external_binary::{
     ExternalBinarySpec, SpawnedExternalProcess, locate_external_binary,
 };
+use crate::scenarios::_helpers::health::wait_for_health;
 
 /// Aggregated handle for a spawned floria: rendered config + server.
 pub struct SpawnedFloria {
@@ -136,25 +137,4 @@ pub async fn spawn_floria_with_custom_pushkin_url(
         server,
         config: config_file,
     }))
-}
-
-async fn wait_for_health(base_url: &str, timeout: Duration) -> bool {
-    let client = match reqwest::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-    {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    let url = format!("{base_url}/health");
-    let cutoff = Instant::now() + timeout;
-    while Instant::now() < cutoff {
-        if let Ok(resp) = client.get(&url).send().await
-            && resp.status().is_success()
-        {
-            return true;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-    false
 }

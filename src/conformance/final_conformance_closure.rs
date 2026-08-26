@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Map, Value, json};
 
+use super::helpers::assert_expected_subset;
 use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST: &str =
@@ -1109,25 +1110,6 @@ fn evaluate_sync_range_completeness_step(step: &Value) -> Result<Value> {
         "reason": reason,
         "history_complete_displayed": false,
     }))
-}
-
-fn assert_expected_subset(name: &str, expected: &Value, observed: &Value) -> Result<()> {
-    let expected = expected
-        .as_object()
-        .ok_or_else(|| anyhow!("{name} expected value must be an object"))?;
-    let observed = observed
-        .as_object()
-        .ok_or_else(|| anyhow!("{name} observed value must be an object"))?;
-    for (key, expected_value) in expected {
-        match observed.get(key) {
-            Some(observed_value) if observed_value == expected_value => {}
-            Some(observed_value) => {
-                bail!("{name} expected {key}={expected_value}, got {observed_value}");
-            }
-            None => bail!("{name} observed result missing expected key {key}"),
-        }
-    }
-    Ok(())
 }
 
 fn record_step(vector_id: &str, name: &str, input: &Value, observed: &Value) {

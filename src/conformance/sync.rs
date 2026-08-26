@@ -12,6 +12,7 @@ use arkret_state::snapshot::{EventSetCommitmentAlgorithm, EventSetLeaf, event_se
 use arkret_wire::ErrorCode;
 use serde_json::{Value, json};
 
+use super::helpers::assert_expected_subset;
 use super::{
     load_fixture_value, looks_like_sha256_digest, required_field, validate_profile, value_array,
     value_field_str, value_field_u64,
@@ -837,25 +838,6 @@ fn ceil_log2(value: u64) -> u64 {
     } else {
         u64::BITS as u64 - (value - 1).leading_zeros() as u64
     }
-}
-
-fn assert_expected_subset(name: &str, expected: &Value, observed: &Value) -> Result<()> {
-    let expected = expected
-        .as_object()
-        .ok_or_else(|| anyhow!("{name} expected value must be an object"))?;
-    let observed = observed
-        .as_object()
-        .ok_or_else(|| anyhow!("{name} observed value must be an object"))?;
-    for (key, expected_value) in expected {
-        match observed.get(key) {
-            Some(observed_value) if observed_value == expected_value => {}
-            Some(observed_value) => {
-                bail!("{name} expected {key}={expected_value}, got {observed_value}");
-            }
-            None => bail!("{name} observed result missing expected key {key}"),
-        }
-    }
-    Ok(())
 }
 
 fn validate_e2ee_pending(value: &Value) -> Result<()> {
