@@ -955,7 +955,6 @@ struct WelcomePayloadFixture<'a> {
     requester_actor_id: &'a str,
     requester_verification_method: &'a str,
     claim_receipt: &'a Value,
-    claim_request_id: &'a str,
     welcome_digest: &'a str,
 }
 
@@ -982,7 +981,6 @@ fn welcome_payload_value(fixture: WelcomePayloadFixture<'_>) -> Value {
             "requester_actor_id": fixture.requester_actor_id,
             "requester_device_id": fixture.requester_device_id,
             "requester_device_authorize_event_id": fixture.device_authorize_event_id,
-            "nonce": fixture.claim_request_id,
             "welcome_digest": fixture.welcome_digest,
             "created_at": "2026-05-25T00:00:00.000Z",
             "signature": {
@@ -1083,7 +1081,6 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         requester_actor_id: requester_core_id.as_str(),
         requester_verification_method: requester_verification_method.as_str(),
         claim_receipt: &claim_receipt,
-        claim_request_id,
         welcome_digest: welcome_digest.as_str(),
     };
     let good_value = welcome_payload_value(good_welcome);
@@ -1096,7 +1093,6 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &intended_realm_id,
         &requester_core_id,
         &welcome_digest,
-        claim_request_id,
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
@@ -1122,7 +1118,6 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &intended_realm_id,
             &requester_core_id,
             &welcome_digest,
-            claim_request_id,
             Some(device_authorize_event_id),
             None,
             Some(requester_device_id),
@@ -1152,7 +1147,6 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &intended_realm_id,
         &requester_core_id,
         &welcome_digest,
-        claim_request_id,
         Some(device_authorize_event_id),
         None,
         Some(requester_device_id),
@@ -1170,47 +1164,40 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         ..good_welcome
     });
     schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_welcome_digest_value)?;
-    let bad_welcome_digest_payload: MlsWelcomePayload =
-        serde_json::from_value(bad_welcome_digest_value)?;
-    if validate_mls_welcome_claim_envelope(
-        &bad_welcome_digest_payload,
-        &claim,
-        &published,
-        &intended_realm_id,
-        &requester_core_id,
-        &welcome_digest,
-        claim_request_id,
-        Some(device_authorize_event_id),
-        None,
-        Some(requester_device_id),
-        Some(device_authorize_event_id),
-    )
-    .is_ok()
-    {
+    if serde_json::from_value::<MlsWelcomePayload>(bad_welcome_digest_value).is_ok() {
         bail!("mismatched claim_envelope welcome_digest was accepted");
     }
-    let bad_nonce_value = welcome_payload_value(WelcomePayloadFixture {
-        claim_request_id: "different-claim-request-id",
-        ..good_welcome
-    });
-    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &bad_nonce_value)?;
-    let bad_nonce: MlsWelcomePayload = serde_json::from_value(bad_nonce_value)?;
-    if validate_mls_welcome_claim_envelope(
-        &bad_nonce,
-        &claim,
-        &published,
-        &intended_realm_id,
-        &requester_core_id,
-        &welcome_digest,
-        claim_request_id,
-        Some(device_authorize_event_id),
-        None,
-        Some(requester_device_id),
-        Some(device_authorize_event_id),
-    )
-    .is_ok()
-    {
-        bail!("mismatched claim_envelope nonce was accepted");
+    for invalid_ciphertext in ["AA==", "AB", "A"] {
+        let mut invalid_value = welcome_payload_value(good_welcome);
+        invalid_value["ciphertext"] = Value::String(invalid_ciphertext.to_owned());
+        schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &invalid_value)?;
+        if serde_json::from_value::<MlsWelcomePayload>(invalid_value).is_ok() {
+            bail!("non-canonical Welcome ciphertext was accepted: {invalid_ciphertext}");
+        }
+    }
+    for retired_field in ["welcome_ref", "encrypted_welcome_ref"] {
+        let mut invalid_value = welcome_payload_value(good_welcome);
+        invalid_value[retired_field] = Value::String(
+            "ak:blob:sha256:8888888888888888888888888888888888888888888888888888888888888888"
+                .to_owned(),
+        );
+        schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &invalid_value)?;
+        if serde_json::from_value::<MlsWelcomePayload>(invalid_value).is_ok() {
+            bail!("retired Welcome carrier field was accepted: {retired_field}");
+        }
+    }
+    let mut retired_nonce = welcome_payload_value(good_welcome);
+    retired_nonce["claim_envelope"]["nonce"] = json!(claim_request_id);
+    schema_invalid(MLS_WELCOME_PAYLOAD_SCHEMA, &retired_nonce)?;
+    if serde_json::from_value::<MlsWelcomePayload>(retired_nonce).is_ok() {
+        bail!("retired claim_envelope nonce was accepted");
+    }
+    let mut mismatched_receipt_context = welcome_payload_value(good_welcome);
+    mismatched_receipt_context["claim_receipt"]["request"]["claim_request_id"] =
+        json!("AAAAAAAAAAAAAAAAAAAAAg");
+    schema_valid(MLS_WELCOME_PAYLOAD_SCHEMA, &mismatched_receipt_context)?;
+    if serde_json::from_value::<MlsWelcomePayload>(mismatched_receipt_context).is_ok() {
+        bail!("mismatched claim receipt/request id context was accepted");
     }
     if expected_bool(vector, "all_digest_fields_equal")?
         && good.claim_ref.keypackage_digest.as_str() != digest

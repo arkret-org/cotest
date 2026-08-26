@@ -1048,6 +1048,12 @@ async fn accept_welcome_and_consume(
 
     let keypackage_bytes = arkret_canonical::base64url_decode(claimed.keypackage.as_bytes())?;
     let keypackage_digest = Hash::new(arkret_canonical::sha256_digest(&keypackage_bytes))?;
+    let welcome_bytes = arkret_canonical::base64url_decode(add.welcome.welcome.as_bytes())?;
+    let welcome_digest = Hash::new(arkret_canonical::sha256_digest(&welcome_bytes))?;
+    ensure!(
+        welcome_digest == add.welcome.welcome_hash,
+        "OpenMLS Welcome digest did not match the decoded RFC 9420 Welcome bytes"
+    );
     let capabilities_digest = Hash::new(arkret_canonical::sha256_digest(
         &arkret_canonical::canonical_json_bytes(&claimed.capabilities)?,
     ))?;
@@ -1056,8 +1062,8 @@ async fn accept_welcome_and_consume(
         "{}#{}",
         requester.full_id, requester.device_id
     )))?;
-    let unsigned_envelope =
-        UnsignedMlsWelcomeClaimEnvelope::new(MlsWelcomeClaimEnvelopeSigningInput {
+    let unsigned_envelope = UnsignedMlsWelcomeClaimEnvelope::new(
+        MlsWelcomeClaimEnvelopeSigningInput {
             keypackage_ref: keypackage_ref.clone(),
             keypackage_digest: keypackage_digest.clone(),
             intended_realm_id: RealmId::new(realm_id.to_owned())?,
@@ -1067,12 +1073,11 @@ async fn accept_welcome_and_consume(
                 requester_device_id: requester.device_id.clone(),
                 requester_device_authorize_event_id: requester.founding_authorize_event_id.clone(),
             },
-            nonce: wire_value(NonEmptyString::new(
-                claim_outcome.claim_request_id.to_string(),
-            ))?,
-            welcome_digest: add.welcome.welcome_hash.clone(),
+            welcome_digest: welcome_digest.clone(),
             created_at: Utc::now(),
-        });
+        },
+        &claim_outcome.claim_receipt,
+    )?;
     let envelope_signature = requester
         .device_signing_key
         .sign(&unsigned_envelope.canonical_signing_bytes()?)
@@ -1106,14 +1111,7 @@ async fn accept_welcome_and_consume(
         },
         claim_envelope,
         claim_receipt: claim_outcome.claim_receipt.clone(),
-        carrier: MlsWelcomeCarrier::new(
-            None,
-            None,
-            Some(wire_value(NonEmptyString::new(
-                add.welcome.welcome.clone(),
-            ))?),
-        )
-        .map_err(anyhow::Error::msg)?,
+        carrier: MlsWelcomeCarrier::new(welcome_bytes).map_err(anyhow::Error::msg)?,
         commit_ref: commit_event.event_id.clone(),
         governance_binding: binding,
         expires_at: claim_outcome.claim_receipt.expires_at,
@@ -1141,8 +1139,6 @@ async fn accept_welcome_and_consume(
         accepted_welcome.event_id == welcome_event.event_id,
         "accepted Welcome resource returned a different Event"
     );
-    let welcome_value = serde_json::to_value(&accepted_welcome)?;
-    let welcome_digest = Hash::new(arkret_canonical::canonical_sha256(&welcome_value)?)?;
     let durable_receipt =
         joined
             .identity()
@@ -1161,7 +1157,7 @@ async fn accept_welcome_and_consume(
                 mls_group_id: wire_value(NonEmptyString::new(requester_group.group_id()))?,
                 mls_epoch: add.welcome.epoch,
                 welcome_ref: wire_value(NonEmptyString::new(welcome_event.event_id.to_string()))?,
-                welcome_digest,
+                welcome_digest: welcome_digest.clone(),
                 durable_at: Utc::now(),
                 signature: target.signature(&[])?,
             })?;
@@ -1214,6 +1210,14 @@ async fn accept_welcome_and_consume(
                 .as_str()
                 == welcome_event.event_id.as_str(),
         "consume outcome drifted from the accepted Welcome and exact claim"
+    );
+    ensure!(
+        consume_outcome
+            .consume_receipt
+            .recipient_durable_receipt
+            .welcome_digest
+            == welcome_digest,
+        "consume outcome drifted from the decoded RFC 9420 Welcome bytes digest"
     );
     Ok(commit_event)
 }

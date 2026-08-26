@@ -120,7 +120,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             "public": false,
             "plaintext_visible_services": [alice.service_id()],
             "delivery_binding_policy": {
-                "allowed_binding_sources": ["did_document_default"],
+                "allowed_binding_sources": ["realm_policy", "did_document_default"],
                 "did_document_default_allowed": true,
                 "allowed_recipient_services": ["*"],
                 "unroutable_membership_allowed": true
@@ -329,12 +329,8 @@ fn member_payload(
             binding_scope: BindingScope::Realm,
             binding_source: BindingSource::DidDocumentDefault,
             delivery_modes: BTreeSet::from([DeliveryMode::Events]),
-            service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
-                current_record_url: target_record
-                    .record
-                    .current_record_url
-                    .replacen("http://", "https://", 1),
-                pinned_record_digest: None,
+            service_resolution: ServiceResolutionCarrier::Inline {
+                inline: target_record.clone(),
             },
             did_document_digest: Some(Hash::new(format!("sha256:{}", "2".repeat(64)))?),
             resolved_at: Utc::now(),
@@ -343,14 +339,18 @@ fn member_payload(
             policy_event_ref: None,
             expires_at: None,
         };
-        Ok(MembershipPayload::join(
+        let payload = MembershipPayload::join(
             realm_id.clone(),
             member.clone(),
             DeliveryStatus::Routable,
             "fanout route-miss fixture",
         )
         .with_delivery_binding(binding)
-        .to_value()?)
+        .to_value()?;
+        arkret_schema::event_payload_validator_catalog()?
+            .validate_payload(EventKind::MemberState.as_str(), &payload)
+            .context("fanout membership payload must satisfy the registered schema")?;
+        Ok(payload)
     } else {
         Ok(
             MembershipPayload::transition(membership, member, "fanout authority ended")
@@ -365,19 +365,12 @@ async fn submit_and_settle_member_transition(
     realm_id: &str,
     payload: serde_json::Value,
 ) -> Result<EventId> {
-    let before = client.realm_seal_frontier(realm_id).await?;
-    let before = before["frontier"]["seal_basis"]["leaves"][0]
-        .as_str()
-        .context("member transition predecessor Seal")?;
     let response = client
         .submit_event(realm_id, EventKind::MemberState.as_str(), payload)
         .await?;
     let event_id = crate::harness::submitted_event_id(&response)?;
-    let proposal_digest = response["control_proposal_acks"][0]["proposal_digest"]
-        .as_str()
-        .context("member transition Control Proposal Ack")?;
     client
-        .await_control_proposal_settled(realm_id, proposal_digest, before)
+        .await_event_seal_coverage(realm_id, &event_id)
         .await?;
     Ok(event_id)
 }
