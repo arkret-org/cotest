@@ -507,6 +507,7 @@ fn run_dpop_negative_cases(fixture: &Value, kat: &DpopKat) -> Result<usize> {
                     now: kat.issued_at,
                     max_age: chrono::Duration::seconds(300),
                     max_future_skew: chrono::Duration::seconds(30),
+                    expected_nonce: None,
                 },
             )
             .is_err();

@@ -120,7 +120,9 @@ pub fn run_push_rule_core_fixture_suite() -> Result<()> {
 pub fn run_push_rule_client_only_vector() -> Result<()> {
     let client: PushRule = serde_json::from_value(serde_json::json!({
         "rule_id": "ak.rule.cotest.client-only",
-        "evaluation_locus": "client"
+        "kind": "underride",
+        "evaluation_locus": "client",
+        "actions": []
     }))?;
     if client.evaluation_locus != "client" {
         bail!("v1 push rule did not preserve evaluation_locus=client");
@@ -128,7 +130,9 @@ pub fn run_push_rule_client_only_vector() -> Result<()> {
 
     let server = serde_json::from_value::<PushRule>(serde_json::json!({
         "rule_id": "ak.rule.cotest.server",
-        "evaluation_locus": "server"
+        "kind": "underride",
+        "evaluation_locus": "server",
+        "actions": []
     }));
     if server.is_ok() {
         bail!("v1 push rule accepted forbidden evaluation_locus=server");

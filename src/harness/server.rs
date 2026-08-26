@@ -36,6 +36,7 @@ const HARNESS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct ArkretServer {
     handle: SutHandle,
+    http_client: HttpClient,
     external_restart: Option<ExternalRestartConfig>,
     base_url: Url,
     service_id: DidCoreId,
@@ -177,13 +178,9 @@ impl ArkretServer {
         }
     }
 
-    /// spawn a pre-built soland binary directly (no `cargo run`), injecting
-    /// `extra_env` into the child process. Mirrors `spawn_process` but invokes
-    /// the binary at `bin_path` with `--bind <addr>` so federation scenarios
-    /// can promote out of the slow `cargo run --manifest-path` path when a
-    /// SOLAND_BIN is supplied. Used by `spawn_process` so the fast
-    /// pre-built-binary path supports the same `extra_env` knob the slow
-    /// `cargo run` path always supported.
+    /// Spawn a pre-built Soland binary directly and inject `extra_env` into
+    /// the child process. The binary receives `--bind <addr>` and shares the
+    /// same environment path used by federation scenarios.
     async fn spawn_external_binary_with_env(
         name: &str,
         bin_path: &Path,
@@ -291,6 +288,7 @@ impl ArkretServer {
 
         Ok(Self {
             handle: SutHandle::Local(child),
+            http_client: probe_http_client()?,
             external_restart: Some(ExternalRestartConfig {
                 bin_path: bin_path.to_owned(),
                 bind,
@@ -316,98 +314,15 @@ impl ArkretServer {
     }
 
     async fn spawn_process(name: &str, extra_env: &[(&str, &str)]) -> Result<Self> {
-        // fast path: if a pre-built `soland` binary is available
-        // (either via `SOLAND_BIN=` or the sibling-checkout convention
-        // `../soland/target/debug/soland[.exe]`), spawn it directly. This
-        // avoids the historical cargo-lock deadlock where `cargo run`
-        // invoked from inside `cargo test` waits forever on the workspace
-        // lock the test runner already holds.
-        //
-        // Falls back to the slow `cargo run --manifest-path` path when the
-        // sibling binary has not been built yet.
+        // Process mode requires a pre-built binary supplied explicitly or
+        // found in the sibling checkout. Test execution never compiles a SUT.
         use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
         if let Some(bin_path) = locate_external_binary(&SOLAND_SPEC) {
             return Self::spawn_external_binary_with_env(name, &bin_path, extra_env).await;
         }
-
-        let mut port = reserve_port()?;
-        let mut metrics_port = reserve_port()?;
-        let bind = format!("127.0.0.1:{}", port.port());
-        let metrics_bind = format!("127.0.0.1:{}", metrics_port.port());
-        let base_url = Url::parse(&format!("http://127.0.0.1:{}/", port.port()))?;
-        let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
-        let manifest = sut_manifest();
-        let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
-        let log_path = service_log_path(name)?;
-        initialize_service_log(log_path.as_deref(), name, "process")?;
-        let _ = fs::remove_dir_all(&blob_root);
-        fs::create_dir_all(&blob_root)?;
-        let (stdout, stderr) = service_log_stdio(log_path.as_deref())?;
-
-        let mut command = Command::new("cargo");
-        command
-            .arg("run")
-            .arg("--quiet")
-            .arg("--manifest-path")
-            .arg(&manifest)
-            .arg("--")
-            .arg("--bind")
-            .arg(&bind)
-            .env_remove("DATABASE_URL")
-            .env("SOLAND_PUBLIC_BASE_URL", base_url.as_str())
-            .env("SOLAND_NOTARY_SIGNING_KEY", &notary_signing_key)
-            .env("SOLAND_METRICS_BIND", &metrics_bind)
-            .env("SOLAND_DEVELOPMENT_MODE", "1")
-            .env("SOLAND_FIRST_PROVISIONING", "1")
-            .env("SOLAND_SEED_DEMO_DATA", "1")
-            .env("SOLAND_TRUST_DOMAIN", test_trust_domain(name))
-            .env(
-                "SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER",
-                EMBEDDED_WEBVH_REGISTRATION_BEARER,
-            )
-            .env("SOLAND_BLOB_ROOT", &blob_root)
-            .stdout(stdout)
-            .stderr(stderr);
-        for (key, value) in
-            harness_account_authority_env(|key| extra_env.iter().any(|(k, _)| *k == key))
-        {
-            command.env(key, value);
-        }
-        for &(key, value) in extra_env {
-            command.env(key, value);
-        }
-        // Release the guard listeners right before the child binds them.
-        port.release();
-        metrics_port.release();
-        let mut child = command
-            .spawn()
-            .with_context(|| format!("failed to start SUT from {}", manifest.display()))?;
-
-        if let Err(error) =
-            wait_until_process_healthy(base_url.clone(), &mut child, log_path.as_deref()).await
-        {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(error);
-        }
-        let (service_id, service_full_id, trust_domain) = fetch_service_identity(&base_url).await?;
-        let service_notary_signer =
-            test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
-
-        Ok(Self {
-            handle: SutHandle::Local(child),
-            external_restart: None,
-            base_url,
-            service_id,
-            service_full_id,
-            service_notary_signer,
-            trust_domain,
-            blob_root: Some(blob_root),
-            log_path,
-            metrics_bind: Some(metrics_bind),
-            _port_reservations: vec![port, metrics_port],
-            _database: None,
-        })
+        Err(anyhow!(
+            "process-mode Soland requires a pre-built binary; set SOLAND_BIN or build the sibling soland target first"
+        ))
     }
 
     async fn spawn_docker(
@@ -508,6 +423,7 @@ impl ArkretServer {
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
+            http_client: probe_http_client()?,
             external_restart: None,
             base_url,
             service_id,
@@ -572,7 +488,7 @@ impl ArkretServer {
     }
 
     pub fn http(&self) -> HttpClient {
-        HttpClient::new()
+        self.http_client.clone()
     }
 
     /// Build an authenticated request for the harness-only embedded WebVH
@@ -1063,11 +979,11 @@ impl TestServerGroup {
     }
 
     pub async fn multi(name: &str, count: usize) -> Result<Self> {
-        // Process-mode fast path: when a pre-built soland binary is available,
-        // spawn the nodes as a mutually-wired federation mesh so inbound
+        // In process mode, spawn the pre-built Soland binaries as a
+        // mutually-wired federation mesh so inbound
         // `/_arkret/peer/events` submissions can resolve each peer's
-        // ServiceDescribe (see `spawn_external_federated`). The slow
-        // `cargo run` and Docker paths below keep their original behavior.
+        // ServiceDescribe (see `spawn_external_federated`). Docker mode uses
+        // the container path below.
         if sut_runtime_mode() == SutRuntimeMode::Process {
             use crate::scenarios::_helpers::external_binary::{
                 SOLAND_SPEC, locate_external_binary,
@@ -1143,17 +1059,6 @@ impl Drop for TestServerGroup {
             let _ = docker_remove_network(&network_name);
         }
     }
-}
-
-fn sut_manifest() -> PathBuf {
-    std::env::var_os("COTEST_SUT_MANIFEST")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join("soland")
-                .join("Cargo.toml")
-        })
 }
 
 fn sut_runtime_mode() -> SutRuntimeMode {
