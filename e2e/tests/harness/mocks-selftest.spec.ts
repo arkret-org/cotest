@@ -397,7 +397,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(Array.isArray(body.applet_package.endpoint_policy?.endpoints)).toBe(true);
     expect(body.applet_package.endpoint_policy.endpoints).toContainEqual({
       method: "POST",
-      path: "/_arkret/edge/applet/install/author",
+      path: "/_arkret/edge/applet/managed-actors/author",
       auth: "none",
     });
     expect(body.applet_package.endpoint_set).toBeUndefined();

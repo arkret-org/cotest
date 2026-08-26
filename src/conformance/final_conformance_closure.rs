@@ -767,8 +767,8 @@ fn run_moderation_franking_roundtrip_case(case: &Value) -> Result<()> {
     }
     for required in [
         "roundtrip_valid",
-        "ciphertext_digest_mismatch",
-        "minimal_disclosure_violation",
+        "target_event_commitment_mismatch",
+        "retired_mirror_violation",
     ] {
         if !seen.contains(required) {
             bail!("moderation franking vector missing case {required}");
@@ -778,22 +778,22 @@ fn run_moderation_franking_roundtrip_case(case: &Value) -> Result<()> {
 }
 
 fn evaluate_moderation_franking_roundtrip(scenario: &Value) -> Result<Value> {
-    let sender_claim_fields = string_set(scenario, "sender_claim_fields")?;
-    let forbidden_sender_fields_present =
-        sender_claim_fields.contains("raw_mls_group_id") || sender_claim_fields.contains("epoch");
+    let retired_proof_fields = string_set(scenario, "retired_proof_fields")?;
     let evidence_forbidden_secret_fields = scenario
         .get("evidence_forbidden_secret_fields")
         .and_then(Value::as_array)
         .is_some_and(|fields| !fields.is_empty());
 
-    if forbidden_sender_fields_present
+    if !retired_proof_fields.is_empty()
         || required_bool(scenario, "proof_contains_plaintext_body")?
         || evidence_forbidden_secret_fields
     {
         return Ok(json!({"decision": "reject", "reason": "schema_violation"}));
     }
-    if !required_bool(scenario, "ciphertext_digest_matches")?
-        || !required_bool(scenario, "aad_digest_matches")?
+    if !required_bool(scenario, "target_event_content_commitment_matches")?
+        || !required_bool(scenario, "franking_signature_matches")?
+        || !required_bool(scenario, "durable_proof_event_matches")?
+        || !required_bool(scenario, "covering_seal_observation_valid")?
     {
         return Ok(json!({
             "decision": "manual_clue_only",

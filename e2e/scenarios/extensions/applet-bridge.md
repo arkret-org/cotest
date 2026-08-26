@@ -52,7 +52,7 @@
    - `requested_scopes = ["ak.message.create", "ak.applet.ghost.provision"]`
    - `proof` 由 mock 内置 controller key 生成
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
-3. 测试先构造 caller-signed `registration_event` 与 `capability_grant_events[]` 作为 preview authoring basis；soland 返回 target-PS-signed、短期且确定性标识的 `authoring_request`，client 将其原样 relay 到 Applet 标准 `POST /_arkret/edge/applet/install/author`，取得 Applet service/Bot 真实签名的四 Event closed bundle，再以 `{applet_package, authoring_request, managed_actor_bundle}` 调 `POST /_arkret/self/applets/install`
+3. 测试先构造 caller-signed `registration_event` 与 `capability_grant_events[]` 作为 preview authoring basis；soland 返回 target-PS-signed、短期 `authoring_request`，client 将其原样 relay 到 Applet 标准 `POST /_arkret/edge/applet/managed-actors/author`，取得 Applet service/managed actor 真实签名的四 Event closed bundle，再以 `{applet_package, authoring_request, managed_actor_bundle}` 调 `POST /_arkret/self/applets/install`
    - commit 不发送已删除的 `approved_scopes` 旧字段；soland 只验证、记录和提交 caller-signed Events，不代签或重建 Event
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
    - 记录 `applet_id`、`bot_actor_id`、`registration_event_ref`
@@ -151,7 +151,7 @@
 
   通过证据：`artifacts/runs/20260726-033554/joint-e2e/playwright-report`。
 
-- canonical surface 包含 `/_arkret/self/applets/install/preview`、Applet service 的 `/_arkret/edge/applet/install/author`、`/_arkret/self/applets/install`、revoke preview/commit、`/_arkret/self/applets/{applet_id}/ghosts/provision` 与 `/_arkret/edge/applet/transactions`；不得以私有路由或 Principal Server 代签替代标准 co-sign relay。
+- canonical surface 包含 `/_arkret/self/applets/install/preview`、Applet service 的 `/_arkret/edge/applet/managed-actors/author`、`/_arkret/self/applets/install`、revoke preview/commit、Ghost preview/commit 与 `/_arkret/edge/applet/transactions`；不得以私有路由或 Principal Server 代签替代标准 co-sign relay。
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`

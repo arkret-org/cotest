@@ -19,7 +19,7 @@
 //   POST /sign-package
 //     Returns a sealed controller-signed ak.schema.applet_package.v1 for
 //     soland's canonical ak.self.applet.install.command.preview / ak.self.applet.command.install strand.
-//   POST /_arkret/edge/applet/install/author
+//   POST /_arkret/edge/applet/managed-actors/author
 //     Verifies a Principal-Server-signed install authoring request and returns
 //     one Applet-service-signed managed-actor bundle for commit relay.
 //   POST /external-event
@@ -113,8 +113,8 @@ const packagesByApplet = new Map(
     },
   ]),
 );
-const installAuthoringOutcomes = new Map(
-  durableState.installAuthoringOutcomes ?? [],
+const managedActorAuthoringOutcomes = new Map(
+  durableState.managedActorAuthoringOutcomes ?? [],
 );
 let currentPrincipalServerVerificationMethod = `${principalServerFullId()}#notary-key`;
 const provisionedGhosts = new Map();
@@ -143,7 +143,7 @@ function persistDurableAuthoringState() {
     registryDid,
     registryPrivateJwk: privateKey.export({ format: "jwk" }),
     packages,
-    installAuthoringOutcomes: [...installAuthoringOutcomes],
+    managedActorAuthoringOutcomes: [...managedActorAuthoringOutcomes],
   };
   const temporary = `${durableStateFile}.${process.pid}.tmp`;
   writeFileSync(temporary, canonicalJson(state), { mode: 0o600 });
@@ -171,9 +171,9 @@ function reloadDurableAuthoringState() {
         : undefined,
     });
   }
-  installAuthoringOutcomes.clear();
-  for (const [requestId, outcome] of state.installAuthoringOutcomes ?? []) {
-    installAuthoringOutcomes.set(requestId, outcome);
+  managedActorAuthoringOutcomes.clear();
+  for (const [subject, outcome] of state.managedActorAuthoringOutcomes ?? []) {
+    managedActorAuthoringOutcomes.set(subject, outcome);
   }
 }
 
@@ -541,41 +541,26 @@ function verifyDetachedJws(jws, canonicalPayload, publicKey) {
 }
 
 function authoringRequestUnsigned(request) {
-  return {
+  const unsigned = {
     schema: request.schema,
-    authoring_request_id: request.authoring_request_id,
+    purpose: request.purpose,
     basis: request.basis,
-    plan_digest: request.plan_digest,
+    hosting_notary: request.hosting_notary,
+    issued_at: request.issued_at,
     expires_at: request.expires_at,
   };
+  if (request.plan_digest !== undefined) {
+    unsigned.plan_digest = request.plan_digest;
+  }
+  return unsigned;
 }
 
-function authoringRequestProjection(request) {
+function authoringProofBinding(proof, context) {
   return {
-    schema: request.schema,
-    basis: request.basis,
-    plan_digest: request.plan_digest,
-    expires_at: request.expires_at,
-  };
-}
-
-function derivedAuthoringRequestId(request) {
-  const hex = canonicalHash(authoringRequestProjection(request)).slice(
-    "sha256:".length,
-  );
-  const bytes = Buffer.from(hex.slice(0, 32), "hex");
-  bytes[6] = (bytes[6] & 0x0f) | 0x70;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const uuid = bytes.toString("hex");
-  return `ak:operation:${uuid.slice(0, 8)}-${uuid.slice(8, 12)}-${uuid.slice(12, 16)}-${uuid.slice(16, 20)}-${uuid.slice(20)}`;
-}
-
-function authoringProofBinding(proof) {
-  return {
+    context,
     payload_digest: proof.payload_digest,
     verification_method: proof.verification_method,
     created_at: proof.created_at,
-    domain: proof.domain,
     audience: proof.audience,
   };
 }
@@ -675,7 +660,6 @@ function validAdminEventEnvelope(event, basis, expectedKind, resolvedAdmin) {
     event.kind !== expectedKind ||
     event.actor_id !== basis.install_actor_id ||
     event.principal_server_id !== basis.target_principal_server_id ||
-    event.created_at !== basis.requested_at ||
     canonicalJson(event.scope_ref) !== canonicalJson(basis.effective_scope) ||
     event.realm_id !== basis.effective_scope?.realm_id ||
     !Array.isArray(event.proofs) ||
@@ -824,13 +808,18 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
   if (
     !exactObjectKeys(request, [
       "schema",
-      "authoring_request_id",
+      "purpose",
       "basis",
       "plan_digest",
+      "hosting_notary",
+      "issued_at",
       "expires_at",
       "proof",
     ]) ||
-    request.schema !== "ak.schema.applet_install_authoring_request.v1"
+    request.schema !== "ak.schema.applet_managed_actor_authoring_request.v1" ||
+    request.purpose !== "install_bot" ||
+    canonicalJson(request.hosting_notary) !==
+      canonicalJson(principalServerNotaryDescriptor().signer)
   ) {
     return "authoring_request_not_closed";
   }
@@ -841,6 +830,7 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
       basis,
       [
         "schema",
+        "purpose",
         "target_principal_server_id",
         "install_actor_id",
         "applet_id",
@@ -848,14 +838,13 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
         "package_digest",
         "effective_scope",
         "approval_request",
-        "requested_at",
-        "requested_expires_at",
         "registration_event",
         "capability_grant_events",
       ],
       ["actor_policy", "e2ee_policy", "widget_policy"],
     ) ||
     basis.schema !== "ak.schema.applet_install_authoring_request_basis.v1" ||
+    basis.purpose !== "install_bot" ||
     basis.target_principal_server_id !== principalServerId() ||
     basis.applet_id !== packageInfo.appletId ||
     basis.service_id !== packageInfo.serviceId ||
@@ -865,22 +854,16 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
     return "authoring_request_coordinate_mismatch";
   }
   const expiresAt = Date.parse(request.expires_at);
-  const requestedAt = Date.parse(basis.requested_at);
-  const requestedExpiresAt = Date.parse(basis.requested_expires_at);
+  const issuedAt = Date.parse(request.issued_at);
   if (
     !Number.isFinite(expiresAt) ||
-    !Number.isFinite(requestedAt) ||
-    !Number.isFinite(requestedExpiresAt) ||
-    expiresAt !== requestedExpiresAt ||
-    requestedExpiresAt <= requestedAt ||
-    requestedExpiresAt - requestedAt > 5 * 60 * 1000 ||
+    !Number.isFinite(issuedAt) ||
+    expiresAt <= issuedAt ||
+    expiresAt - issuedAt > 5 * 60 * 1000 ||
     expiresAt <= Date.now() ||
     expiresAt - Date.now() > 5 * 60 * 1000
   ) {
     return "authoring_request_expired";
-  }
-  if (request.authoring_request_id !== derivedAuthoringRequestId(request)) {
-    return "authoring_request_id_mismatch";
   }
   const proof = request.proof;
   const payloadDigest = canonicalHash(authoringRequestUnsigned(request));
@@ -890,15 +873,13 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
       "verification_method",
       "payload_digest",
       "created_at",
-      "domain",
       "audience",
       "jws",
     ]) ||
     proof.kind !== "detached_jws" ||
     proof.payload_digest !== payloadDigest ||
-    proof.domain !== "arkret.applet.install.authoring-request.v1" ||
     proof.audience !== packageInfo.serviceId ||
-    proof.created_at !== basis.requested_at ||
+    proof.created_at !== request.issued_at ||
     Date.parse(proof.created_at) > Date.now() + 30_000
   ) {
     return "authoring_request_proof_invalid";
@@ -906,7 +887,12 @@ async function validateInstallAuthoringRequest(request, packageInfo) {
   if (
     !verifyDetachedJws(
       proof.jws,
-      canonicalJson(authoringProofBinding(proof)),
+      canonicalJson(
+        authoringProofBinding(
+          proof,
+          "ak.applet_managed_actor_authoring_request_proof.v1",
+        ),
+      ),
       createPublicKey(principalServerNotaryPrivateKey()),
     )
   ) {
@@ -1146,7 +1132,7 @@ function buildInstallManagedActorBundle(request, packageInfo) {
           schema: "ak.schema.realm_genesis.v1",
           purpose: "applet_managed_control",
           genesis_salt: createHash("sha256")
-            .update(`${request.authoring_request_id}:bot-pcr`)
+            .update(`${canonicalHash(request)}:bot-pcr`)
             .digest("base64url"),
           trust_domain: "ak:trust_domain:soland.local",
           schema_refs: [
@@ -1157,7 +1143,7 @@ function buildInstallManagedActorBundle(request, packageInfo) {
           encryption_profile: "mls_rfc9420",
           security_class: "standard",
           digest_algorithm: "sha256",
-          notary: principalServerNotaryDescriptor(),
+          notary: { kind: "single_signer", signer: request.hosting_notary },
           capability_action_registry_digest:
             packageInfo.capabilityActionRegistryDigest,
           initial_resolution: packageInfo.botInitialResolution,
@@ -1252,10 +1238,10 @@ function buildInstallManagedActorBundle(request, packageInfo) {
   const unsignedBundle = {
     schema: "ak.schema.applet_managed_actor_authoring_bundle.v1",
     authoring_request_digest: authoringRequestDigest,
-    bot_actor_provision_event: provisionEvent,
-    bot_pcr_genesis_event: pcrGenesisEvent,
-    bot_accountability_grant_event: accountabilityEvent,
-    bot_profile_event: profileEvent,
+    managed_actor_provision_event: provisionEvent,
+    pcr_genesis_event: pcrGenesisEvent,
+    accountability_grant_event: accountabilityEvent,
+    profile_event: profileEvent,
   };
   const bundlePayloadDigest = canonicalHash(unsignedBundle);
   const proof = {
@@ -1263,11 +1249,16 @@ function buildInstallManagedActorBundle(request, packageInfo) {
     verification_method: packageInfo.verificationMethod,
     payload_digest: bundlePayloadDigest,
     created_at: createdAt,
-    domain: "arkret.applet.install.managed-actor-bundle.v1",
     audience: principalServerId(),
     jws: "",
   };
-  proof.jws = detachedJws(authoringProofBinding(proof), packageInfo.signingKey);
+  proof.jws = detachedJws(
+    authoringProofBinding(
+      proof,
+      "ak.applet_managed_actor_bundle_proof.v1",
+    ),
+    packageInfo.signingKey,
+  );
   return { ...unsignedBundle, proof };
 }
 
@@ -1588,7 +1579,7 @@ function signedPackage(body) {
       endpoints: [
         {
           method: "POST",
-          path: "/_arkret/edge/applet/install/author",
+          path: "/_arkret/edge/applet/managed-actors/author",
           auth: "none",
         },
         {
@@ -1769,7 +1760,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (
-    url.pathname === "/_arkret/edge/applet/install/author" &&
+    url.pathname === "/_arkret/edge/applet/managed-actors/author" &&
     req.method === "POST"
   ) {
     const body = await readJson(req);
@@ -1788,17 +1779,17 @@ const server = createServer(async (req, res) => {
       return;
     }
     const requestDigest = canonicalHash(authoringRequest);
-    const existing = installAuthoringOutcomes.get(
-      authoringRequest?.authoring_request_id,
-    );
+    const subject = [
+      authoringRequest?.purpose,
+      authoringRequest?.basis?.applet_id,
+      authoringRequest?.basis?.target_principal_server_id,
+    ].join("\n");
+    const existing = managedActorAuthoringOutcomes.get(subject);
     if (existing) {
-      if (existing.requestDigest !== requestDigest) {
-        res.statusCode = 409;
-        res.end(JSON.stringify({ error: "authoring_request_id_conflict" }));
+      if (existing.requestDigest === requestDigest) {
+        res.end(canonicalJson(existing.outcome));
         return;
       }
-      res.end(canonicalJson(existing.outcome));
-      return;
     }
     const invalidReason = await validateInstallAuthoringRequest(
       authoringRequest,
@@ -1829,7 +1820,7 @@ const server = createServer(async (req, res) => {
         packageInfo,
       ),
     };
-    installAuthoringOutcomes.set(authoringRequest.authoring_request_id, {
+    managedActorAuthoringOutcomes.set(subject, {
       requestDigest,
       outcome,
     });

@@ -1038,7 +1038,6 @@ test.describe("applet bridge", () => {
         signed,
         realmId,
         { kind: "realm", realm_id: realmId },
-        2 * 60 * 1000,
         (manifest) => {
           manifest.registration_epoch_evidence = evidence;
         },
@@ -1165,7 +1164,7 @@ test.describe("applet bridge", () => {
     expect(wireErrCode(await denied.json())).toBe("proof_invalid");
   });
 
-  test("E4.7 first expired install commit is rejected, while an exact successful replay remains stable after expiry", async ({
+  test("E4.7 an exact successful install replay remains byte-stable", async ({
     request,
   }) => {
     test.setTimeout(120_000);
@@ -1180,28 +1179,6 @@ test.describe("applet bridge", () => {
       history_access: "since_join",
     });
 
-    const expiresBeforeFirstCommit = await signPackage(request, registryBase, {
-      package_id: `package:bridge:first-expired-${stamp}`,
-      namespace: `bridge.first.expired.${stamp}`,
-    });
-    const firstExpired = await rawInstallApplet(
-      request,
-      token,
-      expiresBeforeFirstCommit,
-      realmId,
-      `first-expired-${stamp}`,
-      undefined,
-      {
-        requestedWindowMs: 10_000,
-        commitDelayMs: 10_500,
-        exerciseAuthoringKats: false,
-      },
-    );
-    expect(firstExpired.response.status()).toBe(410);
-    expect(wireErrCode(await firstExpired.response.json())).toBe(
-      "authoring_request_expired",
-    );
-
     const succeedsBeforeExpiry = await signPackage(request, registryBase, {
       package_id: `package:bridge:replay-expired-${stamp}`,
       namespace: `bridge.replay.expired.${stamp}`,
@@ -1214,7 +1191,7 @@ test.describe("applet bridge", () => {
       realmId,
       idempotencyKey,
       undefined,
-      { requestedWindowMs: 10_000, exerciseAuthoringKats: false },
+      { exerciseAuthoringKats: false },
     );
     expect([200, 201]).toContain(first.response.status());
     const firstOutcome = await first.response.json();
@@ -1223,7 +1200,6 @@ test.describe("applet bridge", () => {
         "successful install omitted its exact prepared commit bytes",
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, 10_500));
     const replay = await rawInstallApplet(
       request,
       token,
@@ -1767,7 +1743,6 @@ async function rawInstallApplet(
   idempotencyKey: string,
   prepared?: PreparedAppletInstall,
   options: {
-    requestedWindowMs?: number;
     commitDelayMs?: number;
     exerciseAuthoringKats?: boolean;
   } = {},
@@ -1782,7 +1757,6 @@ async function rawInstallApplet(
       signed,
       realmId,
       effectiveScope,
-      options.requestedWindowMs,
     );
     const previewUrl = `${solandBaseUrl()}/_arkret/self/applets/install/preview`;
     const preview = await request.fetch(previewUrl, {
@@ -1824,7 +1798,7 @@ async function rawInstallApplet(
       );
       expect(rotatePrincipalServerTrust.status()).toBe(200);
       const staleButCryptographicallyValid = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         authorRequestOptions,
       );
       expect(staleButCryptographicallyValid.status()).toBe(400);
@@ -1845,13 +1819,15 @@ async function rawInstallApplet(
       (
         wrongTarget.basis as Record<string, unknown>
       ).target_principal_server_id = canonicalDidCoreId(alternatePrincipalDid);
-      wrongTarget.authoring_request_id = derivedAuthoringRequestId(wrongTarget);
       const wrongTargetProof = wrongTarget.proof as Record<string, unknown>;
       wrongTargetProof.verification_method = `${alternatePrincipalDid}#notary-key`;
       wrongTargetProof.payload_digest = canonicalHash(
         authoringRequestUnsigned(wrongTarget),
       );
-      const wrongTargetBinding = authoringProofBinding(wrongTargetProof);
+      const wrongTargetBinding = authoringProofBinding(
+        wrongTargetProof,
+        "ak.applet_managed_actor_authoring_request_proof.v1",
+      );
       wrongTargetProof.jws = detachedJws(
         wrongTargetBinding,
         alternatePrincipalKey.privateKey,
@@ -1864,7 +1840,7 @@ async function rawInstallApplet(
         ),
       ).toBe(true);
       const wrongTargetResponse = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         {
           headers: { "content-type": "application/json" },
           data: canonicalJson({ authoring_request: wrongTarget }),
@@ -1882,7 +1858,7 @@ async function rawInstallApplet(
       (nestedUnknownBasis.approval_request as Record<string, unknown>).legacy =
         true;
       const nestedUnknownResponse = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         {
           headers: { "content-type": "application/json" },
           data: canonicalJson({ authoring_request: nestedUnknown }),
@@ -1897,14 +1873,13 @@ async function rawInstallApplet(
         string,
         unknown
       >;
-      const invertedBasis = invertedWindow.basis as Record<string, unknown>;
-      invertedBasis.requested_at = canonicalTimestamp(
+      invertedWindow.issued_at = canonicalTimestamp(
         new Date(
-          Date.parse(String(invertedBasis.requested_expires_at)) + 1_000,
+          Date.parse(String(invertedWindow.expires_at)) + 1_000,
         ),
       );
       const invertedWindowResponse = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         {
           headers: { "content-type": "application/json" },
           data: canonicalJson({ authoring_request: invertedWindow }),
@@ -1921,7 +1896,7 @@ async function rawInstallApplet(
       (untrustedPrincipalServer.proof as Record<string, unknown>).jws =
         "eyJhbGciOiJFZDI1NTE5In0..dGFtcGVyZWQ";
       const untrustedPrincipalServerResponse = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         {
           headers: { "content-type": "application/json" },
           data: canonicalJson({ authoring_request: untrustedPrincipalServer }),
@@ -1937,17 +1912,17 @@ async function rawInstallApplet(
     const authoredRequests = exerciseAuthoringKats
       ? await Promise.all([
           request.post(
-            `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+            `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
             authorRequestOptions,
           ),
           request.post(
-            `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+            `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
             authorRequestOptions,
           ),
         ])
       : [
           await request.post(
-            `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+            `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
             authorRequestOptions,
           ),
         ];
@@ -1970,7 +1945,7 @@ async function rawInstallApplet(
       );
       expect(reloaded.status()).toBe(200);
       const replayed = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
+        `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         {
           headers: { "content-type": "application/json" },
           data: canonicalJson({ authoring_request: authoringRequest }),
@@ -1979,22 +1954,6 @@ async function rawInstallApplet(
       expect(replayed.status()).toBe(200);
       expect(canonicalJson(await replayed.json())).toBe(
         canonicalJson(authorOutcome),
-      );
-      const changedSameId = structuredClone(authoringRequest) as Record<
-        string,
-        unknown
-      >;
-      changedSameId.plan_digest = `sha256:${"0".repeat(64)}`;
-      const conflict = await request.post(
-        `${authorBaseUrl}/_arkret/edge/applet/install/author`,
-        {
-          headers: { "content-type": "application/json" },
-          data: canonicalJson({ authoring_request: changedSameId }),
-        },
-      );
-      expect(conflict.status()).toBe(409);
-      expect((await conflict.json()).error).toBe(
-        "authoring_request_id_conflict",
       );
     }
     const managedActorBundle = authorOutcome.managed_actor_bundle;
@@ -2021,7 +1980,7 @@ async function rawInstallApplet(
   if (options.exerciseAuthoringKats !== false) {
     const fifthRole = structuredClone(resolved.commitBody);
     const bundle = fifthRole.managed_actor_bundle as Record<string, unknown>;
-    bundle.membership_event = structuredClone(bundle.bot_profile_event);
+    bundle.membership_event = structuredClone(bundle.profile_event);
     const fifthRoleResponse = await request.fetch(installUrl, {
       method: "POST",
       headers: {
@@ -2061,7 +2020,6 @@ async function prepareAppletInstallAuthoringBasis(
   signed: SignedPackage,
   realmId: string,
   effectiveScope: Record<string, unknown>,
-  requestedWindowMs = 2 * 60 * 1000,
   mutateRegistrationManifest?: (
     manifest: Record<string, unknown>,
   ) => void,
@@ -2175,6 +2133,7 @@ async function prepareAppletInstallAuthoringBasis(
 
   const basis: Record<string, unknown> = {
     schema: "ak.schema.applet_install_authoring_request_basis.v1",
+    purpose: "install_bot",
     target_principal_server_id: solandServiceId(),
     install_actor_id: actorDid,
     applet_id: signed.applet_package.applet_id,
@@ -2193,10 +2152,6 @@ async function prepareAppletInstallAuthoringBasis(
     },
     e2ee_policy: { mls_join_allowed: false },
     widget_policy: { widget_allowed: false },
-    requested_at: createdAt,
-    requested_expires_at: canonicalTimestamp(
-      new Date(Date.now() + requestedWindowMs),
-    ),
     registration_event: registrationEvent,
     capability_grant_events: capabilityGrantEvents,
   };
@@ -2624,45 +2579,29 @@ function canonicalHash(value: unknown): string {
 function authoringRequestUnsigned(
   request: Record<string, unknown>,
 ): Record<string, unknown> {
-  return {
+  const unsigned: Record<string, unknown> = {
     schema: request.schema,
-    authoring_request_id: request.authoring_request_id,
+    purpose: request.purpose,
     basis: request.basis,
-    plan_digest: request.plan_digest,
+    hosting_notary: request.hosting_notary,
+    issued_at: request.issued_at,
     expires_at: request.expires_at,
   };
-}
-
-function authoringRequestProjection(
-  request: Record<string, unknown>,
-): Record<string, unknown> {
-  return {
-    schema: request.schema,
-    basis: request.basis,
-    plan_digest: request.plan_digest,
-    expires_at: request.expires_at,
-  };
-}
-
-function derivedAuthoringRequestId(request: Record<string, unknown>): string {
-  const hex = canonicalHash(authoringRequestProjection(request)).slice(
-    "sha256:".length,
-  );
-  const bytes = Buffer.from(hex.slice(0, 32), "hex");
-  bytes[6] = (bytes[6] & 0x0f) | 0x70;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const uuid = bytes.toString("hex");
-  return `ak:operation:${uuid.slice(0, 8)}-${uuid.slice(8, 12)}-${uuid.slice(12, 16)}-${uuid.slice(16, 20)}-${uuid.slice(20)}`;
+  if (request.plan_digest !== undefined) {
+    unsigned.plan_digest = request.plan_digest;
+  }
+  return unsigned;
 }
 
 function authoringProofBinding(
   proof: Record<string, unknown>,
+  context: string,
 ): Record<string, unknown> {
   return {
+    context,
     payload_digest: proof.payload_digest,
     verification_method: proof.verification_method,
     created_at: proof.created_at,
-    domain: proof.domain,
     audience: proof.audience,
   };
 }

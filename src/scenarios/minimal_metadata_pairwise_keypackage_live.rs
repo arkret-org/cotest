@@ -1156,7 +1156,7 @@ async fn accept_welcome_and_consume(
                 realm_id: RealmId::new(realm_id.to_owned())?,
                 mls_group_id: wire_value(NonEmptyString::new(requester_group.group_id()))?,
                 mls_epoch: add.welcome.epoch,
-                welcome_ref: wire_value(NonEmptyString::new(welcome_event.event_id.to_string()))?,
+                welcome_ref: welcome_event.event_id.clone(),
                 welcome_digest: welcome_digest.clone(),
                 durable_at: Utc::now(),
                 signature: target.signature(&[])?,
