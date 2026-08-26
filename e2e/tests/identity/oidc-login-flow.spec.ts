@@ -174,6 +174,12 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
       await page
         .getByTestId("onboarding-recovery-key-confirm")
         .fill(recoveryKey);
+      const postConfirmationNavigations: string[] = [];
+      page.on("framenavigated", (frame) => {
+        if (frame === page.mainFrame()) {
+          postConfirmationNavigations.push(frame.url());
+        }
+      });
       await page.getByTestId("onboarding-bind-identity").click();
 
       await expect(page.getByTestId("onboarding-complete")).toContainText(
@@ -204,6 +210,10 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         timeout: 120_000,
       });
       await expect(page.getByTestId("login-panel")).toHaveCount(0);
+      expect(
+        postConfirmationNavigations.map((url) => new URL(url).pathname),
+        "accepted Recovery Key confirmation must never transit through /login",
+      ).not.toContain("/login");
     } finally {
       await jointPage.close();
     }
