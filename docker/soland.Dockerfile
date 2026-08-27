@@ -1,4 +1,4 @@
-FROM rust:1.96-bookworm AS build
+FROM rust:bookworm AS build
 
 WORKDIR /workspace
 ENV RUSTFLAGS="-C link-arg=-lssl -C link-arg=-lcrypto"
