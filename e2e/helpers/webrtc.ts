@@ -668,7 +668,11 @@ export async function relayedCallSignals(
   url.searchParams.set("max_duration_ms", "400");
   url.searchParams.set("heartbeat_ms", "600000");
   const response = await fetch(url, {
-    headers: { ...authHeaders(token), accept: "application/x-ndjson" },
+    headers: {
+      ...authHeaders(token),
+      accept: "application/x-ndjson",
+      "Arkret-Operation": "ak.self.signal.stream.subscribe.v1",
+    },
   });
   const text = await response.text();
   expect(
@@ -703,7 +707,11 @@ export async function captureSignalEnvelopes<T>(
   url.searchParams.set("max_duration_ms", "800");
   url.searchParams.set("heartbeat_ms", "25");
   const responsePromise = fetch(url, {
-    headers: { ...authHeaders(token), accept: "application/x-ndjson" },
+    headers: {
+      ...authHeaders(token),
+      accept: "application/x-ndjson",
+      "Arkret-Operation": "ak.self.signal.stream.subscribe.v1",
+    },
   });
   // Let the HTTP request reach the live subscriber registry before sending.
   await new Promise((resolve) => setTimeout(resolve, 75));

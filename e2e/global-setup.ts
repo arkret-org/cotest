@@ -86,7 +86,9 @@ export default async function verifyBuildIdentity(config: FullConfig) {
       );
     }
 
-    const response = await page.request.get(`${solandBaseUrl}/_arkret/describe`);
+    const response = await page.request.get(`${solandBaseUrl}/_arkret/describe`, {
+      headers: { "Arkret-Operation": "ak.server.read.describe.v1" },
+    });
     if (!response.ok()) {
       throw new Error(`Soland describe failed during build identity gate: ${response.status()}`);
     }

@@ -47,10 +47,35 @@ function operationSelector(method: string, url: string): string | undefined {
   )?.operationId;
 }
 
-function withOperationSelectors(request: APIRequestContext): APIRequestContext {
+export function withOperationSelectors(
+  request: APIRequestContext,
+): APIRequestContext {
   const methods = new Set(["delete", "get", "head", "patch", "post", "put"]);
   return new Proxy(request, {
     get(target, property, receiver) {
+      if (property === "fetch") {
+        return (url: string, options: Record<string, unknown> = {}) => {
+          const call = Reflect.get(target, property, target) as (
+            url: string,
+            options?: Record<string, unknown>,
+          ) => Promise<unknown>;
+          const method =
+            typeof options.method === "string" ? options.method.toUpperCase() : "GET";
+          const selector = operationSelector(method, url);
+          if (!selector) return call.call(target, url, options);
+          const headers = {
+            ...((options.headers as Record<string, string> | undefined) ?? {}),
+          };
+          if (
+            !Object.keys(headers).some(
+              (name) => name.toLowerCase() === "arkret-operation",
+            )
+          ) {
+            headers["Arkret-Operation"] = selector;
+          }
+          return call.call(target, url, { ...options, headers });
+        };
+      }
       if (typeof property !== "string" || !methods.has(property)) {
         const value = Reflect.get(target, property, receiver);
         return typeof value === "function" ? value.bind(target) : value;

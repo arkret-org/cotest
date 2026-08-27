@@ -424,10 +424,15 @@ export function wireErrCode(body: unknown): string | undefined {
     record.error && typeof record.error === "object"
       ? (record.error as Record<string, unknown>)
       : undefined;
+  const problemType = stringValue(record.type);
+  const problemCode = problemType?.startsWith("https://arkret.org/problems/")
+    ? problemType.slice("https://arkret.org/problems/".length)
+    : undefined;
   return (
     stringValue(record.errcode) ??
     stringValue(record.code) ??
     stringValue(record.error_code) ??
+    problemCode ??
     stringValue(record.reason_code) ??
     stringValue(nested?.errcode) ??
     stringValue(nested?.code) ??
@@ -2121,6 +2126,7 @@ export async function accountSubscribeFramesApi(
       headers: {
         ...(opts.headers ?? authHeaders(token)),
         accept: "application/x-ndjson",
+        "Arkret-Operation": "ak.self.account.stream.subscribe.v1",
       },
       signal: controller.signal,
     });

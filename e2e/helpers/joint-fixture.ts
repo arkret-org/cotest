@@ -2,7 +2,7 @@ import {
   test as base,
   type APIRequestContext,
   type Browser,
-} from "@playwright/test";
+} from "./arkret-test";
 import {
   createDpopUserSession,
   type DpopUserSession,
@@ -39,7 +39,7 @@ export const test = base.extend<{ jointRealm: JointRealmFixture }>({
   },
 });
 
-export { expect } from "@playwright/test";
+export { expect } from "./arkret-test";
 
 // The joint browser fixture uses real coauth-minted ak.session.grant material
 // and registers the same principal/device at soland before opening inkson.

@@ -45,6 +45,7 @@ import {
   typedId,
 } from "./soland-api";
 import { base58btcEncode } from "./encoding";
+import { withOperationSelectors } from "./arkret-test";
 
 export type JointUser = {
   name: string;
@@ -293,30 +294,40 @@ export class JointUserPage {
     await this.dismissDeviceAuthorizationPrompt();
   }
 
-  async gotoSetup() {
+  async gotoSetup(opts: { completeRecoveryKeySetup?: boolean } = {}) {
     // inkson's /setup is the Overview; the Realm wizard lives at the
     // /setup/realms section. inkson/src/routes.rs §SetupSection.
-    // Drive the live Dioxus router so the authenticated session and secure-store
-    // bootstrap owned by the app shell survive the transition. The sidebar CTA
-    // can be continuously replaced while recovery diagnostics converge; a
-    // Playwright click then waits forever for element stability even though the
-    // route itself is available. Dispatching the same history navigation avoids
-    // coupling this helper to that unrelated render churn.
     const lifecycle = this.page.getByTestId("realm-lifecycle-strand");
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      await this.navigateWithinApp("/setup/realms");
+    const setupLink = this.page.locator('a[href="/setup/realms"]:visible').first();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (opts.completeRecoveryKeySetup ?? true) {
+        await this.completeRecoveryKeySetupIfPrompted(2_000);
+      }
+      if (await setupLink.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await setupLink.click({ timeout: 10_000 }).catch(() => undefined);
+      } else {
+        await this.navigateWithinApp("/setup/realms");
+      }
+      if (opts.completeRecoveryKeySetup ?? true) {
+        await this.completeRecoveryKeySetupIfPrompted(2_000);
+      }
       if (
         await lifecycle
-          .waitFor({ state: "visible", timeout: 30_000 })
+          .waitFor({ state: "visible", timeout: 20_000 })
           .then(() => true)
           .catch(() => false)
       ) {
-        break;
+        await this.dismissDeviceAuthorizationPrompt();
+        return;
       }
-      // Initial account sync can finish after the history event and restore
-      // the Home route once. Re-enter through a settled authenticated shell
-      // instead of waiting on a page that is visibly no longer the wizard.
-      await this.gotoHome();
+      if (
+        !(await this.page
+          .getByTestId("client-shell")
+          .isVisible({ timeout: 1_000 })
+          .catch(() => false))
+      ) {
+        await this.gotoHome();
+      }
     }
     await expect(lifecycle).toBeVisible({ timeout: 60_000 });
     await this.dismissDeviceAuthorizationPrompt();
@@ -834,7 +845,9 @@ export class JointUserPage {
     let strand = this.page.getByTestId("realm-lifecycle-strand").last();
     let titleInput = strand.getByTestId("realm-title-input");
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      await this.gotoSetup();
+      await this.gotoSetup({
+        completeRecoveryKeySetup: promptHandling.completeRecoveryKeySetup,
+      });
       await this.dismissCreateRealmBlockingPrompts(promptHandling);
       strand = this.page.getByTestId("realm-lifecycle-strand").last();
       titleInput = strand.getByTestId("realm-title-input");
@@ -996,6 +1009,11 @@ export class JointUserPage {
     } else {
       const describe = await this.session.context.request.get(
         `${this.serverUrl.replace(/\/$/, "")}/_arkret/describe`,
+        {
+          headers: {
+            "Arkret-Operation": "ak.server.read.describe.v1",
+          },
+        },
       );
       expect(describe.status(), await describe.text()).toBe(200);
       const service = (await describe.json()) as { service_id: string };
@@ -1375,9 +1393,11 @@ export async function ensureRegistered(
     let provisioning = provisionedPrincipals.get(key);
     if (!provisioning) {
       provisioning = (async () => {
-        const accountRequest = await playwrightRequest.newContext({
-          ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
-        });
+        const accountRequest = withOperationSelectors(
+          await playwrightRequest.newContext({
+            ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+          }),
+        );
         try {
           const account = await registerCoauthPasswordAccount(
             accountRequest,
@@ -1420,13 +1440,11 @@ async function ensureRegisteredRaw(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ) {
-  // Spec-canonical registration binding (`ak.gate.account.command.register.v1`):
-  // `POST /_arkret/gate/account/register` with `AccountRegisterRequestBody
-  // {principal_id, display_name?, device_id?}`. The bare `handle` field is no
-  // longer accepted (the first handle arrives via a signed handle claim,
-  // identity-handles.md); the account gets a synthetic localpart derived from
-  // the DID. Success is 200 (200|409 here for idempotent setup).
-  const url = `${solandBaseUrl(opts.server)}/_arkret/gate/account/register`;
+  // Most protocol tests need a pre-existing Principal Server projection but
+  // are not account-onboarding tests. Provision that deployment-private state
+  // directly; canonical `ak.gate.account.command.register.v1` remains owned by
+  // the Account Authority and is exercised through coauth-register.ts.
+  const url = `${solandBaseUrl(opts.server)}/_soland/gate/account/project`;
   const data = {
     principal_id: user.did,
     full_id: user.fullDid,
@@ -1522,9 +1540,11 @@ export async function createDpopUserSession(
   // `request` fixture is often shared by parallel user creation in one scenario;
   // isolating each flow prevents one account's Set-Cookie from switching the
   // other flow onto the wrong identity-creation lease.
-  const accountRequest = await playwrightRequest.newContext({
-    ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
-  });
+  const accountRequest = withOperationSelectors(
+    await playwrightRequest.newContext({
+      ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+    }),
+  );
   try {
     const account = await registerCoauthPasswordAccount(
       accountRequest,

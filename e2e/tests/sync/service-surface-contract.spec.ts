@@ -44,13 +44,12 @@ import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/use
 
 test.describe.configure({ mode: "serial" });
 
-type ErrorEnvelope = {
-  ok?: boolean;
-  error?: {
-    code?: string;
-    message?: string;
-  };
-  request_id?: string;
+type ProblemDetails = {
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  instance?: string;
 };
 
 async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
@@ -59,29 +58,29 @@ async function expectCanonicalSolandErrorEnvelope(request: APIRequestContext) {
   );
   expect(unknown.status(), "unknown API path status").toBe(404);
   expect(unknown.headers()["content-type"] ?? "", "unknown path content-type").toContain(
-    "application/json",
+    "application/problem+json",
   );
-  const unknownBody = (await unknown.json()) as ErrorEnvelope;
+  const unknownBody = (await unknown.json()) as ProblemDetails;
   expect(unknownBody).toMatchObject({
-    ok: false,
-    error: { code: "unrecognized_endpoint" },
+    type: "https://arkret.org/problems/unrecognized_endpoint",
+    status: 404,
   });
-  expect(unknownBody.error?.message, "unknown path error message").toBeTruthy();
-  expect(unknownBody.request_id, "unknown path request_id").toMatch(/^ak:[a-z_]+:/);
+  expect(unknownBody.detail, "unknown path error message").toBeTruthy();
+  expect(unknownBody.instance, "unknown path request_id").toMatch(/^ak:[a-z_]+:/);
 
   const wrongMethod = await request.post(`${solandBaseUrl()}/_arkret/describe`);
   expect(wrongMethod.status(), "known path wrong method status").toBe(405);
   expect(wrongMethod.headers()["content-type"] ?? "", "wrong method content-type").toContain(
-    "application/json",
+    "application/problem+json",
   );
   expect(wrongMethod.headers()["allow"] ?? "", "wrong method Allow header").toContain("GET");
-  const wrongMethodBody = (await wrongMethod.json()) as ErrorEnvelope;
+  const wrongMethodBody = (await wrongMethod.json()) as ProblemDetails;
   expect(wrongMethodBody).toMatchObject({
-    ok: false,
-    error: { code: "method_not_allowed" },
+    type: "https://arkret.org/problems/method_not_allowed",
+    status: 405,
   });
-  expect(wrongMethodBody.error?.message, "wrong method error message").toBeTruthy();
-  expect(wrongMethodBody.request_id, "wrong method request_id").toMatch(/^ak:[a-z_]+:/);
+  expect(wrongMethodBody.detail, "wrong method error message").toBeTruthy();
+  expect(wrongMethodBody.instance, "wrong method request_id").toMatch(/^ak:[a-z_]+:/);
 }
 
 function submittedEventId(body: unknown): string | undefined {

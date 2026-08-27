@@ -1237,6 +1237,7 @@ function Write-JointCaddyConfig {
     )
     foreach ($route in $Routes) {
         $lines += "https://$($route.Host):$TlsPort {"
+        $lines += "`tbind 127.0.0.1"
         $lines += "`ttls $certificate $key"
         $lines += "`treverse_proxy 127.0.0.1:$($route.BackendPort)"
         $lines += "}"
@@ -1797,6 +1798,9 @@ function Get-DescribedServiceId {
             if (([System.Uri]$url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
                 $requestOptions.SkipCertificateCheck = $true
             }
+            $requestOptions.Headers = @{
+                "Arkret-Operation" = "ak.server.read.describe.v1"
+            }
             $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
             $serviceId = [string]$describe.service_id
             if (-not [string]::IsNullOrWhiteSpace($serviceId) -and $serviceId.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
@@ -1826,6 +1830,9 @@ function Get-DescribedServiceFullId {
             $requestOptions = @{}
             if (([System.Uri]$url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
                 $requestOptions.SkipCertificateCheck = $true
+            }
+            $requestOptions.Headers = @{
+                "Arkret-Operation" = "ak.server.read.describe.v1"
             }
             $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
             $fullId = [string]$describe.service_resolution.full_id
