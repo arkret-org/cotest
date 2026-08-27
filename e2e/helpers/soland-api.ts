@@ -49,6 +49,7 @@ import {
   sdkEventDerivedIds,
   sdkEventDerivedObjectId,
   sdkEventEnvelopeProof,
+  sdkJoinReceiptProof,
   sdkMimiConsentProof,
   sha256CanonicalJson,
   stripUndefined,
@@ -68,6 +69,7 @@ export {
   sdkEventDerivedIds,
   sdkEventDerivedObjectId,
   sdkEventEnvelopeProof,
+  sdkJoinReceiptProof,
   sdkMimiConsentProof,
   sha256CanonicalJson,
   wireErrCode,
@@ -1408,38 +1410,18 @@ function joinReceiptProof(args: {
   const registeredSigner = eventSignerFor(args.actorDid);
   const verificationMethod =
     registeredSigner?.verificationMethod ?? `${args.actorDid}#device`;
-  const binding = stripUndefined({
+  return sdkJoinReceiptProof({
+    actorDid: args.actorDid,
+    realmId: args.realmId,
+    receiptDigest: args.receiptDigest,
+    createdAt: args.createdAt,
     context: args.context,
-    receipt_digest: args.receiptDigest,
-    realm_id: args.realmId,
-    application_ref: args.applicationRef,
-    application_revision_digest: args.applicationRevisionDigest,
-    actor_id: canonicalDidCoreId(args.actorDid),
-    executed_by: args.executedBy,
-    verification_method: verificationMethod,
-    created_at: args.createdAt,
+    applicationRef: args.applicationRef,
+    applicationRevisionDigest: args.applicationRevisionDigest,
+    executedBy: args.executedBy,
+    verificationMethod,
+    signingSeedB64url: registeredSigner?.signingSeedB64url,
   });
-  const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
-  const signingInput = `${protectedHeader}.${base64urlJsonCanonical(binding)}`;
-  const signature =
-    signWithRegisteredEventSigner(
-      args.actorDid,
-      verificationMethod,
-      signingInput,
-    ) ??
-    sign(
-      null,
-      Buffer.from(signingInput, "utf8"),
-      developmentProtocolPrivateKey(verificationMethod),
-    ).toString("base64url");
-  return {
-    kind: "detached_jws",
-    alg: "Ed25519",
-    verification_method: verificationMethod,
-    payload_digest: args.receiptDigest,
-    created_at: args.createdAt,
-    jws: `${protectedHeader}..${signature}`,
-  };
 }
 
 export async function submitKnockApi(
