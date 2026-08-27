@@ -53,6 +53,8 @@
    - `proof` 由 mock 内置 controller key 生成
 2. mock-applet-registry `POST ${COTEST_MOCK_APPLET_REGISTRY_BASE_URL}/sign-package` 返回 `{ applet_package, package_digest }`
 3. 测试先构造 caller-signed `registration_event` 与 `capability_grant_events[]` 作为 preview authoring basis；soland 返回 target-PS-signed、短期 `authoring_request`，client 将其原样 relay 到 Applet 标准 `POST /_arkret/edge/applet/managed-actors/author`，取得 Applet service/managed actor 真实签名的四 Event closed bundle，再以 `{applet_package, authoring_request, managed_actor_bundle}` 调 `POST /_arkret/self/applets/install`
+   - mock 的 JavaScript 层只负责 HTTP 编排和 exact-replay 持久化；closed carrier、proof、package/registration binding 与四 Event 构造统一委托给 `cotest-wire` 使用的 Rust SDK managed-actor authoring kernel，不维护第二套协议判定器。
+   - replay 状态中的 registry/service 私钥使用 run-scoped AES-256-GCM key 加密落盘；保留的 joint artifact 只含密文，key 在服务停止后删除。
    - commit 不发送已删除的 `approved_scopes` 旧字段；soland 只验证、记录和提交 caller-signed Events，不代签或重建 Event
    - 断言:`status = 201`,返回 `{ applet_id, bot_actor_id, registration_event_ref, effective_status }`
    - 记录 `applet_id`、`bot_actor_id`、`registration_event_ref`

@@ -20,8 +20,9 @@
 //     Returns a sealed controller-signed ak.schema.applet_package.v1 for
 //     soland's canonical ak.self.applet.install.command.preview.v1 / ak.self.applet.command.install.v1 strand.
 //   POST /_arkret/edge/applet/managed-actors/author
-//     Verifies a Principal-Server-signed install authoring request and returns
-//     one Applet-service-signed managed-actor bundle for commit relay.
+//     Delegates the closed-carrier validation, proof verification, and canonical
+//     four-Event construction to cotest-wire's shared Rust SDK authoring kernel.
+//     JavaScript owns only HTTP orchestration and durable exact-replay storage.
 //   POST /external-event
 //     Forwards an external payload to soland's typed applet ingress route.
 //   GET  /inspect → full mock state.
@@ -44,13 +45,14 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 import {
+  createCipheriv,
+  createDecipheriv,
   createHash,
   createPrivateKey,
   createPublicKey,
   randomBytes,
   randomUUID,
   sign,
-  verify,
 } from "node:crypto";
 import { createEd25519KeyPair } from "./_shared/keypairs.mjs";
 import { handleInspect } from "./_shared/inspect.mjs";
@@ -58,10 +60,76 @@ import { canonicalJson, readJson } from "./_shared/http.mjs";
 
 const port = parseInt(process.env.MOCK_APPLET_REGISTRY_PORT ?? "0", 10);
 const durableStateFile = process.env.MOCK_APPLET_REGISTRY_STATE_FILE;
+const durableStateKeyFile = process.env.MOCK_APPLET_REGISTRY_STATE_KEY_FILE;
+const durableStateSchema = "cotest.mock_applet_registry_state_encrypted.v1";
+const durableStateKey = durableStateFile
+  ? readDurableStateKey(durableStateKeyFile)
+  : undefined;
 const durableState =
   durableStateFile && existsSync(durableStateFile)
-    ? JSON.parse(readFileSync(durableStateFile, "utf8"))
+    ? decryptDurableState(
+        JSON.parse(readFileSync(durableStateFile, "utf8")),
+        durableStateKey,
+      )
     : {};
+
+function readDurableStateKey(path) {
+  if (!path) {
+    throw new Error(
+      "MOCK_APPLET_REGISTRY_STATE_KEY_FILE is required for durable authoring",
+    );
+  }
+  const key = readFileSync(path);
+  if (key.length !== 32) {
+    throw new Error("mock Applet registry durable-state key must be 32 bytes");
+  }
+  return key;
+}
+
+function encryptDurableState(state, key) {
+  const nonce = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  cipher.setAAD(Buffer.from(durableStateSchema, "utf8"));
+  const ciphertext = Buffer.concat([
+    cipher.update(canonicalJson(state), "utf8"),
+    cipher.final(),
+  ]);
+  return {
+    schema: durableStateSchema,
+    algorithm: "A256GCM",
+    nonce: nonce.toString("base64url"),
+    ciphertext: ciphertext.toString("base64url"),
+    tag: cipher.getAuthTag().toString("base64url"),
+  };
+}
+
+function decryptDurableState(envelope, key) {
+  if (
+    !exactObjectKeys(envelope, [
+      "schema",
+      "algorithm",
+      "nonce",
+      "ciphertext",
+      "tag",
+    ]) ||
+    envelope.schema !== durableStateSchema ||
+    envelope.algorithm !== "A256GCM"
+  ) {
+    throw new Error("mock Applet registry durable-state envelope is invalid");
+  }
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    key,
+    Buffer.from(envelope.nonce, "base64url"),
+  );
+  decipher.setAAD(Buffer.from(durableStateSchema, "utf8"));
+  decipher.setAuthTag(Buffer.from(envelope.tag, "base64url"));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(envelope.ciphertext, "base64url")),
+    decipher.final(),
+  ]);
+  return JSON.parse(plaintext.toString("utf8"));
+}
 
 // Auto-generate the registry DID unless overridden, so each harness run
 // gets a unique registry identity (preventing test cross-contamination
@@ -127,18 +195,19 @@ function persistDurableAuthoringState() {
     );
   }
   mkdirSync(dirname(durableStateFile), { recursive: true });
-  const packages = [...packagesByApplet].map(([appletId, packageInfo]) => [
-    appletId,
-    {
-      ...packageInfo,
-      signingKey: undefined,
-      signingPrivateJwk: packageInfo.signingKey.export({ format: "jwk" }),
-      botSigningKey: undefined,
-      botSigningPrivateJwk: packageInfo.botSigningKey?.export({
-        format: "jwk",
-      }),
-    },
-  ]);
+  const packages = [...packagesByApplet].map(([appletId, packageInfo]) => {
+    const { signingKey, botSigningKey, ...serializable } = packageInfo;
+    return [
+      appletId,
+      {
+        ...serializable,
+        signingPrivateJwk: signingKey.export({ format: "jwk" }),
+        ...(botSigningKey
+          ? { botSigningPrivateJwk: botSigningKey.export({ format: "jwk" }) }
+          : {}),
+      },
+    ];
+  });
   const state = {
     registryDid,
     registryPrivateJwk: privateKey.export({ format: "jwk" }),
@@ -146,7 +215,11 @@ function persistDurableAuthoringState() {
     managedActorAuthoringOutcomes: [...managedActorAuthoringOutcomes],
   };
   const temporary = `${durableStateFile}.${process.pid}.tmp`;
-  writeFileSync(temporary, canonicalJson(state), { mode: 0o600 });
+  writeFileSync(
+    temporary,
+    canonicalJson(encryptDurableState(state, durableStateKey)),
+    { mode: 0o600 },
+  );
   renameSync(temporary, durableStateFile);
 }
 
@@ -154,7 +227,10 @@ function reloadDurableAuthoringState() {
   if (!durableStateFile || !existsSync(durableStateFile)) {
     throw new Error("durable Applet authoring state is unavailable");
   }
-  const state = JSON.parse(readFileSync(durableStateFile, "utf8"));
+  const state = decryptDurableState(
+    JSON.parse(readFileSync(durableStateFile, "utf8")),
+    durableStateKey,
+  );
   packagesByApplet.clear();
   for (const [appletId, packageInfo] of state.packages ?? []) {
     packagesByApplet.set(appletId, {
@@ -392,34 +468,24 @@ function deriveEventId(event) {
 }
 
 function deriveEventIdentity(event) {
-  const binary = process.env.COTEST_WIRE_BIN;
-  const command = binary ?? "cargo";
-  const args = binary
-    ? ["event-derived-id"]
-    : ["run", "--quiet", "--bin", "cotest-wire", "--", "event-derived-id"];
-  const result = spawnSync(command, args, {
-    cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
-    encoding: "utf8",
-    input: canonicalJson(event),
-  });
-  if (result.status !== 0) {
-    throw new Error(`derive Event id failed: ${result.stderr}`);
-  }
-  return JSON.parse(result.stdout);
+  return runCotestWire("event-derived-id", event);
 }
 
-function validFormalEventEnvelope(event) {
+function runCotestWire(commandName, input) {
   const binary = process.env.COTEST_WIRE_BIN;
   const command = binary ?? "cargo";
   const args = binary
-    ? ["event-envelope-parse"]
-    : ["run", "--quiet", "--bin", "cotest-wire", "--", "event-envelope-parse"];
+    ? [commandName]
+    : ["run", "--quiet", "--bin", "cotest-wire", "--", commandName];
   const result = spawnSync(command, args, {
     cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
     encoding: "utf8",
-    input: canonicalJson(event),
+    input: canonicalJson(input),
   });
-  return result.status === 0;
+  if (result.status !== 0) {
+    throw new Error(`cotest-wire ${commandName} failed: ${result.stderr}`);
+  }
+  return JSON.parse(result.stdout);
 }
 
 function safeToken(value) {
@@ -453,30 +519,17 @@ function detachedEventProof(
   if (typeof signingJwk.d !== "string") {
     throw new Error("Applet Event signing key has no private seed");
   }
-  const binary = process.env.COTEST_WIRE_BIN;
-  const command = binary ?? "cargo";
-  const args = binary
-    ? ["event-envelope-proof"]
-    : ["run", "--quiet", "--bin", "cotest-wire", "--", "event-envelope-proof"];
-  const result = spawnSync(command, args, {
-    cwd: process.env.COTEST_ROOT ?? process.cwd().replace(/[\\/]e2e$/, ""),
-    encoding: "utf8",
-    input: canonicalJson({
-      actor_did:
-        actorFullDid ??
-        (actorDid.startsWith("ak:did_core:")
-          ? `did:${actorDid.slice("ak:did_core:".length)}`
-          : actorDid),
-      verification_method: verificationMethod,
-      created_at: createdAt,
-      event,
-      signing_seed_b64url: signingJwk.d,
-    }),
+  return runCotestWire("event-envelope-proof", {
+    actor_did:
+      actorFullDid ??
+      (actorDid.startsWith("ak:did_core:")
+        ? `did:${actorDid.slice("ak:did_core:".length)}`
+        : actorDid),
+    verification_method: verificationMethod,
+    created_at: createdAt,
+    event,
+    signing_seed_b64url: signingJwk.d,
   });
-  if (result.status !== 0) {
-    throw new Error(`derive Event proof failed: ${result.stderr}`);
-  }
-  return JSON.parse(result.stdout);
 }
 
 function detachedJws(binding, signingKey) {
@@ -502,759 +555,6 @@ function exactObjectKeys(value, expected) {
     actual.length === expected.length &&
     actual.every((key, index) => key === [...expected].sort()[index])
   );
-}
-
-function closedObjectKeys(value, required, optional = []) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const actual = Object.keys(value);
-  const allowed = new Set([...required, ...optional]);
-  return (
-    required.every((key) => actual.includes(key)) &&
-    actual.every((key) => allowed.has(key))
-  );
-}
-
-function verifyDetachedJws(jws, canonicalPayload, publicKey) {
-  if (typeof jws !== "string") return false;
-  const parts = jws.split(".");
-  if (parts.length !== 3 || parts[1] !== "") return false;
-  let header;
-  try {
-    header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8"));
-  } catch {
-    return false;
-  }
-  if (!exactObjectKeys(header, ["alg"]) || header.alg !== "Ed25519") {
-    return false;
-  }
-  const signingInput = `${parts[0]}.${Buffer.from(canonicalPayload, "utf8").toString("base64url")}`;
-  try {
-    return verify(
-      null,
-      Buffer.from(signingInput, "utf8"),
-      publicKey,
-      Buffer.from(parts[2], "base64url"),
-    );
-  } catch {
-    return false;
-  }
-}
-
-function authoringRequestUnsigned(request) {
-  const unsigned = {
-    schema: request.schema,
-    purpose: request.purpose,
-    basis: request.basis,
-    hosting_notary: request.hosting_notary,
-    issued_at: request.issued_at,
-    expires_at: request.expires_at,
-  };
-  if (request.plan_digest !== undefined) {
-    unsigned.plan_digest = request.plan_digest;
-  }
-  return unsigned;
-}
-
-function authoringProofBinding(proof, context) {
-  return {
-    context,
-    payload_digest: proof.payload_digest,
-    verification_method: proof.verification_method,
-    created_at: proof.created_at,
-    audience: proof.audience,
-  };
-}
-
-function eventProofBinding(event, proof) {
-  const binding = {
-    context: "ak.event_proof.v1",
-    event_digest: proof.event_digest,
-    actor_id: event.actor_id,
-    verification_method: proof.verification_method,
-  };
-  if (proof.signer_resolution_evidence_ref !== undefined) {
-    binding.signer_resolution_evidence_ref =
-      proof.signer_resolution_evidence_ref;
-  }
-  if (proof.signer_resolution_evidence_digest !== undefined) {
-    binding.signer_resolution_evidence_digest =
-      proof.signer_resolution_evidence_digest;
-  }
-  binding.created_at = proof.created_at;
-  if (proof.domain !== undefined) binding.domain = proof.domain;
-  if (proof.audience !== undefined) binding.audience = proof.audience;
-  return binding;
-}
-
-function publicKeyFromDidDocument(document, verificationMethod) {
-  if (!document || document.id !== verificationMethod.split("#", 1)[0]) {
-    return undefined;
-  }
-  const methods = document.verificationMethod;
-  let material;
-  if (Array.isArray(methods)) {
-    const entry = methods.find(
-      (candidate) => candidate?.id === verificationMethod,
-    );
-    material = entry?.publicKeyJwk ?? entry?.public_key_jwk;
-  } else if (methods && typeof methods === "object") {
-    material = methods[verificationMethod];
-  }
-  if (typeof material === "string") {
-    try {
-      material = JSON.parse(material);
-    } catch {
-      return undefined;
-    }
-  }
-  if (!material || typeof material !== "object") return undefined;
-  try {
-    return createPublicKey({ key: material, format: "jwk" });
-  } catch {
-    return undefined;
-  }
-}
-
-async function resolveCurrentAdminKey(basis) {
-  const fullDid = basis.install_actor_id.startsWith("ak:did_core:")
-    ? `did:${basis.install_actor_id.slice("ak:did_core:".length)}`
-    : basis.install_actor_id;
-  const baseUrl =
-    process.env.SOLAND_BASE_URL ?? process.env.COTEST_SOLAND_BASE_URL;
-  if (!baseUrl || typeof fullDid !== "string") return undefined;
-  const requestedEvidenceKinds = fullDid.startsWith("did:webvh:")
-    ? ["did_webvh"]
-    : [];
-  let response;
-  try {
-    response = await fetch(
-      `${String(baseUrl).replace(/\/$/, "")}/_arkret/root/identity/resolve`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: canonicalJson({
-          did: fullDid,
-          requested_evidence_kinds: requestedEvidenceKinds,
-        }),
-      },
-    );
-  } catch {
-    return undefined;
-  }
-  if (!response.ok) return undefined;
-  const outcome = await response.json();
-  if (
-    fullDid.startsWith("did:webvh:") &&
-    (!outcome.method_evidence ||
-      outcome.method_evidence.version_id === undefined)
-  ) {
-    return undefined;
-  }
-  return { fullDid, didDocument: outcome.did_document };
-}
-
-function validAdminEventEnvelope(event, basis, expectedKind, resolvedAdmin) {
-  if (
-    !validFormalEventEnvelope(event) ||
-    !event ||
-    event.kind !== expectedKind ||
-    event.actor_id !== basis.install_actor_id ||
-    event.principal_server_id !== basis.target_principal_server_id ||
-    canonicalJson(event.scope_ref) !== canonicalJson(basis.effective_scope) ||
-    event.realm_id !== basis.effective_scope?.realm_id ||
-    !Array.isArray(event.proofs) ||
-    event.proofs.length !== 1
-  ) {
-    return false;
-  }
-  const proof = event.proofs[0];
-  const actorFullId = basis.install_actor_id.startsWith("ak:did_core:")
-    ? `did:${basis.install_actor_id.slice("ak:did_core:".length)}`
-    : basis.install_actor_id;
-  const identity = deriveEventIdentity(event);
-  const publicKey = publicKeyFromDidDocument(
-    resolvedAdmin?.didDocument,
-    proof?.verification_method,
-  );
-  return (
-    proof?.kind === "detached_jws" &&
-    proof.verification_method?.startsWith(`${actorFullId}#`) &&
-    proof.event_digest === identity.event_digest &&
-    event.event_id === identity.event_id &&
-    publicKey !== undefined &&
-    verifyDetachedJws(
-      proof.jws,
-      canonicalJson(eventProofBinding(event, proof)),
-      publicKey,
-    )
-  );
-}
-
-function validRegistrationEpochEvidence(packageInfo, evidence) {
-  if (
-    !exactObjectKeys(evidence, [
-      "full_id",
-      "did_document_digest",
-      "method_version_evidence",
-      "accepted_signing_keys",
-    ]) ||
-    evidence.full_id !== packageInfo.serviceFullId ||
-    typeof evidence.did_document_digest !== "string" ||
-    !evidence.method_version_evidence ||
-    !Array.isArray(evidence.accepted_signing_keys) ||
-    evidence.accepted_signing_keys.length === 0 ||
-    !evidence.accepted_signing_keys.every(
-      (key) =>
-        exactObjectKeys(key, ["key_ref", "public_key_digest"]) &&
-        key.key_ref === packageInfo.verificationMethod &&
-        typeof key.public_key_digest === "string",
-    )
-  ) {
-    return false;
-  }
-  return (
-    registrationEpochHash(packageInfo.appletPackage, evidence) ===
-    packageInfo.registrationEpoch
-  );
-}
-
-function registrationPayloadFromPackage(packageInfo, evidence) {
-  const pkg = packageInfo.appletPackage;
-  const manifest = {
-    claimed_profiles: pkg.claimed_profiles,
-    limits: pkg.limits,
-    ghost_policy: pkg.ghost_policy,
-    delegation_policy: pkg.delegation_policy,
-    e2ee_policy: pkg.e2ee_policy,
-    registration_epoch_evidence: evidence,
-  };
-  if (pkg.widget !== undefined) manifest.widget = pkg.widget;
-  return {
-    applet_id: pkg.applet_id,
-    service_id: pkg.service_id,
-    controller_id: pkg.controller_id,
-    base_url: pkg.base_url,
-    bot_actor_id: pkg.bot_actor_id,
-    claimed_profiles: pkg.claimed_profiles,
-    protocols: pkg.protocols,
-    namespaces: pkg.namespaces,
-    receive_events: pkg.receive_events,
-    receive_signals: pkg.receive_signals,
-    rate_limited: pkg.rate_limited,
-    requested_scopes: pkg.requested_scopes,
-    registration_epoch: pkg.registration_epoch,
-    webhook_auth: pkg.webhook_auth,
-    manifest,
-    proof: pkg.proof,
-    created_at: pkg.created_at,
-  };
-}
-
-function validEffectiveScope(scope) {
-  return scope?.kind === "realm"
-    ? exactObjectKeys(scope, ["kind", "realm_id"]) &&
-        typeof scope.realm_id === "string" &&
-        /^ak:realm:[A-Za-z0-9_-]{44}$/.test(scope.realm_id)
-    : scope?.kind === "circle" &&
-        exactObjectKeys(scope, ["kind", "realm_id", "circle_id"]) &&
-        typeof scope.realm_id === "string" &&
-        /^ak:realm:[A-Za-z0-9_-]{44}$/.test(scope.realm_id) &&
-        typeof scope.circle_id === "string" &&
-        /^ak:circle:[A-Za-z0-9_-]{44}$/.test(scope.circle_id);
-}
-
-function validAuthoringPolicies(basis) {
-  const approval = basis.approval_request;
-  return (
-    validEffectiveScope(basis.effective_scope) &&
-    exactObjectKeys(approval, [
-      "approve_actions",
-      "ghost_actor_mode",
-      "delegated_native_actors_allowed",
-      "e2ee_join_allowed",
-      "widget_allowed",
-    ]) &&
-    Array.isArray(approval.approve_actions) &&
-    approval.approve_actions.length > 0 &&
-    approval.approve_actions.every(
-      (action) => typeof action === "string" && action.length > 0,
-    ) &&
-    new Set(approval.approve_actions).size ===
-      approval.approve_actions.length &&
-    ["disallowed", "controller_approved", "policy_declared"].includes(
-      approval.ghost_actor_mode,
-    ) &&
-    typeof approval.delegated_native_actors_allowed === "boolean" &&
-    typeof approval.e2ee_join_allowed === "boolean" &&
-    typeof approval.widget_allowed === "boolean" &&
-    (basis.actor_policy === undefined ||
-      (closedObjectKeys(basis.actor_policy, [], ["ghost_actor_mode"]) &&
-        (basis.actor_policy.ghost_actor_mode === undefined ||
-          ["disallowed", "controller_approved", "policy_declared"].includes(
-            basis.actor_policy.ghost_actor_mode,
-          )))) &&
-    (basis.e2ee_policy === undefined ||
-      (closedObjectKeys(basis.e2ee_policy, [], ["mls_join_allowed"]) &&
-        (basis.e2ee_policy.mls_join_allowed === undefined ||
-          typeof basis.e2ee_policy.mls_join_allowed === "boolean"))) &&
-    (basis.widget_policy === undefined ||
-      (closedObjectKeys(basis.widget_policy, [], ["widget_allowed"]) &&
-        (basis.widget_policy.widget_allowed === undefined ||
-          typeof basis.widget_policy.widget_allowed === "boolean")))
-  );
-}
-
-async function validateInstallAuthoringRequest(request, packageInfo) {
-  if (
-    !exactObjectKeys(request, [
-      "schema",
-      "purpose",
-      "basis",
-      "plan_digest",
-      "hosting_notary",
-      "issued_at",
-      "expires_at",
-      "proof",
-    ]) ||
-    request.schema !== "ak.schema.applet_managed_actor_authoring_request.v1" ||
-    request.purpose !== "install_bot" ||
-    canonicalJson(request.hosting_notary) !==
-      canonicalJson(principalServerNotaryDescriptor().signer)
-  ) {
-    return "authoring_request_not_closed";
-  }
-  const basis = request.basis;
-  if (
-    !basis ||
-    !closedObjectKeys(
-      basis,
-      [
-        "schema",
-        "purpose",
-        "target_principal_server_id",
-        "install_actor_id",
-        "applet_id",
-        "service_id",
-        "package_digest",
-        "effective_scope",
-        "approval_request",
-        "registration_event",
-        "capability_grant_events",
-      ],
-      ["actor_policy", "e2ee_policy", "widget_policy"],
-    ) ||
-    basis.schema !== "ak.schema.applet_install_authoring_request_basis.v1" ||
-    basis.purpose !== "install_bot" ||
-    basis.target_principal_server_id !== principalServerId() ||
-    basis.applet_id !== packageInfo.appletId ||
-    basis.service_id !== packageInfo.serviceId ||
-    basis.package_digest !== packageInfo.packageDigest ||
-    !validAuthoringPolicies(basis)
-  ) {
-    return "authoring_request_coordinate_mismatch";
-  }
-  const expiresAt = Date.parse(request.expires_at);
-  const issuedAt = Date.parse(request.issued_at);
-  if (
-    !Number.isFinite(expiresAt) ||
-    !Number.isFinite(issuedAt) ||
-    expiresAt <= issuedAt ||
-    expiresAt - issuedAt > 5 * 60 * 1000 ||
-    expiresAt <= Date.now() ||
-    expiresAt - Date.now() > 5 * 60 * 1000
-  ) {
-    return "authoring_request_expired";
-  }
-  const proof = request.proof;
-  const payloadDigest = canonicalHash(authoringRequestUnsigned(request));
-  if (
-    !exactObjectKeys(proof, [
-      "kind",
-      "verification_method",
-      "payload_digest",
-      "created_at",
-      "audience",
-      "jws",
-    ]) ||
-    proof.kind !== "detached_jws" ||
-    proof.payload_digest !== payloadDigest ||
-    proof.audience !== packageInfo.serviceId ||
-    proof.created_at !== request.issued_at ||
-    Date.parse(proof.created_at) > Date.now() + 30_000
-  ) {
-    return "authoring_request_proof_invalid";
-  }
-  if (
-    !verifyDetachedJws(
-      proof.jws,
-      canonicalJson(
-        authoringProofBinding(
-          proof,
-          "ak.applet_managed_actor_authoring_request_proof.v1",
-        ),
-      ),
-      createPublicKey(principalServerNotaryPrivateKey()),
-    )
-  ) {
-    return "authoring_request_proof_invalid";
-  }
-  if (proof.verification_method !== currentPrincipalServerVerificationMethod) {
-    return "authoring_request_proof_invalid";
-  }
-  const resolvedAdmin = await resolveCurrentAdminKey(basis);
-  if (!resolvedAdmin) return "authoring_request_admin_key_untrusted";
-  const registration = basis.registration_event;
-  const registrationEvidence =
-    registration?.payload?.manifest?.registration_epoch_evidence;
-  if (
-    !validAdminEventEnvelope(
-      registration,
-      basis,
-      "ak.applet.registration",
-      resolvedAdmin,
-    ) ||
-    !validRegistrationEpochEvidence(packageInfo, registrationEvidence) ||
-    canonicalJson(registration?.payload) !==
-      canonicalJson(
-        registrationPayloadFromPackage(packageInfo, registrationEvidence),
-      ) ||
-    !Array.isArray(basis.capability_grant_events) ||
-    basis.capability_grant_events.length === 0
-  ) {
-    return "authoring_request_event_binding_invalid";
-  }
-  const approvedActions = new Set();
-  let precedingEventId = registration.event_id;
-  let precedingActorSeq = registration.actor_seq;
-  for (const event of basis.capability_grant_events) {
-    const grant = event?.payload?.grant;
-    const expectedConstraint = {
-      constraint_kind: "authority_control",
-      constraint_subkind: "applet_authority",
-      effect: "allow",
-      evaluation_class: "grant_local",
-      applet_id: packageInfo.appletId,
-      executed_by: packageInfo.serviceId,
-      registration_epoch: packageInfo.registrationEpoch,
-    };
-    if (
-      !validAdminEventEnvelope(
-        event,
-        basis,
-        "ak.capability.grant",
-        resolvedAdmin,
-      ) ||
-      !exactObjectKeys(event.payload, ["grant"]) ||
-      !closedObjectKeys(grant, [
-        "schema",
-        "realm_id",
-        "issuer",
-        "subject",
-        "subject_principal_server_id",
-        "actions",
-        "resources",
-        "constraints",
-        "issued_at",
-        "expires_at",
-        "issuer_authority_refs",
-      ]) ||
-      grant.schema !== "ak.schema.capability.v1" ||
-      grant.realm_id !== basis.effective_scope?.realm_id ||
-      grant?.issuer !== basis.install_actor_id ||
-      grant?.subject !== packageInfo.serviceId ||
-      grant?.subject_principal_server_id !== basis.target_principal_server_id ||
-      canonicalJson(grant?.resources) !==
-        canonicalJson([basis.effective_scope]) ||
-      canonicalJson(grant.constraints) !==
-        canonicalJson([expectedConstraint]) ||
-      !Array.isArray(grant.issuer_authority_refs) ||
-      grant.issuer_authority_refs.length !== 1 ||
-      !exactObjectKeys(grant.issuer_authority_refs[0], [
-        "kind",
-        "realm_id",
-        "cell_ref",
-        "controller_epoch_at_issuance",
-        "authority_generation",
-      ]) ||
-      grant.issuer_authority_refs[0]?.kind !== "realm_root" ||
-      grant.issuer_authority_refs[0]?.realm_id !==
-        basis.effective_scope?.realm_id ||
-      typeof grant.issuer_authority_refs[0]?.cell_ref !== "string" ||
-      !Number.isSafeInteger(
-        grant.issuer_authority_refs[0]?.controller_epoch_at_issuance,
-      ) ||
-      !Number.isSafeInteger(
-        grant.issuer_authority_refs[0]?.authority_generation,
-      ) ||
-      event.actor_seq !== precedingActorSeq + 1 ||
-      canonicalJson(event.prev_refs) !== canonicalJson([precedingEventId]) ||
-      !Array.isArray(grant?.actions) ||
-      grant.actions.length === 0 ||
-      grant.actions.some(
-        (action) =>
-          !basis.approval_request?.approve_actions?.includes(action) ||
-          approvedActions.has(action),
-      )
-    ) {
-      return "authoring_request_event_binding_invalid";
-    }
-    grant.actions.forEach((action) => approvedActions.add(action));
-    precedingEventId = event.event_id;
-    precedingActorSeq = event.actor_seq;
-  }
-  return undefined;
-}
-
-function deterministicHlc(createdAt, label) {
-  const physical = Date.parse(createdAt)
-    .toString(16)
-    .padStart(12, "0")
-    .slice(-12);
-  const node = createHash("sha256").update(label).digest("hex").slice(0, 8);
-  return `${physical}-0000-${node}`;
-}
-
-function signedAppletEvent(
-  packageInfo,
-  fields,
-  proofCreatedAt,
-  signerAuthority,
-) {
-  const event = {
-    ...fields,
-    actor_id: fields.actor_id,
-    principal_server_id: principalServerId(),
-    created_at: proofCreatedAt,
-    hlc:
-      fields.hlc ??
-      deterministicHlc(proofCreatedAt, `${fields.kind}:${fields.actor_seq}`),
-    prev_refs: fields.prev_refs ?? [],
-    refs: fields.refs ?? [],
-    requirements: fields.requirements,
-    payload: fields.payload,
-  };
-  const signingAuthority =
-    signerAuthority === "bot"
-      ? {
-          verificationMethod: packageInfo.botVerificationMethod,
-          signingKey: packageInfo.botSigningKey,
-        }
-      : {
-          verificationMethod: packageInfo.verificationMethod,
-          signingKey: packageInfo.signingKey,
-        };
-  const eventId = deriveEventId(event);
-  event.event_id = eventId;
-  return {
-    ...event,
-    proofs: [
-      detachedEventProof(
-        event,
-        fields.actor_id,
-        signingAuthority.verificationMethod,
-        signingAuthority.signingKey,
-        undefined,
-        proofCreatedAt,
-      ),
-    ],
-  };
-}
-
-function grantIdFromEvent(event) {
-  return String(event.event_id).replace(/^ak:event:/, "ak:grant:");
-}
-
-function buildInstallManagedActorBundle(request, packageInfo) {
-  const basis = request.basis;
-  const createdAt = request.proof.created_at;
-  const realmId = basis.effective_scope.realm_id;
-  const registrationRef = basis.registration_event.event_id;
-  const appletAuthorityRef = grantIdFromEvent(basis.capability_grant_events[0]);
-  const botId = packageInfo.botActorId;
-  const common = {
-    authorization_ref: appletAuthorityRef,
-    applet_id: packageInfo.appletId,
-  };
-  const provisionEvent = signedAppletEvent(
-    packageInfo,
-    {
-      kind: "ak.applet.managed_actor.provision",
-      realm_id: realmId,
-      scope_ref: { kind: "realm", realm_id: realmId },
-      actor_id: packageInfo.serviceId,
-      actor_seq: 0,
-      ...common,
-      requirements: { schema: ["ak.schema.applet_managed_actor_provision.v1"] },
-      payload: {
-        schema: "ak.schema.applet_managed_actor_provision.v1",
-        applet_id: packageInfo.appletId,
-        service_id: packageInfo.serviceId,
-        actor_id: botId,
-        actor_principal_server_id: principalServerId(),
-        actor_role: "bot",
-        initial_resolution: packageInfo.botInitialResolution,
-        method_history_evidence: packageInfo.botMethodHistoryEvidence,
-        registration_ref: registrationRef,
-        applet_authority_ref: appletAuthorityRef,
-      },
-    },
-    createdAt,
-    "service",
-  );
-  const pcrGenesisEvent = signedAppletEvent(
-    packageInfo,
-    {
-      kind: "ak.realm.create",
-      scope_ref: { kind: "realm_genesis" },
-      actor_id: botId,
-      actor_seq: 0,
-      executed_by: packageInfo.serviceId,
-      ...common,
-      refs: [
-        {
-          id: provisionEvent.event_id,
-          role: "applet_managed_actor_provision",
-          critical: true,
-        },
-      ],
-      preconditions: [
-        {
-          cell: "ak:cell:ak.component.realm.create.v1:null",
-          predicate: { op: "head_eq", value: null },
-        },
-      ],
-      requirements: { schema: ["ak.schema.realm_genesis.v1"] },
-      payload: {
-        object: {
-          schema: "ak.schema.realm_genesis.v1",
-          purpose: "applet_managed_control",
-          genesis_salt: createHash("sha256")
-            .update(`${canonicalHash(request)}:bot-pcr`)
-            .digest("base64url"),
-          trust_domain: "ak:trust_domain:soland.local",
-          schema_refs: [
-            "ak.schema.realm.v1",
-            "ak.profile.principal_control_realm.v1",
-          ],
-          reducer_profile: "ak.reducer.core.v1",
-          encryption_profile: "mls_rfc9420",
-          security_class: "standard",
-          digest_algorithm: "sha256",
-          notary: { kind: "single_signer", signer: request.hosting_notary },
-          initial_resolution: packageInfo.botInitialResolution,
-        },
-      },
-    },
-    createdAt,
-    "service",
-  );
-  const accountabilityWithoutProof = {
-    schema: "ak.schema.accountability_grant.v1",
-    issuer: packageInfo.serviceId,
-    subject: botId,
-    accountability_scope: "contracted_service",
-    not_before: createdAt,
-    grant_status: "active",
-  };
-  const accountabilityPayloadDigest = `sha256:${createHash("sha256")
-    .update("ak.accountability-grant-v1\n", "utf8")
-    .update(canonicalJson(accountabilityWithoutProof), "utf8")
-    .digest("hex")}`;
-  const accountabilityEvent = signedAppletEvent(
-    packageInfo,
-    {
-      kind: "ak.identity.accountability_grant",
-      realm_id: realmId,
-      scope_ref: { kind: "realm", realm_id: realmId },
-      actor_id: packageInfo.serviceId,
-      actor_seq: 1,
-      prev_refs: [provisionEvent.event_id],
-      ...common,
-      requirements: { schema: ["ak.schema.accountability_grant.v1"] },
-      payload: {
-        ...accountabilityWithoutProof,
-        proof: {
-          kind: "detached_jws",
-          verification_method: packageInfo.verificationMethod,
-          payload_digest: accountabilityPayloadDigest,
-          created_at: createdAt,
-          jws: detachedJws(
-            {
-              context: "ak.accountability_grant_proof.v1",
-              payload_digest: accountabilityPayloadDigest,
-              issuer: packageInfo.serviceId,
-              subject: botId,
-              verification_method: packageInfo.verificationMethod,
-              created_at: createdAt,
-            },
-            packageInfo.signingKey,
-          ),
-        },
-      },
-    },
-    createdAt,
-    "service",
-  );
-  const profileEvent = signedAppletEvent(
-    packageInfo,
-    {
-      kind: "ak.profile.create",
-      realm_id: realmId,
-      scope_ref: { kind: "realm", realm_id: realmId },
-      actor_id: botId,
-      actor_seq: 0,
-      executed_by: packageInfo.serviceId,
-      ...common,
-      refs: [
-        {
-          id: accountabilityEvent.event_id,
-          role: "accountability",
-          critical: true,
-        },
-      ],
-      requirements: { schema: ["ak.schema.actor_profile.v1"] },
-      payload: {
-        object: {
-          schema: "ak.schema.actor_profile.v1",
-          realm_id: realmId,
-          principal_id: botId,
-          actor_kind: "integration",
-          display_name: "Applet Bot",
-          accountable_principal_ids: [packageInfo.serviceId],
-          profile_fields: { managed_by_applet: packageInfo.appletId },
-          created_at: createdAt,
-        },
-      },
-    },
-    createdAt,
-    "service",
-  );
-  const authoringRequestDigest = canonicalHash(request);
-  const unsignedBundle = {
-    schema: "ak.schema.applet_managed_actor_authoring_bundle.v1",
-    authoring_request_digest: authoringRequestDigest,
-    managed_actor_provision_event: provisionEvent,
-    pcr_genesis_event: pcrGenesisEvent,
-    accountability_grant_event: accountabilityEvent,
-    profile_event: profileEvent,
-  };
-  const bundlePayloadDigest = canonicalHash(unsignedBundle);
-  const proof = {
-    kind: "detached_jws",
-    verification_method: packageInfo.verificationMethod,
-    payload_digest: bundlePayloadDigest,
-    created_at: createdAt,
-    audience: principalServerId(),
-    jws: "",
-  };
-  proof.jws = detachedJws(
-    authoringProofBinding(
-      proof,
-      "ak.applet_managed_actor_bundle_proof.v1",
-    ),
-    packageInfo.signingKey,
-  );
-  return { ...unsignedBundle, proof };
 }
 
 async function readRealmFrontier(solandBase, authorization, realmId) {
@@ -1785,16 +1085,6 @@ const server = createServer(async (req, res) => {
         return;
       }
     }
-    const invalidReason = await validateInstallAuthoringRequest(
-      authoringRequest,
-      packageInfo,
-    );
-    if (invalidReason) {
-      res.statusCode =
-        invalidReason === "authoring_request_expired" ? 410 : 400;
-      res.end(JSON.stringify({ error: invalidReason }));
-      return;
-    }
     if (
       !packageInfo.botInitialResolution ||
       !packageInfo.botMethodHistoryEvidence ||
@@ -1807,12 +1097,33 @@ const server = createServer(async (req, res) => {
       );
       return;
     }
-    const outcome = {
-      managed_actor_bundle: buildInstallManagedActorBundle(
-        authoringRequest,
-        packageInfo,
-      ),
-    };
+    const servicePrivateJwk = packageInfo.signingKey.export({ format: "jwk" });
+    if (typeof servicePrivateJwk.d !== "string") {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: "applet_service_key_unavailable" }));
+      return;
+    }
+    const outcome = runCotestWire("install-managed-actor-author", {
+      authoring_request: authoringRequest,
+      applet_package: packageInfo.appletPackage,
+      bot_actor_id: packageInfo.botActorId,
+      bot_initial_resolution: packageInfo.botInitialResolution,
+      bot_method_history_evidence: packageInfo.botMethodHistoryEvidence,
+      service_signing_seed_b64url: servicePrivateJwk.d,
+      service_verification_method: packageInfo.verificationMethod,
+      principal_server_id: principalServerId(),
+      principal_server_verification_method:
+        currentPrincipalServerVerificationMethod,
+      principal_server_public_jwk: createPublicKey(
+        principalServerNotaryPrivateKey(),
+      ).export({ format: "jwk" }),
+      trust_domain: "ak:trust_domain:soland.local",
+    });
+    if (outcome.error) {
+      res.statusCode = outcome.status ?? 400;
+      res.end(canonicalJson({ error: outcome.error, detail: outcome.detail }));
+      return;
+    }
     managedActorAuthoringOutcomes.set(subject, {
       requestDigest,
       outcome,

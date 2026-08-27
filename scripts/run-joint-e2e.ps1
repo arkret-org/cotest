@@ -2836,6 +2836,7 @@ if ($StartMockChallengeProvider) {
 
 $managedServices = New-Object System.Collections.Generic.List[object]
 $managedServiceFailures = @()
+$mockAppletRegistryStateKeyFile = $null
 $ephemeralPostgres = $null
 $ephemeralSolandPostgres = $null
 $ephemeralSolandBetaPostgres = $null
@@ -3298,7 +3299,12 @@ try {
     }
     if ($StartMockAppletRegistry) {
         $mockAppletRegistryStateFile = Join-Path $serviceLogDir "mock-applet-registry-state.json"
-        $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile)
+        $mockAppletRegistryStateKeyFile = Join-Path ([System.IO.Path]::GetTempPath()) "cotest-mock-applet-registry-$timestamp.key"
+        [System.IO.File]::WriteAllBytes(
+            $mockAppletRegistryStateKeyFile,
+            [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+        )
+        $envExpr = "`$env:MOCK_APPLET_REGISTRY_PORT='$mockAppletRegistryPort'; `$env:MOCK_APPLET_REGISTRY_STATE_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateFile) + "; `$env:MOCK_APPLET_REGISTRY_STATE_KEY_FILE=" + (Quote-PsLiteral $mockAppletRegistryStateKeyFile)
         if ($MockAppletRegistryDid) {
             $envExpr = "$envExpr; `$env:MOCK_APPLET_REGISTRY_DID=" + (Quote-PsLiteral $MockAppletRegistryDid)
         }
@@ -4271,6 +4277,9 @@ finally {
             Remove-Item Env:NODE_EXTRA_CA_CERTS -ErrorAction SilentlyContinue
             Remove-Item Env:COTEST_RUN_SCOPED_CA_PEM -ErrorAction SilentlyContinue
             Remove-Item Env:COTEST_TLS_SPKI_SHA256 -ErrorAction SilentlyContinue
+        }
+        if ($mockAppletRegistryStateKeyFile) {
+            Remove-Item -LiteralPath $mockAppletRegistryStateKeyFile -Force -ErrorAction SilentlyContinue
         }
     }
 }
