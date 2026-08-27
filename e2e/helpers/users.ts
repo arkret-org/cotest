@@ -490,6 +490,7 @@ export class JointUserPage {
   ): Promise<string> {
     const grantId = typedId("grant");
     await this.gotoRealmAdminSection(realmId, "security");
+    await this.page.getByTestId("advanced-access-toggle").click();
     await this.page.getByTestId("cap-grant-id-input").fill(grantId);
     await this.page.getByTestId("cap-grant-tag-input").fill(action);
     await this.page.getByTestId("cap-grant-subject-input").fill(subjectDid);
