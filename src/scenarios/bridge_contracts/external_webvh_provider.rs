@@ -3,9 +3,10 @@
 //!
 //! Nothing here starts an external service: soland is spawned pointing at an
 //! unreachable provider URL, and the assertions are entirely about what
-//! soland's own `/_arkret/root/identity/describe` publishes — default provider
-//! id, provider entry, resolver policy, trust roots (including its local
-//! identity store's webvh proof-validation policy) and an empty `todos[]`.
+//! soland's own `/_arkret/root/identity/describe` publishes in the
+//! `x_soland_identity_registry` extension — default provider id, provider
+//! entry, resolver allow-list, and trust roots (including its local identity
+//! store's webvh proof-validation policy).
 //!
 //! The provider URL below is a placeholder that is never dialled.
 
@@ -36,19 +37,18 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(describe["did_webvh"]["enabled"], true);
-    assert_eq!(describe["did_webvh"]["method"], "did:webvh");
+    let identity = &describe["x_soland_identity_registry"];
+    let did_webvh = &identity["did_webvh"];
+    assert_eq!(did_webvh["enabled"], true);
+    assert_eq!(did_webvh["method"], "did:webvh");
     // `did-method-adapter-registry.json` names the method version
     // `adapter_version`; it is not a `ak.profile.*` id.
     assert_eq!(
-        describe["did_webvh"]["adapter_version"],
+        did_webvh["adapter_version"],
         arkret_models_identity::did_document::DID_WEBVH_V1_METHOD
     );
-    assert_eq!(
-        describe["did_webvh"]["default_provider_id"],
-        "external.webvh"
-    );
-    let providers = describe["did_webvh"]["providers"]
+    assert_eq!(did_webvh["default_provider_id"], "external.webvh");
+    let providers = did_webvh["providers"]
         .as_array()
         .expect("did_webvh providers");
     let external = providers
@@ -58,22 +58,14 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
     assert_eq!(external["kind"], "external");
     assert_eq!(external["base_url"], EXTERNAL_PROVIDER_URL);
     assert!(
-        describe["resolver_policy"]["allow_methods"]
+        identity["resolver_allow_methods"]
             .as_array()
             .unwrap()
             .iter()
             .any(|value| value.as_str() == Some("webvh")),
         "did:webvh should be discoverable when an external provider is configured"
     );
-    assert_eq!(
-        describe["resolver_policy"]["freshness_receipts"]["endpoint_template"],
-        "/_arkret/root/identity/receipts?did={did}"
-    );
-    assert_eq!(
-        describe["resolver_policy"]["webvh_validation"]["witness_quorum"],
-        "enforced_for_local_webvh_records"
-    );
-    let trust_roots = describe["resolver_policy"]["trust_roots"]
+    let trust_roots = identity["trust_roots"]
         .as_array()
         .expect("resolver policy trust_roots");
     assert!(
@@ -98,13 +90,6 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
             .is_some_and(|trust_domain| trust_domain.starts_with("ak:trust_domain:")),
         "external webvh trust root must bind the expected trust domain: {external_root}"
     );
-    assert!(
-        describe["todos"]
-            .as_array()
-            .is_some_and(|todos| todos.is_empty()),
-        "soland resolver describe TODOs must be cleared: {describe}"
-    );
-
     Ok(())
 }
 

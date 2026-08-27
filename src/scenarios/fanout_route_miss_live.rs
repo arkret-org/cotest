@@ -152,7 +152,12 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     )?;
     wait_for_bootstrap_seal(&alice, &realm_id).await?;
     let bob_join_id = submit_and_settle_member_transition(&alice, &realm_id, bob_join).await?;
-    wait_for_resolved_event(&bob, &bob_join_id).await?;
+    let bob_join_delivery = delivery_status(&alice, &bob_join_id).await?;
+    ensure!(
+        !bob_join_delivery.targets.is_empty(),
+        "Bob's routable join did not create a durable federation target: {bob_join_delivery:?}"
+    );
+    wait_for_resolved_event(&bob, &alice, &bob_join_id).await?;
 
     group.server_mut(1).stop_external_process().await?;
     let first = alice
@@ -387,10 +392,15 @@ async fn submit_and_settle_member_transition(
     Ok(event_id)
 }
 
-async fn wait_for_resolved_event(client: &TestActorClient, event_id: &EventId) -> Result<()> {
-    let mut last = None;
+async fn wait_for_resolved_event(
+    target: &TestActorClient,
+    source: &TestActorClient,
+    event_id: &EventId,
+) -> Result<()> {
+    let mut last_resolve = None;
+    let mut last_delivery = None;
     for _ in 0..60 {
-        let outcome = resolve_events_allow_missing(client, vec![event_id.clone()]).await?;
+        let outcome = resolve_events_allow_missing(target, vec![event_id.clone()]).await?;
         if outcome
             .events
             .iter()
@@ -398,11 +408,13 @@ async fn wait_for_resolved_event(client: &TestActorClient, event_id: &EventId) -
         {
             return Ok(());
         }
-        last = Some(outcome);
+        last_resolve = Some(outcome);
+        last_delivery = Some(delivery_status(source, event_id).await?);
         tokio::time::sleep(Duration::from_secs(2)).await;
     }
     Err(anyhow!(
-        "federated Event {event_id} did not reach the target; last outcome: {last:?}"
+        "federated Event {event_id} did not reach the target; last resolve outcome: \
+         {last_resolve:?}; last source delivery status: {last_delivery:?}"
     ))
 }
 

@@ -323,10 +323,13 @@ impl ArkretServer {
         let base_url = Url::parse(&format!("https://127.0.0.1:{}/", port.port()))?;
         let (notary_signing_key, notary_signing_seed) = test_service_signing_key(name);
         let blob_root = std::env::temp_dir().join(format!("cotest-{name}-{}-blobs", port.port()));
-        let log_path = service_log_path(name)?;
-        initialize_service_log(log_path.as_deref(), name, "external_binary")?;
         let _ = fs::remove_dir_all(&blob_root);
         fs::create_dir_all(&blob_root)?;
+        // Always retain process output for restart diagnostics. When the caller
+        // does not request a persistent artifact directory, keep the log in the
+        // run-scoped blob root so Drop removes it with the rest of the fixture.
+        let log_path = service_log_path(name)?.or_else(|| Some(blob_root.join("service.log")));
+        initialize_service_log(log_path.as_deref(), name, "external_binary")?;
         let (stdout, stderr) = service_log_stdio(log_path.as_deref())?;
 
         let mut command = Command::new(bin_path);
