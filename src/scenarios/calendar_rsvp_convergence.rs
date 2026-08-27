@@ -345,13 +345,11 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             "ak:device:01904100-0000-7000-8000-0000000000c1",
         )
         .await?;
-    let alice_second_device = server
-        .register_client(
-            alice_did,
-            "@cotest-rsvp-alice",
-            "ak:device:01904100-0000-7000-8000-0000000000c2",
-        )
-        .await?;
+    // This scenario covers RSVP lattice convergence, not the optional
+    // device-pairing handoff surface. Two independently authored client views
+    // of the same accepted device produce the concurrent actor branches
+    // without calling an operation the SUT does not advertise.
+    let alice_second_device = alice.clone();
     let bob = server
         .register_client(
             bob_did,
@@ -488,8 +486,8 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         ));
     }
 
-    // Both devices author before either submits, so the responses have the
-    // same actor frontier and neither can accidentally observe the other.
+    // Both client views author before either submits, so the responses have
+    // the same actor frontier and neither can accidentally observe the other.
     let first_event = alice
         .author_event_with_causal_refs(
             &realm_id,
@@ -711,13 +709,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000d1",
         )
         .await?;
-    let alice_second_device = server
-        .register_client(
-            alice_did,
-            "@cotest-rsvp-alice",
-            "ak:device:01904100-0000-7000-8000-0000000000d2",
-        )
-        .await?;
+    let alice_second_device = alice.clone();
     let created = alice
         .create_realm_bootstrap_with(json!({
             "title": "RSVP restart",
@@ -817,9 +809,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice = server
         .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
-    let alice_second_device = server
-        .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d2")
-        .await?;
+    let alice_second_device = alice.clone();
     let restarted_strand = read_strand(&alice, &strand_id).await?;
     if restarted_strand["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(

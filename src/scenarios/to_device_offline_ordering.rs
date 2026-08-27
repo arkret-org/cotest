@@ -54,14 +54,6 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000ba";
     let bob = server.demo_client(&bob_did, bob_device).await?;
     let bob_token = bob.token.clone();
-    // Sanity: alice can also log in on a separate device id so the
-    // sender's session is a separate row from the recipient's. (Not
-    // strictly required by the scenario, but mirrors the implementor's
-    // hint of "two devices for alice and one for bob".)
-    let _alice_device_b = server
-        .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000ab")
-        .await?;
-
     // ── Step 2: alice sends msg 1 to bob's device.
     send_to_device(
         &server,

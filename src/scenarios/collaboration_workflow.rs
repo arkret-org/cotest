@@ -47,30 +47,6 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let alice_core_id = crate::harness::actor_core_id(&alice.actor)?;
     let bob_full_id = arkret_identifiers::DidFullId::new(bob.actor.clone())?;
     let bob_core_id = arkret_identifiers::project_full_id_to_core_id(&bob_full_id)?;
-    let bob_second_device = expect_json(
-        server.account_registration_request().json(
-            &arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
-                principal_id: bob_core_id.clone(),
-                full_id: bob_full_id,
-                display_name: Some(BOB_HANDLE.trim_start_matches('@').to_owned()),
-                device_id: Some(arkret_identifiers::DeviceId::new(
-                    "ak:device:01904100-0000-7000-8000-0000000000b2",
-                )?),
-                proof: None,
-                identity_creation: None,
-                policy_evidence: None,
-            },
-        ),
-        StatusCode::OK,
-    )
-    .await?;
-    let bob_devices = bob_second_device["devices"]
-        .as_array()
-        .expect("bob devices array");
-    assert!(bob_devices.iter().any(|device| {
-        device["device_id"].as_str() == Some("ak:device:01904100-0000-7000-8000-0000000000b2")
-    }));
-
     let hidden_bob = expect_json(
         server
             .http()

@@ -44,7 +44,9 @@ use arkret_signatures::webvh::{
     sign_identity_creation_control_proof, sign_registration_did_evidence_draft,
     validate_principal_inception_operation,
 };
-use arkret_wire::{Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString};
+use arkret_wire::{
+    Base64UrlString, EventRef, Hash, IdempotencyKey, NonEmptyString, ServiceOperationId,
+};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use ed25519_dalek::{Signer, SigningKey};
@@ -230,15 +232,6 @@ pub async fn bootstrap_registered_actor(
     let device_id = canonical_device_id(device_id);
     let device_key = founding_device_signing_key(actor, &device_id);
     let device_method = crate::fixture_did_url(format!("{actor}#{device_id}"));
-    let token = match registration {
-        ActorBootstrapRegistration::DevLogin => dev_login(server, actor, &device_id).await?,
-        ActorBootstrapRegistration::Account { handle } => {
-            register_account(server, actor, handle, &device_id).await?
-        }
-        ActorBootstrapRegistration::AccountWithLocalpart { handle, localpart } => {
-            register_account_with_localpart(server, actor, handle, localpart, &device_id).await?
-        }
-    };
     let key = (server.service_id().as_str().to_owned(), actor.to_owned());
     let cached = PROVISIONED_PRINCIPALS
         .lock()
@@ -250,6 +243,21 @@ pub async fn bootstrap_registered_actor(
                 record.additional_devices.get(&device_id).cloned(),
             )
         });
+    let token = match registration {
+        ActorBootstrapRegistration::DevLogin => dev_login(server, actor, &device_id).await?,
+        ActorBootstrapRegistration::Account { handle } if cached.is_none() => {
+            register_account(server, actor, handle, &device_id).await?
+        }
+        ActorBootstrapRegistration::AccountWithLocalpart { handle, localpart }
+            if cached.is_none() =>
+        {
+            register_account_with_localpart(server, actor, handle, localpart, &device_id).await?
+        }
+        ActorBootstrapRegistration::Account { .. }
+        | ActorBootstrapRegistration::AccountWithLocalpart { .. } => {
+            dev_login(server, actor, &device_id).await?
+        }
+    };
     if let Some((founding, additional)) = cached {
         if device_id == founding.device_id.as_str() {
             register_event_signing_identity(
@@ -979,6 +987,7 @@ async fn submit_harness_pcr_genesis(
     let content_digest = format!("sha-256=:{}:", STANDARD.encode(Sha256::digest(&body)));
     let source_service_id = harness_account_authority_id().to_string();
     let destination_service_id = server.service_id().to_string();
+    let operation = ServiceOperationId::PEER_PRINCIPAL_GENESIS_COMMAND_SUBMIT_V1;
     let source_trust_domain = server.trust_domain().as_str().to_owned();
     let destination_trust_domain = source_trust_domain.clone();
     let target_uri = server.url("/_arkret/peer/principal-genesis");
@@ -1006,6 +1015,7 @@ async fn submit_harness_pcr_genesis(
             "idempotency-key".to_owned(),
             request.idempotency_key.as_str().to_owned(),
         ),
+        ("arkret-operation".to_owned(), operation.to_owned()),
     ];
     let components = vec![
         Component::Method,
@@ -1017,6 +1027,7 @@ async fn submit_harness_pcr_genesis(
         Component::Header("source-trust-domain".to_owned()),
         Component::Header("destination-trust-domain".to_owned()),
         Component::Header("idempotency-key".to_owned()),
+        Component::Header("arkret-operation".to_owned()),
     ];
     let created = chrono::Utc::now().timestamp();
     let expires = created + 120;

@@ -7,6 +7,7 @@ import { sendPlaintextMessageViaApi } from "../../helpers/api";
 import {
   accountSubscribeFramesApi,
   createRealmApi,
+  resolveDefaultStrandId,
 } from "../../helpers/soland-api";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 
@@ -57,6 +58,11 @@ test.describe("account stream + device-message convergence", () => {
     );
     expect(quietElapsedMs).toBeLessThan(40_000);
 
+    // Resolve the projection before opening the measured long-poll. Otherwise
+    // the helper's discovery request can queue behind the outstanding poll in
+    // the shared Playwright request context and measure that client-side wait
+    // instead of the server's event-driven wake latency.
+    const strandId = await resolveDefaultStrandId(request, token, realmId);
     const repollStartedAt = Date.now();
     const repoll = accountSubscribeFramesApi(request, token, {
       after: latestCursor(quiet),
@@ -66,6 +72,7 @@ test.describe("account stream + device-message convergence", () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
     await sendPlaintextMessageViaApi(request, token, realmId, `long-poll wake ${Date.now()}`, {
       actorDid: user.did,
+      strandId,
     });
 
     const woke = await repoll;

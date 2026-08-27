@@ -720,12 +720,12 @@ impl ArkretServer {
         }
     }
 
-    /// Build an authenticated request for the harness-only embedded WebVH
-    /// registration gate. Keeping the credential here prevents direct fixture
-    /// requests from silently bypassing the bootstrap authentication contract.
+    /// Build a request for Soland's deployment-local account projection fixture.
+    /// Canonical Account Authority registration is not owned by a Principal
+    /// Server; live Cotest setup materializes its result through `/_soland`.
     pub fn account_registration_request(&self) -> reqwest::RequestBuilder {
         self.http()
-            .post(self.url("/_arkret/gate/account/register"))
+            .post(self.url("/_soland/self/account/register"))
             .bearer_auth(EMBEDDED_WEBVH_REGISTRATION_BEARER)
     }
 

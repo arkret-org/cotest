@@ -165,15 +165,17 @@ export async function sendPlaintextMessageViaApi(
   token: string,
   realmId: string,
   body: string,
-  opts: { actorDid?: string; server?: SolandKey } = {},
+  opts: { actorDid?: string; server?: SolandKey; strandId?: string } = {},
 ): Promise<ApiMessage> {
   expect(
     opts.actorDid,
     "sendPlaintextMessageViaApi requires opts.actorDid for canonical events",
   ).toBeTruthy();
-  const strandId = await resolveDefaultStrandId(request, token, realmId, {
-    server: opts.server,
-  });
+  const strandId =
+    opts.strandId ??
+    (await resolveDefaultStrandId(request, token, realmId, {
+      server: opts.server,
+    }));
   const envelope = signedEventEnvelope({
     actorDid: opts.actorDid!,
     realmId,

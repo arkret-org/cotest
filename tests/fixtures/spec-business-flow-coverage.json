@@ -88,7 +88,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/system/principal_resolution.rs",
           "markers": [
-            "ak.open.identity.read.resolution.v1",
+          "ak.open.identity.read.resolution",
             "principals/{principal_id}/resolution"
           ]
         },
@@ -218,10 +218,10 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/auth.rs",
-          "markers": [
-            "/_arkret/gate/account/register",
-            "/_arkret/gate/account/logout"
+        "path": "../soland/crates/server/tests/http_api/common.rs",
+        "markers": [
+          "/_soland/self/account/register",
+          "/_soland/gate/auth/dev-login"
           ]
         },
         {
@@ -714,10 +714,10 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/directory_index.rs",
-          "markers": [
-            "/_arkret/find/directory/search-realms",
-            "ak.find.directory.read.private_contact_discovery.v1"
+        "path": "../soland/crates/http/src/routing/spaces/directory/discovery.rs",
+        "markers": [
+          "ak.find.directory.read.private_contact_discovery",
+          "ak.private_contact_discovery.v1"
           ]
         },
         {
@@ -1223,8 +1223,8 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/join_applications.rs",
           "markers": [
-            "ak.self.realm.join_application.command.submit.v1",
-            "ak.self.realm.join_application.audit.read.list.v1"
+          "ak.self.realm.join_application.command.submit",
+          "ak.self.realm.join_application.audit.read.list"
           ]
         },
         {

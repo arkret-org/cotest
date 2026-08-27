@@ -163,15 +163,20 @@ pub async fn register_account(
 ) -> Result<String> {
     let device_id = canonical_device_id(device_id);
     let full_id = arkret_identifiers::DidFullId::new(did.to_owned())?;
-    let body = arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
-        principal_id: arkret_identifiers::project_full_id_to_core_id(&full_id)?,
-        full_id,
-        display_name: Some(handle.trim_start_matches('@').to_owned()),
-        device_id: Some(arkret_identifiers::DeviceId::new(device_id.clone())?),
-        proof: None,
-        identity_creation: None,
-        policy_evidence: None,
-    };
+    let requested_localpart = handle.trim().trim_start_matches('@');
+    let localpart = arkret_wire::string_profiles::prepare_handle_localpart(requested_localpart)
+        .unwrap_or_else(|_| {
+            format!(
+                "cotest-{}",
+                device_id.rsplit(':').next().unwrap_or("account")
+            )
+        });
+    let body = crate::harness::NonProtocolTestBody::new(serde_json::json!({
+        "did": full_id,
+        "handle": localpart,
+        "display_name": handle.trim_start_matches('@'),
+        "device_id": arkret_identifiers::DeviceId::new(device_id.clone())?,
+    }));
     expect_json(
         server.account_registration_request().json(&body),
         StatusCode::OK,

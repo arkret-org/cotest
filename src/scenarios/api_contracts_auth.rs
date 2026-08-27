@@ -49,52 +49,35 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     expect_api_error(
         server
             .account_registration_request()
-            .json(&crate::harness::NonProtocolTestBody::new(json!({"principal_id": "bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"}))),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
+            .json(&crate::harness::NonProtocolTestBody::new(json!({"did": "bad", "handle": "@bad", "device_id": "ak:device:01904100-0000-7000-8000-000000000bad"}))),
+        StatusCode::BAD_REQUEST,
+        "param_invalid",
     )
     .await?;
 
-    let registered = expect_json(
-        server.account_registration_request().json(
-            &arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
-                principal_id: account_core_id.clone(),
-                full_id: account_full_id.clone(),
-                display_name: Some("alice-auth".to_owned()),
-                device_id: Some(arkret_identifiers::DeviceId::new(
-                    "ak:device:01904100-0000-7000-8000-0000000000a1".to_owned(),
-                )?),
-                proof: None,
-                identity_creation: None,
-                policy_evidence: None,
-            },
-        ),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(registered["principal_id"], account_core_id.as_str());
-
-    let second_device = expect_json(
-        server.account_registration_request().json(
-            &arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody {
-                principal_id: account_core_id.clone(),
-                full_id: account_full_id,
-                display_name: Some("alice-auth".to_owned()),
-                device_id: Some(arkret_identifiers::DeviceId::new(
-                    "ak:device:01904100-0000-7000-8000-0000000000a2".to_owned(),
-                )?),
-                proof: None,
-                identity_creation: None,
-                policy_evidence: None,
-            },
-        ),
-        StatusCode::OK,
-    )
-    .await?;
-    let devices = second_device["devices"].as_array().expect("devices array");
-    assert!(devices.iter().any(|device| {
-        device["device_id"].as_str() == Some("ak:device:01904100-0000-7000-8000-0000000000a2")
+    let registration_body = crate::harness::NonProtocolTestBody::new(json!({
+        "did": account_full_id,
+        "handle": "@alice-auth",
+        "display_name": "alice-auth",
+        "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
     }));
+    let registered = expect_json(
+        server
+            .account_registration_request()
+            .json(&registration_body),
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(registered["did"], account_core_id.as_str());
+
+    expect_api_error(
+        server
+            .account_registration_request()
+            .json(&registration_body),
+        StatusCode::CONFLICT,
+        "duplicate_conflict",
+    )
+    .await?;
 
     let login = expect_json(
         server
