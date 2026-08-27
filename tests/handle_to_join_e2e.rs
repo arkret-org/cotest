@@ -7,8 +7,8 @@
 //!     `member_delivery_binding`).
 //!   - T3.3 lands the soland `delivery_binding_policy` reducer (`recipient_service_not_allowed` /
 //!     `binding_source_not_allowed`).
-//!   - T3.4 adds the teabay `ak.find.directory.read.resolve_handle(intent="member_add")` allow-list
-//!     filter.
+//!   - T3.4 adds the teabay `ak.find.directory.read.resolve_handle.v1(intent="member_add")`
+//!     allow-list filter.
 //!
 //! The scenario in `cotest::scenarios::handle_to_join_e2e` always exercises
 //! the SDK happy path + all seven negatives, and best-effort drives a live

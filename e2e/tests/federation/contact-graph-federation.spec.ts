@@ -9,7 +9,7 @@
 //
 // Cross-PS contact federation (spec contact-and-direct-conversation.md §2/§4.1):
 // the contact request/respond protocol face delivers signed `ak.contact.*`
-// facts to the target holder's home PS via `ak.peer.contacts.command.submit`
+// facts to the target holder's home PS via `ak.peer.contacts.command.submit.v1`
 // (`POST /_arkret/peer/contacts`) over the durable federation outbox. The
 // requester addresses the remote target with `recipient_service_id`; the
 // responder addresses the remote requester with `requester_service_id`
@@ -19,7 +19,7 @@
 // (`POST /_arkret/peer/invites`): the recipient PS verifies the grant against
 // its OWN consent cells. S4-fed exercises that real cross-PS path end to end.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   assertDualSolandNotRequired,
   hasDualSoland,

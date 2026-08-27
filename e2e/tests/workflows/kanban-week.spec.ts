@@ -14,7 +14,7 @@ import {
   test,
   type APIRequestContext,
   type Locator,
-} from "@playwright/test";
+} from "../../helpers/arkret-test";
 import { createRealmViaApi } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";

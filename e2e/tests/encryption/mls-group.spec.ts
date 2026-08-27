@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 
 import { solandBaseUrl } from "../../helpers/env";
 import { authHeaders, createRealmApi } from "../../helpers/soland-api";

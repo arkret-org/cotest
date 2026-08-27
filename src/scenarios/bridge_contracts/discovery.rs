@@ -41,7 +41,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         // This is soland's private integration manifest (`/_soland/*`), not a
         // spec-normative surface. soland declares the introspection dependency
         // with the protocol-native operation id rather than a private alias.
-        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT_V1
     );
     assert_eq!(
         integration["surfaces"][0]["path"],

@@ -17,7 +17,7 @@
 // the durable ban gate: a banned actor's media-token re-exchange is refused
 // with `call_participant_removed`.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { wireErrCode } from "../../helpers/soland-api";
 import {

@@ -25,7 +25,7 @@ fn moderation_policy_registry_and_request_schema_require_one_signed_event() {
         .as_array()
         .expect("operations array")
         .iter()
-        .find(|row| row["operation_id"] == "ak.self.realm.moderation_policy.resource.replace")
+        .find(|row| row["operation_id"] == "ak.self.realm.moderation_policy.resource.replace.v1")
         .expect("Realm moderation-policy replace operation");
     assert_eq!(
         operation["request_schema_ref"],

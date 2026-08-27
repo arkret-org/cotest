@@ -232,11 +232,11 @@ fn token_ttl_within_bounds(remaining_secs: i64) -> Result<()> {
 }
 
 pub fn run_token_exchange_minimal_vector() -> Result<()> {
-    if arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN
-        != "ak.self.call.media.exchange.issue_token"
+    if arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN_V1
+        != "ak.self.call.media.exchange.issue_token.v1"
     {
         bail!(
-            "arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN spelling drifted: arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN"
+            "arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN_V1 spelling drifted: arkret_wire::ServiceOperationId::SELF_CALL_MEDIA_EXCHANGE_ISSUE_TOKEN_V1"
         );
     }
     if ParticipantBinding::SCHEMA != "ak.media.participant_binding.v1" {

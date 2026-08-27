@@ -22,7 +22,7 @@
 // sync/api-conventions.md §3.3 (session-grant + DPoP self-path), and
 // arkret-rust-sdk service-describe.schema.json (auth_metadata shape).
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   coauthBaseUrl,
   coauthOidcClientId,

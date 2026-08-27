@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/encryption/audited-e2ee.md
 // Spec: crypto-media/audited-e2ee.md §2/§8, governance/content-moderation.md §3.4
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,

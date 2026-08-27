@@ -37,23 +37,23 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
     crate::conformance::validate_server_profile_claims(&server_describe)?;
 
     for required in [
-        "ak.self.account.stream.subscribe",
-        "ak.find.directory.read.search_realms",
-        "ak.self.authz.read.check",
-        "ak.self.signal.command.send",
-        "ak.edge.push.command.register_device",
-        "ak.self.keys.backups.resource.replace",
-        "ak.self.keys.backups.read.list",
-        "ak.self.call.media.exchange.issue_token",
-        "ak.self.media.read.ice_config",
-        "ak.self.policy.read.check",
-        "ak.self.moderation.command.report",
+        "ak.self.account.stream.subscribe.v1",
+        "ak.find.directory.read.search_realms.v1",
+        "ak.self.authz.read.check.v1",
+        "ak.self.signal.command.send.v1",
+        "ak.edge.push.command.register_device.v1",
+        "ak.self.keys.backups.resource.replace.v1",
+        "ak.self.keys.backups.read.list.v1",
+        "ak.self.call.media.exchange.issue_token.v1",
+        "ak.self.media.read.ice_config.v1",
+        "ak.self.policy.read.check.v1",
+        "ak.self.moderation.command.report.v1",
     ] {
         assert!(
-            description
-                .operation_bindings
-                .iter()
-                .any(|binding| binding.operation_id.as_str() == required),
+            description.supports_operation(
+                arkret_wire::ServiceOperationId::from_wire(required)
+                    .expect("required operation must be registered")
+            ),
             "missing supported operation {required}"
         );
     }

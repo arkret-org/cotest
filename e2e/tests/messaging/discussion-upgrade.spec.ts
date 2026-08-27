@@ -6,7 +6,7 @@
 //   - models/relation.md (confidential_discussion_of)
 //   - discovery/read-receipts.md §2.5 (scope override)
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   authHeaders,
   createSharedRealmViaApi,

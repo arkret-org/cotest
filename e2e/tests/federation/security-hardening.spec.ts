@@ -11,7 +11,7 @@
 // e2e/scenarios/federation/security-hardening.md. If the two nodes cannot talk
 // at all, both assertions hold no matter what the denylist does.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   assertDualSolandNotRequired,
   hasDualSoland,

@@ -179,7 +179,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
 
     // ── 1. policy replace (PUT .../policy-server) ──────────────────────────
     let replace_effect =
-        declared_effect(&registry, "ak.self.realm_policy_server.resource.replace")?;
+        declared_effect(&registry, "ak.self.realm_policy_server.resource.replace.v1")?;
     let before = realm_event_kinds(&alice, &realm_id).await?;
     // The declaration is what the caller signs; the request body carries that
     // Event and nothing else.
@@ -229,18 +229,19 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         .await?;
     let after = realm_event_kinds(&alice, &realm_id).await?;
     let replace_appended = assert_event_log_effect(
-        "ak.self.realm_policy_server.resource.replace",
+        "ak.self.realm_policy_server.resource.replace.v1",
         &replace_effect,
         &before,
         &after,
     )?;
     observations.insert(
-        "ak.self.realm_policy_server.resource.replace".to_owned(),
+        "ak.self.realm_policy_server.resource.replace.v1".to_owned(),
         json!({"status": replace_status.as_u16(), "appended_kinds": replace_appended}),
     );
 
     // ── 2. policy delete (DELETE .../policy-server) ────────────────────────
-    let delete_effect = declared_effect(&registry, "ak.self.realm_policy_server.resource.delete")?;
+    let delete_effect =
+        declared_effect(&registry, "ak.self.realm_policy_server.resource.delete.v1")?;
     let before = realm_event_kinds(&alice, &realm_id).await?;
     // The removal is a signed Event too, so the DELETE carries a body, and the
     // caller attaches its own `head_eq`: a precondition is inside the bytes it
@@ -278,18 +279,18 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
         .await?;
     let after = realm_event_kinds(&alice, &realm_id).await?;
     let delete_appended = assert_event_log_effect(
-        "ak.self.realm_policy_server.resource.delete",
+        "ak.self.realm_policy_server.resource.delete.v1",
         &delete_effect,
         &before,
         &after,
     )?;
     observations.insert(
-        "ak.self.realm_policy_server.resource.delete".to_owned(),
+        "ak.self.realm_policy_server.resource.delete.v1".to_owned(),
         json!({"status": delete_status.as_u16(), "appended_kinds": delete_appended}),
     );
 
     // ── 3. moderation report ───────────────────────────────────────────────
-    let report_operation = "ak.self.moderation.command.report";
+    let report_operation = "ak.self.moderation.command.report.v1";
     if let Ok(report_effect) = declared_effect(&registry, report_operation) {
         let before = realm_event_kinds(&alice, &realm_id).await?;
         let report_request = moderation_report_request(
@@ -334,7 +335,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     }
 
     // ── 4. push route — declared `none` (service-local edge effect only) ───
-    let push_operation = "ak.edge.push.command.register_device";
+    let push_operation = "ak.edge.push.command.register_device.v1";
     let push_effect = declared_effect(&registry, push_operation)?;
     assert_eq!(
         push_effect,
@@ -374,7 +375,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     // ── 5. account data — the actor-private rail ──────────────────────────
     // The one closed `actor_private_event` declaration reachable from a plain
     // session: its Event MUST NOT surface in the shared Realm log.
-    let private_operation = "ak.self.account_data.resource.replace";
+    let private_operation = "ak.self.account_data.resource.replace.v1";
     let private_effect = declared_effect(&registry, private_operation)?;
     let DeclaredEffect::ActorPrivateEvent {
         event_kind: private_kind,

@@ -10,7 +10,7 @@
 // are `test.fixme` until SOL-ORG-06 / TBY-ORG-01..03 land
 // the verified-relationship-backed badge projection.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,

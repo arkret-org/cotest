@@ -361,7 +361,7 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
 
 fn validate_direct_conversation_artifacts() -> Result<()> {
     let operation = arkret_wire::ServiceOperationId::from_wire(
-        arkret_wire::ServiceOperationId::SELF_DIRECT_CONVERSATION_READ_RESOLVE,
+        arkret_wire::ServiceOperationId::SELF_DIRECT_CONVERSATION_READ_RESOLVE_V1,
     )
     .ok_or_else(|| anyhow!("SDK missing direct conversation resolve operation"))?
     .descriptor();
@@ -387,7 +387,7 @@ fn validate_direct_conversation_artifacts() -> Result<()> {
 
     record_vector_event(
         "private_chat_privacy.direct_conversation_artifacts",
-        &json!({"operation_id": "ak.self.direct_conversation.read.resolve"}),
+        &json!({"operation_id": "ak.self.direct_conversation.read.resolve.v1"}),
         &json!({
             "http": "POST /_arkret/self/direct-conversations/resolve",
             "request_field": "peer",

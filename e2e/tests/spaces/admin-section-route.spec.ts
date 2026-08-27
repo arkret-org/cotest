@@ -1,7 +1,7 @@
 // Probe: does inkson's RealmAdminPanel see active_section correctly when
 // the URL is /realms/<id>/settings/<section> on a fresh navigation?
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { openDpopUserPage } from "../../helpers/users";
 
 test.describe("admin section route", () => {

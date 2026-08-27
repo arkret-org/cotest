@@ -91,7 +91,7 @@
       "name": "realm_remark_not_in_directory_projection",
       "surface": "directory_projection",
       "payload": {
-        "operation_id": "ak.find.directory.read.search_realms",
+        "operation_id": "ak.find.directory.read.search_realms.v1",
         "result": {
           "realm_id": "ak:realm:AWTDh81g8RB36YDiswQuSLkbySREHjIIO5wwjNzpiEg9",
           "title": "Engineering",
@@ -121,7 +121,7 @@
       "name": "realm_remark_not_in_bridge_payload",
       "surface": "bridge_payload",
       "payload": {
-        "operation_id": "ak.open.mimi.command.notify",
+        "operation_id": "ak.open.mimi.command.notify.v1",
         "bridge": "mimi_interop",
         "payload": {
           "room_id": "mimi-room-7d9e",
@@ -146,7 +146,7 @@
       "name": "realm_remark_not_in_push_payload",
       "surface": "push_payload",
       "payload": {
-        "operation_id": "ak.edge.push.command.notify",
+        "operation_id": "ak.edge.push.command.notify.v1",
         "notification": {
           "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
           "wakeup_kind": "message",

@@ -3311,7 +3311,7 @@ export async function readRealmSealBasis(
 //
 // The view itself carries no root hint — `event-auth-state-resolution.md`
 // requires the consumer to resolve and verify every leaf Seal — so the two
-// roots below come from `ak.self.seals.read.resolve`, never from the frontier
+// roots below come from `ak.self.seals.read.resolve.v1`, never from the frontier
 // response.
 type RealmSealFrontier = {
   seal_id: string;
@@ -4149,7 +4149,7 @@ export type InviteDeliveryOutcomeView = {
 
 // ── invite-addressing.md §7: the authenticated client dispatch path. ──
 //
-// `ak.self.invites.command.dispatch` is the ONLY legal way for a client to
+// `ak.self.invites.command.dispatch.v1` is the ONLY legal way for a client to
 // start private invite delivery. The client hands the raw
 // `introduction_evidence` plus the accepted `ak.invite.create` Event id to its
 // own Principal Server; that server resolves the canonical Event and owns every service-to-service hop from
@@ -4193,7 +4193,7 @@ export async function resolveAcceptedEventApi(
   );
   expect(
     event,
-    `accepted Event ${eventId} must be readable through ak.self.events.read.resolve`,
+    `accepted Event ${eventId} must be readable through ak.self.events.read.resolve.v1`,
   ).toBeTruthy();
   return event!;
 }
@@ -4249,7 +4249,7 @@ export async function rawDispatchSelfInviteApi(
 
 // ── Peer-layer direct submission. NOT a client path. ──
 //
-// `ak.peer.invites.command.submit` is a Principal-Server-to-Principal-Server
+// `ak.peer.invites.command.submit.v1` is a Principal-Server-to-Principal-Server
 // operation: invite-addressing.md §7 step 1 binds it to verified S2S
 // authentication. This helper self-signs those federation headers, so calling
 // it makes the test process impersonate an inviter Principal Server. That is

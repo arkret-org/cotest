@@ -1,6 +1,6 @@
 //! TB-3 — Gate test: "unsigned ingest must be rejected".
 //!
-//! Posts a valid-shape `ak.find.directory.command.announce` body to teabay **without** the
+//! Posts a valid-shape `ak.find.directory.command.announce.v1` body to teabay **without** the
 //! RFC 9421 `Signature-Input` / `Signature` headers (and without any other
 //! transport-level authentication) and asserts the request is rejected with a
 //! 401 / 403 + an errcode that points at the missing transport signature.

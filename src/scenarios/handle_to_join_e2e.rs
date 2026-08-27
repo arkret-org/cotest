@@ -6,7 +6,7 @@
 //!   1. coauth (T3.2) issues a `handle_claim` whose `handle` is the canonical
 //!      `<localpart>:<domain>` form (R3.1 wire rename from `handle_uri`, arkret-spec @ 7157ee8) and
 //!      whose `member_delivery_binding` points at a recipient principal server.
-//!   2. teabay (T3.4) hosts `ak.find.directory.read.resolve_handle(intent="member_add")` and
+//!   2. teabay (T3.4) hosts `ak.find.directory.read.resolve_handle.v1(intent="member_add")` and
 //!      filters candidates against the target Realm's `allowed_recipient_services`.
 //!   3. soland (T3.3) projects `ak.realm.delivery_binding_policy` and the `ak.member.state{join}`
 //!      reducer rejects bindings whose `recipient_service_id` is not in the policy allow-list.
@@ -75,7 +75,7 @@ const ALICE_ID: &str = "ak:did_core:web:alice.acme.example";
 const ALICE_HANDLE: &str = "alice:acme.example";
 
 /// Source-ref event id the directory would echo back on a real
-/// `ak.find.directory.read.resolve_handle` envelope. Carried so `source_refs[]` is
+/// `ak.find.directory.read.resolve_handle.v1` envelope. Carried so `source_refs[]` is
 /// non-empty (a candidate validator MUST-rule).
 const SOURCE_REF_EVENT_ID: &str = "ak:event:AccVsThCMukcEF5tfolTyrO1SoKc5W7qAlVm_mDWvfuw";
 
@@ -113,7 +113,7 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     //    (COAUTH_BIN + SOLAND_BIN + TEABAY_BIN
     //    + DATABASE_URL + docker), drive a real HTTP `resolve-handle`
     //    against teabay and assert the surface responds with the
-    //    `ak.find.directory.read.resolve_handle` envelope shape. Partial stacks
+    //    `ak.find.directory.read.resolve_handle.v1` envelope shape. Partial stacks
     //    silently skip this leg — the SDK assertions above are the
     //    cotest contract surface.
     if joint_service_stack_available() {
@@ -436,7 +436,7 @@ async fn live_stack_probe() -> Result<()> {
     let stack = try_bootstrap(JointServiceConfig::new("t3-5-handle-to-join")).await?;
     stack.assert_healthy().await?;
 
-    // Live teabay surface check: `ak.find.directory.read.resolve_handle` accepts
+    // Live teabay surface check: `ak.find.directory.read.resolve_handle.v1` accepts
     // `intent=member_add` and returns a structured response. We don't try
     // to mint a real signed claim — without a seeded directory row the
     // resolver collapses to blinded `not_found`, which is the spec-correct

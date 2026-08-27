@@ -13,7 +13,7 @@ import {
   type APIRequestContext,
   type Browser,
   type Page,
-} from "@playwright/test";
+} from "../../helpers/arkret-test";
 import {
   coauthBaseUrl,
   optionalEnv,

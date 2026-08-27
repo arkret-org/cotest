@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Response } from "@playwright/test";
+import { expect, test, type Page, type Response } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { COAUTH_DEV_EMAIL_CODE } from "../../helpers/coauth-register";
 import { openUserPage, uniqueUser } from "../../helpers/users";

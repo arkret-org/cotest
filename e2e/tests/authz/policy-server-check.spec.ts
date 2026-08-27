@@ -27,8 +27,8 @@
 //   PolicyCheckOutcome contract and is added to soland's trust set; it remains
 //   tracked as a fixme below.
 
-import { expect, test } from "@playwright/test";
-import type { APIRequestContext } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
+import type { APIRequestContext } from "../../helpers/arkret-test";
 import {
   mockPolicyServerBaseUrl as configuredMockPolicyServerBaseUrl,
   mockPolicyServerDid,
@@ -257,15 +257,9 @@ test.describe("policy server check", () => {
       describeResp,
       "server describe authz self surface",
     );
-    const operationIds = (describe.operation_bindings as Array<{ operation_id: string }>).map(
-      (binding) => binding.operation_id,
-    );
-    expect(operationIds).toEqual(
+    expect(describe.supported_operation_bundles).toEqual(
       expect.arrayContaining([
-        "ak.self.authz.read.check",
-        "ak.self.authz.grants.read.effective",
-        "ak.self.authz.invites.read.list",
-        "ak.self.policy.read.check",
+        "ak.operation_bundle.principal_server.http_core.v1",
       ]),
     );
     const limits = describe.limits as Record<string, unknown>;

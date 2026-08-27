@@ -210,7 +210,7 @@ fn validate_room_binding_case(case: &Value) -> Result<()> {
 
 fn validate_keypackage_claim_case(case: &Value) -> Result<()> {
     let input = required_field(case, "input")?;
-    if required_str(input, "operation_id")? != "ak.open.mimi.exchange.request_key_material" {
+    if required_str(input, "operation_id")? != "ak.open.mimi.exchange.request_key_material.v1" {
         bail!("keypackage vector operation id drifted");
     }
     let response = required_field(input, "response")?;

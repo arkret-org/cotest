@@ -15,61 +15,61 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.server.read.describe",
+          "operation_id": "ak.server.read.describe.v1",
           "surfaces": [
             "service_discovery"
           ]
         },
         {
-          "operation_id": "ak.root.identity.read.resolve",
+          "operation_id": "ak.root.identity.read.resolve.v1",
           "surfaces": [
             "identity_registry"
           ]
         },
         {
-          "operation_id": "ak.open.identity.read.resolution",
+          "operation_id": "ak.open.identity.read.resolution.v1",
           "surfaces": [
             "identity_resolution"
           ]
         },
         {
-          "operation_id": "ak.root.identity.document.resource.get",
+          "operation_id": "ak.root.identity.document.resource.get.v1",
           "surfaces": [
             "identity_registry"
           ]
         },
         {
-          "operation_id": "ak.root.identity.recovery_policy.command.publish",
+          "operation_id": "ak.root.identity.recovery_policy.command.publish.v1",
           "surfaces": [
             "identity_registry"
           ]
         },
         {
-          "operation_id": "ak.root.identity.recovery_session.command.create",
+          "operation_id": "ak.root.identity.recovery_session.command.create.v1",
           "surfaces": [
             "identity_registry"
           ]
         },
         {
-          "operation_id": "ak.root.identity.recovery_session.command.submit_proof",
+          "operation_id": "ak.root.identity.recovery_session.command.submit_proof.v1",
           "surfaces": [
             "identity_registry"
           ]
         },
         {
-          "operation_id": "ak.self.security_transaction.command.create",
+          "operation_id": "ak.self.security_transaction.command.create.v1",
           "surfaces": [
             "security_transactions"
           ]
         },
         {
-          "operation_id": "ak.self.security_transaction.command.continue",
+          "operation_id": "ak.self.security_transaction.command.continue.v1",
           "surfaces": [
             "security_transactions"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.issue_recovery_completion_grant",
+          "operation_id": "ak.gate.account.command.issue_recovery_completion_grant.v1",
           "surfaces": [
             "account_auth"
           ]
@@ -88,7 +88,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/system/principal_resolution.rs",
           "markers": [
-            "ak.open.identity.read.resolution",
+            "ak.open.identity.read.resolution.v1",
             "principals/{principal_id}/resolution"
           ]
         },
@@ -104,7 +104,7 @@
           "path": "../soland/crates/http/src/routing/identity/recovery/session_endpoints.rs",
           "markers": [
             "recovery-sessions",
-            "ak.root.identity.recovery_session.command.submit_proof"
+            "ak.root.identity.recovery_session.command.submit_proof.v1"
           ]
         },
         {
@@ -143,73 +143,73 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.gate.account.command.register",
+          "operation_id": "ak.gate.account.command.register.v1",
           "surfaces": [
             "account_auth"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.issue_session_grant",
+          "operation_id": "ak.gate.account.command.issue_session_grant.v1",
           "surfaces": [
             "account_auth"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.refresh_session_grant",
+          "operation_id": "ak.gate.account.command.refresh_session_grant.v1",
           "surfaces": [
             "account_auth"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.introspect_session_grant",
+          "operation_id": "ak.gate.account.command.introspect_session_grant.v1",
           "surfaces": [
             "account_auth"
           ]
         },
         {
-          "operation_id": "ak.self.account.read.viewer",
+          "operation_id": "ak.self.account.read.viewer.v1",
           "surfaces": [
             "events_sync"
           ]
         },
         {
-          "operation_id": "ak.self.account.command.update_profile",
+          "operation_id": "ak.self.account.command.update_profile.v1",
           "surfaces": [
             "events_sync"
           ]
         },
         {
-          "operation_id": "ak.self.account.stream.subscribe",
+          "operation_id": "ak.self.account.stream.subscribe.v1",
           "surfaces": [
             "events_sync"
           ]
         },
         {
-          "operation_id": "ak.self.account_data.resource.replace",
+          "operation_id": "ak.self.account_data.resource.replace.v1",
           "surfaces": [
             "account_data"
           ]
         },
         {
-          "operation_id": "ak.self.read_cursor.command.advance",
+          "operation_id": "ak.self.read_cursor.command.advance.v1",
           "surfaces": [
             "read_cursor"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.revoke_session",
+          "operation_id": "ak.gate.account.command.revoke_session.v1",
           "surfaces": [
             "account_auth"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.logout_auth_session",
+          "operation_id": "ak.gate.account.command.logout_auth_session.v1",
           "surfaces": [
             "account_auth"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.logout",
+          "operation_id": "ak.gate.account.command.logout.v1",
           "surfaces": [
             "account_auth"
           ]
@@ -228,7 +228,7 @@
           "kind": "ordinary",
           "path": "../coauth/crates/backend/src/handlers/arkret/tests.rs",
           "markers": [
-            "ak.gate.account.command.logout_auth_session",
+            "ak.gate.account.command.logout_auth_session.v1",
             "/_arkret/gate/account/session-grants/introspect"
           ]
         },
@@ -251,7 +251,7 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/account_subscribe_long_poll.rs",
           "markers": [
-            "ak.self.account.stream.subscribe"
+            "ak.self.account.stream.subscribe.v1"
           ]
         }
       ]
@@ -273,103 +273,103 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.self.contact.command.request",
+          "operation_id": "ak.self.contact.command.request.v1",
           "surfaces": [
             "contact_lifecycle"
           ]
         },
         {
-          "operation_id": "ak.self.contact.command.respond",
+          "operation_id": "ak.self.contact.command.respond.v1",
           "surfaces": [
             "contact_lifecycle"
           ]
         },
         {
-          "operation_id": "ak.self.contact.read.list",
+          "operation_id": "ak.self.contact.read.list.v1",
           "surfaces": [
             "contact_lifecycle"
           ]
         },
         {
-          "operation_id": "ak.self.contact.command.tombstone",
+          "operation_id": "ak.self.contact.command.tombstone.v1",
           "surfaces": [
             "contact_lifecycle"
           ]
         },
         {
-          "operation_id": "ak.self.circle.command.create",
+          "operation_id": "ak.self.circle.command.create.v1",
           "surfaces": [
             "circle_management"
           ]
         },
         {
-          "operation_id": "ak.self.circle.member.command.add",
+          "operation_id": "ak.self.circle.member.command.add.v1",
           "surfaces": [
             "circle_management"
           ]
         },
         {
-          "operation_id": "ak.self.circle.member.resource.delete",
+          "operation_id": "ak.self.circle.member.resource.delete.v1",
           "surfaces": [
             "circle_management"
           ]
         },
         {
-          "operation_id": "ak.self.realm.resource.get",
+          "operation_id": "ak.self.realm.resource.get.v1",
           "surfaces": [
             "realm_read"
           ]
         },
         {
-          "operation_id": "ak.self.realm.command.archive",
+          "operation_id": "ak.self.realm.command.archive.v1",
           "surfaces": [
             "realm_read"
           ]
         },
         {
-          "operation_id": "ak.self.realm.read.export",
+          "operation_id": "ak.self.realm.read.export.v1",
           "surfaces": [
             "realm_read"
           ]
         },
         {
-          "operation_id": "ak.self.realm_link.read.list",
+          "operation_id": "ak.self.realm_link.read.list.v1",
           "surfaces": [
             "realm_governance_links"
           ]
         },
         {
-          "operation_id": "ak.self.space.read.list",
+          "operation_id": "ak.self.space.read.list.v1",
           "surfaces": [
             "realm_object_read"
           ]
         },
         {
-          "operation_id": "ak.self.views.collection_projection.command.materialize",
+          "operation_id": "ak.self.views.collection_projection.command.materialize.v1",
           "surfaces": [
             "view_projection"
           ]
         },
         {
-          "operation_id": "ak.self.authz.read.check",
+          "operation_id": "ak.self.authz.read.check.v1",
           "surfaces": [
             "authz_policy"
           ]
         },
         {
-          "operation_id": "ak.self.consent.command.grant",
+          "operation_id": "ak.self.consent.command.grant.v1",
           "surfaces": [
             "consent_management"
           ]
         },
         {
-          "operation_id": "ak.self.consent.command.revoke",
+          "operation_id": "ak.self.consent.command.revoke.v1",
           "surfaces": [
             "consent_management"
           ]
         },
         {
-          "operation_id": "ak.self.moderation.command.report",
+          "operation_id": "ak.self.moderation.command.report.v1",
           "surfaces": [
             "moderation_reports"
           ]
@@ -380,52 +380,52 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/identity/account/social.rs",
           "markers": [
-            "ak.self.contact.command.request",
-            "ak.self.contact.command.respond"
+            "ak.self.contact.command.request.v1",
+            "ak.self.contact.command.respond.v1"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/circles.rs",
           "markers": [
-            "ak.self.circle.command.create",
-            "ak.self.circle.member.command.add"
+            "ak.self.circle.command.create.v1",
+            "ak.self.circle.member.command.add.v1"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/events/projection_query.rs",
           "markers": [
-            "ak.self.space.read.list"
+            "ak.self.space.read.list.v1"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/spaces/space.rs",
           "markers": [
-            "ak.self.realm.resource.get"
+            "ak.self.realm.resource.get.v1"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/realms.rs",
           "markers": [
-            "ak.self.realm_link.read.list"
+            "ak.self.realm_link.read.list.v1"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/identity/consent.rs",
           "markers": [
-            "ak.self.consent.command.grant",
-            "ak.self.consent.command.revoke"
+            "ak.self.consent.command.grant.v1",
+            "ak.self.consent.command.revoke.v1"
           ]
         },
         {
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/interop/moderation.rs",
           "markers": [
-            "ak.self.moderation.command.report"
+            "ak.self.moderation.command.report.v1"
           ]
         },
         {
@@ -458,127 +458,127 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.open.device_pairing.command.stage",
+          "operation_id": "ak.open.device_pairing.command.stage.v1",
           "surfaces": [
             "device_pairing_handoff"
           ]
         },
         {
-          "operation_id": "ak.open.device_pairing.read.resolve",
+          "operation_id": "ak.open.device_pairing.read.resolve.v1",
           "surfaces": [
             "device_pairing_handoff"
           ]
         },
         {
-          "operation_id": "ak.open.device_pairing.read.status",
+          "operation_id": "ak.open.device_pairing.read.status.v1",
           "surfaces": [
             "device_pairing_handoff"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.pair_device",
+          "operation_id": "ak.gate.account.command.pair_device.v1",
           "surfaces": [
             "account_auth"
           ]
         },
         {
-          "operation_id": "ak.self.device_messages.command.send",
+          "operation_id": "ak.self.device_messages.command.send.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.device_messages.read.list",
+          "operation_id": "ak.self.device_messages.read.list.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.device_messages.command.ack",
+          "operation_id": "ak.self.device_messages.command.ack.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.upload.create",
+          "operation_id": "ak.self.keys.upload.create.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.read.lookup",
+          "operation_id": "ak.self.keys.read.lookup.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.command.claim",
+          "operation_id": "ak.self.keys.command.claim.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.keypackages.upload.create",
+          "operation_id": "ak.self.keys.keypackages.upload.create.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.keypackages.command.claim",
+          "operation_id": "ak.self.keys.keypackages.command.claim.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.keypackages.command.consume",
+          "operation_id": "ak.self.keys.keypackages.command.consume.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.keypackages.command.revoke",
+          "operation_id": "ak.self.keys.keypackages.command.revoke.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.backups.resource.replace",
+          "operation_id": "ak.self.keys.backups.resource.replace.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.backups.read.list",
+          "operation_id": "ak.self.keys.backups.read.list.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.backups.command.unlock",
+          "operation_id": "ak.self.keys.backups.command.unlock.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.keys.backups.resource.delete",
+          "operation_id": "ak.self.keys.backups.resource.delete.v1",
           "surfaces": [
             "device_and_keys"
           ]
         },
         {
-          "operation_id": "ak.self.blob.upload.create",
+          "operation_id": "ak.self.blob.upload.create.v1",
           "surfaces": [
             "blob_storage"
           ]
         },
         {
-          "operation_id": "ak.self.blob.resource.get",
+          "operation_id": "ak.self.blob.resource.get.v1",
           "surfaces": [
             "blob_storage"
           ]
         },
         {
-          "operation_id": "ak.self.blob.command.presign",
+          "operation_id": "ak.self.blob.command.presign.v1",
           "surfaces": [
             "blob_storage"
           ]
@@ -589,9 +589,9 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/identity/device_pairing_open.rs",
           "markers": [
-            "ak.open.device_pairing.command.stage",
-            "ak.open.device_pairing.read.resolve",
-            "ak.open.device_pairing.read.status"
+            "ak.open.device_pairing.command.stage.v1",
+            "ak.open.device_pairing.read.resolve.v1",
+            "ak.open.device_pairing.read.status.v1"
           ]
         },
         {
@@ -623,7 +623,7 @@
           "path": "src/scenarios/protocol_payloads/key_backups.rs",
           "markers": [
             "/_arkret/self/keys/backups",
-            "ak.self.keys.backups.command.unlock"
+            "ak.self.keys.backups.command.unlock.v1"
           ]
         },
         {
@@ -645,67 +645,67 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.find.directory.read.describe",
+          "operation_id": "ak.find.directory.read.describe.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.read.search_realms",
+          "operation_id": "ak.find.directory.read.search_realms.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.read.resolve_realm",
+          "operation_id": "ak.find.directory.read.resolve_realm.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.read.resolve_target",
+          "operation_id": "ak.find.directory.read.resolve_target.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.read.resolve_handle",
+          "operation_id": "ak.find.directory.read.resolve_handle.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.read.private_contact_discovery",
+          "operation_id": "ak.find.directory.read.private_contact_discovery.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.read.list_handles_for_subject",
+          "operation_id": "ak.find.directory.read.list_handles_for_subject.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.command.announce",
+          "operation_id": "ak.find.directory.command.announce.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.command.withdraw",
+          "operation_id": "ak.find.directory.command.withdraw.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.command.takedown_appeal",
+          "operation_id": "ak.find.directory.command.takedown_appeal.v1",
           "surfaces": [
             "directory_discovery"
           ]
         },
         {
-          "operation_id": "ak.find.directory.push.command.register",
+          "operation_id": "ak.find.directory.push.command.register.v1",
           "surfaces": [
             "directory_discovery"
           ]
@@ -717,7 +717,7 @@
           "path": "../soland/crates/server/tests/http_api/directory_index.rs",
           "markers": [
             "/_arkret/find/directory/search-realms",
-            "ak.find.directory.read.private_contact_discovery"
+            "ak.find.directory.read.private_contact_discovery.v1"
           ]
         },
         {
@@ -732,7 +732,7 @@
           "kind": "joint_e2e",
           "path": "src/scenarios/handle_to_join_e2e.rs",
           "markers": [
-            "ak.find.directory.read.resolve_handle"
+            "ak.find.directory.read.resolve_handle.v1"
           ]
         },
         {
@@ -746,7 +746,7 @@
           "kind": "conformance_fixture",
           "path": "src/conformance/privacy.rs",
           "markers": [
-            "ak.find.directory.read.private_contact_discovery",
+            "ak.find.directory.read.private_contact_discovery.v1",
             "withdraw_and_takedown_have_blinded_external_responses"
           ]
         },
@@ -761,14 +761,14 @@
           "kind": "conformance_fixture",
           "path": "src/conformance/list_handles_for_subject_vectors.rs",
           "markers": [
-            "ak.find.directory.read.list_handles_for_subject"
+            "ak.find.directory.read.list_handles_for_subject.v1"
           ]
         },
         {
           "kind": "conformance_fixture",
           "path": "src/conformance/object_addressing_vectors.rs",
           "markers": [
-            "ak.find.directory.read.resolve_target"
+            "ak.find.directory.read.resolve_target.v1"
           ]
         }
       ]
@@ -783,37 +783,37 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.self.signal.command.send",
+          "operation_id": "ak.self.signal.command.send.v1",
           "surfaces": [
             "realtime_media"
           ]
         },
         {
-          "operation_id": "ak.edge.push.command.register_device",
+          "operation_id": "ak.edge.push.command.register_device.v1",
           "surfaces": [
             "push"
           ]
         },
         {
-          "operation_id": "ak.edge.push.command.unregister_device",
+          "operation_id": "ak.edge.push.command.unregister_device.v1",
           "surfaces": [
             "push"
           ]
         },
         {
-          "operation_id": "ak.edge.push.command.notify",
+          "operation_id": "ak.edge.push.command.notify.v1",
           "surfaces": [
             "push"
           ]
         },
         {
-          "operation_id": "ak.self.media.read.ice_config",
+          "operation_id": "ak.self.media.read.ice_config.v1",
           "surfaces": [
             "realtime_media"
           ]
         },
         {
-          "operation_id": "ak.self.call.media.exchange.issue_token",
+          "operation_id": "ak.self.call.media.exchange.issue_token.v1",
           "surfaces": [
             "realtime_media"
           ]
@@ -864,79 +864,79 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.self.agent.command.provision",
+          "operation_id": "ak.self.agent.command.provision.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.gate.account.command.pair_agent_key",
+          "operation_id": "ak.gate.account.command.pair_agent_key.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.read.list",
+          "operation_id": "ak.self.agent.read.list.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.resource.get",
+          "operation_id": "ak.self.agent.resource.get.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.command.pause",
+          "operation_id": "ak.self.agent.command.pause.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.command.resume",
+          "operation_id": "ak.self.agent.command.resume.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.command.deactivate",
+          "operation_id": "ak.self.agent.command.deactivate.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.command.renew_pairing",
+          "operation_id": "ak.self.agent.command.renew_pairing.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.grant.command.attach",
+          "operation_id": "ak.self.agent.grant.command.attach.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.grant.resource.delete",
+          "operation_id": "ak.self.agent.grant.resource.delete.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.sidecar.command.ensure",
+          "operation_id": "ak.self.agent.sidecar.command.ensure.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.participation.resource.replace",
+          "operation_id": "ak.self.agent.participation.resource.replace.v1",
           "surfaces": [
             "agent_runtime"
           ]
         },
         {
-          "operation_id": "ak.self.agent.participation.resource.get",
+          "operation_id": "ak.self.agent.participation.resource.get.v1",
           "surfaces": [
             "agent_runtime"
           ]
@@ -947,15 +947,15 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/identity/agents.rs",
           "markers": [
-            "ak.self.agent.command.provision",
-            "ak.gate.account.command.pair_agent_key"
+            "ak.self.agent.command.provision.v1",
+            "ak.gate.account.command.pair_agent_key.v1"
           ]
         },
         {
           "kind": "joint_e2e",
           "path": "src/scenarios/extension_surface_gaps.rs",
           "markers": [
-            "ak.self.agent.command.provision",
+            "ak.self.agent.command.provision.v1",
             "/_arkret/self/agents"
           ]
         },
@@ -991,61 +991,61 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.peer.events.command.submit",
+          "operation_id": "ak.peer.events.command.submit.v1",
           "surfaces": [
             "peer_federation"
           ]
         },
         {
-          "operation_id": "ak.peer.events.read.frontier",
+          "operation_id": "ak.peer.events.read.frontier.v1",
           "surfaces": [
             "peer_federation"
           ]
         },
         {
-          "operation_id": "ak.open.mimi.read.provider_directory",
+          "operation_id": "ak.open.mimi.read.provider_directory.v1",
           "surfaces": [
             "mimi_interop"
           ]
         },
         {
-          "operation_id": "ak.open.mimi.command.submit_message",
+          "operation_id": "ak.open.mimi.command.submit_message.v1",
           "surfaces": [
             "mimi_interop"
           ]
         },
         {
-          "operation_id": "ak.open.invite_locator.read.resolve",
+          "operation_id": "ak.open.invite_locator.read.resolve.v1",
           "surfaces": [
             "invite_locator_handoff"
           ]
         },
         {
-          "operation_id": "ak.edge.applet.read.describe",
+          "operation_id": "ak.edge.applet.read.describe.v1",
           "surfaces": [
             "applet"
           ]
         },
         {
-          "operation_id": "ak.self.applet.install.command.preview",
+          "operation_id": "ak.self.applet.install.command.preview.v1",
           "surfaces": [
             "applet_install"
           ]
         },
         {
-          "operation_id": "ak.self.applet.command.install",
+          "operation_id": "ak.self.applet.command.install.v1",
           "surfaces": [
             "applet_install"
           ]
         },
         {
-          "operation_id": "ak.self.applet.ghost.command.provision",
+          "operation_id": "ak.self.applet.ghost.command.provision.v1",
           "surfaces": [
             "applet_ghost"
           ]
         },
         {
-          "operation_id": "ak.edge.applet.command.transaction",
+          "operation_id": "ak.edge.applet.command.transaction.v1",
           "surfaces": [
             "applet"
           ]
@@ -1056,7 +1056,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/server/tests/http_api/federation.rs",
           "markers": [
-            "ak.peer.events.command.submit",
+            "ak.peer.events.command.submit.v1",
             "/_arkret/peer/events/frontier"
           ]
         },
@@ -1072,7 +1072,7 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/invites.rs",
           "markers": [
-            "ak.open.invite_locator.read.resolve"
+            "ak.open.invite_locator.read.resolve.v1"
           ]
         },
         {
@@ -1089,7 +1089,7 @@
           "kind": "conformance_fixture",
           "path": "src/conformance/wire/mimi.rs",
           "markers": [
-            "ak.open.mimi.exchange.request_key_material"
+            "ak.open.mimi.exchange.request_key_material.v1"
           ]
         }
       ]
@@ -1103,47 +1103,47 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.self.history_key_requests.command.create",
+          "operation_id": "ak.self.history_key_requests.command.create.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.self.history_key_requests.read.list",
+          "operation_id": "ak.self.history_key_requests.read.list.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.self.history_key_responses.command.send",
+          "operation_id": "ak.self.history_key_responses.command.send.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.self.history_key_responses.read.list",
+          "operation_id": "ak.self.history_key_responses.read.list.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.self.history_key_responses.command.ack",
+          "operation_id": "ak.self.history_key_responses.command.ack.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.self.organization_recovery_archives.read.list",
+          "operation_id": "ak.self.organization_recovery_archives.read.list.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.peer.history_key_requests.command.replicate",
+          "operation_id": "ak.peer.history_key_requests.command.replicate.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.peer.history_key_responses.command.relay",
+          "operation_id": "ak.peer.history_key_responses.command.relay.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.peer.seals.read.mls_governance_proof",
+          "operation_id": "ak.peer.seals.read.mls_governance_proof.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.peer.seals.read.governance_dependencies",
+          "operation_id": "ak.peer.seals.read.governance_dependencies.v1",
           "surfaces": ["history_key_recovery"]
         },
         {
-          "operation_id": "ak.peer.organization_recovery_archives.command.replicate",
+          "operation_id": "ak.peer.organization_recovery_archives.command.replicate.v1",
           "surfaces": ["history_key_recovery"]
         }
       ],
@@ -1152,8 +1152,8 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/governance_history.rs",
           "markers": [
-            "ak.self.history_key_requests.command.create",
-            "ak.peer.history_key_responses.command.relay"
+            "ak.self.history_key_requests.command.create.v1",
+            "ak.peer.history_key_responses.command.relay.v1"
           ]
         },
         {
@@ -1182,37 +1182,37 @@
       ],
       "operation_spine": [
         {
-          "operation_id": "ak.self.realm.join_application.command.submit",
+          "operation_id": "ak.self.realm.join_application.command.submit.v1",
           "surfaces": [
             "candidate_join_policy"
           ]
         },
         {
-          "operation_id": "ak.self.realm.join_application.command.review",
+          "operation_id": "ak.self.realm.join_application.command.review.v1",
           "surfaces": [
             "candidate_join_policy"
           ]
         },
         {
-          "operation_id": "ak.self.realm.join_application.command.cancel",
+          "operation_id": "ak.self.realm.join_application.command.cancel.v1",
           "surfaces": [
             "candidate_join_policy"
           ]
         },
         {
-          "operation_id": "ak.self.realm.join_application.read.list",
+          "operation_id": "ak.self.realm.join_application.read.list.v1",
           "surfaces": [
             "candidate_join_policy"
           ]
         },
         {
-          "operation_id": "ak.self.realm.join_application.resource.get",
+          "operation_id": "ak.self.realm.join_application.resource.get.v1",
           "surfaces": [
             "candidate_join_policy"
           ]
         },
         {
-          "operation_id": "ak.self.realm.join_application.audit.read.list",
+          "operation_id": "ak.self.realm.join_application.audit.read.list.v1",
           "surfaces": [
             "candidate_join_policy"
           ]
@@ -1223,8 +1223,8 @@
           "kind": "ordinary",
           "path": "../soland/crates/http/src/routing/join_applications.rs",
           "markers": [
-            "ak.self.realm.join_application.command.submit",
-            "ak.self.realm.join_application.audit.read.list"
+            "ak.self.realm.join_application.command.submit.v1",
+            "ak.self.realm.join_application.audit.read.list.v1"
           ]
         },
         {

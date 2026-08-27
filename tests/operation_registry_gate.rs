@@ -10,6 +10,18 @@ use cotest::conformance::{
 use serde_json::{Value, json};
 
 #[test]
+fn operation_selector_is_exact_versioned_and_route_bound() {
+    let operation = arkret_wire::ServiceOperationId::from_wire("ak.server.read.describe.v1")
+        .expect("registered current-v1 selector must resolve");
+    assert_eq!(operation.as_str(), "ak.server.read.describe.v1");
+    assert!(operation.matches_http_request("GET", "/_arkret/describe"));
+    assert!(!operation.matches_http_request("POST", "/_arkret/describe"));
+    assert!(!operation.matches_http_request("GET", "/_arkret/self/events"));
+    assert!(arkret_wire::ServiceOperationId::from_wire("ak.server.read.describe").is_none());
+    assert!(arkret_wire::ServiceOperationId::from_wire("ak.server.read.unknown.v1").is_none());
+}
+
+#[test]
 fn openapi_operation_id_drift_fails() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let artifacts_root = temp.path().join("artifacts");
@@ -18,7 +30,7 @@ fn openapi_operation_id_drift_fails() -> Result<()> {
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.read.describe",
+            "ak.server.read.describe.v1",
             "GET /_arkret/describe",
             "typed_response",
             None,
@@ -58,13 +70,13 @@ fn unregistered_source_path_without_product_private_classification_fails() -> Re
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.read.describe",
+            "ak.server.read.describe.v1",
             "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_arkret/describe", "ak.server.read.describe")],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe.v1")],
     )?;
     write_json(
         &product_private_path,
@@ -99,13 +111,13 @@ fn product_private_source_path_is_explicitly_allowed() -> Result<()> {
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.read.describe",
+            "ak.server.read.describe.v1",
             "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_arkret/describe", "ak.server.read.describe")],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe.v1")],
     )?;
     write_json(
         &product_private_path,
@@ -159,13 +171,13 @@ fn cotest_spec_files_are_scanned() -> Result<()> {
     write_minimal_artifacts(
         &artifacts_root,
         &[(
-            "ak.server.read.describe",
+            "ak.server.read.describe.v1",
             "GET /_arkret/describe",
             "typed_response",
             None,
             None,
         )],
-        &[("GET", "/_arkret/describe", "ak.server.read.describe")],
+        &[("GET", "/_arkret/describe", "ak.server.read.describe.v1")],
     )?;
     write_json(
         &product_private_path,
@@ -199,7 +211,7 @@ fn rust_cfg_test_items_are_not_treated_as_production_operations() -> Result<()> 
         &artifacts_root,
         &[
             (
-                "ak.server.read.describe",
+                "ak.server.read.describe.v1",
                 "GET /_arkret/describe",
                 "typed_response",
                 None,
@@ -214,7 +226,7 @@ fn rust_cfg_test_items_are_not_treated_as_production_operations() -> Result<()> 
             ),
         ],
         &[
-            ("GET", "/_arkret/describe", "ak.server.read.describe"),
+            ("GET", "/_arkret/describe", "ak.server.read.describe.v1"),
             ("GET", "/_arkret/health", "ak.server.read.health"),
         ],
     )?;

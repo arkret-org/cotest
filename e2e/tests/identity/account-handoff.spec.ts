@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   createCanonicalAccountHandoff,
   registerCoauthPasswordAccount,
@@ -19,8 +19,8 @@ test.describe("account handoff and PCR genesis @fully-implemented", () => {
     expect(account.initialGrant.principalDid).toBe(account.did);
     expect(account.initialGrant.audience).toBe(solandServiceId());
     expect(account.initialGrant.scopes).toEqual([
-      "ak.self.account.read.describe",
-      "ak.self.events.read.scan",
+      "ak.self.account.read.describe.v1",
+      "ak.self.events.read.scan.v1",
     ]);
 
     const jwtPayload = JSON.parse(

@@ -17,7 +17,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ak.open.mimi.command.submit_message",
+        "operation_id": "ak.open.mimi.command.submit_message.v1",
         "external_user_identifier": "mimi://remote.example/users/alice",
         "claimed_principal_did": "did:web:alice.example",
         "target_side_consent_proof_refs": [],
@@ -40,7 +40,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ak.open.mimi.command.request_consent",
+        "operation_id": "ak.open.mimi.command.request_consent.v1",
         "consent_id": "ak:consent:0196419b-0000-7000-8000-00000000d001",
         "consent_state": {
           "holder_did": "did:web:alice.example",
@@ -74,7 +74,7 @@
         "fixme": false
       },
       "input": {
-        "operation_id": "ak.open.mimi.read.identifiers",
+        "operation_id": "ak.open.mimi.read.identifiers.v1",
         "privacy_profile": "psi_blinded_batch",
         "connection_identifier_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       },

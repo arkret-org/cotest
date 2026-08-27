@@ -15,7 +15,7 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { mockTspEndpointBaseUrl, mockTspEndpointVid, solandBaseUrl } from "../../helpers/env";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 

@@ -2,7 +2,7 @@
 // Contract: true inkson UI + true soland process create a realm and render messages.
 
 import { randomBytes } from "node:crypto";
-import type { APIRequestContext } from "@playwright/test";
+import type { APIRequestContext } from "../../helpers/arkret-test";
 import { test, expect } from "../../helpers/joint-fixture";
 import { canonicalJson, signedEventEnvelope } from "../../helpers/soland-api";
 import {

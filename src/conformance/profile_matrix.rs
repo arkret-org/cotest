@@ -679,7 +679,7 @@ fn registry_id_set(
 
 fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatrix) -> Result<()> {
     let claimed_profiles = string_set_field(describe, "supported_profiles")?;
-    let operation_ids = operation_binding_id_set(describe)?;
+    let operation_ids = operation_bundle_operation_id_set(describe)?;
     let supported_event_kinds = optional_string_set_field(describe, "supported_event_kinds")?;
     let supported_schemas = optional_string_set_field(describe, "supported_event_schemas")?;
     let supported_features = optional_string_set_field(describe, "supported_features")?;
@@ -709,7 +709,7 @@ fn validate_server_claims_against_matrix(describe: &Value, matrix: &ProfileMatri
         ensure_subset(
             &requirement.required_operations,
             &operation_ids,
-            &format!("{profile} operation_bindings"),
+            &format!("{profile} supported_operation_bundles"),
         )?;
         if let Some(supported_event_kinds) = &supported_event_kinds {
             let required_events = requirement
@@ -955,18 +955,24 @@ fn string_set_field(value: &Value, field: &str) -> Result<BTreeSet<String>> {
         .collect())
 }
 
-fn operation_binding_id_set(value: &Value) -> Result<BTreeSet<String>> {
-    let bindings = value
-        .get("operation_bindings")
+fn operation_bundle_operation_id_set(value: &Value) -> Result<BTreeSet<String>> {
+    let bundles = value
+        .get("supported_operation_bundles")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("describe missing operation_bindings[]"))?;
+        .ok_or_else(|| anyhow!("describe missing supported_operation_bundles[]"))?;
     let mut operation_ids = BTreeSet::new();
-    for binding in bindings {
-        let operation_id = binding
-            .get("operation_id")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("operation_bindings entry missing operation_id"))?;
-        operation_ids.insert(operation_id.to_owned());
+    for bundle in bundles {
+        let bundle_id = bundle
+            .as_str()
+            .ok_or_else(|| anyhow!("supported_operation_bundles entry must be a string"))?;
+        let descriptor = arkret_wire::operation_bundle_descriptor(bundle_id)
+            .ok_or_else(|| anyhow!("unknown operation bundle {bundle_id}"))?;
+        operation_ids.extend(
+            descriptor
+                .members
+                .iter()
+                .map(|binding| binding.operation_id.as_str().to_owned()),
+        );
     }
     Ok(operation_ids)
 }

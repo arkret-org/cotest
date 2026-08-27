@@ -63,7 +63,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .and_then(|expected| expected.get("same_http_status"))
                     .and_then(Value::as_u64)
                     == Some(404);
-                let op_ok = matches!(op_id, Some("ak.find.directory.read.resolve_realm"));
+                let op_ok = matches!(op_id, Some("ak.find.directory.read.resolve_realm.v1"));
                 if !op_ok || !same_http_ok {
                     bail!(
                         "privacy fixture {} no longer proves indistinguishable resolve errors",
@@ -74,7 +74,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     "privacy.hidden_realm_resolve_indistinguishable",
                     &json!({"operation_id": case.operation_id.clone()}),
                     &json!({
-                        "operation_id": "ak.find.directory.read.resolve_realm",
+                        "operation_id": "ak.find.directory.read.resolve_realm.v1",
                         "same_http_status": 404,
                     }),
                     &json!({
@@ -93,12 +93,15 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
             // body shape / timing class — and MUST NOT leak the listed
             // binding fields.
             "resolve_handle_failure_blinding" => {
-                validate_resolve_failure_blinding(&case, "ak.find.directory.read.resolve_handle")?;
+                validate_resolve_failure_blinding(
+                    &case,
+                    "ak.find.directory.read.resolve_handle.v1",
+                )?;
             }
             "resolve_agent_selector_failure_blinding" => {
                 validate_resolve_failure_blinding(
                     &case,
-                    "ak.find.directory.read.resolve_agent_selector",
+                    "ak.find.directory.read.resolve_agent_selector.v1",
                 )?;
             }
             "private_contact_discovery_padding_and_cardinality" => {
@@ -255,7 +258,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     .iter()
                     .all(|claim| expected.get(claim).and_then(Value::as_bool) == Some(true));
                 let valid = case.operation_id.as_deref()
-                    == Some("ak.find.directory.read.private_contact_discovery")
+                    == Some("ak.find.directory.read.private_contact_discovery.v1")
                     && input
                         .pointer("/blind_request/phase")
                         .and_then(Value::as_str)
@@ -311,12 +314,12 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     anyhow!("privacy fixture {} missing operation_ids", case.name)
                 })?;
                 for required in [
-                    "ak.find.directory.read.search_realms",
-                    "ak.find.directory.read.resolve_realm",
-                    "ak.find.directory.read.resolve_target",
-                    "ak.find.directory.command.announce",
-                    "ak.find.directory.command.withdraw",
-                    "ak.find.directory.read.private_contact_discovery",
+                    "ak.find.directory.read.search_realms.v1",
+                    "ak.find.directory.read.resolve_realm.v1",
+                    "ak.find.directory.read.resolve_target.v1",
+                    "ak.find.directory.command.announce.v1",
+                    "ak.find.directory.command.withdraw.v1",
+                    "ak.find.directory.read.private_contact_discovery.v1",
                 ] {
                     if !operation_ids.iter().any(|operation| operation == required) {
                         bail!(
@@ -1210,7 +1213,7 @@ fn validate_search_surface_contract(
                 bail!("directory_search must use directory_service profile");
             }
             if required_value_str(surface_case, "operation_id")?
-                != "ak.find.directory.read.search_realms"
+                != "ak.find.directory.read.search_realms.v1"
             {
                 bail!("directory_search operation_id drifted");
             }
@@ -1260,7 +1263,8 @@ fn validate_search_surface_contract(
             if profile != "ak.profile.mimi_interop.v1" {
                 bail!("bridge_interop must use mimi_interop profile");
             }
-            if required_value_str(surface_case, "operation_id")? != "ak.open.mimi.command.notify" {
+            if required_value_str(surface_case, "operation_id")? != "ak.open.mimi.command.notify.v1"
+            {
                 bail!("bridge_interop operation_id drifted");
             }
             for forbidden in ["query_tokens", "candidate_digest", "title", "summary"] {

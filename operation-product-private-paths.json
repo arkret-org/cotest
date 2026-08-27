@@ -21,14 +21,14 @@
       "method": "*",
       "path": "/_arkret/self/blob/resumable",
       "classification": "product-private",
-      "reason": "Local tus companion transport for ak.self.blob.upload.create; kept out of the operation registry until resumable-upload bindings are modeled as first-class operations."
+      "reason": "Local tus companion transport for ak.self.blob.upload.create.v1; kept out of the operation registry until resumable-upload bindings are modeled as first-class operations."
     },
     {
       "source": "soland",
       "method": "*",
       "path": "/_arkret/self/blob/resumable/{**rest}",
       "classification": "product-private",
-      "reason": "Local tus companion transport for ak.self.blob.upload.create; upload resources and finalize are node-local staging affordances, not independent protocol operations."
+      "reason": "Local tus companion transport for ak.self.blob.upload.create.v1; upload resources and finalize are node-local staging affordances, not independent protocol operations."
     },
     {
       "source": "sdk",

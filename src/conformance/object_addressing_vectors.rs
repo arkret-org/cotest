@@ -1,4 +1,4 @@
-//! AKP-0011 shareable object-addressing + `ak.find.directory.read.resolve_target`
+//! AKP-0011 shareable object-addressing + `ak.find.directory.read.resolve_target.v1`
 //! conformance vectors (OA-COT-1..4).
 //!
 //! Spec source: `discovery/discovery-directory.md §9.1` (resolve_target +
@@ -521,7 +521,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 },
                 "service_kind": "principal_server",
                 "role": "joined_member_principal_server",
-                "operations": ["ak.peer.events.command.submit"],
+                "operations": ["ak.peer.events.command.submit.v1"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "encryption_profile": "mls_rfc9420",
                 "digest_algorithm": "sha256",
@@ -542,7 +542,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 },
                 "service_kind": "principal_server",
                 "role": "joined_member_principal_server",
-                "operations": ["ak.peer.events.command.submit"],
+                "operations": ["ak.peer.events.command.submit.v1"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "encryption_profile": "mls_rfc9420",
                 "digest_algorithm": "sha256",

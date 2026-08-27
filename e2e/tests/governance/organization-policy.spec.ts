@@ -18,7 +18,7 @@
 // (SOL-ORG-02/03/05) lands, at which point they become the red-on-regression
 // gate the scenario promises.
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,

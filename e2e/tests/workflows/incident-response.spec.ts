@@ -6,7 +6,7 @@
 //   - models/realm-and-space.md §4 (status board / FSM cells)
 //   - models/morph.md §2-§4 (postmortem document morph)
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {

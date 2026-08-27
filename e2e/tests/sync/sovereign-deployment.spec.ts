@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/sync/sovereign-deployment.md
 // Spec: sync/sovereign-deployment.md §2-§6
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 
 import { solandBaseUrl, solandServiceId, hasDualSoland, type SolandKey } from "../../helpers/env";
 import { issueDevSession, uniqueUser } from "../../helpers/users";

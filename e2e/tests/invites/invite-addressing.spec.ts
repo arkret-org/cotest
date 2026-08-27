@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 
 import {
   solandBaseUrl,
@@ -165,11 +165,11 @@ async function acceptedInviteFixture(
 }
 
 test.describe("invite addressing", () => {
-  // Peer-layer direct coverage. `ak.peer.invites.command.submit` is a
+  // Peer-layer direct coverage. `ak.peer.invites.command.submit.v1` is a
   // Principal-Server-to-Principal-Server operation, so this test stands in for
   // an inviter Principal Server on purpose; it is NOT the client path. A client
   // reaches the same receive pipeline through
-  // `ak.self.invites.command.dispatch` (§7), covered below.
+  // `ak.self.invites.command.dispatch.v1` (§7), covered below.
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
     const recipientServiceId = solandServiceId();
     const invitee = "ak:did_core:web:cotest-invitee.example";
@@ -381,7 +381,7 @@ test.describe("invite addressing", () => {
     expect((await successfulOneTime!.json()).display_hint).toBeUndefined();
   });
 
-  // invite-addressing.md §7 — `ak.self.invites.command.dispatch`. This is the
+  // invite-addressing.md §7 — `ak.self.invites.command.dispatch.v1`. This is the
   // only conforming client entry point into private invite delivery: the client
   // hands raw `introduction_evidence` plus the accepted Event id to its own
   // Principal Server and never synthesizes federation trust material.

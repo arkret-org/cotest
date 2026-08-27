@@ -17,7 +17,7 @@
 //! 2. byte-identical replay returns the first receipt (`duplicate`), not a second write;
 //! 3. same-sequence chain conflict is a typed fork, never `duplicate_conflict`;
 //! 4. a higher-sequence gap performs zero writes, reports the exact `required_status_seq`, and is
-//!    repaired through the bounded `ak.peer.account_status.read.resolve` range;
+//!    repaired through the bounded `ak.peer.account_status.read.resolve.v1` range;
 //! 5. a lower `binding_version` is a typed binding rollback;
 //! 6. an offline, revoked or hostile holder cannot veto `locked | suspended | deactivated |
 //!    erasure_pending` — the record carries no holder-controlled carrier at all, and a
@@ -107,7 +107,8 @@ const FORBIDDEN_RECORD_KEYS: &[&str] = &[
 /// the registered-vocabulary level.
 ///
 /// * `record_or_idempotency_mismatch_is_zero_write` is an `Idempotency-Key` scope decision that
-///   exists only on the `ak.peer.account_status.command.submit` transport, not on any shared type.
+///   exists only on the `ak.peer.account_status.command.submit.v1` transport, not on any shared
+///   type.
 const TRANSPORT_ONLY_STEPS: &[&str] = &["record_or_idempotency_mismatch_is_zero_write"];
 
 /// Machine-readable classification table the receiver decision is compared
@@ -1077,13 +1078,13 @@ fn assert_resolve_operation_is_registered() -> Result<()> {
         .ok_or_else(|| anyhow!("operation registry missing operations[]"))?;
     for (operation_id, http, request_ref, response_ref) in [
         (
-            ServiceOperationId::PEER_ACCOUNT_STATUS_COMMAND_SUBMIT,
+            ServiceOperationId::PEER_ACCOUNT_STATUS_COMMAND_SUBMIT_V1,
             "POST /_arkret/peer/account-status",
             "schemas/account-operations.schema.json#/$defs/account_status_publication_request_body",
             "schemas/account-operations.schema.json#/$defs/account_status_publication_outcome",
         ),
         (
-            ServiceOperationId::PEER_ACCOUNT_STATUS_READ_RESOLVE,
+            ServiceOperationId::PEER_ACCOUNT_STATUS_READ_RESOLVE_V1,
             "POST /_arkret/peer/account-status/resolve",
             "schemas/account-operations.schema.json#/$defs/account_status_resolve_request_body",
             "schemas/account-operations.schema.json#/$defs/account_status_resolve_outcome",

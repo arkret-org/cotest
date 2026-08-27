@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/discovery/directory.md
 // Spec: discovery/discovery-directory.md, discovery/profiles-presence.md, identity/identity-handles.md
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { cssStringEscape } from "../../helpers/dom";
 import { solandBaseUrl } from "../../helpers/env";
 import {

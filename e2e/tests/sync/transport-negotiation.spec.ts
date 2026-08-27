@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/sync/transport-negotiation.md
 // Spec refs:
 //   - sync/transport-bindings.md §2-§4 (binding layers, requirements,
-//     canonical operation IDs, supported_bindings discovery)
+//     canonical operation IDs, transport_bindings discovery)
 //   - sync/service-http-binding.md §3-§5 (auth requirements, RFC 9421
 //     HTTP Message Signature for service-to-service, error envelope)
 //   - sync/federation.md §3.2 (RFC 9421 request signature) + §4.1 (push)
@@ -38,7 +38,7 @@
 //   ✗ TSP binding — extension profile, not v1 core
 //   ✗ Binding fallback chain state machine — presupposes the above bindings
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { hasDualSoland, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -87,7 +87,7 @@ test.beforeEach(() => {
 });
 
 test.describe("transport negotiation", () => {
-  test("both soland instances expose /server/describe with supported_bindings and at minimum http_json", async ({
+  test("both soland instances expose /server/describe with transport_bindings and at minimum http_json", async ({
     request,
   }) => {
     // Sanity: both servers up and exposing binding-discovery surface.
@@ -105,12 +105,11 @@ test.describe("transport negotiation", () => {
 
     if (alphaDescribe.ok()) {
       const alphaBody = await alphaDescribe.json();
-      // service_id MUST be present; supported_bindings SHOULD include http_json.
+      // service_id MUST be present; transport_bindings MUST include http_json.
       expect(typeof alphaBody.service_id).toBe("string");
-      if (Array.isArray(alphaBody.supported_bindings)) {
-        const kinds = alphaBody.supported_bindings.map((b: { kind: string }) => b.kind);
-        expect(kinds).toContain("http_json");
-      }
+      expect(Array.isArray(alphaBody.transport_bindings)).toBe(true);
+      const kinds = alphaBody.transport_bindings.map((b: { kind: string }) => b.kind);
+      expect(kinds).toContain("http_json");
     }
   });
 

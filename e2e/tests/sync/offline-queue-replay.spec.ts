@@ -1,7 +1,7 @@
 // Offline queue replay
 // Contract: e2e/scenarios/sync/offline-queue-replay.md
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 
 import {
   createSharedRealmViaApi,

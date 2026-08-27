@@ -9,7 +9,7 @@
 // started for a given run, the test is skipped (rather than fail).
 
 import { createHash } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   mockAppletRegistryBaseUrl,
   mockEmailBaseUrl,

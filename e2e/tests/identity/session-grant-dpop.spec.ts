@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {

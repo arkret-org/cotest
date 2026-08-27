@@ -25,7 +25,7 @@ fn agent_grant_delete_is_a_typed_caller_signed_event_surface() {
         .as_array()
         .expect("operations array")
         .iter()
-        .find(|row| row["operation_id"] == "ak.self.agent.grant.resource.delete")
+        .find(|row| row["operation_id"] == "ak.self.agent.grant.resource.delete.v1")
         .expect("agent grant delete operation");
     assert_eq!(
         operation["request_schema_ref"],

@@ -18,7 +18,7 @@
 //     Registry public key (for verifying registry-signed envelopes).
 //   POST /sign-package
 //     Returns a sealed controller-signed ak.schema.applet_package.v1 for
-//     soland's canonical ak.self.applet.install.command.preview / ak.self.applet.command.install strand.
+//     soland's canonical ak.self.applet.install.command.preview.v1 / ak.self.applet.command.install.v1 strand.
 //   POST /_arkret/edge/applet/managed-actors/author
 //     Verifies a Principal-Server-signed install authoring request and returns
 //     one Applet-service-signed managed-actor bundle for commit relay.

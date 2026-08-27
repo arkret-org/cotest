@@ -2,7 +2,7 @@
 // Regression guard for the registered Realm genesis transaction and its
 // `(realm_id, actor_id)` authoring frontier.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
@@ -30,7 +30,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const missingRealmId =
       "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19";
 
-    // `ak.self.events.read.frontier` registers a QUERY binding only
+    // `ak.self.events.read.frontier.v1` registers a QUERY binding only
     // (service-http-binding.md); a GET falls through to `events/{event_id}`
     // and its 404 would pass for the wrong reason.
     const frontierUrl = `${solandBaseUrl()}/_arkret/self/events/frontier`;

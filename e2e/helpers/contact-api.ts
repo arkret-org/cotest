@@ -500,7 +500,7 @@ export async function tombstoneContactArkret(
     blockPeer?: boolean;
     // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
     // peer's home service DID so soland federates the `ak.contact.tombstone`
-    // fact to the peer's Principal Server via `ak.peer.contacts.command.submit`.
+    // fact to the peer's Principal Server via `ak.peer.contacts.command.submit.v1`.
     peerServiceId?: string;
     server?: SolandKey;
   } = {},
@@ -647,7 +647,7 @@ async function uploadDirectConversationKeyPackage(
     device_id: user.deviceId,
     keypackages: keyPackages,
   };
-  const signingInput = `ak.self.keys.keypackages.upload.create\n${canonicalJson(unsigned)}`;
+  const signingInput = `ak.self.keys.keypackages.upload.create.v1\n${canonicalJson(unsigned)}`;
   const verificationMethod = registeredEventVerificationMethod(
     user.did,
     user.deviceId,
@@ -805,8 +805,8 @@ export function buildInviteCreateEvent(args: {
 // and then start private delivery for it.
 //
 // invite-addressing.md §7 splits the two hops by actor: an authenticated CLIENT
-// only ever calls `ak.self.invites.command.dispatch` on its own Principal
-// Server, and only a Principal Server may speak `ak.peer.invites.command.submit`
+// only ever calls `ak.self.invites.command.dispatch.v1` on its own Principal
+// Server, and only a Principal Server may speak `ak.peer.invites.command.submit.v1`
 // (§7 step 1 binds that surface to verified service-to-service authentication).
 // Same-service delivery therefore goes through dispatch, whose local branch
 // reruns the very same §7 verification from step 4 and yields the same graded

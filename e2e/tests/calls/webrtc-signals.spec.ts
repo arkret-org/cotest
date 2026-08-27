@@ -11,7 +11,7 @@
 // detached-JWS proof) to `POST /_arkret/self/signal` and read back verbatim
 // from `GET /_arkret/self/signal/subscribe`.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   CALL_SIGNAL_TYPES,
   buildCallSignalEnvelope,

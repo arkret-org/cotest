@@ -7,7 +7,7 @@
 //   - crypto-media/device-lifecycle.md §7  (to-device queue carries the marker fan-out)
 
 import { createHash } from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   acceptInviteViaApi,

@@ -378,7 +378,7 @@ fn mention_rendering_vector_suite_runs_clean() {
     );
 }
 
-// ─── R3.2 / VECT-COT-3 — ak.find.directory.read.list_handles_for_subject ────────────
+// ─── R3.2 / VECT-COT-3 — ak.find.directory.read.list_handles_for_subject.v1 ────────────
 
 #[test]
 fn list_handles_for_subject_vector_suite_runs_clean() {

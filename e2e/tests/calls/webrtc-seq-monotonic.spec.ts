@@ -14,7 +14,7 @@
 // receiver-side rollback rejection is pinned by the Rust conformance vector
 // `ak.vector.call_signal.seq_monotonic.v1` (src/conformance/call_signal.rs).
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   buildCallSignalEnvelope,
   callSignalPlaintext,

@@ -4,7 +4,7 @@
 // the first candidate cannot be explained by a hidden min-id tie-breaker.
 
 import { createHash, randomBytes } from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl, solandServiceFullId } from "../../helpers/env";
 import {
   base64url,

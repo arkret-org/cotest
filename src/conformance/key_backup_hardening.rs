@@ -392,7 +392,7 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         "challenge_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "challenge": "BBBBBBBBBBBBBBBBBBBBBB",
         "nonce": "CCCCCCCCCCCCCCCCCCCCCC",
-        "operation": "ak.self.keys.backups.resource.delete",
+        "operation": "ak.self.keys.backups.resource.delete.v1",
         "principal_id": "ak:did_core:webvh:z6mkfixture",
         "backup_id": "ak:backup:0196419b-0000-7000-8000-000000000001",
         "audience": "https://authority.example",

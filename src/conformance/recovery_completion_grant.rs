@@ -379,8 +379,8 @@ fn validate_mutation_matrix(vector: &CompletionVector) -> Result<()> {
 
     let mut scope = vector.clone();
     scope.request.initial_session["requested_scope"] = json!([
-        "ak.self.account.read.describe",
-        "ak.self.events.command.submit"
+        "ak.self.account.read.describe.v1",
+        "ak.self.events.command.submit.v1"
     ]);
     scope.request.canonical_request_digest = scope.request.expected_canonical_request_digest()?;
     mutations.push(("scope", scope));

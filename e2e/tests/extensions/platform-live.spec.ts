@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();

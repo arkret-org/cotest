@@ -33,7 +33,7 @@ fn registry_and_schema_pin_the_exact_signed_report_event() {
         .as_array()
         .expect("operations array")
         .iter()
-        .find(|row| row["operation_id"] == "ak.self.moderation.command.report")
+        .find(|row| row["operation_id"] == "ak.self.moderation.command.report.v1")
         .expect("moderation report operation");
     assert_eq!(
         operation["idempotency_object_path"],

@@ -4,7 +4,7 @@
 //       §4 (status: active/rejected/tombstoned), §5 (no implicit cascade),
 //       §6 (explicit inheritance, narrow-only, local deny overrides, max_depth=1)
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,

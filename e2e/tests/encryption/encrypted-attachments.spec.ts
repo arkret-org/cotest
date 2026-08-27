@@ -7,7 +7,7 @@
 
 import { createHash } from "node:crypto";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
   addRealmMemberApi,

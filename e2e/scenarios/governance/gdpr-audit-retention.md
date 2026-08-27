@@ -42,8 +42,8 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 ### Phase C — alice 触发 erasure
 
 8. alice 进 `/settings/account` → "Erase my account"
-9. 确认对话框 → 走 spec 定义的 Account Authority 入口 `ak.gate.account.command.request_erasure`（`identity/account-lifecycle.md` §8.1），即 `POST /_arkret/gate/account/erasure-requests`（fresh high-risk authentication + durable 记录意图）。**已移除的私有轨 `/_soland/self/account/erase` 不再存在，不得引用**
-10. Account Authority 签发 `erasure_pending` AccountStatusRecord → `ak.peer.account_status.command.submit` → 异步 durable execution → `ak.peer.erasure_receipt.command.submit` 验收，soland 返回 `ak.schema.erasure_receipt.v1`
+9. 确认对话框 → 走 spec 定义的 Account Authority 入口 `ak.gate.account.command.request_erasure.v1`（`identity/account-lifecycle.md` §8.1），即 `POST /_arkret/gate/account/erasure-requests`（fresh high-risk authentication + durable 记录意图）。**已移除的私有轨 `/_soland/self/account/erase` 不再存在，不得引用**
+10. Account Authority 签发 `erasure_pending` AccountStatusRecord → `ak.peer.account_status.command.submit.v1` → 异步 durable execution → `ak.peer.erasure_receipt.command.submit.v1` 验收，soland 返回 `ak.schema.erasure_receipt.v1`
 11. soland 后台任务执行:
     - 删除 alice 的 PII(display_name、bio、avatar → pseudonymize)
     - 删除 alice 的 E2EE secret material（device keys 与 MLS backup keys 安全销毁，后续无法解密）
@@ -56,7 +56,7 @@ alice 触发 GDPR 数据导出 → 拿到完整个人数据 JSON;触发 erasure 
 > Authority，见 spec-done `2026-08-18-2325-self-erasure-intent-has-no-channel-to-the-account-authority.md`
 > 与 `2026-08-18-2326-session-grant-introspection-carries-no-authentication-freshness.md`）；
 > soland 旧受理面已移除。erase 用例端到端驱动现阻塞于 coauth 实现 gate 面入口
-> `ak.gate.account.command.request_erasure`（`arkret-work` 任务
+> `ak.gate.account.command.request_erasure.v1`（`arkret-work` 任务
 > `2026-08-19-2212-coauth-self-erasure-gate-endpoint.md`）。
 > 对应 e2e 用例（`gdpr-audit-retention.spec.ts` 的 erase 用例）已显式 skip。
 

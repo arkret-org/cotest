@@ -24,19 +24,22 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
         StatusCode::OK,
     )
     .await?;
-    let advertised = describe["operation_bindings"]
+    let advertised = describe["supported_operation_bundles"]
         .as_array()
-        .expect("operation_bindings is an array")
+        .expect("supported_operation_bundles is an array")
         .iter()
-        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
+        .filter_map(Value::as_str)
+        .filter_map(arkret_wire::operation_bundle_descriptor)
+        .flat_map(|bundle| bundle.members)
+        .map(|binding| binding.operation_id.as_str())
         .collect::<Vec<_>>();
     for required in [
-        "ak.edge.applet.read.ping",
-        "ak.edge.applet.read.describe",
-        "ak.self.applet.install.command.preview",
-        "ak.self.applet.command.install",
-        "ak.self.applet.command.revoke",
-        "ak.self.applet.ghost.command.provision",
+        "ak.edge.applet.read.ping.v1",
+        "ak.edge.applet.read.describe.v1",
+        "ak.self.applet.install.command.preview.v1",
+        "ak.self.applet.command.install.v1",
+        "ak.self.applet.command.revoke.v1",
+        "ak.self.applet.ghost.command.provision.v1",
     ] {
         assert!(
             advertised.contains(&required),
@@ -64,9 +67,7 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
     applet_describe.validate()?;
     assert!(
         applet_describe
-            .operation_bindings
-            .iter()
-            .any(|binding| binding.operation_id.as_str() == "ak.edge.applet.read.describe")
+            .supports_operation(arkret_wire::ServiceOperationId::EdgeAppletReadDescribeV1)
     );
 
     expect_api_error(
@@ -98,23 +99,26 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         StatusCode::OK,
     )
     .await?;
-    let advertised = describe["operation_bindings"]
+    let advertised = describe["supported_operation_bundles"]
         .as_array()
-        .expect("operation_bindings is an array")
+        .expect("supported_operation_bundles is an array")
         .iter()
-        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
+        .filter_map(Value::as_str)
+        .filter_map(arkret_wire::operation_bundle_descriptor)
+        .flat_map(|bundle| bundle.members)
+        .map(|binding| binding.operation_id.as_str())
         .collect::<Vec<_>>();
     for required in [
-        "ak.self.agent.command.provision",
-        "ak.self.agent.read.list",
-        "ak.self.agent.resource.get",
-        "ak.self.agent.command.pause",
-        "ak.self.agent.command.resume",
-        "ak.self.agent.command.deactivate",
-        "ak.self.agent.command.renew_pairing",
-        "ak.self.agent.grant.command.attach",
-        "ak.self.agent.grant.resource.delete",
-        "ak.self.agent.sidecar.command.ensure",
+        "ak.self.agent.command.provision.v1",
+        "ak.self.agent.read.list.v1",
+        "ak.self.agent.resource.get.v1",
+        "ak.self.agent.command.pause.v1",
+        "ak.self.agent.command.resume.v1",
+        "ak.self.agent.command.deactivate.v1",
+        "ak.self.agent.command.renew_pairing.v1",
+        "ak.self.agent.grant.command.attach.v1",
+        "ak.self.agent.grant.resource.delete.v1",
+        "ak.self.agent.sidecar.command.ensure.v1",
     ] {
         assert!(
             advertised.contains(&required),
@@ -125,7 +129,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     let empty_list = expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?;
     assert!(empty_list["agents"].as_array().unwrap().is_empty());
 
-    let requested_operation = "ak.self.events.command.submit";
+    let requested_operation = "ak.self.events.command.submit.v1";
     let controller_full_id = DidFullId::new(alice.actor.clone())?;
     let controller_authority = PrincipalAuthorityKey::new(
         project_full_id_to_core_id(&controller_full_id)?,

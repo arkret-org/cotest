@@ -1,7 +1,7 @@
 // Same-server multi-profile browser contexts.
 // Contract: Playwright can simulate two local browser profiles against one soland.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   assertJointStackNotRequired,
   type JointUserPage,

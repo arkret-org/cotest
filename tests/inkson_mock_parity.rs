@@ -465,7 +465,7 @@ fn assert_mock_contract_artifact_gate(
                         case.operation_id
                     )
                 })?;
-                assert_operation_bindings_registered(&case.id, &snapshot.body, &registry)?;
+                assert_operation_bundles_registered(&case.id, &snapshot.body)?;
                 assert_json_shape_required_fields(
                     case,
                     "response",
@@ -477,7 +477,7 @@ fn assert_mock_contract_artifact_gate(
             let body = render_body(case, ctx, &setup_bootstrap_body)?;
             let snapshot = call_mock_contract(contract_path, case, &rendered_path, body, ctx)
                 .with_context(|| format!("mock response for artifact gate case `{}`", case.id))?;
-            assert_operation_bindings_registered(&case.id, &snapshot.body, &registry)?;
+            assert_operation_bundles_registered(&case.id, &snapshot.body)?;
         }
     }
 
@@ -605,67 +605,66 @@ fn extract_contract_branches(source: &str) -> BTreeSet<(String, String)> {
 fn assert_supported_operation_literals_registered(
     source_name: &str,
     source: &str,
-    registry: &BTreeMap<String, RegistryOperation>,
+    _registry: &BTreeMap<String, RegistryOperation>,
 ) -> Result<()> {
     let mut rogue = Vec::new();
-    for (line, operation_id) in extract_supported_operation_literals(source) {
-        if !registry.contains_key(&operation_id) {
-            rogue.push(format!("{source_name}:{line}: {operation_id}"));
+    for (line, bundle_id) in extract_supported_operation_bundle_literals(source) {
+        if arkret_wire::operation_bundle_descriptor(&bundle_id).is_none() {
+            rogue.push(format!("{source_name}:{line}: {bundle_id}"));
         }
     }
     if !rogue.is_empty() {
         bail!(
-            "mock operation_bindings reference unregistered operation_id(s): {}",
+            "mock supported_operation_bundles reference unregistered bundle id(s): {}",
             rogue.join(", ")
         );
     }
     Ok(())
 }
 
-fn assert_operation_bindings_registered(
-    case_id: &str,
-    body: &Value,
-    registry: &BTreeMap<String, RegistryOperation>,
-) -> Result<()> {
-    let Some(bindings) = body.get("operation_bindings").and_then(Value::as_array) else {
+fn assert_operation_bundles_registered(case_id: &str, body: &Value) -> Result<()> {
+    let Some(bundles) = body
+        .get("supported_operation_bundles")
+        .and_then(Value::as_array)
+    else {
         return Ok(());
     };
-    let rogue = bindings
+    let rogue = bundles
         .iter()
-        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
-        .filter(|operation_id| !registry.contains_key(*operation_id))
+        .filter_map(Value::as_str)
+        .filter(|bundle_id| arkret_wire::operation_bundle_descriptor(bundle_id).is_none())
         .collect::<Vec<_>>();
     if !rogue.is_empty() {
         bail!(
-            "mock case `{case_id}` returned unregistered operation_bindings: {}",
+            "mock case `{case_id}` returned unregistered supported_operation_bundles: {}",
             rogue.join(", ")
         );
     }
     Ok(())
 }
 
-fn extract_supported_operation_literals(source: &str) -> Vec<(usize, String)> {
+fn extract_supported_operation_bundle_literals(source: &str) -> Vec<(usize, String)> {
     let mut out = Vec::new();
-    let mut in_operation_bindings = false;
+    let mut in_bundle_declaration = false;
     let mut bracket_depth = 0i32;
     for (line_index, line) in source.lines().enumerate() {
-        if !in_operation_bindings
-            && line.contains("currentHttpDescribeBindings")
+        if !in_bundle_declaration
+            && line.contains("currentHttpDescribeCapabilities")
             && line.contains('[')
         {
-            in_operation_bindings = true;
+            in_bundle_declaration = true;
             bracket_depth = 0;
         }
-        if in_operation_bindings {
+        if in_bundle_declaration {
             for literal in extract_string_literals(line) {
-                if literal.starts_with("ak.") {
+                if literal.starts_with("ak.operation_bundle.") {
                     out.push((line_index + 1, literal));
                 }
             }
             bracket_depth += line.chars().filter(|ch| *ch == '[').count() as i32;
             bracket_depth -= line.chars().filter(|ch| *ch == ']').count() as i32;
             if bracket_depth <= 0 {
-                in_operation_bindings = false;
+                in_bundle_declaration = false;
             }
         }
     }
@@ -959,13 +958,13 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const contractPath = process.argv[1];
 const input = JSON.parse(fs.readFileSync(0, "utf8"));
-const helperPath = require("node:path").join(require("node:path").dirname(contractPath), "currentOperationBindings.ts");
+const helperPath = require("node:path").join(require("node:path").dirname(contractPath), "currentDescribeCapabilities.ts");
 const helperSource = fs
   .readFileSync(helperPath, "utf8")
   .replace(/\bexport\s+(?=(function|const|let|var|class))/g, "");
 const source = fs
   .readFileSync(contractPath, "utf8")
-  .replace(/^import .*currentOperationBindings.*;\s*$/gm, "")
+  .replace(/import\s*\{[\s\S]*?\}\s*from\s*["']\.\/currentDescribeCapabilities["'];?\s*/m, "")
   .replace(/\bexport\s+(?=(function|const|let|var|class))/g, "");
 const context = { __input: input, __result: undefined, console };
 vm.createContext(context);
@@ -1070,28 +1069,28 @@ async fn call_live_soland(
     }
     if let Some(body) = body {
         request = match case.operation_id.as_str() {
-            "ak.self.events.command.submit" => {
+            "ak.self.events.command.submit.v1" => {
                 let typed: arkret_wire::EventsSubmitBatchRequestBody =
                     serde_json::from_value(body)?;
                 request
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(arkret_canonical::canonical_json_bytes(&typed)?)
             }
-            "ak.self.events.read.scan" => {
+            "ak.self.events.read.scan.v1" => {
                 let typed: arkret_models_collaboration::event_query::EventsQueryPostRequestBody =
                     serde_json::from_value(body)?;
                 request
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(arkret_canonical::canonical_json_bytes(&typed)?)
             }
-            "ak.find.directory.read.search_realms" => {
+            "ak.find.directory.read.search_realms.v1" => {
                 let typed: arkret_models_discovery::DirectorySearchRealmsRequestBody =
                     serde_json::from_value(body)?;
                 request
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(arkret_canonical::canonical_json_bytes(&typed)?)
             }
-            "ak.self.signal.command.send" => {
+            "ak.self.signal.command.send.v1" => {
                 let typed: arkret_wire::SignalEnvelope = serde_json::from_value(body)?;
                 request
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -1317,20 +1316,11 @@ fn normalize_server_describe(body: Value) -> Value {
                 })
             })
             .unwrap_or(false);
-    let operation_bindings = body
-        .get("operation_bindings")
-        .and_then(Value::as_array)
-        .map(|bindings| {
-            bindings
-                .iter()
-                .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
-                .any(|operation_id| operation_id == "ak.self.events.command.submit")
-        })
-        .unwrap_or(false);
+    let operation_bundles = describe_supports_operation(&body, "ak.self.events.command.submit.v1");
     json!({
         "protocol_version": body.get("protocol_version").cloned().unwrap_or(Value::Null),
         "service_kind": body.get("service_kind").cloned().unwrap_or(Value::Null),
-        "supports_core_events": supported_features || operation_bindings,
+        "supports_core_events": supported_features || operation_bundles,
     })
 }
 
@@ -1342,16 +1332,8 @@ fn normalize_server_describe(body: Value) -> Value {
 /// current server, so — like `normalize_server_describe` — compare only the
 /// directory contract invariants.
 fn normalize_directory_describe(body: Value) -> Value {
-    let supports_describe = body
-        .get("operation_bindings")
-        .and_then(Value::as_array)
-        .map(|bindings| {
-            bindings
-                .iter()
-                .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
-                .any(|operation_id| operation_id == "ak.find.directory.read.describe")
-        })
-        .unwrap_or(false);
+    let supports_describe =
+        describe_supports_operation(&body, "ak.find.directory.read.describe.v1");
     let accepts_did_web = body
         .get("accepted_did_methods")
         .and_then(Value::as_array)
@@ -1365,12 +1347,23 @@ fn normalize_directory_describe(body: Value) -> Value {
     json!({
         "accept_policy_kind": body.get("accept_policy_kind").cloned().unwrap_or(Value::Null),
         "accepted_resource_kinds": body.get("accepted_resource_kinds").cloned().unwrap_or(Value::Null),
-        "discovery_profiles": body.get("discovery_profiles").cloned().unwrap_or(Value::Null),
+        "supported_profiles": body.get("supported_profiles").cloned().unwrap_or(Value::Null),
         "auth_mode": body.pointer("/auth_metadata/mode").cloned().unwrap_or(Value::Null),
         "default_ttl_seconds": body.get("default_ttl_seconds").cloned().unwrap_or(Value::Null),
         "supports_describe": supports_describe,
         "accepts_did_web": accepts_did_web,
     })
+}
+
+fn describe_supports_operation(body: &Value, operation_id: &str) -> bool {
+    body.get("supported_operation_bundles")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(arkret_wire::operation_bundle_descriptor)
+        .flat_map(|bundle| bundle.members)
+        .any(|binding| binding.operation_id.as_str() == operation_id)
 }
 
 fn normalize_value(value: Value) -> Value {

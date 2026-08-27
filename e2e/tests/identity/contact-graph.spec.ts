@@ -10,7 +10,7 @@
 // Uses the `requested_scopes:[...]` contract (NOT the `/_soland` + `scope`
 // surface that consent-grant.spec.ts exercises).
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import { expectStructurallyIdentical } from "../../helpers/secret-safe";
 import { createDpopUserSession } from "../../helpers/users";

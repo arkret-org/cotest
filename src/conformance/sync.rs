@@ -117,8 +117,8 @@ enum StreamSurface {
 impl StreamSurface {
     const fn operation_id(self) -> &'static str {
         match self {
-            Self::Account => arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
-            Self::Events => arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
+            Self::Account => arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1,
+            Self::Events => arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE_V1,
         }
     }
 }
@@ -420,8 +420,8 @@ pub fn run_stream_frame_sequence_vector() -> Result<()> {
         "stream frame sequence operations",
     )?;
     let expected_operations = [
-        arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE,
-        arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE,
+        arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1,
+        arkret_wire::ServiceOperationId::SELF_EVENTS_STREAM_SUBSCRIBE_V1,
     ];
     if operations.len() != expected_operations.len()
         || !expected_operations.iter().all(|operation| {

@@ -159,8 +159,8 @@ fn reduce_with_kernel(input: &KernelGateInput) -> KernelGateOutcome {
             kernel_cba_bundle(input)
         }
         "ak.message.create" => kernel_offline_publication(input),
-        "ak.self.authorization_leases.command.issue" => kernel_lease_issue(input),
-        "ak.self.control_proposal_acks.command.issue" => kernel_proposal(input),
+        "ak.self.authorization_leases.command.issue.v1" => kernel_lease_issue(input),
+        "ak.self.control_proposal_acks.command.issue.v1" => kernel_proposal(input),
         "ak.notary.fault.equivocation" => kernel_equivocation(input),
         _ => error("unsupported_feature", "kernel_gate_kind_unsupported"),
     }

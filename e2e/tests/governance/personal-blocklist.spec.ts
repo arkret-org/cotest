@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/governance/personal-blocklist.md
 // Spec: governance/content-moderation.md §4-§6, discovery/client-preferences.md §2
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {

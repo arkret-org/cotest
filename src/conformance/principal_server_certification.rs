@@ -12,13 +12,13 @@ const FIXTURE: &str = "principal-server-certification-gate.json";
 const FIXTURE_PROFILE: &str = "ak.profile.principal_server_certification_gate.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
-    "ak.server.read.describe",
-    "ak.self.account.read.describe",
-    "ak.self.account.stream.subscribe",
-    "ak.self.events.stream.subscribe",
-    "ak.self.events.read.scan",
-    "ak.self.snapshot.read.manifest_head",
-    "ak.self.authz.read.check",
+    "ak.server.read.describe.v1",
+    "ak.self.account.read.describe.v1",
+    "ak.self.account.stream.subscribe.v1",
+    "ak.self.events.stream.subscribe.v1",
+    "ak.self.events.read.scan.v1",
+    "ak.self.snapshot.read.manifest_head.v1",
+    "ak.self.authz.read.check.v1",
 ];
 
 const REQUIRED_EVENT_KINDS: &[&str] = &[
@@ -126,7 +126,7 @@ pub fn validate_principal_server_certification(
         bail!("full principal_server claim cannot carry non-empty limitations");
     }
 
-    require_all_operation_bindings(describe, REQUIRED_OPERATIONS)?;
+    require_all_operation_bundles(describe, REQUIRED_OPERATIONS)?;
     require_all("supported_event_kinds", describe, REQUIRED_EVENT_KINDS)?;
     require_all("supported_schemas", describe, REQUIRED_SCHEMAS)?;
     require_federation_durability(describe)?;
@@ -161,17 +161,22 @@ fn require_all(field: &str, describe: &Value, required: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn require_all_operation_bindings(describe: &Value, required: &[&str]) -> Result<()> {
+fn require_all_operation_bundles(describe: &Value, required: &[&str]) -> Result<()> {
     let present = describe
-        .get("operation_bindings")
+        .get("supported_operation_bundles")
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("principal_server certification missing operation_bindings[]"))?
+        .ok_or_else(|| {
+            anyhow!("principal_server certification missing supported_operation_bundles[]")
+        })?
         .iter()
-        .filter_map(|binding| binding.get("operation_id").and_then(Value::as_str))
+        .filter_map(Value::as_str)
+        .filter_map(arkret_wire::operation_bundle_descriptor)
+        .flat_map(|bundle| bundle.members)
+        .map(|binding| binding.operation_id.as_str())
         .collect::<BTreeSet<_>>();
     for item in required {
         if !present.contains(item) {
-            bail!("principal_server certification missing operation binding for {item}");
+            bail!("principal_server certification bundles do not cover {item}");
         }
     }
     Ok(())

@@ -22,7 +22,7 @@
 // run with scripts/run-joint-e2e.ps1, which exports COTEST_SOLAND_METRICS_URL /
 // COTEST_TEABAY_METRICS_URL from ports it owns.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { teabayBaseUrl } from "../../helpers/env";
 import {
   createRealmApi,

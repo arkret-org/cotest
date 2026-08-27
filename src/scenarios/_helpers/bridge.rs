@@ -228,9 +228,9 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
             "device_id": binding.device_id,
             "audience": audience,
             "scopes": [
-                "ak.self.account.read.describe",
-                "ak.self.events.read.scan",
-                "ak.root.identity.recovery_policy.resource.get"
+                "ak.self.account.read.describe.v1",
+                "ak.self.events.read.scan.v1",
+                "ak.root.identity.recovery_policy.resource.get.v1"
             ],
             "expires_at": arkret_canonical::format_timestamp_canonical(
                 chrono::Utc::now() + chrono::Duration::minutes(10)

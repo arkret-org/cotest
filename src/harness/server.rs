@@ -14,7 +14,7 @@ use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD};
 use chrono::Utc;
-use reqwest::{Client as HttpClient, StatusCode};
+use reqwest::{Client as HttpClient, IntoUrl, Method, RequestBuilder, StatusCode};
 use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use url::Url;
@@ -33,6 +33,92 @@ const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registra
 const DURABLE_TEST_KEYSTORE_MASTER_KEY: &str = "d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3c=";
 const HARNESS_HTTP_TIMEOUT: Duration = Duration::from_secs(45);
 const HARNESS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Clone)]
+pub struct OperationSelectingHttpClient {
+    inner: HttpClient,
+}
+
+impl OperationSelectingHttpClient {
+    fn request_with_selector<U>(&self, method: Method, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        let builder = self.inner.request(method.clone(), url);
+        let operation = builder
+            .try_clone()
+            .and_then(|candidate| candidate.build().ok())
+            .and_then(|request| {
+                arkret_wire::ServiceOperationId::from_http_request(
+                    method.as_str(),
+                    request.url().path(),
+                )
+            });
+        match operation {
+            Some(operation) => {
+                builder.header(arkret_http_client::HEADER_OPERATION, operation.as_str())
+            }
+            None => builder,
+        }
+    }
+
+    pub fn request<U>(&self, method: Method, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.request_with_selector(method, url)
+    }
+
+    pub fn delete<U>(&self, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.request_with_selector(Method::DELETE, url)
+    }
+
+    pub fn get<U>(&self, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.request_with_selector(Method::GET, url)
+    }
+
+    pub fn head<U>(&self, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.request_with_selector(Method::HEAD, url)
+    }
+
+    pub fn patch<U>(&self, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.request_with_selector(Method::PATCH, url)
+    }
+
+    pub fn post<U>(&self, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.request_with_selector(Method::POST, url)
+    }
+
+    pub fn put<U>(&self, url: U) -> RequestBuilder
+    where
+        U: IntoUrl,
+    {
+        self.request_with_selector(Method::PUT, url)
+    }
+}
+
+impl std::ops::Deref for OperationSelectingHttpClient {
+    type Target = HttpClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
 
 pub struct ArkretServer {
     handle: SutHandle,
@@ -613,8 +699,10 @@ impl ArkretServer {
         ServiceMetricsClient::new(MeteredService::Soland, base_url).map(Some)
     }
 
-    pub fn http(&self) -> HttpClient {
-        self.http_client.clone()
+    pub fn http(&self) -> OperationSelectingHttpClient {
+        OperationSelectingHttpClient {
+            inner: self.http_client.clone(),
+        }
     }
 
     /// Build an authenticated request for the harness-only embedded WebVH
@@ -756,7 +844,7 @@ impl ArkretServer {
     pub fn sdk(&self) -> Result<SdkClient> {
         let builder = SdkClient::builder(self.base_url());
         Ok(if self._tls.is_some() {
-            builder.http_client(self.http()).build()?
+            builder.http_client(self.http_client.clone()).build()?
         } else {
             builder
                 .allow_insecure_localhost()
@@ -941,7 +1029,7 @@ impl ArkretServer {
     ) -> Result<TestActorClient> {
         let builder = SdkClient::builder(self.base_url()).auth(Auth::Bearer(token.clone()));
         let sdk = if self._tls.is_some() {
-            builder.http_client(self.http()).build()?
+            builder.http_client(self.http_client.clone()).build()?
         } else {
             builder
                 .allow_insecure_localhost()

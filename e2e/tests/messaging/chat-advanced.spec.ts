@@ -7,7 +7,7 @@
 //   - discovery/push-notifications.md §4.3.1, §4.5
 
 import { createHash } from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { cssStringEscape } from "../../helpers/dom";
 import {
   acceptInviteViaApi,

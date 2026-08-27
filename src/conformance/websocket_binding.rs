@@ -25,8 +25,8 @@ use arkret_models_collaboration::sync_frames::websocket_session::{
     WebSocketHandshakeFailure, WebSocketOpenAdmission, WebSocketServerEvent,
     WebSocketTransportDecision,
 };
-use arkret_models_discovery::service_description::SupportedBinding;
-use arkret_models_discovery::websocket_binding::WebSocketBindingDescriptor;
+use arkret_models_discovery::TransportBinding;
+use arkret_models_discovery::websocket_binding::validate_websocket_transport;
 use arkret_signatures::websocket_auth::{
     WebSocketAuthProofRequest, WebSocketAuthVerificationRequest, build_websocket_auth_proof,
     verify_websocket_auth_proof, websocket_holder_thumbprint,
@@ -182,8 +182,8 @@ fn run_discovery_cases(fixture: &Value, env: &SchemaEnv) -> Result<usize> {
                     let descriptor = selected.ok_or_else(|| {
                         anyhow!("discovery case {name} must yield a usable websocket binding")
                     })?;
-                    if descriptor.operations.len() != WebSocketOperationId::ALL.len() {
-                        bail!("discovery case {name} must advertise all three operations");
+                    if descriptor.kind() != arkret_wire::BindingKind::Websocket {
+                        bail!("discovery case {name} must select websocket transport");
                     }
                 }
                 (false, "http_json") => {
@@ -252,9 +252,10 @@ fn discovery_case_instances(name: &str, case: &Value, base: &Value) -> Result<Ve
     bail!("discovery case {name} declares no executable mutation")
 }
 
-fn select_descriptor(instance: &Value) -> Option<WebSocketBindingDescriptor> {
-    let binding: SupportedBinding = serde_json::from_value(instance.clone()).ok()?;
-    WebSocketBindingDescriptor::from_supported_binding(&binding).ok()
+fn select_descriptor(instance: &Value) -> Option<TransportBinding> {
+    let binding: TransportBinding = serde_json::from_value(instance.clone()).ok()?;
+    validate_websocket_transport(&binding).ok()?;
+    Some(binding)
 }
 
 // ── §3.1 DPoP known answer ──────────────────────────────────────────────────

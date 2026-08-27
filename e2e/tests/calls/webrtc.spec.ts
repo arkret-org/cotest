@@ -15,7 +15,7 @@
 // `ak.call.state` projection pinned by the Rust call-state conformance vectors;
 // mid-call TURN refresh is simply a re-call of the ICE config endpoint (§4.2).
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 import { createRealmApi } from "../../helpers/soland-api";

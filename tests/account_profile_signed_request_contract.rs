@@ -33,7 +33,7 @@ fn account_profile_registry_and_schema_require_one_signed_create_or_update_event
         .as_array()
         .expect("operation registry array")
         .iter()
-        .find(|row| row["operation_id"] == "ak.self.account.command.update_profile")
+        .find(|row| row["operation_id"] == "ak.self.account.command.update_profile.v1")
         .expect("account profile update operation");
     assert_eq!(
         operation["idempotency_object_path"],

@@ -188,20 +188,20 @@ async fn describe_backup_operations(server: &ArkretServer) -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    let operations = description["operation_bindings"]
-        .as_array()
-        .expect("operation binding list");
+    let description: arkret_models_discovery::ServiceDescribe =
+        serde_json::from_value(description)?;
     for operation_id in [
-        "ak.self.keys.backups.resource.replace",
-        "ak.self.keys.backups.read.list",
-        "ak.self.keys.backups.command.unlock",
-        "ak.self.keys.backups.resource.delete",
+        "ak.self.keys.backups.resource.replace.v1",
+        "ak.self.keys.backups.read.list.v1",
+        "ak.self.keys.backups.command.unlock.v1",
+        "ak.self.keys.backups.resource.delete.v1",
     ] {
         assert!(
-            operations.iter().any(
-                |binding| binding.get("operation_id").and_then(Value::as_str) == Some(operation_id)
+            description.supports_operation(
+                arkret_wire::ServiceOperationId::from_wire(operation_id)
+                    .expect("backup operation must be registered")
             ),
-            "describe did not advertise {operation_id}: {description}"
+            "describe did not advertise {operation_id}: {description:?}"
         );
     }
     Ok(())

@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/identity/account-states.md
 // Spec: identity/account-lifecycle.md §3
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
@@ -325,7 +325,7 @@ test.describe("account states", () => {
       true,
       "the product-private /_soland/self/account/erase rail was intentionally removed; the spec entry point " +
         "moved to the Account Authority gate face (account-lifecycle.md §8.1 " +
-        "ak.gate.account.command.request_erasure, POST /_arkret/gate/account/erasure-requests); the spec " +
+        "ak.gate.account.command.request_erasure.v1, POST /_arkret/gate/account/erasure-requests); the spec " +
         "questions closed (spec-done 2026-08-18-2325/2326) — blocked on the coauth gate-face " +
         "implementation (arkret-work work/active/2026-08-19-2212)",
     );

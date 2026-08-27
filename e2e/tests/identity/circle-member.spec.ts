@@ -16,7 +16,7 @@
 // Core property: the pulled actor does ZERO operations — admin's one-way add is
 // authoritative, no `accept` round-trip exists for Circle membership.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   ensureRegistered,
   issueDevSession,

@@ -595,7 +595,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
                 Ok::<_, anyhow::Error>(all && bool_field(field)?)
             })?;
             if case.get("operation_id").and_then(Value::as_str)
-                != Some("ak.gate.account.command.issue_controller_gate_attestation")
+                != Some("ak.gate.account.command.issue_controller_gate_attestation.v1")
                 || !all_required
                 || bool_field("bearer_used_as_signature_substitute")?
                 || case

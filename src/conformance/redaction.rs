@@ -804,12 +804,12 @@ fn assert_erasure_receipt_operations_registered() -> Result<()> {
         .ok_or_else(|| anyhow!("operation registry missing operations[]"))?;
     for (operation_id, http, response_ref) in [
         (
-            "ak.peer.erasure_receipt.command.submit",
+            "ak.peer.erasure_receipt.command.submit.v1",
             "POST /_arkret/peer/erasure-receipts",
             "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_submit_outcome",
         ),
         (
-            "ak.peer.erasure_receipt.resource.get",
+            "ak.peer.erasure_receipt.resource.get.v1",
             "GET /_arkret/peer/erasure-receipts/{receipt_id}",
             "schemas/erasure-receipt-operations.schema.json#/$defs/erasure_receipt_resource",
         ),

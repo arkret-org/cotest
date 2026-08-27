@@ -159,12 +159,12 @@ fn simple_mutations_reject_unregistered_success_discriminators() -> Result<()> {
 
     assert_typed_business_value_allowed(
         &schema_index,
-        "ak.self.events.command.submit",
+        "ak.self.events.command.submit.v1",
         &json!({"status": "accepted", "accepted": []}),
     )?;
     assert_typed_business_value_allowed(
         &schema_index,
-        "ak.self.keys.backups.resource.delete",
+        "ak.self.keys.backups.resource.delete.v1",
         &json!({
             "deleted": true,
             "backup_id": "ak:backup:01964137-0000-7000-8000-000000000000"

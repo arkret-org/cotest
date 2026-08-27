@@ -7,7 +7,7 @@
 // in a shared standup space. Lin replies to unblock Pat's PR review ask, and
 // Pat edits the ETA on a reply (after realising EOD was wrong).
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { stepShot } from "../../helpers/screenshots";
 import { openDpopUserPage } from "../../helpers/users";
 

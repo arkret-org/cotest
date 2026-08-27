@@ -18,7 +18,7 @@
 // registered spec contract, but still needs the corresponding sealing path,
 // reducer, or projection before promotion.
 
-import { type APIRequestContext, expect, test } from "@playwright/test";
+import { type APIRequestContext, expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
@@ -95,7 +95,7 @@ async function fetchRealmSealBasis(
   token: string,
   realmId: string,
 ): Promise<RealmSealBasis> {
-  // `ak.self.seals.read.frontier` is the only registered Realm Seal
+  // `ak.self.seals.read.frontier.v1` is the only registered Realm Seal
   // discovery surface and accepts a closed QUERY body.
   const frontierUrl = `${solandBaseUrl()}/_arkret/self/seals/frontier`;
   const response = await request.fetch(frontierUrl, {

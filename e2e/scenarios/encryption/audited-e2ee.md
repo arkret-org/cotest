@@ -28,7 +28,7 @@
 1. alice 创建 `encryption_profile=mls_rfc9420` 的 Realm；不配置旧式 `audit_disclosure_policy`。
 2. bob 提交只含 ciphertext、AAD 与 digest 的 `ak.message.create`。
 3. alice 以 exact scope moderation/governance capability 调用
-   `ak.self.moderation.read.franking_seal_observation`，读取 canonical
+   `ak.self.moderation.read.franking_seal_observation.v1`，读取 canonical
    `ak.moderation.franking_proof` Event、目标 Event、首次 covering Seal、RFC 6962 inclusion path 与
    historical service signer evidence：
    - proof 只以目标 `event_id` 绑定完整 canonical Event commitment，并绑定 Realm、接收服务、历史验证方法、接收时间与

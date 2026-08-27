@@ -34,7 +34,7 @@
 //   COTEST_COAUTH_BASE_URL=…  COTEST_SOLAND_BASE_URL=…  COTEST_INKSON_BASE_URL=… \
 //     npx playwright test identity/oidc-login-flow
 //
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { coauthBaseUrl, optionalEnv, solandBaseUrl } from "../../helpers/env";
 import { openUserPage, uniqueUser } from "../../helpers/users";
 import {

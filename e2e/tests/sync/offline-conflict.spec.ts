@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/sync/offline-conflict.md
 // Spec: sync/client-sync.md §2, sync/operations-sync.md §2-§2.1, authz/event-auth-state-resolution.md §2, §8.1
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   createSharedRealmViaApi,
   listRealmEventsViaApi,

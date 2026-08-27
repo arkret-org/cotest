@@ -210,7 +210,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
 
     // Request body X — canonical-JSON over a small federation_transaction.
     let body_x = json!({
-        "operation": "ak.self.events.command.submit",
+        "operation": "ak.self.events.command.submit.v1",
         "envelopes": [{
             "kind": arkret_models_collaboration::events_payloads::CONTENT_KIND_TEXT,
             "payload": {"body": "federation-c3"}
@@ -286,7 +286,7 @@ pub fn run_federation_idempotency_historical_only() -> Result<()> {
     let first = server_b.receive(&initial_key, dest_td.as_str(), || {
         json!({
             "ok": true,
-            "operation": "ak.self.events.command.submit",
+            "operation": "ak.self.events.command.submit.v1",
             "accepted": 1,
             "request_canonical_digest": request_canonical_digest.as_str(),
         })

@@ -22,7 +22,7 @@
 //   ✓ §4.4 capability revoke fanout: revoking a peer's service delegation
 //     stops outbound federation push to that peer
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   assertDualSolandNotRequired,
   hasDualSoland,
@@ -349,15 +349,6 @@ test.describe("cross-server federation", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    const alphaDescribe = await request.get(
-      `${solandBaseUrl("alpha")}/_arkret/describe`,
-    );
-    expect(alphaDescribe.ok()).toBeTruthy();
-    const alphaDescribeBody = await alphaDescribe.json();
-    expect(alphaDescribeBody.experimental_features ?? []).toContain(
-      "federation.outbound_push.signed_intent",
-    );
-
     const realmId = await createRealmApi(
       request,
       aliceToken,

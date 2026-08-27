@@ -14,7 +14,7 @@
 // with senders attributed, and (b) the durable lifecycle advances via
 // ak.call.state — the two planes the spec actually defines.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { addRealmMemberApi } from "../../helpers/soland-api";
 import {
   ensureRegistered,

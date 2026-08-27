@@ -459,7 +459,7 @@
       "case_id": "revoked_device_cannot_get_high_risk_lease",
       "requirement": "revoked_device_lease",
       "input": {
-        "kind": "ak.self.authorization_leases.command.issue",
+        "kind": "ak.self.authorization_leases.command.issue.v1",
         "payload": {
           "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
           "action": "ak.realm.admin"
@@ -483,7 +483,7 @@
       "case_id": "proposal_include",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_acks.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue.v1",
         "payload": {
           "decision": "include",
           "defer_count": 0
@@ -506,7 +506,7 @@
       "case_id": "proposal_signed_reject",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_acks.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue.v1",
         "payload": {
           "decision": "reject",
           "defer_count": 0
@@ -529,7 +529,7 @@
       "case_id": "proposal_second_defer",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_acks.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue.v1",
         "payload": {
           "decision": "defer",
           "defer_count": 2
@@ -554,7 +554,7 @@
       "case_id": "proposal_third_defer_rejected",
       "requirement": "proposal_decision",
       "input": {
-        "kind": "ak.self.control_proposal_acks.command.issue",
+        "kind": "ak.self.control_proposal_acks.command.issue.v1",
         "payload": {
           "decision": "defer",
           "defer_count": 3

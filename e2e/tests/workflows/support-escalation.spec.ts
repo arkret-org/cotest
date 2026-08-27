@@ -9,7 +9,7 @@
 // cause. Kanban-driven status tracking is fixme'd until kanban + cross-user
 // sync are ready.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { stepShot } from "../../helpers/screenshots";
 import {
   grantCapabilityEventApi,

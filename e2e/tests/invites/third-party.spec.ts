@@ -3,8 +3,8 @@
 // Spec: sync/third-party-invites.md section 3-4
 
 import { createHash, randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
-import type { APIRequestContext } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
+import type { APIRequestContext } from "../../helpers/arkret-test";
 import { mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,

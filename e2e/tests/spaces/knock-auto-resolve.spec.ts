@@ -7,7 +7,7 @@ import {
   test,
   type APIRequestContext,
   type APIResponse,
-} from "@playwright/test";
+} from "../../helpers/arkret-test";
 import {
   mockChallengeProviderBaseUrl,
   mockChallengeProviderDid,

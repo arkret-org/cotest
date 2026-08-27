@@ -7,7 +7,7 @@
 //   - bindings/livekit.md §2/§5 (LiveKit JWT video grant claims)
 //   - conformance/conformance-vectors.md §12.16-12.19
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   solandBaseUrl,
   solandServiceFullId,

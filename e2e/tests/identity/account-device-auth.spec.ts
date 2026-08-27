@@ -3,7 +3,7 @@
 // Spec: identity/account-lifecycle.md §2-§4, key-management.md §5-§6,
 // crypto-media/device-lifecycle.md §2 and §5.4.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 
 test.describe.configure({ mode: "serial" });

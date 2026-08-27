@@ -9,7 +9,7 @@ entries 严格分开;dev mode MUST 让 `verified_profiles=[]`;声明里的 profi
 Event kind MUST fail closed (不能 silent accept-and-drop);profile 涉及的 critical
 extension 服务端未执行时,describe 或 runtime MUST 报错。
 
-不验证:`/server/describe` 的基础形状(`implemented_features`、standard error envelope、
+不验证:`/server/describe` 的基础形状(`supported_features`、standard error envelope、
 pagination、idempotency)由 `scenarios/sync/service-surface-contract.md` 负责。Encoding /
 redaction / HLC / cursor vector 由 `scenarios/conformance/encoding-vectors.md` 负责。
 Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift.md` 负责。
@@ -61,8 +61,8 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
 ## Pre-conditions
 
 - soland `/_arkret/describe` 已暴露 T6.1 claim-level partition
-  (`implemented_features` / `claimed_profiles` / `verified_profiles` /
-  `experimental_features` / `interop_surfaces`)
+  (`supported_features` / `claimed_profiles` / `verified_profiles` /
+  `interop_surfaces`)
 - soland 启动时 `development_mode=true`(cotest harness 默认配置)
 - catalog 通过 `path.resolve(__dirname, "../../../../arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json")`
   解析(相对于 `cotest/e2e/tests/conformance/`)
@@ -170,7 +170,7 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
 - **no new helper**:不要新增 `helpers/conformance.ts` / `helpers/profile-catalog.ts`,
   catalog 集合构造与读文件逻辑放在 spec 文件顶部
 - **与 G1.T2 边界**:G1.T2 (`service-surface-contract`) 盯通用 wire 形状
-  (`implemented_features` / standard error envelope / pagination / idempotency);本
+  (`supported_features` / standard error envelope / pagination / idempotency);本
   场景**只**盯 profile 声明真实性。共享 `solandBaseUrl()` helper,但不共享 fixture
   装载
 

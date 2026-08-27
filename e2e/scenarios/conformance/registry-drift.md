@@ -40,13 +40,13 @@
 ### Phase C — Claimed profile catalog coverage
 
 1. 从 `conformance-profiles.json.profile_roles` 建立 canonical profile id set。
-2. 收集 describe 中 `claimed_profiles`、`verified_profiles`、`self_claimed_profiles`、`implemented_features.profiles` 和嵌套 `profile_id` 值。
+2. 收集 describe 中 `claimed_profiles`、`verified_profiles`、`self_claimed_profiles` 和嵌套 `profile_id` 值。
 3. 断言 claimed set 是 canonical set 的子集；未登记 profile 属于 rogue claim。
 
 ### Phase E — Claimed operation catalog coverage
 
 1. 从 `operation-registry.json.operations[*].operation_id` 建立 canonical operation set。
-2. 只从当前角色 `ServiceDescribe.operation_bindings[*].operation_id` 提取声明；旧扁平字段与推断路径必须被拒绝。
+2. 只从当前角色 `ServiceDescribe.supported_operation_bundles[]` 按本地注册表展开精确 operation 声明；未知 bundle 必须 fail closed。
 3. 断言每个 claimed operation 都在 canonical set 中。不反向要求 soland 实现全部 registry operation。
 
 ### Phase F/G — Server-managed response scanning

@@ -15,7 +15,7 @@
 // statically by tests/realm_organization_statement_negative.rs against the
 // arkret-rust-sdk verifier.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,

@@ -10,7 +10,7 @@
 //   §7 E2EE boundary: MLS-via-IETF profile transcript binding or explicit downgrade
 
 import { createHash, createPrivateKey, sign } from "node:crypto";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   solandBaseUrl,
   solandServiceFullId,

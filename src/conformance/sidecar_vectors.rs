@@ -1236,8 +1236,8 @@ fn assert_new_commit_failure_is_write_free(
 
 pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     let _fixture_case = sidecar_fixture_case(VECTOR_ID_SIDECAR_ENSURE_IDEMPOTENT)?;
-    if arkret_wire::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE
-        != CapabilityActionId::SELF_AGENT_SIDECAR_COMMAND_ENSURE
+    if arkret_wire::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE_V1
+        != CapabilityActionId::SELF_AGENT_SIDECAR_COMMAND_ENSURE_V1
         || ProfileId::AGENT_SIDECAR_V1 != "ak.profile.agent_sidecar.v1"
     {
         bail!("Sidecar ensure operation/profile registry drifted");
@@ -1828,7 +1828,7 @@ pub fn run_sidecar_multi_agent_publish_vector() -> Result<()> {
     // separate controller-only action rather than being implied by Agent
     // write.
     let quartet = [
-        CapabilityActionId::SELF_AGENT_SIDECAR_COMMAND_ENSURE,
+        CapabilityActionId::SELF_AGENT_SIDECAR_COMMAND_ENSURE_V1,
         CapabilityActionId::AGENT_SIDECAR_WRITE,
         CapabilityActionId::AGENT_SIDECAR_EXCHANGE_CONTROL,
         CapabilityActionId::AGENT_SIDECAR_PUBLISH,

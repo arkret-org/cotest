@@ -7,7 +7,7 @@
 //   - §5.1 Redact requires ak.moderation.decision
 //   - §5.2 Ban via ak.member.state{membership="ban"}
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   addRealmMemberApi,

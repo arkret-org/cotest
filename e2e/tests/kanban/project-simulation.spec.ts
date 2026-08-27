@@ -10,7 +10,7 @@ import {
   test,
   type APIRequestContext,
   type Locator,
-} from "@playwright/test";
+} from "../../helpers/arkret-test";
 import { stepShot } from "../../helpers/screenshots";
 import { solandBaseUrl } from "../../helpers/env";
 import {

@@ -56,16 +56,14 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
     }
     assert_array_contains(
         &describe,
-        "discovery_profiles",
-        "ak.profile.directory_service.v1",
+        "supported_operation_bundles",
+        "ak.operation_bundle.directory_service.describe.v1",
     );
-    if directory.is_spawned() {
-        assert_array_contains(
-            &describe,
-            "discovery_profiles",
-            "ak.private_contact_discovery.v1",
-        );
-    }
+    assert_array_contains(
+        &describe,
+        "supported_operation_bundles",
+        "ak.operation_bundle.directory_service.http_core.v1",
+    );
     assert_array_contains(&describe, "accepted_resource_kinds", "space");
     assert_array_contains(&describe, "accepted_resource_kinds", "handle");
     assert_array_contains(&describe, "ingest_modes", "push");
@@ -75,7 +73,6 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
         "/_arkret/find/directory/describe",
         "/_arkret/find/directory/search-realms",
         "/_arkret/find/directory/resolve-handle",
-        "/_arkret/find/directory/private-contact-discovery",
         "/api/admin/v1/resources",
     ] {
         assert!(

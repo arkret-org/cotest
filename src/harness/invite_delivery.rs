@@ -124,7 +124,7 @@ async fn dispatch_invite(
 /// Read the delivered credential from the invitee's holder-private
 /// account-data cell. The cell is the durable source of truth; the to-device
 /// `ak.account_data.update` fanout is only a nudge, and the holder-readable
-/// list surface (`ak.self.account_data.read.list`) returns every non-internal
+/// list surface (`ak.self.account_data.read.list.v1`) returns every non-internal
 /// cell without the single-key registration gate.
 async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str) -> Result<String> {
     let listed = expect_json(invitee.get("/_arkret/self/account_data"), StatusCode::OK).await?;

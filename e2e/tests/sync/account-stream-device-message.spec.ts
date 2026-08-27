@@ -2,7 +2,7 @@
 // Spec: sync/service-http-binding.md §2.3 (account subscribe and device messages)
 //       crypto-media/device-lifecycle.md §7 (durable to-device delivery)
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { sendPlaintextMessageViaApi } from "../../helpers/api";
 import {
   accountSubscribeFramesApi,

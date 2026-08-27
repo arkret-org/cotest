@@ -4,7 +4,7 @@
 //   - discovery/read-receipts.md §2.1-§2.5 (ephemeral format, debounce, policy)
 //   - §3.1-§3.2 (actor-private read marker)
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   authHeaders,
   createSharedRealmViaApi,

@@ -11,7 +11,7 @@
 // signal type. The ICE config is fetched from `POST /_arkret/self/rtc/ice-config`
 // (no prior session needed); renegotiation rides `ak.call.signal{renegotiate}`.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   buildCallSignalEnvelope,
   callSignalPlaintext,

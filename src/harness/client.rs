@@ -20,7 +20,7 @@ use arkret_models_collaboration::governance::membership_invite::MembershipPayloa
 use arkret_models_collaboration::objects::profiles::StrandTrack;
 use arkret_models_collaboration::objects::strand::Strand;
 use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
-use reqwest::{Client as HttpClient, StatusCode};
+use reqwest::StatusCode;
 use serde_json::{Value, json};
 use url::Url;
 
@@ -29,6 +29,7 @@ use super::event_builder::{
     event_envelope_with_causal_refs_for_device, event_envelope_with_chain_for_device,
     event_signing_identity_for_device, realm_bootstrap_event_batch_for_device,
 };
+use super::server::OperationSelectingHttpClient;
 use super::{
     events_frontier_request_body, member_join_payload, member_transition_payload,
     message_create_text_payload, next_typed_id, query_method, realm_create_payload_with_notary,
@@ -37,7 +38,7 @@ use super::{
 
 #[derive(Clone)]
 pub struct TestActorClient {
-    pub(super) http: HttpClient,
+    pub(super) http: OperationSelectingHttpClient,
     pub(super) sdk: SdkClient,
     pub(super) base_url: Url,
     pub(super) service_id: String,

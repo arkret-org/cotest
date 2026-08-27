@@ -46,14 +46,9 @@
             "status": "certified"
           }
         },
-        "operation_bindings": [
-          {"operation_id": "ak.server.read.describe"},
-          {"operation_id": "ak.self.account.read.describe"},
-          {"operation_id": "ak.self.account.stream.subscribe"},
-          {"operation_id": "ak.self.events.stream.subscribe"},
-          {"operation_id": "ak.self.events.read.scan"},
-          {"operation_id": "ak.self.snapshot.read.manifest_head"},
-          {"operation_id": "ak.self.authz.read.check"}
+        "supported_operation_bundles": [
+          "ak.operation_bundle.principal_server.describe.v1",
+          "ak.operation_bundle.principal_server.http_core.v1"
         ],
         "supported_event_kinds": [
           "ak.space.create",
@@ -98,18 +93,11 @@
             "status": "certified"
           }
         },
-        "operation_bindings": [
-          {"operation_id": "ak.server.read.describe"},
-          {"operation_id": "ak.self.account.read.describe"},
-          {"operation_id": "ak.self.account.stream.subscribe"},
-          {"operation_id": "ak.self.events.stream.subscribe"},
-          {"operation_id": "ak.self.events.read.scan"},
-          {"operation_id": "ak.self.snapshot.read.manifest_head"},
-          {"operation_id": "ak.self.authz.read.check"},
-          {"operation_id": "ak.self.blob.upload.create"},
-          {"operation_id": "ak.self.agent.command.provision"},
-          {"operation_id": "ak.self.applet.command.install"},
-          {"operation_id": "ak.self.media.read.ice_config"}
+        "supported_operation_bundles": [
+          "ak.operation_bundle.principal_server.describe.v1",
+          "ak.operation_bundle.principal_server.http_core.v1",
+          "ak.operation_bundle.principal_server.agent_runtime.v1",
+          "ak.operation_bundle.principal_server.applet_install.v1"
         ],
         "supported_event_kinds": [
           "ak.space.create",

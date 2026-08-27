@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 
 import { solandBaseUrl } from "../../helpers/env";
 import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
@@ -9,7 +9,7 @@ type ServiceDescribe = {
   service_id: string;
   service_kind: string;
   service_resolution: Record<string, unknown>;
-  supported_bindings: Array<{ kind: string; base_url?: string }>;
+  transport_bindings: Array<{ kind: string; base_url?: string }>;
 };
 
 type AuthenticatedServiceResolution = {
@@ -49,7 +49,7 @@ test.describe("service resolution bootstrap @fully-implemented", () => {
     const describe = (await describeResponse.json()) as ServiceDescribe;
     expect(describe.service_kind).toBe("principal_server");
 
-    const httpBinding = describe.supported_bindings.find(
+    const httpBinding = describe.transport_bindings.find(
       (binding) => binding.kind === "http_json",
     );
     expect(httpBinding?.base_url, "Describe http_json base URL").toBeTruthy();

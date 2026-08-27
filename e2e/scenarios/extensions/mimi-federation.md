@@ -54,8 +54,8 @@
 3. 断言:Realm 的 `federation-profile-indicator` testid 渲染、文本含 `mimi_interop`
 4. MIMI 互通暴露面走 spec 注册的协议面(SPEC-CR-020:零新增 operation,不存在 `/_arkret/self/realm/:id/federation/mimi/*` 端点):
    - 断言:`GET /_arkret/describe` 宣告 `mimi_interop` extension 支持
-   - 断言:`GET /_arkret/open/mimi/provider-directory`(`ak.open.mimi.read.provider_directory`)返回 200 的 MIMI provider feature profile
-   - room binding 通过 `POST /_arkret/open/mimi/strands/{strand_id}/update`(`ak.open.mimi.command.update_room`)以 `ak.mimi.room_binding` 建立,记录 `room_binding` 的 `mimi_room_uri`
+   - 断言:`GET /_arkret/open/mimi/provider-directory`(`ak.open.mimi.read.provider_directory.v1`)返回 200 的 MIMI provider feature profile
+   - room binding 通过 `POST /_arkret/open/mimi/strands/{strand_id}/update`(`ak.open.mimi.command.update_room.v1`)以 `ak.mimi.room_binding` 建立,记录 `room_binding` 的 `mimi_room_uri`
 
 ### Phase B — bob_mimi 经 MIMI federation 申请加入
 

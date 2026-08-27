@@ -375,7 +375,7 @@ fn validate_bilateral_continuity_checkpoint_fixture() -> Result<()> {
         .ok_or_else(|| anyhow!("operation registry has no operations"))?;
     let self_checkpoint = operations
         .iter()
-        .find(|operation| operation["operation_id"] == "ak.self.contact.command.checkpoint");
+        .find(|operation| operation["operation_id"] == "ak.self.contact.command.checkpoint.v1");
     if self_checkpoint.and_then(|operation| operation["http"].as_str())
         != Some("POST /_arkret/self/contacts/continuity-checkpoint")
     {

@@ -9,7 +9,7 @@
 // Kept timeline-only to stay aligned with feature surface that's solid;
 // kanban-driven onboarding tasks live in workflows/kanban-week.
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { stepShot } from "../../helpers/screenshots";
 import { openDpopUserPage } from "../../helpers/users";
 

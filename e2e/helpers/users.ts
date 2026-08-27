@@ -1420,7 +1420,7 @@ async function ensureRegisteredRaw(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ) {
-  // Spec-canonical registration binding (`ak.gate.account.command.register`):
+  // Spec-canonical registration binding (`ak.gate.account.command.register.v1`):
   // `POST /_arkret/gate/account/register` with `AccountRegisterRequestBody
   // {principal_id, display_name?, device_id?}`. The bare `handle` field is no
   // longer accepted (the first handle arrives via a signed handle claim,
@@ -1578,8 +1578,8 @@ export async function createDpopUserSessionForAccount(
   expect(grant.audience).toBe(audience);
   expect(grant.dpopJkt).toBe(deviceKey.thumbprint);
   expect(grant.scopes).toEqual([
-    "ak.self.account.read.describe",
-    "ak.self.events.read.scan",
+    "ak.self.account.read.describe.v1",
+    "ak.self.events.read.scan.v1",
   ]);
   // Consume only the verified DID returned by the atomic registration result.
   expect(

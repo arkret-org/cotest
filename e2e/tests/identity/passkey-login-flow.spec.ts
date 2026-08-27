@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "../../helpers/arkret-test";
 import { coauthBaseUrl, optionalEnv, solandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";

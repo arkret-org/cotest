@@ -11,7 +11,7 @@
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §2.3 — 接口必须天然支持幂等重试
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §2.4 — 服务必须公布自己的实现 profile
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §3 — `GET /_arkret/describe` canonical shape
-- `arkret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe response claim levels（精确 `operation_bindings` / `implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `interop_surfaces` / `development_mode`）
+- `arkret-spec/spec/v1/zh/sync/service-surface.md` §3.0 — Describe runtime 与 conformance 分层（`supported_operation_bundles` / `transport_bindings` / `supported_features` / `claimed_profiles` / `verified_profiles` / `interop_surfaces` / `development_mode`）
 - `arkret-spec/spec/v1/zh/sync/service-surface.md` §17 — 线级互操作要求(describe 必填字段、`verified_profiles` 与 `development_mode` 约束、claim-level partition)
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §4 — 标准成功响应 envelope
 - `arkret-spec/spec/v1/zh/sync/api-conventions.md` §5 — 标准错误响应(`ok=false`、`error.code`、`message`、`retry_after_ms`、`details`、`request_id`)
@@ -59,14 +59,14 @@
 1. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
 2. 断言:
    - HTTP 200,`Content-Type: application/json`
-   - body 含 spec §3 必填字段：`service_id`、`trust_domain`、`service_kind`、`protocol_version`、`supported_profiles`、`operation_bindings`、`supported_bindings`（数组，不是单数 `binding`）、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
+   - body 含 spec §3 必填字段：`service_id`、`trust_domain`、`service_kind`、`protocol_version`、`supported_profiles`、`supported_operation_bundles`、`transport_bindings`、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
    - `service_kind === "principal_server"`(soland 是 principal server,见 `service-surface.md` §2.5)
    - `protocol_version === "1.0"`
-   - `supported_bindings[0].kind === "http_json"`、`supported_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价
-   - **§3.0 claim-level partition**:`implemented_features` / `claimed_profiles` / `verified_profiles` / `experimental_features` / `interop_surfaces` 全部存在且是数组
+   - `transport_bindings[0].kind === "http_json"`、`transport_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价
+   - **§3.0 claim-level partition**:`supported_features` / `claimed_profiles` / `verified_profiles` / `interop_surfaces` 全部存在且是数组
    - `claimed_profiles[*].claim_kind === "self_claimed"`(self-claim 不得直接写 `conformance_verified`)
    - 若 `development_mode === true`,则 `verified_profiles.length === 0`(spec §3.0 第 2 条 dev fail-closed)
-   - `operation_bindings` 至少含 `ak.server.read.describe` 与 `ak.self.events.command.submit` 的精确 carrier row（spec §4.2 + service-api-schema §2.1 `/events POST`）
+   - `supported_operation_bundles` 至少含 principal `describe.v1` 与 `http_core.v1` bundle，本地注册表展开后覆盖 Describe 与 events submit
 3. `GET ${coauthBaseUrl()}/_arkret/describe`(仅当 `coauthBaseUrl()` 已配置)
 4. 断言:
    - HTTP 200,JSON
@@ -138,7 +138,7 @@
 
 ### Phase E — Unsupported feature fail-closed(§5.1)
 
-31. 从 Phase A 的 describe 响应里取 `supported_features` 与 `implemented_features`,选一个**两者都不在**的 feature 标识(例如 `ak.feature.mimi_room_passthrough.v1` 在普通 dev soland 上不出现)
+31. 从 Phase A 的 describe 响应里取唯一运行时 feature 集 `supported_features`,选一个其中不存在的注册 feature 标识
 32. 构造一个 `POST /_arkret/self/events` 请求,在 envelope 的 `requirements.features[]` 字段里声明依赖该 feature
 33. 断言:
     - HTTP 4xx
@@ -166,7 +166,7 @@
 
 ## Implementation notes
 
-- **soland describe 已实现**:`soland/src/routing/system/describe.rs` + `soland/src/wire.rs` 已经写入 `claimed_profiles` / `verified_profiles` / `implemented_features` 等字段;Phase A 在 soland 侧可以**直接 live**
+- **soland describe 已实现**:`soland/crates/http/src/routing/system/describe.rs` + `soland/crates/http/src/wire.rs` 已写入 bundle、transport、feature 与 profile claim 分层字段;Phase A 在 soland 侧可以**直接 live**
 - **coauth describe 已实现**:`coauth/crates/backend/src/handlers/arkret.rs::server_describe` 同样按 canonical shape 返回;Phase A 在 coauth 侧也可以 live(但需 `test.skip(!coauthBaseUrl(), ...)`)
 - **Phase C list endpoint 已 live**:当前用 `/_arkret/self/events?after=...` 覆盖 §7.1 pagination shape、opaque cursor、tamper reject、gap-free / non-overlap 分页;`/sync/operations` 不存在不再阻塞本场景
 - **event_id 幂等已 live**:soland 当前依赖 `event_id` 幂等(spec §4.2);同 envelope replay 与同 `event_id` drift conflict 已由 Phase D0 覆盖

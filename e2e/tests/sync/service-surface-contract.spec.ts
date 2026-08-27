@@ -12,7 +12,7 @@
 // `GET /_arkret/describe` with the claim-level partition layer in place, so the two
 // describe probes are LIVE today. Phase A.E1 (claim_kind partition), Phase B
 // (error envelope), Phase E (unsupported_feature fail-closed), Phase C (opaque
-// list-pagination cursor on `ak.self.events.read.scan`) and Phase D (generic
+// list-pagination cursor on `ak.self.events.read.scan.v1`) and Phase D (generic
 // `Idempotency-Key` header path on POST /_arkret/self/events) are all live on
 // soland.
 //
@@ -24,7 +24,7 @@
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   createRealmViaApi,
   listRealmEventsViaApi,
@@ -193,10 +193,8 @@ test.describe("describes soland surface @fully-implemented", () => {
     // spec: service-surface.md §3 (canonical shape), §3.0 (claim-level partition),
     //       §17 (line-level interop required fields); service-api-schema.mdx §2.
     //
-    // Asserts the §17 must-have fields are present, that the §3.0 six claim-level
-    // fields (implemented_features / claimed_profiles / verified_profiles /
-    // experimental_features / interop_surfaces + development_mode) are partitioned
-    // correctly, and that dev-mode posture forces verified_profiles == [].
+    // Asserts the canonical fields are present, conformance claims remain
+    // partitioned, and dev-mode posture forces verified_profiles == [].
     const resp = await request.get(`${solandBaseUrl()}/_arkret/describe`);
     expect(resp.status()).toBe(200);
     expect(resp.headers()["content-type"] ?? "").toContain("application/json");
@@ -208,10 +206,10 @@ test.describe("describes soland surface @fully-implemented", () => {
     expect(body.service_kind, "service_kind").toBe("principal_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
     expect(Array.isArray(body.supported_profiles), "supported_profiles is array").toBe(true);
-    expect(Array.isArray(body.operation_bindings), "operation_bindings is array").toBe(true);
-    expect(Array.isArray(body.supported_bindings), "supported_bindings is array").toBe(true);
-    expect(body.supported_bindings.length, "≥1 binding").toBeGreaterThanOrEqual(1);
-    expect(body.supported_bindings[0].kind, "http_json binding").toBe("http_json");
+    expect(Array.isArray(body.supported_operation_bundles), "supported_operation_bundles is array").toBe(true);
+    expect(Array.isArray(body.transport_bindings), "transport_bindings is array").toBe(true);
+    expect(body.transport_bindings.length, "≥1 binding").toBeGreaterThanOrEqual(1);
+    expect(body.transport_bindings[0].kind, "http_json binding").toBe("http_json");
     expect(Array.isArray(body.supported_features), "supported_features is array").toBe(true);
     expect(body.auth_metadata, "auth_metadata present").toBeTruthy();
     expect(body.limits, "limits present").toBeTruthy();
@@ -219,10 +217,8 @@ test.describe("describes soland surface @fully-implemented", () => {
     expect(typeof body.development_mode, "development_mode boolean").toBe("boolean");
 
     // §3.0 — claim-level partition
-    expect(Array.isArray(body.implemented_features), "implemented_features array").toBe(true);
     expect(Array.isArray(body.claimed_profiles), "claimed_profiles array").toBe(true);
     expect(Array.isArray(body.verified_profiles), "verified_profiles array").toBe(true);
-    expect(Array.isArray(body.experimental_features), "experimental_features array").toBe(true);
     expect(Array.isArray(body.interop_surfaces), "interop_surfaces array").toBe(true);
 
     // §3.0 — self-claim has claim_kind === "self_claimed"; conformance_verified MUST live
@@ -236,13 +232,12 @@ test.describe("describes soland surface @fully-implemented", () => {
       expect(body.verified_profiles, "dev-mode verified_profiles is empty").toEqual([]);
     }
 
-    // §4.2 + service-api-schema.mdx §2.1 — every principal server must surface
-    // exact carrier rows for ak.server.read.describe + ak.self.events.command.submit.
-    const operationIds = body.operation_bindings.map(
-      (binding: { operation_id: string }) => binding.operation_id,
+    expect(body.supported_operation_bundles, "exposes principal describe bundle").toContain(
+      "ak.operation_bundle.principal_server.describe.v1",
     );
-    expect(operationIds, "exposes ak.server.read.describe").toContain("ak.server.read.describe");
-    expect(operationIds, "exposes ak.self.events.command.submit").toContain("ak.self.events.command.submit");
+    expect(body.supported_operation_bundles, "exposes principal HTTP core bundle").toContain(
+      "ak.operation_bundle.principal_server.http_core.v1",
+    );
 
     await testInfo.attach("soland-describe", {
       body: JSON.stringify(body, null, 2),
@@ -288,11 +283,12 @@ test.describe("describes coauth surface @fully-implemented", () => {
     expect(body.service_kind, "service_kind").toBe("auth_server");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
 
-    // §3.0 — six claim-level fields present
-    expect(Array.isArray(body.implemented_features)).toBe(true);
+    // Canonical conformance claim fields remain separate from runtime features.
+    expect(Array.isArray(body.supported_operation_bundles)).toBe(true);
+    expect(Array.isArray(body.transport_bindings)).toBe(true);
+    expect(Array.isArray(body.supported_features)).toBe(true);
     expect(Array.isArray(body.claimed_profiles)).toBe(true);
     expect(Array.isArray(body.verified_profiles)).toBe(true);
-    expect(Array.isArray(body.experimental_features)).toBe(true);
     expect(Array.isArray(body.interop_surfaces)).toBe(true);
     expect(typeof body.development_mode).toBe("boolean");
 
@@ -406,8 +402,8 @@ test.describe("shared public describe binding @fully-implemented", () => {
       expect(selectedPrincipalBody.service_kind).toBe("principal_server");
       expect(selectedAuthBody.service_kind).toBe("auth_server");
       expect(selectedPrincipalBody.service_id).not.toBe(selectedAuthBody.service_id);
-      expect(selectedPrincipalBody.operation_bindings).not.toEqual(
-        selectedAuthBody.operation_bindings,
+      expect(selectedPrincipalBody.supported_operation_bundles).not.toEqual(
+        selectedAuthBody.supported_operation_bundles,
       );
       expect(selectedPrincipalBody.claimed_profiles).not.toEqual(
         selectedAuthBody.claimed_profiles,
@@ -509,7 +505,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
     "Phase D0: Event ID replay is idempotent and body drift returns duplicate_conflict",
     async ({ request }) => {
       // spec: api-conventions.md §6 (`event_id` idempotency path) and
-      //       §4.2 (`ak.self.events.command.submit` write surface).
+      //       §4.2 (`ak.self.events.command.submit.v1` write surface).
       //
       // Matrix Complement's transaction replay coverage maps most directly to
       // Arkret's canonical Event ID replay: exact same Event is duplicate/no-op;
@@ -596,7 +592,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       //       §7.1 (list pagination response: { <items_field>, next_cursor, has_more };
       //         client paginates by `has_more`, follows `next_cursor`).
       //
-      // The `ak.self.events.read.scan` list surface at QUERY /_arkret/self/events
+      // The `ak.self.events.read.scan.v1` list surface at QUERY /_arkret/self/events
       // is the first list endpoint to reach the §7.1 wire shape exactly:
       // `{ events, next_cursor: "ak:cursor:<base64url>", has_more, prev_cursor }`.
       const stamp = Date.now();
@@ -842,8 +838,6 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const description = await describe.json();
       const declared = new Set<string>([
         ...((description.supported_features ?? []) as string[]),
-        ...((description.implemented_features ?? []) as string[]),
-        ...((description.experimental_features ?? []) as string[]),
       ]);
       const undeclaredFeature = "ak.feature.mimi_room_passthrough.v1";
       expect(declared.has(undeclaredFeature), "fixture feature must be undeclared").toBe(false);

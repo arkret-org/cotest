@@ -3,7 +3,7 @@
 // Spec: discovery/push-notifications.md §2-§4, discovery/client-preferences.md
 
 import { createHash } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { cssStringEscape } from "../../helpers/dom";
 import { stepShot } from "../../helpers/screenshots";
 import {

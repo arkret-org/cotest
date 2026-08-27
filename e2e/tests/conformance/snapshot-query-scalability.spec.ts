@@ -36,7 +36,7 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { conformanceBaseUrl, solandBaseUrl } from "../../helpers/env";
 import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
 

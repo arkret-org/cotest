@@ -17,7 +17,7 @@ import { createPublicKey, verify as cryptoVerify } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { conformanceBaseUrl } from "../../helpers/env";
 import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
 

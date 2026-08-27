@@ -4,7 +4,7 @@
 //   - models/realm-and-space.md §2-§3
 //   - models/strand-and-message.md §8, §8.4, §8.5
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import {
   createRealmViaApi,
   createSharedRealmViaApi,

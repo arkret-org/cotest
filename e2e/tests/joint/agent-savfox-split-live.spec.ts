@@ -6,7 +6,7 @@ import {
   type Page,
   type Request,
   type Route,
-} from "@playwright/test";
+} from "../../helpers/arkret-test";
 import { readFile } from "node:fs/promises";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {

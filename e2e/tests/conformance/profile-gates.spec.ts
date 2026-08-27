@@ -24,7 +24,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
@@ -252,7 +252,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const envelope = signedEventEnvelope({
       actorDid: alice.did,
       realmId: "ak:realm:AY0rSzrDAC1zeYgGHFxVjALohUeclZwWr9eDkFlNy2df",
-      kind: "ak.edge.applet.command.transaction",
+      kind: "ak.edge.applet.command.transaction.v1",
       // `ak:transaction:` is the canonical typed ID prefix. The abbreviated
       // `ak:txn:` is a `hard_reject` entry in
       // artifacts/registry/forbidden-wire-fields.json, so using it here made

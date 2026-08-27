@@ -4,7 +4,7 @@
 //   - governance/content-moderation.md appeal FSM + separation of duties
 //   - models/governance-objects.md moderation decision / appeal event family
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   authHeaders,
   createSharedRealmViaApi,

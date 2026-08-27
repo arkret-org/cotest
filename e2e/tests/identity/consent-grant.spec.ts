@@ -2,7 +2,7 @@
 // Contract: e2e/scenarios/identity/consent-grant.md
 // Spec: identity/consent-model.md §2-§4
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {

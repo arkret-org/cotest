@@ -21,7 +21,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type APIResponse, expect, test } from "@playwright/test";
+import { type APIResponse, expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   ensureRegistered,
@@ -78,6 +78,10 @@ type DriftRegistry = {
 
 type OperationRegistry = {
   operations: Array<{ operation_id: string; http?: string; grpc?: string; mq?: string }>;
+  operation_bundles: Array<{
+    operation_bundle_id: string;
+    members: Array<{ operation_id: string }>;
+  }>;
   surface_groups: Array<{ surface: string; surface_class: string; operations: string[] }>;
 };
 
@@ -115,19 +119,28 @@ function* walkTree(
   }
 }
 
-/** Exact current-v1 operation ids from role-scoped carrier rows. */
-function pickClaimedOperations(describe: unknown): string[] | null {
+/** Exact current-v1 operation ids expanded from role-scoped registered bundles. */
+function pickClaimedOperations(
+  describe: unknown,
+  operationRegistry: OperationRegistry,
+): string[] | null {
   if (!describe || typeof describe !== "object") return null;
   const d = describe as Record<string, unknown>;
-  if (!Array.isArray(d.operation_bindings)) return null;
-  const operationIds = d.operation_bindings.map((binding) =>
-    binding && typeof binding === "object"
-      ? (binding as Record<string, unknown>).operation_id
-      : undefined,
+  if (!Array.isArray(d.supported_operation_bundles)) return null;
+  const bundles = new Map(
+    operationRegistry.operation_bundles.map((bundle) => [
+      bundle.operation_bundle_id,
+      bundle.members,
+    ]),
   );
-  return operationIds.every((operationId) => typeof operationId === "string")
-    ? (operationIds as string[])
-    : null;
+  const operationIds = new Set<string>();
+  for (const bundleId of d.supported_operation_bundles) {
+    if (typeof bundleId !== "string") return null;
+    const members = bundles.get(bundleId);
+    if (!members) return null;
+    for (const member of members) operationIds.add(member.operation_id);
+  }
+  return [...operationIds];
 }
 
 /**
@@ -143,7 +156,6 @@ function collectClaimedProfileIds(describe: unknown): Set<string> {
     d.claimed_profiles,
     d.verified_profiles,
     d.self_claimed_profiles,
-    (d.implemented_features as Record<string, unknown> | undefined)?.profiles,
   ];
   for (const arr of topLevelArrays) {
     if (Array.isArray(arr)) {
@@ -378,11 +390,11 @@ test.describe("conformance registry drift @fully-implemented", () => {
     expect(resp.ok()).toBeTruthy();
     const describe = await resp.json();
 
-    const claimedOps = pickClaimedOperations(describe);
+    const claimedOps = pickClaimedOperations(describe, operationRegistry);
     if (!claimedOps) {
       test.skip(
         true,
-        "describe did not expose valid operation_bindings — cannot verify operation coverage",
+        "describe did not expose valid supported_operation_bundles — cannot verify operation coverage",
       );
       return;
     }

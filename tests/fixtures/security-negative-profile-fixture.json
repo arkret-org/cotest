@@ -5,7 +5,7 @@
     {
       "name": "bad_signature_correct_digest_forged_jws_rejects",
       "category": "bad_signature",
-      "operation_id": "ak.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit.v1",
       "comment": "event_digest binds the canonical Event bytes correctly, but the detached JWS signature is forged. A real Ed25519 verification MUST reject it — a bare digest comparison would not. signing_public_key_hex is the verifying key resolved from proof.verification_method.",
       "input": {
         "signing_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
@@ -43,7 +43,7 @@
     {
       "name": "bad_canonical_bytes_same_event_id_quarantines",
       "category": "bad_canonical_bytes",
-      "operation_id": "ak.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit.v1",
       "input": {
         "stored_event": {
           "event_id": "ak:event:AWXsf2rFLkYFYlF5uh4gif0IP3q1iVowzqCZ987Rqza8",
@@ -87,7 +87,7 @@
     {
       "name": "bad_schema_payload_rejects",
       "category": "bad_schema_payload",
-      "operation_id": "ak.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit.v1",
       "input": {
         "event": {
           "event_id": "ak:event:Ab1wW6h5QnGMlhhFi-yxg6txnBC4jwSBbzmiKBpMOfTO",
@@ -114,7 +114,7 @@
     {
       "name": "replay_actor_seq_rejects",
       "category": "replay",
-      "operation_id": "ak.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit.v1",
       "input": {
         "actor_frontier": {
           "actor_id": "did:web:alice.example",
@@ -146,7 +146,7 @@
     {
       "name": "downgrade_missing_critical_profile_rejects",
       "category": "downgrade",
-      "operation_id": "ak.self.events.command.submit",
+      "operation_id": "ak.self.events.command.submit.v1",
       "input": {
         "claimed_profile": "ak.profile.e2ee_client.v1",
         "attempted_profile": "ak.profile.full_client.v1",
@@ -185,7 +185,7 @@
     {
       "name": "query_auth_leakage_hard_fails",
       "category": "query_auth_leakage",
-      "operation_id": "ak.self.events.read.scan",
+      "operation_id": "ak.self.events.read.scan.v1",
       "input": {
         "request": {
           "method": "GET",
