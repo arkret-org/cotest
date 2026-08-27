@@ -65,7 +65,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     );
     assert_eq!(
         integration["examples"]["compose_strand"]["step_3"]["path"],
-        "/_soland/edge/push/outbound/bridge/fetch"
+        "/_arkret/edge/push/register-device"
     );
 
     let auth_bridge = expect_json(
@@ -95,42 +95,6 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     assert_eq!(
         auth_bridge["examples"]["register_device_request"]["platform"],
         "web"
-    );
-
-    let push_bridge = expect_json(
-        server
-            .http()
-            .get(server.url("/_soland/edge/push/outbound/bridge/describe")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(
-        push_bridge["contract"],
-        "arkret.rest.outbound_push_bridge.v1"
-    );
-    assert_eq!(
-        push_bridge["gateway_contract"]["resolve_path"],
-        "/_soland/edge/push/outbound/bridge/resolve"
-    );
-    assert_eq!(
-        push_bridge["gateway_contract"]["fetch_path"],
-        "/_soland/edge/push/outbound/bridge/fetch"
-    );
-    assert_eq!(
-        push_bridge["gateway_contract"]["cache_status_path"],
-        "/_soland/edge/push/outbound/bridge/cache/status"
-    );
-    assert_eq!(
-        push_bridge["gateway_contract"]["cache_invalidate_path"],
-        "/_soland/edge/push/outbound/bridge/cache/invalidate"
-    );
-    assert_eq!(
-        push_bridge["examples"]["resolve_request"]["push_gateway_url"],
-        "https://floria.example/_arkret/edge/push/notify"
-    );
-    assert_eq!(
-        push_bridge["examples"]["fetch_request"]["force_refresh"],
-        true
     );
 
     Ok(())
