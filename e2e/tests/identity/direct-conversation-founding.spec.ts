@@ -234,13 +234,13 @@ async function acceptedDirectMessageEvidence(
   };
   expect(
     `sha256:${createHash("sha256")
-      .update("ak.contact.contact_round.v1\n", "utf8")
+      .update("ak.contact.round.v1\n", "utf8")
       .update(canonicalJson(contact_round), "utf8")
       .digest("hex")}`,
   ).toBe(responseReceipt.contact_round_id);
   return {
     kind: "human",
-    contact_round_evidence_bundle: {
+    contact_round_evidence: {
       contact_round_id: responseReceipt.contact_round_id,
       contact_round,
       request_receipts: [requestReceipt],
@@ -249,7 +249,7 @@ async function acceptedDirectMessageEvidence(
         String(left.issuer).localeCompare(String(right.issuer)),
       ),
     },
-    root_basis_continuity_chain: [],
+    contact_round_continuity_chain: [],
   };
 }
 
@@ -423,7 +423,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     // Normal Contact round fixes the responder (Bob), not the requester, as
     // the only founder.
     const basisRef = String(
-      founderContactRoundEvidence.contact_round_evidence_bundle.contact_round
+      founderContactRoundEvidence.contact_round_evidence.contact_round
         .request_event_ref,
     );
     const createdAt = canonicalTimestamp();
@@ -455,7 +455,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       unit_kind: "direct_conversation_founding",
       idempotency_key: typedId("dc-founding"),
       events: accepted.events.map((event) => ({ event })),
-      founder_contact_round_evidence: founderContactRoundEvidence,
+      founding_authority_evidence: founderContactRoundEvidence,
     };
     const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
     const firstResponse = await request.post(eventsUrl, {

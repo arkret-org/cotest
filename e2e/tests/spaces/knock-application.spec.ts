@@ -78,7 +78,6 @@ const APPLICATION_FORM_POLICY = {
 
 const JOIN_POLICY_PROFILE_SCHEMA_REFS = [
   "ak.schema.realm.v1",
-  "ak.profile.candidate.join_policy.v1",
 ];
 
 async function makeUser(request: APIRequestContext, prefix: string) {

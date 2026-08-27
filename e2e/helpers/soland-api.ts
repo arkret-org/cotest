@@ -3725,13 +3725,23 @@ async function forceConformanceCbaBasis(
   if (!descriptor?.reducer_input) {
     return;
   }
+  const proof = Array.isArray(envelope.proofs)
+    ? (envelope.proofs[0] as Record<string, unknown> | undefined)
+    : undefined;
+  const verificationMethod = stringValue(proof?.verification_method);
+  const subjectDid = verificationMethod?.split("#", 1)[0];
+  if (!subjectDid?.startsWith("did:")) {
+    throw new Error(
+      `CBA fixture basis requires a canonical signer DID for ${kind}`,
+    );
+  }
   const response = await request.post(
     `${solandBaseUrl(server)}/_arkret/_conformance/realm-basis`,
     {
       headers: { "content-type": "application/json" },
       data: canonicalJson({
         realm_id: realmId,
-        subject: actorDid,
+        subject: subjectDid,
         data_plane_actions: [fixtureCapabilityAction(kind)],
       }),
     },
@@ -3749,17 +3759,11 @@ async function forceConformanceCbaBasis(
     delete envelope.auth_context;
   } else {
     envelope.seal_ref = basis.seal_id;
-    const proof = Array.isArray(envelope.proofs)
-      ? (envelope.proofs[0] as Record<string, unknown> | undefined)
-      : undefined;
-    const verificationMethod =
-      stringValue(proof?.verification_method) ?? `${actorDid}#device`;
-    envelope.auth_context = eventAuthContext(verificationMethod);
+    envelope.auth_context = eventAuthContext(
+      verificationMethod ?? `${actorDid}#device`,
+    );
     delete envelope.seal_basis;
   }
-  const proof = Array.isArray(envelope.proofs)
-    ? (envelope.proofs[0] as Record<string, unknown> | undefined)
-    : undefined;
   refreshEventEnvelopeProof(envelope, stringValue(proof?.verification_method));
 }
 

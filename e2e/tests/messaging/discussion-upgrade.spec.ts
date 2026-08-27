@@ -19,6 +19,7 @@ import {
   alignSignedEventToActorFrontierApi,
   canonicalTimestamp,
   rawSubmitSignedEventApi,
+  retypeEventDerivedId,
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -380,7 +381,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       eventPayload(findStrandCreate(events, promoted.privateStrandId)),
     ).toMatchObject({
       object: {
-        id: promoted.privateStrandId,
         realm_id: fixture.realmId,
         scope_circle_id: promoted.circleId,
       },
@@ -389,8 +389,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       eventPayload(findRelationCreate(events, promoted.relationId)),
     ).toMatchObject({
       relation: {
-        id: promoted.relationId,
-        kind: "confidential_discussion_of",
+        relation_kind: "confidential_discussion_of",
         from_ref: promoted.privateStrandId,
         to_ref: publicStrandId,
         scope_circle_id: promoted.circleId,
@@ -428,7 +427,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const circleCreate = findCircleCreate(events, promoted.circleId);
     expect(eventPayload(publicStrandCreate)).toMatchObject({
       object: {
-        id: publicStrandId,
         realm_id: fixture.realmId,
       },
     });
@@ -454,7 +452,6 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       payload: {
         object: strandObject(
           fixture.realmId,
-          typedId("strand"),
           fixture.alice,
           "orphan scoped Strand",
           createdAt,
@@ -536,13 +533,6 @@ async function createDiscussionFixture(
       historyAccess: "all_history_for_current_members",
     },
   });
-  await joinRealmMemberViaApi(
-    request,
-    fixture.aliceToken,
-    fixture.alice,
-    fixture.realmId,
-    fixture.alice.did,
-  );
   return fixture;
 }
 
@@ -554,42 +544,40 @@ async function createStrandViaApi(
   title: string,
   opts: { scopeCircleId?: string } = {},
 ) {
-  const strandId = typedId("strand");
   const createdAt = canonicalTimestamp();
+  const envelope = signedEventEnvelope({
+    actorDid: actor.did,
+    realmId,
+    kind: "ak.strand.create",
+    scopeRef: opts.scopeCircleId
+      ? {
+          kind: "circle",
+          realm_id: realmId,
+          circle_id: opts.scopeCircleId,
+        }
+      : undefined,
+    createdAt,
+    payload: {
+      object: strandObject(realmId, actor, title, createdAt, opts),
+    },
+  });
   await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid: actor.did,
-      realmId,
-      kind: "ak.strand.create",
-      scopeRef: opts.scopeCircleId
-        ? {
-            kind: "circle",
-            realm_id: realmId,
-            circle_id: opts.scopeCircleId,
-          }
-        : undefined,
-      createdAt,
-      payload: {
-        object: strandObject(realmId, strandId, actor, title, createdAt, opts),
-      },
-    }),
+    envelope,
     { context: `create strand ${title}` },
   );
-  return strandId;
+  return retypeEventDerivedId(String(envelope.event_id), "strand");
 }
 
 function strandObject(
   realmId: string,
-  strandId: string,
   actor: JointUser,
   title: string,
   createdAt: string,
   opts: { scopeCircleId?: string } = {},
 ) {
   return {
-    id: strandId,
     schema: "ak.schema.strand.v1",
     realm_id: realmId,
     metadata: {
@@ -648,39 +636,39 @@ async function createDiscussionCircleViaApi(
     circleEncryptionProfile?: "none" | "mls_rfc9420";
   },
 ) {
-  const circleId = typedId("circle");
   const createdAt = canonicalTimestamp();
+  const envelope = signedEventEnvelope({
+    actorDid: fixture.alice.did,
+    realmId: fixture.realmId,
+    kind: "ak.circle.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.circle.v1",
+        realm_id: fixture.realmId,
+        title: `private discussion ${Date.now()}`,
+        display: {
+          short_name: "DISC",
+          color_token: "indigo",
+          symbol: { glyph: "lock" },
+        },
+        directory_visibility: "members",
+        join_rule: "invite",
+        history_access: "since_join",
+        encryption_profile: opts.circleEncryptionProfile ?? "none",
+        state: "active",
+        created_by: fixture.alice.did,
+        created_at: createdAt,
+      },
+    },
+  });
   await submitSignedEventApi(
     request,
     fixture.aliceToken,
-    signedEventEnvelope({
-      actorDid: fixture.alice.did,
-      realmId: fixture.realmId,
-      kind: "ak.circle.create",
-      createdAt,
-      payload: {
-        object: {
-          id: circleId,
-          schema: "ak.schema.circle.v1",
-          realm_id: fixture.realmId,
-          title: `private discussion ${Date.now()}`,
-          display: {
-            short_name: "DISC",
-            color_token: "indigo",
-            symbol: { glyph: "lock" },
-          },
-          directory_visibility: "members",
-          join_rule: "invite",
-          history_access: "since_join",
-          encryption_profile: opts.circleEncryptionProfile ?? "none",
-          state: "active",
-          created_by: fixture.alice.did,
-          created_at: createdAt,
-        },
-      },
-    }),
-    { context: `create circle ${circleId}` },
+    envelope,
+    { context: "create discussion circle" },
   );
+  const circleId = retypeEventDerivedId(String(envelope.event_id), "circle");
   await grantCircleMemberManageCapability(request, fixture.aliceToken, {
     ownerDid: fixture.alice.did,
     realmId: fixture.realmId,
@@ -688,13 +676,6 @@ async function createDiscussionCircleViaApi(
     circleId,
   });
   for (const member of opts.members) {
-    await joinRealmMemberViaApi(
-      request,
-      fixture.aliceToken,
-      fixture.alice,
-      fixture.realmId,
-      member.did,
-    );
     await submitCircleMemberStateViaApi(
       request,
       fixture.aliceToken,
@@ -706,31 +687,6 @@ async function createDiscussionCircleViaApi(
     );
   }
   return circleId;
-}
-
-async function joinRealmMemberViaApi(
-  request: APIRequestContext,
-  token: string,
-  actor: JointUser,
-  realmId: string,
-  memberDid: string,
-) {
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorDid: actor.did,
-      realmId,
-      kind: "ak.member.state",
-      payload: {
-        realm_id: realmId,
-        actor_id: memberDid,
-        membership: "join",
-        delivery_status: "unroutable",
-      },
-    }),
-    { context: `join ${memberDid}` },
-  );
 }
 
 async function submitCircleMemberStateViaApi(
@@ -768,28 +724,34 @@ async function createConfidentialDiscussionRelationViaApi(
   publicStrandId: string,
   circleId: string,
 ) {
-  const relationId = typedId("relation");
+  const createdAt = canonicalTimestamp();
+  const envelope = signedEventEnvelope({
+    actorDid: actor.did,
+    realmId,
+    kind: "ak.relation.create",
+    createdAt,
+    payload: {
+      relation: {
+        schema: "ak.schema.relation.v1",
+        realm_id: realmId,
+        relation_kind: "confidential_discussion_of",
+        from_ref: privateStrandId,
+        to_ref: publicStrandId,
+        scope_circle_id: circleId,
+        fields: { role: "promoted_discussion" },
+        state: "active",
+        created_by: actor.did,
+        created_at: createdAt,
+      },
+    },
+  });
   await submitSignedEventApi(
     request,
     token,
-    signedEventEnvelope({
-      actorDid: actor.did,
-      realmId,
-      kind: "ak.relation.create",
-      payload: {
-        relation: {
-          id: relationId,
-          kind: "confidential_discussion_of",
-          from_ref: privateStrandId,
-          to_ref: publicStrandId,
-          scope_circle_id: circleId,
-          fields: { role: "promoted_discussion" },
-        },
-      },
-    }),
+    envelope,
     { context: `link private discussion ${privateStrandId}` },
   );
-  return relationId;
+  return retypeEventDerivedId(String(envelope.event_id), "relation");
 }
 
 async function createDiscussionMessageViaApi(
@@ -836,21 +798,42 @@ function findCircleCreate(
   events: Array<Record<string, unknown>>,
   circleId: string,
 ): Record<string, unknown> {
-  return findEventByPayload(events, "ak.circle.create", circleId);
+  return findEventByDerivedId(events, "ak.circle.create", "circle", circleId);
 }
 
 function findStrandCreate(
   events: Array<Record<string, unknown>>,
   strandId: string,
 ): Record<string, unknown> {
-  return findEventByPayload(events, "ak.strand.create", strandId);
+  return findEventByDerivedId(events, "ak.strand.create", "strand", strandId);
 }
 
 function findRelationCreate(
   events: Array<Record<string, unknown>>,
   relationId: string,
 ): Record<string, unknown> {
-  return findEventByPayload(events, "ak.relation.create", relationId);
+  return findEventByDerivedId(
+    events,
+    "ak.relation.create",
+    "relation",
+    relationId,
+  );
+}
+
+function findEventByDerivedId(
+  events: Array<Record<string, unknown>>,
+  kind: string,
+  objectKind: string,
+  objectId: string,
+): Record<string, unknown> {
+  const event = events.find(
+    (candidate) =>
+      candidate.kind === kind &&
+      typeof candidate.event_id === "string" &&
+      retypeEventDerivedId(candidate.event_id, objectKind) === objectId,
+  );
+  expect(event, `${kind} deriving ${objectId}`).toBeTruthy();
+  return event!;
 }
 
 function findEventByPayload(
