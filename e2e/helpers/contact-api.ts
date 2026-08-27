@@ -981,7 +981,10 @@ export async function listAuthzInvitesArkret(
   );
   url.searchParams.set("subject", actorDid);
   const response = await request.get(url.toString(), {
-    headers: authHeaders(token, "GET", url.toString()),
+    headers: {
+      ...authHeaders(token, "GET", url.toString()),
+      "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
+    },
   });
   const body = await expectJsonOk<{ invites?: AuthzInvite[] }>(
     response,

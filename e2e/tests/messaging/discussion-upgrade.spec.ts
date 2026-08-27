@@ -656,6 +656,9 @@ async function createDiscussionCircleViaApi(
         join_rule: "invite",
         history_access: "since_join",
         encryption_profile: opts.circleEncryptionProfile ?? "none",
+        ...(opts.circleEncryptionProfile === "mls_rfc9420"
+          ? { content_scheme: "mls_rfc9420" }
+          : {}),
         state: "active",
         created_by: fixture.alice.did,
         created_at: createdAt,

@@ -34,27 +34,10 @@ export function wireErrCode(body: unknown): string | undefined {
     return undefined;
   }
   const record = body as Record<string, unknown>;
-  const nested =
-    record.error && typeof record.error === "object"
-      ? (record.error as Record<string, unknown>)
-      : undefined;
   const problemType = stringValue(record.type);
-  const problemCode = problemType?.startsWith("https://arkret.org/problems/")
+  return problemType?.startsWith("https://arkret.org/problems/")
     ? problemType.slice("https://arkret.org/problems/".length)
     : undefined;
-  return (
-    stringValue(record.errcode) ??
-    stringValue(record.code) ??
-    stringValue(record.error_code) ??
-    problemCode ??
-    stringValue(record.reason_code) ??
-    stringValue(nested?.errcode) ??
-    stringValue(nested?.code) ??
-    stringValue(nested?.error_code) ??
-    stringValue(nested?.reason_code) ??
-    stringValue(record.reason) ??
-    stringValue(nested?.reason)
-  );
 }
 
 export async function expectJsonOk<T = Record<string, unknown>>(

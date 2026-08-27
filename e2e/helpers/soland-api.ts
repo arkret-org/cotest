@@ -1893,7 +1893,10 @@ export async function listInvitesApi(
   );
   url.searchParams.set("subject", actorDid);
   const response = await request.get(url.toString(), {
-    headers: authHeaders(token),
+    headers: {
+      ...authHeaders(token, "GET", url.toString()),
+      "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
+    },
   });
   const body = await expectJsonOk<{
     invites?: Array<{ id: string; realm_id: string; invitee?: string }>;

@@ -59,6 +59,16 @@ test.describe("workflow: async daily standup", () => {
         patPage.acceptInvite(realmId),
         quincyPage.acceptInvite(realmId),
       ]);
+      await linPage.grantRealmCapability(
+        realmId,
+        pat.did,
+        "ak.message.create",
+      );
+      await linPage.grantRealmCapability(
+        realmId,
+        quincy.did,
+        "ak.message.create",
+      );
       await Promise.all([
         patPage.gotoTimelineRealm(realmId),
         quincyPage.gotoTimelineRealm(realmId),

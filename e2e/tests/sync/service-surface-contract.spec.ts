@@ -33,6 +33,7 @@ import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalJson,
   prepareSignedEventCbaApi,
   refreshEventEnvelopeProof,
   resolveDefaultStrandId,
@@ -490,10 +491,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test(
-    "Phase B: unknown path returns 404 unrecognized_endpoint with standard error envelope",
+    "Phase B: unknown path returns 404 unrecognized_endpoint with RFC 9457 Problem Details",
     async ({ request }) => {
-      // spec: api-conventions.md §5 (standard error envelope —
-      //         { ok: false, error: { code, message, retry_after_ms?, details? }, request_id }),
+      // spec: api-conventions.md §5 (RFC 9457 Problem Details; `type` is the
+      //         sole stable machine discriminator),
       //       §5.2 (404 unrecognized_endpoint, MUST NOT return HTML / stack /
       //         framework error, MUST terminate at routing layer with no side effects).
       await expectCanonicalSolandErrorEnvelope(request);
@@ -536,7 +537,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       const first = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
-        data: envelope,
+        data: canonicalJson(envelope),
       });
       expect([200, 201], `first submit returned ${first.status()}`).toContain(first.status());
       const firstBody = await first.json();
@@ -545,7 +546,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       const duplicate = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
-        data: envelope,
+        data: canonicalJson(envelope),
       });
       expect(duplicate.status(), `duplicate submit status`).toBe(200);
       const duplicateBody = await duplicate.json();
@@ -571,7 +572,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       refreshEventEnvelopeProof(drift);
       const conflict = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
-        data: drift,
+        data: canonicalJson(drift),
       });
       expect(conflict.status(), "same event_id with different body").toBe(409);
       expect(wireErrCode(await conflict.json())).toBe("duplicate_conflict");
@@ -717,12 +718,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
         data: { realms: [realmId], limit: 2, after: tampered },
       });
       expect(tamperResp.status(), "tampered cursor is param_invalid (HTTP 400)").toBe(400);
-      const tamperBody = (await tamperResp.json()) as {
-        error?: { details?: { reason_code?: string } };
-      };
+      const tamperBody = (await tamperResp.json()) as { reason_code?: string };
       expect(wireErrCode(tamperBody), "tampered cursor error code").toBe("param_invalid");
       expect(
-        tamperBody.error?.details?.reason_code,
+        tamperBody.reason_code,
         "syntax failure carries reason invalid_cursor",
       ).toBe("invalid_cursor");
     },

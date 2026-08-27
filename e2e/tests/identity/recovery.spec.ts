@@ -10,6 +10,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
+import { canonicalJson } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -134,7 +135,7 @@ async function putBackup(
         "content-type": "application/json",
         "idempotency-key": `cotest-key-backup-${backupId}`,
       },
-      data: envelope,
+      data: canonicalJson(envelope),
     },
   );
 }

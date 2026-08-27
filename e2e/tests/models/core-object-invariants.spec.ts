@@ -188,9 +188,9 @@ test.describe("core object invariants", () => {
       // ── Step 3: read back the Realm via the soland API and verify the
       // spec §3 common-field equivalents on the RealmLifecycleResponse
       // serializer. Current wire shape (soland/src/wire.rs
-      // RealmLifecycleResponse): { ok, realm_id, owner, members, deleted }.
+      // RealmLifecycleView): { realm_id, owner_id, members, deleted, ... }.
       //   - realm_id  ↔ spec `id`              (typed ak:realm: prefix)
-      //   - owner     ↔ spec `created_by`      (DID, actor reference)
+      //   - owner_id  ↔ current owner authority (DID, actor reference)
       //   - members   ↔ membership invariant   (must contain owner)
       //   - deleted   ↔ spec `lifecycle_state` (false ⇒ active)
       const realmUrl = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`;
@@ -201,15 +201,15 @@ test.describe("core object invariants", () => {
       const realmBody = (await realmRes.json()) as {
         ok?: boolean;
         realm_id?: string;
-        owner?: string;
+        owner_id?: string;
         members?: string[];
         deleted?: boolean;
       };
       // Common-field 1: `id` (typed ak:realm: prefix).
       expect(realmBody.realm_id).toBe(realmId);
       expect(realmBody.realm_id).toMatch(/^ak:realm:/);
-      // Common-field 2: actor reference (`created_by` equivalent → `owner`).
-      expect(realmBody.owner).toBe(alice.did);
+      // Common-field 2: actor reference through the canonical owner field.
+      expect(realmBody.owner_id).toBe(alice.did);
       // Membership invariant: owner must always appear in members.
       expect(Array.isArray(realmBody.members)).toBe(true);
       expect(realmBody.members ?? []).toContain(alice.did);

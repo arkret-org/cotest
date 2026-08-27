@@ -67,6 +67,8 @@ async function createJointTwoUserRealm(
       eventSigningSeedB64url: aliceSession.eventSigningSeedB64url,
       grantId: aliceSession.grantId,
       grantAudience: aliceSession.grantAudience,
+      recoveryKey: aliceSession.recoveryKey,
+      recoveryMaterialEvidence: aliceSession.recoveryMaterialEvidence,
     }),
     openUserPage(browser, bob, {
       grantJwt: bobSession.grantJwt,
@@ -74,6 +76,8 @@ async function createJointTwoUserRealm(
       eventSigningSeedB64url: bobSession.eventSigningSeedB64url,
       grantId: bobSession.grantId,
       grantAudience: bobSession.grantAudience,
+      recoveryKey: bobSession.recoveryKey,
+      recoveryMaterialEvidence: bobSession.recoveryMaterialEvidence,
     }),
   ]);
   await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);

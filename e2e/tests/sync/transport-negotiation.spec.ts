@@ -47,6 +47,7 @@ import {
   rawPushFederationEvents,
   submitSignedEventApi,
   typedId,
+  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -54,26 +55,17 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 
-// Reads the auth-failure shape off a federation push response without
-// assuming an envelope vs. plain-text body: minimal disclosure means the
-// status, message, and code MUST be identical across every distinct failure
-// cause (federation.md §3.2 / §8.3).
+// Reads the canonical Problem Details shape from a federation push response.
+// Minimal disclosure means status, detail, and type MUST be identical across
+// every distinct failure cause (federation.md §3.2 / §8.3).
 async function federationAuthFailureShape(response: {
   status: () => number;
   text: () => Promise<string>;
 }): Promise<{ status: number; message: string; code: string; raw: string }> {
   const raw = await response.text();
-  let message = "";
-  let code = "";
-  try {
-    const body = JSON.parse(raw) as {
-      error?: { code?: string; message?: string };
-    };
-    message = body.error?.message ?? "";
-    code = body.error?.code ?? "";
-  } catch {
-    message = raw;
-  }
+  const body = JSON.parse(raw) as { detail?: string };
+  const message = body.detail ?? "";
+  const code = wireErrCode(body) ?? "";
   return { status: response.status(), message, code, raw };
 }
 

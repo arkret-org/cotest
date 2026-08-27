@@ -1234,8 +1234,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     verificationMethod?: string;
     signingKey?: KeyObject;
   }) {
-    const sourceServiceId =
-      args.sourceServiceId ?? "did:web:applet-bridge.joint-e2e.local";
+    const sourceServiceId = args.sourceServiceId ?? solandServiceId();
     const realmId = args.realmId ?? typedId("realm");
     // Event actor_id is typed did_core_id; did:web is reserved for the
     // no-history service profile (spec index.md), so even negative cases use a
@@ -1315,25 +1314,17 @@ test.describe("applet inbound transaction push — per-delivery source signature
     };
   }
 
-  // §7.3.1 failure codes carry the discriminating `reason`; `error.code` is the
-  // generic `unauthorized`. Read the reason directly (NOT via wireErrCode, which
-  // would surface `code` first).
+  // §7.3.1 currently places its discriminating `reason` at the Problem root.
+  // The conflict with the operation registry's specific Problem types is
+  // tracked in arkret-work/review/spec-open; do not accept an old nested shape.
   function signatureReason(body: unknown): string | undefined {
     if (!body || typeof body !== "object") {
       return undefined;
     }
     const record = body as Record<string, unknown>;
-    const nested =
-      record.error && typeof record.error === "object"
-        ? (record.error as Record<string, unknown>)
-        : undefined;
     const direct = record.reason;
-    const inner = nested?.reason;
     if (typeof direct === "string") {
       return direct;
-    }
-    if (typeof inner === "string") {
-      return inner;
     }
     return undefined;
   }
@@ -1441,7 +1432,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const resp = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
       headers: {
         ...authHeaders(token),
-        "Source-Service-ID": "did:web:applet-bridge.joint-e2e.local",
+        "Source-Service-ID": solandServiceId(),
         "Idempotency-Key": `inbound-nosig-${stamp}`,
       },
       data: transactionPushBody({ stamp }),
@@ -1460,12 +1451,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const resp = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
       headers: {
         ...authHeaders(token),
-        "Source-Service-ID": "did:web:applet-bridge.joint-e2e.local",
+        "Source-Service-ID": solandServiceId(),
         "Idempotency-Key": `inbound-badsig-${stamp}`,
         "Content-Digest":
           "sha-256=:b3JCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
         "Signature-Input":
-          'sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-id" "destination-service-id" "idempotency-key");created=1700000000;expires=1700000200;keyid="did:web:applet-bridge.joint-e2e.local#key-1";alg="ed25519"',
+          `sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-id" "destination-service-id" "idempotency-key");created=1700000000;expires=1700000200;keyid="${solandServiceFullId()}#key-1";alg="ed25519"`,
         Signature:
           "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
       },
@@ -1480,7 +1471,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
   }) => {
     const token = await setupBearer(request);
     const stamp = Date.now();
-    const sourceServiceId = "did:web:applet-bridge.joint-e2e.local";
+    const sourceServiceId = solandServiceId();
     const idempotencyKey = `inbound-expired-${stamp}`;
     const body = transactionPushBody({ stamp, sourceServiceId });
     const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;

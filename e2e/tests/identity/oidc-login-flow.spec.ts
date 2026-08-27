@@ -383,19 +383,16 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         "**/_arkret/gate/account/session-grants",
         async (route) => {
           forgedResponses += 1;
-          // Exact wire ErrorEnvelope shape per api-conventions.md §5: required
-          // top-level ok/error/request_id, required error.code/error.message,
-          // request_id in the canonical ak:request:<uuid7> form.
+          // Exact RFC 9457 Problem Details shape per api-conventions.md §5.
           await route.fulfill({
             status: 404,
-            contentType: "application/json",
+            contentType: "application/problem+json",
             body: JSON.stringify({
-              ok: false,
-              error: {
-                code: "principal_unknown",
-                message: "principal_unknown",
-              },
-              request_id: "ak:request:01964137-0000-7000-8000-000000000000",
+              type: "https://arkret.org/problems/principal_unknown",
+              title: "Principal unknown",
+              status: 404,
+              detail: "principal_unknown",
+              instance: "ak:request:01964137-0000-7000-8000-000000000000",
             }),
           });
         },

@@ -34,6 +34,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   retypeEventDerivedId,
+  wireErrCode,
 } from "./soland-api";
 
 export type CircleOutcome = {
@@ -504,18 +505,12 @@ export async function restoreCircleArkret(
   );
 }
 
-// Read the canonical wire `code` off a soland error envelope. soland renders
-// errors as `{ ok:false, error:{ code, message }, request_id }`
-// (arkret_sdk::ErrorEnvelope), so the canonical code lives at `error.code`.
+// Read the sole canonical machine discriminator from RFC 9457 Problem Details.
 export async function errorWireCode(
   response: APIResponse,
 ): Promise<string | undefined> {
   try {
-    const body = (await response.json()) as {
-      code?: string;
-      error?: { code?: string };
-    };
-    return body.error?.code ?? body.code;
+    return wireErrCode(await response.json());
   } catch {
     return undefined;
   }

@@ -92,7 +92,10 @@ export async function acceptInviteViaApi(
   listUrl.searchParams.set("subject", actorDid);
   listUrl.searchParams.set("realm_id", realmId);
   const list = await request.get(listUrl.toString(), {
-    headers: authHeaders(token),
+    headers: {
+      ...authHeaders(token, "GET", listUrl.toString()),
+      "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
+    },
   });
   expect(list.status()).toBe(200);
   const body = (await list.json()) as {

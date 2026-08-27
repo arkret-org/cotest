@@ -1,10 +1,13 @@
 // T-P0-05 joint harness smoke.
 // Contract: true inkson UI + true soland process create a realm and render messages.
 
-import { randomBytes } from "node:crypto";
 import type { APIRequestContext } from "../../helpers/arkret-test";
 import { test, expect } from "../../helpers/joint-fixture";
-import { canonicalJson, signedEventEnvelope } from "../../helpers/soland-api";
+import {
+  canonicalJson,
+  readRealmSealBasis,
+  signedEventEnvelope,
+} from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
   createDpopUserSession,
@@ -266,8 +269,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
           delivery_status: "unroutable",
         },
       );
-      const controllerMessageId = `ak:message:${uuidV7()}`;
-      await submitSignedEvent(
+      const controllerMessageId = await submitSignedEvent(
         request,
         jointRealm.aliceSession,
         jointRealm.alice.did,
@@ -275,7 +277,6 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         jointRealm.realmId,
         "ak.message.create",
         {
-          message_id: controllerMessageId,
           strand_id: strandId,
           track_name: "discussion",
           content: {
@@ -508,6 +509,11 @@ async function submitSignedEvent(
     serverUrl,
     realmId,
   );
+  const sealBasis = await readRealmSealBasis(
+    request,
+    session.grantJwt,
+    realmId,
+  );
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,
@@ -515,10 +521,14 @@ async function submitSignedEvent(
     actorSeq: frontier.nextActorSeq,
     prevRefs: frontier.frontierEventIds,
     payload,
+    sealBasis,
   });
   const response = await request.post(url, {
-    headers: selfPathHeadersForDpopSession(session, "POST", url),
-    data: envelope,
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "POST", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson(envelope),
   });
   const text = await response.text();
   expect(
@@ -610,7 +620,10 @@ async function listInvitesForDpop(
   url.searchParams.set("subject", subjectDid);
   const href = url.toString();
   const response = await request.get(href, {
-    headers: selfPathHeadersForDpopSession(session, "GET", href),
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "GET", href),
+      "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
+    },
   });
   const text = await response.text();
   expect(
@@ -671,17 +684,4 @@ async function resolveDefaultStrandId(
   throw new Error(
     `resolveDefaultStrandId: accepted projections for ${realmId} expose no default Strand`,
   );
-}
-
-function uuidV7(): string {
-  const time = Date.now().toString(16).padStart(12, "0").slice(-12);
-  const random = randomBytes(9).toString("hex");
-  const variant = (8 + (randomBytes(1)[0] & 0x03)).toString(16);
-  return [
-    time.slice(0, 8),
-    time.slice(8, 12),
-    `7${random.slice(0, 3)}`,
-    `${variant}${random.slice(3, 6)}`,
-    random.slice(6, 18),
-  ].join("-");
 }

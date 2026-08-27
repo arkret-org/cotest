@@ -1125,7 +1125,10 @@ export class JointUserPage {
           const response = await this.session.context.request.get(
             invitesUrl.toString(),
             {
-              headers: this.selfPathHeaders("GET", invitesUrl.toString()),
+              headers: {
+                ...this.selfPathHeaders("GET", invitesUrl.toString()),
+                "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
+              },
             },
           );
           if (response.status() !== 200) return false;

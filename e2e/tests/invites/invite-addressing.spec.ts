@@ -29,6 +29,7 @@ import {
   submitPeerInviteDeliveryApi,
   submitSignedEventApi,
   typedId,
+  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -63,31 +64,18 @@ async function errorFingerprint(response: {
 
 // The two §7 accepted-event preconditions are a closed rejection set:
 // `failed_precondition` plus one of `invite_event_unaccepted` /
-// `invite_event_actor_mismatch`. The reason is the ErrorEnvelope sub-reason
-// (error-code-registry.json marks both
-// `applies_to: ["service_call"]`), which soland may carry either directly on
-// `error` or inside `error.details`.
+// `invite_event_actor_mismatch`. RFC 9457 `type` carries the top-level code;
+// the registered operation-specific sub-reason is the root `reason_code`.
 async function dispatchRejection(response: {
   status(): number;
   text(): Promise<string>;
 }): Promise<{ status: number; code?: string; reason?: string }> {
   const text = await response.text();
-  const body = JSON.parse(text) as {
-    error?: {
-      code?: string;
-      reason?: string;
-      reason_code?: string;
-      details?: { reason?: string; reason_code?: string };
-    };
-  };
+  const body = JSON.parse(text) as { reason_code?: string };
   return {
     status: response.status(),
-    code: body.error?.code,
-    reason:
-      body.error?.reason_code ??
-      body.error?.reason ??
-      body.error?.details?.reason_code ??
-      body.error?.details?.reason,
+    code: wireErrCode(body),
+    reason: body.reason_code,
   };
 }
 
@@ -166,8 +154,9 @@ async function acceptedInviteFixture(
 
 test.describe("invite addressing", () => {
   // Peer-layer direct coverage. `ak.peer.invites.command.submit.v1` is a
-  // Principal-Server-to-Principal-Server operation, so this test stands in for
-  // an inviter Principal Server on purpose; it is NOT the client path. A client
+  // Principal-Server-to-Principal-Server operation, so this test exercises the
+  // authenticated loopback peer path on the managed Principal Server; it is
+  // NOT the client path. A client
   // reaches the same receive pipeline through
   // `ak.self.invites.command.dispatch.v1` (§7), covered below.
   test("peer invite delivery defers explicit_address evidence", async ({ request }) => {
@@ -207,7 +196,7 @@ test.describe("invite addressing", () => {
         idempotency_key: `cotest-peer-invite-${Date.now()}`,
       },
       {
-        origin: "ak:did_core:web:cotest-source.example",
+        origin: recipientServiceId,
         destination: recipientServiceId,
       },
     );

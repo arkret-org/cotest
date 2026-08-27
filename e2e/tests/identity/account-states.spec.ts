@@ -88,21 +88,19 @@ test.describe("account states", () => {
     expect(logout.status()).toBe(200);
     expect((await logout.json()).revoked).toBe(true);
 
-    const oldMe = await request.get(
-      `${solandBaseUrl()}/_soland/self/account/me`,
-      {
-        headers: selfPathGrantHeaders({
-          deviceKey,
-          grantJwt: grant!.grantJwt,
-          method: "GET",
-          url: `${solandBaseUrl()}/_soland/self/account/me`,
-        }),
-      },
-    );
+    const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
+    const oldMe = await request.get(viewerUrl, {
+      headers: selfPathGrantHeaders({
+        deviceKey,
+        grantJwt: grant!.grantJwt,
+        method: "GET",
+        url: viewerUrl,
+      }),
+    });
     expect(oldMe.status()).toBe(401);
 
     const newToken = await issueDevSession(request, alice);
-    const me = await request.get(`${solandBaseUrl()}/_soland/self/account/me`, {
+    const me = await request.get(viewerUrl, {
       headers: authHeaders(newToken),
     });
     expect(me.status()).toBe(200);

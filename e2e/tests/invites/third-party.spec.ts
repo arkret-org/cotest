@@ -487,7 +487,12 @@ test.describe("third-party invite", () => {
     // Reducer effect: bob is now an invite-membership proposal in the Realm.
     const invitesResp = await request.get(
       `${solandBaseUrl()}/_arkret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.did)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
-      { headers: authHeaders(ctx.bobToken) },
+      {
+        headers: {
+          ...authHeaders(ctx.bobToken),
+          "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
+        },
+      },
     );
     const invitesBody = await expectJsonOk<{
       invites?: Array<{
