@@ -297,24 +297,27 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     )
     .await?;
 
-    let push_registration = expect_json(
-        alice
-            .post("/_arkret/edge/push/register-device")
-            .json(&serde_json::from_value::<
-                arkret_models_integration::PushRegisterDeviceRequestBody,
-            >(json!({
-                "device_id": alice.device_id.as_str(),
-                "push_gateway": "https://push.example",
-                "push_key": "opaque",
-                "platform": "desktop",
-                "app_id": "inkson"
-            }))?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(push_registration["ok"], true);
+    let push_registration: arkret_models_integration::PushRegisterDeviceOutcome =
+        serde_json::from_value(
+            expect_json(
+                alice
+                    .post("/_arkret/edge/push/register-device")
+                    .json(&serde_json::from_value::<
+                        arkret_models_integration::PushRegisterDeviceRequestBody,
+                    >(json!({
+                        "device_id": alice.device_id.as_str(),
+                        "push_gateway": "https://push.example",
+                        "push_key": "opaque",
+                        "platform": "desktop",
+                        "app_id": "inkson"
+                    }))?),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    assert!(!push_registration.push_target_id.as_str().is_empty());
 
-    let push_unregister = expect_json(
+    expect_status(
         alice
             .post("/_arkret/edge/push/unregister-device")
             .json(&serde_json::from_value::<
@@ -324,10 +327,9 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
                 "push_key": "opaque",
                 "app_id": "inkson"
             }))?),
-        StatusCode::OK,
+        StatusCode::NO_CONTENT,
     )
     .await?;
-    assert_eq!(push_unregister["ok"], true);
 
     let policy_realm_id = alice.create_realm("Presence Policy Check Realm").await?;
     let review_policy = expect_json(

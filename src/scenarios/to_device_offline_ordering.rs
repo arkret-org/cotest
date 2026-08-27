@@ -265,7 +265,8 @@ async fn ack_to_device(
     recipient_token: &str,
     ack_token: &str,
 ) -> Result<()> {
-    let ack = expect_json(
+    let ack: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckOutcome =
+        serde_json::from_value(expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/device_messages/ack"))
@@ -275,9 +276,9 @@ async fn ack_to_device(
             >(json!({ "ack_token": ack_token }))?),
         StatusCode::OK,
     )
-    .await?;
-    if ack["ok"] != true {
-        bail!("expected to-device ack to succeed, got {ack}");
+    .await?)?;
+    if ack.pruned_count != 3 {
+        bail!("expected to-device ack to prune 3 messages, got {ack:?}");
     }
     Ok(())
 }

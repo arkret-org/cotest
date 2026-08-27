@@ -166,12 +166,16 @@ async fn submit_invite_move(
 }
 
 fn error_reason(body: &Value) -> String {
-    body["error"]["code"]
-        .as_str()
-        .or_else(|| body["error"]["details"]["reason_code"].as_str())
-        .or_else(|| body["error"]["message"].as_str())
-        .unwrap_or("<no error code>")
-        .to_owned()
+    serde_json::from_value::<arkret_wire::Problem>(body.clone())
+        .map(|problem| {
+            problem
+                .extensions
+                .get("reason_code")
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| problem.code())
+                .to_owned()
+        })
+        .unwrap_or_else(|_| "<invalid problem details>".to_owned())
 }
 
 /// The two frozen-pre-state predicates, executed against a live Soland with

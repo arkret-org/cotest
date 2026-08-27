@@ -10,7 +10,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::Utc;
 use fs2::FileExt as _;
-use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
 use reqwest::{Request, RequestBuilder, StatusCode};
 use serde_json::{Value, json};
 use url::Url;
@@ -141,19 +141,30 @@ pub async fn expect_api_error(
     builder: reqwest::RequestBuilder,
     status: StatusCode,
     errcode: &str,
-) -> Result<Value> {
+) -> Result<arkret_wire::Problem> {
     let response = expect_response(builder, status).await?;
+    let content_type = response
+        .headers
+        .get(CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .map(str::trim);
     let body = response.json()?;
-    let actual_errcode = body["error"]["errcode"]
-        .as_str()
-        .or_else(|| body["error"]["code"].as_str());
-    if body["ok"] != false || actual_errcode != Some(errcode) {
+    let problem: arkret_wire::Problem = serde_json::from_value(body.clone())
+        .with_context(|| format!("decode RFC 9457 Problem Details:\n{}", response.context()))?;
+    if content_type != Some("application/problem+json")
+        || problem.status != status.as_u16()
+        || problem.code() != errcode
+        || body.get("ok").is_some()
+        || body.get("error").is_some()
+        || body.get("request_id").is_some()
+    {
         return Err(anyhow!(
-            "expected error {errcode} at HTTP {status}, got body {body}:\n{}",
+            "expected RFC 9457 error {errcode} at HTTP {status}, got content-type={content_type:?} body={body}:\n{}",
             response.context()
         ));
     }
-    Ok(body)
+    Ok(problem)
 }
 
 pub async fn expect_response(
@@ -181,9 +192,12 @@ pub async fn expect_indistinguishable_api_errors(
     status: StatusCode,
     errcode: &str,
 ) -> Result<Value> {
-    let hidden_body = normalize_transient_fields(expect_api_error(hidden, status, errcode).await?);
-    let missing_body =
-        normalize_transient_fields(expect_api_error(missing, status, errcode).await?);
+    let hidden_body = normalize_transient_fields(serde_json::to_value(
+        expect_api_error(hidden, status, errcode).await?,
+    )?);
+    let missing_body = normalize_transient_fields(serde_json::to_value(
+        expect_api_error(missing, status, errcode).await?,
+    )?);
     if hidden_body != missing_body {
         return Err(anyhow!(
             "expected indistinguishable {errcode} errors, got hidden={hidden_body} missing={missing_body}"
@@ -519,7 +533,7 @@ fn normalize_transient_fields(value: Value) -> Value {
         Value::Object(object) => Value::Object(
             object
                 .into_iter()
-                .filter(|(key, _)| key != "request_id")
+                .filter(|(key, _)| key != "instance")
                 .map(|(key, value)| (key, normalize_transient_fields(value)))
                 .collect(),
         ),

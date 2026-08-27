@@ -231,7 +231,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .is_none()
     );
 
-    let ack = expect_json(
+    let ack: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckOutcome =
+        serde_json::from_value(expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/device_messages/ack"))
@@ -243,8 +244,8 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             }))?),
         StatusCode::OK,
     )
-    .await?;
-    assert_eq!(ack["ok"], true);
+    .await?)?;
+    assert_eq!(ack.pruned_count, 1);
 
     let drained = expect_json(
         server

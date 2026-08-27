@@ -295,9 +295,9 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     )?;
     let stale_response = submit_bytes(&server, &token, submission_bytes(&stale)?).await?;
     assert_eq!(stale_response.status(), StatusCode::CONFLICT);
-    let conflict: Value = stale_response.json().await?;
-    assert_eq!(conflict["error"]["code"], "cas_conflict");
-    assert_eq!(conflict["error"]["details"]["accepted"], false);
+    let conflict: arkret_wire::Problem = stale_response.json().await?;
+    assert_eq!(conflict.code(), "cas_conflict");
+    assert_eq!(conflict.extensions.get("accepted"), Some(&json!(false)));
     let stale_event_id = stale.event_id.as_str();
     let stale_lookup = server
         .http()

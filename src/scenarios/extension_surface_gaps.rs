@@ -43,12 +43,15 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
             "missing advertised applet operation {required}; advertised={advertised:#?}"
         );
     }
-    let ping = expect_json(
-        server.http().get(server.url("/_arkret/edge/applet/ping")),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(ping["ok"], true);
+    let ping: arkret_models_integration::AppletPingOutcome = serde_json::from_value(
+        expect_json(
+            server.http().get(server.url("/_arkret/edge/applet/ping")),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    assert_eq!(ping.service_id, server.service_id().clone());
+    assert_eq!(ping.protocol_version, "1.0");
     let applet_describe: ServiceDescribe = serde_json::from_value(
         expect_json(
             server

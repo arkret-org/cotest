@@ -105,14 +105,9 @@ async fn assert_resolved_or_blinded_not_found(
         // Blinded not_found is the expected outcome for an unknown key under
         // current impl — verify the errcode is `not_found` (not e.g.
         // `param_missing`, which would mean the body shape was wrong).
-        let body: Value = serde_json::from_str(&text)
+        let problem: arkret_wire::Problem = serde_json::from_str(&text)
             .with_context(|| format!("{lookup_field} 404 response is not JSON: {text}"))?;
-        let errcode = body
-            .pointer("/error/code")
-            .or_else(|| body.pointer("/error/errcode"))
-            .or_else(|| body.get("errcode"))
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let errcode = problem.code();
         if !errcode.contains("not_found") {
             bail!("{lookup_field} 404 expected `not_found` errcode, got `{errcode}`. body: {text}");
         }

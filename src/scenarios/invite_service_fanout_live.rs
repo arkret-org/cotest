@@ -249,14 +249,17 @@ async fn assert_service_account_data_fanout(
     let ack_token = outcome
         .ack_token
         .context("non-empty to-device response omitted ack_token")?;
-    let ack = expect_json(
-        holder
-            .post("/_arkret/self/device_messages/ack")
-            .json(&DeviceMessagesAckRequestBody { ack_token }),
-        StatusCode::OK,
-    )
-    .await?;
-    ensure!(ack["ok"] == true, "to-device ack failed: {ack}");
+    let ack: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckOutcome =
+        serde_json::from_value(
+            expect_json(
+                holder
+                    .post("/_arkret/self/device_messages/ack")
+                    .json(&DeviceMessagesAckRequestBody { ack_token }),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    ensure!(ack.pruned_count == 1, "to-device ack pruned no message");
     Ok(())
 }
 

@@ -492,14 +492,9 @@ async fn live_stack_probe() -> Result<()> {
         // 404 path — verify the errcode is the blinded `not_found` we
         // expect, not a body-shape rejection that would suggest the
         // teabay T3.4 wiring is mis-parsing `intent`/`realm_id`.
-        let body: Value = serde_json::from_str(&text)
+        let problem: arkret_wire::Problem = serde_json::from_str(&text)
             .with_context(|| format!("T3.5 live probe: 404 body not JSON: {text}"))?;
-        let errcode = body
-            .pointer("/error/code")
-            .or_else(|| body.pointer("/error/errcode"))
-            .or_else(|| body.get("errcode"))
-            .and_then(Value::as_str)
-            .unwrap_or_default();
+        let errcode = problem.code();
         if !errcode.contains("not_found") {
             bail!(
                 "T3.5 live probe: resolve-handle 404 expected blinded \

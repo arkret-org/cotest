@@ -5,7 +5,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::Utc;
 use reqwest::{StatusCode, Url};
-use serde_json::{Value, json};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, try_spawn};
@@ -189,16 +189,11 @@ async fn assert_ingest_rejected(
     if status != expected_status {
         bail!("{label}: expected HTTP {expected_status}, got {status}. body: {text}");
     }
-    let body: Value = serde_json::from_str(&text)
+    let problem: arkret_wire::Problem = serde_json::from_str(&text)
         .with_context(|| format!("{label}: rejection response is not JSON: {text}"))?;
-    let errcode = body
-        .pointer("/error/code")
-        .or_else(|| body.pointer("/error/errcode"))
-        .or_else(|| body.get("errcode"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let errcode = problem.code();
     if errcode != expected_errcode {
-        bail!("{label}: expected errcode {expected_errcode}, got {errcode:?}. body: {body}");
+        bail!("{label}: expected errcode {expected_errcode}, got {errcode:?}. body: {problem:?}");
     }
     Ok(())
 }

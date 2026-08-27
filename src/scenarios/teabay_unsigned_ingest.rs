@@ -30,7 +30,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, spawn_required};
 
@@ -104,16 +104,13 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
 
     // When the gate lands, the errcode should point at the missing signature
     // rather than at a generic auth failure — surface it for clarity.
-    let body: Value = serde_json::from_str(&text)
+    let problem: arkret_wire::Problem = serde_json::from_str(&text)
         .with_context(|| format!("rejection response is not JSON: {text}"))?;
-    let errcode = body
-        .pointer("/error/code")
-        .or_else(|| body.pointer("/error/errcode"))
-        .or_else(|| body.get("errcode"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let errcode = problem.code();
     if errcode.is_empty() {
-        bail!("unsigned ingest was rejected ({status}) but response has no errcode. body: {body}");
+        bail!(
+            "unsigned ingest was rejected ({status}) but response has no errcode. body: {problem:?}"
+        );
     }
 
     Ok(())

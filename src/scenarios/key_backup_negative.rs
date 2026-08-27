@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result, anyhow, bail};
+use anyhow::{Context as _, Result, anyhow};
 use arkret_identifiers::{
     BackupId, BackupSeriesId, DeviceId, DidFullId, EventId, project_full_id_to_core_id,
 };
@@ -14,7 +14,7 @@ use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::harness::{
-    ArkretServer, TestServerGroup, expect_json, expect_response, wire_negative_from_sdk,
+    ArkretServer, TestServerGroup, expect_api_error, expect_json, wire_negative_from_sdk,
 };
 use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
 
@@ -272,17 +272,7 @@ async fn expect_backup_error(
     status: StatusCode,
     errcode: &str,
 ) -> Result<()> {
-    let response = expect_response(builder, status).await?;
-    let body = response.json()?;
-    let actual = body
-        .pointer("/error/errcode")
-        .or_else(|| body.pointer("/error/code"))
-        .or_else(|| body.get("errcode"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-    if actual != errcode {
-        bail!("expected errcode {errcode}, got {actual:?}. body: {body}");
-    }
+    expect_api_error(builder, status, errcode).await?;
     Ok(())
 }
 

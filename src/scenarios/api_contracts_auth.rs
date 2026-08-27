@@ -19,7 +19,7 @@ pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<
         "unrecognized_endpoint",
     )
     .await?;
-    assert!(missing["request_id"].as_str().is_some());
+    assert!(missing.instance.is_some());
 
     expect_api_error(
         server.http().post(server.url("/_arkret/describe")),

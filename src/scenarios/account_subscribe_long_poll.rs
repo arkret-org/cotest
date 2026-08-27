@@ -101,14 +101,9 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
         StatusCode::BAD_REQUEST,
     )
     .await?;
-    let wrong_purpose_body = wrong_purpose.json()?;
-    assert_eq!(
-        wrong_purpose_body
-            .pointer("/error/code")
-            .or_else(|| wrong_purpose_body.pointer("/error/errcode"))
-            .and_then(Value::as_str),
-        Some("param_invalid")
-    );
+    let wrong_purpose_problem: arkret_wire::Problem =
+        serde_json::from_value(wrong_purpose.json()?)?;
+    assert_eq!(wrong_purpose_problem.code(), "param_invalid");
 
     let wrong_scope = crate::harness::expect_response(
         bob.get("/_arkret/self/account/subscribe?catchup=true")
@@ -116,14 +111,8 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
         StatusCode::BAD_REQUEST,
     )
     .await?;
-    let wrong_scope_body = wrong_scope.json()?;
-    assert_eq!(
-        wrong_scope_body
-            .pointer("/error/code")
-            .or_else(|| wrong_scope_body.pointer("/error/errcode"))
-            .and_then(Value::as_str),
-        Some("cursor_integrity_invalid")
-    );
+    let wrong_scope_problem: arkret_wire::Problem = serde_json::from_value(wrong_scope.json()?)?;
+    assert_eq!(wrong_scope_problem.code(), "cursor_integrity_invalid");
 
     Ok(())
 }

@@ -13,8 +13,6 @@
 //! body `{proof: ak.schema.key_backup_unlock_proof.v1}` bound to the envelope;
 //! a bearer token without that body proof MUST be refused.
 
-use serde_json::Value;
-
 use std::collections::BTreeMap;
 
 use anyhow::{Context as _, Result, anyhow};
@@ -36,6 +34,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
+use serde_json::Value;
 
 use crate::harness::{ArkretServer, expect_json, wire_negative_from_sdk};
 
@@ -218,7 +217,7 @@ async fn unlock_backup_requires_body_proof(
     let baseline = KeysBackupsUnlockRequestBody {
         proof: unlock_proof(actor_id)?,
     };
-    let body = expect_json(
+    crate::harness::expect_api_error(
         server
             .http()
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
@@ -230,9 +229,9 @@ async fn unlock_backup_requires_body_proof(
                     .remove("proof");
             })?),
         StatusCode::UNPROCESSABLE_ENTITY,
+        "schema_violation",
     )
     .await?;
-    assert_eq!(body["error"]["code"], "schema_violation");
     Ok(())
 }
 
@@ -241,7 +240,7 @@ async fn principal_signing_unlock_reaches_trust_anchor(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let unlock = expect_json(
+    crate::harness::expect_api_error(
         server
             .http()
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
@@ -250,9 +249,9 @@ async fn principal_signing_unlock_reaches_trust_anchor(
                 proof: unlock_proof(actor_id)?,
             }),
         StatusCode::UNAUTHORIZED,
+        "untrusted_backup_signature",
     )
     .await?;
-    assert_eq!(unlock["error"]["code"], "untrusted_backup_signature");
     Ok(())
 }
 

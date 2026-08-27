@@ -19,25 +19,32 @@ async fn send_application_message(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let send = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/device_messages"))
-            .bearer_auth(token)
-            .header("Idempotency-Key", "protocol-device-txn")
-            .json(&device_message_send_request(
-                actor_id,
-                "ak:device:01904100-0000-7000-8000-0000000000a1",
-                "ak:device_message:0196419b-0000-7000-8000-00000000f201",
-                "ak.mls.application",
-                encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
-                chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
-                    .with_timezone(&chrono::Utc),
-            )?),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(send["ok"], true);
+    let send: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendOutcome =
+        serde_json::from_value(
+            expect_json(
+                server
+                    .http()
+                    .post(server.url("/_arkret/self/device_messages"))
+                    .bearer_auth(token)
+                    .header("Idempotency-Key", "protocol-device-txn")
+                    .json(&device_message_send_request(
+                        actor_id,
+                        "ak:device:01904100-0000-7000-8000-0000000000a1",
+                        "ak:device_message:0196419b-0000-7000-8000-00000000f201",
+                        "ak.mls.application",
+                        encrypted_envelope("ak.mls.application", "base64url-opaque-ciphertext"),
+                        chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
+                            .with_timezone(&chrono::Utc),
+                    )?),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
+    assert_eq!(
+        send.delivered[&actor_core_id][0],
+        "ak:device:01904100-0000-7000-8000-0000000000a1"
+    );
     Ok(())
 }
 
@@ -46,7 +53,8 @@ async fn duplicate_send_is_idempotent(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let duplicate_send = expect_json(
+    let duplicate_send: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendOutcome =
+        serde_json::from_value(expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/device_messages"))
@@ -63,11 +71,10 @@ async fn duplicate_send_is_idempotent(
             )?),
         StatusCode::OK,
     )
-    .await?;
-    assert_eq!(duplicate_send["ok"], true);
+    .await?)?;
     let actor_core_id = crate::harness::actor_core_id(actor_id)?;
     assert_eq!(
-        duplicate_send["delivered"][actor_core_id][0],
+        duplicate_send.delivered[&actor_core_id][0],
         "ak:device:01904100-0000-7000-8000-0000000000a1"
     );
     Ok(())
@@ -93,7 +100,8 @@ async fn send_verification_message(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    let verification_send = expect_json(
+    let verification_send: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendOutcome =
+        serde_json::from_value(expect_json(
         server
             .http()
             .post(server.url("/_arkret/self/device_messages"))
@@ -113,7 +121,11 @@ async fn send_verification_message(
             )?),
         StatusCode::OK,
     )
-    .await?;
-    assert_eq!(verification_send["ok"], true);
+    .await?)?;
+    let actor_core_id = crate::harness::actor_core_id(actor_id)?;
+    assert_eq!(
+        verification_send.delivered[&actor_core_id][0],
+        "ak:device:01904100-0000-7000-8000-0000000000a1"
+    );
     Ok(())
 }

@@ -60,7 +60,7 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
         "duplicate_conflict",
     )
     .await?;
-    assert_eq!(error["error"]["code"], "duplicate_conflict");
+    assert_eq!(error.code(), "duplicate_conflict");
 
     let fetched = expect_json(
         client.get(&format!(

@@ -105,12 +105,8 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
         StatusCode::PAYLOAD_TOO_LARGE,
     )
     .await?;
-    let over_budget_body: Value = over_budget.json()?;
-    let code = over_budget_body
-        .pointer("/error/code")
-        .or_else(|| over_budget_body.pointer("/error/errcode"))
-        .and_then(Value::as_str);
-    assert_eq!(code, Some("limit_exceeded"));
+    let over_budget_problem: arkret_wire::Problem = serde_json::from_value(over_budget.json()?)?;
+    assert_eq!(over_budget_problem.code(), "limit_exceeded");
 
     Ok(())
 }

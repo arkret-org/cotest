@@ -79,17 +79,18 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         &arkret_signatures::DpopProofRequest::new("POST", &push_url).access_token(&grant_jwt),
         &holder_key,
     )?;
-    let push = expect_json(
-        server
-            .http()
-            .post(&push_url)
-            .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
-            .header("DPoP", &dpop.header_value)
-            .json(&push_body),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(push["ok"], true);
+    let push: arkret_models_integration::PushRegisterDeviceOutcome = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .post(&push_url)
+                .header(reqwest::header::AUTHORIZATION, format!("DPoP {grant_jwt}"))
+                .header("DPoP", &dpop.header_value)
+                .json(&push_body),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
     // soland derives the registration_id as an unlinkable, salt-epoch-bound
     // handle spelled from the same pairwise HMAC tag as the push target
     // pseudonym (push.rs `push_registration_id`). The tag is keyed, so it is
@@ -97,9 +98,11 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     // `push-operations.schema.json#/$defs/registration_id` as an
     // opaque_correlation carrier outside the `ak:` typed-ID namespace; assert
     // that shape instead of an exact value.
-    let registration_id = push["registration_id"]
-        .as_str()
-        .expect("registration_id must be a string");
+    let registration_id = push
+        .registration_id
+        .as_ref()
+        .expect("registration_id must be present")
+        .as_str();
     assert!(
         (1..=128).contains(&registration_id.len())
             && !registration_id.starts_with("ak:")

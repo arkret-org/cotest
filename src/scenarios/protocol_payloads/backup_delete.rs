@@ -20,7 +20,7 @@ use ed25519_dalek::SigningKey;
 use reqwest::StatusCode;
 
 use super::key_backups::BACKUP_ID;
-use crate::harness::{ArkretServer, expect_json};
+use crate::harness::{ArkretServer, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::test_principal_root_signing_authority;
 
 pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<()> {
@@ -74,7 +74,7 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
         proof: KeyBackupDeleteProof::PrincipalSigning { proof },
         reason: Some(reason),
     };
-    let denied = expect_json(
+    expect_api_error(
         server
             .http()
             .delete(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
@@ -82,9 +82,9 @@ pub async fn run(server: &ArkretServer, token: &str, actor_id: &str) -> Result<(
             .header("Idempotency-Key", "protocol-payloads-key-backup-delete")
             .json(&body),
         StatusCode::FORBIDDEN,
+        "capability_denied",
     )
     .await?;
-    assert_eq!(denied["error"]["code"], "capability_denied");
 
     let backup_list = expect_json(
         server

@@ -18,7 +18,6 @@ struct OperationRegistry {
 #[derive(Debug, Deserialize)]
 struct RegistryOperation {
     operation_id: String,
-    http: String,
     success_shape_kind: String,
 }
 
@@ -93,14 +92,12 @@ fn simple_mutations_reject_unregistered_success_discriminators() -> Result<()> {
         .map(|operation| (operation.operation_id.clone(), operation))
         .collect::<BTreeMap<_, _>>();
 
-    let mut checked_simple_mutations = 0usize;
+    let mut checked_success_objects = 0usize;
     for operation in &schema_index.operations {
         let Some(shape) = operation.response.as_ref() else {
             continue;
         };
-        if shape.schema_kind.as_deref() != Some("object")
-            || !shape.required.iter().any(|field| field == "ok")
-        {
+        if shape.schema_kind.as_deref() != Some("object") {
             continue;
         }
 
@@ -118,11 +115,12 @@ fn simple_mutations_reject_unregistered_success_discriminators() -> Result<()> {
                 operation.success_shape_kind
             );
         }
-        if registry_operation.http.starts_with("GET ")
-            || registry_operation.http.starts_with("HEAD ")
-        {
-            continue;
-        }
+        assert!(
+            !shape.required.iter().any(|field| field == "ok")
+                && !shape.properties.iter().any(|field| field == "ok"),
+            "{} must not retain the retired generic success discriminator `ok`",
+            operation.operation_id
+        );
 
         let canonical_fields = shape
             .required
@@ -139,43 +137,24 @@ fn simple_mutations_reject_unregistered_success_discriminators() -> Result<()> {
                 .unwrap_or("inline response shape")
         );
 
-        for alias in ["deleted", "accepted"] {
-            let alias_instead_of_ok = shape
-                .required
+        if shape.closed {
+            let with_retired_ok = canonical_fields
                 .iter()
-                .map(String::as_str)
-                .filter(|field| *field != "ok")
-                .chain(std::iter::once(alias))
+                .copied()
+                .chain(std::iter::once("ok"))
                 .collect::<Vec<_>>();
             assert!(
-                !accepts_top_level_fields(shape, &alias_instead_of_ok),
-                "{} must reject unregistered {alias} in place of ok",
+                !accepts_top_level_fields(shape, &with_retired_ok),
+                "{} closed response must reject retired `ok`",
                 operation.operation_id
             );
         }
-
-        if !shape.properties.iter().any(|field| field == "deleted")
-            && !shape.properties.iter().any(|field| field == "accepted")
-        {
-            for alias in ["deleted", "accepted"] {
-                let dual_write = canonical_fields
-                    .iter()
-                    .copied()
-                    .chain(std::iter::once(alias))
-                    .collect::<Vec<_>>();
-                assert!(
-                    !accepts_top_level_fields(shape, &dual_write),
-                    "{} closed simple-mutation response must reject undeclared {alias}",
-                    operation.operation_id
-                );
-            }
-            checked_simple_mutations += 1;
-        }
+        checked_success_objects += 1;
     }
 
     assert!(
-        checked_simple_mutations >= 20,
-        "expected broad simple-mutation coverage, checked {checked_simple_mutations} operations"
+        checked_success_objects >= 50,
+        "expected broad success-object coverage, checked {checked_success_objects} operations"
     );
 
     assert_typed_business_value_allowed(
