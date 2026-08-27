@@ -368,6 +368,12 @@ fn load_operation_registry(path: &Path) -> Result<Vec<RegisteredOperation>> {
 
     let mut operations = Vec::with_capacity(registry.operations.len());
     for row in registry.operations {
+        if endpoint_id_for_operation(&row.operation_id) == row.operation_id {
+            bail!(
+                "operation registry id must end in an explicit .vN version: {}",
+                row.operation_id
+            );
+        }
         let key = parse_http_binding(&row.http)
             .map_err(|error| anyhow!("{}: {error}", row.operation_id))?;
         operations.push(RegisteredOperation {
@@ -867,8 +873,9 @@ fn validate_openapi_against_registry(
 ) -> Vec<String> {
     let mut failures = Vec::new();
     for operation in registry_by_id.values() {
+        let endpoint_id = endpoint_id_for_operation(&operation.operation_id);
         match openapi.get(&operation.key) {
-            Some(operation_id) if operation_id == &operation.operation_id => {}
+            Some(operation_id) if operation_id == endpoint_id => {}
             Some(operation_id) => failures.push(format!(
                 "OpenAPI {} operationId drift: registry has {}, OpenAPI has {}",
                 operation.key.as_http(),
@@ -885,7 +892,8 @@ fn validate_openapi_against_registry(
 
     for (key, operation_id) in openapi {
         match registry_by_key.get(key) {
-            Some(operation) if operation.operation_id == *operation_id => {}
+            Some(operation)
+                if endpoint_id_for_operation(&operation.operation_id) == operation_id => {}
             Some(operation) => failures.push(format!(
                 "OpenAPI {} maps to {}, registry maps same binding to {}",
                 key.as_http(),
@@ -900,6 +908,15 @@ fn validate_openapi_against_registry(
         }
     }
     failures
+}
+
+fn endpoint_id_for_operation(operation_id: &str) -> &str {
+    operation_id
+        .rsplit_once(".v")
+        .filter(|(_, version)| {
+            !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
+        })
+        .map_or(operation_id, |(endpoint_id, _)| endpoint_id)
 }
 
 fn validate_completeness_against_registry(

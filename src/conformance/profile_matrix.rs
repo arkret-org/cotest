@@ -141,11 +141,18 @@ pub fn run_profile_requirement_gate_suite() -> Result<()> {
             bail!("mls governance binding requirement block missing {required}");
         }
     }
-    if !mls_binding
+    if mls_binding
         .required_features
         .contains("security_frontier_digest")
     {
-        bail!("mls governance binding requirement block missing security_frontier_digest");
+        bail!("feature_discovery evidence leaked into runtime required_features");
+    }
+    let chat = matrix
+        .requirements
+        .get("ak.profile.chat_mvp.v1")
+        .ok_or_else(|| anyhow!("missing chat_mvp requirement block"))?;
+    if chat.required_features.contains("discussion_history_access") {
+        bail!("chat feature_discovery evidence leaked into runtime required_features");
     }
 
     let circle = matrix
@@ -368,7 +375,7 @@ fn collect_profile_requirements(
             collect_known_refs(requirement, "required_schemas", schema_ids, "schema")?;
         let required_capability_actions =
             collect_plain_refs(requirement, "required_capability_actions")?;
-        let mut required_features = collect_plain_refs(requirement, "required_features")?;
+        let required_features = collect_plain_refs(requirement, "required_features")?;
         let feature_discovery = requirement
             .pointer("/feature_discovery/required")
             .and_then(Value::as_array)
@@ -380,7 +387,6 @@ fn collect_profile_requirements(
             if feature.trim().is_empty() {
                 bail!("{profile} feature_discovery.required contains an empty value");
             }
-            required_features.insert(feature.to_owned());
         }
         let required_cell_namespaces =
             collect_cell_refs(requirement, "required_cell_namespaces", false)?;

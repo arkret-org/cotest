@@ -547,31 +547,38 @@ function Invoke-CargoTestInvocation {
     $process = $null
     try {
         $cargo = (Get-Command cargo -CommandType Application -ErrorAction Stop).Source
-        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $startInfo.FileName = $cargo
-        $startInfo.Arguments = (($CargoArgs | ForEach-Object {
+        $nativeArguments = (($CargoArgs | ForEach-Object {
                     ConvertTo-NativeCommandLineArgument -Argument $_
                 }) -join ' ')
-        $startInfo.UseShellExecute = $false
-        $startInfo.CreateNoWindow = $true
-        $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
+        $logStem = ($Label -replace '[^A-Za-z0-9_.-]', '_')
+        $logRoot = Split-Path -Parent $RawLog
+        $stdoutPath = Join-Path $logRoot "$logStem.cargo.stdout.log"
+        $stderrPath = Join-Path $logRoot "$logStem.cargo.stderr.log"
 
-        $process = New-Object System.Diagnostics.Process
-        $process.StartInfo = $startInfo
-        if (-not $process.Start()) {
-            throw "failed to start cargo invocation '$Label'"
-        }
-        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-        $stderrTask = $process.StandardError.ReadToEndAsync()
-
-        # Wait only for the directly launched Cargo process. Reading both
-        # redirected streams asynchronously prevents either pipe from filling
-        # while the test suite is still running.
+        # Redirect Cargo directly to files instead of anonymous pipes. On
+        # Windows, a test-launched service can retain an inherited pipe handle
+        # after Cargo exits; ReadToEndAsync then waits forever even though the
+        # direct Cargo process has completed. File-backed output preserves the
+        # complete report without coupling runner completion to descendants.
+        $process = Start-Process `
+            -FilePath $cargo `
+            -ArgumentList $nativeArguments `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath
         $process.WaitForExit()
         $invocationExitCode = $process.ExitCode
-        $stdout = $stdoutTask.GetAwaiter().GetResult()
-        $stderr = $stderrTask.GetAwaiter().GetResult()
+        $stdout = if (Test-Path -LiteralPath $stdoutPath) {
+            Get-Content -LiteralPath $stdoutPath -Raw
+        } else {
+            ""
+        }
+        $stderr = if (Test-Path -LiteralPath $stderrPath) {
+            Get-Content -LiteralPath $stderrPath -Raw
+        } else {
+            ""
+        }
 
         foreach ($content in @($stderr, $stdout)) {
             foreach ($line in @($content -split '\r?\n')) {

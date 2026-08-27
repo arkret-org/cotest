@@ -218,7 +218,7 @@ fn rust_cfg_test_items_are_not_treated_as_production_operations() -> Result<()> 
                 None,
             ),
             (
-                "ak.server.read.health",
+                "ak.server.read.health.v1",
                 "GET /_arkret/health",
                 "typed_response",
                 None,
@@ -227,7 +227,7 @@ fn rust_cfg_test_items_are_not_treated_as_production_operations() -> Result<()> 
         ],
         &[
             ("GET", "/_arkret/describe", "ak.server.read.describe.v1"),
-            ("GET", "/_arkret/health", "ak.server.read.health"),
+            ("GET", "/_arkret/health", "ak.server.read.health.v1"),
         ],
     )?;
     write_json(
@@ -370,12 +370,18 @@ fn write_minimal_artifacts(
 
     let mut paths = serde_json::Map::new();
     for (method, path, operation_id) in openapi_operations {
+        let endpoint_id = operation_id
+            .rsplit_once(".v")
+            .filter(|(_, version)| {
+                !version.is_empty() && version.bytes().all(|byte| byte.is_ascii_digit())
+            })
+            .map_or(*operation_id, |(endpoint_id, _)| endpoint_id);
         let item = paths
             .entry((*path).to_owned())
             .or_insert_with(|| Value::Object(serde_json::Map::new()));
         item.as_object_mut().expect("path item is object").insert(
             method.to_ascii_lowercase(),
-            json!({"operationId": operation_id, "responses": {"200": {"description": "ok"}}}),
+            json!({"operationId": endpoint_id, "responses": {"200": {"description": "ok"}}}),
         );
     }
     write_json(

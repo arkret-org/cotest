@@ -38,7 +38,6 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 
     for required in [
         "ak.self.account.stream.subscribe.v1",
-        "ak.find.directory.read.search_realms.v1",
         "ak.self.authz.read.check.v1",
         "ak.self.signal.command.send.v1",
         "ak.edge.push.command.register_device.v1",
@@ -82,6 +81,16 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
         directory["resource_kinds"]
             .as_array()
             .is_some_and(|items| !items.is_empty())
+    );
+    let directory_description: arkret_models_discovery::ServiceDescribe =
+        serde_json::from_value(directory)?;
+    assert_eq!(
+        directory_description.service_kind,
+        arkret_wire::ServiceKind::DirectoryService
+    );
+    assert!(
+        directory_description
+            .supports_operation(arkret_wire::ServiceOperationId::FindDirectoryReadSearchRealmsV1)
     );
 
     expect_status(

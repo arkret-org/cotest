@@ -265,7 +265,7 @@ fn run_schema_validation_fixture_file_with_identity(
     let path = fixture_path(file_name);
     let raw = fs::read_to_string(&path)
         .with_context(|| format!("read schema-validation fixture {}", path.display()))?;
-    let value: Value = serde_json::from_str(&raw)
+    let mut value: Value = serde_json::from_str(&raw)
         .with_context(|| format!("parse schema-validation fixture {}", path.display()))?;
     match identity {
         FixtureIdentity::Profile(expected_profile) => validate_profile(&value, expected_profile)?,
@@ -279,6 +279,7 @@ fn run_schema_validation_fixture_file_with_identity(
             }
         }
     }
+    resolve_derived_case_instances(&mut value)?;
     let fixture: SchemaValidationFixture = serde_json::from_value(value.clone())
         .with_context(|| format!("decode schema-validation fixture {}", path.display()))?;
     if fixture.suite != expected_suite {
@@ -296,6 +297,93 @@ fn run_schema_validation_fixture_file_with_identity(
         let semantic_fixture: SchemaSemanticCasesFixture = serde_json::from_value(value)
             .with_context(|| format!("decode semantic-rule cases from {file_name}"))?;
         run_schema_semantic_cases(&semantic_fixture.semantic_cases)?;
+    }
+    Ok(())
+}
+
+fn resolve_derived_case_instances(fixture: &mut Value) -> Result<()> {
+    let cases = fixture
+        .get_mut("schema_validation_cases")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| anyhow!("schema-validation fixture missing schema_validation_cases[]"))?;
+    let mut named_instances = HashMap::<String, Value>::new();
+
+    for case in cases {
+        let case_object = case
+            .as_object_mut()
+            .ok_or_else(|| anyhow!("schema_validation_cases entry must be an object"))?;
+        let name = case_object
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| anyhow!("schema_validation_cases entry missing name"))?
+            .to_owned();
+        let instance = if let Some(instance) = case_object.get("instance") {
+            instance.clone()
+        } else {
+            let source_name = case_object
+                .get("instance_from")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow!("{name} missing instance or instance_from"))?;
+            let mut instance = named_instances.get(source_name).cloned().ok_or_else(|| {
+                anyhow!("{name}.instance_from must name an earlier case: {source_name}")
+            })?;
+            let mutations = case_object
+                .get("mutations")
+                .and_then(Value::as_array)
+                .ok_or_else(|| anyhow!("{name}.mutations must be an array"))?;
+            for mutation in mutations {
+                apply_case_mutation(&name, &mut instance, mutation)?;
+            }
+            case_object.insert("instance".to_owned(), instance.clone());
+            instance
+        };
+        named_instances.insert(name, instance);
+    }
+    Ok(())
+}
+
+fn apply_case_mutation(case_name: &str, instance: &mut Value, mutation: &Value) -> Result<()> {
+    let mutation = mutation
+        .as_object()
+        .ok_or_else(|| anyhow!("{case_name}.mutations entry must be an object"))?;
+    let operation = mutation
+        .get("op")
+        .and_then(Value::as_str)
+        .filter(|operation| matches!(*operation, "add" | "replace" | "remove"))
+        .ok_or_else(|| anyhow!("{case_name}.mutations supports add/replace/remove"))?;
+    let path = mutation
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("{case_name}.mutation path must be a string"))?;
+    let tokens = path
+        .trim_start_matches('/')
+        .split('/')
+        .filter(|token| !token.is_empty())
+        .map(|token| token.replace("~1", "/").replace("~0", "~"))
+        .collect::<Vec<_>>();
+    let (leaf, parents) = tokens
+        .split_last()
+        .ok_or_else(|| anyhow!("{case_name}.mutation path does not resolve: {path}"))?;
+    let mut target = instance;
+    for token in parents {
+        target = target
+            .as_object_mut()
+            .and_then(|object| object.get_mut(token))
+            .ok_or_else(|| anyhow!("{case_name}.mutation path does not resolve: {path}"))?;
+    }
+    let object = target
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("{case_name}.mutation path does not resolve: {path}"))?;
+    if matches!(operation, "replace" | "remove") && !object.contains_key(leaf) {
+        bail!("{case_name}.mutation target does not exist: {path}");
+    }
+    if operation == "remove" {
+        object.remove(leaf);
+    } else {
+        object.insert(
+            leaf.clone(),
+            mutation.get("value").cloned().unwrap_or(Value::Null),
+        );
     }
     Ok(())
 }

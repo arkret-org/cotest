@@ -485,7 +485,14 @@ impl ArkretServer {
             return Err(error);
         }
         let (service_id, service_full_id, trust_domain) =
-            fetch_service_identity(&base_url, Some(&tls)).await?;
+            match fetch_service_identity(&base_url, Some(&tls)).await {
+                Ok(identity) => identity,
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error);
+                }
+            };
         let service_notary_signer =
             test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
 
@@ -622,7 +629,15 @@ impl ArkretServer {
             return Err(anyhow!("{error}{log_suffix}"));
         }
         let (service_id, service_full_id, trust_domain) =
-            fetch_service_identity(&base_url, None).await?;
+            match fetch_service_identity(&base_url, None).await {
+                Ok(identity) => identity,
+                Err(error) => {
+                    let logs = docker_logs(&container_name).unwrap_or_default();
+                    let _ = append_service_log(log_path.as_deref(), &logs);
+                    let _ = docker_remove_container(&container_name);
+                    return Err(error);
+                }
+            };
         let service_notary_signer =
             test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
 
@@ -1689,6 +1704,7 @@ async fn fetch_service_identity(
     let url = base_url.join("/_arkret/describe")?;
     let response = probe_http_client(tls)?
         .get(url.clone())
+        .header("arkret-operation", "ak.server.read.describe.v1")
         .send()
         .await
         .with_context(|| format!("fetch service describe from {url}"))?
