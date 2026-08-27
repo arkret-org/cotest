@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   createHash,
   createPrivateKey,
@@ -31,6 +30,48 @@ import type {
   RealmObject,
   RealmSealFrontierView,
 } from "./generated/spec-wire-objects";
+import {
+  accountSubscribeDeltaApi,
+  accountSubscribeFramesApi,
+} from "./soland-api/account-stream";
+import {
+  authHeaders,
+  expectJsonOk,
+  registerRequestAuth,
+  wireErrCode,
+} from "./soland-api/request";
+import {
+  base64urlJsonCanonical,
+  base64urlJsonRaw,
+  canonicalBytes,
+  canonicalJson,
+  cotestWire,
+  sdkEventDerivedIds,
+  sdkEventDerivedObjectId,
+  sdkEventEnvelopeProof,
+  sdkMimiConsentProof,
+  sha256CanonicalJson,
+  stripUndefined,
+} from "./soland-api/wire-client";
+
+export {
+  accountSubscribeDeltaApi,
+  accountSubscribeFramesApi,
+  authHeaders,
+  base64urlJsonCanonical,
+  base64urlJsonRaw,
+  canonicalBytes,
+  canonicalJson,
+  cotestWire,
+  expectJsonOk,
+  registerRequestAuth,
+  sdkEventDerivedIds,
+  sdkEventDerivedObjectId,
+  sdkEventEnvelopeProof,
+  sdkMimiConsentProof,
+  sha256CanonicalJson,
+  wireErrCode,
+};
 
 export type SignedEventEnvelopeArgs = {
   actorDid: string;
@@ -72,10 +113,6 @@ type RegisteredEventSigner = {
 };
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
-const registeredRequestAuth = new Map<
-  string,
-  (method: string, url: string) => Record<string, string>
->();
 const realmAuthorityControllers = new Map<string, string>();
 const principalControlEvents = new Map<
   string,
@@ -191,30 +228,6 @@ export function signWithRegisteredEventSigner(
   return sign(null, Buffer.from(signingInput, "utf8"), privateKey).toString(
     "base64url",
   );
-}
-
-export function registerRequestAuth(
-  token: string,
-  buildHeaders: (method: string, url: string) => Record<string, string>,
-): void {
-  registeredRequestAuth.set(token, buildHeaders);
-}
-
-export function authHeaders(
-  token: string,
-  method?: string,
-  url?: string,
-): Record<string, string> {
-  const buildHeaders = registeredRequestAuth.get(token);
-  if (buildHeaders) {
-    if (!method || !url) {
-      throw new Error(
-        "DPoP-bound session grant requires the exact request method and URL",
-      );
-    }
-    return buildHeaders(method, url);
-  }
-  return { authorization: `Bearer ${token}` };
 }
 
 // Frozen full-token coordinates for negative/mock cases that have no accepted
@@ -415,34 +428,6 @@ export function principalControlRealmForDidIfKnown(
 // Re-exported authoritative base64url encoder (single source: encoding.ts).
 export { base64url };
 
-export function wireErrCode(body: unknown): string | undefined {
-  if (!body || typeof body !== "object") {
-    return undefined;
-  }
-  const record = body as Record<string, unknown>;
-  const nested =
-    record.error && typeof record.error === "object"
-      ? (record.error as Record<string, unknown>)
-      : undefined;
-  const problemType = stringValue(record.type);
-  const problemCode = problemType?.startsWith("https://arkret.org/problems/")
-    ? problemType.slice("https://arkret.org/problems/".length)
-    : undefined;
-  return (
-    stringValue(record.errcode) ??
-    stringValue(record.code) ??
-    stringValue(record.error_code) ??
-    problemCode ??
-    stringValue(record.reason_code) ??
-    stringValue(nested?.errcode) ??
-    stringValue(nested?.code) ??
-    stringValue(nested?.error_code) ??
-    stringValue(nested?.reason_code) ??
-    stringValue(record.reason) ??
-    stringValue(nested?.reason)
-  );
-}
-
 export function projectFullDidToCoreId(fullDid: string): string {
   if (fullDid.startsWith("did:webvh:")) {
     const [scid] = fullDid.slice("did:webvh:".length).split(":", 1);
@@ -527,18 +512,6 @@ function serviceNotaryPublicKey(serviceId: string): Buffer {
     type: "spki",
   });
   return Buffer.from(spki.subarray(spki.length - 32));
-}
-
-export async function expectJsonOk<T = Record<string, unknown>>(
-  response: APIResponse,
-  context: string,
-): Promise<T> {
-  const text = await response.text();
-  expect(
-    response.ok(),
-    `${context} returned ${response.status()}: ${text}`,
-  ).toBeTruthy();
-  return JSON.parse(text) as T;
 }
 
 export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
@@ -2066,146 +2039,6 @@ export async function queryRealmEventsApi(
     response,
     `query events for ${realmId}`,
   );
-}
-
-export async function accountSubscribeDeltaApi(
-  request: APIRequestContext,
-  token: string,
-  opts: {
-    server?: SolandKey;
-    filter?: Record<string, unknown>;
-    catchup?: boolean;
-    after?: string;
-    timeoutMs?: number;
-    headers?: Record<string, string>;
-  } = {},
-): Promise<Record<string, unknown>> {
-  const frames = await accountSubscribeFramesApi(request, token, opts);
-  const delta = frames.find((frame) => frame.kind === "delta") ?? frames[0];
-  expect(delta, "account subscribe delta frame").toBeTruthy();
-  return delta;
-}
-
-export async function accountSubscribeFramesApi(
-  request: APIRequestContext,
-  token: string,
-  opts: {
-    server?: SolandKey;
-    filter?: Record<string, unknown>;
-    catchup?: boolean;
-    after?: string;
-    timeoutMs?: number;
-    headers?: Record<string, string>;
-  } = {},
-): Promise<Array<Record<string, unknown>>> {
-  void request;
-  const url = new URL(
-    `${solandBaseUrl(opts.server)}/_arkret/self/account/subscribe`,
-  );
-  if (opts.catchup !== false) {
-    url.searchParams.set("catchup", "true");
-  }
-  if (opts.filter) {
-    url.searchParams.set("filter", JSON.stringify(opts.filter));
-  }
-  if (opts.after) {
-    url.searchParams.set("after", opts.after);
-  }
-
-  const controller = new AbortController();
-  const timeoutMs = opts.timeoutMs ?? 30_000;
-  const frames: Array<Record<string, unknown>> = [];
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        ...(opts.headers ?? authHeaders(token)),
-        accept: "application/x-ndjson",
-        "Arkret-Operation": "ak.self.account.stream.subscribe.v1",
-      },
-      signal: controller.signal,
-    });
-    if (response.status !== 200) {
-      const text = await response.text();
-      expect(
-        response.status,
-        `account subscribe returned ${response.status}: ${text}`,
-      ).toBe(200);
-    }
-    if (!response.body) {
-      const text = await response.text();
-      frames.push(...parseNdjsonFrames(text));
-      return frames;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let pending = "";
-    let decided = false;
-    while (!decided) {
-      const chunk = await reader.read();
-      if (chunk.done) {
-        break;
-      }
-      pending += decoder.decode(chunk.value, { stream: true });
-      let newline = pending.search(/\r?\n/);
-      while (newline >= 0) {
-        const line = pending.slice(0, newline).trim();
-        pending = pending.slice(
-          pending.charCodeAt(newline) === 13 ? newline + 2 : newline + 1,
-        );
-        if (line) {
-          const frame = JSON.parse(line) as Record<string, unknown>;
-          frames.push(frame);
-          if (accountSubscribeFrameCompletesSnapshot(frame)) {
-            decided = true;
-            break;
-          }
-        }
-        newline = pending.search(/\r?\n/);
-      }
-    }
-    const tail = (pending + decoder.decode()).trim();
-    if (!decided && tail) {
-      frames.push(...parseNdjsonFrames(tail));
-    }
-    await reader.cancel().catch(() => undefined);
-  } catch (error) {
-    if (timedOut || (error instanceof Error && error.name === "AbortError")) {
-      throw new Error(`account subscribe timed out after ${timeoutMs}ms`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-    controller.abort();
-  }
-
-  expect(frames.length, "account subscribe frames").toBeGreaterThan(0);
-  return frames;
-}
-
-function accountSubscribeFrameCompletesSnapshot(
-  frame: Record<string, unknown>,
-): boolean {
-  return (
-    frame.kind === "catchup_complete" ||
-    frame.kind === "dropped" ||
-    frame.kind === "resync_required" ||
-    frame.kind === "unauthorized"
-  );
-}
-
-function parseNdjsonFrames(text: string): Array<Record<string, unknown>> {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 /// The holder-signed `ak.account_data.set` both account-data endpoints now take.
@@ -4754,222 +4587,6 @@ function nextActorSeq(): number {
   const seq = actorSeqCounter;
   actorSeqCounter += 1;
   return seq;
-}
-
-type CotestWireCommand =
-  | "canonical-json"
-  | "sha256-canonical-json"
-  | "event-envelope-proof"
-  | "event-derived-id"
-  | "mimi-consent-proof"
-  | "mls-keypackage-upload-entry"
-  | "principal-control-realm-id"
-  | "webvh-placeholder-did"
-  | "webvh-genesis"
-  | "account-handoff-outcome"
-  | "account-handoff-request"
-  | "principal-registration-fixture"
-  | "identity-creation-register-request"
-  | "principal-bootstrap-seal"
-  | "principal-successor-seal";
-
-type CotestWireCanonicalJson = { canonical: string };
-type CotestWireDigest = { digest: string; digest_hex: string };
-const cotestRepoRoot = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-);
-
-export function sha256CanonicalJson(value: unknown): string {
-  assertJsonTransportable(value, "$");
-  return cotestWire<CotestWireDigest>("sha256-canonical-json", {
-    value,
-  }).digest_hex;
-}
-
-export function canonicalJson(value: unknown): string {
-  assertJsonTransportable(value, "$");
-  return cotestWire<CotestWireCanonicalJson>("canonical-json", {
-    value,
-  }).canonical;
-}
-
-/// Canonical (JCS key-ordered) JSON serialized to UTF-8 bytes. Authoritative
-/// replacement for the per-helper `canonicalBytes` thin wrappers.
-export function canonicalBytes(value: unknown): Buffer {
-  return Buffer.from(canonicalJson(value), "utf8");
-}
-
-/// base64url of the *canonical* (JCS) JSON encoding of `value`. Use this for any
-/// signing input whose bytes must be deterministic key-ordered JSON (detached
-/// JWS over a canonical transcript, anchorer payloads, holder proofs).
-export function base64urlJsonCanonical(value: unknown): string {
-  return Buffer.from(canonicalJson(value), "utf8").toString("base64url");
-}
-
-/// base64url of the *insertion-order* (`JSON.stringify`) JSON encoding of
-/// `value`. Use this where the wire format is NOT JCS — notably JWT/JWS headers
-/// and DPoP claims (RFC 7519 does not mandate JCS), where the verifier expects
-/// the exact bytes the signer emitted in field-declaration order.
-export function base64urlJsonRaw(value: unknown): string {
-  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
-}
-
-export function sdkEventEnvelopeProof(args: {
-  actorDid: string;
-  event: Record<string, unknown>;
-  verificationMethod: string;
-  createdAt: string;
-  signingSeedB64url?: string;
-}): Record<string, unknown> {
-  assertJsonTransportable(args.event, "$.event");
-  return cotestWire<Record<string, unknown>>("event-envelope-proof", {
-    actor_did: args.actorDid,
-    event: args.event,
-    verification_method: args.verificationMethod,
-    created_at: args.createdAt,
-    signing_seed_b64url: args.signingSeedB64url,
-  });
-}
-
-/// The content-bound `event_id` the SDK derives for this envelope.
-///
-/// An Event id is a function of the Event's own digest and is excluded from
-/// that digest's preimage, so a producer builds the envelope first and derives
-/// the complete suite-tagged digest identity second. Every SDK-side parse
-/// rejects an identity that does not match the digest preimage.
-export function sdkEventDerivedIds(event: Record<string, unknown>): {
-  event_id: string;
-  realm_id: string;
-  object_id?: string;
-} {
-  assertJsonTransportable(event, "$.event");
-  return cotestWire<{ event_id: string; realm_id: string }>(
-    "event-derived-id",
-    event,
-  );
-}
-
-export function sdkEventDerivedObjectId(
-  event: Record<string, unknown>,
-): string {
-  const objectId = sdkEventDerivedIds(event).object_id;
-  if (!objectId) {
-    throw new Error(
-      `Event kind ${String(event.kind)} does not derive an object id`,
-    );
-  }
-  return objectId;
-}
-
-export function sdkMimiConsentProof(args: {
-  request: Record<string, unknown>;
-  verificationMethod: string;
-  createdAt: string;
-  domain: string;
-  audience: string;
-  signingSeedB64url?: string;
-}): Record<string, unknown> {
-  assertJsonTransportable(args.request, "$.request");
-  return cotestWire<Record<string, unknown>>("mimi-consent-proof", {
-    request: args.request,
-    verification_method: args.verificationMethod,
-    created_at: args.createdAt,
-    domain: args.domain,
-    audience: args.audience,
-    signing_seed_b64url: args.signingSeedB64url,
-  });
-}
-
-export function cotestWire<T>(command: CotestWireCommand, input: unknown): T {
-  const binary = process.env.COTEST_WIRE_BIN;
-  const result = spawnSync(
-    binary ?? "cargo",
-    binary
-      ? [command]
-      : ["run", "--quiet", "--bin", "cotest-wire", "--", command],
-    {
-      cwd: cotestRepoRoot,
-      encoding: "utf8",
-      input: JSON.stringify(input),
-      maxBuffer: 10 * 1024 * 1024,
-    },
-  );
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw new Error(
-      `cotest-wire ${command} failed with exit ${result.status}:\n${result.stderr}`,
-    );
-  }
-  try {
-    return JSON.parse(result.stdout.trim()) as T;
-  } catch {
-    throw new Error(
-      `cotest-wire ${command} returned non-JSON output: ${result.stdout}`,
-    );
-  }
-}
-
-function assertJsonTransportable(value: unknown, path: string): void {
-  if (value === null) {
-    return;
-  }
-
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return;
-    case "number":
-      if (!Number.isFinite(value) || Object.is(value, -0)) {
-        throw new TypeError(`non-JSON number at ${path}: ${value}`);
-      }
-      return;
-    case "object":
-      break;
-    default:
-      throw new TypeError(`non-JSON value at ${path}: ${typeof value}`);
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => {
-      if (item === undefined) {
-        throw new TypeError(`non-JSON undefined item at ${path}[${index}]`);
-      }
-      assertJsonTransportable(item, `${path}[${index}]`);
-    });
-    return;
-  }
-
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) {
-    throw new TypeError(`non-JSON object at ${path}`);
-  }
-
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-    if (item === undefined) {
-      throw new TypeError(`non-JSON undefined member at ${path}.${key}`);
-    }
-    assertJsonTransportable(item, `${path}.${key}`);
-  }
-}
-
-function stripUndefined(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) =>
-      item === undefined ? null : stripUndefined(item),
-    );
-  }
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .filter(([, item]) => item !== undefined)
-        .map(([key, item]) => [key, stripUndefined(item)]),
-    );
-  }
-  return value;
 }
 
 export function uuidV7(): string {

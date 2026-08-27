@@ -1,18 +1,14 @@
 // Conformance — Cross-language canonical-JSON parity (TS side)
 //
-// The TS port `canonicalJson` (e2e/helpers/soland-api.ts) reimplements Arkret
-// canonical JSON because the e2e harness runs on Node and cannot call the Rust
-// SDK directly. The authoritative implementation is the SDK's
-// `arkret_canonical` (RFC 8785 JCS, integer-only number profile), and the
-// signatures this harness produces are ultimately verified by soland using that
-// SDK — so any byte-level drift between the TS port and the SDK is a silent
-// signature false-negative/false-positive vector.
+// `canonicalJson` delegates to the Rust `cotest-wire` bridge and therefore to
+// the SDK's authoritative `arkret_canonical` implementation (RFC 8785 JCS,
+// integer-only number profile). The TypeScript harness owns transport and
+// typing only; it does not carry a second canonicalisation algorithm.
 //
 // This suite and the Rust gate (cotest/src/conformance/canonical_cross_lang.rs)
 // read the SAME golden vectors in e2e/fixtures/canonical-cross-check.json. The
-// `canonical` column is produced by the SDK; this test asserts the TS port
-// reproduces it byte-for-byte, while the Rust gate asserts the SDK does. If the
-// TS port drifts, only this side fails — localising the regression.
+// `canonical` column is produced by the SDK; this test asserts the Node-to-Rust
+// bridge returns it byte-for-byte, while the Rust gate asserts the SDK does.
 //
 // Third lane: the `.mjs` runtime (mocks + scripts) carries its own
 // canonicalJson in e2e/mocks/_shared/http.mjs whose digests must equally match
@@ -51,14 +47,14 @@ type CrossCheckDoc = {
 
 const doc = JSON.parse(readFileSync(fixturePath, "utf8")) as CrossCheckDoc;
 
-test.describe("canonical JSON cross-language parity (TS port vs SDK golden)", () => {
+test.describe("canonical JSON cross-language parity (typed bridge vs SDK golden)", () => {
   test("golden fixture carries vectors", () => {
     expect(Array.isArray(doc.vectors)).toBe(true);
     expect(doc.vectors.length).toBeGreaterThan(0);
   });
 
   for (const [index, vector] of doc.vectors.entries()) {
-    test(`vector[${index}] TS canonicalJson matches SDK golden byte-for-byte`, () => {
+    test(`vector[${index}] typed bridge canonicalJson matches SDK golden byte-for-byte`, () => {
       const produced = canonicalJson(vector.value);
       expect(produced).toBe(vector.canonical);
     });
