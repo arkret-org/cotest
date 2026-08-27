@@ -1241,29 +1241,54 @@ fn contains_interactive_challenge(value: &Value) -> bool {
 /// Validate the live HTTP contract for the human-approval branch.
 ///
 /// The response is intentionally strict: it accepts only the current v1
-/// envelope shape and rejects flat fields, embedded JSON, authentication
+/// RFC 9457 shape and rejects unknown extensions, embedded JSON, authentication
 /// challenges, and any interactive controller material.
 pub fn validate_agent_human_approval_http_response(status: u16, body: &Value) -> Result<String> {
     if status != 403 {
         bail!("human approval must use HTTP 403, got {status}");
     }
-    ensure_exact_keys(body, &["error", "ok", "request_id"], "error envelope")?;
-    if body.get("ok").and_then(Value::as_bool) != Some(false) {
-        bail!("human-approval error envelope must set ok=false");
+    let object = body
+        .as_object()
+        .ok_or_else(|| anyhow!("human-approval problem must be an object"))?;
+    for required in [
+        "type",
+        "title",
+        "status",
+        "detail",
+        "reason_code",
+        "approval_request_id",
+    ] {
+        if !object.contains_key(required) {
+            bail!("human-approval problem missing {required}");
+        }
     }
-
-    let error = body
-        .get("error")
-        .ok_or_else(|| anyhow!("human-approval response missing error"))?;
-    ensure_exact_keys(error, &["code", "details", "message"], "error")?;
-    if error.get("code").and_then(Value::as_str) != Some("claim_required") {
-        bail!("human approval must use error.code=claim_required");
+    if object.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "type"
+                | "title"
+                | "status"
+                | "detail"
+                | "instance"
+                | "reason_code"
+                | "approval_request_id"
+        )
+    }) {
+        bail!("human-approval problem contains an unknown extension");
     }
-    let message = error
-        .get("message")
+    if body.get("type").and_then(Value::as_str)
+        != Some("https://arkret.org/problems/claim_required")
+    {
+        bail!("human approval must use the claim_required problem type");
+    }
+    if body.get("status").and_then(Value::as_u64) != Some(403) {
+        bail!("human approval problem status must be 403");
+    }
+    let message = body
+        .get("detail")
         .and_then(Value::as_str)
         .filter(|message| !message.trim().is_empty())
-        .ok_or_else(|| anyhow!("human-approval error message must be non-empty text"))?;
+        .ok_or_else(|| anyhow!("human-approval problem detail must be non-empty text"))?;
     if serde_json::from_str::<Value>(message).is_ok() {
         bail!("human-approval error message must not contain serialized JSON");
     }
@@ -1271,11 +1296,12 @@ pub fn validate_agent_human_approval_http_response(status: u16, body: &Value) ->
     if contains_interactive_challenge(body) {
         bail!("human-approval response contains interactive challenge material");
     }
-    let details = error
-        .get("details")
-        .ok_or_else(|| anyhow!("human-approval response missing error.details"))?;
-    validate_human_approval_details_schema(details)?;
-    let typed: AgentHumanApprovalProblem = serde_json::from_value(details.clone())
+    let details = serde_json::json!({
+        "reason_code": body.get("reason_code").cloned().unwrap_or(Value::Null),
+        "approval_request_id": body.get("approval_request_id").cloned().unwrap_or(Value::Null),
+    });
+    validate_human_approval_details_schema(&details)?;
+    let typed: AgentHumanApprovalProblem = serde_json::from_value(details)
         .map_err(|error| anyhow!("decode typed human-approval details: {error}"))?;
     Ok(typed.approval_request_id().to_owned())
 }
@@ -1381,7 +1407,7 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     }
 
     let details = case
-        .pointer("/expected_error/error/details")
+        .get("expected_error")
         .cloned()
         .ok_or_else(|| anyhow!("human-approval fixture expected details missing"))?;
     let approval_request_id = details
@@ -1431,12 +1457,12 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
     }
 
     let mut flat = response.clone();
-    flat["error"]["reason_code"] = Value::String("human_approval_required".to_owned());
+    flat["unexpected_extension"] = Value::String("human_approval_required".to_owned());
     if validate_agent_human_approval_http_response(403, &flat).is_ok() {
         bail!("unregistered flat human-approval fields were accepted");
     }
     let mut json_message = response.clone();
-    json_message["error"]["message"] = Value::String(details.to_string());
+    json_message["detail"] = Value::String(details.to_string());
     if validate_agent_human_approval_http_response(403, &json_message).is_ok() {
         bail!("JSON-in-message human-approval response was accepted");
     }
@@ -1444,7 +1470,7 @@ pub fn run_agent_human_approval_required_vector() -> Result<()> {
         bail!("human approval was accepted as HTTP 401");
     }
     let mut challenge = response;
-    challenge["error"]["details"]["captcha"] = Value::String("challenge-token".to_owned());
+    challenge["captcha"] = Value::String("challenge-token".to_owned());
     if validate_agent_human_approval_http_response(403, &challenge).is_ok() {
         bail!("interactive challenge material was accepted");
     }

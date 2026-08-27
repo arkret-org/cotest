@@ -388,11 +388,10 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         },
     };
     let outcome = AgentParticipationOutcome {
-        ok: true,
         agent_id: "did:web:agents.acme.example:alice-summary".to_owned(),
         entries: vec![entry.clone()],
     };
-    if !outcome.ok || outcome.entries.len() != 1 {
+    if outcome.entries.len() != 1 {
         bail!("agent participation outcome shape drifted");
     }
 

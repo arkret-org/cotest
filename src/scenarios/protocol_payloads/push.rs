@@ -41,7 +41,6 @@ async fn register_device(server: &ArkretServer, token: &str) -> Result<arkret_wi
     let outcome: arkret_models_integration::PushRegisterDeviceOutcome =
         serde_json::from_value(push)
             .context("register-device response is not a PushRegisterDeviceOutcome")?;
-    assert!(outcome.ok);
     Ok(outcome.push_target_id)
 }
 
