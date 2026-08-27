@@ -86,7 +86,9 @@ Recommended entrypoints:
   -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
 ```
 
-- `process` mode is the fast local path and spawns the SUT with `cargo run`.
+- `process` mode is the fast local path and spawns a pre-built SUT binary
+  (`SOLAND_BIN`, or the sibling soland target built by the runner script);
+  test execution never compiles the SUT itself.
 - `.\scripts\run-compose.ps1` runs the process-mode `compose` profile and can
   attach live `coauth`, `floria`, `sodmin`, `inkson`, or `teabay` services
   through base URLs or managed service commands.
@@ -363,7 +365,9 @@ as a second, misleading `mls-data-plane` test.
 
 ## Runtime Modes
 
-- `process`: spawn the SUT with local `cargo run` against a checkout manifest.
+- `process`: spawn a pre-built SUT binary from the sibling checkout manifest
+  (`SOLAND_BIN` overrides with an explicit immutable binary); test execution
+  never compiles the SUT itself.
 - `compose`: run process-mode bridge-contract tests through
   `scripts/run-compose.ps1`; spawned `soland` remains under cotest lifecycle,
   while external service URLs are passed through `COAUTH_BASE_URL`,

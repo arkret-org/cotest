@@ -8,7 +8,7 @@
 //! object-addressing surface (`arkret_wire`). No live server is required for
 //! OA-COT-1..4; the live share→resolve→open leg is the `#[ignore]` companion
 //! `test_oa_cot_5_share_resolve_open_live` in
-//! `tests/r3_conformance_vectors.rs`.
+//! `tests/conformance_vectors.rs`.
 //!
 //! Grammar invariants pinned here:
 //!   * `web+arkret:` ⇄ HTTPS-fragment forms parse to the SAME ParsedAddress.

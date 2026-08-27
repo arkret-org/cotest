@@ -34,7 +34,6 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
-use serde_json::Value;
 
 use crate::harness::{ArkretServer, expect_json, wire_negative_from_sdk};
 

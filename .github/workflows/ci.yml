@@ -190,8 +190,7 @@ jobs:
     name: fuzz (envelope / snapshot / seal, 60s each)
     runs-on: ubuntu-latest
     # P5.1 — wire-envelope fuzz harnesses get a per-target 60s libFuzzer
-    # budget. Total wall-clock is capped at 5 min so PR latency stays bounded;
-    # nightly extended runs live in integration.yml under a longer schedule.
+    # budget. Total wall-clock is capped at 5 min so PR latency stays bounded.
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4

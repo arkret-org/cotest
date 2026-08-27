@@ -3,9 +3,7 @@
 # Rust scenario scaffolds (`unimplemented!(...)` call sites under src/scenarios).
 #
 # This is the *generator* behind fixme-debt.md. It does NOT need a live
-# Playwright run — it parses source files only. The companion analysis files
-# journey-coverage.md / journey-coverage.json DO require a live enumeration and
-# are intentionally out of scope here.
+# Playwright run — it parses source files only.
 #
 # What it scans:
 #   * e2e/tests/**/*.spec.ts — every `.fixme(` call. The leading comment block

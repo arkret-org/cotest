@@ -20,8 +20,8 @@
 //! scenarios can compare an observed
 //! `(transcript, state_transition, external_response, audit_reason)` quad
 //! against the fixture. Vectors whose implementer-side wire support is not
-//! yet ready stay behind `#[ignore]` in `tests/security_closure_fixture.rs`
-//! as active local runner-contract checks in `tests/security_closure_fixture.rs`.
+//! yet ready stay behind `#[ignore]` in `tests/security_closure_vectors.rs`
+//! as active local runner-contract checks in `tests/security_closure_vectors.rs`.
 
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -39,9 +39,9 @@
 //! processes, network HTTP, real key rotation) stays `#[ignore]` with
 //! `TODO(federation-idempotency-e2e-docker)`.
 //!
-//! Cotest does NOT depend on `soland` or `teabay` — the SDK federation
-//! surface and a small in-memory cache reproduce the wire shape both
-//! services implement.
+//! Cotest does not depend on `teabay`, and this module exercises only the
+//! SDK federation surface plus a small in-memory cache that reproduce the
+//! wire shape both services implement.
 
 use std::collections::BTreeMap;
 

@@ -13,7 +13,6 @@ node_modules/
 /artifacts/
 artifacts/
 /data/
-/and/
 test-results/
 playwright-report/
 playwright-output/
@@ -28,8 +27,6 @@ e2e/playwright-output/
 /coverage-matrix.json
 /coverage-matrix.md
 /fixme-debt.md
-/journey-coverage.json
-/journey-coverage.md
 /junit.xml
 /metadata.json
 /raw.log

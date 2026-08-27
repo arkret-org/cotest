@@ -9,7 +9,7 @@ $sourceRoots = @(
     "soland\crates",
     "inkson\src",
     "cotest\src",
-    "coauth\src",
+    "coauth\crates",
     "garth\src",
     "chime\src"
 ) | ForEach-Object { Join-Path $WorkspaceRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }
@@ -20,7 +20,7 @@ $productionClassificationRoots = @(
     "soland\crates\storage-postgres\src",
     "inkson\src",
     "cotest\src",
-    "coauth\src",
+    "coauth\crates",
     "garth\src",
     "chime\src"
 ) | ForEach-Object { Join-Path $WorkspaceRoot $_ } | Where-Object { Test-Path -LiteralPath $_ }

@@ -9,7 +9,8 @@
   SUT image.
 
 This closes the gap between the earlier ad hoc `cargo run` harness and the
-deployment model used by `E:\Works\palpo-im\complement`.
+deployment model used by Complement (the Matrix homeserver black-box
+integration test suite).
 
 ## What Complement does
 
