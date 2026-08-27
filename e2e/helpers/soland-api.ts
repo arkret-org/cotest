@@ -1041,10 +1041,10 @@ export async function writeJoinPolicyApi(
   return digest;
 }
 
-// Grant a realm-scoped `ak.realm.join.review` capability to a subject. Used
-// by the knock-application scenario to make a non-owner reviewer, whose
-// capability can later be revoked (join-policy.md §7.5 #3 re-check).
-export async function grantRealmReviewCapabilityApi(
+// Grant the exact-Realm `ak.realm.admin` capability required by current-v1
+// candidate review. The grant can later be revoked to exercise the
+// join-policy.md §7.5 authorization-basis rule.
+export async function grantRealmAdminCapabilityApi(
   request: APIRequestContext,
   ownerToken: string,
   args: {
@@ -1079,7 +1079,7 @@ export async function grantRealmReviewCapabilityApi(
     subject_principal_server_id: canonicalDidCoreId(
       solandServiceId(args.server),
     ),
-    actions: ["ak.realm.join.review"],
+    actions: ["ak.realm.admin"],
     resources: [{ kind: "realm", realm_id: args.realmId }],
     issued_at: issuedAt,
     issuer_authority_refs: [
@@ -1107,7 +1107,7 @@ export async function grantRealmReviewCapabilityApi(
   });
   await submitSignedEventApi(request, ownerToken, grantEvent, {
     server: args.server,
-    context: `grant ak.realm.join.review to ${args.subjectDid}`,
+    context: `grant ak.realm.admin to ${args.subjectDid}`,
   });
   const grantId = retypeEventDerivedId(String(grantEvent.event_id), "grant");
   const proposalDigest = Array.isArray(grantEvent.proofs)

@@ -17,7 +17,7 @@ import {
   addRealmMemberApi,
   canonicalTimestamp,
   createRealmApi,
-  grantRealmReviewCapabilityApi,
+  grantRealmAdminCapabilityApi,
   listJoinApplicationAuditApi,
   listMemberApplicationsApi,
   revokeCapabilityApi,
@@ -68,7 +68,7 @@ const APPLICATION_FORM_POLICY = {
     },
   ],
   combinator: "all",
-  review_capability: "ak.realm.join.review",
+  review_capability: "ak.realm.admin",
   reviewer_quorum: "any",
   application_ttl: "PT168H",
   cooldown_after_reject: "PT72H",
@@ -127,7 +127,7 @@ test.describe("knock + application + cooldown", () => {
     expect(listed.viewer_is_reviewer).toBe(true);
   });
 
-  test("E6.A bob submits structured member.application after knocking; alice (with ak.realm.join.review) sees the answers and accepts", async ({
+  test("E6.A bob submits structured member.application after knocking; alice (with exact-Realm admin) sees the answers and accepts", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -140,7 +140,7 @@ test.describe("knock + application + cooldown", () => {
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
-    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+    const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
@@ -222,7 +222,7 @@ test.describe("knock + application + cooldown", () => {
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
-    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+    const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
@@ -311,7 +311,7 @@ test.describe("knock + application + cooldown", () => {
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
-    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+    const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
@@ -404,7 +404,7 @@ test.describe("knock + application + cooldown", () => {
       default_join_rule: "knock",
       ownerDid: alice.user.did,
     });
-    const reviewerGrantId = await grantRealmReviewCapabilityApi(
+    const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
@@ -449,7 +449,7 @@ test.describe("knock + application + cooldown", () => {
     expect(String(reviewResp)).toMatch(/ttl_expired|application_ttl|expired/i);
   });
 
-  test("E6.F reviewer loses ak.realm.join.review after accept; the accepted receipt remains valid at its own authorization basis", async ({
+  test("E6.F reviewer loses exact-Realm admin after accept; the accepted receipt remains valid at its own authorization basis", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -467,7 +467,7 @@ test.describe("knock + application + cooldown", () => {
     // written, so its later membership write (review reject path) and capability
     // re-check have a member to anchor on. Then grant the revocable review cap.
     await addRealmMemberApi(request, alice.token, realmId, reviewer.user.did);
-    const grantId = await grantRealmReviewCapabilityApi(request, alice.token, {
+    const grantId = await grantRealmAdminCapabilityApi(request, alice.token, {
       ownerDid: alice.user.did,
       realmId,
       subjectDid: reviewer.user.did,
