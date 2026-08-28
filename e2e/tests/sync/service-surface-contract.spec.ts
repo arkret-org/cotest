@@ -130,12 +130,11 @@ async function startSharedDescribeBinding(
       res.writeHead(404, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          ok: false,
-          error: {
-            code: "unrecognized_endpoint",
-            message: "only the shared describe binding is exposed by this fixture",
-          },
-          request_id: `ak:request:${randomUUID()}`,
+          type: "https://arkret.org/problems/unrecognized_endpoint",
+          title: "Unrecognized endpoint",
+          status: 404,
+          detail: "only the shared describe binding is exposed by this fixture",
+          instance: `ak:request:${randomUUID()}`,
         }),
       );
       return;
@@ -147,14 +146,13 @@ async function startSharedDescribeBinding(
       res.writeHead(400, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
-          ok: false,
-          error: {
-            code: "param_invalid",
-            message: serviceKind
-              ? `service_kind ${JSON.stringify(serviceKind)} is not available on this binding`
-              : "service_kind is required when multiple roles share this binding",
-          },
-          request_id: `ak:request:${randomUUID()}`,
+          type: "https://arkret.org/problems/param_invalid",
+          title: "Param invalid",
+          status: 400,
+          detail: serviceKind
+            ? `service_kind ${JSON.stringify(serviceKind)} is not available on this binding`
+            : "service_kind is required when multiple roles share this binding",
+          instance: `ak:request:${randomUUID()}`,
         }),
       );
       return;

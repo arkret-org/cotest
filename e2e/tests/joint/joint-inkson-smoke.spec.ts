@@ -5,6 +5,8 @@ import type { APIRequestContext } from "../../helpers/arkret-test";
 import { test, expect } from "../../helpers/joint-fixture";
 import {
   canonicalJson,
+  grantCapabilityEventApi,
+  prepareSignedEventCbaApi,
   readRealmSealBasis,
   signedEventEnvelope,
 } from "../../helpers/soland-api";
@@ -255,6 +257,12 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         jointRealm.alicePage.serverUrl,
         jointRealm.realmId,
       );
+      await grantCapabilityEventApi(request, jointRealm.aliceToken, {
+        ownerDid: jointRealm.alice.did,
+        realmId: jointRealm.realmId,
+        subjectDid: jointRealm.alice.did,
+        actions: ["ak.message.create"],
+      });
       await submitSignedEvent(
         request,
         jointRealm.aliceSession,
@@ -523,6 +531,7 @@ async function submitSignedEvent(
     payload,
     sealBasis,
   });
+  await prepareSignedEventCbaApi(request, session.grantJwt, envelope);
   const response = await request.post(url, {
     headers: {
       ...selfPathHeadersForDpopSession(session, "POST", url),

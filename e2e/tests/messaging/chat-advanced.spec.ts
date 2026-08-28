@@ -255,6 +255,12 @@ test.describe("chat advanced", () => {
     request,
   }) => {
     const fixture = await createChatApiFixture(request, "sync-projection-api");
+    await grantCapabilityEventApi(request, fixture.aliceToken, {
+      ownerDid: fixture.alice.did,
+      realmId: fixture.realmId,
+      subjectDid: fixture.bob.did,
+      actions: ["ak.reaction.add", "ak.reaction.remove"],
+    });
     const strandId = await resolveDefaultStrandId(
       request,
       fixture.aliceToken,

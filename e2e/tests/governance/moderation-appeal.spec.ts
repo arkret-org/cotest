@@ -467,8 +467,10 @@ async function submitAppeal(request: APIRequestContext, fixture: AppealFixture) 
   await submitSignedEventApi(request, fixture.appellantToken, envelope, {
     context: `submit appeal ${envelope.event_id}`,
   });
+  const appealId = String(envelope.event_id).replace(/^ak:event:/, "ak:appeal:");
+  await waitForAppealState(request, fixture.reviewerToken, appealId, "submitted");
   return {
-    appeal_id: String(envelope.event_id).replace(/^ak:event:/, "ak:appeal:"),
+    appeal_id: appealId,
     event_id: String(envelope.event_id),
     state: "submitted",
   };
@@ -479,7 +481,7 @@ async function reviewAppeal(
   fixture: AppealFixture,
   appealId: string,
 ) {
-  return await submitModerationEvent(
+  const outcome = await submitModerationEvent(
     request,
     fixture.reviewerToken,
     fixture.reviewer.did,
@@ -493,6 +495,8 @@ async function reviewAppeal(
       notes_ref: "review notes",
     },
   );
+  await waitForAppealState(request, fixture.reviewerToken, appealId, "under_review");
+  return outcome;
 }
 
 async function decideAppeal(
@@ -501,7 +505,7 @@ async function decideAppeal(
   appealId: string,
   data: Record<string, unknown>,
 ) {
-  return await submitModerationEvent(
+  const outcome = await submitModerationEvent(
     request,
     fixture.reviewerToken,
     fixture.reviewer.did,
@@ -515,6 +519,8 @@ async function decideAppeal(
       decided_at: data.decided_at ?? canonicalTimestamp(),
     },
   );
+  await waitForAppealState(request, fixture.reviewerToken, appealId, "decided");
+  return outcome;
 }
 
 async function closeAppeal(
@@ -522,7 +528,7 @@ async function closeAppeal(
   fixture: AppealFixture,
   appealId: string,
 ) {
-  return await submitModerationEvent(
+  const outcome = await submitModerationEvent(
     request,
     fixture.reviewerToken,
     fixture.reviewer.did,
@@ -537,6 +543,8 @@ async function closeAppeal(
       close_reason: "reviewer_closed",
     },
   );
+  await waitForAppealState(request, fixture.reviewerToken, appealId, "closed");
+  return outcome;
 }
 
 async function liftDecision(
@@ -642,4 +650,28 @@ async function getAppealHistory(request: APIRequestContext, token: string, appea
   expect(response.status(), text).toBe(200);
   const body = JSON.parse(text) as { history: Array<Record<string, unknown>> };
   return body.history;
+}
+
+async function waitForAppealState(
+  request: APIRequestContext,
+  token: string,
+  appealId: string,
+  expectedState: string,
+) {
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `${solandBaseUrl()}/_soland/admin/moderation/appeals/${encodeURIComponent(appealId)}`,
+          { headers: authHeaders(token) },
+        );
+        if (response.status() !== 200) return undefined;
+        const body = (await response.json()) as {
+          history?: Array<Record<string, unknown>>;
+        };
+        return body.history?.at(-1)?.appeal_state;
+      },
+      { timeout: 30_000, intervals: [100, 250, 500, 1_000] },
+    )
+    .toBe(expectedState);
 }

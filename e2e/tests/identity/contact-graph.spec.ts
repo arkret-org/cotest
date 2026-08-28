@@ -160,6 +160,18 @@ test.describe("contact graph (same principal server)", () => {
       action: "accept",
       grantedScopes: ["direct_message"],
     });
+    await expect
+      .poll(async () => (await contactRow(request, aliceToken, bob.did))?.state, {
+        timeout: 30_000,
+        intervals: [100, 250, 500, 1_000],
+      })
+      .toBe("accepted");
+    await expect
+      .poll(async () => (await contactRow(request, bobToken, alice.did))?.state, {
+        timeout: 30_000,
+        intervals: [100, 250, 500, 1_000],
+      })
+      .toBe("accepted");
 
     // The normal Contact branch assigns founding authority to the responder.
     // Alice is therefore required to wait; this state never transfers
@@ -350,6 +362,12 @@ test.describe("contact graph (same principal server)", () => {
       action: "accept",
       grantedScopes: ["invite"],
     });
+    await expect
+      .poll(async () => (await contactRow(request, aliceToken, bob.did))?.state, {
+        timeout: 30_000,
+        intervals: [100, 250, 500, 1_000],
+      })
+      .toBe("accepted");
     const consent = await grantInviteConsentArkret(
       request,
       aliceToken,

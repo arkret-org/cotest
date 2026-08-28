@@ -123,24 +123,19 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
       return undefined;
     }
     const account = await registerCoauthPasswordAccount(request, coauth);
-    const seed = uniqueUser("oidc-chain-root");
-    const user = {
-      ...seed,
-      name: account.handle,
-      did: account.did,
-      fullDid: account.fullDid,
-      handle: `@${account.handle}`,
-      displayName: account.displayName,
-    };
-    await ensureRegistered(request, user);
     const deviceKey = generateDpopDeviceKey();
-    const grant = await mintDpopBoundGrant(request, coauth, user.did, user.deviceId, deviceKey, {
-      audience: solandServiceId(),
-    });
+    const grant = await mintDpopBoundGrant(
+      request,
+      coauth,
+      account.did,
+      account.genesisDeviceId,
+      deviceKey,
+      { audience: solandServiceId() },
+    );
     if (!grant) {
       return undefined;
     }
-    return { deviceKey, grant, actorDid: user.did };
+    return { deviceKey, grant, actorDid: account.did };
   }
 
   test("2. a session grant authenticates a /_arkret/root/* read only WITH a bound DPoP proof", async ({

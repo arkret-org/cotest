@@ -224,7 +224,7 @@ test.describe("core object invariants", () => {
       const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const eventsRes = await request.fetch(eventsUrl, {
         method: "QUERY",
-        data: { realms: [realmId], limit: 20 },
+        data: canonicalJson({ realms: [realmId], limit: 20 }),
         headers: authFor("QUERY", eventsUrl),
       });
       expect(eventsRes.status()).toBe(200);

@@ -11,6 +11,7 @@ import {
   accountSubscribeFramesApi,
   authHeaders,
   createRealmApi,
+  grantCapabilityEventApi,
   replaceAccountDataApi,
   queryRealmEventsApi,
   sendMessageApi,
@@ -179,6 +180,12 @@ test.describe("personal blocklist", () => {
         seedMembers: [bob.did],
       });
       await bobPage.acceptInvite(realmId);
+      await grantCapabilityEventApi(request, aliceToken, {
+        ownerDid: alice.did,
+        realmId,
+        subjectDid: bob.did,
+        actions: ["ak.message.create"],
+      });
 
       const m1 = `S31 m1 ${stamp}`;
       await bobPage.sendTimelineMessage(realmId, m1);

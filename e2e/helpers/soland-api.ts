@@ -15,6 +15,7 @@ import {
   type APIResponse,
 } from "@playwright/test";
 import { xchacha20poly1305 } from "@noble/ciphers/chacha";
+import { operationSelector } from "./arkret-test";
 import {
   type SolandKey,
   solandBaseUrl,
@@ -4412,6 +4413,10 @@ function signedFederationPushHeaders(
   } = {},
 ): Record<string, string> {
   const method = opts.method ?? "POST";
+  const selector = operationSelector(method, targetUri);
+  if (!selector) {
+    throw new Error(`federation request has no registered operation selector: ${method} ${targetUri}`);
+  }
   const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;
   const sourceTrustDomain = trustDomainFromServiceId(sourceDid);
@@ -4429,7 +4434,7 @@ function signedFederationPushHeaders(
   const keyid = `${sourceKey ? solandServiceFullId(sourceKey) : serviceCoreIdToDid(sourceDid)}#federation-fanout-key`;
   const idempotencyComponent = opts.idempotencyKey ? ' "idempotency-key"' : "";
   const signatureParams =
-    `("@method" "@target-uri" "@authority" "content-digest" "source-service-id" ` +
+    `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" "source-service-id" ` +
     `"destination-service-id" "source-trust-domain" "destination-trust-domain"` +
     `${idempotencyComponent});created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
@@ -4437,6 +4442,7 @@ function signedFederationPushHeaders(
     `"@target-uri": ${targetUri}`,
     `"@authority": ${new URL(targetUri).host}`,
     `"content-digest": ${contentDigest}`,
+    `"arkret-operation": ${selector}`,
     `"source-service-id": ${sourceDid}`,
     `"destination-service-id": ${destinationDid}`,
     `"source-trust-domain": ${sourceTrustDomain}`,
@@ -4454,6 +4460,7 @@ function signedFederationPushHeaders(
   return {
     "content-type": "application/json",
     "content-digest": contentDigest,
+    "arkret-operation": selector,
     "source-service-id": sourceDid,
     "destination-service-id": destinationDid,
     "source-trust-domain": sourceTrustDomain,

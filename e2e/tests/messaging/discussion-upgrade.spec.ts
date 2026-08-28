@@ -17,6 +17,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
   alignSignedEventToActorFrontierApi,
+  canonicalJson,
   canonicalTimestamp,
   rawSubmitSignedEventApi,
   retypeEventDerivedId,
@@ -504,7 +505,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(fixture.aliceToken),
-        data: envelope,
+        data: canonicalJson(envelope),
       },
     );
     const body = await response.text();

@@ -31,6 +31,7 @@ import {
   readRealmSealBasis,
   signedEventEnvelope,
   submitPrincipalSuccessorSealApi,
+  wireErrCode,
 } from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
@@ -416,13 +417,11 @@ test.describe("discovery", () => {
           "POST",
           signalUrl,
         ),
-        data: forgedEnvelope,
+        data: canonicalJson(forgedEnvelope),
       });
       const forgedText = await forged.text();
       expect(forged.status(), forgedText).toBe(400);
-      expect(JSON.parse(forgedText)).toMatchObject({
-        error: { details: { reason_code: "proof_invalid" } },
-      });
+      expect(wireErrCode(JSON.parse(forgedText))).toBe("proof_invalid");
 
       // Seed the observed online transition through encrypted Signal after
       // Alice's subscription is established. The receiver decrypts presence;

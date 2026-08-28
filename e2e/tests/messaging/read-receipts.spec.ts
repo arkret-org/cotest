@@ -14,6 +14,7 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
+  canonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -186,7 +187,7 @@ test.describe("read receipts + privacy", () => {
       `${solandBaseUrl()}/_arkret/self/signal`,
       {
         headers: authHeaders(outsiderToken),
-        data: envelope,
+        data: canonicalJson(envelope),
       },
     );
     expect(receipt.status()).toBe(403);

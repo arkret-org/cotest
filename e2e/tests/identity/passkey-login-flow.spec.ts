@@ -81,11 +81,16 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
       await test.step("anonymous callers cannot attach a passkey to an account hint", async () => {
         const anonymous = await browser.newContext();
         try {
-          const response = await anonymous.request.post(
+          const staleHint = await anonymous.request.post(
             `${coauth}/_coauth/account/auth/passkey/register/start`,
             { data: { account_id: handle, display_name: "attacker" } },
           );
-          expect(response.status()).toBe(401);
+          expect(staleHint.status()).toBe(400);
+          const unauthenticated = await anonymous.request.post(
+            `${coauth}/_coauth/account/auth/passkey/register/start`,
+            { data: { display_name: "attacker" } },
+          );
+          expect(unauthenticated.status()).toBe(401);
         } finally {
           await anonymous.close();
         }

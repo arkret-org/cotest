@@ -39,7 +39,7 @@ const registeredHttpOperations = operationRegistry.operations.flatMap(
   },
 );
 
-function operationSelector(method: string, url: string): string | undefined {
+export function operationSelector(method: string, url: string): string | undefined {
   const pathname = new URL(url, "http://cotest.invalid").pathname;
   return registeredHttpOperations.find(
     (operation) =>

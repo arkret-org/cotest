@@ -12,6 +12,7 @@ import {
 } from "node:crypto";
 import {
   expect,
+  operationSelector,
   test,
   type APIRequestContext,
   type APIResponse,
@@ -1243,7 +1244,8 @@ test.describe("applet inbound transaction push — per-delivery source signature
       args.actorDid ??
       `ak:did_core:web:bot-applet-${args.stamp}.joint-e2e.local`;
     const verificationMethod =
-      args.verificationMethod ?? `${sourceServiceId}#applet-service-key`;
+      args.verificationMethod ??
+      `${sourceServiceId === solandServiceId() ? solandServiceFullId() : sourceServiceId}#applet-service-key`;
     const authKeyId = verificationMethod.includes("#")
       ? verificationMethod.slice(verificationMethod.indexOf("#") + 1)
       : verificationMethod;
@@ -1517,8 +1519,12 @@ function signedAppletTransactionHeaders(args: {
   const created = args.created ?? Math.floor(Date.now() / 1000);
   const expires = args.expires ?? created + 300;
   const keyid = args.keyId ?? `${args.sourceServiceId}#applet-service-key`;
+  const selector = operationSelector("POST", args.targetUri);
+  if (!selector) {
+    throw new Error(`applet transaction has no registered operation selector: ${args.targetUri}`);
+  }
   const signatureParams =
-    `("@method" "@target-uri" "@authority" "content-digest" ` +
+    `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" ` +
     `"source-service-id" "destination-service-id" "idempotency-key");` +
     `created=${created};expires=${expires};keyid="${keyid}";alg="ed25519"`;
   const signatureBase = [
@@ -1526,6 +1532,7 @@ function signedAppletTransactionHeaders(args: {
     `"@target-uri": ${args.targetUri}`,
     `"@authority": ${new URL(args.targetUri).host}`,
     `"content-digest": ${contentDigest}`,
+    `"arkret-operation": ${selector}`,
     `"source-service-id": ${args.sourceServiceId}`,
     `"destination-service-id": ${args.destinationServiceId}`,
     `"idempotency-key": ${args.idempotencyKey}`,
@@ -1539,6 +1546,7 @@ function signedAppletTransactionHeaders(args: {
   return {
     "content-type": "application/json",
     "content-digest": contentDigest,
+    "arkret-operation": selector,
     "source-service-id": args.sourceServiceId,
     "destination-service-id": args.destinationServiceId,
     "idempotency-key": args.idempotencyKey,

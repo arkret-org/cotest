@@ -10,6 +10,7 @@ import {
   addRealmMemberApi,
   accountSubscribeDeltaApi,
   createRealmApi,
+  grantCapabilityEventApi,
   resolveDefaultStrandId,
   sendMessageApi,
   setStrandWatchLevelApi,
@@ -153,6 +154,12 @@ test.describe("notifications", () => {
       const aliceToken = await issueDevSession(request, aliceSession.user);
       await resolveDefaultStrandId(request, aliceToken, realmId, {
         authorityRootController: aliceSession.user.did,
+      });
+      await grantCapabilityEventApi(request, aliceToken, {
+        ownerDid: aliceSession.user.did,
+        realmId,
+        subjectDid: aliceSession.user.did,
+        actions: ["ak.message.create"],
       });
 
       await bobPage.gotoNotificationSettings();
