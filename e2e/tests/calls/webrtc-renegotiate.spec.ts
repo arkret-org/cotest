@@ -37,7 +37,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     const ice = await fetchIceConfig(request, aliceToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       mode: "p2p",
     });
@@ -48,7 +48,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     // signed by the media service with the distinct ICE-config domain label.
     expect(body.realm_id).toBe(realmId);
     expect(body.call_id).toBe(callId);
-    expect(body.actor_id).toBe(alice.did);
+    expect(body.actor_id).toBe(alice.id);
     expect(body.device_id).toBe(alice.deviceId);
     expect(Array.isArray(body.ice_servers)).toBe(true);
     expect(body.ice_servers.length).toBeGreaterThan(0);
@@ -84,7 +84,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -97,7 +97,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,

@@ -57,14 +57,14 @@ struct JoinReceiptProofInput {
 
 #[derive(Debug, Deserialize)]
 struct MlsKeyPackageUploadEntryInput {
-    principal_id: String,
+    principal_id: DidCoreId,
     device_id: DeviceId,
     signing_seed_b64url: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct PrincipalControlRealmInput {
-    principal_id: String,
+    principal_id: DidCoreId,
 }
 
 #[derive(Debug, Deserialize)]
@@ -400,11 +400,6 @@ fn author_rejection(code: &str, status: u16, detail: &str) -> Value {
 fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
     let input: MlsKeyPackageUploadEntryInput =
         serde_json::from_value(input).context("parse MLS KeyPackage upload-entry input")?;
-    let principal_id = if input.principal_id.starts_with("ak:did_core:") {
-        DidCoreId::new(input.principal_id).context("parse core principal id")?
-    } else {
-        project_did_to_core_id(&Did::new(input.principal_id).context("parse full principal id")?)?
-    };
     let seed = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(input.signing_seed_b64url)
         .context("decode MLS signing seed")?;
@@ -412,7 +407,7 @@ fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
         .try_into()
         .map_err(|_| anyhow::anyhow!("MLS signing seed must be 32 bytes"))?;
     let identity = arkret::ArkretMlsIdentity::new_human_device(
-        principal_id,
+        input.principal_id,
         input.device_id,
         arkret::ArkretMlsSigner::from_ed25519_signing_key(ed25519_dalek::SigningKey::from_bytes(
             &seed,
@@ -1184,7 +1179,7 @@ fn join_receipt_proof(input: Value) -> Result<Value> {
 fn principal_control_realm(input: Value) -> Result<Value> {
     let input: PrincipalControlRealmInput =
         serde_json::from_value(input).context("parse principal-control realm input")?;
-    let _principal = Did::new(input.principal_id).context("parse principal DID")?;
+    let _principal_id = input.principal_id;
     bail!(
         "principal-control Realm is event-derived; this command requires an accepted create Event and cannot derive it from a DID"
     )

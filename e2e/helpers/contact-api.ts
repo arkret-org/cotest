@@ -26,11 +26,11 @@ import {
   canonicalJson,
   canonicalServiceResolution,
   canonicalTimestamp,
-  currentActorDidApi,
+  currentActorIdApi,
   dispatchSelfInviteApi,
   selfInviteDispatchBody,
   expectJsonOk,
-  principalControlRealmForDid,
+  principalControlRealmForId,
   readRealmSealBasis,
   registeredEventSigningSeedB64url,
   registeredEventVerificationMethod,
@@ -150,17 +150,17 @@ export async function grantInviteConsentArkret(
   request: APIRequestContext,
   token: string,
   holder: JointUser,
-  peerDid: string,
+  peerId: string,
   opts: { server?: SolandKey } = {},
 ): Promise<InviteConsentGrant> {
   const consentId = `ak:consent:${uuidV7()}`;
   const envelope = signedEventEnvelope({
-    actorDid: holder.did,
-    realmId: principalControlRealmForDid(holder.did),
+    actorId: holder.id,
+    realmId: principalControlRealmForId(holder.id),
     kind: "ak.consent.grant",
     payload: {
       consent_id: consentId,
-      peer: peerDid,
+      peer: peerId,
       consent_scope: "invite",
       expires_at: canonicalTimestamp(
         new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -169,12 +169,12 @@ export async function grantInviteConsentArkret(
   });
   await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
-    context: `grant invite consent to ${peerDid}`,
+    context: `grant invite consent to ${peerId}`,
   });
   await submitPrincipalSuccessorSealApi(
     request,
     token,
-    holder.did,
+    holder.id,
     envelope,
     opts,
   );
@@ -184,8 +184,8 @@ export async function grantInviteConsentArkret(
     .poll(
       async () => {
         const cellUrl =
-          `${solandBaseUrl(opts.server)}/_arkret/self/consent/cells/${encodeURIComponent(holder.did)}` +
-          `?peer=${encodeURIComponent(peerDid)}&consent_scope=invite`;
+          `${solandBaseUrl(opts.server)}/_arkret/self/consent/cells/${encodeURIComponent(holder.id)}` +
+          `?peer=${encodeURIComponent(peerId)}&consent_scope=invite`;
         const response = await request.get(cellUrl, {
           headers: authHeaders(token, "GET", cellUrl),
         });
@@ -210,8 +210,8 @@ export async function revokeInviteConsentArkret(
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
   const envelope = signedEventEnvelope({
-    actorDid: holder.did,
-    realmId: principalControlRealmForDid(holder.did),
+    actorId: holder.id,
+    realmId: principalControlRealmForId(holder.id),
     kind: "ak.consent.revoke",
     payload: {
       consent_id: grant.consentId,
@@ -226,7 +226,7 @@ export async function revokeInviteConsentArkret(
   await submitPrincipalSuccessorSealApi(
     request,
     token,
-    holder.did,
+    holder.id,
     envelope,
     opts,
   );
@@ -330,7 +330,7 @@ export async function requestContactArkret(
  */
 export async function resolvePrincipalLocator(
   request: APIRequestContext,
-  subjectDid: string,
+  subjectId: string,
   server: SolandKey,
   sessionToken: string,
 ): Promise<Record<string, unknown>> {
@@ -344,7 +344,7 @@ export async function resolvePrincipalLocator(
   });
   const issued = await expectJsonOk<{
     locator_token: string;
-  }>(issue, `issue principal locator for ${subjectDid}`);
+  }>(issue, `issue principal locator for ${subjectId}`);
   const response = await request.post(
     `${solandBaseUrl(server)}/_arkret/open/invite-locators/resolve`,
     {
@@ -354,9 +354,9 @@ export async function resolvePrincipalLocator(
   );
   const locator = await expectJsonOk<Record<string, unknown>>(
     response,
-    `resolve principal locator for ${subjectDid}`,
+    `resolve principal locator for ${subjectId}`,
   );
-  expect(locator.subject_id).toBe(subjectDid);
+  expect(locator.subject_id).toBe(subjectId);
   return locator;
 }
 
@@ -465,13 +465,19 @@ export async function listContactsArkret(
   );
   return (body.contacts ?? []).map((row) => {
     const wire = row as unknown as Record<string, unknown>;
-    const peer = wire.peer as Record<string, unknown> | string;
+    const peer = wire.peer as Record<string, unknown>;
+    const peerId =
+      peer?.kind === "human" && typeof peer.principal_id === "string"
+        ? peer.principal_id
+        : peer?.kind === "agent" && typeof peer.agent_id === "string"
+          ? peer.agent_id
+          : undefined;
+    if (!peerId) {
+      throw new Error(`contact row has an invalid canonical peer: ${JSON.stringify(wire.peer)}`);
+    }
     return {
       ...row,
-      peer:
-        typeof peer === "string"
-          ? peer
-          : String(peer.principal_id ?? peer.agent_id ?? ""),
+      peer: peerId,
       granted_by_me:
         (wire.granted_to_peer_scopes as string[] | undefined) ?? [],
       granted_to_me:
@@ -629,41 +635,41 @@ async function uploadDirectConversationKeyPackage(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ): Promise<void> {
-  const signingSeedB64url = registeredEventSigningSeedB64url(user.did);
+  const signingSeedB64url = registeredEventSigningSeedB64url(user.id);
   if (!signingSeedB64url) {
     throw new Error(
-      `no accepted device signing seed registered for ${user.did}`,
+      `no accepted device signing seed registered for ${user.id}`,
     );
   }
   const keyPackages = [
     cotestWire<Record<string, unknown>>("mls-keypackage-upload-entry", {
-      principal_id: user.did,
+      principal_id: user.id,
       device_id: user.deviceId,
       signing_seed_b64url: signingSeedB64url,
     }),
   ];
   const unsigned = {
-    principal_id: user.did,
+    principal_id: user.id,
     device_id: user.deviceId,
     keypackages: keyPackages,
   };
   const signingInput = `ak.self.keys.keypackages.upload.create.v1\n${canonicalJson(unsigned)}`;
   const verificationMethod = registeredEventVerificationMethod(
-    user.did,
+    user.id,
     user.deviceId,
   );
   if (!verificationMethod) {
     throw new Error(
-      `no accepted device verification method registered for ${user.did}`,
+      `no accepted device verification method registered for ${user.id}`,
     );
   }
   const signature = signWithRegisteredEventSigner(
-    user.did,
+    user.id,
     verificationMethod,
     signingInput,
   );
   if (!signature) {
-    throw new Error(`no accepted device signer registered for ${user.did}`);
+    throw new Error(`no accepted device signer registered for ${user.id}`);
   }
   const endpointSignature = {
     kid: verificationMethod,
@@ -684,7 +690,7 @@ async function uploadDirectConversationKeyPackage(
   const body = await expectJsonOk<{
     accepted: number;
     rejected?: Array<Record<string, unknown>>;
-  }>(response, `upload direct-conversation KeyPackage ${user.did}`);
+  }>(response, `upload direct-conversation KeyPackage ${user.id}`);
   expect(body.accepted).toBe(1);
   expect(body.rejected ?? []).toEqual([]);
 }
@@ -758,9 +764,9 @@ export type IntroductionEvidence =
 //   - payload.introduction_evidence_digest == sha256(canonical_json(evidence))
 //   - the invite id is retyped from the create Event id and omitted from payload
 export function buildInviteCreateEvent(args: {
-  inviterDid: string;
+  inviterId: string;
   realmId: string;
-  inviteeDid: string;
+  inviteeId: string;
   recipientServiceId: string;
   recipientServer?: SolandKey;
   evidence: IntroductionEvidence;
@@ -774,12 +780,12 @@ export function buildInviteCreateEvent(args: {
     .update(canonicalJson(args.evidence))
     .digest("hex")}`;
   const event = signedEventEnvelope({
-    actorDid: args.inviterDid,
+    actorId: args.inviterId,
     realmId: args.realmId,
     kind: "ak.invite.create",
     schemaId: "ak.schema.invite.v1",
     payload: {
-      invitee: args.inviteeDid,
+      invitee: args.inviteeId,
       invite_delivery_target: {
         recipient_service_id: args.recipientServiceId,
         recipient_service_kind: "principal_server",
@@ -816,10 +822,10 @@ export function buildInviteCreateEvent(args: {
 async function deliverInvite(
   request: APIRequestContext,
   args: {
-    inviterDid: string;
+    inviterId: string;
     inviterToken: string;
     realmId: string;
-    inviteeDid: string;
+    inviteeId: string;
     evidence: IntroductionEvidence;
     originServer: SolandKey;
     recipientServer: SolandKey;
@@ -834,9 +840,9 @@ async function deliverInvite(
 }> {
   const recipientServiceId = solandServiceId(args.recipientServer);
   const { event } = buildInviteCreateEvent({
-    inviterDid: args.inviterDid,
+    inviterId: args.inviterId,
     realmId: args.realmId,
-    inviteeDid: args.inviteeDid,
+    inviteeId: args.inviteeId,
     recipientServiceId,
     recipientServer: args.recipientServer,
     evidence: args.evidence,
@@ -859,7 +865,7 @@ async function deliverInvite(
   const acceptedEventId = String(event.event_id);
   const inviteId = retypeEventDerivedId(acceptedEventId, "invite");
   const inviteAddress = {
-    subject_id: args.inviteeDid,
+    subject_id: args.inviteeId,
     recipient_service_id: recipientServiceId,
     service_resolution: canonicalServiceResolution(args.recipientServer),
     recipient_service_kind: "principal_server" as const,
@@ -908,10 +914,10 @@ async function deliverInvite(
 export async function deliverInviteWithConsentGrant(
   request: APIRequestContext,
   args: {
-    inviterDid: string;
+    inviterId: string;
     inviterToken: string;
     realmId: string;
-    inviteeDid: string;
+    inviteeId: string;
     consentGrantRef: string;
     originServer: SolandKey;
     recipientServer: SolandKey;
@@ -938,10 +944,10 @@ export async function deliverInviteWithConsentGrant(
 export async function deliverInviteExplicitAddress(
   request: APIRequestContext,
   args: {
-    inviterDid: string;
+    inviterId: string;
     inviterToken: string;
     realmId: string;
-    inviteeDid: string;
+    inviteeId: string;
     originServer: SolandKey;
     recipientServer: SolandKey;
     idempotencyKey?: string;
@@ -974,12 +980,12 @@ export async function listAuthzInvitesArkret(
   token: string,
   opts: { server?: SolandKey } = {},
 ): Promise<AuthzInvite[]> {
-  const actorDid = await currentActorDidApi(request, token, opts);
+  const actorId = await currentActorIdApi(request, token, opts);
   const url = new URL(
     "/_arkret/self/authz/invites",
     solandBaseUrl(opts.server),
   );
-  url.searchParams.set("subject", actorDid);
+  url.searchParams.set("subject", actorId);
   const response = await request.get(url.toString(), {
     headers: {
       ...authHeaders(token, "GET", url.toString()),
@@ -1006,10 +1012,10 @@ export async function listAuthzInvitesArkret(
 export function countInvitesFor(
   invites: AuthzInvite[],
   realmId: string,
-  inviteeDid: string,
+  inviteeId: string,
 ): number {
   return invites.filter(
-    (invite) => invite.realm_id === realmId && invite.invitee === inviteeDid,
+    (invite) => invite.realm_id === realmId && invite.invitee === inviteeId,
   ).length;
 }
 
@@ -1018,7 +1024,7 @@ export async function acceptInviteArkret(
   request: APIRequestContext,
   token: string,
   args: {
-    accepterDid: string;
+    accepterId: string;
     realmId: string;
     inviteId: string;
     server?: SolandKey;
@@ -1029,7 +1035,7 @@ export async function acceptInviteArkret(
   return await acceptInviteApi(
     request,
     token,
-    args.accepterDid,
+    args.accepterId,
     args.realmId,
     args.inviteId,
     {

@@ -16,7 +16,7 @@ test.describe("account handoff and PCR genesis @fully-implemented", () => {
     expect(account.pcrGenesisReceipt.scope).toEqual(
       expect.objectContaining({ kind: "pcr_genesis_unit" }),
     );
-    expect(account.initialGrant.principalDid).toBe(account.did);
+    expect(account.initialGrant.principalId).toBe(account.id);
     expect(account.initialGrant.audience).toBe(solandServiceId());
     expect(account.initialGrant.scopes).toEqual([
       "ak.self.account.read.describe.v1",
@@ -50,7 +50,7 @@ test.describe("account handoff and PCR genesis @fully-implemented", () => {
       account,
     });
     expect(handoff.binding).toEqual(
-      expect.objectContaining({ state: "bound", principal_id: account.did }),
+      expect.objectContaining({ state: "bound", principal_id: account.id }),
     );
   });
 });

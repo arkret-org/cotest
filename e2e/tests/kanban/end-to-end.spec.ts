@@ -80,7 +80,7 @@ function relationObject(args: {
   relationKind: string;
   fromRef: string;
   toRef: string;
-  actorDid: string;
+  actorId: string;
 }): Record<string, unknown> {
   return {
     id: args.id,
@@ -89,7 +89,7 @@ function relationObject(args: {
     relation_kind: args.relationKind,
     from_ref: args.fromRef,
     to_ref: args.toRef,
-    created_by: args.actorDid,
+    created_by: args.actorId,
     created_at: canonicalTimestamp(),
   };
 }
@@ -160,13 +160,13 @@ async function setCardDetailEditorValue(page: Page, value: string): Promise<void
 async function createCardStrandApi(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   title: string,
 ): Promise<string> {
   const createdAt = canonicalTimestamp();
   const envelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.strand.create",
     createdAt,
@@ -180,7 +180,7 @@ async function createCardStrandApi(
         },
         stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
-        created_by: actorDid,
+        created_by: actorId,
         created_at: createdAt,
       },
     },
@@ -198,7 +198,7 @@ async function createCardStrandApi(
 async function createSpaceApi(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   kind: "board" | "list",
   title: string,
@@ -206,7 +206,7 @@ async function createSpaceApi(
 ): Promise<string> {
   const createdAt = canonicalTimestamp();
   const envelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.space.create",
     createdAt,
@@ -219,7 +219,7 @@ async function createSpaceApi(
         ...(parentSpaceId
           ? { parent_space_id: parentSpaceId, rank: "m" }
           : {}),
-        created_by: actorDid,
+        created_by: actorId,
         created_at: createdAt,
       },
     },
@@ -350,12 +350,12 @@ test.describe("kanban end-to-end", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `Kanban CAS ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const cardId = await createCardStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       `CAS Card ${stamp}`,
     );
@@ -363,7 +363,7 @@ test.describe("kanban end-to-end", () => {
     const boardSpaceId = await createSpaceApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       "board",
       `CAS Board ${stamp}`,
@@ -371,7 +371,7 @@ test.describe("kanban end-to-end", () => {
     const inProgressListId = await createSpaceApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       "list",
       `CAS In Progress ${stamp}`,
@@ -380,7 +380,7 @@ test.describe("kanban end-to-end", () => {
     const doneListId = await createSpaceApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       "list",
       `CAS Done ${stamp}`,
@@ -388,7 +388,7 @@ test.describe("kanban end-to-end", () => {
     );
 
     const winnerMove = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
       payload: {
@@ -399,7 +399,7 @@ test.describe("kanban end-to-end", () => {
       },
     });
     const loserMove = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
       payload: {
@@ -420,7 +420,7 @@ test.describe("kanban end-to-end", () => {
     await createCardStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       `CAS frontier advance ${stamp}`,
     );
@@ -460,30 +460,30 @@ test.describe("kanban end-to-end", () => {
 
     const realmA = await createRealmApi(request, aliceToken, {
       title: `Kanban Realm A ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const realmB = await createRealmApi(request, aliceToken, {
       title: `Kanban Realm B ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const cardInA = await createCardStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmA,
       `Card in A ${stamp}`,
     );
     const cardInB = await createCardStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmB,
       `Card in B ${stamp}`,
     );
 
     // contains edge in realm A pointing at a Card that lives in realm B.
     const crossRealm = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: realmA,
       kind: "ak.relation.create",
       payload: {
@@ -493,7 +493,7 @@ test.describe("kanban end-to-end", () => {
           relationKind: "contains",
           fromRef: cardInA,
           toRef: cardInB,
-          actorDid: alice.did,
+          actorId: alice.id,
         }),
       },
     });
@@ -529,12 +529,12 @@ test.describe("kanban end-to-end", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `Kanban Archived ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const cardId = await createCardStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       `Archived Card ${stamp}`,
     );
@@ -545,7 +545,7 @@ test.describe("kanban end-to-end", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         kind: "ak.strand.archive",
         payload: { target_ref: cardId },
@@ -555,7 +555,7 @@ test.describe("kanban end-to-end", () => {
 
     // Post into the archived Card's discussion track → strand_not_active.
     const trackWrite = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.tracks.update",
       payload: {

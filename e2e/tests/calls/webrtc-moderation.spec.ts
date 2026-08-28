@@ -62,13 +62,13 @@ test.describe("call moderation (spec wire)", () => {
     const callId = await createCallApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       "ringing",
     );
 
     const moderation = buildCallSignalEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       deviceId: alice.deviceId,
       realmId,
       callId,
@@ -76,7 +76,7 @@ test.describe("call moderation (spec wire)", () => {
       seq: 1,
       data: {
         action: "kick",
-        target_actor_id: bob.did,
+        target_actor_id: bob.id,
         target_device_id: bob.deviceId,
         reason: "policy_violation",
       },
@@ -97,7 +97,7 @@ test.describe("call moderation (spec wire)", () => {
       unknown
     >;
     expect(data.action).toBe("kick");
-    expect(data.target_actor_id).toBe(bob.did);
+    expect(data.target_actor_id).toBe(bob.id);
     expect(data.target_device_id).toBe(bob.deviceId);
     // The moderation frame MUST carry a verifiable proof (§3a — signed by the
     // moderator).
@@ -119,13 +119,13 @@ test.describe("call moderation (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
         signalType: "moderation",
         seq: 1,
-        data: { action: "ban", target_actor_id: bob.did },
+        data: { action: "ban", target_actor_id: bob.id },
       }),
     );
 
@@ -143,7 +143,7 @@ test.describe("call moderation (spec wire)", () => {
       unknown
     >;
     expect(data.action).toBe("ban");
-    expect(data.target_actor_id).toBe(bob.did);
+    expect(data.target_actor_id).toBe(bob.id);
     expect(data.target_device_id).toBeUndefined();
   });
 
@@ -162,7 +162,7 @@ test.describe("call moderation (spec wire)", () => {
 
     // bob is a member but holds NO call capability.
     const moderation = buildCallSignalEnvelope({
-      actorDid: bob.did,
+      actorId: bob.id,
       deviceId: bob.deviceId,
       realmId,
       callId,
@@ -170,7 +170,7 @@ test.describe("call moderation (spec wire)", () => {
       seq: 1,
       data: {
         action: "kick",
-        target_actor_id: alice.did,
+        target_actor_id: alice.id,
         target_device_id: alice.deviceId,
       },
     });
@@ -186,13 +186,13 @@ test.describe("call moderation (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
         signalType: "moderation",
         seq: 1,
-        data: { action: "kick", target_actor_id: bob.did, target_device_id: bob.deviceId },
+        data: { action: "kick", target_actor_id: bob.id, target_device_id: bob.deviceId },
       }),
     );
     const received = (
@@ -218,7 +218,7 @@ test.describe("call moderation (spec wire)", () => {
       request,
       aliceToken,
       realmId,
-      alice.did,
+      alice.id,
       serviceId(),
       [livekitFocus()],
     );
@@ -226,15 +226,15 @@ test.describe("call moderation (spec wire)", () => {
     await grantCallCapability(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
-      bob.did,
+      bob.id,
       CAP_CALL_JOIN,
     );
     const callId = await createCallApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       "ringing",
     );
@@ -243,7 +243,7 @@ test.describe("call moderation (spec wire)", () => {
     const preBan = await exchangeMediaToken(request, bobToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: bob.did,
+      actor_id: bob.id,
       device_id: bob.deviceId,
       focus_id: livekitFocus().focus_id,
     });
@@ -251,9 +251,9 @@ test.describe("call moderation (spec wire)", () => {
 
     // A moderator actor-wide-bans bob: the durable moderation OR-Set value
     // carries a `ban` with no device_id (§3a).
-    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+    await seedCallState(request, aliceToken, alice.id, realmId, callId, {
       state: "active",
-      removedParticipants: [{ actor_id: bob.did, action: "ban" }],
+      removedParticipants: [{ actor_id: bob.id, action: "ban" }],
     });
 
     // Post-ban: once the reducer projection has made the durable ban row
@@ -265,7 +265,7 @@ test.describe("call moderation (spec wire)", () => {
           const response = await exchangeMediaToken(request, bobToken, {
             realm_id: realmId,
             call_id: callId,
-            actor_id: bob.did,
+            actor_id: bob.id,
             device_id: bob.deviceId,
             focus_id: livekitFocus().focus_id,
           });

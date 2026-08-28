@@ -12,18 +12,18 @@
     {
       "name": "device_authorized_alice",
       "kind": "ak.device.authorize",
-      "components_array": ["did:web:alice.example", "dev_alice_01"],
+      "components_array": ["ak:did_core:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
-      "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",
-      "expected_state_subject": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
+      "expected_canonical_json": "[\"ak:did_core:web:alice.example\",\"dev_alice_01\"]",
+      "expected_state_subject": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y"
     },
     {
       "name": "device_revoked_same_subject_as_authorized_supersede",
       "kind": "ak.device.revoke",
-      "components_array": ["did:web:alice.example", "dev_alice_01"],
+      "components_array": ["ak:did_core:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
-      "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",
-      "expected_state_subject": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI",
+      "expected_canonical_json": "[\"ak:did_core:web:alice.example\",\"dev_alice_01\"]",
+      "expected_state_subject": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y",
       "comment": "device.authorized and device.revoked share a cell via component_slot_alias_of; their cell-subject hash is identical — revoke supersedes grant (cf. consent.grant/revoke + capability.grant/revoke patterns)."
     }
   ],
@@ -31,16 +31,16 @@
     {
       "name": "wrong_component_order_collides_into_different_subject",
       "kind": "ak.device.authorize",
-      "components_array": ["dev_alice_01", "did:web:alice.example"],
+      "components_array": ["dev_alice_01", "ak:did_core:web:alice.example"],
       "comment": "If a buggy implementation reorders components_array (e.g. device_id before principal_id) it MUST produce a different hash from the canonical order — proving the order matters. Cotest computes the resulting hash and asserts it differs from the canonical device_authorized_alice subject.",
-      "must_differ_from": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
+      "must_differ_from": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y"
     },
     {
       "name": "pipe_form_must_not_be_used_as_canonical",
       "kind": "ak.device.authorize",
-      "pipe_form": "did:web:alice.example|dev_alice_01",
+      "pipe_form": "ak:did_core:web:alice.example|dev_alice_01",
       "comment": "The pipe-separated form is informational only. Cotest verifies that hashing the pipe string would not produce the canonical state_subject — implementations that use it would diverge.",
-      "must_differ_from": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
+      "must_differ_from": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y"
     }
   ]
 }

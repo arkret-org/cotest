@@ -79,7 +79,7 @@ test.beforeEach(() => {
 async function waitForInvite(
   request: APIRequestContext,
   token: string,
-  inviteeDid: string,
+  inviteeId: string,
   realmId: string,
   server: "alpha" | "beta",
 ) {
@@ -98,7 +98,7 @@ async function waitForInvite(
         const invites = await listInvitesApi(request, token, { server });
         found = invites.find(
           (invite) =>
-            invite.invitee === inviteeDid && invite.realm_id === realmId,
+            invite.invitee === inviteeId && invite.realm_id === realmId,
         );
         return Boolean(found);
       },
@@ -111,7 +111,7 @@ async function waitForInvite(
 async function waitForMember(
   request: APIRequestContext,
   token: string,
-  memberDid: string,
+  memberId: string,
   realmId: string,
   server: "alpha" | "beta",
 ) {
@@ -126,7 +126,7 @@ async function waitForMember(
           return false;
         }
         const body = await response.json();
-        return Array.isArray(body.members) && body.members.includes(memberDid);
+        return Array.isArray(body.members) && body.members.includes(memberId);
       },
       { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
     )
@@ -156,34 +156,25 @@ async function waitForEventBody(
 }
 
 function unsignedPeerQueryHeaders(
-  sourceDid: string,
-  destinationDid: string,
+  sourceServiceId: string,
+  destinationServiceId: string,
 ): Record<string, string> {
   return {
-    "source-service-id": sourceDid,
-    "destination-service-id": destinationDid,
-    "source-trust-domain": trustDomainFromServiceId(sourceDid),
-    "destination-trust-domain": trustDomainFromServiceId(destinationDid),
+    "source-service-id": sourceServiceId,
+    "destination-service-id": destinationServiceId,
+    "source-trust-domain": trustDomainFromServiceId(sourceServiceId),
+    "destination-trust-domain": trustDomainFromServiceId(destinationServiceId),
   };
 }
 
 function trustDomainFromServiceId(serviceId: string): string {
-  const webHost = serviceId.startsWith("did:web:")
-    ? serviceId.slice("did:web:".length).split(":")[0]
-    : undefined;
-  const webvhHost = serviceId.startsWith("did:webvh:")
-    ? serviceId.slice("did:webvh:".length).split(":")[1]
-    : undefined;
-  const keyScope = serviceId.startsWith("did:key:")
-    ? serviceId.slice("did:key:".length)
-    : undefined;
-  const rawScope = webHost ?? webvhHost ?? keyScope ?? serviceId;
-  const scope = rawScope
-    .split(/%3a/i)[0]
-    .replace(/\.+$/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9.\-_:]/g, "");
-  return `ak:trust_domain:${scope || "local"}`;
+  if (
+    serviceId !== solandServiceId("alpha") &&
+    serviceId !== solandServiceId("beta")
+  ) {
+    throw new Error(`unexpected local federation service id: ${serviceId}`);
+  }
+  return "ak:trust_domain:local.host";
 }
 
 test.describe("cross-server federation", () => {
@@ -268,7 +259,7 @@ test.describe("cross-server federation", () => {
       });
       expect(aliceMeResp.ok()).toBeTruthy();
       const aliceMe = await aliceMeResp.json();
-      expect(aliceMe.did).toBe(aliceSession!.user.did);
+      expect(aliceMe.principal_id).toBe(aliceSession!.user.id);
 
       const bobMeUrl = `${solandBaseUrl("beta")}/_soland/self/account/me`;
       const bobMeResp = await request.get(bobMeUrl, {
@@ -276,7 +267,7 @@ test.describe("cross-server federation", () => {
       });
       expect(bobMeResp.ok()).toBeTruthy();
       const bobMe = await bobMeResp.json();
-      expect(bobMe.did).toBe(bob.did);
+      expect(bobMe.principal_id).toBe(bob.id);
     } finally {
       await alicePage.close();
     }
@@ -314,7 +305,7 @@ test.describe("cross-server federation", () => {
         joinRule: "invite",
         historyAccess: "since_join",
       });
-      await alicePage.inviteFromAdmin(realmId, bob.did, undefined, {
+      await alicePage.inviteFromAdmin(realmId, bob.id, undefined, {
         token: bobLocatorToken,
         serverUrl: solandBaseUrl("beta"),
       });
@@ -325,8 +316,8 @@ test.describe("cross-server federation", () => {
         .getByTestId("members-section-pending-invites")
         .click();
       const aliceInviteRow = alicePage.page.locator(
-        `[data-testid="pending-invite-row"][data-member-did="${bob.did}"], ` +
-          `[data-testid="invite-row"][data-member-did="${bob.did}"]`,
+        `[data-testid="pending-invite-row"][data-member-did="${bob.id}"], ` +
+          `[data-testid="invite-row"][data-member-did="${bob.id}"]`,
       );
       await expect(aliceInviteRow).toBeVisible({ timeout: 30_000 });
     } finally {
@@ -354,7 +345,7 @@ test.describe("cross-server federation", () => {
       aliceToken,
       {
         title: `S2 pushed invite ${stamp}`,
-        ownerDid: alice.did,
+        ownerId: alice.id,
         creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
@@ -424,7 +415,7 @@ test.describe("cross-server federation", () => {
     const inviteEvent = makeFederationEvent({
       realmId,
       kind: "ak.invite.create",
-      actorDid: alice.did,
+      actorId: alice.id,
       sealBasis: {
         leaves: [leaves![0]],
         control_event_set_root: String(acceptedSeal.control_event_set_root),
@@ -432,7 +423,7 @@ test.describe("cross-server federation", () => {
       },
       payload: {
         invite_id: inviteId,
-        invitee: bob.did,
+        invitee: bob.id,
         invite_delivery_target: {
           recipient_service_id: solandServiceId("beta"),
           recipient_service_kind: "principal_server",
@@ -459,7 +450,7 @@ test.describe("cross-server federation", () => {
             server: "beta",
           });
           return invites.some(
-            (item) => item.realm_id === realmId && item.invitee === bob.did,
+            (item) => item.realm_id === realmId && item.invitee === bob.id,
           );
         },
         { timeout: 20_000 },
@@ -480,7 +471,7 @@ test.describe("cross-server federation", () => {
 
     const pullBody = await queryPeerEventsApi(request, {
       server: "beta",
-      sourceDid: solandServiceId("alpha"),
+      sourceServiceId: solandServiceId("alpha"),
       realmId,
       limit: 10,
     });
@@ -495,13 +486,13 @@ test.describe("cross-server federation", () => {
 
     const invites = await listInvitesApi(request, bobToken, { server: "beta" });
     const invite = invites.find(
-      (item) => item.realm_id === realmId && item.invitee === bob.did,
+      (item) => item.realm_id === realmId && item.invitee === bob.id,
     );
     expect(invite).toBeTruthy();
     await acceptInviteApi(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       invite!.realm_id,
       invite!.id,
       { server: "beta" },
@@ -512,7 +503,7 @@ test.describe("cross-server federation", () => {
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();
-    expect((await betaSpace.json()).members ?? []).toContain(bob.did);
+    expect((await betaSpace.json()).members ?? []).toContain(bob.id);
   });
 
   test("α invite UI event fans out to β and standard peer Events propagates β acceptance back to α", async ({
@@ -551,7 +542,7 @@ test.describe("cross-server federation", () => {
         joinRule: "invite",
         historyAccess: "since_join",
       });
-      await alicePage.inviteFromAdmin(realmId, bob.did, undefined, {
+      await alicePage.inviteFromAdmin(realmId, bob.id, undefined, {
         token: bobLocatorToken,
         serverUrl: solandBaseUrl("beta"),
       });
@@ -560,12 +551,12 @@ test.describe("cross-server federation", () => {
       const betaInvite = await waitForInvite(
         request,
         bobToken,
-        bob.did,
+        bob.id,
         realmId,
         "beta",
       );
       const acceptanceEvent = signedEventEnvelope({
-        actorDid: bob.did,
+        actorId: bob.id,
         realmId: betaInvite.realm_id,
         kind: "ak.invite.accept",
         payload: {
@@ -643,7 +634,7 @@ test.describe("cross-server federation", () => {
               return false;
             }
             const body = (await response.json()) as { members?: string[] };
-            return body.members?.includes(bob.did) ?? false;
+            return body.members?.includes(bob.id) ?? false;
           },
           { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
         )
@@ -673,9 +664,9 @@ test.describe("cross-server federation", () => {
         title: `S2 two-way ${stamp}`,
         discoverability: "listed",
         history_access: "all_history_for_current_members",
-        invitees: [bob.did],
-        invitee_service_ids: { [bob.did]: solandServiceId("beta") },
-        ownerDid: alice.did,
+        invitees: [bob.id],
+        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        ownerId: alice.id,
         creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
@@ -688,21 +679,21 @@ test.describe("cross-server federation", () => {
     const betaInvite = await waitForInvite(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       realmId,
       "beta",
     );
     await acceptInviteApi(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       betaInvite.realm_id,
       betaInvite.id,
       {
         server: "beta",
       },
     );
-    await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
+    await waitForMember(request, aliceToken, bob.id, realmId, "alpha");
 
     const aliceBody = `alice from alpha ${stamp}`;
     await sendMessageApi(request, aliceToken, realmId, aliceBody, {
@@ -737,9 +728,9 @@ test.describe("cross-server federation", () => {
         title: `S2 backfill ${stamp}`,
         discoverability: "listed",
         history_access: "all_history_for_current_members",
-        invitees: [bob.did],
-        invitee_service_ids: { [bob.did]: solandServiceId("beta") },
-        ownerDid: alice.did,
+        invitees: [bob.id],
+        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        ownerId: alice.id,
         creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
@@ -752,27 +743,27 @@ test.describe("cross-server federation", () => {
     const betaInvite = await waitForInvite(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       realmId,
       "beta",
     );
     await acceptInviteApi(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       betaInvite.realm_id,
       betaInvite.id,
       {
         server: "beta",
       },
     );
-    await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
+    await waitForMember(request, aliceToken, bob.id, realmId, "alpha");
 
     const missingBody = `pulled after partition ${stamp}`;
     const missingEvent = makeFederationEvent({
       realmId,
       kind: "ak.message.create",
-      actorDid: alice.did,
+      actorId: alice.id,
       payload: {
         strand_id: typedId("strand"),
         track_name: "discussion",
@@ -847,7 +838,7 @@ test.describe("cross-server federation", () => {
 
     const backfill = await queryPeerEventsApi(request, {
       server: "alpha",
-      sourceDid: solandServiceId("beta"),
+      sourceServiceId: solandServiceId("beta"),
       realmId,
       limit: 100,
     });
@@ -931,9 +922,9 @@ test.describe("cross-server federation", () => {
         title: `S2 revoke fanout ${stamp}`,
         discoverability: "listed",
         history_access: "all_history_for_current_members",
-        invitees: [bob.did],
-        invitee_service_ids: { [bob.did]: solandServiceId("beta") },
-        ownerDid: alice.did,
+        invitees: [bob.id],
+        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        ownerId: alice.id,
         creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
@@ -945,24 +936,24 @@ test.describe("cross-server federation", () => {
     const betaInvite = await waitForInvite(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       realmId,
       "beta",
     );
     await acceptInviteApi(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       betaInvite.realm_id,
       betaInvite.id,
       { server: "beta" },
     );
-    await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
+    await waitForMember(request, aliceToken, bob.id, realmId, "alpha");
 
     // Alice (Realm owner) delegates the federation delivery binding policy to
     // β's service DID, then confirms a baseline message still fans out to β.
     const grantId = await grantServiceCapabilityApi(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
       subjectServiceId: solandServiceId("beta"),
     });
@@ -975,7 +966,7 @@ test.describe("cross-server federation", () => {
     // Revoke β's service delegation. Per §4.4 the source server MUST stop
     // pushing future events to β.
     await revokeCapabilityApi(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
       grantId,
     });
@@ -1023,7 +1014,7 @@ test.describe("cross-server federation", () => {
     const event = makeFederationEvent({
       realmId,
       kind: "ak.message.create",
-      actorDid: "did:web:alice-rfc9421.example",
+      actorId: "ak:did_core:web:alice-rfc9421.example",
       payload: {
         strand_id: typedId("strand"),
         track_name: "discussion",

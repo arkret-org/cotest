@@ -51,10 +51,10 @@ test.describe("realm links", () => {
       // policy allow-list (the rule that downstream realms may inherit).
       const govRealmId = await createRealmApi(request, aliceToken, {
         title: `models/realm-links Gov Realm ${stamp}`,
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       const govPolicyEnvelope = signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: govRealmId,
         kind: "ak.realm.inheritance_policy",
         payload: {
@@ -73,7 +73,7 @@ test.describe("realm links", () => {
       // and explicitly opts into inheriting from G (spec §6.1).
       const teamRealmId = await createRealmApi(request, aliceToken, {
         title: `models/realm-links Team Realm ${stamp}`,
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       const linkRes = await request.post(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
@@ -90,7 +90,7 @@ test.describe("realm links", () => {
       expect(linkRes.ok()).toBeTruthy();
 
       const teamPolicyEnvelope = signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: teamRealmId,
         kind: "ak.realm.inheritance_policy",
         payload: {
@@ -122,7 +122,7 @@ test.describe("realm links", () => {
       // in; its effective policy stays mode=none and empty.
       const team2RealmId = await createRealmApi(request, aliceToken, {
         title: `models/realm-links Team Realm 2 ${stamp}`,
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       await request.post(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(team2RealmId)}/links`,
@@ -249,13 +249,13 @@ test.describe("realm links", () => {
       const mk = async (label: string, policies: string[]) => {
         const id = await createRealmApi(request, aliceToken, {
           title: `multi-${label}-${stamp}`,
-          ownerDid: alice.did,
+          ownerId: alice.id,
         });
         await submitSignedEventApi(
           request,
           aliceToken,
           signedEventEnvelope({
-            actorDid: alice.did,
+            actorId: alice.id,
             realmId: id,
             kind: "ak.realm.inheritance_policy",
             payload: {
@@ -274,7 +274,7 @@ test.describe("realm links", () => {
 
       const T = await createRealmApi(request, aliceToken, {
         title: `multi-T-${stamp}`,
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       for (const G of [G1, G2]) {
         await request.post(
@@ -288,7 +288,7 @@ test.describe("realm links", () => {
           request,
           aliceToken,
           signedEventEnvelope({
-            actorDid: alice.did,
+            actorId: alice.id,
             realmId: T,
             kind: "ak.realm.inheritance_policy",
             payload: {
@@ -350,13 +350,13 @@ test.describe("realm links", () => {
       // alice owns governance Realm G.
       const G = await createRealmApi(request, aliceToken, {
         title: `cap-G-${stamp}`,
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
 
       // bob owns team Realm T (alice is NOT a member of T).
       const T = await createRealmApi(request, bobToken, {
         title: `cap-T-${stamp}`,
-        ownerDid: bob.did,
+        ownerId: bob.id,
       });
 
       // alice links T --governed_by--> G from G's side (the link is declared
@@ -378,12 +378,12 @@ test.describe("realm links", () => {
       const attempt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: aliceAuth,
         data: signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId: T,
           kind: "ak.member.state",
           payload: {
             realm_id: T,
-            actor_id: bob.did,
+            actor_id: bob.id,
             membership: "ban",
           },
         }),

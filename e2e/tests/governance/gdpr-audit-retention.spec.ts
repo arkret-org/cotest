@@ -81,7 +81,7 @@ test.describe("GDPR / audit / retention", () => {
     });
     expect(exportResp.status()).toBe(200);
     const bundle = await exportResp.json();
-    expect(bundle.did).toBe(alice.did);
+    expect(bundle.principal_id).toBe(alice.id);
     expect(bundle.account).toBeTruthy();
     expect(bundle.profile).toBeTruthy();
     expect(Array.isArray(bundle.realms)).toBe(true);
@@ -149,12 +149,12 @@ test.describe("GDPR / audit / retention", () => {
     const bobToken = await issueDevSession(request, bob);
 
     // bob and alice connect so bob's directory search can see alice pre-erase.
-    const { outcome } = await requestContactArkret(request, bobToken, alice.did, {
+    const { outcome } = await requestContactArkret(request, bobToken, alice.id, {
       requestedScopes: ["direct_message"],
     });
     await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
-      requester: bob.did,
+      requester: bob.id,
       action: "accept",
       grantedScopes: ["direct_message"],
     });
@@ -162,13 +162,13 @@ test.describe("GDPR / audit / retention", () => {
     // Pre-erasure: bob's directory search returns alice.
     const before = await request.post(`${solandBaseUrl()}/_arkret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
-      data: { query: alice.did },
+      data: { query: alice.id },
     });
     const beforeBody = await before.json();
     expect(
       (
-        beforeBody.actors as Array<{ actor_id?: string; preview?: { did?: string } }>
-      ).some((r) => r.actor_id === alice.did || r.preview?.did === alice.did),
+        beforeBody.actors as Array<{ actor_id?: string }>
+      ).some((r) => r.actor_id === alice.id),
       "alice must be visible to bob pre-erasure",
     ).toBe(true);
 
@@ -182,13 +182,13 @@ test.describe("GDPR / audit / retention", () => {
     // Post-erasure: bob's directory search no longer returns alice.
     const after = await request.post(`${solandBaseUrl()}/_arkret/find/directory/search-actors`, {
       headers: { authorization: `Bearer ${bobToken}` },
-      data: { query: alice.did },
+      data: { query: alice.id },
     });
     const afterBody = await after.json();
     expect(
       (
-        afterBody.actors as Array<{ actor_id?: string; preview?: { did?: string } }>
-      ).some((r) => r.actor_id === alice.did || r.preview?.did === alice.did),
+        afterBody.actors as Array<{ actor_id?: string }>
+      ).some((r) => r.actor_id === alice.id),
       "alice MUST NOT appear in directory after erasure",
     ).toBe(false);
   });
@@ -250,7 +250,7 @@ test.describe("GDPR / audit / retention", () => {
       title: `S27 retention ${stamp}`,
       discoverability: "listed",
       history_access: "all_history_for_current_members",
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     // `realm.schema.json` is closed and declares only `retention_policy_id`
     // (a reference to a policy object) — never an inline `retention_policy`.
@@ -353,9 +353,9 @@ test.describe("GDPR / audit / retention", () => {
           title: `S27 fanout ${stamp}`,
           discoverability: "listed",
           history_access: "all_history_for_current_members",
-          invitees: [bob.did],
-          invitee_service_ids: { [bob.did]: solandServiceId("beta") },
-          ownerDid: alice.did,
+          invitees: [bob.id],
+          invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+          ownerId: alice.id,
           creator_service_id: solandServiceId("alpha"),
           plaintext_visible_services: [
             solandServiceId("alpha"),
@@ -376,7 +376,7 @@ test.describe("GDPR / audit / retention", () => {
             });
             betaInvite = invites.find(
               (invite) =>
-                invite.invitee === bob.did &&
+                invite.invitee === bob.id &&
                 invite.realm_id === realmId,
             );
             return Boolean(betaInvite);
@@ -387,7 +387,7 @@ test.describe("GDPR / audit / retention", () => {
       await acceptInviteApi(
         request,
         bobToken,
-        bob.did,
+        bob.id,
         betaInvite!.realm_id,
         betaInvite!.id,
         { server: "beta" },
@@ -412,12 +412,12 @@ test.describe("GDPR / audit / retention", () => {
 
       const remoteBefore = await queryPeerEventsApi(request, {
         server: "beta",
-        actorDid: alice.did,
-        sourceDid: solandServiceId("alpha"),
+        actorId: alice.id,
+        sourceServiceId: solandServiceId("alpha"),
         limit: 100,
       });
       const beforeJson = JSON.stringify(remoteBefore);
-      expect(beforeJson).toContain(alice.did);
+      expect(beforeJson).toContain(alice.id);
       expect(beforeJson).toContain(aliceBody);
 
       const erase = await request.post(`${solandBaseUrl("alpha")}/_soland/self/account/erase`, {
@@ -433,8 +433,8 @@ test.describe("GDPR / audit / retention", () => {
           async () => {
             const remoteAfter = await queryPeerEventsApi(request, {
               server: "beta",
-              actorDid: alice.did,
-              sourceDid: solandServiceId("alpha"),
+              actorId: alice.id,
+              sourceServiceId: solandServiceId("alpha"),
               limit: 100,
             });
             return JSON.stringify(remoteAfter);

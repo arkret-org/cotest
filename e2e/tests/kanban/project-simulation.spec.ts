@@ -128,7 +128,7 @@ async function readSpaceRow(
 async function createBoardWithCard(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   opts: {
     boardTitle: string;
@@ -140,7 +140,7 @@ async function createBoardWithCard(
   const createdAt = canonicalTimestamp();
 
   const boardEnvelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.space.create",
     createdAt,
@@ -150,7 +150,7 @@ async function createBoardWithCard(
         realm_id: realmId,
         kind: "board",
         title: opts.boardTitle,
-        created_by: actorDid,
+        created_by: actorId,
         created_at: createdAt,
       },
     },
@@ -164,7 +164,7 @@ async function createBoardWithCard(
   );
 
   const listEnvelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.space.create",
     createdAt,
@@ -176,7 +176,7 @@ async function createBoardWithCard(
         title: opts.listTitle,
         parent_space_id: boardId,
         rank: "r001",
-        created_by: actorDid,
+        created_by: actorId,
         created_at: createdAt,
       },
     },
@@ -190,7 +190,7 @@ async function createBoardWithCard(
   );
 
   const cardEnvelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.strand.create",
     createdAt,
@@ -210,7 +210,7 @@ async function createBoardWithCard(
         },
         stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
-        created_by: actorDid,
+        created_by: actorId,
         created_at: createdAt,
       },
     },
@@ -233,7 +233,7 @@ async function createBoardWithCard(
 async function registerSingleAssigneeProfile(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
 ): Promise<void> {
   const relationProfiles = [
@@ -251,7 +251,7 @@ async function registerSingleAssigneeProfile(
     request,
     token,
     signedEventEnvelope({
-      actorDid,
+      actorId,
       realmId,
       kind: "ak.realm.policy_bundle",
       payload: {
@@ -293,7 +293,7 @@ test.describe("project simulation", () => {
         title: `S16 Sprint ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        seedMembers: [bob.did, carol.did],
+        seedMembers: [bob.id, carol.id],
       });
 
       // acceptInvite throws on non-2xx; success means the invite was
@@ -333,15 +333,15 @@ test.describe("project simulation", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Assign ${stamp}`,
-      ownerDid: alice.did,
-      invitees: [bob.did],
+      ownerId: alice.id,
+      invitees: [bob.id],
     });
-    await acceptInviteViaApi(request, bobToken, bob.did, realmId);
+    await acceptInviteViaApi(request, bobToken, bob.id, realmId);
 
     const { cardId } = await createBoardWithCard(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       {
         boardTitle: `S16 Board ${stamp}`,
@@ -352,7 +352,7 @@ test.describe("project simulation", () => {
 
     const relationId = typedId("relation");
     const assignment = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
       payload: {
@@ -362,8 +362,8 @@ test.describe("project simulation", () => {
           realm_id: realmId,
           relation_kind: "assigned_to",
           from_ref: cardId,
-          to_ref: bob.did,
-          created_by: alice.did,
+          to_ref: bob.id,
+          created_by: alice.id,
           created_at: canonicalTimestamp(),
         },
       },
@@ -375,11 +375,11 @@ test.describe("project simulation", () => {
     // bob reads the Realm's strands and finds himself on Card 1.
     const row = await readStrandRow(request, bobToken, realmId, cardId);
     expect(row, "Card 1 visible to bob").toBeTruthy();
-    expect(row?.assigned_actor_ids ?? []).toContain(bob.did);
+    expect(row?.assigned_actor_ids ?? []).toContain(bob.id);
     expect(
       (row?.assigned_to_relations ?? []).some(
         (relation) =>
-          relation.actor_id === bob.did && relation.relation_id === relationId,
+          relation.actor_id === bob.id && relation.relation_id === relationId,
       ),
       "assigned_to relation surfaces with bob's actor + relation id",
     ).toBe(true);
@@ -393,7 +393,7 @@ test.describe("project simulation", () => {
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 FSM ${Date.now()}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const taskStrandId = typedId("strand");
     const incidentStrandId = typedId("strand");
@@ -403,7 +403,7 @@ test.describe("project simulation", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: realmId,
         kind: "ak.strand.create",
         createdAt: taskCreatedAt,
@@ -418,7 +418,7 @@ test.describe("project simulation", () => {
             },
             stage: "planned",
             tracks: { discussion: { enabled: true, is_primary: true } },
-            created_by: alice.did,
+            created_by: alice.id,
             created_at: taskCreatedAt,
           },
         },
@@ -427,7 +427,7 @@ test.describe("project simulation", () => {
     );
 
     const badDoneEvent = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.update",
       payload: {
@@ -453,7 +453,7 @@ test.describe("project simulation", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: realmId,
         kind: "ak.strand.update",
         payload: {
@@ -468,7 +468,7 @@ test.describe("project simulation", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: realmId,
         kind: "ak.strand.update",
         payload: {
@@ -484,7 +484,7 @@ test.describe("project simulation", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: realmId,
         kind: "ak.strand.create",
         createdAt: incidentCreatedAt,
@@ -499,7 +499,7 @@ test.describe("project simulation", () => {
             },
             stage: "in_progress",
             tracks: { discussion: { enabled: true, is_primary: true } },
-            created_by: alice.did,
+            created_by: alice.id,
             created_at: incidentCreatedAt,
           },
         },
@@ -508,7 +508,7 @@ test.describe("project simulation", () => {
     );
 
     const badResolvedEvent = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.update",
       payload: {
@@ -666,19 +666,19 @@ test.describe("project simulation", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Conflict ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     await registerSingleAssigneeProfile(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
     );
 
     const { cardId } = await createBoardWithCard(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       {
         boardTitle: `Conflict Board ${stamp}`,
@@ -691,7 +691,7 @@ test.describe("project simulation", () => {
     // single-assignee profile (max_to_per_from=1) forces a conflict; the
     // complete head set remains available for a later explicit resolution.
     const assignToAlice = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
       payload: {
@@ -701,14 +701,14 @@ test.describe("project simulation", () => {
           realm_id: realmId,
           relation_kind: "assigned_to",
           from_ref: cardId,
-          to_ref: alice.did,
-          created_by: alice.did,
+          to_ref: alice.id,
+          created_by: alice.id,
           created_at: canonicalTimestamp(),
         },
       },
     });
     const assignToBob = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
       payload: {
@@ -718,8 +718,8 @@ test.describe("project simulation", () => {
           realm_id: realmId,
           relation_kind: "assigned_to",
           from_ref: cardId,
-          to_ref: bob.did,
-          created_by: alice.did,
+          to_ref: bob.id,
+          created_by: alice.id,
           created_at: canonicalTimestamp(),
         },
       },
@@ -756,12 +756,12 @@ test.describe("project simulation", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Unassign ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const { cardId } = await createBoardWithCard(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       {
         boardTitle: `Unassign Board ${stamp}`,
@@ -775,7 +775,7 @@ test.describe("project simulation", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         kind: "ak.relation.create",
         payload: {
@@ -785,8 +785,8 @@ test.describe("project simulation", () => {
             realm_id: realmId,
             relation_kind: "assigned_to",
             from_ref: cardId,
-            to_ref: bob.did,
-            created_by: alice.did,
+            to_ref: bob.id,
+            created_by: alice.id,
             created_at: canonicalTimestamp(),
           },
         },
@@ -795,14 +795,14 @@ test.describe("project simulation", () => {
     );
 
     const assigned = await readStrandRow(request, aliceToken, realmId, cardId);
-    expect(assigned?.assigned_actor_ids ?? []).toContain(bob.did);
+    expect(assigned?.assigned_actor_ids ?? []).toContain(bob.id);
 
     // Unassign: tombstone the assigned_to edge.
     await submitSignedEventApi(
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         kind: "ak.relation.tombstone",
         payload: {
@@ -819,7 +819,7 @@ test.describe("project simulation", () => {
       realmId,
       cardId,
     );
-    expect(unassigned?.assigned_actor_ids ?? []).not.toContain(bob.did);
+    expect(unassigned?.assigned_actor_ids ?? []).not.toContain(bob.id);
     expect(
       (unassigned?.assigned_to_relations ?? []).some(
         (relation) => relation.relation_id === relationId,
@@ -843,12 +843,12 @@ test.describe("project simulation", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Archive ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const { boardId, listId, cardId } = await createBoardWithCard(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       {
         boardTitle: `Sprint board ${stamp}`,
@@ -866,10 +866,10 @@ test.describe("project simulation", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         kind: "ak.space.archive",
-        payload: { space_id: boardId, sender: alice.did },
+        payload: { space_id: boardId, sender: alice.id },
       }),
       { context: "archive board" },
     );
@@ -893,7 +893,7 @@ test.describe("project simulation", () => {
 
     // Read-only: a write to the archived Card is rejected (strand_not_active).
     const writeEnvelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.update",
       payload: {

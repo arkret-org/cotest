@@ -50,10 +50,10 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
       ]);
       expect(
         JSON.parse(aliceConfigRaw ?? "{}").active_account?.authority?.principal_id,
-      ).toBe(alice.did);
+      ).toBe(alice.id);
       expect(
         JSON.parse(bobConfigRaw ?? "{}").active_account?.authority?.principal_id,
-      ).toBe(bob.did);
+      ).toBe(bob.id);
 
       const realmId = await alicePage.createRealm({
         title: realmTitle,
@@ -69,9 +69,9 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
         request,
         aliceFlow.session.grantJwt,
         realmId,
-        { authorityRootController: alice.did },
+        { authorityRootController: alice.id },
       );
-      await alicePage.inviteFromAdmin(realmId, bob.did);
+      await alicePage.inviteFromAdmin(realmId, bob.id);
 
       await bobPage.acceptInviteFromNotifications(realmId);
       // Membership and message authority are intentionally independent.
@@ -79,9 +79,9 @@ test.describe("same-server multi-profile UI @fully-implemented", () => {
         request,
         aliceFlow.session.grantJwt,
         {
-          ownerDid: alice.did,
+          ownerId: alice.id,
           realmId,
-          subjectDid: bob.did,
+          subjectId: bob.id,
           actions: ["ak.message.create"],
         },
       );

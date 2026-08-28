@@ -222,7 +222,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         "one_time_use_consumed": false,
         "grant": {
             "id": "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD",
-            "issuer": "did:web:coauth.cotest.local",
+            "issuer": "ak:did_core:web:coauth.cotest.local",
             "subject": binding.subject,
             "service_account_id": "alice-session-grant",
             "device_id": binding.device_id,

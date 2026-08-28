@@ -35,8 +35,8 @@ pub async fn coauth_session_grant_response_loss_run() -> Result<()> {
         .timeout(Duration::from_secs(40))
         .build()
         .context("build Coauth fault-test client")?;
-    let actor_id = "did:web:coauth-ledger-chaos.example";
-    let audience = "did:web:principal-ledger-chaos.example";
+    let actor_id = "ak:did_core:web:coauth-ledger-chaos.example";
+    let audience = "ak:did_core:web:principal-ledger-chaos.example";
     let bind_url = format!(
         "{}/_coauth/account/test/debug/bind-principal",
         coauth.base_url()

@@ -69,7 +69,7 @@ test.describe("read receipts + privacy", () => {
       bobToken,
       realmId,
       `G2.T7 bob message ${stamp}`,
-      { actorDid: bob.did },
+      { actorId: bob.id },
     );
 
     const envelope = buildReceiptSignal({
@@ -99,13 +99,13 @@ test.describe("read receipts + privacy", () => {
       (payload) => payload.event_id === message.event_id,
     );
     expect(received).toMatchObject({
-      actor_id: alice.did,
+      actor_id: alice.id,
       event_id: message.event_id,
       read_scope: { kind: "realm" },
     });
     const receivedEnvelope = envelopes.find(
       (candidate) =>
-        candidate.sender_actor_id === alice.did &&
+        candidate.sender_actor_id === alice.id &&
         signalPlaintext(candidate).kind === "ak.receipt.read",
     );
     expect(receivedEnvelope).toBeTruthy();
@@ -207,14 +207,14 @@ test.describe("read receipts + privacy", () => {
       fixture.bobToken,
       fixture.realmId,
       `highest visible second ${Date.now()}`,
-      { actorDid: fixture.bob.did },
+      { actorId: fixture.bob.id },
     );
     const highest = await sendPlaintextMessageViaApi(
       request,
       fixture.bobToken,
       fixture.realmId,
       `highest visible third ${Date.now()}`,
-      { actorDid: fixture.bob.did },
+      { actorId: fixture.bob.id },
     );
     const receipt = buildReceiptSignal({
       actor: fixture.alice,
@@ -281,7 +281,7 @@ test.describe("read receipts + privacy", () => {
       fixture.bobToken,
       fixture.realmId,
       `disabled-window ${Date.now()}`,
-      { actorDid: fixture.bob.did },
+      { actorId: fixture.bob.id },
     );
     const blocked = buildReceiptSignal({
       actor: fixture.alice,
@@ -314,7 +314,7 @@ test.describe("read receipts + privacy", () => {
       fixture.bobToken,
       fixture.realmId,
       `reenabled-window ${Date.now()}`,
-      { actorDid: fixture.bob.did },
+      { actorId: fixture.bob.id },
     );
     const receipt = buildReceiptSignal({
       actor: fixture.alice,
@@ -368,9 +368,9 @@ test.describe("read receipts + privacy", () => {
       receiverVisibleReceiptPayloads(capture.envelopes, {
         disclosure: "required",
         visibility: "private",
-        receiverDid: fixture.bob.did,
+        receiverId: fixture.bob.id,
         eventAuthors: {
-          [fixture.message.event_id]: fixture.bob.did,
+          [fixture.message.event_id]: fixture.bob.id,
         },
       }),
     ).toHaveLength(1);
@@ -378,9 +378,9 @@ test.describe("read receipts + privacy", () => {
       receiverVisibleReceiptPayloads(capture.envelopes, {
         disclosure: "required",
         visibility: "private",
-        receiverDid: fixture.alice.did,
+        receiverId: fixture.alice.id,
         eventAuthors: {
-          [fixture.message.event_id]: fixture.bob.did,
+          [fixture.message.event_id]: fixture.bob.id,
         },
       }),
     ).toHaveLength(0);
@@ -434,7 +434,7 @@ test.describe("read receipts + privacy", () => {
     });
     expect(advance.status()).toBe(200);
     const advanceBody = await advance.json();
-    expect(advanceBody.actor_id).toBe(fixture.alice.did);
+    expect(advanceBody.actor_id).toBe(fixture.alice.id);
     expect(advanceBody.position.event_id).toBe(fixture.message.event_id);
 
     // Alice's first device reads back its own cursor.
@@ -444,7 +444,7 @@ test.describe("read receipts + privacy", () => {
       fixture.realmId,
     );
     expect(aliceMarkers).toHaveLength(1);
-    expect(aliceMarkers[0].actor_id).toBe(fixture.alice.did);
+    expect(aliceMarkers[0].actor_id).toBe(fixture.alice.id);
     expect(aliceMarkers[0].position.event_id).toBe(fixture.message.event_id);
 
     // Alice's second device synchronizes the same account-private cursor.
@@ -454,7 +454,7 @@ test.describe("read receipts + privacy", () => {
       fixture.realmId,
     );
     expect(aliceSecondMarkers).toHaveLength(1);
-    expect(aliceSecondMarkers[0].actor_id).toBe(fixture.alice.did);
+    expect(aliceSecondMarkers[0].actor_id).toBe(fixture.alice.id);
     expect(aliceSecondMarkers[0].position.event_id).toBe(
       fixture.message.event_id,
     );
@@ -492,14 +492,14 @@ test.describe("read receipts + privacy", () => {
       fixture.bobToken,
       fixture.realmId,
       `debounce second ${Date.now()}`,
-      { actorDid: fixture.bob.did },
+      { actorId: fixture.bob.id },
     );
     const highest = await sendPlaintextMessageViaApi(
       request,
       fixture.bobToken,
       fixture.realmId,
       `debounce highest ${Date.now()}`,
-      { actorDid: fixture.bob.did },
+      { actorId: fixture.bob.id },
     );
 
     // Three rapid "scroll" positions for the same realm scope; the cursor must
@@ -630,7 +630,7 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
     fixture.bobToken,
     fixture.realmId,
     `${label} message ${stamp}`,
-    { actorDid: fixture.bob.did },
+    { actorId: fixture.bob.id },
   );
   return { ...fixture, message };
 }
@@ -665,7 +665,7 @@ function buildReceiptSignal(args: {
 }) {
   const sentAt = args.sentAt ?? new Date();
   return buildSignalEnvelope({
-    actorDid: args.actor.did,
+    actorId: args.actor.id,
     deviceId: args.actor.deviceId,
     realmId: args.realmId,
     signalClass: "session",
@@ -677,7 +677,7 @@ function buildReceiptSignal(args: {
       receipt_kind: "read",
       schema: "ak.schema.read_receipt.v1",
       realm_id: args.realmId,
-      actor_id: args.actor.did,
+      actor_id: args.actor.id,
       event_id: args.eventId,
       read_scope: args.readScope ?? { kind: "realm" },
       created_at: sentAt.toISOString(),
@@ -700,7 +700,7 @@ function receiverVisibleReceiptPayloads(
   policy: {
     disclosure: "required" | "optional" | "disabled";
     visibility?: "public" | "members" | "private";
-    receiverDid?: string;
+    receiverId?: string;
     eventAuthors?: Record<string, string>;
   },
 ): Array<Record<string, unknown>> {
@@ -710,7 +710,7 @@ function receiverVisibleReceiptPayloads(
   return receipts.filter(
     (receipt) =>
       typeof receipt.event_id === "string" &&
-      policy.eventAuthors?.[receipt.event_id] === policy.receiverDid,
+      policy.eventAuthors?.[receipt.event_id] === policy.receiverId,
   );
 }
 
@@ -724,7 +724,7 @@ async function setReadReceiptPolicy(
     request,
     token,
     signedEventEnvelope({
-      actorDid: fixture.bob.did,
+      actorId: fixture.bob.id,
       realmId: fixture.realmId,
       kind: "ak.realm.read_receipt_policy",
       schemaId: "ak.schema.event_payload.v1",
@@ -768,14 +768,14 @@ async function advanceReadCursor(
 ) {
   const updatedAt = new Date().toISOString();
   const event = signedEventEnvelope({
-    actorDid: actor.did,
+    actorId: actor.id,
     realmId: body.realm_id,
     kind: "ak.read_cursor.advance",
     createdAt: updatedAt,
     payload: {
       id: typedId("read_cursor"),
       schema: "ak.schema.read_cursor.v1",
-      actor_id: actor.did,
+      actor_id: actor.id,
       device_id: actor.deviceId,
       realm_id: body.realm_id,
       read_scope: body.read_scope,

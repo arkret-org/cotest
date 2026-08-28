@@ -145,7 +145,7 @@ pub fn run_consent_fixture_suite() -> Result<()> {
                                 "vector {name} ak.consent.grant has unexpected outcome {other}"
                             ),
                         }
-                        if peer.starts_with("did:ak:psd-") {
+                        if peer.starts_with("ak:did_core:ak:psd-") {
                             covered_pseudonym = true;
                         }
                         if scope == "any" {

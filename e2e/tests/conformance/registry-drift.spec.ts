@@ -434,7 +434,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: "ak:realm:AWKBMlbiCDVvdxpftc7u00CFiTYThQbKQJCj2gi91O9H",
       kind: removed!.id,
       payload: {},
@@ -479,7 +479,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const submitReceipt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: auth,
       data: signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: "ak:realm:AV1vAwt2NWgRW6lXhHcPfu4l8U3dkzSjWbQ_xXTw370Q",
         kind: "ak.read_cursor.advance",
         payload: {},
@@ -565,7 +565,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     const strandId = await resolveDefaultStrandId(request, token, realmId);
 
     const messageEnvelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.message.create",
       schemaId: "ak.schema.message.v1",
@@ -580,7 +580,7 @@ test.describe("conformance registry drift @fully-implemented", () => {
     });
 
     const cursorEnvelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.read_cursor.advance",
       payload: {},

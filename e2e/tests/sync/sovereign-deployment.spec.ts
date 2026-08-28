@@ -6,7 +6,7 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 
 import { solandBaseUrl, solandServiceId, hasDualSoland, type SolandKey } from "../../helpers/env";
 import { issueDevSession, uniqueUser } from "../../helpers/users";
-import { canonicalJson } from "../../helpers/soland-api";
+import { canonicalJson, projectDidToCoreId } from "../../helpers/soland-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -115,7 +115,7 @@ test.describe("sovereign deployment", () => {
     const bobStatus = await getJson(
       request,
       "alpha",
-      `/_soland/self/account/${encodeURIComponent(fixture.bobDid)}`,
+      `/_soland/self/account/${encodeURIComponent(fixture.bobId)}`,
       fixture.adminTokens.alpha,
     );
     expect(bobStatus.external_via_enclave).toBe(true);
@@ -124,7 +124,7 @@ test.describe("sovereign deployment", () => {
     const audit = await getJson(
       request,
       "beta",
-      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
+      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobId)}`,
       fixture.adminTokens.beta,
     );
     expect(audit.entries.map((entry: any) => entry.action)).toContain("external_invite.accept");
@@ -136,7 +136,7 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "escape");
 
     const direct = await request.get(
-      `${solandBaseUrl("alpha")}/_soland/self/realm/${encodeURIComponent(fixture.internalRealmId)}/access?actor=${encodeURIComponent(fixture.bobDid)}`,
+      `${solandBaseUrl("alpha")}/_soland/self/realm/${encodeURIComponent(fixture.internalRealmId)}/access?actor=${encodeURIComponent(fixture.bobId)}`,
       { headers: { authorization: `Bearer ${fixture.adminTokens.alpha}` } },
     );
     expect(direct.status()).toBe(403);
@@ -152,7 +152,7 @@ test.describe("sovereign deployment", () => {
       {
         data: {
           query: "internal",
-          requester: fixture.bobDid,
+          requester: fixture.bobId,
         },
       },
     );
@@ -164,7 +164,7 @@ test.describe("sovereign deployment", () => {
     const proxy = await request.post(`${solandBaseUrl("beta")}/_soland/self/deployment/enclave-proxy`, {
       headers: { authorization: `Bearer ${fixture.adminTokens.beta}` },
       data: {
-        actor: fixture.bobDid,
+        actor: fixture.bobId,
         target: solandBaseUrl("alpha"),
         path: `/_arkret/self/realms/${fixture.internalRealmId}`,
       },
@@ -175,7 +175,7 @@ test.describe("sovereign deployment", () => {
     const audit = await getJson(
       request,
       "beta",
-      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
+      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobId)}`,
       fixture.adminTokens.beta,
     );
     expect(audit.entries.map((entry: any) => entry.action)).toContain("boundary.enclave_proxy");
@@ -190,7 +190,7 @@ test.describe("sovereign deployment", () => {
       upstream_available: false,
     }, fixture.adminTokens.beta);
     const accepted = await postJson(request, "beta", "/_soland/admin/deployment/store-and-forward/messages", {
-      actor: fixture.bobDid,
+      actor: fixture.bobId,
       realm_id: fixture.enclaveRealmId,
       content: { body: `store forward ${fixture.stamp}` },
     }, fixture.adminTokens.beta);
@@ -252,7 +252,7 @@ test.describe("sovereign deployment", () => {
 
     const accepted = fixture.acceptBody;
     expect(accepted.session_metadata.trust_chain_profile).toBe("enclave");
-    expect(accepted.session_metadata.actor).toBe(fixture.bobDid);
+    expect(accepted.session_metadata.actor).toBe(fixture.bobId);
 
     const enclaveReject = await request.post(
       `${solandBaseUrl("beta")}/_soland/self/account/accept-external-invite`,
@@ -260,7 +260,7 @@ test.describe("sovereign deployment", () => {
         headers: { authorization: `Bearer ${fixture.adminTokens.beta}` },
         data: {
           invite_token: `ak:external_invite:${fixture.short}-rogue`,
-          actor_id: `did:web:rogue-${fixture.stamp}.evil`,
+          actor_id: `ak:did_core:web:rogue-${fixture.stamp}.evil`,
           target_realm: fixture.enclaveRealmId,
           target_host: solandBaseUrl("beta"),
         },
@@ -276,6 +276,8 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   const short = stamp.slice(-12);
   const aliceDid = `did:web:alice-int-${label}-${stamp}.example`;
   const bobDid = `did:web:bob-ext-${label}-${stamp}.example.org`;
+  const aliceId = projectDidToCoreId(aliceDid);
+  const bobId = projectDidToCoreId(bobDid);
   const fixtureRealmIds = SOVEREIGN_REALM_FIXTURES[
     label as keyof typeof SOVEREIGN_REALM_FIXTURES
   ];
@@ -310,24 +312,24 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   await postJson(request, "alpha", "/_soland/admin/deployment/realm.create", {
     realm_id: enclaveRealmId,
     hosted_on: solandServiceId("beta"),
-    created_by: aliceDid,
+    created_by: aliceId,
     external_invite_policy: "allowed",
   }, adminTokens.alpha);
   await postJson(request, "beta", "/_soland/admin/deployment/realm.create", {
     realm_id: enclaveRealmId,
     hosted_on: solandServiceId("beta"),
-    created_by: aliceDid,
+    created_by: aliceId,
     external_invite_policy: "allowed",
   }, adminTokens.beta);
 
   const invite = await postJson(request, "alpha", "/_soland/admin/deployment/external-invite", {
     target_realm: enclaveRealmId,
-    invitee: bobDid,
-    inviter: aliceDid,
+    invitee: bobId,
+    inviter: aliceId,
   }, adminTokens.alpha);
   const acceptBody = await postJson(request, "beta", "/_soland/self/account/accept-external-invite", {
     invite_token: invite.invite_token,
-    actor_id: bobDid,
+    actor_id: bobId,
     target_realm: invite.target_realm,
     target_host: invite.target_host,
   }, adminTokens.beta);
@@ -336,7 +338,9 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
     stamp,
     short,
     aliceDid,
+    aliceId,
     bobDid,
+    bobId,
     enclaveRealmId,
     internalRealmId,
     acceptBody,

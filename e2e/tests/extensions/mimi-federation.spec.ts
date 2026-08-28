@@ -18,11 +18,12 @@ import {
 } from "../../helpers/env";
 import {
   advanceEnvelopeToActorFrontier,
-  canonicalDidCoreId,
+  requireDidCoreId,
   canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
   grantServiceCapabilityApi,
+  projectDidToCoreId,
   queryRealmEventsApi,
   readRealmSealBasis,
   resolveDefaultStrandId,
@@ -229,15 +230,15 @@ async function createBoundMimiRoom(
   // are not authorization sources, and a canonical Realm must never be
   // modified through the conformance fixture endpoint.
   await grantServiceCapabilityApi(request, token, {
-    ownerDid: alice.did,
+    ownerId: alice.id,
     realmId,
     subjectServiceId: solandServiceId(),
     action: "ak.message.create",
   });
   await grantCapabilityEventApi(request, token, {
-    ownerDid: alice.did,
+    ownerId: alice.id,
     realmId,
-    subjectDid: alice.did,
+    subjectId: alice.id,
     actions: ["ak.realm.admin"],
   });
   const strandId = await resolveDefaultStrandId(request, token, realmId);
@@ -261,7 +262,7 @@ async function createBoundMimiRoom(
     },
   };
   const bindingEvent = signedEventEnvelope({
-    actorDid: alice.did,
+    actorId: alice.id,
     realmId,
     kind: "ak.mimi.room_binding",
     sealBasis: await readRealmSealBasis(request, token, realmId),
@@ -278,7 +279,7 @@ async function createBoundMimiRoom(
       ),
     },
     epoch: 1,
-    sender_actor_id: canonicalDidCoreId(alice.did),
+    sender_actor_id: requireDidCoreId(alice.id),
     room_binding_event: { event: bindingEvent },
   };
   const invalidBodies: JsonObject[] = [
@@ -363,7 +364,7 @@ async function postSignedMimiMessage(
 ) {
   const url = mimiMessagesUrl(roomId);
   const body = {
-    sender_actor_id: canonicalDidCoreId(MIMI_SOURCE_SERVICE_ID),
+    sender_actor_id: projectDidToCoreId(MIMI_SOURCE_SERVICE_DID),
     device_id: MIMI_DEVICE_ID,
     mls_group_id: mimiMlsGroupId(roomId),
     epoch: 1,
@@ -383,7 +384,7 @@ function mimiMlsGroupId(roomId: string): string {
   return Buffer.from(`mimi:${roomId}`, "utf8").toString("base64url");
 }
 
-const MIMI_SOURCE_SERVICE_ID = "did:web:mimi.example";
+const MIMI_SOURCE_SERVICE_DID = "did:web:mimi.example";
 const MIMI_PROVIDER_ID = "mimi://mimi.example";
 const MIMI_DEVICE_ID = "ak:device:018f6f50-6a23-7abc-8def-0123456789ab";
 
@@ -416,12 +417,12 @@ function signedMimiHeaders(args: {
   targetUri: string;
   roomUri: string;
 }): Record<string, string> {
-  const sourceServiceId = canonicalDidCoreId(MIMI_SOURCE_SERVICE_ID);
+  const sourceServiceId = projectDidToCoreId(MIMI_SOURCE_SERVICE_DID);
   const canonicalBody = Buffer.from(canonicalJson(args.body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(canonicalBody).digest("base64")}:`;
   const created = Math.floor(Date.now() / 1000);
   const expires = created + 300;
-  const keyid = `${MIMI_SOURCE_SERVICE_ID}#mimi-provider-key`;
+  const keyid = `${MIMI_SOURCE_SERVICE_DID}#mimi-provider-key`;
   const components = [
     "@method",
     "@target-uri",
@@ -482,9 +483,9 @@ function localMimiRoomUri(roomId: string): string {
 }
 
 function localMimiProviderId(): string {
-  const serviceId = solandServiceDid();
-  if (serviceId.startsWith("did:web:")) {
-    return `mimi://${serviceId
+  const serviceDid = solandServiceDid();
+  if (serviceDid.startsWith("did:web:")) {
+    return `mimi://${serviceDid
       .slice("did:web:".length)
       .replaceAll(":", "/")
       .replaceAll(/%3A/gi, ":")
@@ -492,14 +493,14 @@ function localMimiProviderId(): string {
   }
   // did:webvh:<scid>:<host>[:<path>...] — the HTTP authority starts after
   // the SCID segment.
-  const webvh = serviceId.match(/^did:webvh:[^:]+:(.+)$/);
+  const webvh = serviceDid.match(/^did:webvh:[^:]+:(.+)$/);
   if (webvh) {
     return `mimi://${webvh[1]
       .replaceAll(":", "/")
       .replaceAll(/%3A/gi, ":")
       .toLowerCase()}`;
   }
-  return `mimi://${serviceId.replaceAll(":", ".")}`;
+  return `mimi://${serviceDid.replaceAll(":", ".")}`;
 }
 
 function sha256Prefixed(input: string | Buffer): string {

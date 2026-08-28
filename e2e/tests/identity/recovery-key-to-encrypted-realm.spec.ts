@@ -429,10 +429,14 @@ async function readActiveIdentity(page: Page): Promise<{
         device_id?: string;
       };
     };
-    const coreId = config.active_account?.authority?.principal_id ?? "";
-    const did = config.active_account?.resolution?.did ?? "";
-    const deviceId = config.active_account?.device_id ?? "";
-    if (!coreId || !did || !deviceId) {
+    const coreId = config.active_account?.authority?.principal_id;
+    const did = config.active_account?.resolution?.did;
+    const deviceId = config.active_account?.device_id;
+    if (
+      typeof coreId !== "string" ||
+      typeof did !== "string" ||
+      typeof deviceId !== "string"
+    ) {
       throw new Error(
         "Inkson active account omitted its typed identity coordinates",
       );

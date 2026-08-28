@@ -16,6 +16,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  projectDidToCoreId,
   signedEventEnvelope,
   uuidV7,
 } from "../../helpers/soland-api";
@@ -31,7 +32,7 @@ test.describe.configure({ mode: "serial" });
 async function submitOrganizationStatement(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   organizationDid: string,
   relationship: "owner" | "directory_certifier",
@@ -42,7 +43,7 @@ async function submitOrganizationStatement(
   const statement: Record<string, unknown> = {
     statement_id: `org-stmt-${uuidV7()}`,
     realm_id: realmId,
-    organization_id: organizationDid,
+    organization_id: projectDidToCoreId(organizationDid),
     relationship,
     status,
     control_scopes: controlScopes,
@@ -50,8 +51,8 @@ async function submitOrganizationStatement(
   };
   if (revokesStatementId) statement.revokes_statement_id = revokesStatementId;
   statement.authorization = {
-    issuer: organizationDid,
-    issuer_role: "organization_did",
+    issuer: projectDidToCoreId(organizationDid),
+    issuer_role: "organization_principal_id",
     verification_method: `${organizationDid}#k1`,
     signed_at: canonicalTimestamp(),
     proof: "c2ln",
@@ -59,7 +60,7 @@ async function submitOrganizationStatement(
   return request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedEventEnvelope({
-      actorDid,
+      actorId,
       realmId,
       kind: "ak.realm.organization",
       schemaId: "ak.schema.event_payload.v1",
@@ -82,12 +83,11 @@ async function searchOrganization(
   return (body.organizations ?? []) as Array<Record<string, any>>;
 }
 
-function rowFor(rows: Array<Record<string, any>>, orgDid: string) {
+function rowFor(rows: Array<Record<string, any>>, organizationId: string) {
   const envelope = rows.find(
     (row) =>
-      row.organization_did === orgDid ||
-      row.preview?.organization_id === orgDid ||
-      row.preview?.organization_did === orgDid,
+      row.organization_id === organizationId ||
+      row.preview?.organization_id === organizationId,
   );
   return envelope?.preview ?? envelope;
 }
@@ -113,8 +113,9 @@ test.describe("directory verified organization badge", () => {
         public: true,
       });
 
-      const rows = await searchOrganization(request, token, orgDid);
-      const row = rowFor(rows, orgDid);
+      const organizationId = projectDidToCoreId(orgDid);
+      const rows = await searchOrganization(request, token, organizationId);
+      const row = rowFor(rows, organizationId);
       // Either the org is not surfaced at all, or it is surfaced unverified.
       if (row) {
         expect(row.verified_badge ?? row.verified ?? false).toBe(false);
@@ -143,7 +144,7 @@ test.describe("directory verified organization badge", () => {
       const accepted = await submitOrganizationStatement(
         request,
         token,
-        alice.did,
+        alice.id,
         realmId,
         orgDid,
         "directory_certifier",
@@ -152,8 +153,9 @@ test.describe("directory verified organization badge", () => {
       );
       expect(accepted.ok()).toBeTruthy();
 
-      const rows = await searchOrganization(request, token, orgDid);
-      const row = rowFor(rows, orgDid);
+      const organizationId = projectDidToCoreId(orgDid);
+      const rows = await searchOrganization(request, token, organizationId);
+      const row = rowFor(rows, organizationId);
       expect(row, "verified relationship must surface the organization").toBeTruthy();
       expect(row.verified_badge ?? row.verified).toBe(true);
 
@@ -194,21 +196,21 @@ test.describe("directory verified organization badge", () => {
       const active = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId,
           kind: "ak.realm.organization",
           schemaId: "ak.schema.event_payload.v1",
           payload: {
             statement_id: activeStatementId,
             realm_id: realmId,
-            organization_id: orgDid,
+            organization_id: projectDidToCoreId(orgDid),
             relationship: "owner",
             status: "active",
             control_scopes: ["official_badge"],
             issued_at: canonicalTimestamp(),
             authorization: {
-              issuer: orgDid,
-              issuer_role: "organization_did",
+              issuer: projectDidToCoreId(orgDid),
+              issuer_role: "organization_principal_id",
               verification_method: `${orgDid}#k1`,
               signed_at: canonicalTimestamp(),
               proof: "c2ln",
@@ -221,7 +223,7 @@ test.describe("directory verified organization badge", () => {
       const revoke = await submitOrganizationStatement(
         request,
         token,
-        alice.did,
+        alice.id,
         realmId,
         orgDid,
         "owner",
@@ -231,8 +233,9 @@ test.describe("directory verified organization badge", () => {
       );
       expect(revoke.ok()).toBeTruthy();
 
-      const rows = await searchOrganization(request, token, orgDid);
-      const row = rowFor(rows, orgDid);
+      const organizationId = projectDidToCoreId(orgDid);
+      const rows = await searchOrganization(request, token, organizationId);
+      const row = rowFor(rows, organizationId);
       if (row) {
         expect(row.verified_badge ?? row.verified ?? false).toBe(false);
       }

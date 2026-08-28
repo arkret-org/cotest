@@ -136,13 +136,29 @@ function decryptDurableState(envelope, key) {
 // across runs that share a persistent backing store).
 const configuredRegistryDid =
   process.env.MOCK_APPLET_REGISTRY_DID ?? durableState.registryDid;
-const registryDid = configuredRegistryDid?.startsWith("ak:did_core:")
-  ? `did:${configuredRegistryDid.slice("ak:did_core:".length)}`
-  : (configuredRegistryDid ??
-    `did:web:applet-registry-${randomUUID().slice(0, 8)}.joint-e2e.local`);
-const registryDid = configuredRegistryDid?.startsWith("ak:did_core:")
-  ? configuredRegistryDid
-  : `ak:did_core:${registryDid.slice("did:".length)}`;
+const registryDid =
+  configuredRegistryDid ??
+  `did:web:applet-registry-${randomUUID().slice(0, 8)}.joint-e2e.local`;
+if (!registryDid.startsWith("did:")) {
+  throw new Error("MOCK_APPLET_REGISTRY_DID must be a W3C DID");
+}
+
+function projectDidToCoreId(did) {
+  if (did.startsWith("did:webvh:")) {
+    const scid = did.slice("did:webvh:".length).split(":", 1)[0];
+    if (!scid) throw new Error(`invalid did:webvh value: ${did}`);
+    return `ak:did_core:webvh:${scid}`;
+  }
+  for (const method of ["web", "key"]) {
+    const prefix = `did:${method}:`;
+    if (did.startsWith(prefix)) {
+      return `ak:did_core:${method}:${did.slice(prefix.length)}`;
+    }
+  }
+  throw new Error(`unsupported DID method: ${did}`);
+}
+
+const registryId = projectDidToCoreId(registryDid);
 
 const persistedPrivateKey = durableState.registryPrivateJwk
   ? createPrivateKey({ key: durableState.registryPrivateJwk, format: "jwk" })
@@ -511,7 +527,6 @@ function detachedEventProof(
   actorDid,
   verificationMethod,
   signingKey,
-  actorDid,
   proofCreatedAt,
 ) {
   const createdAt = proofCreatedAt ?? rfc3339Now();
@@ -520,11 +535,7 @@ function detachedEventProof(
     throw new Error("Applet Event signing key has no private seed");
   }
   return runCotestWire("event-envelope-proof", {
-    actor_did:
-      actorDid ??
-      (actorDid.startsWith("ak:did_core:")
-        ? `did:${actorDid.slice("ak:did_core:".length)}`
-        : actorDid),
+    actor_did: actorDid,
     verification_method: verificationMethod,
     created_at: createdAt,
     event,
@@ -659,7 +670,7 @@ function signedGhostMessageEvent({
       proofs: [
         detachedEventProof(
           event,
-          provision.ghost_actor_id,
+          provision.ghost_actor_did,
           verificationMethod,
           packageInfo.signingKey,
         ),
@@ -799,13 +810,11 @@ function signedPackage(body) {
   const createdAt = rfc3339Now();
   const serviceDid =
     body.service_id_document?.id ??
-    body.service_id ??
     `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
-  const serviceId = String(body.service_id ?? serviceDid).startsWith(
-    "ak:did_core:",
-  )
-    ? body.service_id
-    : `ak:did_core:${String(serviceDid).slice("did:".length)}`;
+  const serviceId = body.service_id ?? projectDidToCoreId(serviceDid);
+  if (!String(serviceId).startsWith("ak:did_core:")) {
+    throw new Error("service_id must be a DidCoreId");
+  }
   const webhookAuth = body.webhook_auth ?? {
     kind: "http_message_signature",
     key_ref: `${serviceDid}#applet-service-key`,
@@ -849,7 +858,7 @@ function signedPackage(body) {
     package_id: body.package_id ?? `package:${safe}:${uuidV7Like()}`,
     applet_id: appletId,
     service_id: serviceId,
-    controller_id: body.controller_id ?? registryDid,
+    controller_id: body.controller_id ?? registryId,
     base_url: body.base_url ?? serverBaseUrl(),
     bot_actor_id:
       body.bot_actor_id ?? `ak:did_core:web:bot-${safe}.joint-e2e.local`,
@@ -1180,6 +1189,8 @@ const server = createServer(async (req, res) => {
       const ghostActorId = ghostCreation?.ghost_actor_id;
       if (
         typeof ghostActorId !== "string" ||
+        typeof ghostCreation?.ghost_actor_did !== "string" ||
+        !ghostCreation.ghost_actor_did.startsWith("did:") ||
         typeof ghostCreation?.actor_principal_server_id !== "string" ||
         !ghostCreation?.managed_actor_provision_event ||
         !ghostCreation?.pcr_genesis_event ||
@@ -1241,7 +1252,10 @@ const server = createServer(async (req, res) => {
         res.end(provisionText);
         return;
       }
-      provision = JSON.parse(provisionText);
+      provision = {
+        ...JSON.parse(provisionText),
+        ghost_actor_did: ghostCreation.ghost_actor_did,
+      };
       actorSequences.set(ghostActorId, 0);
       provisionedGhosts.set(ghostKey, provision);
     }

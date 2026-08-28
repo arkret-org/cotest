@@ -48,7 +48,7 @@ test.describe("moderation appeal", () => {
     expect(history[0]).toMatchObject({
       appeal_id: appeal.appeal_id,
       appeal_state: "submitted",
-      appellant: fixture.appellant.did,
+      appellant: fixture.appellant.id,
       decision_ref: fixture.decisionId,
     });
   });
@@ -89,7 +89,7 @@ test.describe("moderation appeal", () => {
       appellantToken,
       realmId,
       `Moderation decision: account restricted pending appeal ${stamp}`,
-      { actorDid: appellant.did },
+      { actorId: appellant.id },
     );
     const targetRef = decisionNotice.event_id.replace(/^ak:event:/, "ak:message:");
     const decision = await issueDecision(
@@ -97,7 +97,7 @@ test.describe("moderation appeal", () => {
       reviewerToken,
       realmId,
       targetRef,
-      reviewer.did,
+      reviewer.id,
     );
     const appellantPage = appellantFlow.page;
     try {
@@ -111,8 +111,8 @@ test.describe("moderation appeal", () => {
         request,
         reviewerToken,
         realmId,
-        reviewer.did,
-        appellant.did,
+        reviewer.id,
+        appellant.id,
       );
       const realmAfterBan = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
@@ -120,7 +120,7 @@ test.describe("moderation appeal", () => {
       );
       expect(realmAfterBan.ok()).toBeTruthy();
       const body = await realmAfterBan.json();
-      expect(body.members ?? []).not.toContain(appellant.did);
+      expect(body.members ?? []).not.toContain(appellant.id);
 
       await expect(appellantPage.page.getByTestId("chat-panel")).toHaveAttribute(
         "data-moderation-appeal-count",
@@ -174,13 +174,13 @@ test.describe("moderation appeal", () => {
     const response = await postModerationEvent(
       request,
       fixture.moderatorToken,
-      fixture.moderator.did,
+      fixture.moderator.id,
       fixture.realmId,
       "ak.moderation.appeal.review",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        reviewer: fixture.moderator.did,
+        reviewer: fixture.moderator.id,
         reviewed_at: canonicalTimestamp(),
         notes_ref: "self review attempt",
       },
@@ -196,7 +196,7 @@ test.describe("moderation appeal", () => {
     const duplicate = await postModerationEvent(
       request,
       fixture.appellantToken,
-      fixture.appellant.did,
+      fixture.appellant.id,
       fixture.realmId,
       "ak.moderation.appeal.submit",
       appealPayload(fixture),
@@ -212,13 +212,13 @@ test.describe("moderation appeal", () => {
     const response = await postModerationEvent(
       request,
       fixture.reviewerToken,
-      fixture.reviewer.did,
+      fixture.reviewer.id,
       fixture.realmId,
       "ak.moderation.appeal.decision",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        reviewer: fixture.reviewer.did,
+        reviewer: fixture.reviewer.id,
         verdict: "uphold",
         reason_text_ref: "too early",
         decided_at: canonicalTimestamp(),
@@ -236,13 +236,13 @@ test.describe("moderation appeal", () => {
     const response = await postModerationEvent(
       request,
       fixture.reviewerToken,
-      fixture.reviewer.did,
+      fixture.reviewer.id,
       fixture.realmId,
       "ak.moderation.appeal.close",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        closer: fixture.reviewer.did,
+        closer: fixture.reviewer.id,
         closed_at: canonicalTimestamp(),
         auto_closed: false,
         close_reason: "reviewer_closed",
@@ -260,13 +260,13 @@ test.describe("moderation appeal", () => {
     const response = await postModerationEvent(
       request,
       fixture.reviewerToken,
-      fixture.reviewer.did,
+      fixture.reviewer.id,
       fixture.realmId,
       "ak.moderation.appeal.decision",
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        reviewer: fixture.reviewer.did,
+        reviewer: fixture.reviewer.id,
         verdict: "overturn",
         reason_text_ref: "missing lift",
         decided_at: canonicalTimestamp(),
@@ -339,32 +339,32 @@ async function createAppealFixture(
     request,
     moderatorToken,
     signedEventEnvelope({
-      actorDid: moderator.did,
+      actorId: moderator.id,
       realmId,
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: reviewer.did,
+        actor_id: reviewer.id,
         membership: "join",
         delivery_status: "unroutable",
       },
     }),
-    { context: `join ${reviewer.did}` },
+    { context: `join ${reviewer.id}` },
   );
   await grantCallCapability(
     request,
     moderatorToken,
-    moderator.did,
+    moderator.id,
     realmId,
-    reviewer.did,
+    reviewer.id,
     "ak.moderation.appeal.review",
   );
   await grantCallCapability(
     request,
     moderatorToken,
-    moderator.did,
+    moderator.id,
     realmId,
-    reviewer.did,
+    reviewer.id,
     "ak.moderation.decision.lift",
   );
   const message = await sendPlaintextMessageViaApi(
@@ -372,7 +372,7 @@ async function createAppealFixture(
     appellantToken,
     realmId,
     `appeal target ${label} ${stamp}`,
-    { actorDid: appellant.did },
+    { actorId: appellant.id },
   );
   const targetRef = message.event_id.replace(/^ak:event:/, "ak:message:");
   const decision = await issueDecision(
@@ -380,7 +380,7 @@ async function createAppealFixture(
     moderatorToken,
     realmId,
     targetRef,
-    moderator.did,
+    moderator.id,
   );
   return {
     appellant,
@@ -400,13 +400,13 @@ async function issueDecision(
   token: string,
   realmId: string,
   targetRef: string,
-  actorDid: string,
+  actorId: string,
 ) {
-  const envelope = signedModerationEvent(actorDid, realmId, "ak.moderation.decision", {
+  const envelope = signedModerationEvent(actorId, realmId, "ak.moderation.decision", {
     target_ref: targetRef,
     decision: "quarantine",
     action: "quarantine_message",
-    issuer: actorDid,
+    issuer: actorId,
     reason_code: "abuse_review",
     reason: "moderation decision rationale",
     request_canonical_digest:
@@ -422,24 +422,24 @@ async function banMemberViaApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  actorDid: string,
-  memberDid: string,
+  actorId: string,
+  memberId: string,
 ) {
   await submitSignedEventApi(
     request,
     token,
     signedEventEnvelope({
-      actorDid,
+      actorId,
       realmId,
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: memberDid,
+        actor_id: memberId,
         membership: "ban",
         reason: "moderation_decision",
       },
     }),
-    { context: `ban ${memberDid} from ${realmId}` },
+    { context: `ban ${memberId} from ${realmId}` },
   );
 }
 
@@ -448,7 +448,7 @@ function appealPayload(fixture: AppealFixture) {
     realm_id: fixture.realmId,
     decision_ref: fixture.decisionId,
     target_ref: fixture.targetRef,
-    appellant: fixture.appellant.did,
+    appellant: fixture.appellant.id,
     reason_text_ref: "appeal narrative",
     evidence_refs: [`ak:evidence:${fixture.decisionId}`],
     evidence_visibility: "reviewers_only",
@@ -459,7 +459,7 @@ function appealPayload(fixture: AppealFixture) {
 async function submitAppeal(request: APIRequestContext, fixture: AppealFixture) {
   const payload = appealPayload(fixture);
   const envelope = signedModerationEvent(
-    fixture.appellant.did,
+    fixture.appellant.id,
     fixture.realmId,
     "ak.moderation.appeal.submit",
     payload,
@@ -484,13 +484,13 @@ async function reviewAppeal(
   const outcome = await submitModerationEvent(
     request,
     fixture.reviewerToken,
-    fixture.reviewer.did,
+    fixture.reviewer.id,
     fixture.realmId,
     "ak.moderation.appeal.review",
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
-      reviewer: fixture.reviewer.did,
+      reviewer: fixture.reviewer.id,
       reviewed_at: canonicalTimestamp(),
       notes_ref: "review notes",
     },
@@ -508,13 +508,13 @@ async function decideAppeal(
   const outcome = await submitModerationEvent(
     request,
     fixture.reviewerToken,
-    fixture.reviewer.did,
+    fixture.reviewer.id,
     fixture.realmId,
     "ak.moderation.appeal.decision",
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
-      reviewer: fixture.reviewer.did,
+      reviewer: fixture.reviewer.id,
       ...data,
       decided_at: data.decided_at ?? canonicalTimestamp(),
     },
@@ -531,13 +531,13 @@ async function closeAppeal(
   const outcome = await submitModerationEvent(
     request,
     fixture.reviewerToken,
-    fixture.reviewer.did,
+    fixture.reviewer.id,
     fixture.realmId,
     "ak.moderation.appeal.close",
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
-      closer: fixture.reviewer.did,
+      closer: fixture.reviewer.id,
       closed_at: canonicalTimestamp(),
       auto_closed: false,
       close_reason: "reviewer_closed",
@@ -553,7 +553,7 @@ async function liftDecision(
   appealId: string,
 ) {
   const envelope = signedModerationEvent(
-    fixture.reviewer.did,
+    fixture.reviewer.id,
     fixture.realmId,
     "ak.moderation.decision.lift",
     {
@@ -593,13 +593,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function signedModerationEvent(
-  actorDid: string,
+  actorId: string,
   realmId: string,
   kind: string,
   payload: Record<string, unknown>,
 ) {
   return signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind,
     schemaId: kind.startsWith("ak.moderation.appeal.")
@@ -612,12 +612,12 @@ function signedModerationEvent(
 async function submitModerationEvent(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   kind: string,
   payload: Record<string, unknown>,
 ) {
-  const envelope = signedModerationEvent(actorDid, realmId, kind, payload);
+  const envelope = signedModerationEvent(actorId, realmId, kind, payload);
   await submitSignedEventApi(request, token, envelope, {
     context: `submit ${kind}`,
   });
@@ -627,12 +627,12 @@ async function submitModerationEvent(
 async function postModerationEvent(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   kind: string,
   payload: Record<string, unknown>,
 ) {
-  const envelope = signedModerationEvent(actorDid, realmId, kind, payload);
+  const envelope = signedModerationEvent(actorId, realmId, kind, payload);
   await prepareSignedEventCbaApi(request, token, envelope);
   await alignSignedEventToActorFrontierApi(request, token, envelope);
   return await request.post(`${solandBaseUrl()}/_arkret/self/events`, {

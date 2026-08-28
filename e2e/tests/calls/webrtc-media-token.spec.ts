@@ -78,7 +78,7 @@ test.describe("media token exchange", () => {
     const response = await exchangeMediaToken(request, aliceToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       focus_id: livekitFocus().focus_id,
       desired_media: { audio: true, video: true, screen: false },
@@ -105,7 +105,7 @@ test.describe("media token exchange", () => {
     expect(binding.realm_id).toBe(realmId);
     expect(binding.call_id).toBe(callId);
     expect(binding.focus_id).toBe(livekitFocus().focus_id);
-    expect(binding.actor_id).toBe(alice.did);
+    expect(binding.actor_id).toBe(alice.id);
     expect(binding.device_id).toBe(alice.deviceId);
     expect(binding.participant_identity).toBe(body.participant_identity);
     expect(typeof binding.issued_at).toBe("string");
@@ -162,7 +162,7 @@ test.describe("media token exchange", () => {
     const response = await exchangeMediaToken(request, aliceToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       focus_id: arkretNativeFocus().focus_id,
       desired_media: { audio: true, video: true, screen: false },
@@ -200,7 +200,7 @@ test.describe("media token exchange", () => {
     const denied = await exchangeMediaToken(request, aliceToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       focus_id: "unknown-focus",
     });
@@ -222,13 +222,13 @@ test.describe("media token exchange", () => {
     const member = uniqueUser(`media-member-${Date.now()}`);
     await ensureRegistered(request, member);
     const memberToken = await issueDevSession(request, member);
-    await addRealmMemberApi(request, aliceToken, realmId, member.did);
+    await addRealmMemberApi(request, aliceToken, realmId, member.id);
 
     // Member, but no ak.call.join → refused.
     const denied = await exchangeMediaToken(request, memberToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: member.did,
+      actor_id: member.id,
       device_id: member.deviceId,
       focus_id: livekitFocus().focus_id,
     });
@@ -239,21 +239,21 @@ test.describe("media token exchange", () => {
     await grantCallCapability(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
-      member.did,
+      member.id,
       CAP_CALL_JOIN,
     );
     const admitted = await exchangeMediaToken(request, memberToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: member.did,
+      actor_id: member.id,
       device_id: member.deviceId,
       focus_id: livekitFocus().focus_id,
     });
     expect(admitted.status(), await admitted.text()).toBe(200);
     const body = await admitted.json();
-    expect(body.participant_binding.actor_id).toBe(member.did);
+    expect(body.participant_binding.actor_id).toBe(member.id);
   });
 });
 
@@ -275,7 +275,7 @@ async function setupMediaCall(request: APIRequestContext): Promise<{
     request,
     aliceToken,
     realmId,
-    alice.did,
+    alice.id,
     serviceId(),
     [livekitFocus(), arkretNativeFocus()],
   );

@@ -250,7 +250,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: "ak:realm:AY0rSzrDAC1zeYgGHFxVjALohUeclZwWr9eDkFlNy2df",
       kind: "ak.edge.applet.command.transaction.v1",
       // `ak:transaction:` is the canonical typed ID prefix. The abbreviated
@@ -290,7 +290,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
     const envelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: "ak:realm:AVAS1PeoJLynuHDRgmf-2LvFQSeNYWxMtub5zKMmPWtI",
       kind: "ak.message.create",
       payload: {

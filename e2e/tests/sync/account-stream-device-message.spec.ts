@@ -32,7 +32,7 @@ test.describe("account stream + device-message convergence", () => {
     const token = await issueDevSession(request, user);
     const realmId = await createRealmApi(request, token, {
       title: `long-poll scope ${Date.now()}`,
-      ownerDid: user.did,
+      ownerId: user.id,
     });
     const filter = { realms: [realmId] };
 
@@ -48,7 +48,7 @@ test.describe("account stream + device-message convergence", () => {
     await new Promise((resolve) => setTimeout(resolve, 150));
     await createRealmApi(request, token, {
       title: `out-of-scope long-poll activity ${Date.now()}`,
-      ownerDid: user.did,
+      ownerId: user.id,
     });
     const quiet = await quietPoll;
     const quietElapsedMs = Date.now() - quietStartedAt;
@@ -71,7 +71,7 @@ test.describe("account stream + device-message convergence", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 150));
     await sendPlaintextMessageViaApi(request, token, realmId, `long-poll wake ${Date.now()}`, {
-      actorDid: user.did,
+      actorId: user.id,
       strandId,
     });
 

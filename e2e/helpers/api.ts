@@ -24,7 +24,7 @@ export type ApiRealmOpts = {
   encryptionProfile?: RealmObject["encryption_profile"];
   plaintextVisibleServices?: string[];
   invitees?: string[];
-  ownerDid?: string;
+  ownerId?: string;
   server?: SolandKey;
 };
 
@@ -60,8 +60,8 @@ export async function createRealmViaApi(
   opts: ApiRealmOpts,
 ): Promise<string> {
   expect(
-    opts.ownerDid,
-    "createRealmViaApi requires opts.ownerDid for canonical events",
+    opts.ownerId,
+    "createRealmViaApi requires opts.ownerId for canonical events",
   ).toBeTruthy();
   return await createRealmApi(
     request,
@@ -74,7 +74,7 @@ export async function createRealmViaApi(
       encryption_profile: opts.encryptionProfile,
       plaintext_visible_services: opts.plaintextVisibleServices,
       invitees: opts.invitees,
-      ownerDid: opts.ownerDid,
+      ownerId: opts.ownerId,
     },
     { server: opts.server },
   );
@@ -83,13 +83,13 @@ export async function createRealmViaApi(
 export async function acceptInviteViaApi(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   opts: { server?: SolandKey } = {},
 ) {
   const base = solandBaseUrl(opts.server);
   const listUrl = new URL("/_arkret/self/authz/invites", base);
-  listUrl.searchParams.set("subject", actorDid);
+  listUrl.searchParams.set("subject", actorId);
   listUrl.searchParams.set("realm_id", realmId);
   const list = await request.get(listUrl.toString(), {
     headers: {
@@ -103,11 +103,11 @@ export async function acceptInviteViaApi(
   };
   const invite = (body.invites ?? []).find(
     (candidate) =>
-      candidate.realm_id === realmId && candidate.invitee === actorDid,
+      candidate.realm_id === realmId && candidate.invitee === actorId,
   );
-  expect(invite, `pending invite for ${actorDid} in ${realmId}`).toBeTruthy();
+  expect(invite, `pending invite for ${actorId} in ${realmId}`).toBeTruthy();
 
-  await acceptInviteApi(request, token, actorDid, realmId, invite!.id, opts);
+  await acceptInviteApi(request, token, actorId, realmId, invite!.id, opts);
 }
 
 export async function createSharedRealmViaApi(
@@ -119,7 +119,7 @@ export async function createSharedRealmViaApi(
 ): Promise<string> {
   const realmId = await createRealmViaApi(request, ownerToken, {
     ...opts,
-    ownerDid: owner.did,
+    ownerId: owner.id,
   });
   // A normal Realm has no implicit discussion Strand. This fixture promises a
   // shared messaging Realm, so establish the explicit Strand + default pointer
@@ -129,25 +129,25 @@ export async function createSharedRealmViaApi(
     request,
     ownerToken,
     signedEventEnvelope({
-      actorDid: owner.did,
+      actorId: owner.id,
       realmId,
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: member.did,
+        actor_id: member.id,
         membership: "join",
         delivery_status: "unroutable",
       },
     }),
-    { server: opts.server, context: `join ${member.did}` },
+    { server: opts.server, context: `join ${member.id}` },
   );
   // Membership is not an authorization source. This fixture promises only
   // that both participants can author messages; tests exercising reactions,
   // revisions, or moderation must grant those independent actions explicitly.
   await grantCapabilityEventApi(request, ownerToken, {
-    ownerDid: owner.did,
+    ownerId: owner.id,
     realmId,
-    subjectDid: member.did,
+    subjectId: member.id,
     actions: ["ak.message.create"],
     server: opts.server,
   });
@@ -157,7 +157,7 @@ export async function createSharedRealmViaApi(
 // NOT a thin wrapper over `sendMessageApi` (soland-api.ts): `sendMessageApi`
 // derives the signing actor from `GET /account/me` (the token's own account)
 // and exposes no parameter for an explicit signer, whereas this helper signs
-// with the caller-supplied `opts.actorDid` (asserted required). Multi-actor
+// with the caller-supplied `opts.actorId` (asserted required). Multi-actor
 // specs depend on sending as a DID that is not the token's `/account/me`, so
 // delegating would change the signer and add a network round-trip. Since
 // `sendMessageApi`'s exported signature must not change, the strand is kept here
@@ -168,11 +168,11 @@ export async function sendPlaintextMessageViaApi(
   token: string,
   realmId: string,
   body: string,
-  opts: { actorDid?: string; server?: SolandKey; strandId?: string } = {},
+  opts: { actorId?: string; server?: SolandKey; strandId?: string } = {},
 ): Promise<ApiMessage> {
   expect(
-    opts.actorDid,
-    "sendPlaintextMessageViaApi requires opts.actorDid for canonical events",
+    opts.actorId,
+    "sendPlaintextMessageViaApi requires opts.actorId for canonical events",
   ).toBeTruthy();
   const strandId =
     opts.strandId ??
@@ -180,7 +180,7 @@ export async function sendPlaintextMessageViaApi(
       server: opts.server,
     }));
   const envelope = signedEventEnvelope({
-    actorDid: opts.actorDid!,
+    actorId: opts.actorId!,
     realmId,
     kind: "ak.message.create",
     payload: {
@@ -199,7 +199,7 @@ export async function sendPlaintextMessageViaApi(
   return {
     event_id: String(envelope.event_id),
     realm_id: realmId,
-    actor_id: opts.actorDid,
+    actor_id: opts.actorId,
   };
 }
 

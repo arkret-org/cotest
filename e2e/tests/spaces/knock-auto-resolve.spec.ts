@@ -131,7 +131,7 @@ async function submitCandidateJoin(
   request: APIRequestContext,
   ownerToken: string,
   applicantToken: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   gateProofs: Array<Record<string, unknown>>,
   opts: {
@@ -149,7 +149,7 @@ async function submitCandidateJoin(
   return submitJoinWithProofsApi(
     request,
     applicantToken,
-    actorDid,
+    actorId,
     realmId,
     gateProofs,
     { ...opts, sealBasis },
@@ -189,7 +189,7 @@ test.describe("knock auto-resolve path", () => {
       "acme:employee",
     ]);
 
-    const resp = await submitCandidateJoin(request, aliceToken, bobToken, bob.did, realmId, [
+    const resp = await submitCandidateJoin(request, aliceToken, bobToken, bob.id, realmId, [
       { gate_id: "g-vc", claim_presentation: claimPresentation },
       { gate_id: "g-captcha", challenge_proof: challengeProof },
     ]);
@@ -234,7 +234,7 @@ test.describe("knock auto-resolve path", () => {
       request,
       aliceToken,
       malloryToken,
-      mallory.did,
+      mallory.id,
       realmId,
       [
         { gate_id: "g-vc", claim_presentation: wrongClaim },
@@ -281,7 +281,7 @@ test.describe("knock auto-resolve path", () => {
       issuedAtOffsetSeconds: 400,
     });
 
-    const resp = await submitCandidateJoin(request, aliceToken, bobToken, bob.did, realmId, [
+    const resp = await submitCandidateJoin(request, aliceToken, bobToken, bob.id, realmId, [
       { gate_id: "g-vc", claim_presentation: claimPresentation },
       { gate_id: "g-captcha", challenge_proof: staleProof },
     ]);
@@ -331,7 +331,7 @@ test.describe("knock auto-resolve path", () => {
       request,
       aliceToken,
       bobToken,
-      bob.did,
+      bob.id,
       realmId,
       [{ gate_id: "g-vc", claim_presentation: firstClaim }],
     );
@@ -341,14 +341,14 @@ test.describe("knock auto-resolve path", () => {
     ).toContain(joinResp.status());
 
     // bob leaves, then immediately re-applies with a still-valid g-vc proof.
-    const leave = await submitLeaveApi(request, bobToken, bob.did, realmId);
+    const leave = await submitLeaveApi(request, bobToken, bob.id, realmId);
 
     const reapplyClaim = await issueClaim(request, bob.did, ["acme:employee"]);
     const resp = await submitCandidateJoin(
       request,
       aliceToken,
       bobToken,
-      bob.did,
+      bob.id,
       realmId,
       [{ gate_id: "g-vc", claim_presentation: reapplyClaim }],
       {
@@ -399,7 +399,7 @@ test.describe("knock auto-resolve path", () => {
       request,
       aliceToken,
       bobToken,
-      bob.did,
+      bob.id,
       realmId,
       [{ gate_id: "g-vc", claim_presentation: bobClaim }],
     );
@@ -414,7 +414,7 @@ test.describe("knock auto-resolve path", () => {
       request,
       aliceToken,
       malloryToken,
-      mallory.did,
+      mallory.id,
       realmId,
       [{ gate_id: "g-captcha", challenge_proof: malloryProof }],
     );

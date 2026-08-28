@@ -16,7 +16,7 @@
       "name": "concurrent_cas_register_move_resolves_to_bottom",
       "comment": "Peer_a writes display_name=\"Alice\", peer_b writes display_name=\"Alicia\" to the same cas-register cell concurrently. After both peers see each other's anchor, the register joins to Bottom and the cell is flagged as conflicted; clients display the conflict-resolution UI.",
       "cell_kind": "cas_register",
-      "cell_id": "ak:cell:ak.component.profile.display_name.v1:did:web:alice.example",
+      "cell_id": "ak:cell:ak.component.profile.display_name.v1:ak:did_core:web:alice.example",
       "concurrent_moves": [
         {"peer": "peer_a", "value": "Alice", "ts": 1700000000},
         {"peer": "peer_b", "value": "Alicia", "ts": 1700000001}
@@ -64,7 +64,7 @@
       "name": "anchor_pull_idempotent_after_conflict_resolution",
       "comment": "After the conflict resolves to Bottom, peer_a pulls peer_b's Anchor a second time. Result is identical — re-applying the same anchor is a no-op (idempotent).",
       "cell_kind": "cas_register",
-      "cell_id": "ak:cell:ak.component.profile.display_name.v1:did:web:alice.example",
+      "cell_id": "ak:cell:ak.component.profile.display_name.v1:ak:did_core:web:alice.example",
       "concurrent_moves": [
         {"peer": "peer_a", "value": "Alice", "ts": 1700000000},
         {"peer": "peer_b", "value": "Alicia", "ts": 1700000001}

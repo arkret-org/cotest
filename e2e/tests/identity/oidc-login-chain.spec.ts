@@ -117,7 +117,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
   // COAUTH_ENABLE_TEST_ENDPOINTS) is unavailable.
   async function setupGrant(
     request: APIRequestContext,
-  ): Promise<{ deviceKey: DpopDeviceKey; grant: DpopBoundGrant; actorDid: string } | undefined> {
+  ): Promise<{ deviceKey: DpopDeviceKey; grant: DpopBoundGrant; actorId: string } | undefined> {
     const coauth = coauthBaseUrl();
     if (!coauth) {
       return undefined;
@@ -127,7 +127,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     const grant = await mintDpopBoundGrant(
       request,
       coauth,
-      account.did,
+      account.id,
       account.genesisDeviceId,
       deviceKey,
       { audience: solandServiceId() },
@@ -135,7 +135,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     if (!grant) {
       return undefined;
     }
-    return { deviceKey, grant, actorDid: account.did };
+    return { deviceKey, grant, actorId: account.id };
   }
 
   test("2. a session grant authenticates a /_arkret/root/* read only WITH a bound DPoP proof", async ({

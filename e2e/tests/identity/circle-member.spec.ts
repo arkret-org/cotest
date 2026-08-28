@@ -63,13 +63,13 @@ test.describe("circle membership (same principal server)", () => {
     // add — `addRealmMemberApi` submits ak.member.state{join}).
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S8 circle realm ${Date.now()}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
 
     // alice creates an invite-rule Circle bound to that realm.
     const circle = await createCircleArkret(request, aliceToken, {
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       title: `S8 circle ${Date.now()}`,
       joinRule: "invite",
@@ -92,25 +92,25 @@ test.describe("circle membership (same principal server)", () => {
     // explicitly grants herself member management for this Circle, joins so she
     // can read the member list, then pulls Bob. Bob is NOT consulted.
     await grantCircleMemberManageCapability(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
-      subjectDid: alice.did,
+      subjectId: alice.id,
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
-      actorDid: alice.did,
+      signerId: alice.id,
       realmId,
-      actorId: alice.did,
+      actorId: alice.id,
       membership: "join",
     });
     const membership = await addCircleMemberArkret(
       request,
       aliceToken,
       circle.circle_id,
-      { actorDid: alice.did, realmId, actorId: bob.did, membership: "join" },
+      { signerId: alice.id, realmId, actorId: bob.id, membership: "join" },
     );
     expect(membership.membership).toBe("join");
-    expect(membership.actor_id).toBe(bob.did);
+    expect(membership.actor_id).toBe(bob.id);
 
     // CORE ASSERTION: bob did zero operations yet is a Circle member.
     const fetched = await getCircleArkret(
@@ -118,7 +118,7 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.members).toContain(bob.did);
+    expect(fetched.members).toContain(bob.id);
 
     // The DELETE is itself a caller-signed membership Move. Its payload binds
     // both path ids and carries the observed joined head as the CAS guard.
@@ -126,12 +126,12 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
-      bob.did,
-      { actorDid: alice.did, realmId },
+      bob.id,
+      { actorId: alice.id, realmId },
     );
     expect(removed).toEqual({
       circle_id: circle.circle_id,
-      actor_id: bob.did,
+      actor_id: bob.id,
       membership: "leave",
     });
     const afterRemoval = await getCircleArkret(
@@ -139,7 +139,7 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(afterRemoval.members).not.toContain(bob.did);
+    expect(afterRemoval.members).not.toContain(bob.id);
   });
 
   test("S8 lifecycle archive then restore returns Circle to active", async ({
@@ -151,30 +151,30 @@ test.describe("circle membership (same principal server)", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S8 restore circle realm ${Date.now()}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const circle = await createCircleArkret(request, aliceToken, {
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       title: `S8 restore circle ${Date.now()}`,
       joinRule: "invite",
     });
     await grantCircleManageCapability(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
-      subjectDid: alice.did,
+      subjectId: alice.id,
       circleId: circle.circle_id,
     });
     await grantCircleMemberManageCapability(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
-      subjectDid: alice.did,
+      subjectId: alice.id,
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
-      actorDid: alice.did,
+      signerId: alice.id,
       realmId,
-      actorId: alice.did,
+      actorId: alice.id,
       membership: "join",
     });
 
@@ -182,7 +182,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
-      { actorDid: alice.did, realmId },
+      { actorId: alice.id, realmId },
     );
     expect(archived.state).toBe("archived");
 
@@ -190,7 +190,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
-      { actorDid: alice.did, realmId },
+      { actorId: alice.id, realmId },
     );
     expect(restored.state).toBe("active");
 
@@ -218,24 +218,24 @@ test.describe("circle membership (same principal server)", () => {
 
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S8n circle realm ${Date.now()}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const circle = await createCircleArkret(request, aliceToken, {
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       title: `S8n circle ${Date.now()}`,
       joinRule: "invite",
     });
     await grantCircleMemberManageCapability(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
-      subjectDid: alice.did,
+      subjectId: alice.id,
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
-      actorDid: alice.did,
+      signerId: alice.id,
       realmId,
-      actorId: alice.did,
+      actorId: alice.id,
       membership: "join",
     });
 
@@ -245,7 +245,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       aliceToken,
       circle.circle_id,
-      { actorDid: alice.did, realmId, actorId: mallory.did, membership: "join" },
+      { signerId: alice.id, realmId, actorId: mallory.id, membership: "join" },
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(422);
@@ -259,7 +259,7 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.members ?? []).not.toContain(mallory.did);
+    expect(fetched.members ?? []).not.toContain(mallory.id);
   });
 
   // S8 capability: a realm member who is NOT the owner and holds no
@@ -287,27 +287,27 @@ test.describe("circle membership (same principal server)", () => {
     // alice owns the realm; carol + dave are both join members.
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S8c circle realm ${Date.now()}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
-    await addRealmMemberApi(request, aliceToken, realmId, carol.did);
-    await addRealmMemberApi(request, aliceToken, realmId, dave.did);
+    await addRealmMemberApi(request, aliceToken, realmId, carol.id);
+    await addRealmMemberApi(request, aliceToken, realmId, dave.id);
 
     const circle = await createCircleArkret(request, aliceToken, {
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       title: `S8c circle ${Date.now()}`,
       joinRule: "invite",
     });
     await grantCircleMemberManageCapability(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
-      subjectDid: alice.did,
+      subjectId: alice.id,
       circleId: circle.circle_id,
     });
     await addCircleMemberArkret(request, aliceToken, circle.circle_id, {
-      actorDid: alice.did,
+      signerId: alice.id,
       realmId,
-      actorId: alice.did,
+      actorId: alice.id,
       membership: "join",
     });
 
@@ -318,7 +318,7 @@ test.describe("circle membership (same principal server)", () => {
       request,
       carolToken,
       circle.circle_id,
-      { actorDid: carol.did, realmId, actorId: dave.did, membership: "join" },
+      { signerId: carol.id, realmId, actorId: dave.id, membership: "join" },
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(403);
@@ -332,6 +332,6 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.members ?? []).not.toContain(dave.did);
+    expect(fetched.members ?? []).not.toContain(dave.id);
   });
 });

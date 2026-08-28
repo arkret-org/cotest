@@ -12,7 +12,7 @@ import {
 import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   base64url,
-  canonicalDidCoreId,
+  requireDidCoreId,
   canonicalJson,
   canonicalTimestamp,
   cotestWire,
@@ -197,7 +197,7 @@ async function acceptedDirectMessageEvidence(
       idempotency_key: typedId("contact-request"),
       peer: {
         kind: "human",
-        principal_id: canonicalDidCoreId(bob.user.did),
+        principal_id: requireDidCoreId(bob.user.id),
       },
       granted_to_peer_scopes: ["direct_message"],
       introduction_evidence: { kind: "explicit_address" },
@@ -237,7 +237,7 @@ async function acceptedDirectMessageEvidence(
       idempotency_key: typedId("contact-scope"),
       peer: {
         kind: "human",
-        principal_id: canonicalDidCoreId(bob.user.did),
+        principal_id: requireDidCoreId(bob.user.id),
       },
       contact_round_id: responseReceipt.contact_round_id,
       version: 2,
@@ -247,8 +247,8 @@ async function acceptedDirectMessageEvidence(
   );
   const aliceCurrentProof = aliceScopeOutcome.current_proof as JsonObject;
   const pair = [
-    canonicalDidCoreId(alice.user.did),
-    canonicalDidCoreId(bob.user.did),
+    requireDidCoreId(alice.user.id),
+    requireDidCoreId(bob.user.id),
   ].sort();
   const contact_round = {
     kind: "normal",
@@ -280,8 +280,8 @@ async function acceptedDirectMessageEvidence(
 }
 
 function foundingEvents(args: {
-  founderDid: string;
-  peerDid: string;
+  founderId: string;
+  peerId: string;
   basisRef: string;
   salt: string;
   createdAt: string;
@@ -296,7 +296,7 @@ function foundingEvents(args: {
     },
   ];
   const { envelope: create, realmId } = signedRealmGenesisEnvelope({
-    actorDid: args.founderDid,
+    actorId: args.founderId,
     realmId: "",
     kind: "ak.realm.create",
     actorSeq: 0,
@@ -337,7 +337,7 @@ function foundingEvents(args: {
   });
   const createId = String(create.event_id);
   const member = signedEventEnvelope({
-    actorDid: args.founderDid,
+    actorId: args.founderId,
     realmId,
     kind: "ak.member.state",
     actorSeq: 1,
@@ -347,7 +347,7 @@ function foundingEvents(args: {
     authorizationRef: REALM_AUTHORITY_ROOT_CELL,
     payload: {
       realm_id: realmId,
-      actor_id: args.peerDid,
+      actor_id: args.peerId,
       membership: "join",
       delivery_status: "unroutable",
       reason: "direct_conversation_bootstrap",
@@ -355,7 +355,7 @@ function foundingEvents(args: {
   });
   const memberId = String(member.event_id);
   const strand = signedEventEnvelope({
-    actorDid: args.founderDid,
+    actorId: args.founderId,
     realmId,
     kind: "ak.strand.create",
     actorSeq: 2,
@@ -371,14 +371,14 @@ function foundingEvents(args: {
         stage: "in_progress",
         state: "active",
         tracks: { discussion: { enabled: true, is_primary: true } },
-        created_by: args.founderDid,
+        created_by: args.founderId,
         created_at: args.createdAt,
       },
     },
   });
   const strandId = String(strand.event_id);
   const founderMember = signedEventEnvelope({
-    actorDid: args.founderDid,
+    actorId: args.founderId,
     realmId,
     kind: "ak.member.state",
     actorSeq: 3,
@@ -388,13 +388,13 @@ function foundingEvents(args: {
     authorizationRef: REALM_AUTHORITY_ROOT_CELL,
     preconditions: [
       {
-        cell: `ak:cell:ak.component.member.state.v1:${args.founderDid}`,
+        cell: `ak:cell:ak.component.member.state.v1:${args.founderId}`,
         predicate: { op: "head_eq", value: null },
       },
     ],
     payload: {
       realm_id: realmId,
-      actor_id: args.founderDid,
+      actor_id: args.founderId,
       membership: "join",
       delivery_status: "unroutable",
       reason: "direct_conversation_bootstrap",
@@ -409,8 +409,8 @@ function foundingEvents(args: {
 
 function smallerFoundingCandidate(args: {
   accepted: ReturnType<typeof foundingEvents>;
-  founderDid: string;
-  peerDid: string;
+  founderId: string;
+  peerId: string;
   basisRef: string;
   acceptedSalt: string;
   createdAt: string;
@@ -455,11 +455,11 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     const createdAt = canonicalTimestamp();
     const hlcMillis = Date.now().toString(16).padStart(12, "0").slice(-12);
     const acceptedSalt = base64url(randomBytes(32));
-    const bobCoreId = canonicalDidCoreId(bob.did);
-    const aliceCoreId = canonicalDidCoreId(alice.did);
+    const bobCoreId = requireDidCoreId(bob.id);
+    const aliceCoreId = requireDidCoreId(alice.id);
     const accepted = foundingEvents({
-      founderDid: bobCoreId,
-      peerDid: aliceCoreId,
+      founderId: bobCoreId,
+      peerId: aliceCoreId,
       basisRef,
       salt: acceptedSalt,
       createdAt,
@@ -467,8 +467,8 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
     });
     const { candidate: losing, salt: losingSalt } = smallerFoundingCandidate({
       accepted,
-      founderDid: bobCoreId,
-      peerDid: aliceCoreId,
+      founderId: bobCoreId,
+      peerId: aliceCoreId,
       basisRef,
       acceptedSalt,
       createdAt,

@@ -68,7 +68,7 @@ test.describe("moderation reports and audited E2EE", () => {
 type EncryptedMessageSetup = {
   aliceToken: string;
   reporterToken: string;
-  reporterDid: string;
+  reporterId: string;
   realmId: string;
   message: Record<string, unknown>;
 };
@@ -97,20 +97,20 @@ async function setupEncryptedMessage(
     history_access: "since_join",
     encryption_profile: "mls_rfc9420",
     plaintext_visible_services: [],
-    ownerDid: alice.did,
+    ownerId: alice.id,
   });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-  await addRealmMemberApi(request, aliceToken, realmId, reporter.did);
+  await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+  await addRealmMemberApi(request, aliceToken, realmId, reporter.id);
   await grantCapabilityEventApi(request, aliceToken, {
-    ownerDid: alice.did,
+    ownerId: alice.id,
     realmId,
-    subjectDid: bob.did,
+    subjectId: bob.id,
     actions: ["ak.message.create"],
   });
 
   const strandCreatedAt = canonicalTimestamp();
   const strandEvent = signedEventEnvelope({
-    actorDid: alice.did,
+    actorId: alice.id,
     realmId,
     kind: "ak.strand.create",
     createdAt: strandCreatedAt,
@@ -125,7 +125,7 @@ async function setupEncryptedMessage(
             profile: "discussion",
           },
         },
-        created_by: alice.did,
+        created_by: alice.id,
         created_at: strandCreatedAt,
       },
     },
@@ -144,7 +144,7 @@ async function setupEncryptedMessage(
   ).toString("base64url");
   const encryptedContent = encryptedEnvelope(ciphertext, realmId);
   const message = signedEventEnvelope({
-    actorDid: bob.did,
+    actorId: bob.id,
     realmId,
     kind: "ak.message.create",
     payload: {
@@ -160,7 +160,7 @@ async function setupEncryptedMessage(
   return {
     aliceToken,
     reporterToken,
-    reporterDid: reporter.did,
+    reporterId: reporter.id,
     realmId,
     message,
   };
@@ -171,14 +171,14 @@ async function fileModerationReport(
   setup: EncryptedMessageSetup,
 ) {
   const reportEvent = signedEventEnvelope({
-    actorDid: setup.reporterDid,
+    actorId: setup.reporterId,
     realmId: setup.realmId,
     kind: "ak.self.moderation.report",
     payload: {
       realm_id: setup.realmId,
       target_ref: setup.message.event_id,
       report_reason_code: "harassment",
-      reporter: setup.reporterDid,
+      reporter: setup.reporterId,
       provenance: "self",
       description: "ordinary moderation report for scoped administrators",
       evidence_refs: [],

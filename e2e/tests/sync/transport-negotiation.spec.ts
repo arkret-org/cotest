@@ -140,7 +140,7 @@ test.describe("transport negotiation", () => {
       token,
       {
         title: "E8.1 federation signature fixture",
-        ownerDid: user.did,
+        ownerId: user.id,
         creator_service_id: solandServiceId("alpha"),
       },
       { server: "alpha" },
@@ -149,7 +149,7 @@ test.describe("transport negotiation", () => {
       makeFederationEvent({
         realmId,
         kind: "ak.message.create",
-        actorDid: user.did,
+        actorId: user.id,
         payload: {
           strand_id: typedId("strand"),
           track_name: "discussion",

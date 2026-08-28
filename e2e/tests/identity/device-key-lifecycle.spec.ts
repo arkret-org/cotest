@@ -64,8 +64,8 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
     );
     const returningUser = uniqueUser("oidc-key-life");
     returningUser.did = principalDid!;
-    returningUser.did =
-      registeredAccount?.did ?? projectDidToCoreId(principalDid!);
+    returningUser.id =
+      registeredAccount?.id ?? projectDidToCoreId(principalDid!);
     if (registeredAccount) {
       returningUser.deviceId = registeredAccount.genesisDeviceId;
     }

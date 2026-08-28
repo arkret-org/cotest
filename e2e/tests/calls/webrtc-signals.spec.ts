@@ -61,7 +61,7 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       const callId = newCallId();
 
       const envelope = buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -81,7 +81,7 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       );
       expect(mine.length, `bob receives the ${signalType} signal`).toBe(1);
       const env = mine[0];
-      expect(env.sender_actor_id).toBe(alice.did);
+      expect(env.sender_actor_id).toBe(alice.id);
       const payload = callSignalPlaintext(env);
       expect(payload.kind).toBe("ak.call.signal");
       // Canonical signal_kind + monotonic seq survive the relay verbatim.

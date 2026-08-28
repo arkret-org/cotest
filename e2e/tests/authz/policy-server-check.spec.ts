@@ -37,12 +37,13 @@ import {
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
-  canonicalDidCoreId,
+  requireDidCoreId,
   canonicalJson,
   createRealmApi,
-  currentActorDidApi,
+  currentActorIdApi,
   expectJsonOk,
   prepareSignedEventSubmissionApi,
+  projectDidToCoreId,
   rawSubmitSignedEventApi,
   readRealmSealBasis,
   resolveDefaultStrandId,
@@ -67,10 +68,10 @@ async function declarePolicyServer(
   did: string,
   opts: { cacheTtlSeconds?: number; timeoutMs?: number } = {},
 ): Promise<Record<string, unknown>> {
-  const actorDid = await currentActorDidApi(request, token);
+  const actorId = await currentActorIdApi(request, token);
   const sealBasis = await readRealmSealBasis(request, token, realmId);
   const payload = {
-    policy_server_service_id: canonicalDidCoreId(did),
+    policy_server_service_id: projectDidToCoreId(did),
     policy_server_url: `${baseUrl}/_arkret/self/policy/check`,
     cache_ttl_seconds: opts.cacheTtlSeconds ?? 5,
     timeout_ms: opts.timeoutMs ?? 1500,
@@ -78,7 +79,7 @@ async function declarePolicyServer(
   };
   const previousValue = policyServerCellValues.get(realmId);
   const event = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.realm.policy_server",
     preconditions: previousValue
@@ -125,11 +126,11 @@ async function deletePolicyServer(
   token: string,
   realmId: string,
 ) {
-  const actorDid = await currentActorDidApi(request, token);
+  const actorId = await currentActorIdApi(request, token);
   const previousValue = policyServerCellValues.get(realmId);
   const payload = { tombstone: true };
   const event = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.realm.policy_server",
     preconditions: previousValue
@@ -170,13 +171,13 @@ async function deletePolicyServer(
 async function submitGatedMessage(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   body: string,
 ): Promise<{ status: number; json: Record<string, unknown> }> {
   const strandId = await resolveDefaultStrandId(request, token, realmId);
   const envelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.message.create",
     payload: {
@@ -309,7 +310,7 @@ test.describe("policy server check", () => {
     );
     expect(projected.realm_id).toBe(realmId);
     expect(projected.policy_server_service_id).toBe(
-      canonicalDidCoreId(policyServerDid),
+      projectDidToCoreId(policyServerDid),
     );
     expect(projected.policy_server_url).toBe(policyServerUrl);
     expect(projected.from_organization_fallback).toBe(false);
@@ -330,7 +331,7 @@ test.describe("policy server check", () => {
       "PUT must append a canonical policy-server Event",
     ).toBeTruthy();
     expect(declaration?.event_id).toMatch(/^ak:event:/);
-    expect(declaration?.actor_id).toBe(alice.did);
+    expect(declaration?.actor_id).toBe(alice.id);
     expect(declaration?.executed_by).toBeUndefined();
     expect(declaration?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
     expect(declaration?.proofs?.length ?? 0).toBeGreaterThan(0);
@@ -360,7 +361,7 @@ test.describe("policy server check", () => {
       "get realm policy server",
     );
     expect(fetched.policy_server_service_id).toBe(
-      canonicalDidCoreId(policyServerDid),
+      projectDidToCoreId(policyServerDid),
     );
     expect(fetched.policy_server_url).toBe(policyServerUrl);
 
@@ -371,7 +372,7 @@ test.describe("policy server check", () => {
         "content-type": "application/json",
       },
       data: canonicalJson({
-        actor_id: bob.did,
+        actor_id: bob.id,
         action: "ak.message.create",
         resource: {
           kind: "realm",
@@ -401,7 +402,7 @@ test.describe("policy server check", () => {
     const alice = uniqueUser(`s30-policy-alice-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const aliceDid = await currentActorDidApi(request, aliceToken);
+    const aliceId = await currentActorIdApi(request, aliceToken);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S30 policy ${stamp}`,
       discoverability: "listed",
@@ -414,7 +415,7 @@ test.describe("policy server check", () => {
     const beforeDeclare = await submitGatedMessage(
       request,
       aliceToken,
-      aliceDid,
+      aliceId,
       realmId,
       "before policy server is declared",
     );
@@ -441,7 +442,7 @@ test.describe("policy server check", () => {
     const gated = await submitGatedMessage(
       request,
       aliceToken,
-      aliceDid,
+      aliceId,
       realmId,
       "after policy server is declared",
     );
@@ -482,7 +483,7 @@ test.describe("policy server check", () => {
     const alice = uniqueUser(`s30-timeout-alice-${stamp}`);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
-    const aliceDid = await currentActorDidApi(request, aliceToken);
+    const aliceId = await currentActorIdApi(request, aliceToken);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S30 timeout ${stamp}`,
       discoverability: "listed",
@@ -511,7 +512,7 @@ test.describe("policy server check", () => {
     const gated = await submitGatedMessage(
       request,
       aliceToken,
-      aliceDid,
+      aliceId,
       realmId,
       "gated op while upstream is slow",
     );
@@ -576,7 +577,7 @@ test.describe("policy server check", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: childRealmId,
         kind: "ak.realm.link",
         payload: {
@@ -618,7 +619,7 @@ test.describe("policy server check", () => {
     );
     expect(fallbackBody.realm_id).toBe(orgRealmId);
     expect(fallbackBody.policy_server_service_id).toBe(
-      canonicalDidCoreId(orgDid),
+      projectDidToCoreId(orgDid),
     );
     expect(fallbackBody.policy_server_url).toBe(orgUrl);
     expect(fallbackBody.cache_ttl_seconds).toBe(17);
@@ -660,7 +661,7 @@ test.describe("policy server check", () => {
     );
     expect(directBody.realm_id).toBe(childRealmId);
     expect(directBody.policy_server_service_id).toBe(
-      canonicalDidCoreId(childDid),
+      projectDidToCoreId(childDid),
     );
     expect(directBody.policy_server_url).toBe(childUrl);
     expect(directBody.cache_ttl_seconds).toBe(3);
@@ -680,7 +681,7 @@ test.describe("policy server check", () => {
     );
     expect(restoredFallbackBody.realm_id).toBe(orgRealmId);
     expect(restoredFallbackBody.policy_server_service_id).toBe(
-      canonicalDidCoreId(orgDid),
+      projectDidToCoreId(orgDid),
     );
     expect(restoredFallbackBody.from_organization_fallback).toBe(true);
 
@@ -697,7 +698,7 @@ test.describe("policy server check", () => {
       tombstone,
       "DELETE must append a canonical policy-server tombstone Event",
     ).toBeTruthy();
-    expect(tombstone?.actor_id).toBe(alice.did);
+    expect(tombstone?.actor_id).toBe(alice.id);
     expect(tombstone?.executed_by).toBeUndefined();
     expect(tombstone?.seal_basis?.leaves?.length ?? 0).toBeGreaterThan(0);
     expect(tombstone?.proofs?.length ?? 0).toBeGreaterThan(0);

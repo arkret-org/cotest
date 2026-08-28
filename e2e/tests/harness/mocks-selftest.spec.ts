@@ -269,7 +269,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect((await resetResp.json()).default).toBe("deny");
 
     const defaultDenyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ak.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
+      data: { action: "ak.member.invite", actor_id: "ak:did_core:web:alice", target: "ak:did_core:web:carol" },
     });
     expect(defaultDenyResp.status()).toBe(200);
     expect((await defaultDenyResp.json()).decision).toBe("deny");
@@ -280,7 +280,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
 
     // Explicit permissive baseline when no rules match.
     const allowResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ak.member.invite", actor_id: "did:web:alice", target: "did:web:carol" },
+      data: { action: "ak.member.invite", actor_id: "ak:did_core:web:alice", target: "ak:did_core:web:carol" },
     });
     expect(allowResp.status()).toBe(200);
     expect((await allowResp.json()).decision).toBe("allow");
@@ -291,8 +291,8 @@ test.describe("harness mocks selftest @fully-implemented", () => {
         rules: [
           {
             action: "ak.member.invite",
-            actor: "did:web:alice",
-            target: "did:web:bob",
+            actor: "ak:did_core:web:alice",
+            target: "ak:did_core:web:bob",
             decision: "deny",
             reason: "abuse_filter",
             obligations: [{ kind: "log_event", target: "audit_log" }],
@@ -302,7 +302,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     });
 
     const denyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ak.member.invite", actor_id: "did:web:alice", target: "did:web:bob" },
+      data: { action: "ak.member.invite", actor_id: "ak:did_core:web:alice", target: "ak:did_core:web:bob" },
     });
     expect(denyResp.status()).toBe(200);
     const denyBody = await denyResp.json();
@@ -392,7 +392,11 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     const body = await signed.json();
     expect(body.package_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(body.applet_package.schema).toBe("ak.schema.applet_package.v1");
-    expect(body.applet_package.bot_actor_id.startsWith(`did:web:bot-${namespace}`)).toBe(true);
+    expect(
+      body.applet_package.bot_actor_id.startsWith(
+        `ak:did_core:web:bot-${namespace}`,
+      ),
+    ).toBe(true);
     expect(body.applet_package.requested_scopes).toContain("ak.message.create");
     expect(Array.isArray(body.applet_package.endpoint_policy?.endpoints)).toBe(true);
     expect(body.applet_package.endpoint_policy.endpoints).toContainEqual({

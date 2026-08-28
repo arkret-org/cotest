@@ -40,7 +40,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
         ...authHeaders(aliceToken, "QUERY", frontierUrl),
         "content-type": "application/json",
       },
-      data: canonicalJson({ actor_id: alice.did, realm_id: missingRealmId }),
+      data: canonicalJson({ actor_id: alice.id, realm_id: missingRealmId }),
     });
     expect(
       missingFrontier.status(),
@@ -50,7 +50,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     let acceptedBootstrap: AcceptedRealmBootstrap | undefined;
     const realmId = await createRealmApi(request, aliceToken, {
       created_at: canonicalTimestamp(),
-      ownerDid: alice.did,
+      ownerId: alice.id,
       title: `Batch bootstrap ${Date.now()}`,
       summary: "cotest registered Realm genesis regression fixture",
       encryption_profile: "none",
@@ -63,7 +63,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
 
     const timeline = await queryRealmEventsApi(request, aliceToken, realmId);
     const events = ((timeline.events ?? []) as Array<Record<string, unknown>>)
-      .filter((event) => event.actor_id === alice.did)
+      .filter((event) => event.actor_id === alice.id)
       .sort((left, right) => Number(left.actor_seq) - Number(right.actor_seq));
     const expectedKinds = [
       "ak.realm.create",
@@ -98,10 +98,10 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     expect(
       creatorMembership.actor_id,
       "the creator membership slot is authored by the creator",
-    ).toBe(alice.did);
+    ).toBe(alice.id);
     expect(creatorMembership.payload).toMatchObject({
       realm_id: realmId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       membership: "join",
     });
     expect(
@@ -109,7 +109,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       "the creator member cell genesis write MUST carry head_eq null",
     ).toEqual([
       {
-        cell: `ak:cell:ak.component.member.state.v1:${alice.did}`,
+        cell: `ak:cell:ak.component.member.state.v1:${alice.id}`,
         predicate: { op: "head_eq", value: null },
       },
     ]);
@@ -167,7 +167,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
         ...authHeaders(aliceToken, "QUERY", frontierUrl),
         "content-type": "application/json",
       },
-      data: canonicalJson({ actor_id: alice.did, realm_id: realmId }),
+      data: canonicalJson({ actor_id: alice.id, realm_id: realmId }),
     });
     const frontierText = await frontierResponse.text();
     expect(
@@ -186,7 +186,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     expect(frontierBody.frontier).toMatchObject({
       kind: "realm_actor",
       realm_id: realmId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       next_actor_seq: events.length,
       frontier_event_ids: [events.at(-1)!.event_id],
     });
@@ -205,7 +205,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const continuedEvents = (
       (afterMessage.events ?? []) as Array<Record<string, unknown>>
     )
-      .filter((event) => event.actor_id === alice.did)
+      .filter((event) => event.actor_id === alice.id)
       .sort((left, right) => Number(left.actor_seq) - Number(right.actor_seq));
     expect(continuedEvents.slice(events.length).map((event) => event.kind)).toEqual([
       "ak.strand.create",

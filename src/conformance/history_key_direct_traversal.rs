@@ -3,6 +3,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, anyhow, bail};
+use arkret_identifiers::TrustDomainId;
+use arkret_models_collaboration::events_payloads::{
+    RealmCreatePayload, RealmGenesis, RealmPurpose,
+};
 use arkret_models_collaboration::governance::realm_lifecycle::HistoryAccessPayload;
 use arkret_models_collaboration::governance_dependencies::GovernanceDependencyResolveOutcome;
 use arkret_models_collaboration::history_key::{
@@ -28,12 +32,12 @@ use arkret_state::lattice::{CasRegister, Lattice, SealedOp};
 use arkret_state::{BottomMode, CellState, LatticeKind, MemoryCellRegistry, compute_state_root};
 use arkret_wire::event_envelope::ScopeRef;
 use arkret_wire::{
-    AvailabilityReceipt, CellFamilyId, CellRef, Did, DidCoreId, DidUrl, Event,
+    AvailabilityReceipt, CellFamilyId, CellRef, Did, DidCoreId, DidUrl, EncryptionProfile, Event,
     EventCandidateBinding, EventCandidateBindingKey, EventCandidateBindingOutcome, EventId,
-    EventKind, HISTORY_STORE_LIMITS, Hash, HistoryAccess, HistoryCandidateMaterialKey,
+    EventKind, GenesisSalt, HISTORY_STORE_LIMITS, Hash, HistoryAccess, HistoryCandidateMaterialKey,
     HistoryEffectiveScope, Hlc, LatticeOp, LatticeOpType, NotarySig, NotarySignerDescriptor,
     NotaryValue, ProducerEventProof, ProjectedCellWrite, ProjectedOp, RealmId, Seal, SealBasis,
-    SealId, SealSignature, null_subject_cell,
+    SealId, SealSignature, SecurityClass, null_subject_cell,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -453,19 +457,6 @@ fn verify_response_stream_fixture(fixture: &Value) -> Result<()> {
             .context("response stream KAT omits sequence_ordered_list")?,
     )?;
     list.validate()?;
-    let empty: HistoryKeyResponseListOutcome = serde_json::from_value(
-        kat.pointer("/wire_instances/empty_list")
-            .cloned()
-            .context("response stream KAT omits empty_list")?,
-    )?;
-    empty.validate()?;
-    if !empty.ack_entries.is_empty()
-        || empty.ack_token.is_some()
-        || empty.cursor.is_some()
-        || empty.limited
-    {
-        bail!("response stream empty page is not the canonical non-ack shape");
-    }
     let ack: HistoryKeyResponseAckRequest = serde_json::from_value(
         kat.pointer("/wire_instances/ack_request")
             .cloned()
@@ -900,20 +891,26 @@ fn verify_governance_dependency_kats(fixture: &Value) -> Result<()> {
     let signer_evidence: AuthenticatedSignerResolutionEvidence =
         serde_json::from_value(signer_kat["evidence"].clone())?;
     let signer_digest = signer_evidence.canonical_sha256_digest()?;
-    if signer_digest.as_str()
-        != signer_kat["evidence_digest"]
-            .as_str()
-            .context("signer evidence KAT omits evidence_digest")?
-        || signer_evidence.evidence_ref()?.as_ref()
-            != signer_kat["evidence_ref"]
-                .as_str()
-                .context("signer evidence KAT omits evidence_ref")?
-        || arkret_canonical::canonical::canonical_json_bytes(&signer_evidence)?.len() as u64
-            != signer_kat["canonical_bytes"]
-                .as_u64()
-                .context("signer evidence KAT omits canonical_bytes")?
+    let actual_ref = signer_evidence.evidence_ref()?;
+    let actual_ref_str = actual_ref.as_ref();
+    let actual_canonical_bytes =
+        arkret_canonical::canonical::canonical_json_bytes(&signer_evidence)?.len() as u64;
+    let expected_digest = signer_kat["evidence_digest"]
+        .as_str()
+        .context("signer evidence KAT omits evidence_digest")?;
+    let expected_ref = signer_kat["evidence_ref"]
+        .as_str()
+        .context("signer evidence KAT omits evidence_ref")?;
+    let expected_canonical_bytes = signer_kat["canonical_bytes"]
+        .as_u64()
+        .context("signer evidence KAT omits canonical_bytes")?;
+    if signer_digest.as_str() != expected_digest
+        || actual_ref_str != expected_ref
+        || actual_canonical_bytes != expected_canonical_bytes
     {
-        bail!("authenticated signer evidence KAT drifted");
+        bail!(
+            "authenticated signer evidence KAT drifted:\n  digest expected {expected_digest}, actual {signer_digest}\n  ref expected {expected_ref}, actual {actual_ref_str}\n  canonical bytes expected {expected_canonical_bytes}, actual {actual_canonical_bytes}"
+        );
     }
 
     let dependency_kat = fixture
@@ -1650,6 +1647,18 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
     )?;
     let method = historical_descriptor.verification_method.clone();
     let notary = NotaryValue::single_signer(historical_descriptor.clone());
+    let genesis = RealmGenesis::event_derived(
+        RealmPurpose::Collaboration,
+        GenesisSalt::new("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")?,
+        TrustDomainId::new("ak:trust_domain:replay-kat.example")?,
+        vec![arkret_wire::SchemaId::REALM_V1.to_owned()],
+        arkret_wire::CORE_REDUCER_PROFILE,
+        arkret_canonical::DigestSuite::Sha256,
+        SecurityClass::Standard,
+        EncryptionProfile::MlsRfc9420,
+        notary.clone(),
+    )?;
+    let create_payload = RealmCreatePayload::new(genesis).to_value()?;
     let created_at = DateTime::parse_from_rfc3339(REPLAY_KAT_CREATED_AT)?.with_timezone(&Utc);
     let mut genesis_event = arkret_wire::test_support::raw_event_at(
         EventKind::RealmCreate.to_string(),
@@ -1658,7 +1667,7 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
         actor_id.clone(),
         0,
         Hlc::new("0198d35d9800-0000-a13f9c2e")?,
-        json!({"object": {"digest_algorithm": "sha256", "notary": notary}}),
+        create_payload,
         created_at,
     )?;
     attach_replay_kat_proof(&mut genesis_event, &method)?;

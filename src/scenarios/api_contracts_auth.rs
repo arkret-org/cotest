@@ -67,7 +67,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(registered["did"], account_core_id.as_str());
+    assert_eq!(registered["principal_id"], account_core_id.as_str());
 
     expect_api_error(
         server

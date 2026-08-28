@@ -37,7 +37,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
             "prev_refs": [],
             "refs": [],
             "payload": {
-                "resource_id": "did:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
+                "resource_id": "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
                 "value": {
                     "resource_kind": "actor",
                     "discoverability": "public",

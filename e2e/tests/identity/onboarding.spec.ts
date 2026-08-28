@@ -100,6 +100,6 @@ test.describe("first registration PCR genesis @fully-implemented", () => {
       binding?: { state?: string; principal_id?: string };
     };
     expect(snapshot.binding?.state).toBe("bound");
-    expect(snapshot.binding?.principal_id).toBe(account.did);
+    expect(snapshot.binding?.principal_id).toBe(account.id);
   });
 });

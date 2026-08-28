@@ -68,7 +68,7 @@
         "state_root": "sha256:ddd1111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [],
         "signature": {
-          "issuer": "did:web:anchorer.example",
+          "issuer": "ak:did_core:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
           "signature_algorithm": "Ed25519"
         }
@@ -139,7 +139,7 @@
           }
         ],
         "signature": {
-          "issuer": "did:web:anchorer.example",
+          "issuer": "ak:did_core:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
           "signature_algorithm": "Ed25519"
         }
@@ -172,7 +172,7 @@
         "state_root": "sha256:8a81111111111111111111111111111111111111111111111111111111111111",
         "bottom_diagnostics": [],
         "signature": {
-          "issuer": "did:web:anchorer.example",
+          "issuer": "ak:did_core:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
           "signature_algorithm": "Ed25519"
         },
@@ -198,7 +198,7 @@
         "state_root": "sha256:dead0000000000000000000000000000000000000000000000000000000000ff",
         "bottom_diagnostics": [],
         "signature": {
-          "issuer": "did:web:anchorer.example",
+          "issuer": "ak:did_core:web:anchorer.example",
           "kid": "did:web:anchorer.example#anchor-key-1",
           "signature_algorithm": "Ed25519"
         },

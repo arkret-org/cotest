@@ -51,12 +51,12 @@ test.describe("workflow: team onboarding", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [yuki.did],
+        seedMembers: [yuki.id],
       });
       await yukiPage.acceptInvite(realmId);
       await meiPage.grantRealmCapability(
         realmId,
-        yuki.did,
+        yuki.id,
         "ak.message.create",
       );
       await meiPage.sendTimelineMessage(realmId, welcome);
@@ -150,7 +150,7 @@ test.describe("workflow: team onboarding", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [yuki.did],
+        seedMembers: [yuki.id],
       });
       await yukiPage.acceptInvite(realmId);
       await meiPage.sendTimelineMessage(realmId, welcome);

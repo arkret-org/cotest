@@ -17,7 +17,7 @@ test.describe("MLS group encryption", () => {
     const token = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, token, {
       title: "MLS create-lock smoke",
-      ownerDid: alice.did,
+      ownerId: alice.id,
       history_access: "since_join",
       encryption_profile: "mls_rfc9420",
     });

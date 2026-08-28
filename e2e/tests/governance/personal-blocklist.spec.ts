@@ -78,7 +78,7 @@ test.describe("personal blocklist", () => {
     const firstEntry = await replaceAccountDataApi(
       request,
       token,
-      alice.did,
+      alice.id,
       dataType,
       first,
       0,
@@ -89,7 +89,7 @@ test.describe("personal blocklist", () => {
     const secondEntry = await replaceAccountDataApi(
       request,
       token,
-      alice.did,
+      alice.id,
       dataType,
       second,
       Number(firstEntry.revision ?? 1),
@@ -167,7 +167,7 @@ test.describe("personal blocklist", () => {
     const bobToken = await issueDevSession(request, bob);
     const aliceSubscribeOpts = () =>
       accountSubscribeDpopOpts(aliceFlow.session);
-    const bobDidVisiblePrefix = bob.did.slice(0, 16);
+    const bobIdVisiblePrefix = bob.id.slice(0, 16);
     const apiActorSeq = 8_000_000_200_000_000 + (stamp % 100_000);
 
     try {
@@ -177,13 +177,13 @@ test.describe("personal blocklist", () => {
         joinRule: "invite",
         historyAccess: "since_join",
         encryptionProfile: "none",
-        seedMembers: [bob.did],
+        seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
       await grantCapabilityEventApi(request, aliceToken, {
-        ownerDid: alice.did,
+        ownerId: alice.id,
         realmId,
-        subjectDid: bob.did,
+        subjectId: bob.id,
         actions: ["ak.message.create"],
       });
 
@@ -205,11 +205,11 @@ test.describe("personal blocklist", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await alicePage.page.getByTestId("block-target-input").fill(bob.did);
+      await alicePage.page.getByTestId("block-target-input").fill(bob.id);
       await alicePage.page.getByTestId("block-user-button").click();
       await expect(
         alicePage.page.getByTestId("blocked-users-list"),
-      ).toContainText(bobDidVisiblePrefix, {
+      ).toContainText(bobIdVisiblePrefix, {
         timeout: 30_000,
       });
       await expect(alicePage.page.getByTestId("write-status")).toContainText(
@@ -224,7 +224,7 @@ test.describe("personal blocklist", () => {
             await blocklistStoredOpaque(
               request,
               aliceToken,
-              bob.did,
+              bob.id,
               aliceSubscribeOpts,
             ),
           {
@@ -236,7 +236,7 @@ test.describe("personal blocklist", () => {
 
       const m2 = `S31 m2 ${stamp}`;
       await sendMessageApi(request, bobToken, realmId, m2, {
-        mentions: [alice.did],
+        mentions: [alice.id],
         actorSeq: apiActorSeq,
       });
       await alicePage.gotoTimelineRealm(realmId);
@@ -264,12 +264,12 @@ test.describe("personal blocklist", () => {
       });
       await alicePage.page
         .getByTestId("blocked-user-row")
-        .filter({ hasText: bobDidVisiblePrefix })
+        .filter({ hasText: bobIdVisiblePrefix })
         .getByTestId("unblock-button")
         .click();
       await expect(
         alicePage.page.getByTestId("blocked-users-list"),
-      ).not.toContainText(bobDidVisiblePrefix, {
+      ).not.toContainText(bobIdVisiblePrefix, {
         timeout: 30_000,
       });
       await expect
@@ -278,7 +278,7 @@ test.describe("personal blocklist", () => {
             await blocklistClearedOrTombstoned(
               request,
               aliceToken,
-              bob.did,
+              bob.id,
               aliceSubscribeOpts,
             ),
           {
@@ -323,12 +323,12 @@ test.describe("personal blocklist", () => {
       public: true,
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-    await addRealmMemberApi(request, aliceToken, realmId, carol.did);
-    await putBlocklist(request, aliceToken, alice.did, [
-      canonicalActorBlockEntry(bob.did),
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    await addRealmMemberApi(request, aliceToken, realmId, carol.id);
+    await putBlocklist(request, aliceToken, alice.id, [
+      canonicalActorBlockEntry(bob.id),
     ]);
-    expect(await blocklistStoredOpaque(request, aliceToken, bob.did)).toBe(
+    expect(await blocklistStoredOpaque(request, aliceToken, bob.id)).toBe(
       true,
     );
 
@@ -352,7 +352,7 @@ test.describe("personal blocklist", () => {
     }
 
     const redactEvent = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.message.redact",
       payload: {
@@ -395,7 +395,7 @@ test.describe("personal blocklist", () => {
       public: true,
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
 
     const mutedVisible = `S31 E11.2 muted-visible ${stamp}`;
     await sendMessageApi(request, bobToken, realmId, mutedVisible);
@@ -424,7 +424,7 @@ test.describe("personal blocklist", () => {
     await replaceAccountDataApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       "ak.push_rules",
       {
         rules: [
@@ -458,8 +458,8 @@ test.describe("personal blocklist", () => {
     const notifyBody = await notify.json();
     expect(JSON.stringify(notifyBody)).not.toContain(`mute-${stamp}`);
 
-    await putBlocklist(request, aliceToken, alice.did, [
-      canonicalActorBlockEntry(bob.did),
+    await putBlocklist(request, aliceToken, alice.id, [
+      canonicalActorBlockEntry(bob.id),
     ]);
     const blockedHidden = `S31 E11.2 blocked-hidden ${stamp}`;
     await sendMessageApi(request, bobToken, realmId, blockedHidden);
@@ -487,9 +487,9 @@ test.describe("personal blocklist", () => {
       public: true,
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-    await putBlocklist(request, aliceToken, alice.did, [
-      canonicalActorBlockEntry(bob.did),
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    await putBlocklist(request, aliceToken, alice.id, [
+      canonicalActorBlockEntry(bob.id),
     ]);
 
     const body = `S31 E11.3 bob own message ${stamp}`;
@@ -502,10 +502,10 @@ test.describe("personal blocklist", () => {
       eventsText(await queryRealmEventsApi(request, bobToken, realmId)),
     ).toContain(body);
 
-    expect(await blocklistStoredOpaque(request, aliceToken, bob.did)).toBe(
+    expect(await blocklistStoredOpaque(request, aliceToken, bob.id)).toBe(
       true,
     );
-    expect(await blocklistStoredOpaque(request, bobToken, alice.did)).toBe(
+    expect(await blocklistStoredOpaque(request, bobToken, alice.id)).toBe(
       false,
     );
     expect(await readNotificationsText(request, bobToken)).not.toMatch(
@@ -525,13 +525,13 @@ function canonicalActorBlockEntry(did: string): BlocklistEntry {
 async function putBlocklist(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   entries: BlocklistEntry[],
 ) {
   await replaceAccountDataApi(
     request,
     token,
-    actorDid,
+    actorId,
     BLOCKLIST_DATA_TYPE,
     { entries },
     0,

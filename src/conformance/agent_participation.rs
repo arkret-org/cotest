@@ -388,7 +388,7 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
         },
     };
     let outcome = AgentParticipationOutcome {
-        agent_id: "did:web:agents.acme.example:alice-summary".to_owned(),
+        agent_id: "ak:did_core:web:agents.acme.example:alice-summary".to_owned(),
         entries: vec![entry.clone()],
     };
     if outcome.entries.len() != 1 {

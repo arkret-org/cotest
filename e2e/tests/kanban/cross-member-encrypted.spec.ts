@@ -68,7 +68,7 @@ async function waitForMlsWelcome(
   request: APIRequestContext,
   session: DpopUserSession,
   realmId: string,
-  recipientDid: string,
+  recipientId: string,
 ): Promise<void> {
   await expect
     .poll(
@@ -91,13 +91,13 @@ async function waitForMlsWelcome(
         return (body.events ?? []).some(
           (event: Record<string, any>) =>
             event.kind === "ak.mls.welcome" &&
-            event.payload?.recipient_principal_id === recipientDid,
+            event.payload?.recipient_principal_id === recipientId,
         );
       },
       {
         timeout: 120_000,
         intervals: [1_000, 2_000, 5_000],
-        message: `MLS Welcome for ${recipientDid} was not accepted in ${realmId}`,
+        message: `MLS Welcome for ${recipientId} was not accepted in ${realmId}`,
       },
     )
     .toBe(true);
@@ -622,7 +622,7 @@ test.describe("cross-member encrypted kanban", () => {
       // 2) Invite Bob before his browser has completed the founding-device
       // bootstrap or published a KeyPackage. The invite must persist even
       // though immediate MLS admission is deferred.
-      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
+      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.id);
       expect(
         inviteStatus,
         "the Realm invite must persist while Bob has no claimable KeyPackage",
@@ -648,7 +648,7 @@ test.describe("cross-member encrypted kanban", () => {
       //    cross-member collaboration path this test exercises.)
       await bobPage.acceptInvite(realmId);
       await bobPage.gotoTimelineRealm(realmId);
-      await waitForMlsWelcome(request, aliceSession, realmId, bob.did);
+      await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await bobPage.completeRecoveryKeySetupIfPrompted();
 
@@ -841,7 +841,7 @@ test.describe("cross-member encrypted kanban", () => {
 
       // 3) Alice invites Bob only after the encrypted content already exists,
       // while Bob still has no browser-published KeyPackage.
-      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.did);
+      const inviteStatus = await alicePage.inviteFromAdmin(realmId, bob.id);
       expect(inviteStatus).toContain("invited");
       expect(inviteStatus).not.toContain("MLS Welcome queued");
 
@@ -853,7 +853,7 @@ test.describe("cross-member encrypted kanban", () => {
       await bobPage.acknowledgeRecommendedEncryptionPromptIfVisible();
       await bobPage.acceptInvite(realmId);
       await bobPage.gotoTimelineRealm(realmId);
-      await waitForMlsWelcome(request, aliceSession, realmId, bob.did);
+      await waitForMlsWelcome(request, aliceSession, realmId, bob.id);
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await bobPage.completeRecoveryKeySetupIfPrompted();
 

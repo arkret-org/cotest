@@ -52,7 +52,7 @@ import {
 async function createStrandApi(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   title: string,
   fields: Record<string, unknown> = { status: "open" },
@@ -63,7 +63,7 @@ async function createStrandApi(
     request,
     token,
     signedEventEnvelope({
-      actorDid,
+      actorId,
       realmId,
       kind: "ak.strand.create",
       createdAt,
@@ -75,7 +75,7 @@ async function createStrandApi(
           metadata: { title, fields },
           stage: "planned",
           tracks: { discussion: { enabled: true, is_primary: true } },
-          created_by: actorDid,
+          created_by: actorId,
           created_at: createdAt,
         },
       },
@@ -136,7 +136,7 @@ function relationObject(args: {
   relationKind: string;
   fromRef: string;
   toRef: string;
-  actorDid: string;
+  actorId: string;
 }): Record<string, unknown> {
   return {
     id: args.id,
@@ -145,7 +145,7 @@ function relationObject(args: {
     relation_kind: args.relationKind,
     from_ref: args.fromRef,
     to_ref: args.toRef,
-    created_by: args.actorDid,
+    created_by: args.actorId,
     created_at: canonicalTimestamp(),
   };
 }
@@ -210,10 +210,10 @@ test.describe("core object invariants", () => {
       expect(realmBody.realm_id).toBe(realmId);
       expect(realmBody.realm_id).toMatch(/^ak:realm:/);
       // Common-field 2: actor reference through the canonical owner field.
-      expect(realmBody.owner_id).toBe(alice.did);
+      expect(realmBody.owner_id).toBe(alice.id);
       // Membership invariant: owner must always appear in members.
       expect(Array.isArray(realmBody.members)).toBe(true);
-      expect(realmBody.members ?? []).toContain(alice.did);
+      expect(realmBody.members ?? []).toContain(alice.id);
       // Common-field 3: `lifecycle_state` equivalent (deleted=false ⇒ active).
       expect(realmBody.deleted).toBe(false);
 
@@ -260,7 +260,7 @@ test.describe("core object invariants", () => {
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
       );
       // Common-field (§2.2): actor_id.
-      expect(lifecycleEvent.actor_id).toBe(alice.did);
+      expect(lifecycleEvent.actor_id).toBe(alice.id);
       // Common-field: kind (§2.2 — Event Envelope `kind`).
       expect(typeof lifecycleEvent.kind).toBe("string");
       expect(lifecycleEvent.kind?.length ?? 0).toBeGreaterThan(0);
@@ -305,13 +305,13 @@ test.describe("core object invariants", () => {
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `core-invariants B ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
 
     const strandId = await createStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       `core-invariants strand ${stamp}`,
       { status: "open" },
@@ -329,7 +329,7 @@ test.describe("core object invariants", () => {
     );
     const initialPosition = { list_space_id: sourceListId, rank: "m" };
     const initialMove = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
       preconditions: [
@@ -364,7 +364,7 @@ test.describe("core object invariants", () => {
       realmId,
     );
     const staleMoveEnvelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
       preconditions: [
@@ -408,7 +408,7 @@ test.describe("core object invariants", () => {
     );
     expect(basisAfterReject).toEqual(acceptedBasis);
     const freshMove = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.strand.move",
       preconditions: [
@@ -459,7 +459,7 @@ test.describe("core object invariants", () => {
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `core-invariants C ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const createdAt = canonicalTimestamp();
     const parentSpaceId = typedId("space");
@@ -467,7 +467,7 @@ test.describe("core object invariants", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         kind: "ak.space.create",
         createdAt,
@@ -478,7 +478,7 @@ test.describe("core object invariants", () => {
             realm_id: realmId,
             kind: "board",
             metadata: { title: `core-invariants parent ${stamp}` },
-            created_by: alice.did,
+            created_by: alice.id,
             created_at: createdAt,
           },
         },
@@ -493,7 +493,7 @@ test.describe("core object invariants", () => {
       {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId,
           kind: "ak.space.archive",
           payload: { space_id: parentSpaceId },
@@ -509,7 +509,7 @@ test.describe("core object invariants", () => {
       {
         headers: authHeaders(aliceToken),
         data: signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId,
           kind: "ak.space.tombstone",
           payload: { space_id: parentSpaceId },
@@ -540,7 +540,7 @@ test.describe("core object invariants", () => {
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `core-invariants D ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
 
     // `has_default_view` is many_to_one on (from_ref, relation_kind). The
@@ -552,7 +552,7 @@ test.describe("core object invariants", () => {
     const sourceRef = await createStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       `has_default_view anchor ${stamp}`,
     );
@@ -564,7 +564,7 @@ test.describe("core object invariants", () => {
         request,
         aliceToken,
         signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId,
           kind: "ak.relation.create",
           payload: {
@@ -574,7 +574,7 @@ test.describe("core object invariants", () => {
               relationKind: "has_default_view",
               fromRef: sourceRef,
               toRef: viewId,
-              actorDid: alice.did,
+              actorId: alice.id,
             }),
           },
         }),
@@ -607,7 +607,7 @@ test.describe("core object invariants", () => {
     // the same signed envelope is accepted by the events submit surface.
     const dupRelationId = typedId("relation");
     const duplicateEnvelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
       payload: {
@@ -617,7 +617,7 @@ test.describe("core object invariants", () => {
           relationKind: "has_default_view",
           fromRef: sourceRef,
           toRef: v2,
-          actorDid: alice.did,
+          actorId: alice.id,
         }),
       },
     });
@@ -637,24 +637,24 @@ test.describe("core object invariants", () => {
     // strand in another Realm and try to `contains` it from this Realm.
     const realmB = await createRealmApi(request, aliceToken, {
       title: `core-invariants D other ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const strandInA = await createStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       `card in A ${stamp}`,
     );
     const strandInB = await createStrandApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmB,
       `card in B ${stamp}`,
     );
     const crossRealmEnvelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
       payload: {
@@ -664,7 +664,7 @@ test.describe("core object invariants", () => {
           relationKind: "contains",
           fromRef: strandInA,
           toRef: strandInB,
-          actorDid: alice.did,
+          actorId: alice.id,
         }),
       },
     });
@@ -709,7 +709,7 @@ test.describe("core object invariants", () => {
     const aliceToken = await issueDevSession(request, alice);
     const realmId = await createRealmApi(request, aliceToken, {
       title: `core-invariants E ${stamp}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
     const createdAt = canonicalTimestamp();
     const spaceId = typedId("space");
@@ -717,7 +717,7 @@ test.describe("core object invariants", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         kind: "ak.space.create",
         createdAt,
@@ -728,7 +728,7 @@ test.describe("core object invariants", () => {
             realm_id: realmId,
             kind: "board",
             metadata: { title: `core-invariants E ${stamp}` },
-            created_by: alice.did,
+            created_by: alice.id,
             created_at: createdAt,
           },
         },

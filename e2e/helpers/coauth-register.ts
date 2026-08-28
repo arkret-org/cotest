@@ -38,10 +38,9 @@ export type CoauthPasswordAccount = {
   password: string;
   displayName: string;
   /// Stable principal did_core_id used by business protocol objects.
-  did: string;
+  id: string;
   /// Resolvable DID used only for registration and proof verification methods.
   did: string;
-  principalId?: string;
   genesisDeviceId: string;
   recoveryKey: string;
   initialGrant: DpopBoundGrant;
@@ -573,7 +572,7 @@ export async function registerCoauthPasswordAccount(
         )
       : [],
     expiresAt,
-    principalDid: principalId,
+    principalId,
     eventSigningKey,
   };
   return {
@@ -581,9 +580,8 @@ export async function registerCoauthPasswordAccount(
     email,
     password,
     displayName,
-    did: principalId,
+    id: principalId,
     did,
-    principalId,
     genesisDeviceId,
     recoveryKey: fixture.recovery_key,
     initialGrant,

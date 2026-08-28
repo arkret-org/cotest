@@ -46,15 +46,15 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     await grantCallCapability(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
-      bob.did,
+      bob.id,
       CAP_CALL_SIGNAL_SEND,
     );
     const callId = await createCallApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       "connecting",
     );
@@ -64,7 +64,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -77,7 +77,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       request,
       bobToken,
       buildCallSignalEnvelope({
-        actorDid: bob.did,
+        actorId: bob.id,
         deviceId: bob.deviceId,
         realmId,
         callId,
@@ -90,7 +90,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -107,7 +107,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -136,26 +136,26 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     expect(byType(bobView, "candidate").length).toBe(1);
     expect(byType(bobView, "hangup").length).toBe(1);
     // Sender attribution survives the relay.
-    expect(byType(bobView, "invite")[0].sender_actor_id).toBe(alice.did);
-    expect(byType(aliceView, "answer")[0].sender_actor_id).toBe(bob.did);
+    expect(byType(bobView, "invite")[0].sender_actor_id).toBe(alice.id);
+    expect(byType(aliceView, "answer")[0].sender_actor_id).toBe(bob.id);
     // Alice's own frames are seq-monotonic per sender (1=invite, 2=candidate,
     // 3=hangup); bob's answer is seq 1 in his own (actor,device) lane.
     const aliceSeqs = bobView
-      .filter((e) => e.sender_actor_id === alice.did)
+      .filter((e) => e.sender_actor_id === alice.id)
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(aliceSeqs).toEqual([1, 2, 3]);
     const bobSeqs = aliceView
-      .filter((e) => e.sender_actor_id === bob.did)
+      .filter((e) => e.sender_actor_id === bob.id)
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(bobSeqs).toEqual([1]);
 
     // Durable lifecycle plane — ak.call.state advances connecting -> active ->
     // ended (call-state.md §4.2). The owner writes the durable cell; we drive
     // it through the legal FSM transitions.
-    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+    await seedCallState(request, aliceToken, alice.id, realmId, callId, {
       state: "active",
     });
-    await seedCallState(request, aliceToken, alice.did, realmId, callId, {
+    await seedCallState(request, aliceToken, alice.id, realmId, callId, {
       state: "ended",
     });
   });
@@ -168,13 +168,13 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     const carol = uniqueUser(`seq-focus-carol-${Date.now()}`);
     await ensureRegistered(request, carol);
     const carolToken = await issueDevSession(request, carol);
-    await addRealmMemberApi(request, aliceToken, realmId, carol.did);
+    await addRealmMemberApi(request, aliceToken, realmId, carol.id);
     // Non-owner members need send capability.
-    for (const member of [bob.did, carol.did]) {
+    for (const member of [bob.id, carol.id]) {
       await grantCallCapability(
         request,
         aliceToken,
-        alice.did,
+        alice.id,
         realmId,
         member,
         CAP_CALL_SIGNAL_SEND,
@@ -184,7 +184,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     const callId = await createCallApi(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
       "connecting",
     );
@@ -194,7 +194,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -207,7 +207,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       request,
       bobToken,
       buildCallSignalEnvelope({
-        actorDid: bob.did,
+        actorId: bob.id,
         deviceId: bob.deviceId,
         realmId,
         callId,
@@ -220,7 +220,7 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
       request,
       carolToken,
       buildCallSignalEnvelope({
-        actorDid: carol.did,
+        actorId: carol.id,
         deviceId: carol.deviceId,
         realmId,
         callId,
@@ -241,9 +241,9 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     // focus.
     const joiners = aliceView.map((e) => e.sender_actor_id);
     expect(joiners).toEqual(
-      expect.arrayContaining([bob.did, carol.did]),
+      expect.arrayContaining([bob.id, carol.id]),
     );
-    expect(joiners).not.toContain(alice.did);
+    expect(joiners).not.toContain(alice.id);
     for (const env of aliceView) {
       expect(callSignalPlaintext(env).signal_kind).toBe("focus_join");
       expect(

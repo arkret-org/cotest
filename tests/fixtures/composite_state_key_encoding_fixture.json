@@ -13,10 +13,10 @@
     {
       "name": "device_authorized_alice",
       "kind": "ak.device.authorize",
-      "components_array": ["did:web:alice.example", "dev_alice_01"],
+      "components_array": ["ak:did_core:web:alice.example", "dev_alice_01"],
       "components_order_source": "[principal_id, device_id]",
-      "expected_canonical_json": "[\"did:web:alice.example\",\"dev_alice_01\"]",
-      "expected_state_subject": "Cc3tAcTcn4Jm2fN6Dy_nwzJKDhoQza_oIkG89c0MdXI"
+      "expected_canonical_json": "[\"ak:did_core:web:alice.example\",\"dev_alice_01\"]",
+      "expected_state_subject": "NRN9PBlwGpkP3RkmrEGxrhRwy36CoO2ObofqpTx443Y"
     },
     {
       "name": "realm_policy_default",
@@ -29,19 +29,19 @@
     {
       "name": "realm_member_carol",
       "kind": "ak.realm.member",
-      "components_array": ["ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG", "did:web:carol.example"],
+      "components_array": ["ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG", "ak:did_core:web:carol.example"],
       "components_order_source": "[realm_id, actor_id]",
-      "expected_canonical_json": "[\"ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG\",\"did:web:carol.example\"]",
-      "expected_state_subject": "Bglo4pGVpqIifh7FDA-5gOZZ7zznjiPWKdUaXq4zDG0"
+      "expected_canonical_json": "[\"ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG\",\"ak:did_core:web:carol.example\"]",
+      "expected_state_subject": "bsegZdQuIKr3CdogEnBmKYGcVRVLB25gxg4tg-r99m8"
     }
   ],
   "ordering_negative_vectors": [
     {
       "name": "wrong_component_order_must_differ",
       "kind": "ak.realm.member",
-      "components_array": ["did:web:carol.example", "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG"],
+      "components_array": ["ak:did_core:web:carol.example", "ak:realm:AaRfbi5sqNgNzzcqaDDsD5tsVkRS_qMFGKFnTcnsjmVG"],
       "comment": "Component reordering (actor_id before realm_id) MUST produce a different hash than the canonical order. Encoders that emit canonical state_subject by reordering would diverge from realm_member_carol.",
-      "must_differ_from": "Bglo4pGVpqIifh7FDA-5gOZZ7zznjiPWKdUaXq4zDG0"
+      "must_differ_from": "bsegZdQuIKr3CdogEnBmKYGcVRVLB25gxg4tg-r99m8"
     },
     {
       "name": "wrong_component_order_must_differ_realm_policy",
@@ -74,7 +74,7 @@
     },
     {
       "name": "bottom_token_in_inner_position_rejected",
-      "components_array": ["did:web:alice.example", "__bottom__", "dev_alice_01"],
+      "components_array": ["ak:did_core:web:alice.example", "__bottom__", "dev_alice_01"],
       "comment": "Reserved-token check is positional-agnostic — even when nested as a middle component, encoders MUST reject.",
       "expected": {
         "outcome": "reject",

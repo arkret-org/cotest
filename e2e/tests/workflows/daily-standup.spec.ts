@@ -53,7 +53,7 @@ test.describe("workflow: async daily standup", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [pat.did, quincy.did],
+        seedMembers: [pat.id, quincy.id],
       });
       await Promise.all([
         patPage.acceptInvite(realmId),
@@ -61,12 +61,12 @@ test.describe("workflow: async daily standup", () => {
       ]);
       await linPage.grantRealmCapability(
         realmId,
-        pat.did,
+        pat.id,
         "ak.message.create",
       );
       await linPage.grantRealmCapability(
         realmId,
-        quincy.did,
+        quincy.id,
         "ak.message.create",
       );
       await Promise.all([

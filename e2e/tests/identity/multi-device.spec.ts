@@ -8,7 +8,7 @@ import { solandBaseUrl } from "../../helpers/env";
 import {
   authHeaders,
   canonicalTimestamp,
-  principalControlRealmForDid,
+  principalControlRealmForId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -31,7 +31,7 @@ test.describe("single device-authorization model @fully-implemented", () => {
     const targetDeviceId = typedId("device");
     const targetKey = generateDeviceAuthorizationKey();
     const payload = acceptedDeviceAuthorizePayload({
-      principalId: alice.did,
+      principalId: alice.id,
       authorizerDeviceId: alice.deviceId,
       targetDeviceId,
       targetKey,
@@ -51,8 +51,8 @@ test.describe("single device-authorization model @fully-implemented", () => {
       request,
       authorizerToken,
       signedEventEnvelope({
-        actorDid: alice.did,
-        realmId: principalControlRealmForDid(alice.did),
+        actorId: alice.id,
+        realmId: principalControlRealmForId(alice.id),
         kind: "ak.device.authorize",
         payload,
       }),
@@ -87,7 +87,7 @@ test.describe("single device-authorization model @fully-implemented", () => {
     const authorizerToken = await issueDevSession(request, alice);
     const targetKey = generateDeviceAuthorizationKey();
     const payload = acceptedDeviceAuthorizePayload({
-      principalId: alice.did,
+      principalId: alice.id,
       authorizerDeviceId: alice.deviceId,
       targetDeviceId: typedId("device"),
       targetKey,
@@ -102,8 +102,8 @@ test.describe("single device-authorization model @fully-implemented", () => {
       {
         headers: authHeaders(authorizerToken),
         data: signedEventEnvelope({
-          actorDid: alice.did,
-          realmId: principalControlRealmForDid(alice.did),
+          actorId: alice.id,
+          realmId: principalControlRealmForId(alice.id),
           kind: "ak.device.authorize",
           payload: forged,
         }),

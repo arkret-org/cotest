@@ -59,7 +59,7 @@ test.describe("workflow: support escalation", () => {
         joinRule: "invite",
         historyAccess: "all_history_for_current_members",
         encryptionProfile: "none",
-        seedMembers: [sam.did],
+        seedMembers: [sam.id],
       });
       // invite.accept transitions the invite lifecycle from the accepted
       // predecessor value written by invite.create. Seeing the pending invite
@@ -80,7 +80,7 @@ test.describe("workflow: support escalation", () => {
         alexFlow.session.grantJwt,
         realmId,
         {
-          authorityRootController: alexFlow.user.did,
+          authorityRootController: alexFlow.user.id,
         },
       );
       expect(
@@ -91,9 +91,9 @@ test.describe("workflow: support escalation", () => {
       // this workflow exercises; grantCapabilityEventApi waits for the grant
       // Control Move to reach the accepted Seal before Sam authors against it.
       await grantCapabilityEventApi(request, alexFlow.session.grantJwt, {
-        ownerDid: alexFlow.user.did,
+        ownerId: alexFlow.user.id,
         realmId,
-        subjectDid: sam.did,
+        subjectId: sam.id,
         actions: ["ak.message.create"],
       });
       await alexPage.sendTimelineMessage(realmId, summary);
@@ -294,7 +294,7 @@ test.describe("workflow: support escalation", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [sam.did],
+        seedMembers: [sam.id],
       });
       await samPage.acceptInvite(realmId);
 

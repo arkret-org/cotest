@@ -40,7 +40,7 @@ test.describe("ak.call.signal seq monotonicity (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -53,7 +53,7 @@ test.describe("ak.call.signal seq monotonicity (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -71,7 +71,7 @@ test.describe("ak.call.signal seq monotonicity (spec wire)", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -112,7 +112,7 @@ test.describe("ak.call.signal seq monotonicity (spec wire)", () => {
         request,
         aliceToken,
         buildCallSignalEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           deviceId: alice.deviceId,
           realmId,
           callId,

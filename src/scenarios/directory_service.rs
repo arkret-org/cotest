@@ -52,7 +52,10 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
             .is_some_and(|service_id| !service_id.is_empty())
     );
     if directory.is_spawned() {
-        assert_eq!(describe["service_id"], "did:web:teabay.cotest.local");
+        assert_eq!(
+            describe["service_id"],
+            "ak:did_core:web:teabay.cotest.local"
+        );
     }
     assert_array_contains(
         &describe,

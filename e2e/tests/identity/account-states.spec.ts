@@ -40,7 +40,7 @@ test.describe("account states", () => {
     );
     expect(meResp.ok()).toBeTruthy();
     const me = await meResp.json();
-    expect(me.did).toBe(alice.did);
+    expect(me.principal_id).toBe(alice.id);
     if ("state" in me) {
       expect(me.state).toBe("active");
     }
@@ -59,7 +59,7 @@ test.describe("account states", () => {
     const alice = {
       ...seed,
       name: account.handle,
-      did: account.did,
+      id: account.id,
       did: account.did,
       handle: `@${account.handle}`,
       displayName: account.displayName,
@@ -70,7 +70,7 @@ test.describe("account states", () => {
     const grant = await mintDpopBoundGrant(
       request,
       coauthBase!,
-      alice.did,
+      alice.id,
       alice.deviceId,
       deviceKey,
     );
@@ -120,7 +120,7 @@ test.describe("account states", () => {
     const adminToken = await issueDevSession(request, admin);
 
     const lock = await request.post(
-      `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/lock`,
+      `${solandBaseUrl()}/_soland/admin/accounts/${alice.id}/lock`,
       {
         headers: authHeaders(adminToken),
         data: { reason: "suspicious_login" },
@@ -145,7 +145,7 @@ test.describe("account states", () => {
       `${solandBaseUrl()}/_soland/gate/auth/dev-login`,
       {
         data: {
-          actor: alice.did,
+          actor: alice.id,
           device_id: alice.deviceId,
           display_name: alice.displayName,
         },
@@ -155,7 +155,7 @@ test.describe("account states", () => {
     expect(wireErrCode(await login.json())).toBe("account_locked");
 
     const unlock = await request.post(
-      `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/unlock`,
+      `${solandBaseUrl()}/_soland/admin/accounts/${alice.id}/unlock`,
       {
         headers: authHeaders(adminToken),
         data: { reason: "operator_verified" },
@@ -179,7 +179,7 @@ test.describe("account states", () => {
     const adminToken = await issueDevSession(request, admin);
 
     const suspend = await request.post(
-      `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/suspend`,
+      `${solandBaseUrl()}/_soland/admin/accounts/${alice.id}/suspend`,
       {
         headers: authHeaders(adminToken),
         // Suspension expiry is only a management review hint in the protocol;
@@ -204,7 +204,7 @@ test.describe("account states", () => {
       `${solandBaseUrl()}/_soland/gate/auth/dev-login`,
       {
         data: {
-          actor: alice.did,
+          actor: alice.id,
           device_id: alice.deviceId,
           display_name: alice.displayName,
         },
@@ -214,7 +214,7 @@ test.describe("account states", () => {
     expect(wireErrCode(await login.json())).toBe("account_suspended");
 
     const unsuspend = await request.post(
-      `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/unsuspend`,
+      `${solandBaseUrl()}/_soland/admin/accounts/${alice.id}/unsuspend`,
       {
         headers: authHeaders(adminToken),
         data: { reason: "appeal_accepted" },
@@ -250,16 +250,16 @@ test.describe("account states", () => {
       bob,
       {
         title: "deactivation visibility",
-        ownerDid: alice.did,
+        ownerId: alice.id,
       },
     );
     const message = `message before deactivate ${Date.now()}`;
     await sendPlaintextMessageViaApi(request, aliceToken, realmId, message, {
-      actorDid: alice.did,
+      actorId: alice.id,
     });
 
     const deactivate = await request.post(
-      `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/deactivate`,
+      `${solandBaseUrl()}/_soland/admin/accounts/${alice.id}/deactivate`,
       {
         headers: authHeaders(adminToken),
         data: { reason: "user_requested_via_support" },
@@ -283,7 +283,7 @@ test.describe("account states", () => {
       `${solandBaseUrl()}/_soland/gate/auth/dev-login`,
       {
         data: {
-          actor: alice.did,
+          actor: alice.id,
           device_id: alice.deviceId,
           display_name: alice.displayName,
         },
@@ -303,13 +303,8 @@ test.describe("account states", () => {
     const searchBody = await search.json();
     expect(
       (
-        searchBody.actors as Array<{
-          actor_id?: string;
-          preview?: { did?: string };
-        }>
-      ).some(
-        (row) => row.actor_id === alice.did || row.preview?.did === alice.did,
-      ),
+        searchBody.actors as Array<{ actor_id?: string }>
+      ).some((row) => row.actor_id === alice.id),
     ).toBe(false);
 
     const events = await listRealmEventsViaApi(request, bobToken, realmId);
@@ -373,13 +368,8 @@ test.describe("account states", () => {
     const searchBody = await search.json();
     expect(
       (
-        searchBody.actors as Array<{
-          actor_id?: string;
-          preview?: { did?: string };
-        }>
-      ).some(
-        (row) => row.actor_id === alice.did || row.preview?.did === alice.did,
-      ),
+        searchBody.actors as Array<{ actor_id?: string }>
+      ).some((row) => row.actor_id === alice.id),
     ).toBe(false);
   });
 
@@ -395,7 +385,7 @@ test.describe("account states", () => {
     const adminToken = await issueDevSession(request, admin);
 
     const suspend = await request.post(
-      `${solandBaseUrl()}/_soland/admin/accounts/${alice.did}/suspend`,
+      `${solandBaseUrl()}/_soland/admin/accounts/${alice.id}/suspend`,
       {
         headers: authHeaders(adminToken),
         data: { reason: "audit_probe" },
@@ -404,7 +394,7 @@ test.describe("account states", () => {
     expect(suspend.status()).toBe(200);
 
     const audit = await request.get(
-      `${solandBaseUrl()}/_soland/admin/audit/events?actor=${encodeURIComponent(admin.did)}&limit=20`,
+      `${solandBaseUrl()}/_soland/admin/audit/events?actor=${encodeURIComponent(admin.id)}&limit=20`,
       { headers: authHeaders(adminToken) },
     );
     expect(audit.status()).toBe(200);
@@ -417,12 +407,12 @@ test.describe("account states", () => {
     ).find(
       (event) =>
         event.action === "org.arkret.soland.account.state_change" &&
-        event.payload?.subject === alice.did,
+        event.payload?.subject === alice.id,
     );
     expect(transition).toBeTruthy();
     expect(transition!.payload.from).toBe("active");
     expect(transition!.payload.to).toBe("suspended");
-    expect(transition!.payload.actor).toBe(admin.did);
+    expect(transition!.payload.actor).toBe(admin.id);
     expect(transition!.payload.reason).toBe("audit_probe");
     expect(transition!.payload.timestamp).toBeTruthy();
   });

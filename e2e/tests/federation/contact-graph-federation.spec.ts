@@ -84,12 +84,12 @@ test.describe("contact graph federation (α/β)", () => {
     // The beta default invite/contact policy quarantines explicit-address
     // requests. Resolve a signed principal locator so the peer can notify and
     // project the pending_incoming row (invite-addressing.md Â§5).
-    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta", bobToken);
+    const bobLocator = await resolvePrincipalLocator(request, bob.id, "beta", bobToken);
 
     const { outcome } = await requestContactArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
       {
         requestedScopes: ["invite"],
         server: "alpha",
@@ -108,7 +108,7 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () => {
-          const row = await contactRow(request, bobToken, alice.did, {
+          const row = await contactRow(request, bobToken, alice.id, {
             server: "beta",
           });
           return row?.state;
@@ -120,7 +120,7 @@ test.describe("contact graph federation (α/β)", () => {
     // bob accepts on β granting invite, addressing the remote requester (α).
     const respondOutcome = await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",
@@ -132,7 +132,7 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () => {
-          const row = await contactRow(request, aliceToken, bob.did, {
+          const row = await contactRow(request, aliceToken, bob.id, {
             server: "alpha",
           });
           return row?.state;
@@ -140,7 +140,7 @@ test.describe("contact graph federation (α/β)", () => {
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .toBe("accepted");
-    const aliceRow = await contactRow(request, aliceToken, bob.did, {
+    const aliceRow = await contactRow(request, aliceToken, bob.id, {
       server: "alpha",
     });
     expect(aliceRow?.next_prepare_input).toBeTruthy();
@@ -161,11 +161,11 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta", bobToken);
+    const bobLocator = await resolvePrincipalLocator(request, bob.id, "beta", bobToken);
 
     // Federated direct_message contact handshake (same path as S1-fed, but with
     // direct_message scope so the resolver's consent precondition is met).
-    const { outcome } = await requestContactArkret(request, aliceToken, bob.did, {
+    const { outcome } = await requestContactArkret(request, aliceToken, bob.id, {
       requestedScopes: ["direct_message"],
       server: "alpha",
       recipientServiceId: solandServiceId("beta"),
@@ -177,14 +177,14 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () =>
-          (await contactRow(request, bobToken, alice.did, { server: "beta" }))
+          (await contactRow(request, bobToken, alice.id, { server: "beta" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .toBe("pending_incoming");
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "accept",
       grantedScopes: ["direct_message"],
       server: "beta",
@@ -194,7 +194,7 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () =>
-          (await contactRow(request, aliceToken, bob.did, { server: "alpha" }))
+          (await contactRow(request, aliceToken, bob.id, { server: "alpha" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
@@ -204,7 +204,7 @@ test.describe("contact graph federation (α/β)", () => {
       `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
       {
         headers: authHeaders(aliceToken),
-        data: { peer: bob.did, create: true },
+        data: { peer: bob.id, create: true },
       },
     );
     expect(resolved.ok()).toBeTruthy();
@@ -216,8 +216,8 @@ test.describe("contact graph federation (α/β)", () => {
     expect(body.main_strand_id).toMatch(/^ak:strand:/);
     expect(body.materialization_draft).toBeUndefined();
     const draft = body.claim_authorization_draft;
-    expect(draft?.request?.requester).toBe(alice.did);
-    expect(draft?.request?.target_principal_id).toBe(bob.did);
+    expect(draft?.request?.requester).toBe(alice.id);
+    expect(draft?.request?.target_principal_id).toBe(bob.id);
     expect(draft?.request?.intended_realm_id).toBe(body.realm_id);
     expect(draft?.request?.strand_id).toBe(body.main_strand_id);
     expect(draft?.request?.claim_purpose).toBe("direct_conversation");
@@ -232,7 +232,7 @@ test.describe("contact graph federation (α/β)", () => {
       `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
       {
         headers: authHeaders(aliceToken),
-        data: { peer: bob.did, create: true },
+        data: { peer: bob.id, create: true },
       },
     );
     expect(retry.ok()).toBeTruthy();
@@ -272,14 +272,14 @@ test.describe("contact graph federation (α/β)", () => {
       await Promise.all([alicePage.gotoHome(), bobPage.gotoHome()]);
       const bobLocator = await resolvePrincipalLocator(
         request,
-        bob.did,
+        bob.id,
         "beta",
         bobToken,
       );
       const { outcome } = await requestContactArkret(
         request,
         aliceToken,
-        bob.did,
+        bob.id,
         {
           requestedScopes: ["direct_message"],
           server: "alpha",
@@ -297,7 +297,7 @@ test.describe("contact graph federation (α/β)", () => {
               await contactRow(
                 request,
                 bobToken,
-                alice.did,
+                alice.id,
                 { server: "beta" },
               )
             )?.state,
@@ -306,7 +306,7 @@ test.describe("contact graph federation (α/β)", () => {
         .toBe("pending_incoming");
       await respondContactArkret(request, bobToken, {
         requestId: outcome.request_event_ref,
-        requester: alice.did,
+        requester: alice.id,
         action: "accept",
         grantedScopes: ["direct_message"],
         server: "beta",
@@ -319,7 +319,7 @@ test.describe("contact graph federation (α/β)", () => {
               await contactRow(
                 request,
                 aliceToken,
-                bob.did,
+                bob.id,
                 { server: "alpha" },
               )
             )?.state,
@@ -331,7 +331,7 @@ test.describe("contact graph federation (α/β)", () => {
       await alicePage.page.getByTestId("realm-sidebar-tab-direct").click();
       await alicePage.page
         .locator(
-          `[data-testid="direct-conversation-row"][data-peer="${bob.did}"]`,
+          `[data-testid="direct-conversation-row"][data-peer="${bob.id}"]`,
         )
         .click();
       await expect(alicePage.page).toHaveURL(/\/direct\/ak:realm:.*\/ak:strand:/, {
@@ -348,7 +348,7 @@ test.describe("contact graph federation (α/β)", () => {
             const row = await contactRow(
               request,
               bobToken,
-              alice.did,
+              alice.id,
               { server: "beta" },
             );
             return row?.direct_conversation;
@@ -361,7 +361,7 @@ test.describe("contact graph federation (α/β)", () => {
       await bobPage.page.getByTestId("realm-sidebar-tab-direct").click();
       await bobPage.page
         .locator(
-          `[data-testid="direct-conversation-row"][data-peer="${alice.did}"]`,
+          `[data-testid="direct-conversation-row"][data-peer="${alice.id}"]`,
         )
         .click();
       await expect
@@ -436,12 +436,12 @@ test.describe("contact graph federation (α/β)", () => {
     const { outcome } = await requestContactArkret(
       request,
       aliceTokenBeta,
-      bob.did,
+      bob.id,
       { requestedScopes: ["invite"], server: "beta" },
     );
     await respondContactArkret(request, bobTokenBeta, {
       requestId: outcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",
@@ -450,7 +450,7 @@ test.describe("contact graph federation (α/β)", () => {
       request,
       bobTokenBeta,
       bob,
-      alice.did,
+      alice.id,
       { server: "beta" },
     );
     const grantRef = consent.eventRef;
@@ -461,7 +461,7 @@ test.describe("contact graph federation (α/β)", () => {
       aliceTokenAlpha,
       {
         title: `S4-fed pull ${stamp}`,
-        ownerDid: alice.did,
+        ownerId: alice.id,
         creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
@@ -475,10 +475,10 @@ test.describe("contact graph federation (α/β)", () => {
     const { outcome: delivery, inviteId } = await deliverInviteWithConsentGrant(
       request,
       {
-        inviterDid: alice.did,
+        inviterId: alice.id,
         inviterToken: aliceTokenAlpha,
         realmId,
-        inviteeDid: bob.did,
+        inviteeId: bob.id,
         consentGrantRef: grantRef!,
         originServer: "alpha",
         recipientServer: "beta",
@@ -492,13 +492,13 @@ test.describe("contact graph federation (α/β)", () => {
       server: "beta",
     });
     const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee === bob.did,
+      (i) => i.realm_id === realmId && i.invitee === bob.id,
     );
     expect(invite, "bob@β pending invite for the α realm").toBeTruthy();
     expect(invite!.id).toBe(inviteId);
 
     await acceptInviteArkret(request, bobTokenBeta, {
-      accepterDid: bob.did,
+      accepterId: bob.id,
       realmId,
       inviteId: invite!.id,
       server: "beta",
@@ -514,7 +514,7 @@ test.describe("contact graph federation (α/β)", () => {
           if (!resp.ok()) return false;
           const realm = await resp.json();
           return (
-            Array.isArray(realm.members) && realm.members.includes(bob.did)
+            Array.isArray(realm.members) && realm.members.includes(bob.id)
           );
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
@@ -543,10 +543,10 @@ test.describe("contact graph federation (α/β)", () => {
       server: "alpha",
     });
     const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    const bobLocator = await resolvePrincipalLocator(request, bob.did, "beta", bobToken);
+    const bobLocator = await resolvePrincipalLocator(request, bob.id, "beta", bobToken);
 
     // Federated accepted handshake (reuse S1-fed path).
-    const { outcome } = await requestContactArkret(request, aliceToken, bob.did, {
+    const { outcome } = await requestContactArkret(request, aliceToken, bob.id, {
       requestedScopes: ["invite"],
       server: "alpha",
       recipientServiceId: solandServiceId("beta"),
@@ -558,14 +558,14 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () =>
-          (await contactRow(request, bobToken, alice.did, { server: "beta" }))
+          (await contactRow(request, bobToken, alice.id, { server: "beta" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .toBe("pending_incoming");
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",
@@ -574,14 +574,14 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () =>
-          (await contactRow(request, aliceToken, bob.did, { server: "alpha" }))
+          (await contactRow(request, aliceToken, bob.id, { server: "alpha" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .toBe("accepted");
 
     // alice@α tombstones bob, addressing bob's home PS (β) and hard-blocking.
-    const tomb = await tombstoneContactArkret(request, aliceToken, bob.did, {
+    const tomb = await tombstoneContactArkret(request, aliceToken, bob.id, {
       blockPeer: true,
       peerServiceId: solandServiceId("beta"),
       server: "alpha",
@@ -593,7 +593,7 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () =>
-          (await contactRow(request, bobToken, alice.did, { server: "beta" }))
+          (await contactRow(request, bobToken, alice.id, { server: "beta" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )

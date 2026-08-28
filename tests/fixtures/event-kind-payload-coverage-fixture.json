@@ -132,7 +132,7 @@
       "cell_family": "ak.component.consent.grant.v1",
       "lattice": "or_set",
       "bottom": "inert",
-      "payload_shape": { "consent_id": "ak:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "peer": "did:web:bob.example", "scope": "messaging" }
+      "payload_shape": { "consent_id": "ak:consent:7fd5ae82-44e2-7a8a-9a4b-8857991142f9", "peer": "ak:did_core:web:bob.example", "scope": "messaging" }
     },
     {
       "name": "consent_revoke_or_set",
@@ -164,7 +164,7 @@
       "cell_family": "ak.component.device.authorization.v1",
       "lattice": "or_set",
       "bottom": "inert",
-      "payload_shape": { "device_id": "dev_alice_01", "principal_id": "did:web:alice.example" }
+      "payload_shape": { "device_id": "dev_alice_01", "principal_id": "ak:did_core:web:alice.example" }
     },
     {
       "name": "member_state_fsm",
@@ -172,7 +172,7 @@
       "cell_family": "ak.component.member.state.v1",
       "lattice": "fsm",
       "bottom": "reject",
-      "payload_shape": { "actor_ref": "did:web:alice.example", "state": "join", "prev_state": "invite" }
+      "payload_shape": { "actor_ref": "ak:did_core:web:alice.example", "state": "join", "prev_state": "invite" }
     },
     {
       "name": "view_create_mv_register",

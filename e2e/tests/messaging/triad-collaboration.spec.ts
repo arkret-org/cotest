@@ -59,7 +59,7 @@ function expectRedactedPayload(
   expect(JSON.stringify(event)).not.toContain(leakedBody);
 }
 
-function visibleMemberDids(realm: Record<string, unknown>): string[] {
+function visibleMemberIds(realm: Record<string, unknown>): string[] {
   const members = realm.members;
   if (!Array.isArray(members)) {
     return [];
@@ -72,10 +72,10 @@ function visibleMemberDids(realm: Record<string, unknown>): string[] {
       return [];
     }
     const record = member as Record<string, unknown>;
-    const did = [record.did, record.actor_id, record.actor, record.id].find(
+    const id = [record.actor_id, record.id].find(
       (candidate): candidate is string => typeof candidate === "string",
     );
-    return did ? [did] : [];
+    return id ? [id] : [];
   });
 }
 
@@ -101,7 +101,7 @@ test.describe("single-server triad collaboration", () => {
       aliceToken,
       realmId,
       createBody,
-      { actorDid: alice.did },
+      { actorId: alice.id },
     );
 
     const revisedBody = `triad revised ${stamp}`;
@@ -110,7 +110,7 @@ test.describe("single-server triad collaboration", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: realmId,
         kind: "ak.message.revise",
         payload: {
@@ -132,7 +132,7 @@ test.describe("single-server triad collaboration", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: realmId,
         kind: "ak.message.redact",
         payload: {
@@ -182,7 +182,7 @@ test.describe("single-server triad collaboration", () => {
     const baseMs = Date.now() + 1_000;
     const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const pre = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: realmId,
       kind: "ak.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs)),
@@ -199,13 +199,13 @@ test.describe("single-server triad collaboration", () => {
       request,
       aliceToken,
       signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: realmId,
         kind: "ak.member.state",
         createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
         payload: {
           realm_id: realmId,
-          actor_id: carol.did,
+          actor_id: carol.id,
           membership: "join",
           delivery_status: "unroutable",
         },
@@ -213,7 +213,7 @@ test.describe("single-server triad collaboration", () => {
       { context: "join carol" },
     );
     const post = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: realmId,
       kind: "ak.message.create",
       createdAt: canonicalTimestamp(new Date(baseMs + 120_000)),
@@ -284,7 +284,7 @@ test.describe("single-server triad collaboration", () => {
         joinRule: "invite",
         historyAccess: "since_join",
         encryptionProfile: "none",
-        seedMembers: [bob.did],
+        seedMembers: [bob.id],
       });
       await stepShot(alicePage.page, testInfo, "A-alice-space-created");
 
@@ -321,7 +321,7 @@ test.describe("single-server triad collaboration", () => {
       await expect(alicePage.timelineEvent(m2Edited)).toBeVisible({ timeout: 30_000 });
 
       // Phase C — alice invites carol, carol accepts, carol has restricted history.
-      await alicePage.inviteFromAdmin(realmId, carol.did);
+      await alicePage.inviteFromAdmin(realmId, carol.id);
       await stepShot(alicePage.page, testInfo, "C-alice-invited-carol");
 
       await carolPage.acceptInvite(realmId);
@@ -414,18 +414,18 @@ test.describe("single-server triad collaboration", () => {
         // caused fresh-nav fails (see scenarios/spaces/admin-section-route.md).
         // We add an explicit waitForInviteActionReady belt-and-suspenders only
         // on the second issue, where the helper's gotoRealmAdmin re-mounts.
-        await alicePage.inviteFromAdmin(realmId, bob.did);
+        await alicePage.inviteFromAdmin(realmId, bob.id);
 
         // Re-issue same invite — soland MUST treat as idempotent (same
         // invite_id returned for any pending (space, invitee) pair).
-        await alicePage.inviteFromAdmin(realmId, bob.did);
+        await alicePage.inviteFromAdmin(realmId, bob.id);
 
         // Bob's canonical invite projection should contain one pending invite.
         await expect.poll(async () => {
           const visible = await listInvitesApi(request, bobToken);
           return visible.filter((invite) =>
             invite.realm_id === realmId &&
-            invite.invitee === bob.did &&
+            invite.invitee === bob.id &&
             (invite.state ?? invite.status ?? "pending") === "pending"
           ).length;
         }, { timeout: 30_000 }).toBe(1);
@@ -456,25 +456,25 @@ test.describe("single-server triad collaboration", () => {
       const realmId = await createRealmViaApi(request, aliceToken, {
         title: `S1.2 Shared History ${stamp}`,
         historyAccess: "all_history_for_current_members",
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       const pre = await sendPlaintextMessageViaApi(
         request,
         aliceToken,
         realmId,
         preMessage,
-        { actorDid: alice.did },
+        { actorId: alice.id },
       );
       await submitSignedEventApi(
         request,
         aliceToken,
         signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId: realmId,
           kind: "ak.member.state",
           payload: {
             realm_id: realmId,
-            actor_id: carol.did,
+            actor_id: carol.id,
             membership: "join",
             delivery_status: "unroutable",
           },
@@ -508,19 +508,19 @@ test.describe("single-server triad collaboration", () => {
         bobToken,
         realmId,
         `before leave ${stamp}`,
-        { actorDid: bob.did },
+        { actorId: bob.id },
       );
 
       await submitSignedEventApi(
         request,
         bobToken,
         signedEventEnvelope({
-          actorDid: bob.did,
+          actorId: bob.id,
           realmId,
           kind: "ak.member.state",
           payload: {
             realm_id: realmId,
-            actor_id: bob.did,
+            actor_id: bob.id,
             membership: "leave",
             reason: "self_leave",
           },
@@ -533,13 +533,13 @@ test.describe("single-server triad collaboration", () => {
         { headers: authHeaders(aliceToken) },
       );
       expect(realmAfterLeave.status()).toBe(200);
-      expect(visibleMemberDids(await realmAfterLeave.json())).not.toContain(bob.did);
+      expect(visibleMemberIds(await realmAfterLeave.json())).not.toContain(bob.id);
 
       const afterLeaveBody = `after leave rejected ${stamp}`;
       const rejected = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(bobToken),
         data: signedEventEnvelope({
-          actorDid: bob.did,
+          actorId: bob.id,
           realmId,
           kind: "ak.message.create",
           payload: {
@@ -558,7 +558,7 @@ test.describe("single-server triad collaboration", () => {
       const bobMemberEvents = eventsAfterLeave.filter(
         (event) =>
           eventKind(event) === "ak.member.state" &&
-          eventPayload(event).actor_id === bob.did,
+          eventPayload(event).actor_id === bob.id,
       );
       expect(eventPayload(bobMemberEvents[bobMemberEvents.length - 1])).toMatchObject({
         membership: "leave",
@@ -569,12 +569,12 @@ test.describe("single-server triad collaboration", () => {
         request,
         aliceToken,
         signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId,
           kind: "ak.member.state",
           payload: {
             realm_id: realmId,
-            actor_id: bob.did,
+            actor_id: bob.id,
             membership: "join",
             delivery_status: "unroutable",
             reason: "owner_readd",
@@ -587,7 +587,7 @@ test.describe("single-server triad collaboration", () => {
         bobToken,
         realmId,
         `after rejoin ${stamp}`,
-        { actorDid: bob.did },
+        { actorId: bob.id },
       );
       const finalEvents = await listRealmEventsViaApi(request, aliceToken, realmId);
       expect(finalEvents.map((event) => event.event_id)).toEqual(

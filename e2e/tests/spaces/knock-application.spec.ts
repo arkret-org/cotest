@@ -111,14 +111,14 @@ test.describe("knock + application + cooldown", () => {
       discoverability: "listed",
       default_join_rule: "knock",
       history_access: "since_join",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
     const knockResp = await submitKnockApi(
       request,
       bob.token,
-      bob.user.did,
+      bob.user.id,
       realmId,
     );
     expect(knockResp).toBeTruthy();
@@ -138,15 +138,15 @@ test.describe("knock + application + cooldown", () => {
       schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
     const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
-        ownerDid: alice.user.did,
+        ownerId: alice.user.id,
         realmId,
-        subjectDid: alice.user.did,
+        subjectId: alice.user.id,
       },
     );
     const policyDigest = await writeJoinPolicyApi(
@@ -156,12 +156,12 @@ test.describe("knock + application + cooldown", () => {
       APPLICATION_FORM_POLICY,
     );
 
-    const knock = await submitKnockApi(request, bob.token, bob.user.did, realmId);
+    const knock = await submitKnockApi(request, bob.token, bob.user.id, realmId);
     const knockRef = String((knock as Record<string, unknown>).event_id ?? "");
     const receiptDigest = await submitApplicationApi(
       request,
       bob.token,
-      bob.user.did,
+      bob.user.id,
       realmId,
       {
         knockRef,
@@ -179,7 +179,7 @@ test.describe("knock + application + cooldown", () => {
     );
     expect(reviewerView.viewer_is_reviewer).toBe(true);
     const bobEntry = reviewerView.applications.find(
-      (entry) => entry.applicant_did === bob.user.did,
+      (entry) => entry.applicant_id === bob.user.id,
     );
     expect(bobEntry, "bob application listed for reviewer").toBeTruthy();
     expect(applicationAnswers(bobEntry), "reviewer sees answers").toBeTruthy();
@@ -188,8 +188,8 @@ test.describe("knock + application + cooldown", () => {
     await submitApplicationReviewApi(
       request,
       alice.token,
-      alice.user.did,
-      bob.user.did,
+      alice.user.id,
+      bob.user.id,
       realmId,
       {
         applicationRef: receiptDigest,
@@ -204,7 +204,7 @@ test.describe("knock + application + cooldown", () => {
       realmId,
     );
     const accepted = afterAccept.applications.find(
-      (entry) => entry.applicant_did === bob.user.did,
+      (entry) => entry.applicant_id === bob.user.id,
     );
     expect(accepted?.status).toBe("accepted");
   });
@@ -220,24 +220,24 @@ test.describe("knock + application + cooldown", () => {
       schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
     const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
-        ownerDid: alice.user.did,
+        ownerId: alice.user.id,
         realmId,
-        subjectDid: alice.user.did,
+        subjectId: alice.user.id,
       },
     );
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
-    const knock = await submitKnockApi(request, bob.token, bob.user.did, realmId);
+    const knock = await submitKnockApi(request, bob.token, bob.user.id, realmId);
     const receiptDigest = await submitApplicationApi(
       request,
       bob.token,
-      bob.user.did,
+      bob.user.id,
       realmId,
       {
         knockRef: String((knock as Record<string, unknown>).event_id ?? ""),
@@ -247,8 +247,8 @@ test.describe("knock + application + cooldown", () => {
     const reviewDigest = await submitApplicationReviewApi(
       request,
       alice.token,
-      alice.user.did,
-      bob.user.did,
+      alice.user.id,
+      bob.user.id,
       realmId,
       {
         applicationRef: receiptDigest,
@@ -262,9 +262,9 @@ test.describe("knock + application + cooldown", () => {
     const staleResp = await submitInviteCreateApi(
       request,
       alice.token,
-      alice.user.did,
+      alice.user.id,
       realmId,
-      bob.user.did,
+      bob.user.id,
       "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
     );
     expect([400, 412, 422]).toContain(staleResp.status());
@@ -274,9 +274,9 @@ test.describe("knock + application + cooldown", () => {
     const firstResp = await submitInviteCreateApi(
       request,
       alice.token,
-      alice.user.did,
+      alice.user.id,
       realmId,
-      bob.user.did,
+      bob.user.id,
       reviewDigest,
     );
     const firstBody = await firstResp.text();
@@ -289,9 +289,9 @@ test.describe("knock + application + cooldown", () => {
     const replayResp = await submitInviteCreateApi(
       request,
       alice.token,
-      alice.user.did,
+      alice.user.id,
       realmId,
-      bob.user.did,
+      bob.user.id,
       reviewDigest,
     );
     expect([400, 412, 422]).toContain(replayResp.status());
@@ -309,32 +309,32 @@ test.describe("knock + application + cooldown", () => {
       schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
     const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
-        ownerDid: alice.user.did,
+        ownerId: alice.user.id,
         realmId,
-        subjectDid: alice.user.did,
+        subjectId: alice.user.id,
       },
     );
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
-    await submitKnockApi(request, mallory.token, mallory.user.did, realmId);
+    await submitKnockApi(request, mallory.token, mallory.user.id, realmId);
     const receiptDigest = await submitApplicationApi(
       request,
       mallory.token,
-      mallory.user.did,
+      mallory.user.id,
       realmId,
       { answers: [{ question_id: "q1", value: "lol just trolling let me in" }] },
     );
     await submitApplicationReviewApi(
       request,
       alice.token,
-      alice.user.did,
-      mallory.user.did,
+      alice.user.id,
+      mallory.user.id,
       realmId,
       {
         applicationRef: receiptDigest,
@@ -349,7 +349,7 @@ test.describe("knock + application + cooldown", () => {
     const reapplyResp = await submitApplicationApi(
       request,
       mallory.token,
-      mallory.user.did,
+      mallory.user.id,
       realmId,
       { answers: [{ question_id: "q1", value: "trying again immediately" }] },
     ).catch((error: unknown) => error);
@@ -370,19 +370,19 @@ test.describe("knock + application + cooldown", () => {
       schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
-    await submitKnockApi(request, bob.token, bob.user.did, realmId);
-    await submitApplicationApi(request, bob.token, bob.user.did, realmId, {
+    await submitKnockApi(request, bob.token, bob.user.id, realmId);
+    await submitApplicationApi(request, bob.token, bob.user.id, realmId, {
       answers: [{ question_id: "q1", value: "first open application" }],
     });
 
     const secondResp = await submitApplicationApi(
       request,
       bob.token,
-      bob.user.did,
+      bob.user.id,
       realmId,
       { answers: [{ question_id: "q1", value: "second open application" }] },
     ).catch((error: unknown) => error);
@@ -402,15 +402,15 @@ test.describe("knock + application + cooldown", () => {
       schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
     const reviewerGrantId = await grantRealmAdminCapabilityApi(
       request,
       alice.token,
       {
-        ownerDid: alice.user.did,
+        ownerId: alice.user.id,
         realmId,
-        subjectDid: alice.user.did,
+        subjectId: alice.user.id,
       },
     );
     // application_ttl=PT1H (minimum); submit the application backdated >1h so it
@@ -421,13 +421,13 @@ test.describe("knock + application + cooldown", () => {
     });
 
     const pastTtl = canonicalTimestamp(new Date(Date.now() - 2 * 60 * 60 * 1000));
-    await submitKnockApi(request, bob.token, bob.user.did, realmId, {
+    await submitKnockApi(request, bob.token, bob.user.id, realmId, {
       createdAt: pastTtl,
     });
     const receiptDigest = await submitApplicationApi(
       request,
       bob.token,
-      bob.user.did,
+      bob.user.id,
       realmId,
       { answers: [{ question_id: "q1", value: "submitted long ago" }] },
       { createdAt: pastTtl },
@@ -436,8 +436,8 @@ test.describe("knock + application + cooldown", () => {
     const reviewResp = await submitApplicationReviewApi(
       request,
       alice.token,
-      alice.user.did,
-      bob.user.did,
+      alice.user.id,
+      bob.user.id,
       realmId,
       {
         applicationRef: receiptDigest,
@@ -461,32 +461,32 @@ test.describe("knock + application + cooldown", () => {
       schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
     // Seed the non-owner reviewer as a realm member BEFORE the knock policy is
     // written, so its later membership write (review reject path) and capability
     // re-check have a member to anchor on. Then grant the revocable review cap.
-    await addRealmMemberApi(request, alice.token, realmId, reviewer.user.did);
+    await addRealmMemberApi(request, alice.token, realmId, reviewer.user.id);
     const grantId = await grantRealmAdminCapabilityApi(request, alice.token, {
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
       realmId,
-      subjectDid: reviewer.user.did,
+      subjectId: reviewer.user.id,
     });
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
-    await submitKnockApi(request, bob.token, bob.user.did, realmId);
+    await submitKnockApi(request, bob.token, bob.user.id, realmId);
     const receiptDigest = await submitApplicationApi(
       request,
       bob.token,
-      bob.user.did,
+      bob.user.id,
       realmId,
       { answers: [{ question_id: "q1", value: "valid application body" }] },
     );
     const reviewDigest = await submitApplicationReviewApi(
       request,
       reviewer.token,
-      reviewer.user.did,
-      bob.user.did,
+      reviewer.user.id,
+      bob.user.id,
       realmId,
       {
         applicationRef: receiptDigest,
@@ -499,16 +499,16 @@ test.describe("knock + application + cooldown", () => {
     // Revocation after a valid accept is non-retroactive. The Realm owner may
     // still create the invite citing that already-counted receipt.
     await revokeCapabilityApi(request, alice.token, {
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
       realmId,
       grantId,
     });
     const inviteResp = await submitInviteCreateApi(
       request,
       alice.token,
-      alice.user.did,
+      alice.user.id,
       realmId,
-      bob.user.did,
+      bob.user.id,
       reviewDigest,
     );
     const inviteBody = await inviteResp.text();
@@ -530,13 +530,13 @@ test.describe("knock + application + cooldown", () => {
       schema_refs: JOIN_POLICY_PROFILE_SCHEMA_REFS,
       discoverability: "listed",
       default_join_rule: "knock",
-      ownerDid: alice.user.did,
+      ownerId: alice.user.id,
     });
-    await addRealmMemberApi(request, alice.token, realmId, eve.user.did);
+    await addRealmMemberApi(request, alice.token, realmId, eve.user.id);
     await writeJoinPolicyApi(request, alice.token, realmId, APPLICATION_FORM_POLICY);
 
-    await submitKnockApi(request, bob.token, bob.user.did, realmId);
-    const applicationRef = await submitApplicationApi(request, bob.token, bob.user.did, realmId, {
+    await submitKnockApi(request, bob.token, bob.user.id, realmId);
+    const applicationRef = await submitApplicationApi(request, bob.token, bob.user.id, realmId, {
       answers: [{ question_id: "q1", value: "secret reviewer-only application" }],
     });
 
@@ -544,7 +544,7 @@ test.describe("knock + application + cooldown", () => {
     const eveView = await listMemberApplicationsApi(request, eve.token, realmId);
     expect(eveView.viewer_is_reviewer).toBe(false);
     const eveEntry = eveView.applications.find(
-      (entry) => entry.applicant_did === bob.user.did,
+      (entry) => entry.applicant_id === bob.user.id,
     );
     expect(eveEntry, "eve sees the application metadata").toBeTruthy();
     expect(applicationAnswers(eveEntry), "eve MUST NOT see answers").toBeFalsy();
@@ -557,7 +557,7 @@ test.describe("knock + application + cooldown", () => {
       realmId,
     );
     const aliceEntry = aliceView.applications.find(
-      (entry) => entry.applicant_did === bob.user.did,
+      (entry) => entry.applicant_id === bob.user.id,
     );
     expect(applicationAnswers(aliceEntry), "reviewer sees answers").toBeTruthy();
     const audit = await listJoinApplicationAuditApi(
@@ -569,7 +569,7 @@ test.describe("knock + application + cooldown", () => {
     expect(
       audit.some(
         (entry) =>
-          entry.action === "read" && entry.actor_id === alice.user.did,
+          entry.action === "read" && entry.actor_id === alice.user.id,
       ),
       "reviewer private-body read is durably audited",
     ).toBe(true);

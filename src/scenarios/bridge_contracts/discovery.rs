@@ -90,7 +90,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     );
     assert_eq!(
         auth_bridge["examples"]["session_grant_issue_request"]["principal_id"],
-        "did:web:alice.example"
+        "ak:did_core:web:alice.example"
     );
     assert_eq!(
         auth_bridge["examples"]["register_device_request"]["platform"],

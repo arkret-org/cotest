@@ -77,7 +77,7 @@ test.describe("workflow: incident response", () => {
         joinRule: "invite",
         historyAccess: "all_history_for_current_members",
         encryptionProfile: "none",
-        seedMembers: [backend.did, comms.did],
+        seedMembers: [backend.id, comms.id],
       });
       await Promise.all([
         backendPage.acceptInvite(realmId),
@@ -167,7 +167,7 @@ test.describe("workflow: incident response", () => {
     const token = await issueDevSession(request, oncall);
     const realmId = await createRealmApi(request, token, {
       title: `SEV FSM ${stamp}`,
-      ownerDid: oncall.did,
+      ownerId: oncall.id,
     });
     const incidentStrandId = typedId("strand");
     const createdAt = canonicalTimestamp();
@@ -175,7 +175,7 @@ test.describe("workflow: incident response", () => {
       request,
       token,
       signedEventEnvelope({
-        actorDid: oncall.did,
+        actorId: oncall.id,
         realmId,
         kind: "ak.strand.create",
         createdAt,
@@ -190,7 +190,7 @@ test.describe("workflow: incident response", () => {
             },
             stage: "in_progress",
             tracks: { discussion: { enabled: true, is_primary: true } },
-            created_by: oncall.did,
+            created_by: oncall.id,
             created_at: createdAt,
           },
         },
@@ -199,7 +199,7 @@ test.describe("workflow: incident response", () => {
     );
 
     const badResolvedEvent = signedEventEnvelope({
-      actorDid: oncall.did,
+      actorId: oncall.id,
       realmId,
       kind: "ak.strand.update",
       payload: {
@@ -225,7 +225,7 @@ test.describe("workflow: incident response", () => {
       request,
       token,
       signedEventEnvelope({
-        actorDid: oncall.did,
+        actorId: oncall.id,
         realmId,
         kind: "ak.strand.update",
         payload: {
@@ -239,7 +239,7 @@ test.describe("workflow: incident response", () => {
       request,
       token,
       signedEventEnvelope({
-        actorDid: oncall.did,
+        actorId: oncall.id,
         realmId,
         kind: "ak.strand.update",
         payload: {

@@ -9,7 +9,7 @@ import { mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
-  canonicalDidCoreId,
+  requireDidCoreId,
   canonicalJson,
   canonicalTimestamp,
   createRealmApi,
@@ -53,7 +53,7 @@ function didKeyUser(prefix: string, identity: DidKeyIdentity): JointUser {
   const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
   return {
     name: `${prefix}-${stamp}`.toLowerCase(),
-    did: projectDidToCoreId(identity.did),
+    id: projectDidToCoreId(identity.did),
     did: identity.did,
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${prefix}-${stamp}`.toLowerCase(),
@@ -189,7 +189,7 @@ async function submitSelfEvent(
 async function allowlistVerificationService(
   request: APIRequestContext,
   token: string,
-  ownerDid: string,
+  ownerId: string,
   realmId: string,
   serviceId: string,
 ) {
@@ -197,13 +197,13 @@ async function allowlistVerificationService(
     request,
     token,
     signedEventEnvelope({
-      actorDid: ownerDid,
+      actorId: ownerId,
       realmId,
       kind: "ak.realm.policy_bundle",
       payload: {
         policy_revision: nextJoinPolicyRevision(undefined, realmId),
         allowed_third_party_invite_verification_service_ids: [
-          canonicalDidCoreId(serviceId),
+          projectDidToCoreId(serviceId),
         ],
       },
     }),
@@ -214,12 +214,12 @@ async function allowlistVerificationService(
 async function submitThirdPartyInvite(
   request: APIRequestContext,
   token: string,
-  ownerDid: string,
+  ownerId: string,
   cell: ThirdPartyInviteCell,
   payload: Record<string, unknown>,
 ): Promise<SelfEventsOutcome> {
   const envelope = signedEventEnvelope({
-    actorDid: ownerDid,
+    actorId: ownerId,
     realmId: cell.realmId,
     kind: "ak.invite.third_party",
     schemaId: "ak.schema.event.v1",
@@ -248,7 +248,7 @@ async function submitClaim(
     request,
     bobToken,
     signedEventEnvelope({
-      actorDid: claimant.did,
+      actorId: claimant.id,
       realmId: cell.realmId,
       kind: "ak.invite.claim",
       actorSeq: 0,
@@ -283,14 +283,14 @@ test.describe("third-party invite", () => {
     // dev-login auto-provisions the did:key account for bob.
     const bobToken = await issueDevSession(request, bob);
     registerEventSigner({
-      actorDid: bob.did,
+      actorId: bob.id,
       deviceId: bob.deviceId,
       verificationMethod: bobIdentity.verificationMethod,
       signingSeedB64url: bobIdentity.signingSeedB64url,
     });
     const realmId = await createRealmApi(request, aliceToken, {
       title: `3PID invite reducer ${opts.fixtureNonce}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
 
     const verificationService = await createVerificationService(
@@ -301,7 +301,7 @@ test.describe("third-party invite", () => {
       await allowlistVerificationService(
         request,
         aliceToken,
-        alice.did,
+        alice.id,
         realmId,
         verificationService.did,
       );
@@ -313,7 +313,7 @@ test.describe("third-party invite", () => {
     const { payload, cell } = buildThirdPartyInvitePayload({
       realmId,
       verificationService,
-      tokenCommitment: tokenCommitment(`${opts.fixtureNonce}-${alice.did}`),
+      tokenCommitment: tokenCommitment(`${opts.fixtureNonce}-${alice.id}`),
       expiresAt,
       displayNameHint: "external invite",
     });
@@ -343,7 +343,7 @@ test.describe("third-party invite", () => {
     const outcome = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,
-      ctx.alice.did,
+      ctx.alice.id,
       ctx.cell,
       ctx.invitePayload,
     );
@@ -441,7 +441,7 @@ test.describe("third-party invite", () => {
     const issued = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,
-      ctx.alice.did,
+      ctx.alice.id,
       ctx.cell,
       ctx.invitePayload,
     );
@@ -452,20 +452,20 @@ test.describe("third-party invite", () => {
     const bindingProof = signBindingProof({
       cell: ctx.cell,
       verificationService: ctx.verificationService,
-      subjectId: ctx.bob.did,
+      subjectId: ctx.bob.id,
       claimNonce,
       bindingExpiresAt,
     });
     const subjectProof = signSubjectProof({
       cell: ctx.cell,
       subject: ctx.bobIdentity,
-      verificationServiceId: ctx.verificationService.did,
+      verificationServiceDid: ctx.verificationService.did,
       bindingProof,
       claimNonce,
     });
     const claimPayload = buildClaimPayload({
       cell: ctx.cell,
-      subjectId: ctx.bob.did,
+      subjectId: ctx.bob.id,
       claimNonce,
       bindingProof,
       subjectProof,
@@ -486,7 +486,7 @@ test.describe("third-party invite", () => {
 
     // Reducer effect: bob is now an invite-membership proposal in the Realm.
     const invitesResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.did)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
+      `${solandBaseUrl()}/_arkret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.id)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
       {
         headers: {
           ...authHeaders(ctx.bobToken),
@@ -505,9 +505,9 @@ test.describe("third-party invite", () => {
     }>(invitesResp, "list claimed invites");
     const claimed = (invitesBody.invites ?? []).find(
       (invite) =>
-        invite.realm_id === ctx.realmId && invite.invitee === ctx.bob.did,
+        invite.realm_id === ctx.realmId && invite.invitee === ctx.bob.id,
     );
-    expect(claimed, `claimed invite for ${ctx.bob.did}`).toBeTruthy();
+    expect(claimed, `claimed invite for ${ctx.bob.id}`).toBeTruthy();
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
@@ -527,7 +527,7 @@ test.describe("third-party invite", () => {
     const issued = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,
-      ctx.alice.did,
+      ctx.alice.id,
       ctx.cell,
       ctx.invitePayload,
     );
@@ -542,14 +542,14 @@ test.describe("third-party invite", () => {
     const bindingProof = signBindingProof({
       cell: ctx.cell,
       verificationService: ctx.verificationService,
-      subjectId: ctx.bob.did,
+      subjectId: ctx.bob.id,
       claimNonce,
       bindingExpiresAt: ctx.cell.expiresAt,
     });
     const subjectProof = signSubjectProof({
       cell: ctx.cell,
       subject: ctx.bobIdentity,
-      verificationServiceId: ctx.verificationService.did,
+      verificationServiceDid: ctx.verificationService.did,
       bindingProof,
       claimNonce,
     });
@@ -560,7 +560,7 @@ test.describe("third-party invite", () => {
       ctx.cell,
       buildClaimPayload({
         cell: ctx.cell,
-        subjectId: ctx.bob.did,
+        subjectId: ctx.bob.id,
         claimNonce,
         bindingProof,
         subjectProof,
@@ -588,7 +588,7 @@ test.describe("third-party invite", () => {
     const issued = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,
-      ctx.alice.did,
+      ctx.alice.id,
       ctx.cell,
       ctx.invitePayload,
     );
@@ -598,7 +598,7 @@ test.describe("third-party invite", () => {
     const mallory = didKeyUser("s3-mallory", malloryIdentity);
     const malloryToken = await issueDevSession(request, mallory);
     registerEventSigner({
-      actorDid: mallory.did,
+      actorId: mallory.id,
       deviceId: mallory.deviceId,
       verificationMethod: malloryIdentity.verificationMethod,
       signingSeedB64url: malloryIdentity.signingSeedB64url,
@@ -610,7 +610,7 @@ test.describe("third-party invite", () => {
     const bindingProof = signBindingProof({
       cell: ctx.cell,
       verificationService: ctx.verificationService,
-      subjectId: ctx.bob.did,
+      subjectId: ctx.bob.id,
       claimNonce,
       bindingExpiresAt: ctx.cell.expiresAt,
     });
@@ -618,7 +618,7 @@ test.describe("third-party invite", () => {
     const subjectProof = signSubjectProof({
       cell: ctx.cell,
       subject: malloryIdentity,
-      verificationServiceId: ctx.verificationService.did,
+      verificationServiceDid: ctx.verificationService.did,
       bindingProof,
       claimNonce,
     });
@@ -629,7 +629,7 @@ test.describe("third-party invite", () => {
       ctx.cell,
       buildClaimPayload({
         cell: ctx.cell,
-        subjectId: mallory.did,
+        subjectId: mallory.id,
         claimNonce,
         bindingProof,
         subjectProof,
@@ -661,7 +661,7 @@ test.describe("third-party invite", () => {
     const issued = await submitThirdPartyInvite(
       request,
       ctx.aliceToken,
-      ctx.alice.did,
+      ctx.alice.id,
       ctx.cell,
       ctx.invitePayload,
     );
@@ -671,14 +671,14 @@ test.describe("third-party invite", () => {
     const firstBinding = signBindingProof({
       cell: ctx.cell,
       verificationService: ctx.verificationService,
-      subjectId: ctx.bob.did,
+      subjectId: ctx.bob.id,
       claimNonce: firstNonce,
       bindingExpiresAt: ctx.cell.expiresAt,
     });
     const firstSubject = signSubjectProof({
       cell: ctx.cell,
       subject: ctx.bobIdentity,
-      verificationServiceId: ctx.verificationService.did,
+      verificationServiceDid: ctx.verificationService.did,
       bindingProof: firstBinding,
       claimNonce: firstNonce,
     });
@@ -689,7 +689,7 @@ test.describe("third-party invite", () => {
       ctx.cell,
       buildClaimPayload({
         cell: ctx.cell,
-        subjectId: ctx.bob.did,
+        subjectId: ctx.bob.id,
         claimNonce: firstNonce,
         bindingProof: firstBinding,
         subjectProof: firstSubject,
@@ -706,14 +706,14 @@ test.describe("third-party invite", () => {
     const secondBinding = signBindingProof({
       cell: ctx.cell,
       verificationService: ctx.verificationService,
-      subjectId: ctx.bob.did,
+      subjectId: ctx.bob.id,
       claimNonce: secondNonce,
       bindingExpiresAt: ctx.cell.expiresAt,
     });
     const secondSubject = signSubjectProof({
       cell: ctx.cell,
       subject: ctx.bobIdentity,
-      verificationServiceId: ctx.verificationService.did,
+      verificationServiceDid: ctx.verificationService.did,
       bindingProof: secondBinding,
       claimNonce: secondNonce,
     });
@@ -724,7 +724,7 @@ test.describe("third-party invite", () => {
       ctx.cell,
       buildClaimPayload({
         cell: ctx.cell,
-        subjectId: ctx.bob.did,
+        subjectId: ctx.bob.id,
         claimNonce: secondNonce,
         bindingProof: secondBinding,
         subjectProof: secondSubject,

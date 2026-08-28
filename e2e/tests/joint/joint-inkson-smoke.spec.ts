@@ -133,17 +133,17 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       // which is the genesis write of that member cell and MUST carry
       // `head_eq null`. `ak.realm.create` never writes membership implicitly.
       const creatorMembership = bootstrap!.at(-1)!;
-      const creatorDid = bootstrap![0].actor_id;
+      const creatorId = bootstrap![0].actor_id;
       expect(creatorMembership.kind).toBe("ak.member.state");
-      expect(creatorMembership.actor_id).toBe(creatorDid);
+      expect(creatorMembership.actor_id).toBe(creatorId);
       expect(creatorMembership.payload).toMatchObject({
         realm_id: realmId,
-        actor_id: creatorDid,
+        actor_id: creatorId,
         membership: "join",
       });
       expect(creatorMembership.preconditions).toEqual([
         {
-          cell: `ak:cell:ak.component.member.state.v1:${creatorDid}`,
+          cell: `ak:cell:ak.component.member.state.v1:${creatorId}`,
           predicate: { op: "head_eq", value: null },
         },
       ]);
@@ -239,7 +239,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       `joint-participant-${stamp}`,
     );
     expect(participantSession, "joint participant DPoP session").toBeTruthy();
-    const participantId = participantSession!.user.did;
+    const participantId = participantSession!.user.id;
     const participantFlow = await openDpopUserPageFromSession(
       browser,
       participantSession,
@@ -259,15 +259,15 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         jointRealm.realmId,
       );
       await grantCapabilityEventApi(request, jointRealm.aliceToken, {
-        ownerDid: jointRealm.alice.did,
+        ownerId: jointRealm.alice.id,
         realmId: jointRealm.realmId,
-        subjectDid: jointRealm.alice.did,
+        subjectId: jointRealm.alice.id,
         actions: ["ak.message.create"],
       });
       await submitSignedEvent(
         request,
         jointRealm.aliceSession,
-        jointRealm.alice.did,
+        jointRealm.alice.id,
         jointRealm.alicePage.serverUrl,
         jointRealm.realmId,
         "ak.member.state",
@@ -281,7 +281,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       const controllerMessageId = await submitSignedEvent(
         request,
         jointRealm.aliceSession,
-        jointRealm.alice.did,
+        jointRealm.alice.id,
         jointRealm.alicePage.serverUrl,
         jointRealm.realmId,
         "ak.message.create",
@@ -295,7 +295,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
               {
                 kind: "mention",
                 subject_id: participantId,
-                controller_subject_id: jointRealm.alice.did,
+                controller_subject_id: jointRealm.alice.id,
                 controller_handle_at_time: controllerHandle,
                 agent_slug_at_time: slug,
                 display_name_at_time: forgedDisplayName,
@@ -337,7 +337,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
       await expect(
         jointRealm.alicePage.page.locator(
-          `[data-testid="participant-agent-group"][data-controller-id="${jointRealm.alice.did}"]`,
+          `[data-testid="participant-agent-group"][data-controller-id="${jointRealm.alice.id}"]`,
         ),
       ).toHaveCount(0);
 
@@ -430,7 +430,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         historyAccess: "since_join",
         encryptionProfile: "none",
       });
-      await alicePage.inviteFromAdmin(realmId, bob.did);
+      await alicePage.inviteFromAdmin(realmId, bob.id);
 
       await expect
         .poll(
@@ -439,11 +439,11 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
               request,
               bobFlow.session,
               bobPage.serverUrl,
-              bob.did,
+              bob.id,
             );
             return invites.some(
               (invite) =>
-                invite.realm_id === realmId && invite.invitee === bob.did,
+                invite.realm_id === realmId && invite.invitee === bob.id,
             );
           },
           { timeout: 30_000 },
@@ -504,7 +504,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
 async function submitSignedEvent(
   request: APIRequestContext,
   session: DpopUserSession,
-  actorDid: string,
+  actorId: string,
   serverUrl: string,
   realmId: string,
   kind: string,
@@ -514,7 +514,7 @@ async function submitSignedEvent(
   const frontier = await readRealmActorFrontier(
     request,
     session,
-    actorDid,
+    actorId,
     serverUrl,
     realmId,
   );
@@ -523,7 +523,7 @@ async function submitSignedEvent(
       ? await readRealmSealBasis(request, session.grantJwt, realmId)
       : undefined;
   const envelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind,
     actorSeq: frontier.nextActorSeq,
@@ -554,7 +554,7 @@ async function submitSignedEvent(
 async function readRealmActorFrontier(
   request: APIRequestContext,
   session: DpopUserSession,
-  actorDid: string,
+  actorId: string,
   serverUrl: string,
   realmId: string,
 ): Promise<{ nextActorSeq: number; frontierEventIds: string[] }> {
@@ -565,7 +565,7 @@ async function readRealmActorFrontier(
       ...selfPathHeadersForDpopSession(session, "QUERY", href),
       "content-type": "application/json",
     },
-    data: canonicalJson({ actor_id: actorDid, realm_id: realmId }),
+    data: canonicalJson({ actor_id: actorId, realm_id: realmId }),
   });
   const text = await response.text();
   expect(
@@ -580,7 +580,7 @@ async function readRealmActorFrontier(
     };
   };
   const frontier = body.frontier;
-  expect(frontier?.actor_id, "actor frontier identity").toBe(actorDid);
+  expect(frontier?.actor_id, "actor frontier identity").toBe(actorId);
   const nextActorSeq = frontier?.next_actor_seq;
   expect(
     typeof nextActorSeq === "number" &&
@@ -623,10 +623,10 @@ async function listInvitesForDpop(
   request: APIRequestContext,
   session: DpopUserSession,
   serverUrl: string,
-  subjectDid: string,
+  subjectId: string,
 ): Promise<Array<{ id: string; realm_id: string; invitee?: string }>> {
   const url = new URL("/_arkret/self/authz/invites", serverUrl);
-  url.searchParams.set("subject", subjectDid);
+  url.searchParams.set("subject", subjectId);
   const href = url.toString();
   const response = await request.get(href, {
     headers: {

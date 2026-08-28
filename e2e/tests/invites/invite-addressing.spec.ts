@@ -104,12 +104,12 @@ async function acceptedInviteFixture(
   const inviteeToken = await issueDevSession(request, invitee);
   const realmId = await createRealmApi(request, inviterToken, {
     title: `invite dispatch ${slug} ${Date.now()}`,
-    ownerDid: inviter.did,
+    ownerId: inviter.id,
   });
 
   const evidence = { kind: "explicit_address" } as const;
   const inviteAddress = {
-    subject_id: invitee.did,
+    subject_id: invitee.id,
     recipient_service_id: solandServiceId(),
     // §7 step 6: this carrier and the durable
     // `invite_delivery_target.service_resolution` MUST be byte-for-byte equal.
@@ -117,11 +117,11 @@ async function acceptedInviteFixture(
     recipient_service_kind: "principal_server" as const,
   };
   const event = signedEventEnvelope({
-    actorDid: inviter.did,
+    actorId: inviter.id,
     realmId,
     kind: "ak.invite.create",
     payload: {
-      invitee: invitee.did,
+      invitee: invitee.id,
       invite_delivery_target: {
         recipient_service_id: inviteAddress.recipient_service_id,
         service_resolution: inviteAddress.service_resolution,
@@ -168,7 +168,7 @@ test.describe("invite addressing", () => {
       recipient_service_kind: "principal_server" as const,
     };
     const inviteEvent = signedEventEnvelope({
-      actorDid: "did:web:cotest-inviter.example",
+      actorId: "ak:did_core:web:cotest-inviter.example",
       realmId: typedId("realm"),
       kind: "ak.invite.create",
       payload: {
@@ -260,7 +260,7 @@ test.describe("invite addressing", () => {
     expect(resolvedResponse.status(), await resolvedResponse.text()).toBe(200);
     const locator = await resolvedResponse.json();
     expect(locator.schema).toBe("ak.schema.principal_locator.v1");
-    expect(locator.subject_id).toBe(user.did);
+    expect(locator.subject_id).toBe(user.id);
     expect(locator.recipient_service_id).toBe(solandServiceId());
     expect(locator.issued_at).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
@@ -418,7 +418,7 @@ test.describe("invite addressing", () => {
       countInvitesFor(
         await listAuthzInvitesArkret(request, fixture.inviteeToken),
         fixture.realmId,
-        fixture.invitee.did,
+        fixture.invitee.id,
       ),
       "a quarantined low-trust invite must stay invisible to the invitee",
     ).toBe(0);
@@ -441,11 +441,11 @@ test.describe("invite addressing", () => {
     // `failed_precondition` / `invite_event_unaccepted`. The Event below is well
     // formed and correctly signed but was never submitted.
     const unsubmitted = signedEventEnvelope({
-      actorDid: fixture.inviter.did,
+      actorId: fixture.inviter.id,
       realmId: fixture.realmId,
       kind: "ak.invite.create",
       payload: {
-        invitee: fixture.invitee.did,
+        invitee: fixture.invitee.id,
         invite_delivery_target: {
           recipient_service_id: fixture.inviteAddress.recipient_service_id,
           service_resolution: fixture.inviteAddress.service_resolution,
@@ -495,7 +495,7 @@ test.describe("invite addressing", () => {
       countInvitesFor(
         await listAuthzInvitesArkret(request, fixture.inviteeToken),
         fixture.realmId,
-        fixture.invitee.did,
+        fixture.invitee.id,
       ),
       "a rejected §7 precondition must not create any holder-private invite",
     ).toBe(0);

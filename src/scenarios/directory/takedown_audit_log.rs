@@ -103,7 +103,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
     // Accept a well-formed row.
     let now = Utc::now();
     validate_audit_row(
-        "did:web:moderator.example",
+        "ak:did_core:web:moderator.example",
         "ak:realm:AU16OSOCTqcHCtBpGjjlRSVEboy9z65gD0A2Vw73vGcu",
         TakedownReason::PolicyViolation,
         now,
@@ -112,7 +112,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
 
     // Reject a row whose realm id lacks the typed prefix.
     let bad = validate_audit_row(
-        "did:web:moderator.example",
+        "ak:did_core:web:moderator.example",
         "realm-501", // bare id
         TakedownReason::PolicyViolation,
         now,
@@ -123,7 +123,7 @@ pub async fn takedown_audit_log_run() -> Result<()> {
 
     // Sanity: a round-tripped audit row keeps every field.
     let row = json!({
-        "actor_id": "did:web:moderator.example",
+        "actor_id": "ak:did_core:web:moderator.example",
         "target_realm_id": "ak:realm:AU16OSOCTqcHCtBpGjjlRSVEboy9z65gD0A2Vw73vGcu",
         "reason": "subject_request",
         "created_at": arkret_canonical::format_timestamp_canonical(now),

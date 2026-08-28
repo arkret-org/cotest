@@ -11,13 +11,13 @@
         {
           "move_id": "ak:event:AZC-U6IhvshOPx6I2sZcwUIipTolibFEKZrW4-KHFwXY",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000001",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000001",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -25,17 +25,17 @@
         {
           "move_id": "ak:event:ASWDS-DvTMGsI8ra8IMcrWzD1L3BUF2D3bFEvSpZJB01",
           "kind": "ak.invite.send",
-          "actor_id": "did:web:bob.example",
+          "actor_id": "ak:did_core:web:bob.example",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000001",
-              "peer": "did:web:bob.example",
+              "peer": "ak:did_core:web:bob.example",
               "scope": "invite"
             }
           ],
-          "payload": { "target": "did:web:alice.example" },
+          "payload": { "target": "ak:did_core:web:alice.example" },
           "expected": { "outcome": "accept" }
         }
       ]
@@ -47,13 +47,13 @@
         {
           "move_id": "ak:event:ASRboSxLt55ezeNBXCa9odsuRrRWsJ_J49TgWKtyTcWd",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000002",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000002",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -61,7 +61,7 @@
         {
           "move_id": "ak:event:AerVVhAWptFKZiFBDlob36MUqKQML7m1Hilkfvbtzngz",
           "kind": "ak.consent.revoke",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000002",
           "effects": [
             {
@@ -75,17 +75,17 @@
         {
           "move_id": "ak:event:AbLUaNO9m_tRCJn4qAM03Ym0bFcN-oRmeEHjTinQpPUu",
           "kind": "ak.invite.send",
-          "actor_id": "did:web:bob.example",
+          "actor_id": "ak:did_core:web:bob.example",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000002",
-              "peer": "did:web:bob.example",
+              "peer": "ak:did_core:web:bob.example",
               "scope": "invite"
             }
           ],
-          "payload": { "target": "did:web:alice.example" },
+          "payload": { "target": "ak:did_core:web:alice.example" },
           "expected": { "outcome": "reject", "reason_code": "consent_required" }
         }
       ]
@@ -97,13 +97,13 @@
         {
           "move_id": "ak:event:AVcRegcVuCp930M9IWpAEAB1WurfkmzertYaDjGXO2Er",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000003",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000003",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "any" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "any" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -111,17 +111,17 @@
         {
           "move_id": "ak:event:AR6k4R7kutlf3GbRm7fWf23NK2AkTOnggBXBo27It2lg",
           "kind": "ak.call.invite",
-          "actor_id": "did:web:bob.example",
+          "actor_id": "ak:did_core:web:bob.example",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000003",
-              "peer": "did:web:bob.example",
+              "peer": "ak:did_core:web:bob.example",
               "scope": "voice_call"
             }
           ],
-          "payload": { "target": "did:web:alice.example", "media": "voice" },
+          "payload": { "target": "ak:did_core:web:alice.example", "media": "voice" },
           "expected": { "outcome": "accept" }
         }
       ]
@@ -133,14 +133,14 @@
         {
           "move_id": "ak:event:AQ7PcRk7F8COt6aCuAycx49-WYhi3NKKzgPpCmERO_pH",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000004",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000004",
               "op": "or_set_add",
               "tag": {
-                "peer": "did:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
+                "peer": "ak:did_core:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
                 "scope": "direct_message"
               }
             }
@@ -150,17 +150,17 @@
         {
           "move_id": "ak:event:AZIHixnEFY8AjPKf_lcxVA5lvzAJ8mwvgHMnPklwWczI",
           "kind": "ak.message.create",
-          "actor_id": "did:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
+          "actor_id": "ak:did_core:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000004",
-              "peer": "did:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
+              "peer": "ak:did_core:ak:psd-z9z9z9z9z9z9z9z9z9z9z9",
               "scope": "direct_message"
             }
           ],
-          "payload": { "target": "did:web:alice.example" },
+          "payload": { "target": "ak:did_core:web:alice.example" },
           "expected": { "outcome": "accept" }
         }
       ]
@@ -172,17 +172,17 @@
         {
           "move_id": "ak:event:AXmvES9hZnd6rMGeyyrheZ3OD3clq90EyCR8zNtL7b-q",
           "kind": "ak.invite.send",
-          "actor_id": "did:web:bob.example",
+          "actor_id": "ak:did_core:web:bob.example",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000005",
-              "peer": "did:web:bob.example",
+              "peer": "ak:did_core:web:bob.example",
               "scope": "invite"
             }
           ],
-          "payload": { "target": "did:web:alice.example" },
+          "payload": { "target": "ak:did_core:web:alice.example" },
           "expected": { "outcome": "reject", "reason_code": "consent_required" }
         }
       ]
@@ -194,13 +194,13 @@
         {
           "move_id": "ak:event:AYOCSkT8KIIWmurgqwj-bO34GhBMojoBLNgda-4YNv4N",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000006",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -208,7 +208,7 @@
         {
           "move_id": "ak:event:AU6Gj6E2x1N3tRNymmRUM5a2b7hlQsNAjPXsZshWZCdN",
           "kind": "ak.consent.revoke",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
           "effects": [
             {
@@ -222,13 +222,13 @@
         {
           "move_id": "ak:event:AXelGZt58KVKD4UNPjrUnRlRhVgmn3VKkoiNHRc0uEnW",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000006",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -236,17 +236,17 @@
         {
           "move_id": "ak:event:AckajWhdlCrAHZ-QiTx6WaNU8bp6NZw9atIdivEChqNg",
           "kind": "ak.invite.send",
-          "actor_id": "did:web:bob.example",
+          "actor_id": "ak:did_core:web:bob.example",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000006",
-              "peer": "did:web:bob.example",
+              "peer": "ak:did_core:web:bob.example",
               "scope": "invite"
             }
           ],
-          "payload": { "target": "did:web:alice.example" },
+          "payload": { "target": "ak:did_core:web:alice.example" },
           "expected": { "outcome": "accept" }
         }
       ]
@@ -258,13 +258,13 @@
         {
           "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA001",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000007",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -272,13 +272,13 @@
         {
           "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA002",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000007",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -286,7 +286,7 @@
         {
           "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA003",
           "kind": "ak.consent.revoke",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
           "effects": [
             {
@@ -300,17 +300,17 @@
         {
           "move_id": "ak:event:AdQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uA004",
           "kind": "ak.invite.send",
-          "actor_id": "did:web:bob.example",
+          "actor_id": "ak:did_core:web:bob.example",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000007",
-              "peer": "did:web:bob.example",
+              "peer": "ak:did_core:web:bob.example",
               "scope": "invite"
             }
           ],
-          "payload": { "target": "did:web:alice.example" },
+          "payload": { "target": "ak:did_core:web:alice.example" },
           "expected": { "outcome": "accept" }
         }
       ]
@@ -322,13 +322,13 @@
         {
           "move_id": "ak:event:AeQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uB001",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000008",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000008",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:bob.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:bob.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "accept" }
@@ -336,13 +336,13 @@
         {
           "move_id": "ak:event:AeQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uB002",
           "kind": "ak.consent.grant",
-          "actor_id": "did:web:alice.example",
+          "actor_id": "ak:did_core:web:alice.example",
           "consent_id": "ak:consent:01964100-0000-7000-8000-000000000008",
           "effects": [
             {
               "cell": "ak:cell:ak.component.consent.grant.v1:ak:consent:01964100-0000-7000-8000-000000000008",
               "op": "or_set_add",
-              "tag": { "peer": "did:web:carol.example", "scope": "invite" }
+              "tag": { "peer": "ak:did_core:web:carol.example", "scope": "invite" }
             }
           ],
           "expected": { "outcome": "reject", "reason_code": "consent_intent_rebind" }
@@ -350,17 +350,17 @@
         {
           "move_id": "ak:event:AeQx0lM6L4G5QRA7ZrBTHiwU9F7WD4mGTW8N4k8uB003",
           "kind": "ak.invite.send",
-          "actor_id": "did:web:bob.example",
+          "actor_id": "ak:did_core:web:bob.example",
           "admission_checks": [
             {
               "kind": "consent_active",
-              "holder": "did:web:alice.example",
+              "holder": "ak:did_core:web:alice.example",
               "consent_id": "ak:consent:01964100-0000-7000-8000-000000000008",
-              "peer": "did:web:bob.example",
+              "peer": "ak:did_core:web:bob.example",
               "scope": "invite"
             }
           ],
-          "payload": { "target": "did:web:alice.example" },
+          "payload": { "target": "ak:did_core:web:alice.example" },
           "expected": { "outcome": "accept" }
         }
       ]

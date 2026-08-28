@@ -59,7 +59,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       request,
       fixture.aliceToken,
       signedEventEnvelope({
-        actorDid: fixture.alice.did,
+        actorId: fixture.alice.id,
         realmId: fixture.realmId,
         kind: "ak.message.create",
         payload: {
@@ -232,7 +232,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const sentAt = new Date();
     const sentAtIso = sentAt.toISOString();
     const envelope = buildSignalEnvelope({
-      actorDid: fixture.bob.did,
+      actorId: fixture.bob.id,
       deviceId: fixture.bob.deviceId,
       realmId: fixture.realmId,
       scopeRef: {
@@ -247,7 +247,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         receipt_kind: "read",
         schema: "ak.schema.read_receipt.v1",
         realm_id: fixture.realmId,
-        actor_id: fixture.bob.did,
+        actor_id: fixture.bob.id,
         read_scope: {
           kind: "strand",
           object_ref: promoted.privateStrandId,
@@ -269,7 +269,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const received = envelopes.find((candidate) => {
       const plaintext = signalPlaintext(candidate);
       return (
-        candidate.sender_actor_id === fixture.bob.did &&
+        candidate.sender_actor_id === fixture.bob.id &&
         plaintext.kind === "ak.receipt.read"
       );
     });
@@ -284,7 +284,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     });
     expect(signalPlaintext(received)).toMatchObject({
       kind: "ak.receipt.read",
-      actor_id: fixture.bob.did,
+      actor_id: fixture.bob.id,
       read_scope: {
         kind: "strand",
         object_ref: promoted.privateStrandId,
@@ -447,7 +447,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const orphanCircleId = typedId("circle");
     const createdAt = canonicalTimestamp();
     const envelope = signedEventEnvelope({
-      actorDid: fixture.alice.did,
+      actorId: fixture.alice.id,
       realmId: fixture.realmId,
       kind: "ak.strand.create",
       createdAt,
@@ -489,7 +489,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     });
 
     const envelope = signedEventEnvelope({
-      actorDid: fixture.alice.did,
+      actorId: fixture.alice.id,
       realmId: fixture.realmId,
       kind: "ak.strand.update",
       payload: {
@@ -556,7 +556,7 @@ async function createStrandViaApi(
 ) {
   const createdAt = canonicalTimestamp();
   const envelope = signedEventEnvelope({
-    actorDid: actor.did,
+    actorId: actor.id,
     realmId,
     kind: "ak.strand.create",
     scopeRef: opts.scopeCircleId
@@ -602,7 +602,7 @@ function strandObject(
       },
     },
     ...(opts.scopeCircleId ? { scope_circle_id: opts.scopeCircleId } : {}),
-    created_by: actor.did,
+    created_by: actor.id,
     created_at: createdAt,
   };
 }
@@ -648,7 +648,7 @@ async function createDiscussionCircleViaApi(
 ) {
   const createdAt = canonicalTimestamp();
   const envelope = signedEventEnvelope({
-    actorDid: fixture.alice.did,
+    actorId: fixture.alice.id,
     realmId: fixture.realmId,
     kind: "ak.circle.create",
     createdAt,
@@ -670,7 +670,7 @@ async function createDiscussionCircleViaApi(
           ? { content_scheme: "mls_rfc9420" }
           : {}),
         state: "active",
-        created_by: fixture.alice.did,
+        created_by: fixture.alice.id,
         created_at: createdAt,
       },
     },
@@ -683,9 +683,9 @@ async function createDiscussionCircleViaApi(
   );
   const circleId = retypeEventDerivedId(String(envelope.event_id), "circle");
   await grantCircleMemberManageCapability(request, fixture.aliceToken, {
-    ownerDid: fixture.alice.did,
+    ownerId: fixture.alice.id,
     realmId: fixture.realmId,
-    subjectDid: fixture.alice.did,
+    subjectId: fixture.alice.id,
     circleId,
   });
   for (const member of opts.members) {
@@ -695,7 +695,7 @@ async function createDiscussionCircleViaApi(
       fixture.alice,
       fixture.realmId,
       circleId,
-      member.did,
+      member.id,
       "join",
     );
   }
@@ -708,23 +708,23 @@ async function submitCircleMemberStateViaApi(
   actor: JointUser,
   realmId: string,
   circleId: string,
-  memberDid: string,
+  memberId: string,
   membership: "join" | "invite" | "knock" | "leave" | "ban",
 ) {
   await submitSignedEventApi(
     request,
     token,
     signedEventEnvelope({
-      actorDid: actor.did,
+      actorId: actor.id,
       realmId,
       kind: "ak.circle.member.state",
       payload: {
         circle_id: circleId,
-        actor_id: memberDid,
+        actor_id: memberId,
         membership,
       },
     }),
-    { context: `circle ${circleId} member ${memberDid} -> ${membership}` },
+    { context: `circle ${circleId} member ${memberId} -> ${membership}` },
   );
 }
 
@@ -739,7 +739,7 @@ async function createConfidentialDiscussionRelationViaApi(
 ) {
   const createdAt = canonicalTimestamp();
   const envelope = signedEventEnvelope({
-    actorDid: actor.did,
+    actorId: actor.id,
     realmId,
     kind: "ak.relation.create",
     createdAt,
@@ -753,7 +753,7 @@ async function createConfidentialDiscussionRelationViaApi(
         scope_circle_id: circleId,
         fields: { role: "promoted_discussion" },
         state: "active",
-        created_by: actor.did,
+        created_by: actor.id,
         created_at: createdAt,
       },
     },
@@ -776,7 +776,7 @@ async function createDiscussionMessageViaApi(
   body: string,
 ) {
   const envelope = signedEventEnvelope({
-    actorDid: actor.did,
+    actorId: actor.id,
     realmId,
     kind: "ak.message.create",
     scopeRef: circleScopeByStrand.has(strandId)

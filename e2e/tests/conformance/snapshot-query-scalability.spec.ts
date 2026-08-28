@@ -38,7 +38,11 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../../helpers/arkret-test";
 import { conformanceBaseUrl, solandBaseUrl } from "../../helpers/env";
-import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
+import {
+  canonicalJson,
+  projectDidToCoreId,
+  wireErrCode,
+} from "../../helpers/soland-api";
 
 const __filename_ = fileURLToPath(import.meta.url);
 const __dirname_ = dirname(__filename_);
@@ -119,7 +123,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.event.v1"],
       chunk_hashes: chunkHashes,
-      created_by: "did:web:soland.conformance",
+      created_by: "ak:did_core:web:soland.conformance",
       created_at: "2026-05-31T00:00:00.000Z",
     };
 
@@ -161,7 +165,7 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       reducer_profile: "ak.reducer.core.v1",
       schema_profile_refs: ["ak.schema.event.v1"],
       chunk_hashes: chunks.map(chunkDigest),
-      created_by: signerDid,
+      created_by: projectDidToCoreId(signerDid),
       created_at: "2026-05-31T00:00:00.000Z",
       signature: {
         alg: "Ed25519",

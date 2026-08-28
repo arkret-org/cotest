@@ -50,7 +50,7 @@ import { withOperationSelectors } from "./arkret-test";
 export type JointUser = {
   name: string;
   /// Stable business identity projected through the active DID method adapter.
-  did: string;
+  id: string;
   /// Resolvable DID retained only for registration and proof-method boundaries.
   did: string;
   deviceId: string;
@@ -485,7 +485,7 @@ export class JointUserPage {
   // relies on the delegated action.
   async grantRealmCapability(
     realmId: string,
-    subjectDid: string,
+    subjectId: string,
     action: string,
   ): Promise<string> {
     const grantId = typedId("grant");
@@ -493,7 +493,7 @@ export class JointUserPage {
     await this.page.getByTestId("advanced-access-toggle").click();
     await this.page.getByTestId("cap-grant-id-input").fill(grantId);
     await this.page.getByTestId("cap-grant-tag-input").fill(action);
-    await this.page.getByTestId("cap-grant-subject-input").fill(subjectDid);
+    await this.page.getByTestId("cap-grant-subject-input").fill(subjectId);
     await this.page.getByTestId("cap-grant-submit-button").click();
     const status = this.page.getByTestId("realm-admin-status");
     await expect(status).toContainText("ak.capability.grant event", {
@@ -504,7 +504,7 @@ export class JointUserPage {
     const grantsUrl = new URL(
       `${this.serverUrl}/_arkret/self/authz/effective-grants`,
     );
-    grantsUrl.searchParams.set("subject", subjectDid);
+    grantsUrl.searchParams.set("subject", subjectId);
     grantsUrl.searchParams.set("realm_id", realmId);
     await expect
       .poll(
@@ -994,10 +994,10 @@ export class JointUserPage {
     return realmId;
   }
 
-  // Drive the Realm admin invite modal to invite `targetDid` into realmId.
+  // Drive the Realm admin invite modal to invite `targetId` into realmId.
   async inviteFromAdmin(
     realmId: string,
-    targetDid: string,
+    targetId: string,
     expectedDisplayLabel?: string,
     locator?: { token: string; serverUrl?: string },
   ): Promise<string> {
@@ -1020,7 +1020,7 @@ export class JointUserPage {
       const service = (await describe.json()) as { service_id: string };
       const resolutionUrl = `${this.serverUrl.replace(/\/$/, "")}/_arkret/open/services/${encodeURIComponent(service.service_id)}/resolution`;
       targetInput = JSON.stringify({
-        subject_id: targetDid,
+        subject_id: targetId,
         recipient_service_id: service.service_id,
         service_resolution: {
           current_record_url: resolutionUrl.replace(/^http:/, "https:"),
@@ -1063,10 +1063,10 @@ export class JointUserPage {
     await invite.getByTestId("invite-target-input").fill(targetInput);
     await invite.getByTestId("send-invite-button").click();
     const status = members.getByTestId("realm-members-status");
-    const displayLabel = expectedDisplayLabel ?? displayLabelForDid(targetDid);
+    const displayLabel = expectedDisplayLabel ?? targetId;
     await expect(status).toContainText(
       new RegExp(
-        `invited (${escapeRegex(displayLabel)}|${escapeRegex(targetDid)})`,
+        `invited (${escapeRegex(displayLabel)}|${escapeRegex(targetId)})`,
       ),
       { timeout: 30_000 },
     );
@@ -1117,7 +1117,7 @@ export class JointUserPage {
       "/_arkret/self/authz/invites",
       `${this.serverUrl.replace(/\/$/, "")}/`,
     );
-    invitesUrl.searchParams.set("subject", this.user.did);
+    invitesUrl.searchParams.set("subject", this.user.id);
     invitesUrl.searchParams.set("realm_id", realmId);
     await expect
       .poll(
@@ -1192,7 +1192,7 @@ export class JointUserPage {
 
   async sendTimelineMentionMessage(
     realmId: string,
-    mentionDid: string,
+    mentionId: string,
     suffix: string,
   ): Promise<string> {
     if (!this.page.url().includes(`/chat/${realmId}`)) {
@@ -1201,9 +1201,9 @@ export class JointUserPage {
     const input = this.page.getByTestId("chat-input");
     await input.fill("");
     await this.page.getByTestId("mention-trigger-button").click();
-    const escapedDid = mentionDid.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const escapedId = mentionId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const suggestion = this.page.locator(
-      `[data-testid="mention-suggestion"][data-mention-did="${escapedDid}"]`,
+      `[data-testid="mention-suggestion"][data-mention-did="${escapedId}"]`,
     );
     await expect(suggestion).toBeVisible({ timeout: 30_000 });
     await suggestion.click();
@@ -1368,7 +1368,7 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   })();
   return {
     name: slug,
-    did: projectDidToCoreId(principalDid),
+    id: projectDidToCoreId(principalDid),
     did: principalDid,
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${slug}`,
@@ -1422,7 +1422,7 @@ export async function ensureRegistered(
               `ensureRegistered: canonical provisioning returned no session for ${user.name}`,
             );
           }
-          user.did = session.user.did;
+          user.id = session.user.id;
           user.did = session.user.did;
           user.deviceId = session.user.deviceId;
           user.handle = session.user.handle;
@@ -1450,7 +1450,7 @@ async function ensureRegisteredRaw(
   // the Account Authority and is exercised through coauth-register.ts.
   const url = `${solandBaseUrl(opts.server)}/_soland/gate/account/project`;
   const data = {
-    principal_id: user.did,
+    principal_id: user.id,
     did: user.did,
     display_name: user.displayName,
     device_id: user.deviceId,
@@ -1463,7 +1463,7 @@ async function ensureRegisteredRaw(
     headers.authorization = `Bearer ${registrationBearer}`;
   }
   registerEventSigner({
-    actorDid: user.did,
+    actorId: user.id,
     deviceId: user.deviceId,
     verificationMethod: `${user.did}#${user.deviceId}`,
   });
@@ -1479,7 +1479,7 @@ async function ensureRegisteredRaw(
     const text = await response.text();
     if (response.status() !== 429 || attempt === backoffMs.length - 1) {
       throw new Error(
-        `ensureRegistered: ${url} returned ${response.status()} for ${user.did}: ${text}`,
+        `ensureRegistered: ${url} returned ${response.status()} for ${user.id}: ${text}`,
       );
     }
     await sleep(retryAfterMs(response, backoffMs[attempt]));
@@ -1493,7 +1493,7 @@ export async function issueDevSession(
 ): Promise<string> {
   const url = `${solandBaseUrl(opts.server)}/_soland/gate/auth/dev-login`;
   const data = {
-    actor: user.did,
+    actor: user.id,
     // Same actor (DID) can hold multiple device sessions: pass `deviceId` to
     // override the default per-user device. soland's dev-login registers each
     // distinct device_id in the device inventory, which is what drives the
@@ -1502,7 +1502,7 @@ export async function issueDevSession(
     display_name: user.displayName,
   };
   registerEventSigner({
-    actorDid: user.did,
+    actorId: user.id,
     deviceId: opts.deviceId ?? user.deviceId,
     verificationMethod: `${user.did}#${opts.deviceId ?? user.deviceId}`,
   });
@@ -1520,12 +1520,12 @@ export async function issueDevSession(
     const text = await response.text();
     if (response.status() !== 429 || attempt === backoffMs.length - 1) {
       throw new Error(
-        `issueDevSession: ${url} returned ${response.status()} for ${user.did}: ${text}`,
+        `issueDevSession: ${url} returned ${response.status()} for ${user.id}: ${text}`,
       );
     }
     await sleep(retryAfterMs(response, backoffMs[attempt]));
   }
-  throw new Error(`issueDevSession: exhausted retry loop for ${user.did}`);
+  throw new Error(`issueDevSession: exhausted retry loop for ${user.id}`);
 }
 
 export async function createDpopUserSession(
@@ -1607,13 +1607,13 @@ export async function createDpopUserSessionForAccount(
   ]);
   // Consume only the verified DID returned by the atomic registration result.
   expect(
-    grant.principalDid,
+    grant.principalId,
     "handoff session must return the bound principal DID",
   ).toBeTruthy();
   const user = {
     ...seed,
     name: account.handle,
-    did: grant.principalDid,
+    id: grant.principalId,
     did: account.did,
     handle: `@${account.handle}`,
     displayName: account.displayName,
@@ -1621,7 +1621,7 @@ export async function createDpopUserSessionForAccount(
   await ensureRegisteredRaw(request, user, { server: opts.server });
   const eventSigningSeedB64url = dpopDeviceSeedB64url(eventSigningKey);
   registerEventSigner({
-    actorDid: user.did,
+    actorId: user.id,
     deviceId: user.deviceId,
     verificationMethod: `${user.did}#${user.deviceId}`,
     signingSeedB64url: eventSigningSeedB64url,
@@ -1679,8 +1679,8 @@ export async function createDpopUserSessionForAccount(
     "ak:realm:",
   );
   session.principalControlRealmId = principalControlRealmId;
-  registerPrincipalControlRealm(user.did, principalControlRealmId);
-  registerPrincipalControlEvents(user.did, session.principalControlEvents);
+  registerPrincipalControlRealm(user.id, principalControlRealmId);
+  registerPrincipalControlEvents(user.id, session.principalControlEvents);
   const bootstrapSeal = cotestWire<Record<string, unknown>>(
     "principal-bootstrap-seal",
     {
@@ -1689,7 +1689,8 @@ export async function createDpopUserSessionForAccount(
     },
   );
   session.recoveryMaterialEvidence = {
-    principal_id: user.did,
+    principal_id: user.id,
+    principal_did: user.did,
     device_id: user.deviceId,
     principal_control_realm_id: principalControlRealmId,
     pcr_genesis_unit: checkpoint.pcr_genesis_unit,
@@ -1876,7 +1877,7 @@ export async function openUser(
           : {
               profile_id: `ak:profile:${randomUUID()}`,
               authority: {
-                principal_id: user.did,
+                principal_id: user.id,
                 principal_server_id: solandServiceId(opts.server),
               },
               resolution: {
@@ -2160,27 +2161,6 @@ function sanitize(value: string): string {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function displayLabelForDid(did: string): string {
-  const materialized = did.match(/^did:web:([^:]+):users:([^:]+)$/);
-  if (materialized) {
-    return `${materialized[2]}:${materialized[1]}`;
-  }
-  const simpleExample = did.match(/^did:web:([a-z0-9._-]+)\.example$/i);
-  if (simpleExample) {
-    return `${simpleExample[1].toLowerCase()}:example.com`;
-  }
-  // did:webvh fixture principals minted by uniqueUser():
-  // `did:webvh:<scid>:<slug>.example` — same label derivation as the
-  // did:web simple-example form above.
-  const webvhExample = did.match(
-    /^did:webvh:[a-z0-9]+:([a-z0-9._-]+)\.example$/i,
-  );
-  if (webvhExample) {
-    return `${webvhExample[1].toLowerCase()}:example.com`;
-  }
-  return did;
 }
 
 async function dismissDeviceAuthorizationPrompt(page: Page) {

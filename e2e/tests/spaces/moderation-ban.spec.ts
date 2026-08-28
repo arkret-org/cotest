@@ -67,17 +67,17 @@ test.describe("moderation and ban", () => {
       discoverability: "public",
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
-    await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
-    await addRealmMemberApi(request, aliceToken, realmId, carol.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
+    await addRealmMemberApi(request, aliceToken, realmId, mallory.id);
+    await addRealmMemberApi(request, aliceToken, realmId, carol.id);
     // The first message below is authored by a non-owner. Establish the
     // ordinary Realm's explicit default discussion Strand as the root
     // controller before that member write.
     await resolveDefaultStrandId(request, aliceToken, realmId);
     await grantCapabilityEventApi(request, aliceToken, {
-      ownerDid: alice.did,
+      ownerId: alice.id,
       realmId,
-      subjectDid: mallory.did,
+      subjectId: mallory.id,
       actions: ["ak.message.create"],
     });
 
@@ -91,7 +91,7 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(beforeRedaction)).toContain(abusive);
 
     const reportEvent = signedEventEnvelope({
-      actorDid: bob.did,
+      actorId: bob.id,
       realmId,
       kind: "ak.self.moderation.report",
       payload: {
@@ -99,7 +99,7 @@ test.describe("moderation and ban", () => {
         target_ref: sent.event_id,
         report_reason_code: "harassment",
         description: "S5 abusive content posted by mallory",
-        reporter: bob.did,
+        reporter: bob.id,
         evidence_refs: [sent.event_id],
       },
     });
@@ -159,12 +159,12 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(await ownerReports.json())).toContain(reportBody.report_id);
 
     const unauthorizedBanEvent = signedEventEnvelope({
-      actorDid: bob.did,
+      actorId: bob.id,
       realmId,
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: mallory.did,
+        actor_id: mallory.id,
         membership: "ban",
         reason: "non_moderator_attempt",
       },
@@ -199,18 +199,18 @@ test.describe("moderation and ban", () => {
     expect(JSON.stringify(await reports.json())).toContain(reportBody.report_id);
 
     const banEvent = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: mallory.did,
+        actor_id: mallory.id,
         membership: "ban",
         reason: "moderation_report_upheld",
       },
     });
     await submitSignedEventApi(request, aliceToken, banEvent, {
-      context: `ban ${mallory.did} from ${realmId}`,
+      context: `ban ${mallory.id} from ${realmId}`,
     });
 
     const realmAfterBan = await request.get(
@@ -219,13 +219,13 @@ test.describe("moderation and ban", () => {
     );
     expect(realmAfterBan.ok()).toBeTruthy();
     const realmAfterBanBody = await realmAfterBan.json();
-    expect(realmAfterBanBody.members ?? []).not.toContain(mallory.did);
+    expect(realmAfterBanBody.members ?? []).not.toContain(mallory.id);
 
     const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const bannedWrite = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
       headers: authHeaders(malloryToken),
       data: signedEventEnvelope({
-        actorDid: mallory.did,
+        actorId: mallory.id,
         realmId,
         kind: "ak.message.create",
         payload: {
@@ -241,7 +241,7 @@ test.describe("moderation and ban", () => {
     expect([401, 403, 404, 412]).toContain(bannedWrite.status());
 
     const redactEvent = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.message.redact",
       payload: {
@@ -290,26 +290,26 @@ test.describe("moderation and ban", () => {
       discoverability: "public",
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, realmId, mallory.id);
 
     const firstBan = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.member.state",
-      payload: { realm_id: realmId, actor_id: mallory.did, membership: "ban" },
+      payload: { realm_id: realmId, actor_id: mallory.id, membership: "ban" },
     });
     const secondBan = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId,
       kind: "ak.member.state",
-      payload: { realm_id: realmId, actor_id: mallory.did, membership: "ban" },
+      payload: { realm_id: realmId, actor_id: mallory.id, membership: "ban" },
     });
 
     await submitSignedEventApi(request, aliceToken, firstBan, {
-      context: `first ban ${mallory.did}`,
+      context: `first ban ${mallory.id}`,
     });
     await submitSignedEventApi(request, aliceToken, secondBan, {
-      context: `second ban ${mallory.did}`,
+      context: `second ban ${mallory.id}`,
     });
 
     const realm = await request.get(`${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`, {
@@ -317,7 +317,7 @@ test.describe("moderation and ban", () => {
     });
     expect(realm.ok()).toBeTruthy();
     const body = await realm.json();
-    expect(body.members ?? []).not.toContain(mallory.did);
+    expect(body.members ?? []).not.toContain(mallory.id);
   });
 
   test("owner can ban a member from the inkson admin member row", async ({
@@ -344,13 +344,13 @@ test.describe("moderation and ban", () => {
       discoverability: "public",
       history_access: "all_history_for_current_members",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, mallory.did);
+    await addRealmMemberApi(request, aliceToken, realmId, mallory.id);
 
     const alicePage = aliceFlow.page;
     try {
       await alicePage.gotoRealmAdminSection(realmId, "members");
       const malloryRow = alicePage.page.locator(
-        `[data-testid="member-row"][data-member-did="${mallory.did}"]`,
+        `[data-testid="member-row"][data-member-did="${mallory.id}"]`,
       );
       await expect(malloryRow).toBeVisible({ timeout: 30_000 });
       // The "Recovery setup is incomplete" banner can render over the member
@@ -368,7 +368,7 @@ test.describe("moderation and ban", () => {
       );
       expect(realm.ok()).toBeTruthy();
       const body = await realm.json();
-      expect(body.members ?? []).not.toContain(mallory.did);
+      expect(body.members ?? []).not.toContain(mallory.id);
     } finally {
       await alicePage.close();
     }

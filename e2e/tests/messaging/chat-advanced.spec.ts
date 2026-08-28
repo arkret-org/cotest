@@ -91,9 +91,9 @@ test.describe("chat advanced", () => {
   }) => {
     const fixture = await createChatApiFixture(request, "reaction-api");
     await grantCapabilityEventApi(request, fixture.aliceToken, {
-      ownerDid: fixture.alice.did,
+      ownerId: fixture.alice.id,
       realmId: fixture.realmId,
-      subjectDid: fixture.bob.did,
+      subjectId: fixture.bob.id,
       actions: ["ak.reaction.add", "ak.reaction.remove"],
     });
     const message = await sendPlaintextMessageViaApi(
@@ -101,7 +101,7 @@ test.describe("chat advanced", () => {
       fixture.aliceToken,
       fixture.realmId,
       `reaction target ${Date.now()}`,
-      { actorDid: fixture.alice.did },
+      { actorId: fixture.alice.id },
     );
     const messageRef = message.event_id.replace(/^ak:event:/, "ak:message:");
 
@@ -109,7 +109,7 @@ test.describe("chat advanced", () => {
       request,
       fixture.bobToken,
       signedEventEnvelope({
-        actorDid: fixture.bob.did,
+        actorId: fixture.bob.id,
         realmId: fixture.realmId,
         kind: "ak.reaction.add",
         payload: {
@@ -123,7 +123,7 @@ test.describe("chat advanced", () => {
       request,
       fixture.bobToken,
       signedEventEnvelope({
-        actorDid: fixture.bob.did,
+        actorId: fixture.bob.id,
         realmId: fixture.realmId,
         kind: "ak.reaction.remove",
         payload: {
@@ -159,7 +159,7 @@ test.describe("chat advanced", () => {
       fixture.aliceToken,
       fixture.realmId,
       `root ${Date.now()}`,
-      { actorDid: fixture.alice.did },
+      { actorId: fixture.alice.id },
     );
     const rootMessageRef = root.event_id.replace(/^ak:event:/, "ak:message:");
     const strandId = await resolveDefaultStrandId(
@@ -169,7 +169,7 @@ test.describe("chat advanced", () => {
     );
     const replyBody = `reply ${Date.now()}`;
     const reply = signedEventEnvelope({
-      actorDid: fixture.bob.did,
+      actorId: fixture.bob.id,
       realmId: fixture.realmId,
       kind: "ak.message.create",
       payload: {
@@ -215,7 +215,7 @@ test.describe("chat advanced", () => {
       request,
       fixture.aliceToken,
       signedEventEnvelope({
-        actorDid: fixture.alice.did,
+        actorId: fixture.alice.id,
         realmId: fixture.realmId,
         kind: "ak.message.create",
         payload: {
@@ -225,7 +225,7 @@ test.describe("chat advanced", () => {
             kind: "ak.content.text",
             body,
             mentions: [
-              { kind: "mention", subject_id: fixture.bob.did },
+              { kind: "mention", subject_id: fixture.bob.id },
             ],
           },
         },
@@ -241,11 +241,11 @@ test.describe("chat advanced", () => {
     const mention = events.find(
       (event) =>
         event.kind === "ak.message.create" &&
-        JSON.stringify(event.payload).includes(fixture.bob.did),
+        JSON.stringify(event.payload).includes(fixture.bob.id),
     );
     expect(mention?.payload).toMatchObject({
       content: {
-        mentions: [{ kind: "mention", subject_id: fixture.bob.did }],
+        mentions: [{ kind: "mention", subject_id: fixture.bob.id }],
       },
     });
     expect(mention?.payload).not.toHaveProperty("mention_routing_hint");
@@ -256,9 +256,9 @@ test.describe("chat advanced", () => {
   }) => {
     const fixture = await createChatApiFixture(request, "sync-projection-api");
     await grantCapabilityEventApi(request, fixture.aliceToken, {
-      ownerDid: fixture.alice.did,
+      ownerId: fixture.alice.id,
       realmId: fixture.realmId,
-      subjectDid: fixture.bob.did,
+      subjectId: fixture.bob.id,
       actions: ["ak.reaction.add", "ak.reaction.remove"],
     });
     const strandId = await resolveDefaultStrandId(
@@ -268,7 +268,7 @@ test.describe("chat advanced", () => {
     );
     const body = `@${fixture.bob.handle.replace(/^@/, "")} sync projection ${Date.now()}`;
     const root = signedEventEnvelope({
-      actorDid: fixture.alice.did,
+      actorId: fixture.alice.id,
       realmId: fixture.realmId,
       kind: "ak.message.create",
       payload: {
@@ -278,7 +278,7 @@ test.describe("chat advanced", () => {
           kind: "ak.content.text",
           body,
           mentions: [
-            { kind: "mention", subject_id: fixture.bob.did },
+            { kind: "mention", subject_id: fixture.bob.id },
           ],
         },
       },
@@ -289,7 +289,7 @@ test.describe("chat advanced", () => {
     const rootEventId = String(root.event_id);
     const rootMessageRef = rootEventId.replace(/^ak:event:/, "ak:message:");
     const reply = signedEventEnvelope({
-      actorDid: fixture.bob.did,
+      actorId: fixture.bob.id,
       realmId: fixture.realmId,
       kind: "ak.message.create",
       payload: {
@@ -307,7 +307,7 @@ test.describe("chat advanced", () => {
       request,
       fixture.aliceToken,
       signedEventEnvelope({
-        actorDid: fixture.alice.did,
+        actorId: fixture.alice.id,
         realmId: fixture.realmId,
         kind: "ak.reaction.add",
         payload: { target_ref: rootMessageRef, key: "+1" },
@@ -318,7 +318,7 @@ test.describe("chat advanced", () => {
       request,
       fixture.bobToken,
       signedEventEnvelope({
-        actorDid: fixture.bob.did,
+        actorId: fixture.bob.id,
         realmId: fixture.realmId,
         kind: "ak.reaction.add",
         payload: { target_ref: rootMessageRef, key: "+1" },
@@ -329,7 +329,7 @@ test.describe("chat advanced", () => {
       request,
       fixture.bobToken,
       signedEventEnvelope({
-        actorDid: fixture.bob.did,
+        actorId: fixture.bob.id,
         realmId: fixture.realmId,
         kind: "ak.reaction.remove",
         payload: { target_ref: rootMessageRef, key: "+1" },
@@ -348,7 +348,7 @@ test.describe("chat advanced", () => {
     expect(rootProjection).toMatchObject({
       payload: {
         content: {
-          mentions: [{ kind: "mention", subject_id: fixture.bob.did }],
+          mentions: [{ kind: "mention", subject_id: fixture.bob.id }],
         },
       },
     });
@@ -363,17 +363,17 @@ test.describe("chat advanced", () => {
     expect(reactionEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actor_id: fixture.alice.did,
+          actor_id: fixture.alice.id,
           kind: "ak.reaction.add",
           payload: expect.objectContaining({ key: "+1" }),
         }),
         expect.objectContaining({
-          actor_id: fixture.bob.did,
+          actor_id: fixture.bob.id,
           kind: "ak.reaction.add",
           payload: expect.objectContaining({ key: "+1" }),
         }),
         expect.objectContaining({
-          actor_id: fixture.bob.did,
+          actor_id: fixture.bob.id,
           kind: "ak.reaction.remove",
           payload: expect.objectContaining({ key: "+1" }),
         }),
@@ -414,15 +414,15 @@ test.describe("chat advanced", () => {
     try {
       const realmId = await createRealmApi(request, aliceToken, {
         title: `typing API ${stamp}`,
-        ownerDid: aliceFlow.user.did,
-        invitees: [bob.did],
+        ownerId: aliceFlow.user.id,
+        invitees: [bob.id],
         history_access: "all_history_for_current_members",
       });
-      await acceptInviteViaApi(request, bobToken, bob.did, realmId);
+      await acceptInviteViaApi(request, bobToken, bob.id, realmId);
       const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       const sentAt = new Date();
       const envelope = buildSignalEnvelope({
-        actorDid: aliceFlow.user.did,
+        actorId: aliceFlow.user.id,
         deviceId: aliceFlow.user.deviceId,
         realmId,
         sentAt,
@@ -452,7 +452,7 @@ test.describe("chat advanced", () => {
 
       const received = envelopes.find(
         (candidate) =>
-          candidate.sender_actor_id === aliceFlow.user.did &&
+          candidate.sender_actor_id === aliceFlow.user.id &&
           signalPlaintext(candidate).kind === "ak.typing",
       );
       expect(received, "bob received encrypted typing Signal").toBeTruthy();
@@ -543,7 +543,7 @@ test.describe("chat advanced", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [bob.did, carol.did],
+        seedMembers: [bob.id, carol.id],
       });
       await bobPage.acceptInvite(realmId);
       await carolPage.acceptInvite(realmId);
@@ -656,7 +656,7 @@ test.describe("chat advanced", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [bob.did, carol.did],
+        seedMembers: [bob.id, carol.id],
       });
       await Promise.all([
         bobPage.acceptInvite(realmId),
@@ -665,7 +665,7 @@ test.describe("chat advanced", () => {
 
       mention = mentionSuffix;
       await sendMessageApi(request, aliceToken, realmId, mention, {
-        mentions: [bob.did],
+        mentions: [bob.id],
         actorSeq: apiActorSeq,
       });
       await alicePage.gotoTimelineRealm(realmId);
@@ -752,7 +752,7 @@ test.describe("chat advanced", () => {
         title: `S14E Poll ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        seedMembers: [bob.did, carol.did],
+        seedMembers: [bob.id, carol.id],
       });
       await Promise.all([
         bobPage.acceptInvite(realmId),
@@ -866,7 +866,7 @@ test.describe("chat advanced", () => {
         title: `S14F Typing ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        seedMembers: [bob.did],
+        seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
       await Promise.all([
@@ -876,7 +876,7 @@ test.describe("chat advanced", () => {
 
       await alicePage.page.getByTestId("chat-input").fill(`draft ${stamp}`);
       const aliceTypingIndicator = bobPage.page.locator(
-        `[data-testid="typing-indicator"][data-typing-actors*="${cssStringEscape(alice.did)}"]`,
+        `[data-testid="typing-indicator"][data-typing-actors*="${cssStringEscape(alice.id)}"]`,
       );
       await expect(aliceTypingIndicator).toBeVisible({ timeout: 5_000 });
       await stepShot(bobPage.page, testInfo, "typing-visible");
@@ -918,7 +918,7 @@ test.describe("chat advanced", () => {
         title: `S14G Presence ${stamp}`,
         discoverability: "listed",
         joinRule: "invite",
-        seedMembers: [bob.did],
+        seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
       await Promise.all([
@@ -927,7 +927,7 @@ test.describe("chat advanced", () => {
       ]);
 
       const bobPresenceRow = alicePage.page.locator(
-        `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.did)}"]`,
+        `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.id)}"]`,
       );
       await expect(bobPresenceRow).toContainText(/online/i, { timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "presence-online");
@@ -967,10 +967,10 @@ test.describe("chat advanced", () => {
       },
     );
     const plaintext = `Encrypted mention for @${bob.handle.replace(/^@/, "")} ${stamp}`;
-    const sidecarHash = mentionSidecarHash(realmId, bob.did);
+    const sidecarHash = mentionSidecarHash(realmId, bob.id);
     const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const envelope = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: realmId,
       kind: "ak.message.create",
       payload: {
@@ -996,7 +996,7 @@ test.describe("chat advanced", () => {
     );
     expect(messageEvent, "encrypted sidecar message event").toBeTruthy();
     const rawServerView = JSON.stringify(messageEvent);
-    expect(rawServerView).not.toContain(bob.did);
+    expect(rawServerView).not.toContain(bob.id);
     expect(rawServerView).not.toContain(plaintext);
     expect(rawServerView).toContain("mention_sidecar_digest");
     expect(rawServerView).toContain(sidecarHash);

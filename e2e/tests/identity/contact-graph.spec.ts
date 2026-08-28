@@ -62,7 +62,7 @@ test.describe("contact graph (same principal server)", () => {
     const { outcome: reqOutcome } = await requestContactArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
       { requestedScopes: ["invite"], message: greeting },
     );
     expect(reqOutcome.state).toBe("pending_outgoing");
@@ -70,12 +70,12 @@ test.describe("contact graph (same principal server)", () => {
     expect(reqOutcome.request_acceptance_receipt.core).toBeTruthy();
 
     // Bob sees the incoming request.
-    const bobIncoming = await contactRow(request, bobToken, alice.did);
+    const bobIncoming = await contactRow(request, bobToken, alice.id);
     expect(bobIncoming?.state).toBe("pending_incoming");
 
     const respondOutcome = await respondContactArkret(request, bobToken, {
       requestId: reqOutcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
     });
@@ -84,8 +84,8 @@ test.describe("contact graph (same principal server)", () => {
     expect(respondOutcome.acceptance_receipt).toBeTruthy();
 
     // Both sides now list each other as accepted.
-    const aliceRow = await contactRow(request, aliceToken, bob.did);
-    const bobRow = await contactRow(request, bobToken, alice.did);
+    const aliceRow = await contactRow(request, aliceToken, bob.id);
+    const bobRow = await contactRow(request, bobToken, alice.id);
     expect(aliceRow?.state).toBe("accepted");
     expect(bobRow?.state).toBe("accepted");
 
@@ -111,17 +111,17 @@ test.describe("contact graph (same principal server)", () => {
     const { outcome } = await requestContactArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
       { requestedScopes: ["invite"] },
     );
     const reject = await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "reject",
     });
     expect(reject.state).toBe("rejected");
     // Reject grants no scopes: bob did not grant alice anything.
-    const bobRow = await contactRow(request, bobToken, alice.did);
+    const bobRow = await contactRow(request, bobToken, alice.id);
     expect(bobRow?.state).toBe("rejected");
     expect(bobRow?.granted_by_me ?? []).not.toContain("invite");
     expect(bobRow?.bidirectional_scopes ?? []).toHaveLength(0);
@@ -151,23 +151,23 @@ test.describe("contact graph (same principal server)", () => {
     const { outcome } = await requestContactArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
       { requestedScopes: ["direct_message"] },
     );
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "accept",
       grantedScopes: ["direct_message"],
     });
     await expect
-      .poll(async () => (await contactRow(request, aliceToken, bob.did))?.state, {
+      .poll(async () => (await contactRow(request, aliceToken, bob.id))?.state, {
         timeout: 30_000,
         intervals: [100, 250, 500, 1_000],
       })
       .toBe("accepted");
     await expect
-      .poll(async () => (await contactRow(request, bobToken, alice.did))?.state, {
+      .poll(async () => (await contactRow(request, bobToken, alice.id))?.state, {
         timeout: 30_000,
         intervals: [100, 250, 500, 1_000],
       })
@@ -179,14 +179,14 @@ test.describe("contact graph (same principal server)", () => {
     const waiting = await resolveDirectConversationArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
     );
     expect(waiting.state).toBe("awaiting_founder");
 
     const resolved = await resolveDirectConversationArkret(
       request,
       bobToken,
-      alice.did,
+      alice.id,
     );
     expect(resolved.state).toBe("creation_required");
     expect(
@@ -199,7 +199,7 @@ test.describe("contact graph (same principal server)", () => {
     const retry = await resolveDirectConversationArkret(
       request,
       bobToken,
-      alice.did,
+      alice.id,
     );
     expectStructurallyIdentical(
       retry.next_founding_input,
@@ -226,12 +226,12 @@ test.describe("contact graph (same principal server)", () => {
     const { outcome } = await requestContactArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
       { requestedScopes: ["invite"] },
     );
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
     });
@@ -240,14 +240,14 @@ test.describe("contact graph (same principal server)", () => {
       request,
       bobToken,
       bob,
-      alice.did,
+      alice.id,
     );
     const grantRef = consent.eventRef;
 
     // alice creates a NEW realm and pulls bob in using the consent_grant ref.
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S4 pull realm ${Date.now()}`,
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
 
     const {
@@ -255,10 +255,10 @@ test.describe("contact graph (same principal server)", () => {
       inviteId,
       sealBasis,
     } = await deliverInviteWithConsentGrant(request, {
-      inviterDid: alice.did,
+      inviterId: alice.id,
       inviterToken: aliceToken,
       realmId,
-      inviteeDid: bob.did,
+      inviteeId: bob.id,
       consentGrantRef: grantRef!,
       originServer: "default",
       recipientServer: "default",
@@ -270,14 +270,14 @@ test.describe("contact graph (same principal server)", () => {
     // bob lists the pending invite.
     const invites = await listAuthzInvitesArkret(request, bobToken);
     const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee === bob.did,
+      (i) => i.realm_id === realmId && i.invitee === bob.id,
     );
     expect(invite, "bob pending invite for the new realm").toBeTruthy();
     expect(invite!.id).toBe(inviteId);
 
     // bob accepts -> becomes a realm member.
     await acceptInviteArkret(request, bobToken, {
-      accepterDid: bob.did,
+      accepterId: bob.id,
       realmId,
       inviteId: invite!.id,
       sealBasis,
@@ -292,7 +292,7 @@ test.describe("contact graph (same principal server)", () => {
           if (!resp.ok()) return false;
           const realm = await resp.json();
           return (
-            Array.isArray(realm.members) && realm.members.includes(bob.did)
+            Array.isArray(realm.members) && realm.members.includes(bob.id)
           );
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
@@ -314,14 +314,14 @@ test.describe("contact graph (same principal server)", () => {
 
     const realmId = await createRealmApi(request, malloryToken, {
       title: `S5 stranger realm ${Date.now()}`,
-      ownerDid: mallory.did,
+      ownerId: mallory.id,
     });
 
     const { outcome } = await deliverInviteExplicitAddress(request, {
-      inviterDid: mallory.did,
+      inviterId: mallory.id,
       inviterToken: malloryToken,
       realmId,
-      inviteeDid: victim.did,
+      inviteeId: victim.id,
       originServer: "default",
       recipientServer: "default",
     });
@@ -333,7 +333,7 @@ test.describe("contact graph (same principal server)", () => {
     // Victim has no pending invite (quarantined, not notified).
     const invites = await listAuthzInvitesArkret(request, victimToken);
     expect(
-      countInvitesFor(invites, realmId, victim.did),
+      countInvitesFor(invites, realmId, victim.id),
       "quarantined explicit_address invite must not surface to the invitee",
     ).toBe(0);
   });
@@ -353,17 +353,17 @@ test.describe("contact graph (same principal server)", () => {
     const { outcome } = await requestContactArkret(
       request,
       bobToken,
-      alice.did,
+      alice.id,
       { requestedScopes: ["invite"] },
     );
     await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
-      requester: bob.did,
+      requester: bob.id,
       action: "accept",
       grantedScopes: ["invite"],
     });
     await expect
-      .poll(async () => (await contactRow(request, aliceToken, bob.did))?.state, {
+      .poll(async () => (await contactRow(request, aliceToken, bob.id))?.state, {
         timeout: 30_000,
         intervals: [100, 250, 500, 1_000],
       })
@@ -372,28 +372,28 @@ test.describe("contact graph (same principal server)", () => {
       request,
       aliceToken,
       alice,
-      bob.did,
+      bob.id,
     );
     const grantRef = consent.eventRef;
 
     // alice blocks bob.
-    const tomb = await tombstoneContactArkret(request, aliceToken, bob.did, {
+    const tomb = await tombstoneContactArkret(request, aliceToken, bob.id, {
       blockPeer: true,
     });
     expect(tomb.state).toBe("tombstoned");
     const policy = await getInviteReceivePolicyArkret(request, aliceToken);
-    expect(policy.denied_subjects ?? []).toContain(bob.did);
+    expect(policy.denied_subjects ?? []).toContain(bob.id);
 
     // bob tries to pull alice into a realm with the (now revoked) consent_grant.
     const realmId = await createRealmApi(request, bobToken, {
       title: `S6 blocked realm ${Date.now()}`,
-      ownerDid: bob.did,
+      ownerId: bob.id,
     });
     const { outcome: delivery } = await deliverInviteWithConsentGrant(request, {
-      inviterDid: bob.did,
+      inviterId: bob.id,
       inviterToken: bobToken,
       realmId,
-      inviteeDid: alice.did,
+      inviteeId: alice.id,
       consentGrantRef: grantRef!,
       originServer: "default",
       recipientServer: "default",
@@ -404,7 +404,7 @@ test.describe("contact graph (same principal server)", () => {
 
     const invites = await listAuthzInvitesArkret(request, aliceToken);
     expect(
-      countInvitesFor(invites, realmId, alice.did),
+      countInvitesFor(invites, realmId, alice.id),
       "denied_subjects invite must be dropped, not delivered to the invitee",
     ).toBe(0);
   });
@@ -427,12 +427,12 @@ test.describe("contact graph (same principal server)", () => {
     const { outcome } = await requestContactArkret(
       request,
       bobToken,
-      alice.did,
+      alice.id,
       { requestedScopes: ["invite"] },
     );
     await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
-      requester: bob.did,
+      requester: bob.id,
       action: "accept",
       grantedScopes: ["invite"],
     });
@@ -440,7 +440,7 @@ test.describe("contact graph (same principal server)", () => {
       request,
       aliceToken,
       alice,
-      bob.did,
+      bob.id,
     );
     const grantRef = consent.eventRef;
 
@@ -454,7 +454,7 @@ test.describe("contact graph (same principal server)", () => {
     // explicit-feedback variant requires the subject to opt low_trust=outcome.
     const realmId = await createRealmApi(request, bobToken, {
       title: `S7 revoked realm ${Date.now()}`,
-      ownerDid: bob.did,
+      ownerId: bob.id,
     });
 
     // Opt alice into low-trust outcome disclosure. Quarantine remains an
@@ -467,10 +467,10 @@ test.describe("contact graph (same principal server)", () => {
     });
 
     const { outcome: delivery } = await deliverInviteWithConsentGrant(request, {
-      inviterDid: bob.did,
+      inviterId: bob.id,
       inviterToken: bobToken,
       realmId,
-      inviteeDid: alice.did,
+      inviteeId: alice.id,
       consentGrantRef: grantRef!,
       originServer: "default",
       recipientServer: "default",
@@ -481,7 +481,7 @@ test.describe("contact graph (same principal server)", () => {
     // alice is not actually a member.
     const invites = await listAuthzInvitesArkret(request, aliceToken);
     expect(
-      countInvitesFor(invites, realmId, alice.did),
+      countInvitesFor(invites, realmId, alice.id),
       "revoked-consent invite must stay quarantined and holder-private",
     ).toBe(0);
   });

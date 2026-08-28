@@ -57,7 +57,7 @@ export function base64urlJsonRaw(value: unknown): string {
 }
 
 export function sdkEventEnvelopeProof(args: {
-  actorDid: string;
+  actorId: string;
   event: Record<string, unknown>;
   verificationMethod: string;
   createdAt: string;
@@ -65,7 +65,7 @@ export function sdkEventEnvelopeProof(args: {
 }): Record<string, unknown> {
   assertJsonTransportable(args.event, "$.event");
   return cotestWire<Record<string, unknown>>("event-envelope-proof", {
-    actor_did: args.actorDid,
+    actor_did: args.actorId,
     event: args.event,
     verification_method: args.verificationMethod,
     created_at: args.createdAt,
@@ -117,7 +117,7 @@ export function sdkMimiConsentProof(args: {
 }
 
 export function sdkJoinReceiptProof(args: {
-  actorDid: string;
+  actorId: string;
   realmId: string;
   receiptDigest: string;
   createdAt: string;
@@ -129,7 +129,7 @@ export function sdkJoinReceiptProof(args: {
   signingSeedB64url?: string;
 }): Record<string, unknown> {
   return cotestWire<Record<string, unknown>>("join-receipt-proof", {
-    actor_did: args.actorDid,
+    actor_did: args.actorId,
     realm_id: args.realmId,
     receipt_digest: args.receiptDigest,
     created_at: args.createdAt,

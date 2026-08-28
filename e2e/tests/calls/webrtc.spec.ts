@@ -52,7 +52,7 @@ test.describe("calls — canonical wire", () => {
         data: {
           realm_id: realmId,
           call_id: callId,
-          actor_id: alice.did,
+          actor_id: alice.id,
           device_id: alice.deviceId,
           mode: "p2p",
         },
@@ -64,7 +64,7 @@ test.describe("calls — canonical wire", () => {
     const iceAuth = await fetchIceConfig(request, token, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       mode: "p2p",
     });
@@ -88,9 +88,9 @@ test.describe("calls — canonical wire", () => {
     await grantCallCapability(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       realmId,
-      bob.did,
+      bob.id,
       CAP_CALL_SIGNAL_SEND,
     );
     const callId = newCallId();
@@ -99,7 +99,7 @@ test.describe("calls — canonical wire", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -112,7 +112,7 @@ test.describe("calls — canonical wire", () => {
       request,
       bobToken,
       buildCallSignalEnvelope({
-        actorDid: bob.did,
+        actorId: bob.id,
         deviceId: bob.deviceId,
         realmId,
         callId,
@@ -125,7 +125,7 @@ test.describe("calls — canonical wire", () => {
       request,
       aliceToken,
       buildCallSignalEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         deviceId: alice.deviceId,
         realmId,
         callId,
@@ -163,11 +163,11 @@ test.describe("calls — canonical wire", () => {
     }
     // Alice's lane is seq-monotonic (invite=1, hangup=2).
     const aliceSeqs = bobView
-      .filter((e) => e.sender_actor_id === alice.did)
+      .filter((e) => e.sender_actor_id === alice.id)
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(aliceSeqs).toEqual([1, 2]);
     const bobSeqs = aliceView
-      .filter((e) => e.sender_actor_id === bob.did)
+      .filter((e) => e.sender_actor_id === bob.id)
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(bobSeqs).toEqual([1]);
   });
@@ -187,7 +187,7 @@ test.describe("calls — canonical wire", () => {
     const issuedResp = await fetchIceConfig(request, aliceToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       mode: "p2p",
     });
@@ -198,7 +198,7 @@ test.describe("calls — canonical wire", () => {
     const refreshedResp = await fetchIceConfig(request, aliceToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       mode: "p2p",
     });
@@ -251,14 +251,14 @@ test.describe("calls — canonical wire", () => {
     const aliceResp = await fetchIceConfig(request, aliceToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: alice.did,
+      actor_id: alice.id,
       device_id: alice.deviceId,
       mode: "p2p",
     });
     const bobResp = await fetchIceConfig(request, bobToken, {
       realm_id: realmId,
       call_id: callId,
-      actor_id: bob.did,
+      actor_id: bob.id,
       device_id: bob.deviceId,
       mode: "p2p",
     });
@@ -281,10 +281,10 @@ test.describe("calls — canonical wire", () => {
     expect(aliceTurn.credential).toMatch(/^[A-Za-z0-9+/]+=*$/);
     expect(bobTurn.credential).toMatch(/^[A-Za-z0-9+/]+=*$/);
     // No principal identity leaks into the pseudonym.
-    expect(aliceUsername).not.toContain(alice.did);
+    expect(aliceUsername).not.toContain(alice.id);
     expect(aliceUsername).not.toContain("did:web");
     expect(aliceUsername).not.toContain(alice.name);
-    expect(bobUsername).not.toContain(bob.did);
+    expect(bobUsername).not.toContain(bob.id);
     expect(bobUsername).not.toContain("did:web");
     expect(bobUsername).not.toContain(bob.name);
     // Distinct principals get distinct pseudonyms.

@@ -91,7 +91,7 @@ export async function setupTwoPartyCallRealm(
     title: `${opts.realmTitlePrefix ?? label} ${stamp}`,
     public: true,
   });
-  await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+  await addRealmMemberApi(request, aliceToken, realmId, bob.id);
   return { alice, aliceToken, bob, bobToken, realmId };
 }
 
@@ -110,7 +110,7 @@ export async function setupTwoPartyCallRealm(
 // genuine, not a shape stub.
 
 interface DeviceSigner {
-  actorDid: string;
+  actorId: string;
   deviceId: string;
   verificationMethod: string;
   privateKey: KeyObject;
@@ -124,8 +124,8 @@ const deviceSignerCache = new Map<string, DeviceSigner>();
  * is generated in-process; it is a genuine ed25519 key, never a hard-coded
  * string. The `verification_method` follows the spec `{actor_id}#{device_id}` form.
  */
-function deviceSigner(actorDid: string, deviceId: string): DeviceSigner {
-  const key = `${actorDid}\0${deviceId}`;
+function deviceSigner(actorId: string, deviceId: string): DeviceSigner {
+  const key = `${actorId}\0${deviceId}`;
   const cached = deviceSignerCache.get(key);
   if (cached) {
     return cached;
@@ -135,9 +135,9 @@ function deviceSigner(actorDid: string, deviceId: string): DeviceSigner {
   const spki = publicKey.export({ format: "der", type: "spki" }) as Buffer;
   const publicKeyHex = spki.subarray(spki.length - 32).toString("hex");
   const signer: DeviceSigner = {
-    actorDid,
+    actorId,
     deviceId,
-    verificationMethod: `${actorDid}#${deviceId}`,
+    verificationMethod: `${actorId}#${deviceId}`,
     privateKey,
     publicKeyHex,
   };
@@ -147,18 +147,18 @@ function deviceSigner(actorDid: string, deviceId: string): DeviceSigner {
 
 /** Hex of the device's raw ed25519 verifying key (for conformance verification). */
 export function deviceVerifyingKeyHex(
-  actorDid: string,
+  actorId: string,
   deviceId: string,
 ): string {
-  return deviceSigner(actorDid, deviceId).publicKeyHex;
+  return deviceSigner(actorId, deviceId).publicKeyHex;
 }
 
 function deviceVerifyingKeyMultibase(
-  actorDid: string,
+  actorId: string,
   deviceId: string,
 ): string {
   const rawKey = Buffer.from(
-    deviceSigner(actorDid, deviceId).publicKeyHex,
+    deviceSigner(actorId, deviceId).publicKeyHex,
     "hex",
   );
   return `z${base58Encode(Buffer.concat([Buffer.from([0xed, 0x01]), rawKey]))}`;
@@ -181,7 +181,7 @@ function base58Encode(bytes: Uint8Array): string {
 
 /** Build an encrypted-only Signal envelope for arbitrary client plaintext. */
 export function buildSignalEnvelope(args: {
-  actorDid: string;
+  actorId: string;
   deviceId: string;
   realmId: string;
   scopeRef?: Record<string, unknown>;
@@ -204,7 +204,7 @@ export function buildSignalEnvelope(args: {
   const envelope: Record<string, unknown> = {
     realm_id: args.realmId,
     scope_ref: args.scopeRef ?? { kind: "realm", realm_id: args.realmId },
-    sender_actor_id: args.actorDid,
+    sender_actor_id: args.actorId,
     sender_device_id: args.deviceId,
     seal_ref: `ak:seal:sha256:${"0".repeat(64)}`,
     signal_class: signalClass,
@@ -229,8 +229,8 @@ export function buildSignalEnvelope(args: {
     proof: {
       kind: "detached_jws",
       verification_method:
-        registeredEventVerificationMethod(args.actorDid, args.deviceId) ??
-        `${args.actorDid}#${args.deviceId}`,
+        registeredEventVerificationMethod(args.actorId, args.deviceId) ??
+        `${args.actorId}#${args.deviceId}`,
       envelope_digest: `sha256:${"0".repeat(64)}`,
       created_at: canonicalEventTimestamp(sentAt),
       jws: "",
@@ -242,7 +242,7 @@ export function buildSignalEnvelope(args: {
 
 /** Build an encrypted-only Signal envelope draft for a call plaintext. */
 export function buildCallSignalEnvelope(args: {
-  actorDid: string;
+  actorId: string;
   deviceId: string;
   realmId: string;
   callId: string;
@@ -259,7 +259,7 @@ export function buildCallSignalEnvelope(args: {
         ? "setup"
         : "session";
   return buildSignalEnvelope({
-    actorDid: args.actorDid,
+    actorId: args.actorId,
     deviceId: args.deviceId,
     realmId: args.realmId,
     signalClass,
@@ -318,11 +318,11 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
   const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
   const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const actorDid = String(envelope.sender_actor_id);
+  const actorId = String(envelope.sender_actor_id);
   const deviceId = String(envelope.sender_device_id);
   const signature =
     signWithRegisteredEventSigner(
-      actorDid,
+      actorId,
       String(proof.verification_method),
       signingInput,
     ) ??
@@ -330,7 +330,7 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
       nodeSign(
         null,
         Buffer.from(signingInput, "utf8"),
-        deviceSigner(actorDid, deviceId).privateKey,
+        deviceSigner(actorId, deviceId).privateKey,
       ),
     );
   proof.jws = `${protectedHeader}..${signature}`;
@@ -366,9 +366,9 @@ export const CAP_CALL_JOIN = "ak.call.join";
 export async function grantCallCapability(
   request: APIRequestContext,
   ownerToken: string,
-  ownerDid: string,
+  ownerId: string,
   realmId: string,
-  subjectDid: string,
+  subjectId: string,
   action: string,
 ): Promise<void> {
   const resources = [{ kind: "realm", realm_id: realmId }];
@@ -390,8 +390,8 @@ export async function grantCallCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: realmId,
-    issuer: ownerDid,
-    subject: subjectDid,
+    issuer: ownerId,
+    subject: subjectId,
     subject_principal_server_id: solandServiceId(),
     actions: [action],
     resources,
@@ -414,14 +414,14 @@ export async function grantCallCapability(
     request,
     ownerToken,
     signedEventEnvelope({
-      actorDid: ownerDid,
+      actorId: ownerId,
       realmId,
       kind: "ak.capability.grant",
       payload: {
         grant,
       },
     }),
-    { context: `grant ${action} to ${subjectDid}` },
+    { context: `grant ${action} to ${subjectId}` },
   );
 }
 
@@ -466,7 +466,7 @@ async function waitForRealmSealAdvance(
 export async function seedCallState(
   request: APIRequestContext,
   ownerToken: string,
-  ownerDid: string,
+  ownerId: string,
   realmId: string,
   callId: string,
   opts: {
@@ -515,7 +515,7 @@ export async function seedCallState(
         ? { device_id: removedParticipant.device_id }
         : {}),
       action: removedParticipant.action,
-      removed_by: ownerDid,
+      removed_by: ownerId,
       removed_at: removedParticipant.removed_at ?? canonicalTimestamp(),
     };
     payload.moderation_delta = {
@@ -528,7 +528,7 @@ export async function seedCallState(
     request,
     ownerToken,
     signedEventEnvelope({
-      actorDid: ownerDid,
+      actorId: ownerId,
       realmId,
       kind: "ak.call.state",
       sealBasis,
@@ -543,13 +543,13 @@ export async function seedCallState(
 export async function createCallApi(
   request: APIRequestContext,
   ownerToken: string,
-  ownerDid: string,
+  ownerId: string,
   realmId: string,
   initialState: "scheduled" | "ringing" | "connecting" = "ringing",
 ): Promise<string> {
   const sealBasis = await readRealmSealBasis(request, ownerToken, realmId);
   const envelope = signedEventEnvelope({
-    actorDid: ownerDid,
+    actorId: ownerId,
     realmId,
     kind: "ak.call.create",
     sealBasis,
@@ -581,16 +581,16 @@ export async function prepareSignalEnvelope(
   envelope: Record<string, unknown>,
 ): Promise<void> {
   const realmId = String(envelope.realm_id);
-  const actorDid = String(envelope.sender_actor_id);
+  const actorId = String(envelope.sender_actor_id);
   const deviceId = String(envelope.sender_device_id);
-  if (!registeredEventVerificationMethod(actorDid, deviceId)) {
+  if (!registeredEventVerificationMethod(actorId, deviceId)) {
     const keyResponse = await request.post(
       `${solandBaseUrl()}/_arkret/_conformance/device-signing-key`,
       {
         data: {
-          actor_id: actorDid,
+          actor_id: actorId,
           device_id: deviceId,
-          public_key_multibase: deviceVerifyingKeyMultibase(actorDid, deviceId),
+          public_key_multibase: deviceVerifyingKeyMultibase(actorId, deviceId),
         },
       },
     );
@@ -606,7 +606,7 @@ export async function prepareSignalEnvelope(
     const basis = await seedConformanceRealmBasisApi(
       request,
       realmId,
-      actorDid,
+      actorId,
       ["ak.message.create"],
     );
     envelope.seal_ref = basis.seal_id;
@@ -796,7 +796,7 @@ export async function configureMediaService(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  ownerDid: string,
+  ownerId: string,
   serviceId: string,
   foci: MediaFocusConfig[],
 ): Promise<void> {
@@ -807,7 +807,7 @@ export async function configureMediaService(
     request,
     token,
     signedEventEnvelope({
-      actorDid: ownerDid,
+      actorId: ownerId,
       realmId,
       kind: "ak.realm.media_service",
       sealBasis,

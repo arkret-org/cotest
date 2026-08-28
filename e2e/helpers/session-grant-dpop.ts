@@ -64,7 +64,7 @@ export type DpopBoundGrant = {
   scopes: string[];
   expiresAt: string;
   /// The verified principal DID the issuer bound to the grant subject.
-  principalDid: string;
+  principalId: string;
   /// Long-term founding Event signer, deliberately distinct from the
   /// ephemeral holder/DPoP key. Present on PCR-genesis registration outcomes.
   eventSigningKey?: DpopDeviceKey;
@@ -278,7 +278,7 @@ export function kickoffDpopHeaders(args: {
 export async function mintDpopBoundGrant(
   request: APIRequestContext,
   coauthBase: string,
-  actorDid: string,
+  actorId: string,
   deviceId: string,
   deviceKey: DpopDeviceKey,
   opts: MintDpopGrantOpts = {},
@@ -288,7 +288,7 @@ export async function mintDpopBoundGrant(
     `${coauthBase}/_coauth/account/test/debug/issue-dpop-grant`,
     {
       data: {
-        actor_id: actorDid,
+        actor_id: actorId,
         device_id: deviceId,
         dpop_jwk: deviceKey.publicJwk,
         audience,
@@ -313,10 +313,10 @@ export async function mintDpopBoundGrant(
     audience: string;
     scopes: string[];
     expires_at: string;
-    principal_did?: string;
+    principal_id?: string;
   };
-  if (!body.principal_did) {
-    throw new Error("debug issue-dpop-grant omitted verified principal_did");
+  if (!body.principal_id) {
+    throw new Error("debug issue-dpop-grant omitted verified principal_id");
   }
   return {
     grantId: body.grant_id,
@@ -325,6 +325,6 @@ export async function mintDpopBoundGrant(
     audience: body.audience,
     scopes: body.scopes,
     expiresAt: body.expires_at,
-    principalDid: body.principal_did,
+    principalId: body.principal_id,
   };
 }

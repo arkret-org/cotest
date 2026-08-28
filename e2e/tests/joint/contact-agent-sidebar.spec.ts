@@ -34,7 +34,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         jointRealm.bobSession,
       );
       const realAliceRow = realBobContacts.find(
-        (row) => row.peer === jointRealm.alice.did,
+        (row) => row.peer === jointRealm.alice.id,
       );
       expect(realAliceRow?.agents ?? []).toHaveLength(0);
 
@@ -49,7 +49,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       );
       await expect(aliceSelfGroup.getByTestId("contact-sidebar-self-row")).toHaveAttribute(
         "data-peer",
-        jointRealm.alice.did,
+        jointRealm.alice.id,
       );
       await expect(aliceSelfGroup).toContainText("ME");
 
@@ -62,7 +62,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       // sidebar load, so this guards against asserting before data arrives.
       await expect(
         alicePage.locator(
-          `[data-testid="direct-conversation-row"][data-peer="${jointRealm.bob.did}"]`,
+          `[data-testid="direct-conversation-row"][data-peer="${jointRealm.bob.id}"]`,
         ),
       ).toBeVisible({ timeout: 30_000 });
       await expect(
@@ -74,8 +74,8 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
 
       const bobPage = jointRealm.bobPage.page;
       const allowedAgent = {
-        agent_id: `did:web:agents.joint-e2e.local:${stamp}`,
-        controller_id: jointRealm.alice.did,
+        agent_id: `ak:did_core:web:agents.joint-e2e.local:${stamp}`,
+        controller_id: jointRealm.alice.id,
         display_name: `Alice Allowed Agent ${stamp}`,
         agent_slug: `allowed-${stamp.toString(36)}`,
         direct_conversation: {
@@ -100,7 +100,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
             contacts?: Array<Record<string, unknown>>;
           };
           const contacts = (body.contacts ?? []).map((row) =>
-            row.peer === jointRealm.alice.did
+            row.peer === jointRealm.alice.id
               ? { ...row, agents: [allowedAgent] }
               : row,
           );
@@ -117,11 +117,11 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         "contact-sidebar-self-group",
       );
       const aliceContact = bobPage.locator(
-        `[data-testid="direct-conversation-row"][data-peer="${jointRealm.alice.did}"]`,
+        `[data-testid="direct-conversation-row"][data-peer="${jointRealm.alice.id}"]`,
       );
       await expect(aliceContact).toBeVisible({ timeout: 30_000 });
       const aliceGroup = bobPage.locator(
-        `.contact-sidebar-group[data-controller="${jointRealm.alice.did}"]`,
+        `.contact-sidebar-group[data-controller="${jointRealm.alice.id}"]`,
       );
       const toggle = aliceGroup.getByTestId("contact-sidebar-agent-toggle");
       await expect(toggle).toContainText("Agents 1");
@@ -132,7 +132,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       await expect(allowedAgentRow).toBeVisible();
       await expect(allowedAgentRow).toHaveAttribute(
         "data-controller",
-        jointRealm.alice.did,
+        jointRealm.alice.id,
       );
       await allowedAgentRow.click();
       await expect(bobPage).toHaveURL(/\/direct\/.*0000000000b1\/.*0000000000b2$/);
@@ -257,7 +257,7 @@ async function provisionPendingAgent(
       "Agent provision EventInitialSubmission.event",
     );
     expect(provisionEvent.kind).toBe("ak.agent.provision");
-    expect(provisionEvent.actor_id).toBe(controller.user.did);
+    expect(provisionEvent.actor_id).toBe(controller.user.id);
     expect(provisionEvent.realm_id).toBe(controllerRealmId);
     expect(provisionEvent.proofs).not.toHaveLength(0);
     const provisionPayload = asJsonObject(
@@ -266,7 +266,7 @@ async function provisionPendingAgent(
     );
     expect(provisionPayload.schema).toBe("ak.schema.agent_provision.v1");
     expect(provisionPayload.agent_id).toBe(agentId);
-    expect(provisionPayload.controller_id).toBe(controller.user.did);
+    expect(provisionPayload.controller_id).toBe(controller.user.id);
     expect(provisionPayload.principal_control_realm_id).toBe(
       principalControlRealmId,
     );
@@ -346,7 +346,7 @@ async function establishDirectMessageContact(
   const requested = await request.post(requestUrl, {
     headers: selfPathHeadersForDpopSession(requester, "POST", requestUrl),
     data: {
-      target: responder.user.did,
+      target: responder.user.id,
       requested_scopes: ["direct_message"],
       introduction_evidence: { kind: "explicit_address" },
     },
@@ -362,7 +362,7 @@ async function establishDirectMessageContact(
     headers: selfPathHeadersForDpopSession(responder, "POST", respondUrl),
     data: {
       request_id: requestedBody.request_event_ref,
-      requester: requester.user.did,
+      requester: requester.user.id,
       action: "accept",
       granted_scopes: ["direct_message"],
     },

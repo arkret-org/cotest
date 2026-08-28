@@ -243,7 +243,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     // selection before opening OIDC; the callback must never infer a principal
     // from an unbound OAuth subject.
     const returningUser = uniqueUser("oidc-login");
-    returningUser.did = account.did;
+    returningUser.id = account.id;
     returningUser.did = account.did;
     const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
@@ -361,7 +361,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     // A fully bound account: client-signed entry 0 with a verified binding.
     const account = await registerCoauthPasswordAccount(request, coauth!);
     const returningUser = uniqueUser("forged-unknown");
-    returningUser.did = account.did;
+    returningUser.id = account.id;
     returningUser.did = account.did;
     const jointPage = await openUserPage(browser, returningUser);
     const page = jointPage.page;
@@ -440,7 +440,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
           page.getByTestId("account-handoff-onboarding"),
         ).toHaveCount(0);
         await expect(page.getByTestId("login-panel")).toBeVisible();
-        const state = await page.evaluate((expectedDid) => {
+        const state = await page.evaluate((expectedId) => {
           const pendingKeys: string[] = [];
           for (let index = 0; index < localStorage.length; index += 1) {
             const key = localStorage.key(index) ?? "";
@@ -466,10 +466,10 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
             }>;
           };
           const boundAccountKnown = (rootIndex.known_profiles ?? []).some(
-            (profile) => profile.authority?.principal_id === expectedDid,
+            (profile) => profile.authority?.principal_id === expectedId,
           );
           return { pendingKeys, boundAccountKnown };
-        }, account.did);
+        }, account.id);
         expect(
           state.pendingKeys,
           "a forged principal_unknown must not draft identity creation checkpoints",

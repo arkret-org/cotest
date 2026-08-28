@@ -148,7 +148,7 @@ test.describe("tsp bootstrap", () => {
     expect(identity.vid).toMatch(/^did:/);
     expect(identity.public_jwk).toBeTruthy();
     const bobExternVid = identity.vid;
-    await assertTspTransportIfExposed(request, alice.did, aliceToken);
+    await assertTspTransportIfExposed(request, alice.id, aliceToken);
 
     // Phase B — relationship bootstrap (VID verification → relationship + remote pubkey).
     const bootstrap = await bootstrapRelationship(
@@ -170,13 +170,13 @@ test.describe("tsp bootstrap", () => {
       operation: "ak.invite.create",
       realm_id: realmId,
       invitee: bobExternVid,
-      actor: alice.did,
+      actor: alice.id,
       // The Arkret event signature is independent of TSP authenticity (§5).
       arkret_signature: randomBytes(64).toString("base64url"),
     };
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.did,
+        from_vid: alice.id,
         to_vid: bobExternVid,
         payload_b64: b64(innerArkret),
         signature_b64: randomBytes(64).toString("base64"),
@@ -193,7 +193,7 @@ test.describe("tsp bootstrap", () => {
     // `ak.*` operation, and fabricates an ACK into the outbox. The inbox/outbox
     // record encodes that BOTH layers were processed independently.
     const inboxResp = await request.get(
-      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.did)}`,
+      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.id)}`,
     );
     expect(inboxResp.ok()).toBeTruthy();
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
@@ -206,7 +206,7 @@ test.describe("tsp bootstrap", () => {
       .poll(
         async () => {
           const outboxResp = await request.get(
-            `${endpoint.base}/tsp/outbox?vid=${encodeURIComponent(alice.did)}`,
+            `${endpoint.base}/tsp/outbox?vid=${encodeURIComponent(alice.id)}`,
           );
           if (!outboxResp.ok()) {
             return false;
@@ -238,7 +238,7 @@ test.describe("tsp bootstrap", () => {
 
     const identity = await fetchEndpointIdentity(request, endpoint.base);
     const bobExternVid = identity.vid;
-    await bootstrapRelationship(request, endpoint.base, alice.did);
+    await bootstrapRelationship(request, endpoint.base, alice.id);
 
     // Drop the TSP endpoint: the mock now returns 503 for message sends.
     const inject = await request.post(`${endpoint.base}/scenarios`, {
@@ -249,7 +249,7 @@ test.describe("tsp bootstrap", () => {
     const realmId = TSP_FIXTURE_REALM_IDS.fallback;
     const tspAttempt = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.did,
+        from_vid: alice.id,
         to_vid: bobExternVid,
         payload_b64: b64({ type: "ak.invite.create", realm_id: realmId, invitee: bobExternVid }),
         signature_b64: randomBytes(64).toString("base64"),
@@ -264,7 +264,7 @@ test.describe("tsp bootstrap", () => {
     // alive and the client is NOT fail-closed on the TSP outage.
     const eventsResp = await request.fetch(`${solandBaseUrl()}/_arkret/self/events`, {
       method: "QUERY",
-      data: { actors: [alice.did] },
+      data: { actors: [alice.id] },
       headers: { authorization: `Bearer ${aliceToken}` },
     });
     expect(
@@ -304,7 +304,7 @@ test.describe("tsp bootstrap", () => {
 
     const identity = await fetchEndpointIdentity(request, endpoint.base);
     const bobExternVid = identity.vid;
-    const bootstrap = await bootstrapRelationship(request, endpoint.base, alice.did);
+    const bootstrap = await bootstrapRelationship(request, endpoint.base, alice.id);
     expect(bootstrap.ok).toBe(true);
 
     // A TSP envelope whose VID resolves in a degraded (witness-offline) view
@@ -312,7 +312,7 @@ test.describe("tsp bootstrap", () => {
     // the trust assessment, not the authenticity check, is what degrades.
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.did,
+        from_vid: alice.id,
         to_vid: bobExternVid,
         // The inner payload self-declares the degraded VID-trust view so the
         // ACK round-trip can carry `vid_trust=degraded_no_witness` alongside
@@ -321,7 +321,7 @@ test.describe("tsp bootstrap", () => {
           type: "ak.invite.create",
           realm_id: TSP_FIXTURE_REALM_IDS.degraded,
           invitee: bobExternVid,
-          actor: alice.did,
+          actor: alice.id,
           vid_trust: "degraded_no_witness",
         }),
         signature_b64: randomBytes(64).toString("base64"),
@@ -336,7 +336,7 @@ test.describe("tsp bootstrap", () => {
     // The recorded envelope preserves the degraded trust marker for the
     // relationship/ACK metadata (independent of authenticity).
     const inboxResp = await request.get(
-      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.did)}`,
+      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.id)}`,
     );
     expect(inboxResp.ok()).toBeTruthy();
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
@@ -367,7 +367,7 @@ test.describe("tsp bootstrap", () => {
 
     const identity = await fetchEndpointIdentity(request, endpoint.base);
     const bobExternVid = identity.vid;
-    await bootstrapRelationship(request, endpoint.base, alice.did);
+    await bootstrapRelationship(request, endpoint.base, alice.id);
 
     // Nested mode: the inner Arkret operation (real vid_local + operation name
     // + payload) is opaque to any intermediary. We model the on-the-wire outer
@@ -376,7 +376,7 @@ test.describe("tsp bootstrap", () => {
     const innerArkret = {
       type: "ak.invite.create",
       operation: "ak.invite.create",
-      actor: alice.did, // the real vid_local — MUST stay hidden from a relay
+      actor: alice.id, // the real vid_local — MUST stay hidden from a relay
       realm_id: TSP_FIXTURE_REALM_IDS.nested,
       invitee: bobExternVid,
       secret_marker: `nested-secret-${randomUUID()}`,
@@ -386,7 +386,7 @@ test.describe("tsp bootstrap", () => {
 
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.did,
+        from_vid: alice.id,
         to_vid: bobExternVid,
         // The terminus (bob_extern) receives the full inner Arkret payload.
         payload_b64: innerBytesB64,
@@ -397,7 +397,7 @@ test.describe("tsp bootstrap", () => {
 
     // The terminus successfully decodes + recognizes the inner operation.
     const inboxResp = await request.get(
-      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.did)}`,
+      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.id)}`,
     );
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
     const terminus = inbox.find(
@@ -420,7 +420,7 @@ test.describe("tsp bootstrap", () => {
         "sha256:" + createHash("sha256").update(innerBytesB64).digest("hex"),
     };
     const relaySerialized = JSON.stringify(relayView);
-    expect(relaySerialized).not.toContain(alice.did); // no vid_local
+    expect(relaySerialized).not.toContain(alice.id); // no vid_local
     expect(relaySerialized).not.toContain("ak.invite.create"); // no inner operation
     expect(relaySerialized).not.toContain(innerArkret.secret_marker); // no plaintext payload
     expect(relayView.sender_vid).toBe(pairwiseVid);

@@ -95,7 +95,7 @@ try {
     # BIP-39 candidate regex (12+ quoted lowercase 3-8 letter words) but are
     # ordinary sentences, so the wordlist validator must reject them.
     $cleanLines = @(
-        '{"status":"ok","principal_id":"did:webvh:QmExample:host:webvh:alice"}',
+        '{"status":"ok","principal_id":"ak:did_core:webvh:QmExample"}',
         'INFO completed request in 42ms path=/_arkret/describe',
         # A table whose name merely starts with a private-material word is not a
         # private-material column: `\bseed\b` must not match `seed_catalog`.

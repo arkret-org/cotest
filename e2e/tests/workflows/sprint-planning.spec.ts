@@ -64,7 +64,7 @@ test.describe("workflow: sprint planning", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [bob.did, carol.did],
+        seedMembers: [bob.id, carol.id],
       });
       await Promise.all([
         bobPage.acceptInvite(realmId),
@@ -289,7 +289,7 @@ test.describe("workflow: sprint planning", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [bob.did, carol.did],
+        seedMembers: [bob.id, carol.id],
       });
       await Promise.all([
         bobPage.acceptInvite(realmId),

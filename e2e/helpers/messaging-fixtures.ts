@@ -24,7 +24,7 @@ export async function createTwoUserMessagingRealm(
     label: string;
     title: string;
     owner?: "alice" | "bob";
-    realm?: Omit<ApiRealmOpts, "invitees" | "ownerDid" | "title">;
+    realm?: Omit<ApiRealmOpts, "invitees" | "ownerId" | "title">;
   },
 ): Promise<TwoUserMessagingRealmFixture> {
   const alice = uniqueUser(`${opts.label}-alice`);

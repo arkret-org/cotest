@@ -24,6 +24,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  projectDidToCoreId,
   signedEventEnvelope,
   uuidV7,
 } from "../../helpers/soland-api";
@@ -59,7 +60,7 @@ function realmOrganizationStatement(args: {
   const statement: Record<string, unknown> = {
     statement_id: args.statementId ?? `org-stmt-${uuidV7()}`,
     realm_id: args.realmId,
-    organization_id: args.organizationDid,
+    organization_id: projectDidToCoreId(args.organizationDid),
     relationship: args.relationship,
     status: args.status,
     control_scopes: args.controlScopes,
@@ -69,8 +70,8 @@ function realmOrganizationStatement(args: {
   if (args.expiresAt) statement.expires_at = args.expiresAt;
   if (args.revokesStatementId) statement.revokes_statement_id = args.revokesStatementId;
   statement.authorization = {
-    issuer: args.organizationDid,
-    issuer_role: "organization_did",
+    issuer: projectDidToCoreId(args.organizationDid),
+    issuer_role: "organization_principal_id",
     verification_method: `${args.organizationDid}#k1`,
     signed_at: canonicalTimestamp(),
     proof: "c2ln",
@@ -83,14 +84,14 @@ function realmOrganizationStatement(args: {
 async function submitOrganizationStatement(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   payload: Record<string, unknown>,
 ) {
   return request.post(`${solandBaseUrl()}/_arkret/self/events`, {
     headers: authHeaders(token),
     data: signedEventEnvelope({
-      actorDid,
+      actorId,
       realmId,
       kind: "ak.realm.organization",
       schemaId: "ak.schema.event_payload.v1",
@@ -172,7 +173,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const accepted = await submitOrganizationStatement(
         request,
         aliceToken,
-        alice.did,
+        alice.id,
         realmId,
         realmOrganizationStatement({
           realmId,
@@ -193,7 +194,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const layers = body.effective_policy?.organization_policy_layers ?? [];
       expect(
         layers.map((layer: { organization_id?: string }) => layer.organization_id),
-      ).toContain(orgDid);
+      ).toContain(projectDidToCoreId(orgDid));
       expect(body.effective_policy?.inheritance_mode).toBe("organization");
       expect(body.effective_policy?.official_badge).toBe(true);
 
@@ -206,7 +207,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const narrowAccepted = await submitOrganizationStatement(
         request,
         aliceToken,
-        alice.did,
+        alice.id,
         narrowRealmId,
         realmOrganizationStatement({
           realmId: narrowRealmId,
@@ -253,7 +254,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const active = await submitOrganizationStatement(
         request,
         aliceToken,
-        alice.did,
+        alice.id,
         realmId,
         realmOrganizationStatement({
           realmId,
@@ -269,7 +270,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const revoke = await submitOrganizationStatement(
         request,
         aliceToken,
-        alice.did,
+        alice.id,
         realmId,
         realmOrganizationStatement({
           realmId,
@@ -290,7 +291,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const layers = body.effective_policy?.organization_policy_layers ?? [];
       expect(
         layers.map((layer: { organization_id?: string }) => layer.organization_id),
-      ).not.toContain(orgDid);
+      ).not.toContain(projectDidToCoreId(orgDid));
       expect(body.effective_policy?.official_badge ?? false).toBe(false);
       expect(body.effective_policy?.inheritance_mode ?? "none").toBe("none");
     },
@@ -318,7 +319,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const accepted = await submitOrganizationStatement(
         request,
         aliceToken,
-        alice.did,
+        alice.id,
         realmId,
         realmOrganizationStatement({
           realmId,
@@ -339,7 +340,7 @@ test.describe("organization governance — verified relationship semantics", () 
       const body = await effective.json();
       const governanceLayers = (body.effective_policy?.organization_policy_layers ?? []).filter(
         (layer: { relationship?: string; organization_id?: string }) =>
-          layer.organization_id === sponsorDid &&
+          layer.organization_id === projectDidToCoreId(sponsorDid) &&
           (layer.relationship === "owner" || layer.relationship === "governance"),
       );
       expect(governanceLayers, "sponsor must not become an owner/governance layer").toEqual([]);

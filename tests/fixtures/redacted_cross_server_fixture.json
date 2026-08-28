@@ -17,7 +17,7 @@
       "comment": "Author@peer_a sends message m1; admin@peer_a issues redaction Move on m1. Peer B pulls and projects. A non-author member viewer on peer B sees only the tombstone — body is hidden, redacted_by/redacted_at metadata visible.",
       "message_id": "msg:m1",
       "author_did": "did:web:alice.example",
-      "viewer_did": "did:web:carol.example",
+      "viewer_id": "ak:did_core:web:carol.example",
       "viewer_is_author": false,
       "redaction": {
         "redacted_by": "did:web:admin.example",
@@ -37,7 +37,7 @@
       "comment": "Same redaction Move; on peer B, the author@peer_a's own session views m1. Per MAL-14 author-audit-view rule, the author sees the full body + redaction metadata (audit trail).",
       "message_id": "msg:m1",
       "author_did": "did:web:alice.example",
-      "viewer_did": "did:web:alice.example",
+      "viewer_id": "ak:did_core:web:alice.example",
       "viewer_is_author": true,
       "redaction": {
         "redacted_by": "did:web:admin.example",
@@ -57,7 +57,7 @@
       "comment": "Admin issues an un-redact Move on m1 (writes RedactionCell::None). Peer B pulls and projects. Member viewer now sees the full body again — un-redaction is causal-only and propagates cross-server.",
       "message_id": "msg:m1",
       "author_did": "did:web:alice.example",
-      "viewer_did": "did:web:carol.example",
+      "viewer_id": "ak:did_core:web:carol.example",
       "viewer_is_author": false,
       "redaction_then_un_redaction": true,
       "redaction": {

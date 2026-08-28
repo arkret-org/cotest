@@ -21,6 +21,7 @@ import {
   authHeaders,
   canonicalTimestamp,
   createRealmApi,
+  projectDidToCoreId,
   signedEventEnvelope,
   uuidV7,
 } from "../../helpers/soland-api";
@@ -106,20 +107,20 @@ test.describe("organization principal bootstrap / delegation", () => {
       const submit = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: signedEventEnvelope({
-          actorDid: admin.did,
+          actorId: admin.id,
           realmId,
           kind: "ak.realm.organization",
           schemaId: "ak.schema.event_payload.v1",
           payload: {
             statement_id: `org-stmt-${uuidV7()}`,
             realm_id: realmId,
-            organization_id: orgDid,
+            organization_id: projectDidToCoreId(orgDid),
             relationship: "owner",
             status: "active",
             control_scopes: ["official_badge", "realm_admin"],
             issued_at: canonicalTimestamp(),
             authorization: {
-              issuer: orgDid,
+              issuer: projectDidToCoreId(orgDid),
               issuer_role: "governance_service",
               verification_method: `${orgDid}#k1`,
               delegation_ref: delegationRef,
@@ -180,20 +181,20 @@ test.describe("organization principal bootstrap / delegation", () => {
       const submit = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
         headers: authHeaders(token),
         data: signedEventEnvelope({
-          actorDid: admin.did,
+          actorId: admin.id,
           realmId,
           kind: "ak.realm.organization",
           schemaId: "ak.schema.event_payload.v1",
           payload: {
             statement_id: `org-stmt-${uuidV7()}`,
             realm_id: realmId,
-            organization_id: orgDid,
+            organization_id: projectDidToCoreId(orgDid),
             relationship: "owner",
             status: "active",
             control_scopes: ["official_badge"],
             issued_at: canonicalTimestamp(),
             authorization: {
-              issuer: orgDid,
+              issuer: projectDidToCoreId(orgDid),
               issuer_role: "governance_service",
               verification_method: `${orgDid}#k1`,
               delegation_ref: delegationRef,

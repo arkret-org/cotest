@@ -182,7 +182,7 @@ pub async fn register_account(
     )
     .await?;
 
-    dev_login(server, did, &device_id).await
+    dev_login(server, did.as_str(), &device_id).await
 }
 
 pub async fn register_account_with_localpart(

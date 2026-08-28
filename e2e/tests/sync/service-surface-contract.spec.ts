@@ -515,12 +515,12 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc event idempotency ${stamp}`,
         historyAccess: "all_history_for_current_members",
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);
       const body = `event id replay ${stamp}`;
       const envelope = signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         kind: "ak.message.create",
         payload: {
@@ -555,7 +555,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       expect(eventsAfterDuplicate.filter((event) => event.event_id === eventId)).toHaveLength(1);
 
       const drift = signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId,
         eventId,
         kind: "ak.message.create",
@@ -600,7 +600,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc pagination ${stamp}`,
         historyAccess: "all_history_for_current_members",
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);
 
@@ -608,7 +608,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const seededEventIds: string[] = [];
       for (let i = 0; i < 6; i += 1) {
         const envelope = signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId,
           kind: "ak.message.create",
           payload: {
@@ -747,14 +747,14 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const realmId = await createRealmViaApi(request, token, {
         title: `ssc idempotency-key ${stamp}`,
         historyAccess: "all_history_for_current_members",
-        ownerDid: alice.did,
+        ownerId: alice.id,
       });
       const strandId = await resolveDefaultStrandId(request, token, realmId);
       const idempotencyKey = `ssc-${randomUUID()}`;
 
       const messageEnvelope = (body: string) =>
         signedEventEnvelope({
-          actorDid: alice.did,
+          actorId: alice.id,
           realmId,
           kind: "ak.message.create",
           payload: {
@@ -842,7 +842,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
       const envelope = signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: "ak:realm:Abf_EFzG0z16A5W8192VSnWPMSNVFmuS4X2gQVKgT4ml",
         kind: "ak.message.create",
         payload: {
@@ -878,7 +878,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
       const envelope = signedEventEnvelope({
-        actorDid: alice.did,
+        actorId: alice.id,
         realmId: "ak:realm:AZi2ri6b3n9gy8t4vZ4PaHWctnb2kQBJ7o-ajv9MjXsg",
         kind: "ak.message.create",
         payload: {

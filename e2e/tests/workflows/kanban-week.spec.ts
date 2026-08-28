@@ -164,7 +164,7 @@ test.describe("workflow: kanban week-in-review", () => {
         title: `Week 21 ops ${stamp}`,
         discoverability: "listed",
         encryptionProfile: "none",
-        ownerDid: patFlow.user.did,
+        ownerId: patFlow.user.id,
       });
       await patPage.page.evaluate((path) => {
         window.history.pushState({}, "", path);

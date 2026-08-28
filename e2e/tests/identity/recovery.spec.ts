@@ -323,7 +323,7 @@ test.describe("account recovery", () => {
 
     // mixed_secret_storage=true with a weak Argon2id floor is rejected.
     const weakMixed = secretStorageEnvelope({
-      actorId: alice.did,
+      actorId: alice.id,
       deviceId: alice.deviceId,
       mixed: true,
       // Below the §7.1 mixed floor (262144 / 4): base secret_storage floor
@@ -345,7 +345,7 @@ test.describe("account recovery", () => {
     // baseline accepted shape (proves the rejections above are floor/profile
     // specific, not a generic envelope-shape failure).
     const baseline = secretStorageEnvelope({
-      actorId: alice.did,
+      actorId: alice.id,
       deviceId: alice.deviceId,
       mixed: false,
       argon2: { memory_kib: 65_536, iterations: 3, parallelism: 1 },

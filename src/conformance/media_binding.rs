@@ -149,12 +149,12 @@ fn pick_oldest_focus<'a>(members: &'a [CallMember<'a>]) -> Option<&'a str> {
 
 pub fn run_focus_selection_oldest_membership_vector() -> Result<()> {
     let alice = CallMember {
-        actor_id: "did:web:alice.example",
+        actor_id: "ak:did_core:web:alice.example",
         joined_at_unix_ms: 1_700_000_000_000,
         foci_preferred: &["focus.livekit.lhr", "focus.arkret.lhr"],
     };
     let bob = CallMember {
-        actor_id: "did:web:bob.example",
+        actor_id: "ak:did_core:web:bob.example",
         joined_at_unix_ms: 1_700_000_005_000,
         foci_preferred: &["focus.arkret.lhr", "focus.livekit.lhr"],
     };
@@ -399,7 +399,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         0x00, 0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0,
         0xf0, 0x01,
     ];
-    let actor_id = "did:web:alice.example.com";
+    let actor_id = "ak:did_core:web:alice.example.com";
     let call_id = "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz";
     let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
     let expires_at = "2026-05-27T12:34:56.000Z";
@@ -424,7 +424,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     // Golden signature pin: the deterministic ed25519 signature over the fixed
     // input MUST reproduce this byte string. A drift in canonical JSON, the
     // label, the 0x00 separator, or the field set changes these bytes.
-    const EXPECTED_SIG_HEX: &str = "4ec8abfe9a29bb627a70348e9bbffbee01a56df0e889e80f259fe0620ed9629c2843c7e31106ab6eef78aaef4184050a2210f72290301eeeafdf19d6903d6505";
+    const EXPECTED_SIG_HEX: &str = "e7e0182f6caa264b72b078a5d7092be2195170e80e37598a2b541284cf5d15f0e5eedc72e57784fce9c735e0e9d75243d59258272c5659c5132cc67adfb99405";
     let actual_sig_hex = hex_lower(&sig.to_bytes());
     if actual_sig_hex != EXPECTED_SIG_HEX {
         bail!(
@@ -439,7 +439,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
 
     // 2. Tampering each authoritative field breaks verification.
     let tampers: [(&str, &str); 7] = [
-        (actor_id, "did:web:eve.example.com"),
+        (actor_id, "ak:did_core:web:eve.example.com"),
         (
             call_id,
             "ak:call:AXeSRv0BBNTmteRf54F8yu5ahdBtw9_GfJ47WLgnrkD5",
@@ -799,7 +799,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
-        "did:web:recorder.example",
+        "ak:did_core:web:recorder.example",
         "ak:event:ARHMhWPvHwsRKYQXNhB6wm4cESEe1fbHz6rJWPRl9wHY",
     )?;
 
@@ -859,7 +859,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         .map_err(|err| anyhow!("HKDF expand failed: {err}"))?;
 
     const EXPECTED_KEY_HEX: &str =
-        "1a5c13fae77f3f08f539f30d372cea8b338f3ed4d79881f583e9be0c7555f915";
+        "882a68faf71d618aabe26d26bd0c340ad32ed36ebd2e387e9d38ecf8a7bb50ec";
     let actual_key_hex = hex_lower(&recording_key);
     if actual_key_hex != EXPECTED_KEY_HEX {
         bail!(
@@ -872,7 +872,7 @@ pub fn run_recording_exporter_label_vector() -> Result<()> {
         "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz",
         "fra-1",
         "rtc-recording-019a7360-0000-7000-8000-000000000002",
-        "did:web:recorder.example",
+        "ak:did_core:web:recorder.example",
         "ak:event:AS-ORd5zGMm1S5O6yi-p0U6TY6n0gvX_I-ZaEoNxW5LO",
     )?;
     let mut other_info =

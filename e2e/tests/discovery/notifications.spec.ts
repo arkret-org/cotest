@@ -63,7 +63,7 @@ test.describe("notifications", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [bob.did],
+        seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
       const [aliceToken, bobToken] = await Promise.all([
@@ -78,14 +78,14 @@ test.describe("notifications", () => {
         request,
         aliceToken,
         realmId,
-        { authorityRootController: alice.did },
+        { authorityRootController: alice.id },
       );
       await setStrandWatchLevelApi(
         request,
         bobToken,
         realmId,
         strandId,
-        bob.did,
+        bob.id,
         "all",
       );
 
@@ -148,17 +148,17 @@ test.describe("notifications", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [bob.did],
+        seedMembers: [bob.id],
       });
       await bobPage.acceptInvite(realmId);
       const aliceToken = await issueDevSession(request, aliceSession.user);
       await resolveDefaultStrandId(request, aliceToken, realmId, {
-        authorityRootController: aliceSession.user.did,
+        authorityRootController: aliceSession.user.id,
       });
       await grantCapabilityEventApi(request, aliceToken, {
-        ownerDid: aliceSession.user.did,
+        ownerId: aliceSession.user.id,
         realmId,
-        subjectDid: aliceSession.user.did,
+        subjectId: aliceSession.user.id,
         actions: ["ak.message.create"],
       });
 
@@ -198,7 +198,7 @@ test.describe("notifications", () => {
 
       const mentionMsg = mentionSuffix;
       await sendMessageApi(request, aliceToken, realmId, mentionMsg, {
-        mentions: [bob.did],
+        mentions: [bob.id],
         actorSeq: apiActorSeq,
       });
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
@@ -267,7 +267,7 @@ test.describe("notifications", () => {
         discoverability: "listed",
         joinRule: "invite",
         encryptionProfile: "none",
-        seedMembers: [bob.did],
+        seedMembers: [bob.id],
       });
       await bobDeviceA.acceptInvite(realmId);
 
@@ -317,7 +317,7 @@ test.describe("notifications", () => {
 
       suppressedMsg = suppressedSuffix;
       await sendMessageApi(request, aliceToken, realmId, suppressedMsg, {
-        mentions: [bob.did],
+        mentions: [bob.id],
         actorSeq: apiActorSeq,
       });
       await bobDeviceA.gotoNotifications();
@@ -339,7 +339,7 @@ test.describe("notifications", () => {
       ).toContainText(/dnd disabled/i, { timeout: 30_000 });
       resumedMsg = resumedSuffix;
       await sendMessageApi(request, aliceToken, realmId, resumedMsg, {
-        mentions: [bob.did],
+        mentions: [bob.id],
         actorSeq: apiActorSeq + 1,
       });
       await bobDeviceA.gotoNotifications();
@@ -385,10 +385,10 @@ test.describe("notifications", () => {
       history_access: "all_history_for_current_members",
       encryption_profile: "none",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
     const msg = `mark all read notification ${stamp}`;
     await sendMessageApi(request, aliceToken, realmId, msg, {
-      mentions: [bob.did],
+      mentions: [bob.id],
     });
 
     const bobPage = bobSession.page;
@@ -443,11 +443,11 @@ test.describe("notifications", () => {
       history_access: "since_join",
       encryption_profile: "mls_rfc9420",
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
     await replaceAccountDataApi(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       "ak.push_rules",
       {
         rules: [
@@ -466,10 +466,10 @@ test.describe("notifications", () => {
     );
 
     const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;
-    const sidecarHash = mentionSidecarHash(realmId, bob.did);
+    const sidecarHash = mentionSidecarHash(realmId, bob.id);
     const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const encrypted = signedEventEnvelope({
-      actorDid: alice.did,
+      actorId: alice.id,
       realmId: realmId,
       kind: "ak.message.create",
       payload: {
@@ -500,7 +500,7 @@ test.describe("notifications", () => {
     expect(wire).not.toContain(plaintext);
     expect(wire).not.toContain("sealed-keyword");
     expect(wire).not.toContain(sidecarHash);
-    expect(wire).not.toContain(bob.did);
+    expect(wire).not.toContain(bob.id);
   });
 
   test(// @user-promise: e2e/scenarios/discovery/notifications.md
@@ -538,7 +538,7 @@ test.describe("notifications", () => {
       return;
     }
     const bob = bobDevice1Session.user;
-    expect(bobDevice2Session.user.did).toBe(bob.did);
+    expect(bobDevice2Session.user.id).toBe(bob.id);
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
     const bobDevice1 = bobDevice1Session.page;
@@ -600,10 +600,10 @@ test.describe("notifications", () => {
         history_access: "all_history_for_current_members",
         encryption_profile: "none",
       });
-      await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+      await addRealmMemberApi(request, aliceToken, realmId, bob.id);
       const msg = `cross-device unread ${stamp}`;
       await sendMessageApi(request, aliceToken, realmId, msg, {
-        mentions: [bob.did],
+        mentions: [bob.id],
       });
 
       await bobDevice1.gotoNotifications();

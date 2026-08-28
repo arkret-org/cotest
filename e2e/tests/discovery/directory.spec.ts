@@ -26,7 +26,7 @@ import {
 import {
   canonicalJson,
   prepareSignedEventSubmissionApi,
-  principalControlRealmForDid,
+  principalControlRealmForId,
   readRealmSealBasis,
   signedEventEnvelope,
   submitPrincipalSuccessorSealApi,
@@ -63,7 +63,7 @@ test.describe("discovery", () => {
       );
       await alicePage.fillWithPassivePromptRetry(
         alicePage.page.getByTestId("directory-search-input"),
-        bob.did,
+        bob.id,
       );
       await alicePage.clickWithPassivePromptRetry(
         alicePage.page.getByTestId("directory-search-button"),
@@ -84,7 +84,7 @@ test.describe("discovery", () => {
       );
       await alicePage.fillWithPassivePromptRetry(
         aliceContact.getByTestId("contact-target-did-input"),
-        bob.did,
+        bob.id,
       );
       await alicePage.clickWithPassivePromptRetry(
         aliceContact.getByTestId("request-contact-button"),
@@ -103,7 +103,7 @@ test.describe("discovery", () => {
       await bobPage.clickWithPassivePromptRetry(
         bobContact.getByTestId("list-contacts-button"),
       );
-      await expect(bobContactStatus).toContainText(alice.did, {
+      await expect(bobContactStatus).toContainText(alice.id, {
         timeout: 30_000,
       });
       await expect(bobContactStatus).toContainText(/pending_incoming/i, {
@@ -111,7 +111,7 @@ test.describe("discovery", () => {
       });
       await bobPage.fillWithPassivePromptRetry(
         bobContact.getByTestId("contact-requester-did-input"),
-        alice.did,
+        alice.id,
       );
       await bobPage.clickWithPassivePromptRetry(
         bobContact.getByTestId("accept-contact-button"),
@@ -124,7 +124,7 @@ test.describe("discovery", () => {
       await bobPage.clickWithPassivePromptRetry(
         bobContact.getByTestId("list-contacts-button"),
       );
-      await expect(bobContactStatus).toContainText(alice.did);
+      await expect(bobContactStatus).toContainText(alice.id);
       await expect(bobContactStatus).toContainText(/contacts 1/i);
 
       // The accepted edge must project symmetrically before Directory uses
@@ -148,7 +148,7 @@ test.describe("discovery", () => {
               }>;
             };
             return body.contacts?.find(
-              (row) => row.peer?.principal_id === bob.did,
+              (row) => row.peer?.principal_id === bob.id,
             )?.state;
           },
           { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
@@ -162,7 +162,7 @@ test.describe("discovery", () => {
           "POST",
           searchActorsUrl,
         ),
-        data: { query: bob.did },
+        data: { query: bob.id },
       });
       const searchActorsText = await searchActors.text();
       expect(searchActors.status(), searchActorsText).toBe(200);
@@ -171,7 +171,7 @@ test.describe("discovery", () => {
       };
       expect(searchActorsBody.actors).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ actor_id: bob.did }),
+          expect.objectContaining({ actor_id: bob.id }),
         ]),
       );
 
@@ -182,14 +182,14 @@ test.describe("discovery", () => {
       );
       await alicePage.fillWithPassivePromptRetry(
         alicePage.page.getByTestId("directory-search-input"),
-        bob.did,
+        bob.id,
       );
       await alicePage.clickWithPassivePromptRetry(
         alicePage.page.getByTestId("directory-search-button"),
       );
       await expect(
         alicePage.page.locator(
-          `[data-testid="actor-result-did"][title="${cssStringEscape(bob.did)}"]`,
+          `[data-testid="actor-result-did"][title="${cssStringEscape(bob.id)}"]`,
         ),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "post-contact-visible");
@@ -222,17 +222,17 @@ test.describe("discovery", () => {
 
     const newDisplay = `Bob Renamed ${stamp}`;
     const newBio = `Engineer doing E2E work · ${stamp}`;
-    const bobRealmId = principalControlRealmForDid(bob.did);
+    const bobRealmId = principalControlRealmForId(bob.id);
     const profileEvent = signedEventEnvelope({
       kind: "ak.profile.create",
       realmId: bobRealmId,
-      actorDid: bob.did,
+      actorId: bob.id,
       sealBasis: await readRealmSealBasis(request, bobToken, bobRealmId),
       payload: {
         object: {
           schema: "ak.schema.actor_profile.v1",
           realm_id: bobRealmId,
-          principal_id: bob.did,
+          principal_id: bob.id,
           actor_kind: "user",
           display_name: newDisplay,
           profile_fields: { bio: newBio },
@@ -264,7 +264,7 @@ test.describe("discovery", () => {
       await submitPrincipalSuccessorSealApi(
         request,
         bobToken,
-        bob.did,
+        bob.id,
         profileEvent,
       );
       for (let attempt = 0; attempt < 120; attempt += 1) {
@@ -293,7 +293,7 @@ test.describe("discovery", () => {
     expect(search.status()).toBe(200);
     const body = await search.json();
     const actors = (body.actors ?? []) as Array<{ actor_id?: string }>;
-    expect(actors.some((actor) => actor.actor_id === bob.did)).toBe(false);
+    expect(actors.some((actor) => actor.actor_id === bob.id)).toBe(false);
     expect(JSON.stringify(actors)).not.toContain(newBio);
 
     // /account/viewer reflects new fields on the canonical account surface.
@@ -374,7 +374,7 @@ test.describe("discovery", () => {
         historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
-      await bobPage.inviteFromAdmin(presenceRealmId, alice.did);
+      await bobPage.inviteFromAdmin(presenceRealmId, alice.id);
       await alicePage.acceptInviteFromNotifications(presenceRealmId);
       await Promise.all([
         alicePage.gotoTimelineRealm(presenceRealmId),
@@ -403,13 +403,13 @@ test.describe("discovery", () => {
       const sentAt = new Date();
       const signalUrl = `${solandBaseUrl()}/_arkret/self/signal`;
       const forgedEnvelope = buildSignalEnvelope({
-        actorDid: bob.did,
+        actorId: bob.id,
         deviceId: bob.deviceId,
         realmId: presenceRealmId,
         sentAt,
         plaintext: {
           kind: "ak.presence",
-          actor_id: bob.did,
+          actor_id: bob.id,
           state: "dnd",
           payload_sequence: Date.now(),
           ttl_ms: 25_000,
@@ -444,7 +444,7 @@ test.describe("discovery", () => {
       ).toBe("proof_invalid");
 
       const bobPresenceRow = alicePage.page.locator(
-        `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.did)}"]`,
+        `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.id)}"]`,
       );
       await expect(bobPresenceRow).toHaveAttribute(
         "data-presence-state",
@@ -501,7 +501,7 @@ test.describe("discovery", () => {
     const { outcome: aliceReqBody } = await requestContactArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
       { requestedScopes: ["direct_message"] },
     );
     expect(aliceReqBody.state).toBe("pending_outgoing");
@@ -509,7 +509,7 @@ test.describe("discovery", () => {
     // bob rejects the request.
     const bobBody = await respondContactArkret(request, bobToken, {
       requestId: aliceReqBody.request_event_ref,
-      requester: alice.did,
+      requester: alice.id,
       action: "reject",
     });
     expect(bobBody.state).toBe("rejected");
@@ -519,7 +519,7 @@ test.describe("discovery", () => {
     const { outcome: retryBody } = await requestContactArkret(
       request,
       aliceToken,
-      bob.did,
+      bob.id,
       { requestedScopes: ["direct_message"] },
     );
     expect(retryBody.state).toBe("rejected");

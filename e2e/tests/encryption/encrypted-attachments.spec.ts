@@ -80,9 +80,9 @@ test.describe("encrypted attachments", () => {
       history_access: "since_join",
       encryption_profile: "mls_rfc9420",
       plaintext_visible_services: [],
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
-    await addRealmMemberApi(request, aliceToken, realmId, bob.did);
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
 
     const ciphertext = Buffer.from(`ciphertext-only-${Date.now()}`, "utf8");
     const ciphertextDigest = sha256Digest(ciphertext);

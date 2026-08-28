@@ -19,8 +19,8 @@ import {
   type KeyObject,
 } from "node:crypto";
 import {
-  canonicalDidCoreId,
   canonicalJson,
+  projectDidToCoreId,
   sha256CanonicalJson,
 } from "./soland-api";
 import {
@@ -132,7 +132,7 @@ export function buildThirdPartyInvitePayload(args: {
     // invite.schema.json types this as did_core_id, and soland compares it
     // byte-for-byte against the Realm allowlist and the binding_proof's
     // verification_service_id, so every carrier uses the core-id spelling.
-    verification_service_id: canonicalDidCoreId(args.verificationService.did),
+    verification_service_id: projectDidToCoreId(args.verificationService.did),
     verification_public_key: args.verificationService.verificationMethod,
     max_claims: 1,
   };
@@ -165,7 +165,7 @@ export function signBindingProof(args: {
   claimNonce: string;
   bindingExpiresAt: string;
 }): Record<string, unknown> {
-  const serviceId = canonicalDidCoreId(args.verificationService.did);
+  const serviceId = projectDidToCoreId(args.verificationService.did);
   const unsigned = {
     verification_service_id: serviceId,
     verification_method: args.verificationService.verificationMethod,
@@ -200,7 +200,7 @@ export function signBindingProof(args: {
 export function signSubjectProof(args: {
   cell: ThirdPartyInviteCell;
   subject: DidKeyIdentity;
-  verificationServiceId: string;
+  verificationServiceDid: string;
   bindingProof: Record<string, unknown>;
   claimNonce: string;
 }): Record<string, unknown> {
@@ -211,9 +211,9 @@ export function signSubjectProof(args: {
     claim_nonce: args.claimNonce,
     invite_id: cellInviteId(args.cell),
     realm_id: args.cell.realmId,
-    subject_id: args.subject.did,
+    subject_id: projectDidToCoreId(args.subject.did),
     token_commitment: args.cell.tokenCommitment,
-    verification_service_id: canonicalDidCoreId(args.verificationServiceId),
+    verification_service_id: projectDidToCoreId(args.verificationServiceDid),
   });
   return {
     verification_method: args.subject.verificationMethod,

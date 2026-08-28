@@ -19,7 +19,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "../../helpers/arkret-test";
 import { conformanceBaseUrl } from "../../helpers/env";
-import { canonicalJson, wireErrCode } from "../../helpers/soland-api";
+import {
+  canonicalJson,
+  projectDidToCoreId,
+  wireErrCode,
+} from "../../helpers/soland-api";
 
 // ---------------------------------------------------------------------------
 // Fixture loader — resolves relative to this spec file so cwd doesn't matter.
@@ -575,12 +579,12 @@ test.describe("conformance encoding vectors", () => {
     // a redaction over `payload.content`, viewed by both the owner and a
     // guest. Owner sees full event; guest sees content stripped + a
     // `redacted_because` marker added.
-    const ownerDid = "did:web:alice.example";
-    const guestDid = "did:web:guest.example";
+    const ownerId = "ak:did_core:web:alice.example";
+    const guestId = "ak:did_core:web:guest.example";
     const event = {
       event_id: "ak:event:AY3Ymj4NJ7YEqOwLhBjWKXoD1P7PbP5OfU_ed6ZWIIMc",
       kind: "ak.message.create",
-      sender_actor_id: ownerDid,
+      sender_actor_id: ownerId,
       payload: {
         strand_id: "ak:strand:ASH_OYgk3yTng0ptjCny23EVDMiKLUxD8bxiWI7MuZ8E",
         content: { kind: "ak.content.text", body: "private message" },
@@ -600,7 +604,7 @@ test.describe("conformance encoding vectors", () => {
           vector_id: "ak.vector.redaction.owner_view.synthetic.v1",
           event,
           redaction,
-          viewer_did: ownerDid,
+          viewer_id: ownerId,
         }),
       },
     );
@@ -620,7 +624,7 @@ test.describe("conformance encoding vectors", () => {
           vector_id: "ak.vector.redaction.guest_view.synthetic.v1",
           event,
           redaction,
-          viewer_did: guestDid,
+          viewer_id: guestId,
         }),
       },
     );
@@ -755,7 +759,7 @@ test.describe("conformance encoding vectors", () => {
             fields: receipt.fields ?? ["payload.content"],
             reason: receipt.reason,
           },
-          viewer_did: "did:web:guest.example",
+          viewer_id: projectDidToCoreId("did:web:guest.example"),
         }),
       },
     );

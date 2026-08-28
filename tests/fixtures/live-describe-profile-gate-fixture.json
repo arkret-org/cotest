@@ -70,7 +70,7 @@
       },
       "describe": {
         "service": "teabay",
-        "service_id": "did:web:teabay.example",
+        "service_id": "ak:did_core:web:teabay.example",
         "supported_profiles": [],
         "ingest_modes": [
           "announce"

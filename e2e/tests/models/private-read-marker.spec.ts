@@ -64,7 +64,7 @@ test.describe("private read marker", () => {
     const mark = await postReadCursor(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       alice.deviceId,
       realmId,
       { kind: "realm" },
@@ -73,7 +73,7 @@ test.describe("private read marker", () => {
     expect(mark.status()).toBe(200);
     const markBody = await mark.json();
     expect(markBody.realm_id).toBe(realmId);
-    expect(markBody.actor_id).toBe(alice.did);
+    expect(markBody.actor_id).toBe(alice.id);
     expect(markBody.position).toEqual(position);
     expect(typeof markBody.updated_at).toBe("string");
     expect(markBody.updated_at).toMatch(
@@ -89,7 +89,7 @@ test.describe("private read marker", () => {
     expect(afterBody.markers).toContainEqual(
       expect.objectContaining({
         realm_id: realmId,
-        actor_id: alice.did,
+        actor_id: alice.id,
         read_scope: { kind: "realm" },
         position,
       }),
@@ -122,7 +122,7 @@ test.describe("private read marker", () => {
     const markAlice = await postReadCursor(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       alice.deviceId,
       realmId,
       { kind: "realm" },
@@ -130,7 +130,7 @@ test.describe("private read marker", () => {
     );
     expect(markAlice.status()).toBe(200);
     const markAliceBody = await markAlice.json();
-    expect(markAliceBody.actor_id).toBe(alice.did);
+    expect(markAliceBody.actor_id).toBe(alice.id);
 
     const aliceAfter = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
@@ -140,7 +140,7 @@ test.describe("private read marker", () => {
     const aliceAfterBody = await aliceAfter.json();
     expect(aliceAfterBody.markers).toContainEqual(
       expect.objectContaining({
-        actor_id: alice.did,
+        actor_id: alice.id,
         position,
       }),
     );
@@ -175,17 +175,17 @@ test.describe("private read marker", () => {
       discoverability: "listed",
       history_access: "all_history_for_current_members",
       encryption_profile: "none",
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
 
-    const m2 = await sendAndResolvePosition(request, token1, realmId, alice.did, `M2 ${stamp}`);
-    const m4 = await sendAndResolvePosition(request, token1, realmId, alice.did, `M4 ${stamp}`);
+    const m2 = await sendAndResolvePosition(request, token1, realmId, alice.id, `M2 ${stamp}`);
+    const m4 = await sendAndResolvePosition(request, token1, realmId, alice.id, `M4 ${stamp}`);
 
     // Phase C — device-1 records marker at M2.
     const markM2 = await postReadCursor(
       request,
       token1,
-      alice.did,
+      alice.id,
       device1,
       realmId,
       { kind: "realm" },
@@ -198,7 +198,7 @@ test.describe("private read marker", () => {
     const device2Marker = await pollToDeviceReadMarker(request, token2, realmId);
     expect(device2Marker.content.position).toEqual(m2);
     expect(device2Marker.content.read_scope).toEqual({ kind: "realm" });
-    expect(device2Marker.content.actor_id).toBe(alice.did);
+    expect(device2Marker.content.actor_id).toBe(alice.id);
     // The update originates from device-1 (fan-out skips the writer's device).
     expect(device2Marker.content.device_id).toBe(device1);
 
@@ -206,7 +206,7 @@ test.describe("private read marker", () => {
     const markM4 = await postReadCursor(
       request,
       token2,
-      alice.did,
+      alice.id,
       device2,
       realmId,
       { kind: "realm" },
@@ -254,18 +254,18 @@ test.describe("private read marker", () => {
       discoverability: "listed",
       history_access: "all_history_for_current_members",
       encryption_profile: "none",
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
 
-    const first = await sendAndResolvePosition(request, token1, realmId, alice.did, `EC1 ${stamp}`);
-    const second = await sendAndResolvePosition(request, token1, realmId, alice.did, `EC2 ${stamp}`);
+    const first = await sendAndResolvePosition(request, token1, realmId, alice.id, `EC1 ${stamp}`);
+    const second = await sendAndResolvePosition(request, token1, realmId, alice.id, `EC2 ${stamp}`);
 
     // Two monotonically-advancing writes from device-1 in quick succession.
     for (const position of [first, second]) {
       const mark = await postReadCursor(
         request,
         token1,
-        alice.did,
+        alice.id,
         device1,
         realmId,
         { kind: "realm" },
@@ -312,10 +312,10 @@ test.describe("private read marker", () => {
       discoverability: "listed",
       history_access: "since_join",
       encryption_profile: "mls_rfc9420",
-      invitees: [alice.did],
-      ownerDid: bob.did,
+      invitees: [alice.id],
+      ownerId: bob.id,
     });
-    await acceptInviteViaApi(request, aliceToken, alice.did, realmId);
+    await acceptInviteViaApi(request, aliceToken, alice.id, realmId);
 
     // bob sends an encrypted message that mentions alice. Message notifications
     // are derived locally from the timeline; the account notification stream is
@@ -325,8 +325,8 @@ test.describe("private read marker", () => {
       request,
       bobToken,
       realmId,
-      bob.did,
-      alice.did,
+      bob.id,
+      alice.id,
       secretBody,
     );
 
@@ -357,21 +357,21 @@ test.describe("private read marker", () => {
       discoverability: "listed",
       history_access: "all_history_for_current_members",
       encryption_profile: "none",
-      ownerDid: alice.did,
+      ownerId: alice.id,
     });
 
     const mPublic = await sendAndResolvePosition(
       request,
       aliceToken,
       realmId,
-      alice.did,
+      alice.id,
       `M_public ${stamp}`,
     );
     const mPrivate = await sendAndResolvePosition(
       request,
       aliceToken,
       realmId,
-      alice.did,
+      alice.id,
       `M_private ${stamp}`,
     );
     const circleId = typedId("circle");
@@ -380,7 +380,7 @@ test.describe("private read marker", () => {
     const markRealm = await postReadCursor(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       alice.deviceId,
       realmId,
       { kind: "realm" },
@@ -392,7 +392,7 @@ test.describe("private read marker", () => {
     const markCircle = await postReadCursor(
       request,
       aliceToken,
-      alice.did,
+      alice.id,
       alice.deviceId,
       realmId,
       { kind: "circle", container_ref: circleId },
@@ -439,13 +439,13 @@ async function readCursorFixture(
     discoverability: "listed",
     history_access: "all_history_for_current_members",
     encryption_profile: "none",
-    ownerDid: alice.did,
+    ownerId: alice.id,
   });
   const position = await sendAndResolvePosition(
     request,
     aliceToken,
     realmId,
-    alice.did,
+    alice.id,
     `cursor target ${stamp}`,
   );
   return { alice, aliceToken, realmId, position };
@@ -454,7 +454,7 @@ async function readCursorFixture(
 async function postReadCursor(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   deviceId: string,
   realmId: string,
   readScope: { kind: string; container_ref?: string; track_name?: string },
@@ -462,14 +462,14 @@ async function postReadCursor(
 ) {
   const updatedAt = new Date().toISOString();
   const event = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.read_cursor.advance",
     createdAt: updatedAt,
     payload: {
       id: typedId("read_cursor"),
       schema: "ak.schema.read_cursor.v1",
-      actor_id: actorDid,
+      actor_id: actorId,
       device_id: deviceId,
       realm_id: realmId,
       read_scope: readScope,
@@ -494,11 +494,11 @@ async function sendAndResolvePosition(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  actorDid: string,
+  actorId: string,
   body: string,
 ): Promise<{ event_id: string; hlc: string }> {
   const message = await sendPlaintextMessageViaApi(request, token, realmId, body, {
-    actorDid,
+    actorId,
   });
   const events = await listRealmEventsViaApi(request, token, realmId, { limit: 50 });
   const event = events.find(
@@ -555,15 +555,15 @@ async function pollToDeviceReadMarker(
   );
 }
 
-// Send an encrypted (E2EE) message that mentions `mentionDid`. The body is
+// Send an encrypted (E2EE) message that mentions `mentionId`. The body is
 // sealed (`encrypted_content` ciphertext); the plaintext `secretBody` is the
 // canary the notification projection MUST NOT expose.
 async function sendEncryptedMentionMessage(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  actorDid: string,
-  mentionDid: string,
+  actorId: string,
+  mentionId: string,
   secretBody: string,
 ): Promise<string> {
   const strandId = await resolveDefaultStrandId(request, token, realmId);
@@ -571,13 +571,13 @@ async function sendEncryptedMentionMessage(
     "base64url",
   );
   const envelope = signedEventEnvelope({
-    actorDid,
+    actorId,
     realmId,
     kind: "ak.message.create",
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      mention_sidecar_digest: [mentionSidecarHash(realmId, mentionDid)],
+      mention_sidecar_digest: [mentionSidecarHash(realmId, mentionId)],
       encrypted_content: encryptedEnvelope(ciphertext, realmId),
     },
   });

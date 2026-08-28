@@ -57,7 +57,7 @@ export function generateWebvhKey(): WebvhKey {
 
 /// The preliminary `did:webvh:{SCID}:…` a genesis DID document is authored
 /// against. The SDK owns the DID <-> hosting-authority mapping.
-export function webvhPlaceholderDid(baseUrl: string, localId: string): string {
+export function webvhPlaceholderId(baseUrl: string, localId: string): string {
   return cotestWire<{ did: string; method_authority: string }>(
     "webvh-placeholder-did",
     { base_url: baseUrl, local_id: localId },
@@ -67,14 +67,14 @@ export function webvhPlaceholderDid(baseUrl: string, localId: string): string {
 export function buildWebvhGenesisEntry(
   input: WebvhGenesisInput,
 ): BuiltWebvhGenesis {
-  const placeholderDid = webvhPlaceholderDid(input.baseUrl, input.localId);
+  const placeholderId = webvhPlaceholderId(input.baseUrl, input.localId);
   return cotestWire<BuiltWebvhGenesis>("webvh-genesis", {
     base_url: input.baseUrl,
     local_id: input.localId,
     root_seed_b64url: ed25519PrivateKeySeedB64url(input.rootKey.privateKey),
     next_root_public_key_multibase: input.nextRootKey.multibase,
     version_time: input.versionTime,
-    document: input.document(placeholderDid),
+    document: input.document(placeholderId),
   });
 }
 

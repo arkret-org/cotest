@@ -168,7 +168,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         alice
             .post(&format!("/_arkret/self/realms/{realm_id}/agents"))
             .json(&NonProtocolTestBody::new(json!({
-                "agent_id": "did:web:agent.example",
+                "agent_id": "ak:did_core:web:agent.example",
                 "display_name": "Planner"
             }))),
         StatusCode::NOT_FOUND,

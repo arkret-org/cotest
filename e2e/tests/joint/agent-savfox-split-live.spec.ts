@@ -112,7 +112,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
       // boundary against a known Sidecar id.
       await jointRealm.alicePage.inviteFromAdmin(
         jointRealm.realmId,
-        jointRealm.bob.did,
+        jointRealm.bob.id,
       );
       await jointRealm.bobPage.acceptInvite(jointRealm.realmId);
 
@@ -468,8 +468,8 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
           jointRealm,
         );
         secondController = secondControllerFlow.page;
-        expect(secondControllerFlow.session.user.did).toBe(
-          jointRealm.alice.did,
+        expect(secondControllerFlow.session.user.id).toBe(
+          jointRealm.alice.id,
         );
         expect(secondControllerFlow.session.user.deviceId).not.toBe(
           jointRealm.alice.deviceId,
@@ -569,7 +569,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
         const evidence = {
           schema: "cotest.sidecar_savfox_joint_evidence.v1",
-          controller_id: jointRealm.alice.did,
+          controller_id: jointRealm.alice.id,
           agent_id: firstPairing.agentId,
           source_realm_id: jointRealm.realmId,
           sidecar_id: ensured.sidecar_id,
@@ -678,7 +678,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             JSON.stringify(
               {
                 schema: "cotest.sidecar_two_device_convergence.v1",
-                controller_id: jointRealm.alice.did,
+                controller_id: jointRealm.alice.id,
                 device_ids: [
                   jointRealm.alice.deviceId,
                   secondControllerFlow.session.user.deviceId,

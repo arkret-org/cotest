@@ -19,7 +19,7 @@
 // else: the operations declare a durable `event_log` effect, and the spec
 // forbids the service from producing that signature for the caller
 // (`capabilities.md` §118/§361, `key-management.md` §411). That is also why the
-// helpers take an `actorDid` — a bearer token says who is calling, but only a
+// helpers take an `actorId` — a bearer token says who is calling, but only a
 // DID can be the `actor_id` of a signed Event.
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
@@ -75,9 +75,9 @@ export async function grantCircleMemberManageCapability(
   request: APIRequestContext,
   ownerToken: string,
   args: {
-    ownerDid: string;
+    ownerId: string;
     realmId: string;
-    subjectDid: string;
+    subjectId: string;
     circleId: string;
     server?: SolandKey;
   },
@@ -86,8 +86,8 @@ export async function grantCircleMemberManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: args.ownerDid,
-    subject: args.subjectDid,
+    issuer: args.ownerId,
+    subject: args.subjectId,
     subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.member.manage"],
     resources: [
@@ -112,7 +112,7 @@ export async function grantCircleMemberManageCapability(
     ],
   };
   const envelope = signedEventEnvelope({
-    actorDid: args.ownerDid,
+    actorId: args.ownerId,
     realmId: args.realmId,
     kind: "ak.capability.grant",
     payload: { grant: unsignedGrant },
@@ -124,7 +124,7 @@ export async function grantCircleMemberManageCapability(
     envelope,
     {
       server: args.server,
-      context: `grant ak.circle.member.manage for ${args.circleId} to ${args.subjectDid}`,
+      context: `grant ak.circle.member.manage for ${args.circleId} to ${args.subjectId}`,
     },
   );
   return retypeEventDerivedId(String(envelope.event_id), "grant");
@@ -134,9 +134,9 @@ export async function grantCircleManageCapability(
   request: APIRequestContext,
   ownerToken: string,
   args: {
-    ownerDid: string;
+    ownerId: string;
     realmId: string;
-    subjectDid: string;
+    subjectId: string;
     circleId: string;
     server?: SolandKey;
   },
@@ -145,8 +145,8 @@ export async function grantCircleManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: args.ownerDid,
-    subject: args.subjectDid,
+    issuer: args.ownerId,
+    subject: args.subjectId,
     subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.manage"],
     resources: [
@@ -171,7 +171,7 @@ export async function grantCircleManageCapability(
     ],
   };
   const envelope = signedEventEnvelope({
-    actorDid: args.ownerDid,
+    actorId: args.ownerId,
     realmId: args.realmId,
     kind: "ak.capability.grant",
     payload: { grant: unsignedGrant },
@@ -183,7 +183,7 @@ export async function grantCircleManageCapability(
     envelope,
     {
       server: args.server,
-      context: `grant ak.circle.manage for ${args.circleId} to ${args.subjectDid}`,
+      context: `grant ak.circle.manage for ${args.circleId} to ${args.subjectId}`,
     },
   );
   return retypeEventDerivedId(String(envelope.event_id), "grant");
@@ -223,7 +223,7 @@ export function circleDisplayFromTitle(
 // is reducer-derived. Everything else is the actor's to choose, which is why the
 // whole object lives inside the signed Event rather than in REST fields.
 function circleCreateObject(args: {
-  actorDid: string;
+  actorId: string;
   realmId: string;
   title: string;
   summary?: string;
@@ -248,7 +248,7 @@ function circleCreateObject(args: {
       ? { content_scheme: "mls_rfc9420" }
       : {}),
     state: "active",
-    created_by: args.actorDid,
+    created_by: args.actorId,
     created_at: args.createdAt,
   };
 }
@@ -261,7 +261,7 @@ export async function createCircleArkret(
   request: APIRequestContext,
   token: string,
   args: {
-    actorDid: string;
+    actorId: string;
     realmId: string;
     title: string;
     joinRule?: string;
@@ -277,7 +277,7 @@ export async function createCircleArkret(
     request,
     token,
     signedEventEnvelope({
-      actorDid: args.actorDid,
+      actorId: args.actorId,
       realmId: args.realmId,
       kind: "ak.circle.create",
       payload: { object: circleCreateObject({ ...args, createdAt }) },
@@ -318,7 +318,7 @@ export async function getCircleArkret(
 // Add (or change) a Circle member. Returns the raw APIResponse so negative
 // scenarios can assert status + wire `code` without throwing.
 //
-// `actorDid` is the caller who signs the Event — not `actorId`, the actor whose
+// `signerId` is the caller who signs the Event — not `actorId`, the actor whose
 // membership moves. The two differ on every admin pull, which is exactly the
 // scenario this surface exists for: the puller signs, the pulled actor does
 // nothing.
@@ -327,7 +327,7 @@ export async function addCircleMemberRaw(
   token: string,
   circleId: string,
   args: {
-    actorDid: string;
+    signerId: string;
     realmId: string;
     actorId: string;
     membership?: CircleMembership;
@@ -338,7 +338,7 @@ export async function addCircleMemberRaw(
     request,
     token,
     signedEventEnvelope({
-      actorDid: args.actorDid,
+      actorId: args.signerId,
       realmId: args.realmId,
       kind: "ak.circle.member.state",
       payload: {
@@ -368,7 +368,7 @@ export async function addCircleMemberArkret(
   token: string,
   circleId: string,
   args: {
-    actorDid: string;
+    signerId: string;
     realmId: string;
     actorId: string;
     membership?: CircleMembership;
@@ -388,7 +388,7 @@ export async function removeCircleMemberArkret(
   circleId: string,
   actorId: string,
   args: {
-    actorDid: string;
+    actorId: string;
     realmId: string;
     server?: SolandKey;
   },
@@ -397,7 +397,7 @@ export async function removeCircleMemberArkret(
     request,
     token,
     signedEventEnvelope({
-      actorDid: args.actorDid,
+      actorId: args.actorId,
       realmId: args.realmId,
       kind: "ak.circle.member.state",
       payload: {
@@ -431,7 +431,7 @@ export async function removeCircleMemberArkret(
 // against the path. `reason` is free text on that payload — it is not a wire
 // reason code, which is why the argument lost the `Code` suffix.
 type CircleLifecycleArgs = {
-  actorDid: string;
+  actorId: string;
   realmId: string;
   reason?: string;
   server?: SolandKey;
@@ -448,7 +448,7 @@ async function submitCircleLifecycleArkret(
     request,
     token,
     signedEventEnvelope({
-      actorDid: args.actorDid,
+      actorId: args.actorId,
       realmId: args.realmId,
       kind: `ak.circle.${action}`,
       payload: {

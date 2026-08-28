@@ -79,10 +79,10 @@ test.describe("offline sync + conflict repair", () => {
     expect(before).not.toContain(m2);
 
     await sendPlaintextMessageViaApi(request, aliceToken, realmId, m1, {
-      actorDid: alice.did,
+      actorId: alice.id,
     });
     await sendPlaintextMessageViaApi(request, aliceToken, realmId, m2, {
-      actorDid: alice.did,
+      actorId: alice.id,
     });
 
     await expect
@@ -146,7 +146,7 @@ test.describe("offline sync + conflict repair", () => {
 
     for (const body of messages) {
       await sendPlaintextMessageViaApi(request, aliceToken, realmId, body, {
-        actorDid: alice.did,
+        actorId: alice.id,
       });
     }
 
@@ -262,9 +262,9 @@ test.describe("offline sync + conflict repair", () => {
         title: `G2.T3 offline backfill ${stamp}`,
         discoverability: "listed",
         history_access: "all_history_for_current_members",
-        invitees: [bob.did],
-        invitee_service_ids: { [bob.did]: solandServiceId("beta") },
-        ownerDid: alice.did,
+        invitees: [bob.id],
+        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        ownerId: alice.id,
         creator_service_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
@@ -277,26 +277,26 @@ test.describe("offline sync + conflict repair", () => {
     const betaInvite = await waitForInvite(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       realmId,
       "beta",
     );
     await acceptInviteApi(
       request,
       bobToken,
-      bob.did,
+      bob.id,
       betaInvite.realm_id,
       betaInvite.id,
       { server: "beta" },
     );
-    await waitForMember(request, aliceToken, bob.did, realmId, "alpha");
+    await waitForMember(request, aliceToken, bob.id, realmId, "alpha");
 
     // Offline window: alice writes an event that bob never pulled.
     const missingBody = `offline payload body ${stamp}`;
     const missingEvent = makeFederationEvent({
       realmId,
       kind: "ak.message.create",
-      actorDid: alice.did,
+      actorId: alice.id,
       payload: {
         strand_id: typedId("strand"),
         track_name: "discussion",
@@ -338,7 +338,7 @@ test.describe("offline sync + conflict repair", () => {
           : undefined;
       return (
         envelope.kind === "ak.member.state" &&
-        payload?.actor_id === alice.did &&
+        payload?.actor_id === alice.id &&
         payload.membership === "join" &&
         binding?.recipient_service_id === solandServiceId("alpha")
       );
@@ -371,7 +371,7 @@ test.describe("offline sync + conflict repair", () => {
     // and ingest it so bob's timeline catches up.
     const backfill = await queryPeerEventsApi(request, {
       server: "alpha",
-      sourceDid: solandServiceId("beta"),
+      sourceServiceId: solandServiceId("beta"),
       realmId,
       limit: 100,
     });
@@ -407,7 +407,7 @@ test.describe("offline sync + conflict repair", () => {
           : undefined;
       return (
         event.kind === "ak.invite.create" &&
-        payload?.invitee === bob.did &&
+        payload?.invitee === bob.id &&
         target?.recipient_service_id === solandServiceId("beta")
       );
     });
@@ -432,7 +432,7 @@ test.describe("offline sync + conflict repair", () => {
     // surface is intentionally fail-closed for this profile.
     const betaAfter = await queryPeerEventsApi(request, {
       server: "beta",
-      sourceDid: solandServiceId("alpha"),
+      sourceServiceId: solandServiceId("alpha"),
       realmId,
       limit: 100,
     });
@@ -450,7 +450,7 @@ test.describe("offline sync + conflict repair", () => {
 async function waitForInvite(
   request: APIRequestContext,
   token: string,
-  inviteeDid: string,
+  inviteeId: string,
   realmId: string,
   server: "alpha" | "beta",
 ) {
@@ -469,7 +469,7 @@ async function waitForInvite(
         const invites = await listInvitesApi(request, token, { server });
         found = invites.find(
           (invite) =>
-            invite.invitee === inviteeDid && invite.realm_id === realmId,
+            invite.invitee === inviteeId && invite.realm_id === realmId,
         );
         return Boolean(found);
       },
@@ -482,7 +482,7 @@ async function waitForInvite(
 async function waitForMember(
   request: APIRequestContext,
   token: string,
-  memberDid: string,
+  memberId: string,
   realmId: string,
   server: "alpha" | "beta",
 ) {
@@ -497,7 +497,7 @@ async function waitForMember(
           return false;
         }
         const body = await response.json();
-        return Array.isArray(body.members) && body.members.includes(memberDid);
+        return Array.isArray(body.members) && body.members.includes(memberId);
       },
       { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
     )
@@ -578,7 +578,7 @@ async function createBottomConflictFixture(
   await submitRealmTitleUpdate(
     request,
     aliceToken,
-    alice.did,
+    alice.id,
     realmId,
     aliceTitle,
     initialTitle,
@@ -589,7 +589,7 @@ async function createBottomConflictFixture(
   await submitRealmTitleUpdate(
     request,
     bobToken,
-    bob.did,
+    bob.id,
     realmId,
     bobTitle,
     aliceTitle,
@@ -602,7 +602,7 @@ async function createBottomConflictFixture(
 async function submitRealmTitleUpdate(
   request: APIRequestContext,
   token: string,
-  actorDid: string,
+  actorId: string,
   realmId: string,
   title: string,
   previousTitle: string,
@@ -611,7 +611,7 @@ async function submitRealmTitleUpdate(
     request,
     token,
     signedEventEnvelope({
-      actorDid,
+      actorId,
       realmId: realmId,
       kind: "ak.realm.profile",
       preconditions: [
