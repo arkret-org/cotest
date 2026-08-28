@@ -86,7 +86,7 @@ fn d2d_root_secret_share_uses_typed_device_message_wire_and_hpke() -> Result<()>
     )?;
     assert_eq!(parsed_request.request_id, REQUEST_ID);
     assert_eq!(parsed_request.secret_id, SECRET_ID);
-    assert_eq!(parsed_request.from_device, device_id(NEW_DEVICE)?);
+    assert_eq!(parsed_request.from_device_id, device_id(NEW_DEVICE)?);
 
     let send_content = seal_secret_send(&parsed_request, ACCOUNT_SECRET, 7, EXPIRES_AT)?;
     let send_target = DeviceMessageTarget {
@@ -218,7 +218,7 @@ fn request_content(
     Ok(SecretShareRequestContent {
         request_id: request.request_id.clone(),
         secret_id: request.secret_id.clone(),
-        from_device: device_id(NEW_DEVICE)?,
+        from_device_id: device_id(NEW_DEVICE)?,
         recipient_hpke_public_key: URL_SAFE_NO_PAD.encode(recipient_pk),
     })
 }
@@ -237,7 +237,7 @@ fn seal_secret_send(
     let aad = send_aad(
         MESSAGE_ID,
         OLD_DEVICE,
-        request.from_device.as_str(),
+        request.from_device_id.as_str(),
         &request.request_id,
         expires_at,
     )?;
@@ -250,7 +250,7 @@ fn seal_secret_send(
     Ok(SecretShareSendContent {
         request_id: request.request_id.clone(),
         secret_id: request.secret_id.clone(),
-        from_device: device_id(OLD_DEVICE)?,
+        from_device_id: device_id(OLD_DEVICE)?,
         scheme: HPKE_SUITE_X25519_CHACHA20POLY1305_V1.to_owned(),
         enc: URL_SAFE_NO_PAD.encode(sealed.enc),
         ciphertext: URL_SAFE_NO_PAD.encode(sealed.ciphertext),
@@ -274,13 +274,13 @@ fn open_secret_send(
     }
     // `ak.secret.send` is a device-to-device secret transfer, so the envelope
     // MUST carry the `device` sender branch: an Agent runtime has no device
-    // identity to match `from_device` against.
+    // identity to match `from_device_id` against.
     let sender_device_id = envelope
         .sender
         .device_id()
         .ok_or_else(|| anyhow::anyhow!("ak.secret.send envelope has no sender device"))?;
-    if &content.from_device != sender_device_id {
-        bail!("ak.secret.send from_device does not match envelope sender");
+    if &content.from_device_id != sender_device_id {
+        bail!("ak.secret.send from_device_id does not match envelope sender");
     }
     if content.scheme != HPKE_SUITE_X25519_CHACHA20POLY1305_V1 {
         bail!("unsupported ak.secret.send scheme");

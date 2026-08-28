@@ -99,11 +99,11 @@ export async function acceptInviteViaApi(
   });
   expect(list.status()).toBe(200);
   const body = (await list.json()) as {
-    invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
+    invites?: Array<{ id: string; realm_id: string; invitee_id?: string }>;
   };
   const invite = (body.invites ?? []).find(
     (candidate) =>
-      candidate.realm_id === realmId && candidate.invitee === actorId,
+      candidate.realm_id === realmId && candidate.invitee_id === actorId,
   );
   expect(invite, `pending invite for ${actorId} in ${realmId}`).toBeTruthy();
 

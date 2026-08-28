@@ -174,10 +174,10 @@ fn expect_reason(error: AgentParticipationError, expected: &str) -> Result<()> {
 fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<AgentSelectorClaim> {
     Ok(AgentSelectorClaim {
         schema: SchemaId::AGENT_SELECTOR_CLAIM_V1.to_owned(),
-        controller_subject_id: did_field(case, "controller_subject_id")?,
+        controller_subject_id: did_field(case, "controller_subject")?,
         agent_slug: required_str(case, slug_field)?.to_owned(),
-        subject: did_field(case, agent_field)?,
-        issuer: DidCoreId::new("ak:did_core:web:directory.acme.example")?,
+        subject_id: did_field(case, agent_field)?,
+        issuer_id: DidCoreId::new("ak:did_core:web:directory.acme.example")?,
         vouching_id: Some(DidCoreId::new("ak:did_core:web:directory.acme.example")?),
         binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
@@ -207,7 +207,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
 fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorResolutionOutcome> {
     let outcome = DirectoryAgentSelectorResolutionOutcome {
         controller_subject_id: claim.controller_subject_id.clone(),
-        subject: claim.subject.clone(),
+        subject_id: claim.subject_id.clone(),
         agent_slug: claim.agent_slug.clone(),
         verified: true,
         selector_claim: claim,
@@ -235,7 +235,7 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
     claim.validate()?;
     let outcome = selector_outcome(claim.clone())?;
 
-    let mention = Mention::new(outcome.subject.clone())
+    let mention = Mention::new(outcome.subject_id.clone())
         .with_agent_selector_metadata(
             outcome.controller_subject_id.clone(),
             Handle::parse(required_str(vector, "controller_handle")?)?,
@@ -266,7 +266,7 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
         "changed_agent_subject",
         "changed_agent_slug",
     )?)?;
-    if changed.subject == mention.subject_id {
+    if changed.subject_id == mention.subject_id {
         bail!("changed selector control must target a different agent DID");
     }
     if mention.subject_id.as_str() != expected_str(vector, "historical_target_after_slug_change")? {
@@ -389,9 +389,9 @@ pub fn run_agent_participation_session_overlay_vector() -> Result<()> {
     };
     let outcome = AgentParticipationOutcome {
         agent_id: "ak:did_core:web:agents.acme.example:alice-summary".to_owned(),
-        entries: vec![entry.clone()],
+        agent_participation_entries: vec![entry.clone()],
     };
-    if outcome.entries.len() != 1 {
+    if outcome.agent_participation_entries.len() != 1 {
         bail!("agent participation outcome shape drifted");
     }
 
@@ -509,7 +509,7 @@ pub fn run_agent_participation_third_party_mention_gate_vector() -> Result<()> {
         &fixture,
         VECTOR_ID_AGENT_PARTICIPATION_THIRD_PARTY_MENTION_GATE,
     )?;
-    let controller = did_field(vector, "controller_subject_id")?;
+    let controller = did_field(vector, "controller_subject")?;
     let third_party = did_field(vector, "third_party_subject")?;
     let before = participation_field(vector, "effective_before")?;
     let after = participation_field(vector, "effective_after")?;

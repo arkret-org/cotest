@@ -87,7 +87,7 @@ export type RealmObject = {
       "frozen_public_key_b64u": string;
       "frozen_public_key_digest": string;
     };
-    "recovery_members"?: Array<{
+    "recovery_signers"?: Array<{
       "actor_id": string;
       "verification_method": string;
       "key_kind": "ed25519_raw32";
@@ -106,7 +106,7 @@ export type RealmObject = {
     "recovery_controller_organization_ids"?: string[];
   } | {
     "kind": "threshold";
-    "members": Array<{
+    "signers": Array<{
       "actor_id": string;
       "verification_method": string;
       "key_kind": "ed25519_raw32";
@@ -125,7 +125,7 @@ export type RealmObject = {
     "forensic_attribution": "quorum_intersection" | "waived";
   } | {
     "kind": "open_set";
-    "members": Array<{
+    "signers": Array<{
       "actor_id": string;
       "verification_method": string;
       "key_kind": "ed25519_raw32";
@@ -157,7 +157,7 @@ export type RealmObject = {
       "frozen_public_key_b64u": string;
       "frozen_public_key_digest": string;
     };
-    "recovery_members": Array<{
+    "recovery_signers": Array<{
       "actor_id": string;
       "verification_method": string;
       "key_kind": "ed25519_raw32";
@@ -240,7 +240,7 @@ export type CapabilityGrantObject = {
   "id": string;
   "schema": "ak.schema.capability.v1";
   "realm_id"?: string;
-  "issuer": string;
+  "issuer_id": string;
   "issuer_principal_server_id": string;
   "subject": string | {
     "kind": "condition";
@@ -338,7 +338,7 @@ export type CapabilityGrantObject = {
     "allowed_data_labels"?: string[];
     "allowed_endpoints"?: string[];
     "max_authority_depth"?: number;
-    "authority_path"?: string[];
+    "authority_path_ids"?: string[];
     "authority_regrant_allowed"?: boolean;
     "authority_scope"?: "narrowing_only" | "same_scope" | "custom";
     "applet_id"?: string;
@@ -362,7 +362,7 @@ export type CapabilityGrantObject = {
     "auto_reject_on_timeout"?: boolean;
     "proposal_morph_kind"?: string;
     "approval_threshold"?: "majority" | "unanimous" | "quorum" | "custom";
-    "approvers"?: string[];
+    "approver_ids"?: string[];
     "accountability_required"?: boolean;
     "guardian_approval_required"?: boolean;
     "controller_approval_required"?: boolean;
@@ -441,7 +441,7 @@ export type InviteDeliveryRequestBody = {
       "location_id"?: string;
       "event_id"?: string;
       "external_id"?: string;
-      "url"?: string;
+      "uri"?: string;
       [key: string]: unknown;
     };
     "actor_kind"?: "user" | "organization" | "team" | "agent" | "service" | "integration";
@@ -470,7 +470,7 @@ export type InviteDeliveryRequestBody = {
     }>;
     "causal_refs"?: string[];
     "preconditions"?: Array<{
-      "cell": string;
+      "cell_id": string;
       "predicate": {
         "op": "head_eq" | "head_in" | "satisfies" | "contains";
         "value"?: unknown;
@@ -506,7 +506,7 @@ export type InviteDeliveryRequestBody = {
       "event_digest": string;
       "producer_proof_digest": string;
       "producer_verification_method": string;
-      "producer_signing_key": string;
+      "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
       "producer_signer_resolution_evidence_digest"?: string;
       "signer_resolution_evidence_ref": string;
@@ -637,9 +637,9 @@ export type InviteDeliveryRequestBody = {
       "schema": "ak.schema.handle_claim.v1";
       "handle": string;
       "handle_aliases"?: string[];
-      "subject": string;
-      "issuer": string;
-      "issuer_service_id"?: string;
+      "subject_id": string;
+      "issuer_id": string;
+      "vouching_id"?: string;
       "binding_state": "pending" | "verified" | "revoked" | "expired";
       "claim_kind"?: "handle_binding" | "organization_handle";
       "visibility"?: "public" | "restricted" | "private";
@@ -739,7 +739,7 @@ export type InviteDeliveryRequestBody = {
         "service_acceptance_ref"?: string;
         "policy_event_ref"?: string;
       };
-      "issuer_service_id": string;
+      "issuer_id": string;
       "audience": string;
       "issued_at": string;
       "expires_at": string;
@@ -977,7 +977,7 @@ export type EventFederationSubmission = {
       "location_id"?: string;
       "event_id"?: string;
       "external_id"?: string;
-      "url"?: string;
+      "uri"?: string;
       [key: string]: unknown;
     };
     "actor_kind"?: "user" | "organization" | "team" | "agent" | "service" | "integration";
@@ -1006,7 +1006,7 @@ export type EventFederationSubmission = {
     }>;
     "causal_refs"?: string[];
     "preconditions"?: Array<{
-      "cell": string;
+      "cell_id": string;
       "predicate": {
         "op": "head_eq" | "head_in" | "satisfies" | "contains";
         "value"?: unknown;
@@ -1042,7 +1042,7 @@ export type EventFederationSubmission = {
       "event_digest": string;
       "producer_proof_digest": string;
       "producer_verification_method": string;
-      "producer_signing_key": string;
+      "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
       "producer_signer_resolution_evidence_digest"?: string;
       "signer_resolution_evidence_ref": string;

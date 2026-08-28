@@ -87,8 +87,8 @@ fn base_claim() -> Value {
     json!({
         "schema": "ak.schema.handle_claim.v1",
         "handle": "alice:acme.example",
-        "subject": "ak:did_core:web:alice.principal.example",
-        "issuer": "ak:did_core:web:coauth.acme.example",
+        "subject_id": "ak:did_core:web:alice.principal.example",
+        "issuer_id": "ak:did_core:web:coauth.acme.example",
         "binding_state": "verified",
         "claim_kind": "handle_binding",
         "created_at": "2026-05-20T00:00:00.000Z",
@@ -198,7 +198,7 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
         "resource-handle-7",
     ] {
         let mut claim = base_claim();
-        claim["subject"] = json!(bad_subject);
+        claim["subject_id"] = json!(bad_subject);
         if validator.is_valid(&claim) {
             bail!(
                 "VECT-COT-7: handle claim with non-principal subject `{bad_subject}` MUST \

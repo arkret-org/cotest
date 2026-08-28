@@ -406,7 +406,7 @@ async function issueDecision(
     target_ref: targetRef,
     decision: "quarantine",
     action: "quarantine_message",
-    issuer: actorId,
+    issuer_id: actorId,
     reason_code: "abuse_review",
     reason: "moderation decision rationale",
     request_canonical_digest:

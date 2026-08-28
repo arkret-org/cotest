@@ -289,7 +289,7 @@ fn kernel_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
             return error("schema_violation", "offline_write_identifier_invalid");
         };
         ops.push(IssuedOp {
-            issuer,
+            issuer_id: issuer,
             op: SealedOp::new(
                 move_id,
                 lattice_op(LatticeOpType::Append, None, Some(value), Some(0)),
@@ -369,7 +369,7 @@ fn kernel_exclusive_control(input: &KernelGateInput) -> KernelGateOutcome {
     ) {
         CellState::Value(value) => projection(json!({"value": value})),
         CellState::Bottom(bottom) => {
-            let mut heads = bottom.heads;
+            let mut heads = bottom.head_ids;
             heads.sort_by_key(Value::to_string);
             projection(json!({
                 "heads": heads,
@@ -669,29 +669,29 @@ fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
     match notary {
         NotaryValue::SingleSigner {
             signer,
-            recovery_members,
+            recovery_signers,
             ..
         } => {
             let mut members = BTreeSet::from([signer.actor_id.as_str().to_owned()]);
             members.extend(
-                recovery_members
+                recovery_signers
                     .iter()
                     .map(|member| member.actor_id.as_str().to_owned()),
             );
             members
         }
-        NotaryValue::Threshold { members, .. } | NotaryValue::OpenSet { members } => members
+        NotaryValue::Threshold { signers, .. } | NotaryValue::OpenSet { signers } => signers
             .iter()
             .map(|member| member.actor_id.as_str().to_owned())
             .collect(),
         NotaryValue::Mixed {
             signer,
-            recovery_members,
+            recovery_signers,
             ..
         } => {
             let mut members = BTreeSet::from([signer.actor_id.as_str().to_owned()]);
             members.extend(
-                recovery_members
+                recovery_signers
                     .iter()
                     .map(|member| member.actor_id.as_str().to_owned()),
             );

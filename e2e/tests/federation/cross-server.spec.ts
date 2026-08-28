@@ -87,7 +87,7 @@ async function waitForInvite(
     | {
         id: string;
         realm_id: string;
-        invitee?: string;
+        invitee_id?: string;
         state?: string;
         status?: string;
       }
@@ -98,7 +98,7 @@ async function waitForInvite(
         const invites = await listInvitesApi(request, token, { server });
         found = invites.find(
           (invite) =>
-            invite.invitee === inviteeId && invite.realm_id === realmId,
+            invite.invitee_id === inviteeId && invite.realm_id === realmId,
         );
         return Boolean(found);
       },
@@ -346,7 +346,7 @@ test.describe("cross-server federation", () => {
       {
         title: `S2 pushed invite ${stamp}`,
         ownerId: alice.id,
-        creator_service_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
@@ -423,7 +423,7 @@ test.describe("cross-server federation", () => {
       },
       payload: {
         invite_id: inviteId,
-        invitee: bob.id,
+        invitee_id: bob.id,
         invite_delivery_target: {
           recipient_id: solandServiceId("beta"),
           recipient_kind: "principal_server",
@@ -450,7 +450,7 @@ test.describe("cross-server federation", () => {
             server: "beta",
           });
           return invites.some(
-            (item) => item.realm_id === realmId && item.invitee === bob.id,
+            (item) => item.realm_id === realmId && item.invitee_id === bob.id,
           );
         },
         { timeout: 20_000 },
@@ -486,7 +486,7 @@ test.describe("cross-server federation", () => {
 
     const invites = await listInvitesApi(request, bobToken, { server: "beta" });
     const invite = invites.find(
-      (item) => item.realm_id === realmId && item.invitee === bob.id,
+      (item) => item.realm_id === realmId && item.invitee_id === bob.id,
     );
     expect(invite).toBeTruthy();
     await acceptInviteApi(
@@ -665,9 +665,9 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_access: "all_history_for_current_members",
         invitees: [bob.id],
-        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        invitee_ids: { [bob.id]: solandServiceId("beta") },
         ownerId: alice.id,
-        creator_service_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
@@ -729,9 +729,9 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_access: "all_history_for_current_members",
         invitees: [bob.id],
-        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        invitee_ids: { [bob.id]: solandServiceId("beta") },
         ownerId: alice.id,
-        creator_service_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
@@ -923,9 +923,9 @@ test.describe("cross-server federation", () => {
         discoverability: "listed",
         history_access: "all_history_for_current_members",
         invitees: [bob.id],
-        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        invitee_ids: { [bob.id]: solandServiceId("beta") },
         ownerId: alice.id,
-        creator_service_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),

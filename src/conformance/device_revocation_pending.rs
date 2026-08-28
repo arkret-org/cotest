@@ -254,7 +254,7 @@ fn request(
                     ),
                     principal_id: principal_id.clone(),
                     device_id: device_id.clone(),
-                    audience: DidCoreId::new("ak:did_core:web:ps.example")?,
+                    audience_id: DidCoreId::new("ak:did_core:web:ps.example")?,
                     holder_jkt: "A".repeat(43),
                     session_intent_digest: intent_digest.clone(),
                     issued_at: at(0)?,

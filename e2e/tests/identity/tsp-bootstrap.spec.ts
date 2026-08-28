@@ -169,7 +169,7 @@ test.describe("tsp bootstrap", () => {
       content_type: "application/arkret+json",
       operation: "ak.invite.create",
       realm_id: realmId,
-      invitee: bobExternVid,
+      invitee_id: bobExternVid,
       actor: alice.id,
       // The Arkret event signature is independent of TSP authenticity (§5).
       arkret_signature: randomBytes(64).toString("base64url"),
@@ -251,7 +251,7 @@ test.describe("tsp bootstrap", () => {
       data: {
         from_vid: alice.id,
         to_vid: bobExternVid,
-        payload_b64: b64({ type: "ak.invite.create", realm_id: realmId, invitee: bobExternVid }),
+        payload_b64: b64({ type: "ak.invite.create", realm_id: realmId, invitee_id: bobExternVid }),
         signature_b64: randomBytes(64).toString("base64"),
       },
     });
@@ -320,7 +320,7 @@ test.describe("tsp bootstrap", () => {
         payload_b64: b64({
           type: "ak.invite.create",
           realm_id: TSP_FIXTURE_REALM_IDS.degraded,
-          invitee: bobExternVid,
+          invitee_id: bobExternVid,
           actor: alice.id,
           vid_trust: "degraded_no_witness",
         }),
@@ -378,7 +378,7 @@ test.describe("tsp bootstrap", () => {
       operation: "ak.invite.create",
       actor: alice.id, // the real vid_local — MUST stay hidden from a relay
       realm_id: TSP_FIXTURE_REALM_IDS.nested,
-      invitee: bobExternVid,
+      invitee_id: bobExternVid,
       secret_marker: `nested-secret-${randomUUID()}`,
     };
     const innerBytesB64 = b64(innerArkret);

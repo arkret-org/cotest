@@ -416,7 +416,7 @@ pub(crate) fn realm_bootstrap_event_batch_for_device(
 /// carries: each of these cells is written exactly once, at genesis.
 fn head_eq_null_precondition(cell: &str) -> Result<arkret_wire::cba::Precondition> {
     Ok(arkret_wire::cba::Precondition {
-        cell: arkret_wire::CellRef::new(cell.to_owned())?,
+        cell_id: arkret_wire::CellRef::new(cell.to_owned())?,
         predicate: arkret_wire::cba::Predicate {
             op: arkret_wire::cba::PredicateOp::HeadEq,
             value: Some(Value::Null),
@@ -880,7 +880,7 @@ pub fn event_envelope(actor: &str, realm_id: &str, kind: &str, payload: Value) -
 /// replaces.
 pub fn head_eq_precondition(cell: &str, settled_value: Value) -> arkret_wire::cba::Precondition {
     serde_json::from_value(json!({
-        "cell": cell,
+        "cell_id": cell,
         "predicate": { "op": "head_eq", "value": settled_value },
     }))
     .expect("cotest head_eq precondition")
@@ -1544,7 +1544,7 @@ mod realm_bootstrap_tests {
         );
         let precondition = &membership.preconditions[0];
         assert_eq!(
-            precondition.cell.as_str(),
+            precondition.cell_id.as_str(),
             format!("ak:cell:ak.component.member.state.v1:{ACTOR_CORE}")
         );
         assert_eq!(

@@ -529,7 +529,7 @@ fn op_append(value: serde_json::Value, issuer_seq: u64) -> LatticeOp {
 fn issued_op(issuer: &str, suffix: &str, op: LatticeOp) -> IssuedOp {
     let did = Did::new(issuer.to_owned()).expect("test fixture issuer should be a valid did");
     IssuedOp {
-        issuer: arkret_identifiers::project_did_to_core_id(&did)
+        issuer_id: arkret_identifiers::project_did_to_core_id(&did)
             .expect("test fixture issuer should project to a core id"),
         op: SealedOp::new(issuer_digest(suffix), op),
     }
@@ -892,7 +892,7 @@ fn mv_register_concurrent_set_surfaces_multiple_values() -> Result<()> {
         CellState::Bottom(b) => {
             // Bottom must surface both move_ids AND both values via heads.
             let heads_have_both = b
-                .heads
+                .head_ids
                 .iter()
                 .filter_map(|h| h.as_str())
                 .collect::<Vec<_>>();
@@ -949,11 +949,13 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
     if entries.len() != 3 {
         bail!("OrderedLog must dedupe byte-identical appends and keep 3 entries, got {entries:?}");
     }
-    if entries[0].get("issuer").and_then(Value::as_str) != Some("ak:did_core:web:alice.example")
+    if entries[0].get("issuer_id").and_then(Value::as_str) != Some("ak:did_core:web:alice.example")
         || entries[0].get("issuer_seq").and_then(Value::as_u64) != Some(0)
-        || entries[1].get("issuer").and_then(Value::as_str) != Some("ak:did_core:web:alice.example")
+        || entries[1].get("issuer_id").and_then(Value::as_str)
+            != Some("ak:did_core:web:alice.example")
         || entries[1].get("issuer_seq").and_then(Value::as_u64) != Some(1)
-        || entries[2].get("issuer").and_then(Value::as_str) != Some("ak:did_core:web:bob.example")
+        || entries[2].get("issuer_id").and_then(Value::as_str)
+            != Some("ak:did_core:web:bob.example")
         || entries[2].get("issuer_seq").and_then(Value::as_u64) != Some(0)
     {
         bail!("OrderedLog entries are not sorted by issuer then seq: {entries:?}");
@@ -1183,7 +1185,7 @@ fn notary_cell_threshold_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("02");
     let value = serde_json::to_value(arkret_wire::NotaryValue::Threshold {
-        members: ["notary1", "notary2", "notary3"]
+        signers: ["notary1", "notary2", "notary3"]
             .into_iter()
             .map(|name| {
                 crate::fixture_notary_signer(
@@ -1207,7 +1209,7 @@ fn notary_cell_open_set_profile_resolves_to_value() -> Result<()> {
     let lattice = CasRegister;
     let cref = notary_cell("03");
     let value = serde_json::to_value(arkret_wire::NotaryValue::OpenSet {
-        members: ["peer1", "peer2"]
+        signers: ["peer1", "peer2"]
             .into_iter()
             .map(|name| {
                 crate::fixture_notary_signer(
@@ -1232,7 +1234,7 @@ fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
         signer: crate::fixture_notary_signer(arkret_wire::DidCoreId::new(
             "ak:did_core:web:hub.example",
         )?),
-        recovery_members: ["recovery1", "recovery2"]
+        recovery_signers: ["recovery1", "recovery2"]
             .into_iter()
             .map(|name| {
                 crate::fixture_notary_signer(

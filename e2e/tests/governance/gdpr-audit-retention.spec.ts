@@ -154,7 +154,7 @@ test.describe("GDPR / audit / retention", () => {
     });
     await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
-      requester: bob.id,
+      requesterId: bob.id,
       action: "accept",
       grantedScopes: ["direct_message"],
     });
@@ -354,9 +354,9 @@ test.describe("GDPR / audit / retention", () => {
           discoverability: "listed",
           history_access: "all_history_for_current_members",
           invitees: [bob.id],
-          invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+          invitee_ids: { [bob.id]: solandServiceId("beta") },
           ownerId: alice.id,
-          creator_service_id: solandServiceId("alpha"),
+          creator_id: solandServiceId("alpha"),
           plaintext_visible_services: [
             solandServiceId("alpha"),
             solandServiceId("beta"),
@@ -366,7 +366,7 @@ test.describe("GDPR / audit / retention", () => {
       );
 
       let betaInvite:
-        | { id: string; realm_id: string; invitee?: string }
+        | { id: string; realm_id: string; invitee_id?: string }
         | undefined;
       await expect
         .poll(
@@ -376,7 +376,7 @@ test.describe("GDPR / audit / retention", () => {
             });
             betaInvite = invites.find(
               (invite) =>
-                invite.invitee === bob.id &&
+                invite.invitee_id === bob.id &&
                 invite.realm_id === realmId,
             );
             return Boolean(betaInvite);

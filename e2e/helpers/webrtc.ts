@@ -390,7 +390,7 @@ export async function grantCallCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: realmId,
-    issuer: ownerId,
+    issuer_id: ownerId,
     subject: subjectId,
     subject_principal_server_id: solandServiceId(),
     actions: [action],

@@ -15,7 +15,7 @@ fn notary_value_uses_core_actor_id_and_rejects_did_spelling() {
 
     let mixed = serde_json::to_value(arkret_wire::NotaryValue::Mixed {
         signer: cotest::fixture_notary_signer(actor_id),
-        recovery_members: vec![cotest::fixture_notary_signer(recovery_id)],
+        recovery_signers: vec![cotest::fixture_notary_signer(recovery_id)],
         controller_organization_id: None,
         recovery_controller_organization_ids: Vec::new(),
     })

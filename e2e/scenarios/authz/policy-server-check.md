@@ -53,7 +53,7 @@
      "on_timeout": "fail_closed"
    }
    ```
-2. 断言:`GET /_arkret/self/realms/{realm_id}/policy-server` 返回的 `policy_server_url` 等于 mock URL
+2. 断言:`GET /_arkret/self/realms/{realm_id}/policy-server` 返回的 `policy_server_url` 等于 mock URI
 3. 调 `GET ${MOCK_POLICY_SERVER_PORT}/inspect`,记录此时 `checks.length`(后续比较增量)
 
 ### Phase B — 默认 allow:invite 触发 /policy/check
@@ -108,7 +108,7 @@
 
 ## Observable assertions (合并清单)
 
-- Phase A:Realm policy-server projection 中 `policy_server_url` 等于 mock URL,`on_timeout = "fail_closed"`
+- Phase A:Realm policy-server projection 中 `policy_server_url` 等于 mock URI,`on_timeout = "fail_closed"`
 - Phase B 步骤 8-9:allow 决策下邀请成功,mock 收到一条 `action = ak.invite.create` 的 check
 - Phase C 步骤 13-14:deny 决策下 HTTP 412,errcode `policy_denied`,inkson 渲染 reason
 - Phase D 步骤 19-20:obligation `log_event` 写入 audit log,且 mock inspect 标记 obligations_executed=true

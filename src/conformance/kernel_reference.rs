@@ -187,7 +187,7 @@ fn reduce_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
         .iter()
         .map(|(digest, (actor_id, value))| {
             json!({
-                "issuer": actor_id,
+                "issuer_id": actor_id,
                 "issuer_seq": 0,
                 "event_digest": digest,
                 "value": value
@@ -429,9 +429,9 @@ fn notary_authorities(notary: &Value) -> Option<BTreeSet<String>> {
                 .map(|actor_id| BTreeSet::from([actor_id.to_owned()]))
                 .unwrap_or_default(),
         ),
-        "open_set" | "threshold" => Some(notary_descriptor_actor_set(notary.get("members"))),
+        "open_set" | "threshold" => Some(notary_descriptor_actor_set(notary.get("signers"))),
         "mixed" => {
-            let mut members = notary_descriptor_actor_set(notary.get("recovery_members"));
+            let mut members = notary_descriptor_actor_set(notary.get("recovery_signers"));
             if let Some(actor_id) = notary.pointer("/signer/actor_id").and_then(Value::as_str) {
                 members.insert(actor_id.to_owned());
             }

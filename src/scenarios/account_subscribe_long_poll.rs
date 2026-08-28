@@ -650,8 +650,7 @@ fn same_service_invite_payload(
 ) -> Result<(Value, IntroductionEvidence)> {
     let evidence = IntroductionEvidence::SamePrincipalServer;
     let evidence_digest = arkret_canonical::canonical_sha256(&evidence)?;
-    let payload =
-        invite_create_payload(invitee, recipient_id, &evidence_digest, expires_at)?;
+    let payload = invite_create_payload(invitee, recipient_id, &evidence_digest, expires_at)?;
     Ok((payload, evidence))
 }
 

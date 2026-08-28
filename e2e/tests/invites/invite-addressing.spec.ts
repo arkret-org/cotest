@@ -121,7 +121,7 @@ async function acceptedInviteFixture(
     realmId,
     kind: "ak.invite.create",
     payload: {
-      invitee: invitee.id,
+      invitee_id: invitee.id,
       invite_delivery_target: {
         recipient_id: inviteAddress.recipient_id,
         service_resolution: inviteAddress.service_resolution,
@@ -172,7 +172,7 @@ test.describe("invite addressing", () => {
       realmId: typedId("realm"),
       kind: "ak.invite.create",
       payload: {
-        invitee,
+        invitee_id: invitee,
         invite_delivery_target: inviteDeliveryTarget,
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(introductionEvidence)}`,
         expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
@@ -445,7 +445,7 @@ test.describe("invite addressing", () => {
       realmId: fixture.realmId,
       kind: "ak.invite.create",
       payload: {
-        invitee: fixture.invitee.id,
+        invitee_id: fixture.invitee.id,
         invite_delivery_target: {
           recipient_id: fixture.inviteAddress.recipient_id,
           service_resolution: fixture.inviteAddress.service_resolution,

@@ -436,7 +436,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("pairing_code missing"))?;
     let audience = pairing
-        .get("audience")
+        .get("audience_id")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("pairing audience missing"))?;
     let canonical_pairing_expires_at = case
@@ -458,22 +458,27 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     {
         bail!("runtime possession transcript canonical JSON drifted");
     }
-    if proof.transcript_digest.as_str()
-        != case
-            .get("expected_possession_transcript_digest")
-            .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("expected possession transcript digest missing"))?
-        || proof.wire_digest()?.as_str()
-            != case
-                .get("expected_proof_of_possession_digest")
-                .and_then(Value::as_str)
-                .ok_or_else(|| anyhow!("expected proof digest missing"))?
+    let expected_transcript_digest = case
+        .get("expected_possession_transcript_digest")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("expected possession transcript digest missing"))?;
+    let expected_proof_digest = case
+        .get("expected_proof_of_possession_digest")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("expected proof digest missing"))?;
+    let actual_proof_digest = proof.wire_digest()?;
+    if proof.transcript_digest.as_str() != expected_transcript_digest
+        || actual_proof_digest.as_str() != expected_proof_digest
     {
-        bail!("runtime possession proof digest drifted");
+        bail!(
+            "runtime possession proof digest drifted: transcript expected {expected_transcript_digest}, actual {}; proof expected {expected_proof_digest}, actual {}",
+            proof.transcript_digest,
+            actual_proof_digest
+        );
     }
     let canonical_pairing_binding = serde_json::json!({
         "agent_id": pairing_agent_id,
-        "audience": audience,
+        "audience_id": audience,
         "controller_id": controller_id,
         "expires_at": canonical_pairing_expires_at,
         "kind": "ak.agent.key_pairing_request_binding.v1",
@@ -791,8 +796,8 @@ pub fn run_agent_longevity_no_expiry_vector() -> Result<()> {
     // `accountability_grant.expires_at` is optional the same way.
     let grant = serde_json::json!({
         "schema": "ak.schema.accountability_grant.v1",
-        "issuer": "ak:did_core:web:alice.example",
-        "subject": "ak:did_core:web:agent.example",
+        "issuer_id": "ak:did_core:web:alice.example",
+        "subject_id": "ak:did_core:web:agent.example",
         "accountability_scope": "agent_operator",
         "not_before": "2026-07-12T00:00:00.000Z",
         "grant_status": "active",
@@ -961,7 +966,7 @@ fn expect_aob_denial(
 
 fn valid_act_on_behalf_request() -> MiniActOnBehalfRequest<'static> {
     MiniActOnBehalfRequest {
-        executed_by: Some("did:web:agent.example"),
+        executed_by: Some("ak:did_core:web:agent.example"),
         authorization_ref: Some("ak:grant:AbrgMKK4KXMpRsGsFrsEQEsjo207metUd4zt8yjzB-UH"),
         participation_allows: true,
         grant_covers_action: true,

@@ -6,8 +6,9 @@
 //!      The container's lifetime is bound to the returned [`EphemeralPg`] handle — `Drop` removes
 //!      the container with `docker rm -fv` so a cargo-test panic / early-return cannot leak it.
 //!   2. Generate a fresh coauth config YAML by shelling out to `coauth config generate` (which
-//!      produces real signing/encryption keys), then patch the `database.uri`, `http.public_base`,
-//!      `issuer`, and the listener bind addresses so the spawned server points at our pinned ports
+//!      produces real signing/encryption keys), then patch the `database.uri`,
+//!      `http.public_base_url`, `issuer`, and the listener bind addresses so the spawned server
+//!      points at our pinned ports
 //!      + the docker postgres (`bootstrap_coauth_config`).
 //!   3. Run `coauth database migrate` against the generated config so the schema is applied before
 //!      the server boots (`run_coauth_migrations`).
@@ -514,13 +515,13 @@ pub fn bootstrap_coauth_config(
 
     // 2. Patch:
     //    - database.uri → ephemeral postgres
-    //    - http.public_base / http.issuer → http://<bind_addr>/
+    //    - http.public_base_url / http.issuer → http://<bind_addr>/
     //    - listener bind address `[::]:7080` → bind_addr
     //    - internal listener `localhost:8091` → 127.0.0.1:<free port> (we don't use it but it must
     //      be free so `coauth server` doesn't collide with another concurrent test instance)
     let internal_port =
         reserve_port().context("failed to reserve coauth internal listener port")?;
-    let public_base = format!("http://{bind_addr}/");
+    let public_base_url = format!("http://{bind_addr}/");
     let mut patched = String::with_capacity(raw.len());
     let mut in_database = false;
     let mut in_http = false;
@@ -539,14 +540,14 @@ pub fn bootstrap_coauth_config(
             patched.push_str(pg_url);
             patched.push('\n');
             emitted = true;
-        } else if in_http && trimmed.starts_with("public_base:") {
-            patched.push_str("  public_base: ");
-            patched.push_str(&public_base);
+        } else if in_http && trimmed.starts_with("public_base_url:") {
+            patched.push_str("  public_base_url: ");
+            patched.push_str(&public_base_url);
             patched.push('\n');
             emitted = true;
         } else if in_http && trimmed.starts_with("issuer:") {
             patched.push_str("  issuer: ");
-            patched.push_str(&public_base);
+            patched.push_str(&public_base_url);
             patched.push('\n');
             emitted = true;
         } else if in_http && trimmed.starts_with("- address:") {

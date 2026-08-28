@@ -27,7 +27,7 @@
       },
       "move": {
         "id": "ak:event:AXgAdefW5lHi7e4pF2WIw-G6kahhIdaDRTVQPL7ritQM",
-        "issuer": "ak:did_core:web:admin.example",
+        "issuer_id": "ak:did_core:web:admin.example",
         "anchor_ref": "ak:anchor:sha256:1111111111111111111111111111111111111111111111111111111111111111",
         "preconditions": [
           {
@@ -82,7 +82,7 @@
       "concurrent_moves": [
         {
           "id": "ak:event:AS0SeFp4K9gJ7dJU-USj6NamrbB1oErV6VePQBTjW3Lb",
-          "issuer": "ak:did_core:web:alice.example",
+          "issuer_id": "ak:did_core:web:alice.example",
           "effects": [
             {
               "cell": "ak:cell:ak.component.realm.draft_title.v1:ak.realm.0196419b-0000-7000-8000-000000000000",
@@ -95,7 +95,7 @@
         },
         {
           "id": "ak:event:AfeHttDwx-zk7Rh6zo7caL11OGRimn53g67KylvQIr2F",
-          "issuer": "ak:did_core:web:bob.example",
+          "issuer_id": "ak:did_core:web:bob.example",
           "effects": [
             {
               "cell": "ak:cell:ak.component.realm.draft_title.v1:ak.realm.0196419b-0000-7000-8000-000000000000",
@@ -144,7 +144,7 @@
       "anchor_frontier_moves": [
         {
           "id": "ak:event:AQTfDWbZ2nobXL0kvvTzAmjD1uF04Avf_wKpyLmXT9kX",
-          "issuer": "ak:did_core:web:admin.example",
+          "issuer_id": "ak:did_core:web:admin.example",
           "preconditions": [
             {
               "cell": "ak:cell:ak.component.realm.locked.v1:ak.realm.0196419b-0000-7000-8000-000000000000",
@@ -166,7 +166,7 @@
         },
         {
           "id": "ak:event:ARnS0Gtn5eYYiNNVxwK8POAbOQLWMrUz2doUJH5EmGn9",
-          "issuer": "ak:did_core:web:alice.example",
+          "issuer_id": "ak:did_core:web:alice.example",
           "effects": [
             {
               "cell": "ak:cell:ak.component.realm.tags.v1:ak.realm.0196419b-0000-7000-8000-000000000000",
@@ -180,7 +180,7 @@
         },
         {
           "id": "ak:event:AWChRVVZEhLd4pe15rXQqiFBeugRaqqtYA_ONULHs8DV",
-          "issuer": "ak:did_core:web:bob.example",
+          "issuer_id": "ak:did_core:web:bob.example",
           "effects": [
             {
               "cell": "ak:cell:ak.component.realm.draft_title.v1:ak.realm.0196419b-0000-7000-8000-000000000000",

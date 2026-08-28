@@ -75,7 +75,7 @@ test.describe("contact graph (same principal server)", () => {
 
     const respondOutcome = await respondContactArkret(request, bobToken, {
       requestId: reqOutcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
     });
@@ -116,7 +116,7 @@ test.describe("contact graph (same principal server)", () => {
     );
     const reject = await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "reject",
     });
     expect(reject.state).toBe("rejected");
@@ -156,7 +156,7 @@ test.describe("contact graph (same principal server)", () => {
     );
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "accept",
       grantedScopes: ["direct_message"],
     });
@@ -231,7 +231,7 @@ test.describe("contact graph (same principal server)", () => {
     );
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
     });
@@ -270,7 +270,7 @@ test.describe("contact graph (same principal server)", () => {
     // bob lists the pending invite.
     const invites = await listAuthzInvitesArkret(request, bobToken);
     const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee === bob.id,
+      (i) => i.realm_id === realmId && i.invitee_id === bob.id,
     );
     expect(invite, "bob pending invite for the new realm").toBeTruthy();
     expect(invite!.id).toBe(inviteId);
@@ -358,7 +358,7 @@ test.describe("contact graph (same principal server)", () => {
     );
     await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
-      requester: bob.id,
+      requesterId: bob.id,
       action: "accept",
       grantedScopes: ["invite"],
     });
@@ -432,7 +432,7 @@ test.describe("contact graph (same principal server)", () => {
     );
     await respondContactArkret(request, aliceToken, {
       requestId: outcome.request_event_ref,
-      requester: bob.id,
+      requesterId: bob.id,
       action: "accept",
       grantedScopes: ["invite"],
     });

@@ -144,7 +144,7 @@ async fn account_data_row(holder: &TestActorClient, key: &str) -> Result<Account
     let listed: AccountDataList = serde_json::from_value(listed_value)
         .context("account-data list is not an AccountDataList")?;
     listed
-        .entries
+        .account_data_entries
         .into_iter()
         .find(|entry| entry.account_data_key == key)
         .ok_or_else(|| anyhow!("account-data list omitted {key}"))
@@ -276,7 +276,7 @@ async fn grant_then_revoke_invite_consent(
     let consent_id = ConsentId::new(next_typed_id("consent"))?;
     let grant_payload = ConsentGrantPayload {
         consent_id: consent_id.clone(),
-        peer: peer_core_id,
+        peer_id: peer_core_id,
         consent_scope: ConsentScope::Invite,
         not_before: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
@@ -326,7 +326,7 @@ async fn grant_then_revoke_invite_consent(
 
     let revoke_payload = ConsentRevokePayload {
         consent_id,
-        observed_dots: granted
+        observed_dot_ids: granted
             .active_grant_dots
             .iter()
             .cloned()

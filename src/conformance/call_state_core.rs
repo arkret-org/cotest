@@ -158,7 +158,7 @@ fn unsigned_token_outcome(
         backend_kind: MediaBackendKind::Livekit,
         connect_url: "wss://livekit-fra.example.com".to_owned(),
         backend_token: MediaBackendToken::Opaque("opaque-backend-token".to_owned()),
-        participant_identity: identity.clone(),
+        participant_id: identity.clone(),
         participant_binding: CallMediaParticipantBinding {
             scheme: ParticipantBinding::SCHEMA.to_owned(),
             sig: String::new(),
@@ -168,7 +168,7 @@ fn unsigned_token_outcome(
             focus_id: request.focus_id.clone(),
             actor_id: request.actor_id.clone(),
             device_id: request.device_id.clone(),
-            participant_identity: identity,
+            participant_id: identity,
             issued_at: expires_at - Duration::minutes(5),
             expires_at,
         },

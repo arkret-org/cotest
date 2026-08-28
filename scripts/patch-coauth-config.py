@@ -139,7 +139,7 @@ def main() -> int:
     )
     src = replace_first_line(
         src,
-        r"^(\s*public_base:).*$",
+        r"^(\s*public_base_url:).*$",
         rf"\1 {coauth_base}",
     )
     src = replace_first_line(

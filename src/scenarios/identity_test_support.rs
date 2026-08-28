@@ -444,7 +444,7 @@ async fn authorize_additional_principal_device(
     let payload = DeviceAuthorizePayload {
         principal_id: founding.core_id.clone(),
         device_id: new_device_id,
-        device_public_key,
+        device_public_key_did: device_public_key,
         hpke_key: hpke_key.clone(),
         algorithms,
         device_key_algorithm: Some(NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?),
@@ -767,7 +767,7 @@ async fn bootstrap_test_device_authorization(
     let mut payload = DeviceAuthorizePayload {
         principal_id: principal_actor_id.clone(),
         device_id: device_id.clone(),
-        device_public_key: device_public_key.clone(),
+        device_public_key_did: device_public_key.clone(),
         hpke_key: hpke_key.clone(),
         algorithms: algorithms.clone(),
         device_key_algorithm: Some(NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?),
@@ -798,7 +798,7 @@ async fn bootstrap_test_device_authorization(
         device_key_digest: arkret_identifiers::Hash::new(
             arkret_canonical::canonical::sha256_digest(device_public_key.as_bytes()),
         )?,
-        device_public_key: device_public_key.clone(),
+        device_public_key_did: device_public_key.clone(),
         device_key_algorithm: FoundingDeviceKeyAlgorithm::Ed25519,
         device_key_purpose: FoundingDeviceKeyPurpose::EventSigningAndMlsIdentity,
         hpke_key_digest: arkret_identifiers::Hash::new(
@@ -931,7 +931,7 @@ async fn bootstrap_test_device_authorization(
             identity_creation_lease_id: format!("cotest-identity-creation-{local_id}"),
             lease_fence: 1,
             dpop_jkt: format!("cotest-dpop-jkt-{local_id}"),
-            audience: server.service_id().clone(),
+            audience_id: server.service_id().clone(),
             origin: HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             trust_domain: server.trust_domain().clone(),
             issued_at,
@@ -1018,10 +1018,7 @@ async fn submit_harness_pcr_genesis(
     let headers = vec![
         ("content-digest".to_owned(), content_digest.clone()),
         ("source-service-id".to_owned(), source_id.clone()),
-        (
-            "destination-service-id".to_owned(),
-            destination_id.clone(),
-        ),
+        ("destination-service-id".to_owned(), destination_id.clone()),
         (
             "source-trust-domain".to_owned(),
             source_trust_domain.clone(),

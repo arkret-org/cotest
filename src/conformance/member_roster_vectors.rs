@@ -95,8 +95,8 @@ fn verified_claim_for_subject(handle: &str, subject: &DidCoreId) -> Result<Handl
         schema: HandleClaim::SCHEMA.to_owned(),
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
         handle_aliases: Vec::new(),
-        subject: Some(subject.clone()),
-        issuer: Some(DidCoreId::new("ak:did_core:web:coauth.acme.example")?),
+        subject_id: Some(subject.clone()),
+        issuer_id: Some(DidCoreId::new("ak:did_core:web:coauth.acme.example")?),
         vouching_id: None,
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: None,
@@ -219,13 +219,17 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
         .and_then(Value::as_bool)
         != Some(true)
     {
-        bail!("VECT-ROST-2: `member_roster_entries_limited` MUST be true when the roster is truncated");
+        bail!(
+            "VECT-ROST-2: `member_roster_entries_limited` MUST be true when the roster is truncated"
+        );
     }
     let cursor = frame
         .get("member_roster_entries_next_cursor")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            anyhow!("VECT-ROST-2: a truncated roster MUST carry `member_roster_entries_next_cursor`")
+            anyhow!(
+                "VECT-ROST-2: a truncated roster MUST carry `member_roster_entries_next_cursor`"
+            )
         })?;
     if !cursor.starts_with("ak:cursor:") {
         bail!(
@@ -240,11 +244,10 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
     if unlimited.get("member_roster_entries_limited").is_some() {
         bail!("VECT-ROST-2: a non-truncated roster MUST NOT carry `member_roster_entries_limited`");
     }
-    if unlimited
-        .get("member_roster_entries_next_cursor")
-        .is_some()
-    {
-        bail!("VECT-ROST-2: a non-truncated roster MUST NOT carry `member_roster_entries_next_cursor`");
+    if unlimited.get("member_roster_entries_next_cursor").is_some() {
+        bail!(
+            "VECT-ROST-2: a non-truncated roster MUST NOT carry `member_roster_entries_next_cursor`"
+        );
     }
     Ok(())
 }

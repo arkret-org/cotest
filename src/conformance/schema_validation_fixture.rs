@@ -618,7 +618,7 @@ impl SchemaEnv {
     }
 
     pub(crate) fn compile(&self, schema_ref: &str) -> Result<jsonschema::Validator> {
-        let (schema_value, base_uri) = self.resolve_schema_ref(schema_ref)?;
+        let (schema_value, base_url) = self.resolve_schema_ref(schema_ref)?;
         let mut builder = Registry::new();
         for (id, value) in &self.resources {
             builder = builder
@@ -631,7 +631,7 @@ impl SchemaEnv {
         let mut opts = jsonschema::options()
             .with_registry(&registry)
             .should_validate_formats(true);
-        if let Some(base) = base_uri {
+        if let Some(base) = base_url {
             opts = opts.with_base_uri(base);
         }
         opts.build(&schema_value)
@@ -654,7 +654,7 @@ impl SchemaEnv {
                 .schemas_by_file
                 .get(&key)
                 .ok_or_else(|| anyhow!("schema_ref points at unknown file `{schema_ref}`"))?;
-            let base_uri = parent.get("$id").and_then(Value::as_str).map(str::to_owned);
+            let base_url = parent.get("$id").and_then(Value::as_str).map(str::to_owned);
             let mut schema = if let Some(fragment) = fragment {
                 let pointer = format!("/{}", fragment.trim_start_matches('/'));
                 let value = parent.pointer(&pointer).ok_or_else(|| {
@@ -674,7 +674,7 @@ impl SchemaEnv {
                     map.entry("$defs").or_insert_with(|| defs.clone());
                 }
             }
-            return Ok((schema, base_uri));
+            return Ok((schema, base_url));
         }
         if let Some(rest) = schema_ref.strip_prefix("openapi/") {
             // We only support OpenAPI refs that target
@@ -696,7 +696,7 @@ impl SchemaEnv {
             // Inline shared component schemas referenced by this component
             // so we don't need a separate openapi-aware registry.
             let inlined = inline_openapi_refs(component, openapi)?;
-            let base_uri = Some(format!(
+            let base_url = Some(format!(
                 "{SCHEMA_ID_PREFIX}openapi/arkret-service-api.openapi.yaml"
             ));
             let mut schema = inlined;
@@ -704,7 +704,7 @@ impl SchemaEnv {
                 map.entry("$schema")
                     .or_insert(json!("https://json-schema.org/draft/2020-12/schema"));
             }
-            return Ok((schema, base_uri));
+            return Ok((schema, base_url));
         }
         bail!("unsupported schema_ref shape: {schema_ref}")
     }

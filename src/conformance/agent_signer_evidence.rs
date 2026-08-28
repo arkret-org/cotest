@@ -529,11 +529,7 @@ fn execute_historical_materialization_case(name: &str, case: &Value) -> Result<O
         }
         "historical_materialization_other_receiver_service_is_a_distinct_branch" => {
             require_case_bool(case, "same_selector_tuple", false)?;
-            require_case_str(
-                case,
-                "selector_component_that_differs",
-                "receiver_id",
-            )?;
+            require_case_str(case, "selector_component_that_differs", "receiver_id")?;
             if case
                 .get("additional_historical_roots_published")
                 .and_then(Value::as_u64)
@@ -770,9 +766,7 @@ fn historical_outcome_with(
     let controller_key = public_key(fixture.controller_public_key);
     let authority_key = public_key(fixture.authority_public_key);
     let account_key = public_key(fixture.account_authority_public_key);
-    let receiver_id = receiver_override
-        .as_ref()
-        .unwrap_or(&fixture.receiver_id);
+    let receiver_id = receiver_override.as_ref().unwrap_or(&fixture.receiver_id);
     let resolve = |method: &DidUrl, _at: DateTime<Utc>| {
         (!deny_key_resolution && method == &fixture.receiver_verification_method)
             .then(|| public_key(fixture.receiver_public_key))
@@ -1051,7 +1045,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         key_state_witness,
         key_transition_witness: None,
         agent_lifecycle_witness: lifecycle_witness,
-        seal_lineage: vec![key_seal, lifecycle_seal],
+        seal_lineages: vec![key_seal, lifecycle_seal],
     };
     let snapshot_digest = canonical_hash(&core)?;
     let mut snapshot = AgentAuthoritySnapshot {
@@ -1118,7 +1112,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         operation_id: operation_id.clone(),
         request_digest: request_digest.clone(),
         verifier_id: verifier_id.clone(),
-        audience: audience.clone(),
+        audience_id: audience.clone(),
         challenge: challenge.clone(),
         agent_snapshot_digest: snapshot_digest.clone(),
         agent_key_seal_id: admission

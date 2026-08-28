@@ -72,7 +72,7 @@
    - HTTP 200,JSON
    - `service_kind === "auth_server"`(spec §3 服务类型命名规则)
    - `claimed_profiles` 是数组,且没有任何 entry 的 `profile_id` 等于 `ak.profile.identity_registry.v1`(coauth MUST NOT 假 claim identity registry — G3.C3)
-   - `auth_metadata.account_authority.gate_account_base` 是绝对 URL,且 `auth_metadata.methods[]` 非空(coauth 是 Account Authority)
+   - `auth_metadata.account_authority.gate_account_base_url` 是绝对 URI,且 `auth_metadata.methods[]` 非空(coauth 是 Account Authority)
    - 同样 §3.0 六个 claim-level 字段都存在
 5. **Cross-server invariant**:两边的 `protocol_version` 必须一致(`"1.0"`)且 `trust_domain` 命名空间满足 `ak:trust_domain:` 前缀
 

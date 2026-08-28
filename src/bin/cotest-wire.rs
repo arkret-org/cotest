@@ -88,7 +88,7 @@ struct WebvhGenesisInput {
 #[derive(Debug, Deserialize)]
 struct PrincipalRegistrationFixtureInput {
     principal_server_url: String,
-    gate_account_base: String,
+    gate_account_base_url: String,
     handoff_request_id: String,
     identity_creation_lease: Value,
     device_id: String,
@@ -99,14 +99,14 @@ struct PrincipalRegistrationFixtureInput {
 #[derive(Debug, Deserialize)]
 struct InitialSessionFixtureInput {
     session_public_key: arkret::CanonicalSessionPublicJwk,
-    audience: DidCoreId,
+    audience_id: DidCoreId,
 }
 
 #[derive(Debug, Deserialize)]
 struct AccountHandoffRequestFixtureInput {
     request_id: String,
-    audience: DidCoreId,
-    issuer: String,
+    audience_id: DidCoreId,
+    oidc_issuer_uri: String,
     client_id: String,
     redirect_uri: String,
     state: String,
@@ -437,7 +437,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             .parse()
             .context("parse founding device id")?,
         session_public_key: input.initial_session.session_public_key,
-        audience: input.initial_session.audience,
+        audience_id: input.initial_session.audience_id,
     };
     initial_session.validate()?;
     let endpoint =
@@ -514,7 +514,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     let (genesis_create_event, founding_authorize_event, device_signing_seed) =
         build_pcr_genesis_unit(
             &principal,
-            initial_session.audience.clone(),
+            initial_session.audience_id.clone(),
             genesis_salt.clone(),
             &input.trust_domain,
             &draft.version_id,
@@ -542,7 +542,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     .context("build identity-binding challenge request")?;
     let checkpoint = json!({
         "principal_server_url": input.principal_server_url,
-        "gate_account_base": input.gate_account_base,
+        "gate_account_base_url": input.gate_account_base_url,
         "handoff_request_id": input.handoff_request_id,
         "lease_id": lease.identity_creation_lease_id,
         "lease_fence": lease.fence,
@@ -632,7 +632,7 @@ fn build_pcr_genesis_unit(
         arkret_models_collaboration::events_payloads::DeviceAuthorizePayload {
             principal_id: principal_id.clone(),
             device_id: principal_device_id.clone(),
-            device_public_key: device_public_key.clone(),
+            device_public_key_did: device_public_key.clone(),
             hpke_key: hpke_key.clone(),
             algorithms: algorithms.clone(),
             device_key_algorithm: Some(non_empty("Ed25519")?),
@@ -676,7 +676,7 @@ fn build_pcr_genesis_unit(
         device_key_digest: arkret::Hash::new(arkret_canonical::canonical::sha256_digest(
             device_public_key.as_bytes(),
         ))?,
-        device_public_key,
+        device_public_key_did: device_public_key,
         device_key_algorithm:
             arkret_models_collaboration::events_payloads::FoundingDeviceKeyAlgorithm::Ed25519,
         device_key_purpose:
@@ -917,8 +917,8 @@ fn account_handoff_request(input: Value) -> Result<Value> {
         garth::OidcAccountHandoffInput {
             request_id: arkret::RequestId::new(input.request_id)
                 .context("parse account-handoff request id")?,
-            audience: input.audience,
-            issuer: input.issuer,
+            audience_id: input.audience_id,
+            issuer_uri: input.oidc_issuer_uri,
             client_id: input.client_id,
             redirect_uri: input.redirect_uri,
             state: input.state,

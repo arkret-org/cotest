@@ -104,7 +104,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     expect(accountAuthority, "auth_metadata.account_authority missing").toBeTruthy();
     const coauthOrigin = new URL(coauth!).origin;
     expect(new URL(accountAuthority.origin).origin).toBe(coauthOrigin);
-    expect(accountAuthority.gate_account_base).toBe(`${coauthOrigin}/_arkret/gate/account`);
+    expect(accountAuthority.gate_account_base_url).toBe(`${coauthOrigin}/_arkret/gate/account`);
 
     // The advertised OIDC issuer is the Auth Server too (OIDC discovery target).
     expect(new URL(oidc!.issuer!).origin).toBe(coauthOrigin);

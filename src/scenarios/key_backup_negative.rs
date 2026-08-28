@@ -245,7 +245,7 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
         retention: None,
         series_id: BackupSeriesId::new(backup_id.replacen("ak:backup:", "ak:backup_series:", 1))?,
         series_seq: 0,
-        supersedes: None,
+        supersedes_id: None,
         supersedes_digest: None,
         frontier_ref: None,
         recovery_policy_ref: None,

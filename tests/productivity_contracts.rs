@@ -391,7 +391,8 @@ fn scheduled_send_signed_event(body: &str) -> arkret_wire::AuthoredEvent {
 fn scheduled_send_generation() -> AuthoringGeneration {
     AuthoringGeneration {
         authority_model: AuthoringAuthorityModel::AcceptedDevice,
-        authority_principal_id: "ak:did_core:web:alice.example".to_owned(),
+        authority_principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:alice.example")
+            .unwrap(),
         generation_ref: "1-QmCurrent".to_owned(),
     }
 }

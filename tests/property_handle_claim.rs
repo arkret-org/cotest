@@ -50,8 +50,8 @@ fn base_claim() -> HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
         handle: None,
         handle_aliases: Vec::new(),
-        subject: None,
-        issuer: None,
+        subject_id: None,
+        issuer_id: None,
         vouching_id: None,
         binding_state: None,
         claim_kind: None,
@@ -123,7 +123,7 @@ proptest! {
         let claim = HandleClaim {
             binding_state: Some(HandleBindingState::Verified),
             handle: Some(Handle::parse(&handle).unwrap()),
-            issuer: Some(DidCoreId::new("ak:did_core:web:issuer.example").unwrap()),
+            issuer_id: Some(DidCoreId::new("ak:did_core:web:issuer.example").unwrap()),
             expires_at: with_expiry.then(|| Utc::now() + Duration::minutes(5)),
             verified_at: with_verified_at.then(Utc::now),
             ..base_claim()
@@ -145,7 +145,7 @@ proptest! {
     ) {
         let claim = HandleClaim {
             handle: Some(Handle::parse(&handle).unwrap()),
-            issuer: Some(
+            issuer_id: Some(
                 DidCoreId::new(format!("ak:did_core:web:{issuer}.example")).unwrap(),
             ),
             ..base_claim()

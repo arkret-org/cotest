@@ -263,9 +263,9 @@ test.describe("offline sync + conflict repair", () => {
         discoverability: "listed",
         history_access: "all_history_for_current_members",
         invitees: [bob.id],
-        invitee_service_ids: { [bob.id]: solandServiceId("beta") },
+        invitee_ids: { [bob.id]: solandServiceId("beta") },
         ownerId: alice.id,
-        creator_service_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
@@ -407,7 +407,7 @@ test.describe("offline sync + conflict repair", () => {
           : undefined;
       return (
         event.kind === "ak.invite.create" &&
-        payload?.invitee === bob.id &&
+        payload?.invitee_id === bob.id &&
         target?.recipient_id === solandServiceId("beta")
       );
     });
@@ -458,7 +458,7 @@ async function waitForInvite(
     | {
         id: string;
         realm_id: string;
-        invitee?: string;
+        invitee_id?: string;
         state?: string;
         status?: string;
       }
@@ -469,7 +469,7 @@ async function waitForInvite(
         const invites = await listInvitesApi(request, token, { server });
         found = invites.find(
           (invite) =>
-            invite.invitee === inviteeId && invite.realm_id === realmId,
+            invite.invitee_id === inviteeId && invite.realm_id === realmId,
         );
         return Boolean(found);
       },

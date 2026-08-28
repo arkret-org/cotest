@@ -146,7 +146,7 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
         }),
         series_id: backup_series_id(SERIES_ID)?,
         series_seq: 0,
-        supersedes: None,
+        supersedes_id: None,
         supersedes_digest: None,
         frontier_ref: None,
         recovery_policy_ref: None,

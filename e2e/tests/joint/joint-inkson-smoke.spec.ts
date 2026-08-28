@@ -443,7 +443,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
             );
             return invites.some(
               (invite) =>
-                invite.realm_id === realmId && invite.invitee === bob.id,
+                invite.realm_id === realmId && invite.invitee_id === bob.id,
             );
           },
           { timeout: 30_000 },
@@ -624,7 +624,7 @@ async function listInvitesForDpop(
   session: DpopUserSession,
   serverUrl: string,
   subjectId: string,
-): Promise<Array<{ id: string; realm_id: string; invitee?: string }>> {
+): Promise<Array<{ id: string; realm_id: string; invitee_id?: string }>> {
   const url = new URL("/_arkret/self/authz/invites", serverUrl);
   url.searchParams.set("subject", subjectId);
   const href = url.toString();
@@ -640,7 +640,7 @@ async function listInvitesForDpop(
     `list invites returned ${response.status()}: ${text}`,
   ).toBeTruthy();
   const body = JSON.parse(text) as {
-    invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
+    invites?: Array<{ id: string; realm_id: string; invitee_id?: string }>;
   };
   return body.invites ?? [];
 }

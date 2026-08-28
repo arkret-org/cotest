@@ -81,7 +81,7 @@
 19. **bob_external** 尝试访问主域资源:
     - `GET <soland_main>/_arkret/self/realms/<internalRealmId>` → 401/403,reason `external_user_no_main_access`
     - 在 inkson UI 通过 directory 搜索 `S_internal` 的 title → 结果为空(directory 对外部 enclave 用户裁剪)
-    - 尝试 `POST <soland_main>/_arkret/find/directory/search-realms`(body `{ query: "internal", requester: <bob_did> }`) → 返回空集或 403
+    - 尝试 `POST <soland_main>/_arkret/find/directory/search-realms`(body `{ query: "internal", requester_id: <bob_id> }`) → 返回空集或 403
 20. **alice_internal** 检查 `S_internal`(主域私密 realm)的成员列表 — bob 不存在;directory 也不会向 enclave 暴露 `S_internal`
 21. 断言:bob 试图通过 enclave 节点 hop 到 main(`POST <soland_enclave>/_soland/self/deployment/enclave-proxy { target: <soland_main>, path: "/_arkret/self/realms/..." }` 或类似)→ 拒,reason `enclave_no_upstream_proxy_for_external`
 

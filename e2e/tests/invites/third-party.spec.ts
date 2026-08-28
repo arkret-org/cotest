@@ -498,14 +498,14 @@ test.describe("third-party invite", () => {
       invites?: Array<{
         id?: string;
         realm_id?: string;
-        invitee?: string;
+        invitee_id?: string;
         state?: string;
         status?: string;
       }>;
     }>(invitesResp, "list claimed invites");
     const claimed = (invitesBody.invites ?? []).find(
       (invite) =>
-        invite.realm_id === ctx.realmId && invite.invitee === ctx.bob.id,
+        invite.realm_id === ctx.realmId && invite.invitee_id === ctx.bob.id,
     );
     expect(claimed, `claimed invite for ${ctx.bob.id}`).toBeTruthy();
   });

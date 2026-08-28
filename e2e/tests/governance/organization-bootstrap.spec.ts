@@ -120,7 +120,7 @@ test.describe("organization principal bootstrap / delegation", () => {
             control_scopes: ["official_badge", "realm_admin"],
             issued_at: canonicalTimestamp(),
             authorization: {
-              issuer: projectDidToCoreId(orgDid),
+              issuer_id: projectDidToCoreId(orgDid),
               issuer_role: "governance_service",
               verification_method: `${orgDid}#k1`,
               delegation_ref: delegationRef,
@@ -194,7 +194,7 @@ test.describe("organization principal bootstrap / delegation", () => {
             control_scopes: ["official_badge"],
             issued_at: canonicalTimestamp(),
             authorization: {
-              issuer: projectDidToCoreId(orgDid),
+              issuer_id: projectDidToCoreId(orgDid),
               issuer_role: "governance_service",
               verification_method: `${orgDid}#k1`,
               delegation_ref: delegationRef,

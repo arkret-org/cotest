@@ -33,6 +33,7 @@ use arkret_signatures::websocket_auth::{
     WebSocketAuthProofRequest, WebSocketAuthVerificationRequest, build_websocket_auth_proof,
     verify_websocket_auth_proof, websocket_holder_thumbprint,
 };
+use arkret_wire::WebOrigin;
 use arkret_wire::websocket_binding::{
     WEBSOCKET_AUTH_REPLAY_CONTEXT, WEBSOCKET_AUTHENTICATION_DEADLINE_MS,
     WEBSOCKET_HARD_MAX_FRAME_BYTES, WEBSOCKET_REPLAY_LEDGER_RETENTION_SECONDS,
@@ -206,8 +207,8 @@ fn discovery_case_instances(name: &str, case: &Value, base: &Value) -> Result<Ve
     if let Some(instance) = case.get("instance") {
         return Ok(vec![instance.clone()]);
     }
-    if let Some(base_urls) = case.get("base_urls").and_then(Value::as_array) {
-        return base_urls
+    if let Some(base_uris) = case.get("base_uris").and_then(Value::as_array) {
+        return base_uris
             .iter()
             .map(|base_url| {
                 let mut instance = base.clone();
@@ -394,7 +395,8 @@ impl DpopKat {
         WebSocketChallengeRecord {
             connection_id: self.connection_id.clone(),
             nonce: self.nonce.clone(),
-            canonical_origin: self.challenge_state.canonical_origin.clone(),
+            canonical_origin: WebOrigin::new(&self.challenge_state.canonical_origin)
+                .expect("fixture canonical_origin must be a canonical Web Origin"),
             canonical_base_url: self.challenge_state.canonical_base_url.clone(),
             issued_at: self.challenge_state.issued_at,
             expires_at: self.challenge_state.expires_at,
@@ -1242,7 +1244,8 @@ fn run_reauth_trace(fixture: &Value, kat: &DpopKat) -> Result<()> {
         let challenge = WebSocketChallengeRecord {
             connection_id: kat.connection_id.clone(),
             nonce: reauth_nonce.to_owned(),
-            canonical_origin: kat.challenge_state.canonical_origin.clone(),
+            canonical_origin: WebOrigin::new(&kat.challenge_state.canonical_origin)
+                .expect("fixture canonical_origin must be a canonical Web Origin"),
             canonical_base_url: kat.challenge_state.canonical_base_url.clone(),
             issued_at,
             expires_at: issued_at

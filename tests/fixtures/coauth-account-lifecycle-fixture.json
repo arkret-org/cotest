@@ -9,7 +9,7 @@
       "expect": "pass",
       "idp": {
         "kind": "local_oidc_provider",
-        "issuer": "http://127.0.0.1:0/mock-idp",
+        "oidc_issuer_uri": "http://127.0.0.1:0/mock-idp",
         "subject": "alice@example.test",
         "jwks": {
           "keys": [

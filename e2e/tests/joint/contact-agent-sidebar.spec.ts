@@ -362,7 +362,7 @@ async function establishDirectMessageContact(
     headers: selfPathHeadersForDpopSession(responder, "POST", respondUrl),
     data: {
       request_id: requestedBody.request_event_ref,
-      requester: requester.user.id,
+      requesterId: requester.user.id,
       action: "accept",
       granted_scopes: ["direct_message"],
     },

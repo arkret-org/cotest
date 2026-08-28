@@ -304,7 +304,7 @@ test.describe("describes coauth surface @fully-implemented", () => {
     // describe login proof providers.
     expect(body.auth_metadata, "auth_metadata present").toBeTruthy();
     expect(
-      body.auth_metadata?.account_authority?.gate_account_base,
+      body.auth_metadata?.account_authority?.gate_account_base_url,
       "auth metadata advertises account authority",
     ).toMatch(/^https?:\/\//);
     expect(Array.isArray(body.auth_metadata?.methods), "auth metadata advertises methods[]").toBe(

@@ -600,7 +600,7 @@ test.describe("applet bridge", () => {
       const accountabilityGrant = acceptedEvents.find(
         (event) =>
           event.kind === "ak.identity.accountability_grant" &&
-          (event.payload as Record<string, unknown> | undefined)?.subject ===
+          (event.payload as Record<string, unknown> | undefined)?.subject_id ===
             ghostActorId,
       );
       expect(
@@ -614,8 +614,8 @@ test.describe("applet bridge", () => {
       );
       expect(accountabilityGrant?.payload).toEqual(
         expect.objectContaining({
-          issuer: signed.applet_package.service_id,
-          subject: ghostActorId,
+          issuer_id: signed.applet_package.service_id,
+          subject_id: ghostActorId,
           grant_status: "active",
         }),
       );
@@ -2076,7 +2076,7 @@ async function prepareAppletInstallAuthoringBasis(
     const unsignedGrant: Record<string, unknown> = {
       schema: "ak.schema.capability.v1",
       realm_id: realmId,
-      issuer: actorId,
+      issuer_id: actorId,
       subject: signed.applet_package.service_id,
       subject_principal_server_id: solandServiceId(),
       actions: [action],
@@ -2415,8 +2415,8 @@ function buildGhostManagedActorCreation(args: {
 
   const grantWithoutProof = {
     schema: "ak.schema.accountability_grant.v1",
-    issuer: serviceId,
-    subject: ghostId,
+    issuer_id: serviceId,
+    subject_id: ghostId,
     accountability_scope: "contracted_service",
     not_before: args.createdAt,
     grant_status: "active",

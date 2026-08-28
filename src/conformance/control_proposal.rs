@@ -150,7 +150,7 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
             .as_u64()
             .and_then(|value| u32::try_from(value).ok())
             .ok_or_else(|| anyhow!("threshold is invalid"))?,
-        members: authority_members,
+        signers: authority_members,
         forensic_attribution: ForensicAttribution::QuorumIntersection,
     };
     let policy = ControlProposalDecisionPolicy {

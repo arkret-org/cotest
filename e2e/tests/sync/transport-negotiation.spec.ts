@@ -141,7 +141,7 @@ test.describe("transport negotiation", () => {
       {
         title: "E8.1 federation signature fixture",
         ownerId: user.id,
-        creator_service_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("alpha"),
       },
       { server: "alpha" },
     );

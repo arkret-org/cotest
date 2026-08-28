@@ -246,7 +246,7 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "target_principal_id": "ak:did_core:webvh:z6mkfixture",
         "intended_realm_id": "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
-        "requester": "ak:did_core:webvh:z6mkfixture",
+        "requester_id": "ak:did_core:webvh:z6mkfixture",
         "mls_group_id": "fixture-group",
         "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.content.v1"],
@@ -1332,11 +1332,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         serde_json::from_value(next_attempt)?;
     next_attempt.validate_shape()?;
     let next_identity = (
-        next_attempt
-            .service_binding
-            .source_id
-            .as_str()
-            .to_owned(),
+        next_attempt.service_binding.source_id.as_str().to_owned(),
         next_attempt.claim_request_id.as_str().to_owned(),
     );
     if next_identity == identity || ledger.contains_key(&next_identity) {

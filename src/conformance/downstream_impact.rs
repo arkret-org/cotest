@@ -77,7 +77,7 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
             // here or the dot is unresolvable and the decision is rejected.
             "event_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
             "decision_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
-            "issuer": "ak:did_core:web:moderator.example",
+            "issuer_id": "ak:did_core:web:moderator.example",
             "target_ref": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC",
             "decision": "dismiss",
             "request_canonical_digest": format!("sha256:{}", "1".repeat(64))
@@ -101,7 +101,7 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
             json!({
                 "event_id": decision_event_id,
                 "decision_id": decision_event_id,
-                "issuer": format!("ak:did_core:web:moderator-{index}.example"),
+                "issuer_id": format!("ak:did_core:web:moderator-{index}.example"),
                 "target_ref": target,
                 "decision": decision,
                 "request_canonical_digest": format!("sha256:{index:064x}")

@@ -266,7 +266,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     )?;
     ensure!(
         upload_outcome.accepted == 2
-            && upload_outcome.rejected.is_empty()
+            && upload_outcome.rejections.is_empty()
             && upload_outcome
                 .key_package_refs
                 .iter()
@@ -571,7 +571,7 @@ async fn verify_ordinary_keypackage_binding_matrix(
     let outcome: KeyPackagesUploadOutcome = serde_json::from_value(outcome_value)?;
     ensure!(
         outcome.accepted == 1
-            && outcome.rejected.is_empty()
+            && outcome.rejections.is_empty()
             && outcome.key_package_refs == [valid_record.keypackage_ref.to_string()],
         "ordinary RFC 9420 KeyPackage was not accepted: {outcome:?}"
     );
@@ -850,7 +850,7 @@ fn signed_device_claim(
     let unsigned = PeerKeyPackagesClaimUnsignedRequest {
         claim_request_id: wire_value(Base64UrlString::new(request_token))?,
         target_principal_id: target.actor_id.clone(),
-        requester: requester.core_id.clone(),
+        requester_id: requester.core_id.clone(),
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
         mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
@@ -902,7 +902,7 @@ fn signed_device_claim(
     let body = KeyPackagesClaimRequestBody {
         claim_request_id: unsigned.claim_request_id,
         target_principal_id: unsigned.target_principal_id,
-        requester: unsigned.requester,
+        requester_id: unsigned.requester_id,
         intended_realm_id: unsigned.intended_realm_id,
         mls_group_id: unsigned.mls_group_id,
         claim_purpose: unsigned.claim_purpose,
@@ -1227,11 +1227,11 @@ fn mls_cas_preconditions(base_transition: &Event) -> Result<Vec<Precondition>> {
         .into_iter()
         .filter(|write| {
             write
-                .cell
+                .cell_id
                 .as_str()
                 .starts_with("ak:cell:ak.component.mls.epoch.v1:")
                 || write
-                    .cell
+                    .cell_id
                     .as_str()
                     .starts_with("ak:cell:ak.component.mls.key_schedule.v1:")
         })
@@ -1244,7 +1244,7 @@ fn mls_cas_preconditions(base_transition: &Event) -> Result<Vec<Precondition>> {
                 .value
                 .context("MLS transition cell write omitted its full register value")?;
             Ok(Precondition {
-                cell: effect.cell,
+                cell_id: effect.cell_id,
                 predicate: Predicate {
                     op: PredicateOp::HeadEq,
                     value: Some(value),
@@ -1283,7 +1283,7 @@ fn signed_pairwise_claim(
     let unsigned = PeerKeyPackagesClaimUnsignedRequest {
         claim_request_id: wire_value(Base64UrlString::new(request_token.clone()))?,
         target_principal_id: target.actor_id.clone(),
-        requester: requester.actor_id.clone(),
+        requester_id: requester.actor_id.clone(),
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
         mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
@@ -1327,7 +1327,7 @@ fn signed_pairwise_claim(
     let body = KeyPackagesClaimRequestBody {
         claim_request_id: unsigned.claim_request_id,
         target_principal_id: unsigned.target_principal_id,
-        requester: unsigned.requester,
+        requester_id: unsigned.requester_id,
         intended_realm_id: unsigned.intended_realm_id,
         mls_group_id: unsigned.mls_group_id,
         claim_purpose: unsigned.claim_purpose,
@@ -1372,7 +1372,7 @@ fn signed_pairwise_upload_with_records(
         intended_realm_id: Some(RealmId::new(realm_id.to_owned())?),
         agent_verification_method: None,
         agent_key_authorize_event_id: None,
-        keypackages: records
+        keypackage_upload_entries: records
             .iter()
             .map(|record| mls_key_package_record_upload_entry(record).map_err(anyhow::Error::msg))
             .collect::<Result<Vec<_>>>()?,
@@ -1396,7 +1396,7 @@ fn signed_ordinary_upload_with_records(
         intended_realm_id: None,
         agent_verification_method: None,
         agent_key_authorize_event_id: None,
-        keypackages: records
+        keypackage_upload_entries: records
             .iter()
             .map(|record| mls_key_package_record_upload_entry(record).map_err(anyhow::Error::msg))
             .collect::<Result<Vec<_>>>()?,
@@ -1426,7 +1426,7 @@ async fn assert_upload_entries_rejected(
     if response.status() == StatusCode::OK {
         let outcome: KeyPackagesUploadOutcome = serde_json::from_slice(&response.bytes().await?)?;
         ensure!(
-            outcome.accepted == 0 && !outcome.rejected.is_empty(),
+            outcome.accepted == 0 && !outcome.rejections.is_empty(),
             "invalid KeyPackage entry was accepted: {outcome:?}"
         );
         return Ok(());

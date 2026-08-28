@@ -223,7 +223,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let mut authorize_payload = DeviceAuthorizePayload {
         principal_id: principal.clone(),
         device_id: device_id.clone(),
-        device_public_key: device_public_key.clone(),
+        device_public_key_did: device_public_key.clone(),
         hpke_key: hpke_key.clone(),
         algorithms: algorithms.clone(),
         device_key_algorithm: Some(non_empty("Ed25519")?),
@@ -248,7 +248,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         device_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
             device_public_key.as_bytes(),
         ))?,
-        device_public_key,
+        device_public_key_did: device_public_key,
         device_key_algorithm: FoundingDeviceKeyAlgorithm::Ed25519,
         device_key_purpose: FoundingDeviceKeyPurpose::EventSigningAndMlsIdentity,
         hpke_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(

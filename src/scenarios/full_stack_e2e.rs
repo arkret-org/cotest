@@ -19,8 +19,7 @@
 //!   7. **chime mock receives blind wakeup** — an in-process receiver verifies it can accept a
 //!      sanitized payload.
 //!   8. **rebind handover** — model T3.3 reducer state by mutating the candidate's
-//!      `member_delivery_binding.recipient_id` and asserting the local allow-list model
-//!      rejects it.
+//!      `member_delivery_binding.recipient_id` and asserting the local allow-list model rejects it.
 //!   9. **revocation** — model a `ak.handle.revoke` event by expiring the candidate; the validator
 //!      MUST refuse subsequent operations.
 //!
@@ -185,12 +184,7 @@ fn step_2_coauth_issue_handle_claim(candidate: &MemberDeliveryBindingCandidate) 
             candidate.expires_at
         );
     }
-    if candidate
-        .member_delivery_binding
-        .recipient_id
-        .as_str()
-        != PRINCIPAL_ID
-    {
+    if candidate.member_delivery_binding.recipient_id.as_str() != PRINCIPAL_ID {
         bail!("T8.1 step 2: member_delivery_binding.recipient_id drifted");
     }
     Ok(())
@@ -394,12 +388,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
     }
 
     let allowed = [PRINCIPAL_ID];
-    if allowed.contains(
-        &handover
-            .member_delivery_binding
-            .recipient_id
-            .as_str(),
-    ) {
+    if allowed.contains(&handover.member_delivery_binding.recipient_id.as_str()) {
         bail!("T8.1 step 8: rebound recipient unexpectedly passed allow-list");
     }
     Ok(())

@@ -187,7 +187,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
             "ak:did_core:web:spotcheck-policy.example".to_owned(),
         )?,
         policy_server_url: "https://spotcheck-policy.example/_arkret/self/policy/check".to_owned(),
-        public_keys: Vec::new(),
+        public_kids: Vec::new(),
         applies_to: Vec::new(),
         policy_sources: Vec::new(),
         abuse_profile_ref: None,

@@ -98,10 +98,11 @@ pub fn events_frontier_request_body(
     actor_did: &str,
     realm_id: Option<&str>,
 ) -> Result<arkret_models_collaboration::event_query::EventsFrontierRequestBody> {
+    let actor_did = arkret_identifiers::Did::new(actor_did.to_owned())?;
+    let actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)?;
     Ok(
         arkret_models_collaboration::event_query::EventsFrontierRequestBody {
-            actor_id: arkret_identifiers::Did::new(actor_did.to_owned())
-                .and_then(|did| arkret_identifiers::project_did_to_core_id(&did))?,
+            actor_id,
             realm_id: realm_id
                 .map(|value| arkret_identifiers::RealmId::new(value.to_owned()))
                 .transpose()?,
@@ -115,7 +116,7 @@ pub fn events_query_for_realm(
 ) -> Result<arkret_models_collaboration::event_query::EventsQueryPostRequestBody> {
     Ok(
         arkret_models_collaboration::event_query::EventsQueryPostRequestBody {
-            realms: vec![arkret_identifiers::RealmId::new(realm_id.to_owned())?],
+            realm_ids: vec![arkret_identifiers::RealmId::new(realm_id.to_owned())?],
             limit: Some(limit),
             ..Default::default()
         },
@@ -312,7 +313,7 @@ pub fn realm_create_payload_with_notary(
 
     let notary = arkret_wire::notary::NotaryValue::SingleSigner {
         signer: notary_signer,
-        recovery_members: vec![crate::fixture_notary_signer(
+        recovery_signers: vec![crate::fixture_notary_signer(
             arkret_identifiers::DidCoreId::new("ak:did_core:web:recovery.soland.local")?,
         )],
         controller_organization_id: Some(arkret_identifiers::DidCoreId::new(

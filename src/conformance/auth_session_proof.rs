@@ -175,7 +175,7 @@ fn session_grant_request_value(
         "request_id": required_str(vector, "request_id")?,
         "principal_id": required_str(vector, "principal_id")?,
         "device_id": required_str(vector, "device_id")?,
-        "audience": audience,
+        "audience_id": audience,
         "accepted_device_possession_proof": {
             "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
             "purpose": "session_grant_issue",
@@ -184,7 +184,7 @@ fn session_grant_request_value(
             "account_handoff_grant_digest": required_str(vector, "account_handoff_grant_digest")?,
             "principal_id": required_str(vector, "principal_id")?,
             "device_id": required_str(vector, "device_id")?,
-            "audience": audience,
+            "audience_id": audience,
             "holder_jkt": required_str(vector, "holder_jkt")?,
             "session_intent_digest": session_intent_digest,
             "issued_at": arkret_canonical::format_timestamp_canonical(issued_at),
@@ -209,7 +209,7 @@ fn issue_session_grant(
     let SessionGrantRequestBody::Human(request) = request else {
         return Err(arkret_wire::ReasonCode::PROOF_INVALID);
     };
-    if request.audience.as_str() != target_audience {
+    if request.audience_id.as_str() != target_audience {
         return Err(arkret_wire::ErrorCode::AUDIENCE_MISMATCH);
     }
     if request.validate().is_err() {
@@ -232,7 +232,7 @@ fn issue_session_grant(
             r#"{"crv":"Ed25519","kty":"OKP","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}"#,
         )
         .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
-        audience: request.audience.clone(),
+        audience_id: request.audience_id.clone(),
         granted_scope: STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
             .iter()
             .map(|operation| operation.as_str().to_owned())
@@ -265,7 +265,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
     )?;
     let refresh = json!({
         "grant_jwt": "grant.jwt.fixture",
-        "audience": audience,
+        "audience_id": audience,
         "device_id": device_id,
         "accepted_device_possession_proof": {
             "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
@@ -273,7 +273,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
             "predecessor_session_grant_id": predecessor,
             "principal_id": principal_id,
             "device_id": device_id,
-            "audience": audience,
+            "audience_id": audience,
             "holder_jkt": holder_jkt,
             "session_intent_digest": intent,
             "issued_at": "2026-06-19T00:00:00.000Z",
@@ -297,7 +297,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
         "request_id": request_id,
         "principal_id": principal_id,
         "device_id": device_id,
-        "audience": audience,
+        "audience_id": audience,
         "accepted_device_possession_proof": {
             "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
             "purpose": "session_grant_issue",
@@ -306,7 +306,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
             "account_handoff_grant_digest": format!("sha256:{}", "b".repeat(64)),
             "principal_id": principal_id,
             "device_id": device_id,
-            "audience": audience,
+            "audience_id": audience,
             "holder_jkt": holder_jkt,
             "session_intent_digest": issue_intent,
             "issued_at": "2026-06-19T00:00:00.000Z",

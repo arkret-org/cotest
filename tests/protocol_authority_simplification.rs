@@ -75,7 +75,7 @@ fn accept(mut event: Event) -> Event {
             producer_proof_digest: PrincipalServerAdmissionProof::producer_proof_digest(producer)
                 .unwrap(),
             producer_verification_method: producer.verification_method.clone(),
-            producer_signing_key: DidKey::new("did:key:z6MkhFixtureDeviceKey").unwrap(),
+            producer_signing_key_did: DidKey::new("did:key:z6MkhFixtureDeviceKey").unwrap(),
             producer_signer_resolution_evidence_ref: None,
             producer_signer_resolution_evidence_digest: None,
             signer_resolution_evidence_ref,
@@ -138,7 +138,7 @@ fn accepted_event_requires_exact_origin_and_producer_binding() {
 fn deleted_event_wire_members_are_hard_rejected() {
     let event = accept(producer_event());
     let mut value = serde_json::to_value(&event).unwrap();
-    value["accepted_by_service_id"] = serde_json::json!(event.principal_server_id);
+    value["accepted_by"] = serde_json::json!(event.principal_server_id);
     assert!(serde_json::from_value::<Event>(value).is_err());
 
     let mut missing_origin = serde_json::to_value(event).unwrap();

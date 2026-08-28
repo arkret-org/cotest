@@ -12,7 +12,7 @@
 // facts to the target holder's home PS via `ak.peer.contacts.command.submit.v1`
 // (`POST /_arkret/peer/contacts`) over the durable federation outbox. The
 // requester addresses the remote target with `recipient_id`; the
-// responder addresses the remote requester with `requester_service_id`
+// responder addresses the remote requester with `requester_id`
 // (principal DIDs do not embed their home PS).
 //
 // What ALSO crosses a PS boundary is the consent_grant-evidence invite delivery
@@ -66,7 +66,7 @@ test.describe("contact graph federation (α/β)", () => {
   //
   // alice@α requests bob@β with recipient_id=β -> the signed
   // ak.contact.requested fact federates to β over the outbox -> bob@β sees
-  // pending_incoming -> bob accepts with requester_service_id=α -> the
+  // pending_incoming -> bob accepts with requester_id=α -> the
   // ak.contact.accepted fact federates back to α -> alice@α sees accepted +
   // invite_consent_grant_ref (bob -> alice invite grant projected on α).
   test("S1-fed cross-PS add friend federates request + accept and converges both sides", async ({
@@ -120,7 +120,7 @@ test.describe("contact graph federation (α/β)", () => {
     // bob accepts on β granting invite, addressing the remote requester (α).
     const respondOutcome = await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",
@@ -184,7 +184,7 @@ test.describe("contact graph federation (α/β)", () => {
       .toBe("pending_incoming");
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "accept",
       grantedScopes: ["direct_message"],
       server: "beta",
@@ -306,7 +306,7 @@ test.describe("contact graph federation (α/β)", () => {
         .toBe("pending_incoming");
       await respondContactArkret(request, bobToken, {
         requestId: outcome.request_event_ref,
-        requester: alice.id,
+        requesterId: alice.id,
         action: "accept",
         grantedScopes: ["direct_message"],
         server: "beta",
@@ -441,7 +441,7 @@ test.describe("contact graph federation (α/β)", () => {
     );
     await respondContactArkret(request, bobTokenBeta, {
       requestId: outcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",
@@ -462,7 +462,7 @@ test.describe("contact graph federation (α/β)", () => {
       {
         title: `S4-fed pull ${stamp}`,
         ownerId: alice.id,
-        creator_service_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("alpha"),
         plaintext_visible_services: [
           solandServiceId("alpha"),
           solandServiceId("beta"),
@@ -492,7 +492,7 @@ test.describe("contact graph federation (α/β)", () => {
       server: "beta",
     });
     const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee === bob.id,
+      (i) => i.realm_id === realmId && i.invitee_id === bob.id,
     );
     expect(invite, "bob@β pending invite for the α realm").toBeTruthy();
     expect(invite!.id).toBe(inviteId);
@@ -565,7 +565,7 @@ test.describe("contact graph federation (α/β)", () => {
       .toBe("pending_incoming");
     await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
       server: "beta",

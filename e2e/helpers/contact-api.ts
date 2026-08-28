@@ -365,7 +365,7 @@ export async function respondContactArkret(
   token: string,
   opts: {
     requestId: string;
-    requester: string;
+    requesterId: string;
     action: "accept" | "reject";
     grantedScopes?: string[];
     server?: SolandKey;
@@ -375,9 +375,9 @@ export async function respondContactArkret(
   const rows = await listContactsArkret(request, token, {
     server: opts.server,
   });
-  const row = rows.find((candidate) => candidate.peer === opts.requester);
+  const row = rows.find((candidate) => candidate.peer === opts.requesterId);
   if (!row?.request_receipt) {
-    throw new Error(`contact ${opts.requester} exposes no request_receipt`);
+    throw new Error(`contact ${opts.requesterId} exposes no request_receipt`);
   }
   const nonce = uuidV7();
   const operationId = `ak:operation:contact.${opts.action}.${nonce}`;
@@ -402,7 +402,7 @@ export async function respondContactArkret(
   const prepared = await expectJsonOk<{
     reservation_handle: string;
     event_draft: { unsigned_event_bytes: string };
-  }>(preparedResponse, `prepare contact ${opts.action} <- ${opts.requester}`);
+  }>(preparedResponse, `prepare contact ${opts.action} <- ${opts.requesterId}`);
   const signedEvent = JSON.parse(
     Buffer.from(
       prepared.event_draft.unsigned_event_bytes,
@@ -425,7 +425,7 @@ export async function respondContactArkret(
   });
   const accepted = await expectJsonOk<Record<string, unknown>>(
     response,
-    `contact respond ${opts.action} <- ${opts.requester}`,
+    `contact respond ${opts.action} <- ${opts.requesterId}`,
   );
   await submitPrincipalSuccessorSealApi(
     request,
@@ -759,7 +759,7 @@ export type IntroductionEvidence =
 // invite-delivery consistency checks (src/routing/invites.rs
 // validate_invite_delivery_consistency + projection required fields):
 //   - kind == ak.invite.create
-//   - payload.invitee == invite_address.subject_id
+//   - payload.invitee_id == invite_address.subject_id
 //   - payload.invite_delivery_target.recipient_id == recipient svc
 //   - payload.introduction_evidence_digest == sha256(canonical_json(evidence))
 //   - the invite id is retyped from the create Event id and omitted from payload
@@ -785,7 +785,7 @@ export function buildInviteCreateEvent(args: {
     kind: "ak.invite.create",
     schemaId: "ak.schema.invite.v1",
     payload: {
-      invitee: args.inviteeId,
+      invitee_id: args.inviteeId,
       invite_delivery_target: {
         recipient_id: args.recipientServiceId,
         recipient_kind: "principal_server",
@@ -971,7 +971,7 @@ export async function deliverInviteExplicitAddress(
 export type AuthzInvite = {
   id: string;
   realm_id: string;
-  invitee?: string;
+  invitee_id?: string;
   state?: string;
 };
 
@@ -1015,7 +1015,7 @@ export function countInvitesFor(
   inviteeId: string,
 ): number {
   return invites.filter(
-    (invite) => invite.realm_id === realmId && invite.invitee === inviteeId,
+    (invite) => invite.realm_id === realmId && invite.invitee_id === inviteeId,
   ).length;
 }
 

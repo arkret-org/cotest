@@ -594,14 +594,14 @@ export async function createRealmApi(
      * have no delivery target; callers exercising cross-server invite fanout
      * opt in here so the helper emits the canonical `ak.invite.create` event.
      */
-    invitee_service_ids?: Record<string, string>;
+    invitee_ids?: Record<string, string>;
     /**
      * Override the creator's home Principal Server. The helper defaults this
      * to the selected Soland because the standard availability policy needs a
      * joined-member Principal Server before any post-genesis Control Move can
      * be sealed.
      */
-    creator_service_id?: string;
+    creator_id?: string;
     plaintext_visible_services?: string[];
     public?: boolean;
     federation_policy?: RealmObject["federation_policy"];
@@ -758,7 +758,7 @@ export async function createRealmApi(
     );
   }
   const creatorServiceId =
-    data.creator_service_id ?? solandServiceId(opts.server);
+    data.creator_id ?? solandServiceId(opts.server);
   const creatorDid =
     eventSignerFor(ownerId)?.verificationMethod.split("#", 1)[0] ?? ownerId;
   const didDocumentResponse = await request.get(
@@ -829,7 +829,7 @@ export async function createRealmApi(
 
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
-      data.invitee_service_ids?.[invitee] ?? solandServiceId(opts.server);
+      data.invitee_ids?.[invitee] ?? solandServiceId(opts.server);
     const evidence = { kind: "explicit_address" };
     const sealBasis = await readRealmSealBasis(
       request,
@@ -843,7 +843,7 @@ export async function createRealmApi(
       kind: "ak.invite.create",
       sealBasis,
       payload: {
-        invitee,
+        invitee_id: invitee,
         invite_delivery_target: {
           recipient_id: recipientServiceId,
           // `invite_create_payload.invite_delivery_target` is the closed
@@ -1067,7 +1067,7 @@ export async function grantRealmAdminCapabilityApi(
   > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: requireDidCoreId(args.ownerId),
+    issuer_id: requireDidCoreId(args.ownerId),
     subject: requireDidCoreId(args.subjectId),
     // `capability_grant_payload` requires the subject's Principal Server
     // whenever `subject` is a plain principal id.
@@ -1172,7 +1172,7 @@ export async function grantServiceCapabilityApi(
   > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: requireDidCoreId(args.ownerId),
+    issuer_id: requireDidCoreId(args.ownerId),
     subject: requireDidCoreId(args.subjectServiceId),
     // `capability_grant_payload` requires the subject's Principal Server
     // whenever `subject` is a plain principal id.
@@ -1272,7 +1272,7 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: requireDidCoreId(args.ownerId),
+    issuer_id: requireDidCoreId(args.ownerId),
     subject: requireDidCoreId(args.subjectId),
     // `capability_grant_payload` makes `subject_principal_server_id` required
     // whenever `subject` is a plain principal id: the authority pair is
@@ -1739,12 +1739,12 @@ export async function submitInviteCreateApi(
     sealBasis,
     refs: [{ role: "join_authorised_by", id: joinAuthorisedByRef }],
     // Directed invite-create payload shape per event-payload.schema.json
-    // `invite_payload` (variant: invitee + invite_delivery_target +
+    // `invite_payload` (variant: invitee_id + invite_delivery_target +
     // introduction_evidence_digest + expires_at). The subject is carried by
-    // `invitee` (a DID); the forbidden `subject_did` wire field and the
+    // `invitee_id` (a stable principal id); the forbidden `subject_did` wire field and the
     // non-schema `realm_id` / `inviter` keys are intentionally absent.
     payload: {
-      invitee: subjectId,
+      invitee_id: subjectId,
       invite_delivery_target: {
         recipient_id: solandServiceId(opts.server),
         service_resolution: canonicalServiceResolution(opts.server),
@@ -1825,7 +1825,7 @@ export async function acceptInviteApi(
               ...authHeaders(token, "POST", resolveUrl),
               "content-type": "application/json",
             },
-            data: canonicalJson({ realm_id: realmId, requester: actorId }),
+            data: canonicalJson({ realm_id: realmId, requester_id: actorId }),
           });
           const resolution = await expectJsonOk<{
             join_candidates?: Array<{
@@ -1896,7 +1896,7 @@ export async function listInvitesApi(
   Array<{
     id: string;
     realm_id: string;
-    invitee?: string;
+    invitee_id?: string;
     state?: string;
     status?: string;
   }>
@@ -1914,7 +1914,7 @@ export async function listInvitesApi(
     },
   });
   const body = await expectJsonOk<{
-    invites?: Array<{ id: string; realm_id: string; invitee?: string }>;
+    invites?: Array<{ id: string; realm_id: string; invitee_id?: string }>;
   }>(response, "list invites");
   return body.invites ?? [];
 }
@@ -3523,7 +3523,7 @@ async function readDirectoryJoinCandidateSealBasis(
     `${solandBaseUrl(server)}/_arkret/find/directory/resolve-realm`,
     {
       headers: authHeaders(token),
-      data: { realm_id: realmId, requester: actorId },
+      data: { realm_id: realmId, requester_id: actorId },
     },
   );
   if (!response.ok()) {

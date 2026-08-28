@@ -295,7 +295,7 @@ fn verify_rrk_production_projection_and_join(fixture: &Value) -> Result<()> {
             .to_owned(),
     )?;
     let joined = CasRegister.join(
-        &register_write.cell,
+        &register_write.cell_id,
         &[
             SealedOp::new(register_id.clone(), register_op.clone()),
             SealedOp::new(rotate_id.clone(), rotate_op),
@@ -320,7 +320,7 @@ fn verify_rrk_production_projection_and_join(fixture: &Value) -> Result<()> {
     if stale_op.from.is_some()
         || !matches!(
             CasRegister.join(
-                &register_write.cell,
+                &register_write.cell_id,
                 &[
                     SealedOp::new(register_id, register_op),
                     SealedOp::new(rotate_id, stale_op),
@@ -516,7 +516,7 @@ fn verify_client_convergence_kat(fixture: &Value) -> Result<()> {
     let empty: HistoryKeyResponseListOutcome =
         serde_json::from_value(requester["empty_response_page"]["wire"].clone())?;
     empty.validate()?;
-    if !empty.ack_entries.is_empty() || empty.ack_token.is_some() || empty.cursor.is_some() {
+    if !empty.entries.is_empty() || empty.ack_token.is_some() || empty.cursor.is_some() {
         bail!("history requester convergence KAT permits an ackable empty page");
     }
 
@@ -1466,7 +1466,7 @@ fn replay_kat_set(cell: CellRef, value: Value) -> ProjectedCellWrite {
     op.op_type = LatticeOpType::Set;
     op.value = Some(value);
     ProjectedCellWrite {
-        cell,
+        cell_id: cell,
         op: ProjectedOp::Direct(op),
     }
 }

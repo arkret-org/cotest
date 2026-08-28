@@ -373,8 +373,8 @@ export async function createCanonicalAccountHandoff(
   const requestId = typedId("request");
   const body = cotestWire<Record<string, unknown>>("account-handoff-request", {
     request_id: requestId,
-    audience: args.audience,
-    issuer: authorization.issuer,
+    audience_id: args.audience,
+    oidc_issuer_uri: authorization.issuer,
     client_id: authorization.clientId,
     redirect_uri: authorization.redirectUri,
     state: authorization.state,
@@ -463,7 +463,7 @@ export async function registerCoauthPasswordAccount(
     "principal-registration-fixture",
     {
       principal_server_url: solandBaseUrl(opts.server),
-      gate_account_base: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
+      gate_account_base_url: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
       handoff_request_id: handoff.requestId,
       identity_creation_lease: lease,
       device_id: genesisDeviceId,
@@ -521,7 +521,7 @@ export async function registerCoauthPasswordAccount(
   const registeredPrincipalId = stringValue(registered.principal_id);
   const grantId = stringValue(sessionOutcome?.session_grant_id);
   const grantJwt = stringValue(sessionOutcome?.session_grant);
-  const grantAudience = stringValue(sessionOutcome?.audience);
+  const grantAudience = stringValue(sessionOutcome?.audience_id);
   const expiresAt = stringValue(sessionOutcome?.expires_at);
   const deviceSigningSeed = stringValue(
     fixture.checkpoint.device_signing_seed_b64url,

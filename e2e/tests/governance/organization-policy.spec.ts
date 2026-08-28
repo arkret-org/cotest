@@ -70,7 +70,7 @@ function realmOrganizationStatement(args: {
   if (args.expiresAt) statement.expires_at = args.expiresAt;
   if (args.revokesStatementId) statement.revokes_statement_id = args.revokesStatementId;
   statement.authorization = {
-    issuer: projectDidToCoreId(args.organizationDid),
+    issuer_id: projectDidToCoreId(args.organizationDid),
     issuer_role: "organization_principal_id",
     verification_method: `${args.organizationDid}#k1`,
     signed_at: canonicalTimestamp(),

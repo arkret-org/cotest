@@ -137,7 +137,7 @@ async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str)
             let delivery: InviteDelivery = serde_json::from_value(cell["content"].clone())
                 .context("invite_delivery account-data cell is not an InviteDelivery")?;
             delivery
-                .entries
+                .delivery_entries
                 .into_iter()
                 .find(|entry| entry.invite_id.as_str() == invite_id)
                 .map(|entry| entry.invite_token)

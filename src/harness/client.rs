@@ -768,7 +768,7 @@ impl TestActorClient {
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
             realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
-            issuer: project_did_to_core_id(&Did::new(
+            issuer_id: project_did_to_core_id(&Did::new(
                 self.actor.clone(),
             )?)?,
             subject:

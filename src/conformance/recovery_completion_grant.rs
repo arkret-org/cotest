@@ -100,9 +100,9 @@ fn completion_vector() -> Result<CompletionVector> {
                 quorum_participant_count: None,
                 share_ids: None,
             },
-            backup_classes_unlocked: Vec::new(),
+            unlocked_backups: Vec::new(),
             welcome_count: 0,
-            welcome_realm_summary: None,
+            welcome_realm_summaries: None,
             outcome: RecoveryReceiptOutcome::Completed,
             outcome_reason_code: None,
             started_at,
@@ -155,7 +155,7 @@ fn completion_vector() -> Result<CompletionVector> {
     let initial_session = InitialSessionGrantIntent {
         device_id: device_id.parse()?,
         session_public_key: session_public_key.clone(),
-        audience: audience.parse()?,
+        audience_id: audience.parse()?,
     };
     initial_session.validate()?;
 
@@ -190,7 +190,7 @@ fn completion_vector() -> Result<CompletionVector> {
         session_grant_id: "ak:session_grant:ATLC-gY-xpE0kN3QXVYxo0Kh32EoNCTBQTSFuu_P57e6"
             .parse()?,
         session_public_key,
-        audience: audience.parse()?,
+        audience_id: audience.parse()?,
         granted_scope: standard_initial_session_grant_scope(),
         scope_details: None,
     };
@@ -270,7 +270,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         || receipt_generation != attestation_generation
         || receipt_generation != request_generation
         || attestation.coordinator_id.as_str() != vector.context.audience
-        || initial.audience.as_str() != vector.context.audience
+        || initial.audience_id.as_str() != vector.context.audience
         || initial.session_public_key.thumbprint_sha256()? != vector.context.holder_jkt
     {
         bail!("recovery completion evidence is not closed over receipt/device/session bindings");

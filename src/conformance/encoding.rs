@@ -272,9 +272,9 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
                 .find(|vector| vector.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID))
         })
         .ok_or_else(|| anyhow!("encoding fixture missing {VECTOR_ID}"))?;
-    let issuer = value_field_str(vector, "issuer")?;
+    let issuer = value_field_str(vector, "issuer_id")?;
     let principal_server_id = value_field_str(vector, "principal_server_id")?;
-    let subject = value_field_str(vector, "subject")?;
+    let subject = value_field_str(vector, "subject_id")?;
     let descriptor = arkret_wire::EventKind::from("ak.identity.accountability_grant")
         .descriptor()
         .ok_or_else(|| anyhow!("accountability grant descriptor is missing"))?;
@@ -373,8 +373,8 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
                 "leaves": ["ak:seal:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
             },
             "payload": {
-                "issuer": issuer,
-                "subject": subject,
+                "issuer_id": issuer,
+                "subject_id": subject,
                 "accountability_scope": scope,
                 "grant_status": status
             },
@@ -396,7 +396,7 @@ fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
                 writes.len()
             );
         };
-        Ok(write.cell.clone())
+        Ok(write.cell_id.clone())
     };
     // The subject is the canonical exact-set component, so a reordered set
     // addresses the same cell.

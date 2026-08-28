@@ -14,7 +14,7 @@
     "control_scopes": ["official_badge", "realm_admin"],
     "issued_at": "2026-06-25T00:00:00.000Z",
     "authorization": {
-      "issuer": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
+      "issuer_id": "ak:did_core:web:example.test:orgs:01J0000000000000000000000A",
       "issuer_role": "organization_principal_id",
       "verification_method": "did:webvh:example.test:orgs:01J0000000000000000000000A#k1",
       "signed_at": "2026-06-25T00:00:00.000Z",

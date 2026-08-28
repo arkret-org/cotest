@@ -2,7 +2,7 @@
 //! the Inkson producer.
 //!
 //! `conformance-vectors.md` §23.4 makes a directed `ak.invite.cancel` fail
-//! with `reducer_projection_failed` when `payload.invitee` is missing or does
+//! with `reducer_projection_failed` when `payload.invitee_id` is missing or does
 //! not equal the invite cell's frozen invitee, and makes the 3PID branch go
 //! through `ak.invite.revoke` instead. Those are pre-acceptance predicates: a
 //! late projection-time rejection would leave the Event durable and split the
@@ -10,8 +10,8 @@
 //!
 //! The two predicates asserted here are executed, not restated:
 //!
-//!   1. the stored invitee exists (a cancel with no `payload.invitee` is refused), and
-//!   2. it equals `payload.invitee` (a cancel naming a different DID is refused),
+//!   1. the stored invitee exists (a cancel with no `payload.invitee_id` is refused), and
+//!   2. it equals `payload.invitee_id` (a cancel naming a different principal is refused),
 //!
 //! each verified against the live server for **zero Event acceptance** and
 //! **zero cell change**: the Realm Event log, the Seal frontier, and the
@@ -220,7 +220,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     let create_event_id = crate::harness::submitted_event_id(&body)?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&create_event_id).to_string();
 
-    // Predicate 1 — a directed cancel with NO `payload.invitee`.
+    // Predicate 1 — a directed cancel with NO `payload.invitee_id`.
     let before = observe(&alice, &realm_id, &bob_core_id).await?;
     let (missing_status, missing_body) = submit_invite_move(
         &alice,
@@ -236,7 +236,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     assert_ne!(
         missing_status,
         StatusCode::OK,
-        "cancel without payload.invitee must be refused: {missing_body}"
+        "cancel without payload.invitee_id must be refused: {missing_body}"
     );
     let after_missing = observe(&alice, &realm_id, &bob_core_id).await?;
     assert_eq!(

@@ -509,7 +509,7 @@ test.describe("discovery", () => {
     // bob rejects the request.
     const bobBody = await respondContactArkret(request, bobToken, {
       requestId: aliceReqBody.request_event_ref,
-      requester: alice.id,
+      requesterId: alice.id,
       action: "reject",
     });
     expect(bobBody.state).toBe("rejected");

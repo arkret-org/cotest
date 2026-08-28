@@ -425,7 +425,7 @@ test.describe("single-server triad collaboration", () => {
           const visible = await listInvitesApi(request, bobToken);
           return visible.filter((invite) =>
             invite.realm_id === realmId &&
-            invite.invitee === bob.id &&
+            invite.invitee_id === bob.id &&
             (invite.state ?? invite.status ?? "pending") === "pending"
           ).length;
         }, { timeout: 30_000 }).toBe(1);

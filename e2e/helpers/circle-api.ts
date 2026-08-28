@@ -86,7 +86,7 @@ export async function grantCircleMemberManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: args.ownerId,
+    issuer_id: args.ownerId,
     subject: args.subjectId,
     subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.member.manage"],
@@ -145,7 +145,7 @@ export async function grantCircleManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer: args.ownerId,
+    issuer_id: args.ownerId,
     subject: args.subjectId,
     subject_principal_server_id: solandServiceId(args.server),
     actions: ["ak.circle.manage"],

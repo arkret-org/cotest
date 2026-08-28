@@ -533,7 +533,7 @@ fn assert_policy_scope_projection() -> Result<PolicyScopeOutcome> {
             "payload": {
                 "target_ref": message_id,
                 "decision": "quarantine",
-                "issuer": "ak:did_core:web:policy-bot.example.com",
+                "issuer_id": "ak:did_core:web:policy-bot.example.com",
                 "request_canonical_digest": "sha256:5f8b3c2ad4e1907664bb2f0c9d1e3a57c48d6b02fe971a35c8d40b7e9a2f6c1d",
                 "action": "quarantine_message",
             },
@@ -697,7 +697,7 @@ fn assert_hard_erasure_receipt() -> Result<()> {
         "schema": "ak.schema.erasure_receipt.v1",
         "receipt_id": receipt_id,
         "trigger": {"kind": "event", "event_id": redaction_event_id},
-        "issuer": "ak:did_core:web:erasure.example.com",
+        "issuer_id": "ak:did_core:web:erasure.example.com",
         "subject": {"kind": "event", "subject_ref": original_event_id},
         "scope": {"storage_boundary": "canonical_log_minimization"},
         "outcome": "completed",

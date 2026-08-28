@@ -70,7 +70,7 @@ fn now_anchor() -> DateTime<Utc> {
 
 fn issuer_policy() -> HandleIssuerPolicyEntry {
     HandleIssuerPolicyEntry {
-        issuer: issuer_string(),
+        issuer_id: issuer_string(),
         authorized_handle_domains: vec!["acme.example".to_owned(), "other.example".to_owned()],
         issuer_class: HandleIssuerAuthorityClass::DomainAuthority,
     }
@@ -85,8 +85,8 @@ fn verified_claim(
         schema: HandleClaim::SCHEMA.to_owned(),
         handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
         handle_aliases: Vec::new(),
-        subject: Some(subject.clone()),
-        issuer: Some(DidCoreId::new(ISSUER)?),
+        subject_id: Some(subject.clone()),
+        issuer_id: Some(DidCoreId::new(ISSUER)?),
         vouching_id: None,
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: None,
@@ -112,7 +112,7 @@ fn empty_selection<'a>(
         subject_id: subject.as_str(),
         context: None,
         claim_set_snapshot: snapshot,
-        handle_issuer_policy: &[],
+        handle_issuer_policies: &[],
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     }
@@ -157,7 +157,7 @@ pub fn run_render_step1_unique_success_vector() -> Result<()> {
     let snapshot = vec![verified_claim("alice:acme.example", &s, None)?];
     let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
-        handle_issuer_policy: &accepted,
+        handle_issuer_policies: &accepted,
         ..empty_selection(&s, &snapshot)
     };
     let render = render_mention(&s, &selection, None, Some("Alice Zhang"));
@@ -185,7 +185,7 @@ pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
         subject_id: s.as_str(),
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
-        handle_issuer_policy: &accepted,
+        handle_issuer_policies: &accepted,
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
@@ -265,7 +265,7 @@ pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()
     let snapshot = vec![verified_claim("alice:acme.example", &s, None)?];
     let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
-        handle_issuer_policy: &accepted,
+        handle_issuer_policies: &accepted,
         ..empty_selection(&s, &snapshot)
     };
     let render = render_mention(&mention.subject_id, &selection, None, None);

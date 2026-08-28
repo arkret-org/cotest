@@ -152,7 +152,7 @@ test.describe("sovereign deployment", () => {
       {
         data: {
           query: "internal",
-          requester: fixture.bobId,
+          requester_id: fixture.bobId,
         },
       },
     );
@@ -324,8 +324,8 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
 
   const invite = await postJson(request, "alpha", "/_soland/admin/deployment/external-invite", {
     target_realm: enclaveRealmId,
-    invitee: bobId,
-    inviter: aliceId,
+    invitee_id: bobId,
+    inviter_id: aliceId,
   }, adminTokens.alpha);
   const acceptBody = await postJson(request, "beta", "/_soland/self/account/accept-external-invite", {
     invite_token: invite.invite_token,

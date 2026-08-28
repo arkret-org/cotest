@@ -99,7 +99,7 @@
         "payload": {
           "notary": {
             "kind": "open_set",
-            "members": [
+            "signers": [
               {
                 "actor_id": "ak:did_core:web:notary-a.example",
                 "verification_method": "did:web:notary-a.example#notary-key-1",
@@ -257,7 +257,7 @@
         "value": {
           "entries": [
             {
-              "issuer": "ak:did_core:web:alice.example",
+              "issuer_id": "ak:did_core:web:alice.example",
               "issuer_seq": 0,
               "event_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
               "value": {
@@ -265,7 +265,7 @@
               }
             },
             {
-              "issuer": "ak:did_core:web:alice.example",
+              "issuer_id": "ak:did_core:web:alice.example",
               "issuer_seq": 0,
               "event_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
               "value": {

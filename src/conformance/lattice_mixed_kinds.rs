@@ -150,7 +150,7 @@ fn check_mv_concurrent(vector: &Value) -> Result<()> {
     }
     let mut issuers: std::collections::BTreeSet<&str> = Default::default();
     for m in moves {
-        let issuer = required_str(m, "issuer")?;
+        let issuer = required_str(m, "issuer_id")?;
         issuers.insert(issuer);
     }
     if issuers.len() < 2 {

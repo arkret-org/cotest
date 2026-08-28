@@ -272,7 +272,7 @@ async function acceptedDirectMessageEvidence(
       request_receipts: [requestReceipt],
       normal_response_receipt: responseReceipt,
       current_proofs: [aliceCurrentProof, bobCurrentProof].sort((left, right) =>
-        String(left.issuer).localeCompare(String(right.issuer)),
+        String(left.issuer_id).localeCompare(String(right.issuer_id)),
       ),
     },
     contact_round_continuity_chain: [],

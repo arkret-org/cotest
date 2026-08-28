@@ -153,7 +153,9 @@ pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
             "issuance_nonce" => {
                 claims["issuance_nonce"] = json!("/////////////////////wAAAAAAAAAAAAAAAAAAAAA")
             }
-            "audience" => claims["audience"] = json!("did:webvh:z6mkfixture:other.example"),
+            "audience_id" => {
+                claims["audience_id"] = json!("ak:did_core:webvh:z6mkfixtureotherexample")
+            }
             "holder_binding.device_binding" => {
                 claims["holder_binding"]["device_binding"] =
                     json!("ak:device:019a0000-0000-7000-8000-000000000099")
@@ -166,8 +168,13 @@ pub fn run_session_grant_issuance_kat_suite() -> Result<()> {
             "session_id" => claims["session_id"] = base["session_grant_id"].clone(),
             other => bail!("unhandled SessionGrant tamper vector {other}"),
         }
-        let rejected = serde_json::from_value::<SignedSessionGrantClaims>(claims)
-            .map_or(true, |claims| claims.validate().is_err());
+        let rejected =
+            serde_json::from_value::<SignedSessionGrantClaims>(claims).map_or(true, |claims| {
+                claims.validate().is_err()
+                    || claims
+                        .recomputed_grant_id()
+                        .map_or(true, |recomputed| recomputed != claims.grant_id)
+            });
         ensure!(
             rejected,
             "tamper vector {} was accepted",
