@@ -44,8 +44,8 @@ use arkret_signatures::account_status::{
     verify_account_status_receipt, verify_account_status_record,
 };
 use arkret_wire::{
-    AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, NonEmptyString, RealmId, ReasonCode,
-    ReceiptId, SchemaId, ServiceOperationId,
+    AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, RealmId, ReasonCode, ReceiptId, SchemaId,
+    ServiceAccountId, ServiceOperationId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
@@ -439,7 +439,7 @@ async fn assert_gap_recovery_through_bounded_resolve(
     // type is what proves it.
     let request = AccountStatusResolveRequestBody {
         account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: NonEmptyString::new(account).map_err(anyhow::Error::msg)?,
+        account_id: ServiceAccountId::new(account).map_err(anyhow::Error::msg)?,
         from_status_seq: required_status_seq,
         limit: 128,
     };
@@ -586,9 +586,11 @@ async fn assert_offline_and_hostile_holder_cannot_veto_deny(
             );
         }
 
-        // A hostile holder cannot undo the deny either: reversing it needs a
-        // successor the Account Authority never issued, and `erasure_pending`
-        // has no outbound edge at all.
+        // A hostile holder cannot undo the deny: only an Account Authority
+        // successor can advance this ledger. The replica intentionally cannot
+        // inspect the issuer's local appeal or completed-PCR-recovery evidence;
+        // it accepts an authority-signed legal successor. `erasure_pending`
+        // alone has no outbound edge.
         let reversal = sign_account_status_record(
             unsigned(
                 &account,
@@ -604,16 +606,6 @@ async fn assert_offline_and_hostile_holder_cannot_veto_deny(
             .append(&reversal, &receipt_for(&reversal, base + 3, receiver_key)?)
             .await?;
         match status {
-            AccountStatus::Deactivated => {
-                let AccountStatusReplicaAppend::Conflict {
-                    kind: AccountStatusReplicaConflictKind::TransitionInvalid,
-                    ..
-                } = append
-                else {
-                    bail!("deactivated -> active was not rejected as an invalid transition");
-                };
-                assert_head_is(replicas, &deny).await?;
-            }
             AccountStatus::ErasurePending => {
                 let AccountStatusReplicaAppend::Conflict {
                     kind: AccountStatusReplicaConflictKind::ErasurePendingTerminal,
@@ -624,13 +616,15 @@ async fn assert_offline_and_hostile_holder_cannot_veto_deny(
                 };
                 assert_head_is(replicas, &deny).await?;
             }
-            // `locked` and `suspended` are appealable by the Account Authority
-            // itself; the point of the case is that the holder never gets a
-            // veto, not that the state is irreversible.
+            // `locked` and `suspended` are appealable, while `deactivated` is
+            // recoverable only after the issuer's local deployment-policy and
+            // completed-PCR-recovery gates. All three appear to the replica as
+            // an authority-signed legal successor; authoring conformance checks
+            // the distinct local authorization closures.
             _ => {
                 let AccountStatusReplicaAppend::Accepted(_) = append else {
                     bail!(
-                        "an Account Authority appeal out of {} was refused",
+                        "an Account Authority legal successor out of {} was refused",
                         status.as_str()
                     );
                 };
@@ -1265,7 +1259,7 @@ fn unsigned(
     Ok(UnsignedAccountStatusRecord {
         schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
         account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: NonEmptyString::new(account_id).map_err(anyhow::Error::msg)?,
+        account_id: ServiceAccountId::new(account_id).map_err(anyhow::Error::msg)?,
         principal_authority: AccountStatusPrincipalAuthority {
             principal_id: DidCoreId::new(PRINCIPAL_ID)?,
             principal_server_id: DidCoreId::new(PRINCIPAL_SERVER_ID)?,

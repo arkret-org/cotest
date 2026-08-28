@@ -2,7 +2,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::{DeviceId, DidCoreId, Hash, SessionGrantId};
+use arkret_identifiers::{DeviceId, DidCoreId, Hash, ServiceAccountId, SessionGrantId};
 use arkret_models_collaboration::session_grant_bodies::{
     SessionGrantOutcome, SessionGrantRefreshRequestBody, SessionGrantRequestBody,
     human_session_grant_intent_digest, session_grant_refresh_request_digest,
@@ -218,6 +218,8 @@ fn issue_session_grant(
 
     Ok(SessionGrantOutcome {
         principal_id: request.principal_id.clone(),
+        service_account_id: ServiceAccountId::new("account-1")
+            .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
         device_id: Some(request.device_id.clone()),
         session_grant: "ak.session.grant.test".to_owned(),
         expires_at: now + server_max_ttl,
