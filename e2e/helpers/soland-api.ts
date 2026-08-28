@@ -772,14 +772,14 @@ export async function createRealmApi(
     realm_id: realmId,
     allowed_binding_sources: ["did_document_default"],
     did_document_default_allowed: true,
-    allowed_recipient_services: [creatorServiceId],
-    required_endorsers: [],
+    allowed_recipient_ids: [creatorServiceId],
+    required_endorser_ids: [],
     unroutable_membership_allowed: true,
     rebind_authorization: "member",
   };
   const creatorDeliveryBinding: Record<string, unknown> = {
-    recipient_service_id: creatorServiceId,
-    recipient_service_kind: "principal_server",
+    recipient_id: creatorServiceId,
+    recipient_kind: "principal_server",
     binding_scope: "realm",
     binding_source: "did_document_default",
     delivery_modes: ["events", "sync", "to_device", "push", "keypackages"],
@@ -845,14 +845,14 @@ export async function createRealmApi(
       payload: {
         invitee,
         invite_delivery_target: {
-          recipient_service_id: recipientServiceId,
+          recipient_id: recipientServiceId,
           // `invite_create_payload.invite_delivery_target` is the closed
           // `invite-delivery-request.schema.json#/$defs/invite_delivery_target`,
           // whose `service_resolution` is required — omitting it produced a
           // durable Event that could never satisfy invite-addressing.md §7
           // step 6.
           service_resolution: canonicalServiceResolution(opts.server),
-          recipient_service_kind: "principal_server",
+          recipient_kind: "principal_server",
         },
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
         expires_at: canonicalTimestamp(
@@ -1746,9 +1746,9 @@ export async function submitInviteCreateApi(
     payload: {
       invitee: subjectId,
       invite_delivery_target: {
-        recipient_service_id: solandServiceId(opts.server),
+        recipient_id: solandServiceId(opts.server),
         service_resolution: canonicalServiceResolution(opts.server),
-        recipient_service_kind: "principal_server",
+        recipient_kind: "principal_server",
       },
       introduction_evidence_digest: `sha256:${sha256CanonicalJson({ kind: "explicit_address" })}`,
       expires_at: expiresAt,
@@ -4121,7 +4121,7 @@ export async function rawSubmitPeerInviteDeliveryApi(
   },
 ) {
   const destination =
-    opts.destination ?? body.invite_address.recipient_service_id;
+    opts.destination ?? body.invite_address.recipient_id;
   const url = `${solandBaseUrl(opts.server)}/_arkret/peer/invites`;
   return await request.post(url, {
     data: canonicalJson(body),
@@ -4409,7 +4409,7 @@ function peerEventsSubmitBody(
       })}`,
       membership_frontier: frontier,
       delivery_binding_frontier: frontier,
-      destination_service_kind: "principal_server",
+      destination_kind: "principal_server",
     },
     events,
   }) as Record<string, unknown>;

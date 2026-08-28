@@ -60,11 +60,11 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 );
             }
             // Round 2+3 (2026-05-20): fixture case renamed from
-            // `origin_destination_service_id_mismatch` to
-            // `source_destination_service_id_mismatch`. The semantics
+            // `origin_destination_id_mismatch` to
+            // `source_destination_id_mismatch`. The semantics
             // (federation source DID ≠ signed destination DID → reject)
             // are unchanged.
-            "source_destination_service_id_mismatch" => {
+            "source_destination_id_mismatch" => {
                 let verdict = validate_origin_destination(
                     "did:web:remote.example",
                     "did:web:wrong.example",
@@ -74,7 +74,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     bail!("federation fixture {} accepted DID mismatch", case.name);
                 }
                 record_vector_event(
-                    "federation.source_destination_service_id_mismatch",
+                    "federation.source_destination_id_mismatch",
                     &json!({
                         "source": "did:web:remote.example",
                         "signed_destination": "did:web:wrong.example",
@@ -269,7 +269,7 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
             "verification_method",
             "producer_signer_resolution_evidence_ref",
             "producer_signer_resolution_evidence_digest",
-            "receiver_service_id"
+            "receiver_id"
         ]
     });
     if contract != &required_contract {
@@ -294,7 +294,7 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
         ),
         (
             "two_receivers_accept_the_same_event",
-            "one_receipt_per_receiver_service_id_as_distinct_historical_branches",
+            "one_receipt_per_receiver_id_as_distinct_historical_branches",
         ),
         (
             "byte_identical_resubmission_of_an_accepted_event",
@@ -321,7 +321,7 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
             "handoff_incomplete_and_delivery_not_marked_complete",
         ),
         (
-            "receipt_proof_unparsable_or_receiver_service_id_mismatch",
+            "receipt_proof_unparsable_or_receiver_id_mismatch",
             "handoff_incomplete_and_delivery_not_marked_complete",
         ),
         (

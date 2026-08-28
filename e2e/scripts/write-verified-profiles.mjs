@@ -129,7 +129,7 @@ function printUsage() {
       '        "artifact_ref": "file:///.../verified-profiles.json",',
       '        "claim_kind": "conformance_verified",',
       '        "verification_run_id": "<run id>",',
-      '        "verifier_service_id": "ak:did_core:...",',
+      '        "verifier_id": "ak:did_core:...",',
       '        "signature_algorithm": "Ed25519",',
       '        "signature": "<base64url signature>",',
       '        "expires_at": "<RFC3339 optional>"',
@@ -231,7 +231,7 @@ function sha256Hex(s) {
 
 function loadSigningConfig() {
   // `service-describe.schema.json#/properties/verified_profiles/items` requires
-  // `verifier_service_id` to be a `did_core_id` (common-ids.schema.json), i.e.
+  // `verifier_id` to be a `did_core_id` (common-ids.schema.json), i.e.
   // `ak:did_core:*`. The DID URL signing key is separate and projects to
   // this value; the operator supplies both. Fail closed rather than minting a
   // prefix here — a fabricated `ak:` value would be dropped by the Rust loader
@@ -279,7 +279,7 @@ function signedProfileStatement(entry) {
     verification_run_id: entry.verification_run_id,
     artifact_digest: entry.artifact_digest,
     artifact_ref: entry.artifact_ref,
-    verifier_service_id: entry.verifier_service_id,
+    verifier_id: entry.verifier_id,
     timestamp: entry.timestamp,
   };
   if (entry.expires_at) {
@@ -380,7 +380,7 @@ function main(argv) {
         spec_file: specFile,
         artifact_digest: `sha256:${sha256Hex(hashInput)}`,
         artifact_ref: artifactRef,
-        verifier_service_id: signingConfig.verifierServiceId,
+        verifier_id: signingConfig.verifierServiceId,
         timestamp: generatedAt,
       };
       if (signingConfig.validUntil) {

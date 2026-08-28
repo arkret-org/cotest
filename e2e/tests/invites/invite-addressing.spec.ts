@@ -110,11 +110,11 @@ async function acceptedInviteFixture(
   const evidence = { kind: "explicit_address" } as const;
   const inviteAddress = {
     subject_id: invitee.id,
-    recipient_service_id: solandServiceId(),
+    recipient_id: solandServiceId(),
     // §7 step 6: this carrier and the durable
     // `invite_delivery_target.service_resolution` MUST be byte-for-byte equal.
     service_resolution: canonicalServiceResolution(),
-    recipient_service_kind: "principal_server" as const,
+    recipient_kind: "principal_server" as const,
   };
   const event = signedEventEnvelope({
     actorId: inviter.id,
@@ -123,9 +123,9 @@ async function acceptedInviteFixture(
     payload: {
       invitee: invitee.id,
       invite_delivery_target: {
-        recipient_service_id: inviteAddress.recipient_service_id,
+        recipient_id: inviteAddress.recipient_id,
         service_resolution: inviteAddress.service_resolution,
-        recipient_service_kind: "principal_server",
+        recipient_kind: "principal_server",
       },
       introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
       expires_at: canonicalTimestamp(
@@ -164,8 +164,8 @@ test.describe("invite addressing", () => {
     const invitee = "ak:did_core:web:cotest-invitee.example";
     const introductionEvidence = { kind: "explicit_address" } as const;
     const inviteDeliveryTarget = {
-      recipient_service_id: recipientServiceId,
-      recipient_service_kind: "principal_server" as const,
+      recipient_id: recipientServiceId,
+      recipient_kind: "principal_server" as const,
     };
     const inviteEvent = signedEventEnvelope({
       actorId: "ak:did_core:web:cotest-inviter.example",
@@ -261,7 +261,7 @@ test.describe("invite addressing", () => {
     const locator = await resolvedResponse.json();
     expect(locator.schema).toBe("ak.schema.principal_locator.v1");
     expect(locator.subject_id).toBe(user.id);
-    expect(locator.recipient_service_id).toBe(solandServiceId());
+    expect(locator.recipient_id).toBe(solandServiceId());
     expect(locator.issued_at).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
@@ -447,9 +447,9 @@ test.describe("invite addressing", () => {
       payload: {
         invitee: fixture.invitee.id,
         invite_delivery_target: {
-          recipient_service_id: fixture.inviteAddress.recipient_service_id,
+          recipient_id: fixture.inviteAddress.recipient_id,
           service_resolution: fixture.inviteAddress.service_resolution,
-          recipient_service_kind: "principal_server",
+          recipient_kind: "principal_server",
         },
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(fixture.evidence)}`,
         expires_at: canonicalTimestamp(

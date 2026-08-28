@@ -315,10 +315,10 @@ pub fn realm_create_payload_with_notary(
         recovery_members: vec![crate::fixture_notary_signer(
             arkret_identifiers::DidCoreId::new("ak:did_core:web:recovery.soland.local")?,
         )],
-        controller_organization: Some(arkret_identifiers::DidCoreId::new(
+        controller_organization_id: Some(arkret_identifiers::DidCoreId::new(
             "ak:did_core:web:organization.primary.soland.local",
         )?),
-        recovery_controller_organizations: vec![arkret_identifiers::DidCoreId::new(
+        recovery_controller_organization_ids: vec![arkret_identifiers::DidCoreId::new(
             "ak:did_core:web:organization.recovery.soland.local",
         )?],
     };
@@ -398,8 +398,8 @@ pub fn realm_create_payload_with_notary(
                 realm_id: None,
                 allowed_binding_sources: None,
                 did_document_default_allowed: None,
-                allowed_recipient_services: None,
-                required_endorsers: None,
+                allowed_recipient_ids: None,
+                required_endorser_ids: None,
                 unroutable_membership_allowed: Some(true),
                 rebind_authorization: None,
                 handover_grace_seconds: None,

@@ -11,7 +11,7 @@
 // the contact request/respond protocol face delivers signed `ak.contact.*`
 // facts to the target holder's home PS via `ak.peer.contacts.command.submit.v1`
 // (`POST /_arkret/peer/contacts`) over the durable federation outbox. The
-// requester addresses the remote target with `recipient_service_id`; the
+// requester addresses the remote target with `recipient_id`; the
 // responder addresses the remote requester with `requester_service_id`
 // (principal DIDs do not embed their home PS).
 //
@@ -64,7 +64,7 @@ test.beforeEach(() => {
 test.describe("contact graph federation (α/β)", () => {
   // S1-fed: cross-PS add friend (alice@α <-> bob@β), full positive handshake.
   //
-  // alice@α requests bob@β with recipient_service_id=β -> the signed
+  // alice@α requests bob@β with recipient_id=β -> the signed
   // ak.contact.requested fact federates to β over the outbox -> bob@β sees
   // pending_incoming -> bob accepts with requester_service_id=α -> the
   // ak.contact.accepted fact federates back to α -> alice@α sees accepted +
@@ -221,11 +221,11 @@ test.describe("contact graph federation (α/β)", () => {
     expect(draft?.request?.intended_realm_id).toBe(body.realm_id);
     expect(draft?.request?.strand_id).toBe(body.main_strand_id);
     expect(draft?.request?.claim_purpose).toBe("direct_conversation");
-    expect(draft?.transport_binding?.source_service_id).toBe(
+    expect(draft?.transport_binding?.source_id).toBe(
       solandServiceId("alpha"),
     );
-    expect(draft?.transport_binding?.destination_service_id).toBe(
-      bobLocator.recipient_service_id,
+    expect(draft?.transport_binding?.destination_id).toBe(
+      bobLocator.recipient_id,
     );
 
     const retry = await request.post(
@@ -527,7 +527,7 @@ test.describe("contact graph federation (α/β)", () => {
   //
   // alice@α and bob@β first become accepted contacts (same federated handshake
   // as S1-fed). Then alice@α tombstones bob with block_peer=true and addresses
-  // bob's home PS via peer_service_id=β. soland's contact_tombstone handler
+  // bob's home PS via peer_id=β. soland's contact_tombstone handler
   // federates `ak.contact.tombstone` over the durable outbox; β's
   // peer_contacts_submit downgrades its mirrored alice row to `tombstoned`.
   // Spec contact-and-direct-conversation.md §2/§4.1.

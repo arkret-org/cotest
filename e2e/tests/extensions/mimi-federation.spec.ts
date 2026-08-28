@@ -254,7 +254,7 @@ async function createBoundMimiRoom(
         realm_id: realmId,
         strand_id: strandId,
       },
-      hub_provider: solandServiceId(),
+      hub_provider_id: solandServiceId(),
       local_provider_role: "hub",
       content_profile: "application/mimi-content",
       mls_group_id: mlsGroupId,

@@ -425,8 +425,8 @@ test.describe("cross-server federation", () => {
         invite_id: inviteId,
         invitee: bob.id,
         invite_delivery_target: {
-          recipient_service_id: solandServiceId("beta"),
-          recipient_service_kind: "principal_server",
+          recipient_id: solandServiceId("beta"),
+          recipient_kind: "principal_server",
         },
         introduction_evidence_digest: `sha256:${"ab".repeat(32)}`,
         expires_at: new Date(Date.now() + 86_400_000).toISOString(),
@@ -594,12 +594,12 @@ test.describe("cross-server federation", () => {
         const payload = event.payload as
           | {
               delivery_binding?: {
-                recipient_service_id?: string;
+                recipient_id?: string;
               };
             }
           | undefined;
         return (
-          payload?.delivery_binding?.recipient_service_id ===
+          payload?.delivery_binding?.recipient_id ===
           solandServiceId("alpha")
         );
       });
@@ -796,12 +796,12 @@ test.describe("cross-server federation", () => {
       const payload = event.payload as
         | {
             delivery_binding?: {
-              recipient_service_id?: string;
+              recipient_id?: string;
             };
           }
         | undefined;
       return (
-        payload?.delivery_binding?.recipient_service_id ===
+        payload?.delivery_binding?.recipient_id ===
         solandServiceId("alpha")
       );
     });
@@ -856,12 +856,12 @@ test.describe("cross-server federation", () => {
       const payload = event.payload as
         | {
             invite_delivery_target?: {
-              recipient_service_id?: string;
+              recipient_id?: string;
             };
           }
         | undefined;
       return (
-        payload?.invite_delivery_target?.recipient_service_id ===
+        payload?.invite_delivery_target?.recipient_id ===
         solandServiceId("beta")
       );
     });

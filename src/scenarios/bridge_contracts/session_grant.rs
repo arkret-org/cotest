@@ -118,7 +118,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
         "grant presentation must introspect at coauth"
     );
     assert_eq!(requests[0]["grant_jwt"], grant_jwt);
-    assert_eq!(requests[0]["audience"], server.service_id().as_str());
+    assert_eq!(requests[0]["audience_id"], server.service_id().as_str());
 
     // Negative: the same grant presented with a DPoP proof from a different
     // holder key fails closed — the proof thumbprint no longer matches the

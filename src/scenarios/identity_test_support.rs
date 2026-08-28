@@ -1004,8 +1004,8 @@ async fn submit_harness_pcr_genesis(
 ) -> Result<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome> {
     let body = canonical_json_bytes(request)?;
     let content_digest = format!("sha-256=:{}:", STANDARD.encode(Sha256::digest(&body)));
-    let source_service_id = harness_account_authority_id().to_string();
-    let destination_service_id = server.service_id().to_string();
+    let source_id = harness_account_authority_id().to_string();
+    let destination_id = server.service_id().to_string();
     let operation = ServiceOperationId::PEER_PRINCIPAL_GENESIS_COMMAND_SUBMIT_V1;
     let source_trust_domain = server.trust_domain().as_str().to_owned();
     let destination_trust_domain = source_trust_domain.clone();
@@ -1017,10 +1017,10 @@ async fn submit_harness_pcr_genesis(
     };
     let headers = vec![
         ("content-digest".to_owned(), content_digest.clone()),
-        ("source-service-id".to_owned(), source_service_id.clone()),
+        ("source-service-id".to_owned(), source_id.clone()),
         (
             "destination-service-id".to_owned(),
-            destination_service_id.clone(),
+            destination_id.clone(),
         ),
         (
             "source-trust-domain".to_owned(),
@@ -1078,8 +1078,8 @@ async fn submit_harness_pcr_genesis(
             .post(target_uri)
             .header("content-type", "application/json")
             .header("content-digest", content_digest)
-            .header("source-service-id", source_service_id)
-            .header("destination-service-id", destination_service_id)
+            .header("source-service-id", source_id)
+            .header("destination-service-id", destination_id)
             .header("source-trust-domain", source_trust_domain)
             .header("destination-trust-domain", destination_trust_domain)
             .header("idempotency-key", request.idempotency_key.as_str())

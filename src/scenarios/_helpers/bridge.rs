@@ -212,7 +212,7 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         return;
     };
     let audience = by_jwt
-        .audience
+        .audience_id
         .map(|value| value.as_str().to_owned())
         .unwrap_or_default();
     res.render(Json(json!({
@@ -222,11 +222,11 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         "one_time_use_consumed": false,
         "grant": {
             "id": "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD",
-            "issuer": "ak:did_core:web:coauth.cotest.local",
-            "subject": binding.subject,
+            "issuer_id": "ak:did_core:web:coauth.cotest.local",
+            "subject_id": binding.subject,
             "service_account_id": "alice-session-grant",
             "device_id": binding.device_id,
-            "audience": audience,
+            "audience_id": audience,
             "scopes": [
                 "ak.self.account.read.describe.v1",
                 "ak.self.events.read.scan.v1",

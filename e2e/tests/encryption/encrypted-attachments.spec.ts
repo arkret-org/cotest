@@ -129,7 +129,7 @@ test.describe("encrypted attachments", () => {
     expect(body.upload_receipt.blob_ref).toBe(body.blob_ref);
     expect(body.upload_receipt.content_digest).toBe(ciphertextDigest);
     expect(body.upload_receipt.size_bytes).toBe(ciphertext.length);
-    expect(body.upload_receipt.issuer_service_id).toBe(solandServiceId());
+    expect(body.upload_receipt.issuer_id).toBe(solandServiceId());
     expect(body.upload_receipt.signature).toBeTruthy();
     expect(JSON.stringify(body.upload_receipt)).not.toContain("cat.png");
     expect(JSON.stringify(body.upload_receipt)).not.toContain("image/png");

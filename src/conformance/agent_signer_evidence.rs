@@ -125,11 +125,11 @@ struct ExecutableEvidence {
     authorize_event_id: EventId,
     authorize_public_key_digest: Hash,
     binding_digest: Hash,
-    authority_service_id: DidCoreId,
+    authority_id: DidCoreId,
     authority_verification_method: DidUrl,
-    account_authority_service_id: DidCoreId,
+    account_authority_id: DidCoreId,
     account_authority_verification_method: DidUrl,
-    receiver_service_id: DidCoreId,
+    receiver_id: DidCoreId,
     receiver_verification_method: DidUrl,
     controller_public_key: [u8; 32],
     authority_public_key: [u8; 32],
@@ -532,7 +532,7 @@ fn execute_historical_materialization_case(name: &str, case: &Value) -> Result<O
             require_case_str(
                 case,
                 "selector_component_that_differs",
-                "receiver_service_id",
+                "receiver_id",
             )?;
             if case
                 .get("additional_historical_roots_published")
@@ -588,7 +588,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
                 "normalized_document_digest_verified",
                 "rfc9421_covers_method_path_digest_source_destination_operation_request",
                 "verification_key_from_active_service_resolution",
-                "authenticated_source_matches_agent_authority_service_id",
+                "authenticated_source_matches_agent_authority_id",
                 "current_principal_server_matches_source",
             ];
             let all_required = required_true.iter().try_fold(true, |all, field| {
@@ -770,9 +770,9 @@ fn historical_outcome_with(
     let controller_key = public_key(fixture.controller_public_key);
     let authority_key = public_key(fixture.authority_public_key);
     let account_key = public_key(fixture.account_authority_public_key);
-    let receiver_service_id = receiver_override
+    let receiver_id = receiver_override
         .as_ref()
-        .unwrap_or(&fixture.receiver_service_id);
+        .unwrap_or(&fixture.receiver_id);
     let resolve = |method: &DidUrl, _at: DateTime<Utc>| {
         (!deny_key_resolution && method == &fixture.receiver_verification_method)
             .then(|| public_key(fixture.receiver_public_key))
@@ -794,7 +794,7 @@ fn historical_outcome_with(
                 .producer_signer_resolution_evidence_ref,
             producer_signer_resolution_evidence_digest: &fixture
                 .producer_signer_resolution_evidence_digest,
-            receiver_service_id,
+            receiver_id,
             resolve_receiver_historical_key: &resolve,
         },
     )))
@@ -849,9 +849,9 @@ fn common_context<'a>(
         agent_key_authorize_event_id: &fixture.authorize_event_id,
         authorize_public_key_digest: &fixture.authorize_public_key_digest,
         authorize_signing_key_binding_digest: &fixture.binding_digest,
-        expected_authority_service_id: &fixture.authority_service_id,
+        expected_authority_id: &fixture.authority_id,
         expected_authority_verification_method: &fixture.authority_verification_method,
-        expected_account_authority_service_id: &fixture.account_authority_service_id,
+        expected_account_authority_id: &fixture.account_authority_id,
         expected_account_authority_verification_method: &fixture
             .account_authority_verification_method,
         controller_public_key: controller_key,
@@ -898,9 +898,9 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let receiver_service_did = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
     let signer_id = project_did_to_core_id(&signer_did)?;
     let controller_id = project_did_to_core_id(&controller_did)?;
-    let authority_service_id = project_did_to_core_id(&authority_service_did)?;
-    let account_authority_service_id = project_did_to_core_id(&account_authority_service_did)?;
-    let receiver_service_id = project_did_to_core_id(&receiver_service_did)?;
+    let authority_id = project_did_to_core_id(&authority_service_did)?;
+    let account_authority_id = project_did_to_core_id(&account_authority_service_did)?;
+    let receiver_id = project_did_to_core_id(&receiver_service_did)?;
     let verification_method =
         DidUrl::new(format!("{signer_did}#runtime-1")).map_err(anyhow::Error::msg)?;
     let controller_verification_method =
@@ -991,7 +991,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
             realm_id: realm_id.clone(),
         },
         controller_id.clone(),
-        authority_service_id.clone(),
+        authority_id.clone(),
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         serde_json::json!({"agent_id": signer_id}),
@@ -1042,7 +1042,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         inclusion_proof: Vec::new(),
     };
     let core = AgentAuthoritySnapshotCore {
-        authority_service_id: authority_service_id.clone(),
+        authority_id: authority_id.clone(),
         principal_control_realm_id: realm_id.clone(),
         frontier_seal_id: lifecycle_seal.id.clone(),
         frontier_state_root: lifecycle_seal.state_root.clone(),
@@ -1059,7 +1059,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         snapshot_digest: snapshot_digest.clone(),
         lease: AgentSnapshotLease {
             authority_kind: nes("agent_authority")?,
-            authority_service_id: authority_service_id.clone(),
+            authority_id: authority_id.clone(),
             verification_method: authority_verification_method.clone(),
             snapshot_digest: snapshot_digest.clone(),
             issued_at,
@@ -1085,7 +1085,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         status: config.controller_status,
         basis_digest: canonical_hash(&basis)?,
         basis,
-        authority_service_id: account_authority_service_id.clone(),
+        authority_id: account_authority_id.clone(),
         verification_method: account_authority_verification_method.clone(),
         issued_at,
         expires_at,
@@ -1142,7 +1142,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         admission_evidence: admission.clone(),
         current_observation: observation,
         outer_attestation: pending_outer(
-            &authority_service_id,
+            &authority_id,
             &authority_verification_method,
             issued_at,
             expires_at,
@@ -1169,7 +1169,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         producer_signer_resolution_evidence_ref: producer_signer_resolution_evidence_ref.clone(),
         producer_signer_resolution_evidence_digest: producer_signer_resolution_evidence_digest
             .clone(),
-        receiver_service_id: receiver_service_id.clone(),
+        receiver_id: receiver_id.clone(),
         proof: pending_proof()?,
     };
     receipt.proof = sign_domain(
@@ -1183,7 +1183,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         admission_evidence: admission,
         event_admission_receipt: receipt,
         outer_attestation: pending_historical_outer(
-            &authority_service_id,
+            &authority_id,
             &authority_verification_method,
             now,
         )?,
@@ -1201,11 +1201,11 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         authorize_event_id,
         authorize_public_key_digest,
         binding_digest,
-        authority_service_id,
+        authority_id,
         authority_verification_method,
-        account_authority_service_id,
+        account_authority_id,
         account_authority_verification_method,
-        receiver_service_id,
+        receiver_id,
         receiver_verification_method,
         controller_public_key: controller_signing.verifying_key().to_bytes(),
         authority_public_key: authority_signing.verifying_key().to_bytes(),
@@ -1302,7 +1302,7 @@ fn pending_historical_outer(
     Ok(AgentHistoricalEvidenceOuterAttestation {
         domain: nes(DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1)?,
         core_digest: hash_byte(0)?,
-        source_service_id: service_id.clone(),
+        source_id: service_id.clone(),
         verification_method: method.clone(),
         attested_at,
         proof: pending_proof()?,
@@ -1318,7 +1318,7 @@ fn pending_outer(
     Ok(AgentEvidenceOuterAttestation {
         domain: nes(DomainSeparationId::AGENT_SIGNER_EVIDENCE_V1)?,
         core_digest: hash_byte(0)?,
-        source_service_id: service_id.clone(),
+        source_id: service_id.clone(),
         verification_method: method.clone(),
         issued_at,
         expires_at,

@@ -519,9 +519,9 @@ fn realm_bootstrap_event_batch_with_signing_identity(
                 ));
             }
         }
-        match &delivery_binding_policy.allowed_recipient_services {
+        match &delivery_binding_policy.allowed_recipient_ids {
             None => {
-                delivery_binding_policy.allowed_recipient_services =
+                delivery_binding_policy.allowed_recipient_ids =
                     Some(AllowedRecipientServices::Allowlist(vec![
                         principal_server_id.clone(),
                     ]));
@@ -1242,8 +1242,8 @@ fn creator_member_join_payload_value(
         .cloned()
         .ok_or_else(|| anyhow!("routable creator binding requires the bootstrap policy Event"))?;
     let binding = MemberDeliveryBinding {
-        recipient_service_id: principal_server_id.clone(),
-        recipient_service_kind: RecipientServiceKind::PrincipalServer,
+        recipient_id: principal_server_id.clone(),
+        recipient_kind: RecipientServiceKind::PrincipalServer,
         binding_scope: BindingScope::Realm,
         binding_source: BindingSource::RealmPolicy,
         delivery_modes: BTreeSet::from([DeliveryMode::Events]),
@@ -1292,22 +1292,22 @@ pub(crate) fn member_transition_payload(
 
 pub(crate) fn invite_create_payload(
     invitee: &str,
-    recipient_service_id: &str,
+    recipient_id: &str,
     introduction_evidence_digest: impl Into<String>,
     expires_at: DateTime<Utc>,
 ) -> Result<Value> {
     let invitee_did =
         Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee DID: {err}"))?;
-    let recipient_service_id = arkret_identifiers::DidCoreId::new(recipient_service_id.to_owned())
+    let recipient_id = arkret_identifiers::DidCoreId::new(recipient_id.to_owned())
         .map_err(|err| anyhow!("invalid recipient service core id: {err}"))?;
     let current_record_url = format!(
         "https://cotest.invalid{}",
-        arkret_models_identity::canonical_service_current_record_path(&recipient_service_id)
+        arkret_models_identity::canonical_service_current_record_path(&recipient_id)
     );
     InviteCreatePayload::new(
         arkret_identifiers::project_did_to_core_id(&invitee_did)?,
         InviteDeliveryTarget::principal_server(
-            recipient_service_id,
+            recipient_id,
             arkret_models_identity::ServiceResolutionCarrier::CurrentRecordUrl {
                 current_record_url,
                 pinned_record_digest: None,
@@ -1348,7 +1348,7 @@ fn member_payload(
         delivery_status,
         delivery_binding,
         gate_proofs: Vec::new(),
-        via_service_ids: Vec::new(),
+        via_ids: Vec::new(),
         reason,
         invite_ref,
         membership_cause: None,
@@ -1573,7 +1573,7 @@ mod realm_bootstrap_tests {
             Some(&json!(["realm_policy"]))
         );
         assert_eq!(
-            policy.payload.get("allowed_recipient_services"),
+            policy.payload.get("allowed_recipient_ids"),
             Some(&json!([SERVICE]))
         );
 
@@ -1591,7 +1591,7 @@ mod realm_bootstrap_tests {
         )
         .expect("typed creator binding");
         binding.validate().expect("valid creator binding");
-        assert_eq!(binding.recipient_service_id.as_str(), SERVICE);
+        assert_eq!(binding.recipient_id.as_str(), SERVICE);
         assert_eq!(binding.binding_source, BindingSource::RealmPolicy);
         assert_eq!(
             binding.delivery_modes,
@@ -1602,7 +1602,7 @@ mod realm_bootstrap_tests {
             ServiceResolutionCarrier::CurrentRecordUrl {
                 current_record_url: format!(
                     "https://cotest.invalid{}",
-                    canonical_service_current_record_path(&binding.recipient_service_id)
+                    canonical_service_current_record_path(&binding.recipient_id)
                 ),
                 pinned_record_digest: None,
             }

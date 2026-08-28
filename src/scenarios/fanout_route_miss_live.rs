@@ -123,7 +123,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             "delivery_binding_policy": {
                 "allowed_binding_sources": ["realm_policy", "did_document_default"],
                 "did_document_default_allowed": true,
-                "allowed_recipient_services": ["*"],
+                "allowed_recipient_ids": ["*"],
                 "unroutable_membership_allowed": true
             }
         }))
@@ -339,8 +339,8 @@ fn member_payload(
     let member = arkret_wire::project_did_to_core_id(&Did::new(member.to_owned())?)?;
     if membership == MembershipPayloadState::Join {
         let binding = MemberDeliveryBinding {
-            recipient_service_id: member_service.clone(),
-            recipient_service_kind: RecipientServiceKind::PrincipalServer,
+            recipient_id: member_service.clone(),
+            recipient_kind: RecipientServiceKind::PrincipalServer,
             binding_scope: BindingScope::Realm,
             binding_source: BindingSource::DidDocumentDefault,
             delivery_modes: BTreeSet::from([DeliveryMode::Events]),

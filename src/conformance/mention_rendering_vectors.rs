@@ -87,7 +87,7 @@ fn verified_claim(
         handle_aliases: Vec::new(),
         subject: Some(subject.clone()),
         issuer: Some(DidCoreId::new(ISSUER)?),
-        issuer_service_id: None,
+        vouching_id: None,
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: None,
         visibility: None,
@@ -202,10 +202,10 @@ pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
 
 pub fn run_render_fallback_cached_vector() -> Result<()> {
     let s = subject()?;
-    // No verifiable projection (empty accepted_issuers drops the claim),
+    // No verifiable projection (empty accepted_issuer_ids drops the claim),
     // but a stale local cache verified handle exists.
     let snapshot = vec![verified_claim("alice:acme.example", &s, None)?];
-    let selection = empty_selection(&s, &snapshot); // accepted_issuers empty → Step 0 drops it
+    let selection = empty_selection(&s, &snapshot); // accepted_issuer_ids empty → Step 0 drops it
     let cached = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     let render = render_mention(&s, &selection, Some(&cached), Some("Alice Zhang"));
     match render {

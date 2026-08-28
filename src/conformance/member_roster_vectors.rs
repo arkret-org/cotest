@@ -97,7 +97,7 @@ fn verified_claim_for_subject(handle: &str, subject: &DidCoreId) -> Result<Handl
         handle_aliases: Vec::new(),
         subject: Some(subject.clone()),
         issuer: Some(DidCoreId::new("ak:did_core:web:coauth.acme.example")?),
-        issuer_service_id: None,
+        vouching_id: None,
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: None,
         visibility: None,

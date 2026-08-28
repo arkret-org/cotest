@@ -674,9 +674,9 @@ pub fn run_lattice_cas_register_supersession_vector() -> Result<()> {
         arkret_wire::CellFamilyId::REALM_POLICY_SERVER_V1,
         "ak.realm.01js0sp0000000000000000002",
     );
-    let declaration = json!({"policy_server_service_id": "ak:did_core:web:policy.example"});
+    let declaration = json!({"policy_server_id": "ak:did_core:web:policy.example"});
     let tombstone = json!({"tombstone": true});
-    let replacement = json!({"policy_server_service_id": "ak:did_core:web:replacement.example"});
+    let replacement = json!({"policy_server_id": "ak:did_core:web:replacement.example"});
 
     let chain = vec![
         SealedOp::new(issuer_digest("d1"), op_set(declaration.clone())),
@@ -1241,8 +1241,8 @@ fn notary_cell_mixed_profile_resolves_to_value() -> Result<()> {
                 )
             })
             .collect(),
-        controller_organization: None,
-        recovery_controller_organizations: Vec::new(),
+        controller_organization_id: None,
+        recovery_controller_organization_ids: Vec::new(),
     })?;
     let ops = vec![SealedOp::new(issuer_digest("a4"), op_set(value))];
     let resolved = lattice.join(&cref, &ops);

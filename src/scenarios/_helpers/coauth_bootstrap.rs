@@ -228,7 +228,7 @@ impl PreparedCoauth {
     pub async fn spawn_for_principal_server(
         self,
         principal_server_endpoint: &str,
-        principal_server_service_id: &str,
+        principal_server_id: &str,
         session_grant_introspection_bearer: &str,
         embedded_webvh_registration_bearer: &str,
         principal_server_ca_path: Option<&Path>,
@@ -243,7 +243,7 @@ impl PreparedCoauth {
         patch_principal_server_config(
             &mut bundle,
             principal_server_endpoint,
-            principal_server_service_id,
+            principal_server_id,
             session_grant_introspection_bearer,
             embedded_webvh_registration_bearer,
         )?;

@@ -52,14 +52,14 @@ test.describe("sovereign deployment", () => {
         request,
         "alpha",
         "/_soland/admin/deployment/configure",
-        { trust_roots: [], allow_external_via_enclave: false },
+        { trust_root_ids: [], allow_external_via_enclave: false },
         tokens.alpha,
       ),
       postJson(
         request,
         "beta",
         "/_soland/admin/deployment/configure",
-        { trust_roots: [], upstream_available: true },
+        { trust_root_ids: [], upstream_available: true },
         tokens.beta,
       ),
     ]);
@@ -295,13 +295,13 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
 
   await postJson(request, "alpha", "/_soland/admin/deployment/configure", {
     profile: "sovereign_main",
-    trust_roots: ["did:web:*.example"],
+    trust_root_ids: ["did:web:*.example"],
     allow_external_via_enclave: true,
   }, adminTokens.alpha);
   await postJson(request, "beta", "/_soland/admin/deployment/configure", {
     profile: "enclave",
     upstream_main: solandBaseUrl("alpha"),
-    trust_roots: ["did:web:*.example", "did:web:*.example.org"],
+    trust_root_ids: ["did:web:*.example", "did:web:*.example.org"],
     upstream_available: true,
   }, adminTokens.beta);
   await postJson(request, "alpha", "/_soland/admin/deployment/register-enclave", {

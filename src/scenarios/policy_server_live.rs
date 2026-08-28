@@ -35,7 +35,7 @@ use crate::transcripts::record_vector_event;
 /// signed Event and nothing else.
 fn declaration_payload(host: &str) -> Value {
     json!({
-        "policy_server_service_id": format!("ak:did_core:web:{host}"),
+        "policy_server_id": format!("ak:did_core:web:{host}"),
         "policy_server_url": format!("https://{host}/_arkret/self/policy/check"),
         "cache_ttl_seconds": 60,
         "timeout_ms": 1500,
@@ -226,7 +226,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     let declared = policy_server_events(&alice, &org_realm).await?;
     assert_eq!(declared.len(), 1, "declaration events: {declared:?}");
     assert_eq!(
-        declared[0]["payload"]["policy_server_service_id"], "ak:did_core:web:org-policy.example",
+        declared[0]["payload"]["policy_server_id"], "ak:did_core:web:org-policy.example",
         "declaration event payload: {declared:?}"
     );
     assert_eq!(
@@ -246,7 +246,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
     let (status, inherited) = get_policy_server(&alice, &child_realm).await?;
     assert_eq!(status, StatusCode::OK, "inherited GET: {inherited}");
     assert_eq!(
-        inherited["policy_server_service_id"],
+        inherited["policy_server_id"],
         "ak:did_core:web:org-policy.example"
     );
     assert_eq!(inherited["from_organization_fallback"], true);
@@ -299,7 +299,7 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
         "fallback after DELETE: {fallback}"
     );
     assert_eq!(
-        fallback["policy_server_service_id"],
+        fallback["policy_server_id"],
         "ak:did_core:web:org-policy.example"
     );
     assert_eq!(fallback["from_organization_fallback"], true);
@@ -338,8 +338,8 @@ pub async fn policy_server_binding_contract_is_live() -> Result<()> {
             "missing_direct_history_delete": missing_status.as_u16(),
             "settled_delete": deleted_status.as_u16(),
             "repeat_delete": repeat_status.as_u16(),
-            "fallback_after_tombstone": fallback["policy_server_service_id"].clone(),
-            "fallback_policy_server_service_id": inherited["policy_server_service_id"].clone(),
+            "fallback_after_tombstone": fallback["policy_server_id"].clone(),
+            "fallback_policy_server_id": inherited["policy_server_id"].clone(),
         }),
     );
     Ok(())
@@ -393,7 +393,7 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
     let (status, restored) = get_policy_server(&alice, &realm_id).await?;
     assert_eq!(status, StatusCode::OK, "restarted GET: {restored}");
     assert_eq!(
-        restored["policy_server_service_id"], "ak:did_core:web:restart-policy.example",
+        restored["policy_server_id"], "ak:did_core:web:restart-policy.example",
         "the declaration must survive restart: {restored}"
     );
     let events = policy_server_events(&alice, &realm_id).await?;
@@ -432,7 +432,7 @@ pub async fn policy_server_declaration_survives_restart() -> Result<()> {
         }),
         &json!({
             "post_restart_get": status.as_u16(),
-            "post_restart_policy_server_service_id": restored["policy_server_service_id"].clone(),
+            "post_restart_policy_server_id": restored["policy_server_id"].clone(),
             "post_tombstone_restart_get": tombstone_status.as_u16(),
             "durable_policy_events": events.len(),
         }),

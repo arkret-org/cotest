@@ -340,7 +340,7 @@ test.describe("offline sync + conflict repair", () => {
         envelope.kind === "ak.member.state" &&
         payload?.actor_id === alice.id &&
         payload.membership === "join" &&
-        binding?.recipient_service_id === solandServiceId("alpha")
+        binding?.recipient_id === solandServiceId("alpha")
       );
     }) as Record<string, unknown> | undefined;
     expect(
@@ -408,7 +408,7 @@ test.describe("offline sync + conflict repair", () => {
       return (
         event.kind === "ak.invite.create" &&
         payload?.invitee === bob.id &&
-        target?.recipient_service_id === solandServiceId("beta")
+        target?.recipient_id === solandServiceId("beta")
       );
     });
     expect(

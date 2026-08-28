@@ -51,7 +51,7 @@ fn build_realm(
         summary: None,
         security_class,
         created_by: principal.clone(),
-        owning_organizations: Vec::new(),
+        owning_organization_ids: Vec::new(),
         schema_refs: vec!["ak.profile.realm.v1".to_owned()],
         policy_id: None,
         preview_policy_id: None,

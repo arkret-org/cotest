@@ -252,7 +252,7 @@ async function acceptedDirectMessageEvidence(
   ].sort();
   const contact_round = {
     kind: "normal",
-    sorted_pair_members: pair,
+    sorted_pair_member_ids: pair,
     request_event_ref: requestReceipt.core.request_event_ref,
     request_acceptance_receipt_digest: `sha256:${sha256CanonicalJson(
       requestReceipt,

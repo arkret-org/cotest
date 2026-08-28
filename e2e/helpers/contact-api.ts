@@ -704,9 +704,9 @@ export type InviteReceivePolicy = {
   explicit_address_behavior: "drop" | "quarantine" | "notify";
   unknown_invites: "drop" | "quarantine";
   trusted_realm_ids?: string[];
-  trusted_principal_services?: string[];
-  denied_principal_services?: string[];
-  denied_subjects?: string[];
+  trusted_principal_ids?: string[];
+  denied_principal_ids?: string[];
+  denied_subject_ids?: string[];
   disclosure?: {
     high_trust?: "opaque" | "outcome";
     low_trust?: "opaque" | "outcome";
@@ -760,7 +760,7 @@ export type IntroductionEvidence =
 // validate_invite_delivery_consistency + projection required fields):
 //   - kind == ak.invite.create
 //   - payload.invitee == invite_address.subject_id
-//   - payload.invite_delivery_target.recipient_service_id == recipient svc
+//   - payload.invite_delivery_target.recipient_id == recipient svc
 //   - payload.introduction_evidence_digest == sha256(canonical_json(evidence))
 //   - the invite id is retyped from the create Event id and omitted from payload
 export function buildInviteCreateEvent(args: {
@@ -787,8 +787,8 @@ export function buildInviteCreateEvent(args: {
     payload: {
       invitee: args.inviteeId,
       invite_delivery_target: {
-        recipient_service_id: args.recipientServiceId,
-        recipient_service_kind: "principal_server",
+        recipient_id: args.recipientServiceId,
+        recipient_kind: "principal_server",
         // invite-addressing.md §6: this carrier MUST later be byte-for-byte
         // equal to `invite_address.service_resolution`, so both sides read the
         // same normalizer.
@@ -866,9 +866,9 @@ async function deliverInvite(
   const inviteId = retypeEventDerivedId(acceptedEventId, "invite");
   const inviteAddress = {
     subject_id: args.inviteeId,
-    recipient_service_id: recipientServiceId,
+    recipient_id: recipientServiceId,
     service_resolution: canonicalServiceResolution(args.recipientServer),
-    recipient_service_kind: "principal_server" as const,
+    recipient_kind: "principal_server" as const,
   };
   const idempotencyKey =
     args.idempotencyKey ?? `${args.idempotencyKeyPrefix}:${inviteId}`;

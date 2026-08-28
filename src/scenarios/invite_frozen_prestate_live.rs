@@ -80,7 +80,7 @@ async fn observe(
                         "id": invite["id"].clone(),
                         "state": invite["state"].clone(),
                         "status": invite["status"].clone(),
-                        "invitee": invite["invitee"].clone(),
+                        "invitee_id": invite["invitee_id"].clone(),
                     })
                 })
                 .collect()
@@ -251,7 +251,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
         "ak.invite.cancel",
         json!({
             "invite_id": invite_id,
-            "invitee": mallory_core_id,
+            "invitee_id": mallory_core_id,
             "target_state": "revoked",
             "reason": "invitee mismatch negative",
         }),
@@ -284,7 +284,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
     .map_err(|error| anyhow!("inkson invite_cancel event: {error}"))?;
     let inkson_payload = serde_json::to_value(inkson_cancel.payload())?;
     assert_eq!(
-        inkson_payload["invitee"].as_str(),
+        inkson_payload["invitee_id"].as_str(),
         Some(bob_core_id.as_str()),
         "the Inkson direct-cancel producer must carry the frozen invitee: {inkson_payload}"
     );
@@ -365,7 +365,7 @@ pub async fn invite_frozen_prestate_is_enforced_before_acceptance() -> Result<()
                 "events_appended": after_mismatch.event_ids.len() - before.event_ids.len(),
                 "seal_advanced": before.seal_id != after_mismatch.seal_id,
             },
-            "inkson_direct_cancel_invitee": inkson_payload["invitee"].clone(),
+            "inkson_direct_cancel_invitee": inkson_payload["invitee_id"].clone(),
             "accepted_events_appended": after_accept.event_ids.len() - before.event_ids.len(),
             "replay_status": replay_status.as_u16(),
         }),

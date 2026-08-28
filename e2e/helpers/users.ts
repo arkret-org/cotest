@@ -1021,7 +1021,7 @@ export class JointUserPage {
       const resolutionUrl = `${this.serverUrl.replace(/\/$/, "")}/_arkret/open/services/${encodeURIComponent(service.service_id)}/resolution`;
       targetInput = JSON.stringify({
         subject_id: targetId,
-        recipient_service_id: service.service_id,
+        recipient_id: service.service_id,
         service_resolution: {
           current_record_url: resolutionUrl.replace(/^http:/, "https:"),
         },

@@ -131,8 +131,8 @@ export function buildThirdPartyInvitePayload(args: {
     token_entropy_bits: 128,
     // invite.schema.json types this as did_core_id, and soland compares it
     // byte-for-byte against the Realm allowlist and the binding_proof's
-    // verification_service_id, so every carrier uses the core-id spelling.
-    verification_service_id: projectDidToCoreId(args.verificationService.did),
+    // verification_id, so every carrier uses the core-id spelling.
+    verification_id: projectDidToCoreId(args.verificationService.did),
     verification_public_key: args.verificationService.verificationMethod,
     max_claims: 1,
   };
@@ -157,7 +157,7 @@ export function buildThirdPartyInvitePayload(args: {
 // Sign the `binding_proof` exactly as soland reconstructs it: the unsigned proof
 // object (no `signature`/`sig`) wrapped in the domain-separated transcript that
 // binds invite_id / realm_id / subject_id / token_commitment / claim_nonce /
-// invite_digest / verification_service_id.
+// invite_digest / verification_id.
 export function signBindingProof(args: {
   cell: ThirdPartyInviteCell;
   verificationService: DidKeyIdentity;
@@ -167,7 +167,7 @@ export function signBindingProof(args: {
 }): Record<string, unknown> {
   const serviceId = projectDidToCoreId(args.verificationService.did);
   const unsigned = {
-    verification_service_id: serviceId,
+    verification_id: serviceId,
     verification_method: args.verificationService.verificationMethod,
     subject_id: args.subjectId,
     realm_id: args.cell.realmId,
@@ -184,7 +184,7 @@ export function signBindingProof(args: {
     realm_id: args.cell.realmId,
     subject_id: args.subjectId,
     token_commitment: args.cell.tokenCommitment,
-    verification_service_id: serviceId,
+    verification_id: serviceId,
   });
   return {
     ...unsigned,
@@ -213,7 +213,7 @@ export function signSubjectProof(args: {
     realm_id: args.cell.realmId,
     subject_id: projectDidToCoreId(args.subject.did),
     token_commitment: args.cell.tokenCommitment,
-    verification_service_id: projectDidToCoreId(args.verificationServiceDid),
+    verification_id: projectDidToCoreId(args.verificationServiceDid),
   });
   return {
     verification_method: args.subject.verificationMethod,

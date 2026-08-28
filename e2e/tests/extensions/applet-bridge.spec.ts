@@ -533,7 +533,7 @@ test.describe("applet bridge", () => {
         headers: authHeaders(aliceToken),
         data: {
           soland_base_url: solandBaseUrl(),
-          destination_service_id: solandServiceId(),
+          destination_id: solandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
           authorization_ref: messageGrantRef,
@@ -561,7 +561,7 @@ test.describe("applet bridge", () => {
         headers: authHeaders(aliceToken),
         data: {
           soland_base_url: solandBaseUrl(),
-          destination_service_id: solandServiceId(),
+          destination_id: solandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
           strand_id: portalStrandId,
@@ -693,7 +693,7 @@ test.describe("applet bridge", () => {
         headers: authHeaders(aliceToken),
         data: {
           soland_base_url: solandBaseUrl(),
-          destination_service_id: solandServiceId(),
+          destination_id: solandServiceId(),
           applet_id: registration.applet_id,
           realm_id: realmId,
           strand_id: portalStrandId,
@@ -1305,7 +1305,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     };
     return {
       applet_id: unidentified.applet_id,
-      source_service_id: sourceServiceId,
+      source_id: sourceServiceId,
       events: [
         {
           ...event,

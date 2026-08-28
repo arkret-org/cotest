@@ -261,8 +261,8 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
         "request_digest": request_digest,
         "claims_digest": claims_digest,
-        "source_service_id": "ak:did_core:webvh:z6mkfixtureservice",
-        "destination_service_id": "ak:did_core:webvh:z6mkfixtureservice",
+        "source_id": "ak:did_core:webvh:z6mkfixtureservice",
+        "destination_id": "ak:did_core:webvh:z6mkfixtureservice",
         "request": request,
         "claimed_at": "2026-01-01T00:00:00.000Z",
         "expires_at": "2026-01-01T00:05:00.000Z",
@@ -1296,7 +1296,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     let request_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&typed)?)?;
 
     let identity = (
-        typed.service_binding.source_service_id.as_str().to_owned(),
+        typed.service_binding.source_id.as_str().to_owned(),
         typed.claim_request_id.as_str().to_owned(),
     );
     let outcome = arkret_canonical::canonical_json_bytes(&claim_outcome_value(json!({
@@ -1334,7 +1334,7 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     let next_identity = (
         next_attempt
             .service_binding
-            .source_service_id
+            .source_id
             .as_str()
             .to_owned(),
         next_attempt.claim_request_id.as_str().to_owned(),

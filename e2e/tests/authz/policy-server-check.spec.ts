@@ -14,7 +14,7 @@
 //   soland's outbound policy client (soland/crates/http/src/authz/policy_client.rs)
 //   requires a spec §3-conformant PolicyCheckOutcome — bound_to echo, three
 //   frontier digests matching soland's own runtime-computed values, and an
-//   Ed25519 signature whose kid resolves under the declared policy_server_service_id
+//   Ed25519 signature whose kid resolves under the declared policy_server_id
 //   via soland's DID resolver. The harness mock cannot satisfy that (it neither
 //   computes soland's internal membership/policy frontiers nor publishes a
 //   DID document soland trusts). Per spec §4 fail-closed default, soland
@@ -71,7 +71,7 @@ async function declarePolicyServer(
   const actorId = await currentActorIdApi(request, token);
   const sealBasis = await readRealmSealBasis(request, token, realmId);
   const payload = {
-    policy_server_service_id: projectDidToCoreId(did),
+    policy_server_id: projectDidToCoreId(did),
     policy_server_url: `${baseUrl}/_arkret/self/policy/check`,
     cache_ttl_seconds: opts.cacheTtlSeconds ?? 5,
     timeout_ms: opts.timeoutMs ?? 1500,
@@ -309,7 +309,7 @@ test.describe("policy server check", () => {
       policyServerDid,
     );
     expect(projected.realm_id).toBe(realmId);
-    expect(projected.policy_server_service_id).toBe(
+    expect(projected.policy_server_id).toBe(
       projectDidToCoreId(policyServerDid),
     );
     expect(projected.policy_server_url).toBe(policyServerUrl);
@@ -360,7 +360,7 @@ test.describe("policy server check", () => {
       get,
       "get realm policy server",
     );
-    expect(fetched.policy_server_service_id).toBe(
+    expect(fetched.policy_server_id).toBe(
       projectDidToCoreId(policyServerDid),
     );
     expect(fetched.policy_server_url).toBe(policyServerUrl);
@@ -427,7 +427,7 @@ test.describe("policy server check", () => {
     // Reset the mock to a clean, permissive baseline to make the point that the
     // deny is soland's fail-closed default (spec section 4), not the mock's
     // verdict: soland cannot verify the mock's simplified, unsigned response
-    // shape against the declared policy_server_service_id, so the gate denies.
+    // shape against the declared policy_server_id, so the gate denies.
     const reset = await request.delete(`${baseUrl}/scenarios`);
     expect(reset.status()).toBe(200);
     await request.post(`${baseUrl}/scenarios`, { data: { default: "allow" } });
@@ -618,7 +618,7 @@ test.describe("policy server check", () => {
       "read child policy_server through governed_by fallback",
     );
     expect(fallbackBody.realm_id).toBe(orgRealmId);
-    expect(fallbackBody.policy_server_service_id).toBe(
+    expect(fallbackBody.policy_server_id).toBe(
       projectDidToCoreId(orgDid),
     );
     expect(fallbackBody.policy_server_url).toBe(orgUrl);
@@ -660,7 +660,7 @@ test.describe("policy server check", () => {
       "read child direct policy_server overriding fallback",
     );
     expect(directBody.realm_id).toBe(childRealmId);
-    expect(directBody.policy_server_service_id).toBe(
+    expect(directBody.policy_server_id).toBe(
       projectDidToCoreId(childDid),
     );
     expect(directBody.policy_server_url).toBe(childUrl);
@@ -680,7 +680,7 @@ test.describe("policy server check", () => {
       "read organization policy_server after child tombstone",
     );
     expect(restoredFallbackBody.realm_id).toBe(orgRealmId);
-    expect(restoredFallbackBody.policy_server_service_id).toBe(
+    expect(restoredFallbackBody.policy_server_id).toBe(
       projectDidToCoreId(orgDid),
     );
     expect(restoredFallbackBody.from_organization_fallback).toBe(true);

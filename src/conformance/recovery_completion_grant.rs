@@ -126,7 +126,7 @@ fn completion_vector() -> Result<CompletionVector> {
             transaction_request_digest: transaction_request_digest.parse()?,
             prepared_plan_digest: prepared_plan_digest.parse()?,
             principal_id: principal_id.parse()?,
-            coordinator_service_id: audience.parse()?,
+            coordinator_id: audience.parse()?,
             recovery_session_id: "ak:recovery_session:019a8400-0000-7000-8000-000000000004"
                 .parse()?,
             terminal_receipt_id: "ak:receipt:019a8400-0000-7000-8000-000000000003".parse()?,
@@ -269,7 +269,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         || receipt.authorization_event_id != vector.request.device_authorization_event_id
         || receipt_generation != attestation_generation
         || receipt_generation != request_generation
-        || attestation.coordinator_service_id.as_str() != vector.context.audience
+        || attestation.coordinator_id.as_str() != vector.context.audience
         || initial.audience.as_str() != vector.context.audience
         || initial.session_public_key.thumbprint_sha256()? != vector.context.holder_jkt
     {

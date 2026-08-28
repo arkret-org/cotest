@@ -291,7 +291,7 @@ export async function mintDpopBoundGrant(
         actor_id: actorId,
         device_id: deviceId,
         dpop_jwk: deviceKey.publicJwk,
-        audience,
+        audience_id: audience,
         ...(opts.scopes ? { scopes: opts.scopes } : {}),
       },
     },
@@ -310,7 +310,7 @@ export async function mintDpopBoundGrant(
     grant_id: string;
     grant_jwt: string;
     dpop_jkt: string;
-    audience: string;
+    audience_id: string;
     scopes: string[];
     expires_at: string;
     principal_id?: string;
@@ -322,7 +322,7 @@ export async function mintDpopBoundGrant(
     grantId: body.grant_id,
     grantJwt: body.grant_jwt,
     dpopJkt: body.dpop_jkt,
-    audience: body.audience,
+    audience: body.audience_id,
     scopes: body.scopes,
     expiresAt: body.expires_at,
     principalId: body.principal_id,

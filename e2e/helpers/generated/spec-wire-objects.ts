@@ -16,7 +16,7 @@ export type RealmObject = {
   "summary"?: string;
   "security_class"?: "standard" | "high_assurance";
   "trust_domain": string;
-  "owning_organizations"?: string[];
+  "owning_organization_ids"?: string[];
   "schema_refs": Array<string | "ak.profile.principal_control_realm.v1" | "ak.profile.direct_conversation_realm.v1" | "ak.profile.mls.minimal_metadata_realm.v1">;
   "fields"?: {
     "purpose"?: "principal_control" | "managed_agent_control" | "applet_managed_control";
@@ -102,8 +102,8 @@ export type RealmObject = {
       "frozen_public_key_b64u": string;
       "frozen_public_key_digest": string;
     }>;
-    "controller_organization"?: string;
-    "recovery_controller_organizations"?: string[];
+    "controller_organization_id"?: string;
+    "recovery_controller_organization_ids"?: string[];
   } | {
     "kind": "threshold";
     "members": Array<{
@@ -172,8 +172,8 @@ export type RealmObject = {
       "frozen_public_key_b64u": string;
       "frozen_public_key_digest": string;
     }>;
-    "controller_organization"?: string;
-    "recovery_controller_organizations"?: string[];
+    "controller_organization_id"?: string;
+    "recovery_controller_organization_ids"?: string[];
   };
   "revocation_freshness_window_ms"?: number;
   "recovery_witness_freshness_window_ms"?: number;
@@ -367,7 +367,7 @@ export type CapabilityGrantObject = {
     "guardian_approval_required"?: boolean;
     "controller_approval_required"?: boolean;
     "required_claims"?: unknown[];
-    "trusted_claim_issuers"?: string[];
+    "trusted_claim_issuer_ids"?: string[];
     "claim_refresh_required"?: boolean;
     "claim_max_age"?: string;
     "allowed_history_access_values"?: Array<"since_join" | "all_history_for_current_members">;
@@ -379,7 +379,7 @@ export type CapabilityGrantObject = {
     "key_rotation_period"?: string;
     "max_key_age"?: string;
     "key_backup_required"?: boolean;
-    "approved_key_issuers"?: string[];
+    "approved_key_issuer_ids"?: string[];
     "depends_on_moderation_state"?: boolean;
   }>;
   "issued_at": string;
@@ -531,7 +531,7 @@ export type InviteDeliveryRequestBody = {
   };
   "invite_address": {
     "subject_id": string;
-    "recipient_service_id": string;
+    "recipient_id": string;
     "service_resolution": {
       "inline": {
         "record": {
@@ -561,14 +561,14 @@ export type InviteDeliveryRequestBody = {
       "pinned_record_digest"?: string;
     };
     "route_assistance"?: unknown;
-    "recipient_service_kind"?: "principal_server";
+    "recipient_kind"?: "principal_server";
   };
   "introduction_evidence": {
     "kind": "locator_ref";
     "principal_locator": {
       "schema": "ak.schema.principal_locator.v1";
       "subject_id": string;
-      "recipient_service_id": string;
+      "recipient_id": string;
       "service_resolution": {
         "inline": {
           "record": {
@@ -598,7 +598,7 @@ export type InviteDeliveryRequestBody = {
         "pinned_record_digest"?: string;
       };
       "route_assistance"?: unknown;
-      "recipient_service_kind"?: "principal_server";
+      "recipient_kind"?: "principal_server";
       "issued_at": string;
       "expires_at": string;
       "locator_ref_digest": string;
@@ -647,7 +647,7 @@ export type InviteDeliveryRequestBody = {
       "challenge"?: string;
       "claim_scope"?: Record<string, unknown>;
       "member_delivery_binding"?: {
-        "recipient_service_id": string;
+        "recipient_id": string;
         "service_resolution": {
           "inline": {
             "record": {
@@ -676,7 +676,7 @@ export type InviteDeliveryRequestBody = {
           "current_record_url": string;
           "pinned_record_digest"?: string;
         };
-        "recipient_service_kind"?: "principal_server";
+        "recipient_kind"?: "principal_server";
         "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
         "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "keypackages">;
         "service_acceptance_ref"?: string;
@@ -704,7 +704,7 @@ export type InviteDeliveryRequestBody = {
       "handle": string;
       "handle_aliases"?: string[];
       "member_delivery_binding": {
-        "recipient_service_id": string;
+        "recipient_id": string;
         "service_resolution": {
           "inline": {
             "record": {
@@ -733,7 +733,7 @@ export type InviteDeliveryRequestBody = {
           "current_record_url": string;
           "pinned_record_digest"?: string;
         };
-        "recipient_service_kind"?: "principal_server";
+        "recipient_kind"?: "principal_server";
         "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
         "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "keypackages">;
         "service_acceptance_ref"?: string;

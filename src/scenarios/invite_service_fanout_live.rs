@@ -215,8 +215,8 @@ async fn assert_service_account_data_fanout(
     ensure!(
         matches!(
             &envelope.sender,
-            DeviceMessageSender::Service { sender_service_id }
-                if sender_service_id.as_str() == expected_service_id
+            DeviceMessageSender::Service { sender_id }
+                if sender_id.as_str() == expected_service_id
         ),
         "actor-private account-data fanout did not use the local Service sender"
     );

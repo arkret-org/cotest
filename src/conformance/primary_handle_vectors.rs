@@ -35,7 +35,7 @@ pub const VECTOR_ID_PH_HOLDER_FLAG_WINS: &str =
 pub const VECTOR_ID_PH_MOST_RECENT_WINS: &str =
     "ak.cotest_vector.primary_handle_selection.most_recent_wins_when_neither.v1";
 pub const VECTOR_ID_PH_TIE_BREAK_ISSUER: &str =
-    "ak.cotest_vector.primary_handle_selection.tie_break_by_accepted_issuers_position.v1";
+    "ak.cotest_vector.primary_handle_selection.tie_break_by_accepted_issuer_ids_position.v1";
 pub const VECTOR_ID_PH_TIE_BREAK_CREATED_AT: &str =
     "ak.cotest_vector.primary_handle_selection.tie_break_by_created_at.v1";
 pub const VECTOR_ID_PH_TIE_BREAK_CLAIM_DIGEST: &str =
@@ -98,7 +98,7 @@ fn claim(
         handle_aliases: Vec::new(),
         subject: Some(subject()?),
         issuer: Some(DidCoreId::new(issuer)?),
-        issuer_service_id: None,
+        vouching_id: None,
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: None,
         visibility: None,
@@ -263,7 +263,7 @@ pub fn run_holder_flag_wins_over_most_recent_vector() -> Result<()> {
 
 pub fn run_most_recent_wins_when_neither_vector() -> Result<()> {
     let s = subject()?;
-    // Same issuer (equal accepted_issuers position) so the most-recent
+    // Same issuer (equal accepted_issuer_ids position) so the most-recent
     // layer's created_at discriminator is what decides the winner — neither
     // an audience match nor a holder flag applies.
     let older = claim(
@@ -297,9 +297,9 @@ pub fn run_most_recent_wins_when_neither_vector() -> Result<()> {
     Ok(())
 }
 
-// ── VECT-COT-1.6 — tie-break by accepted_issuers position ───────────────────
+// ── VECT-COT-1.6 — tie-break by accepted_issuer_ids position ───────────────────
 
-pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
+pub fn run_tie_break_by_accepted_issuer_ids_position_vector() -> Result<()> {
     let s = subject()?;
     let created = at(2026, 5, 10);
     let expires = at(2026, 6, 25);
@@ -319,7 +319,7 @@ pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
     let chosen =
         select_primary_handle(&input).ok_or_else(|| anyhow!("a candidate MUST be selected"))?;
     if chosen_handle(&chosen)? != "alice:acme.example" {
-        bail!("tie-break MUST prefer the earlier accepted_issuers position");
+        bail!("tie-break MUST prefer the earlier accepted_issuer_ids position");
     }
     // Reverse the policy order → OTHER now wins, proving the position
     // drives the tie-break deterministically.
@@ -330,7 +330,7 @@ pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
     let chosen_rev = select_primary_handle(&reversed)
         .ok_or_else(|| anyhow!("a candidate MUST be selected (reversed)"))?;
     if chosen_handle(&chosen_rev)? != "alice:other.example" {
-        bail!("tie-break MUST follow accepted_issuers order when it is reversed");
+        bail!("tie-break MUST follow accepted_issuer_ids order when it is reversed");
     }
     Ok(())
 }
@@ -340,7 +340,7 @@ pub fn run_tie_break_by_accepted_issuers_position_vector() -> Result<()> {
 pub fn run_tie_break_by_created_at_vector() -> Result<()> {
     let s = subject()?;
     let expires = at(2026, 6, 25);
-    // Same issuer (same accepted_issuers position) → created_at decides.
+    // Same issuer (same accepted_issuer_ids position) → created_at decides.
     let earlier = claim(
         "alice:acme.example",
         ACME_ISSUER,
@@ -573,7 +573,7 @@ pub fn run_policy_snapshot_as_of_replay_vector() -> Result<()> {
     let snapshot = vec![from_acme, from_other];
 
     // Historical Realm policy (version 1) trusted only OTHER, then later
-    // reversed trust. The policy_snapshot (accepted_issuers) drives the
+    // reversed trust. The policy_snapshot (accepted_issuer_ids) drives the
     // historical replay output deterministically.
     let policy_v1 = accepted(&[OTHER_ISSUER]);
     let replay_v1 = PrimaryHandleSelectInput {
@@ -618,7 +618,7 @@ pub fn run_primary_handle_vector_suite() -> Result<()> {
     run_audience_match_wins_vector()?;
     run_holder_flag_wins_over_most_recent_vector()?;
     run_most_recent_wins_when_neither_vector()?;
-    run_tie_break_by_accepted_issuers_position_vector()?;
+    run_tie_break_by_accepted_issuer_ids_position_vector()?;
     run_tie_break_by_created_at_vector()?;
     run_tie_break_by_claim_digest_vector()?;
     run_holder_primary_null_skips_layer_vector()?;

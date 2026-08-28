@@ -7,7 +7,7 @@
 // cotest is the "declared owning organization != verified governance
 // relationship" regression gate. Protocol governance semantics derive ONLY from
 // an active, verified `ak.realm.organization` relationship statement
-// (RealmOrganizationPayload) — never from `realm.create.owning_organizations[]`
+// (RealmOrganizationPayload) — never from `realm.create.owning_organization_ids[]`
 // alone, and never from the `_soland/self/organizations` local-deployment
 // surface.
 //

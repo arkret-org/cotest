@@ -184,7 +184,7 @@ async function submitSelfEvent(
 // Seed the Realm policy components cell with the verification-service allowlist
 // the reducer re-checks (third-party-invites.md §2.1 Allowlist MUST). The
 // allowlist entries are did_core_id and compared byte-for-byte against the
-// payload's verification_service_id, so the DID is projected first. The
+// payload's verification_id, so the DID is projected first. The
 // createRealmApi genesis already occupies policy_revision 1.
 async function allowlistVerificationService(
   request: APIRequestContext,
@@ -202,7 +202,7 @@ async function allowlistVerificationService(
       kind: "ak.realm.policy_bundle",
       payload: {
         policy_revision: nextJoinPolicyRevision(undefined, realmId),
-        allowed_third_party_invite_verification_service_ids: [
+        allowed_third_party_invite_verification_ids: [
           projectDidToCoreId(serviceId),
         ],
       },
@@ -424,7 +424,7 @@ test.describe("third-party invite", () => {
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
-  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker, now resolved:
   // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
@@ -511,7 +511,7 @@ test.describe("third-party invite", () => {
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
-  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker, now resolved:
   // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
@@ -571,7 +571,7 @@ test.describe("third-party invite", () => {
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
-  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker, now resolved:
   // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
@@ -646,7 +646,7 @@ test.describe("third-party invite", () => {
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
-  // (2026-08-02, `allowed_third_party_invite_verification_service_ids`) and in
+  // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker, now resolved:
   // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md

@@ -331,7 +331,7 @@ pub use primary_handle_vectors::{
     run_empty_candidate_fallback_vector, run_holder_flag_wins_over_most_recent_vector,
     run_holder_primary_null_skips_layer_vector, run_most_recent_wins_when_neither_vector,
     run_policy_snapshot_as_of_replay_vector, run_primary_handle_vector_suite,
-    run_single_candidate_passthrough_vector, run_tie_break_by_accepted_issuers_position_vector,
+    run_single_candidate_passthrough_vector, run_tie_break_by_accepted_issuer_ids_position_vector,
     run_tie_break_by_claim_digest_vector, run_tie_break_by_created_at_vector,
 };
 pub use principal_server_certification::{

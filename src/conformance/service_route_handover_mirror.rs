@@ -503,7 +503,7 @@ fn validate_dual_idempotency(case: &SemanticCase) -> Result<()> {
         ],
     )?;
     let base = PublishInput {
-        source: text(&case.inputs, "/source_service_id")?.to_owned(),
+        source: text(&case.inputs, "/source_id")?.to_owned(),
         realm: text(&case.inputs, "/realm_id")?.to_owned(),
         request_id: text(&case.inputs, "/request_id")?.to_owned(),
         request_digest: text(&case.inputs, "/request_digest")?.to_owned(),
@@ -852,7 +852,7 @@ fn validate_cache_expiry(fixture: &Fixture, case: &SemanticCase) -> Result<()> {
 
 fn validate_core_boundary(fixture: &Fixture, case: &SemanticCase) -> Result<()> {
     let entry = cache_fixture_entry(fixture)?;
-    let bound = text(&case.inputs, "/member_recipient_service_id")?;
+    let bound = text(&case.inputs, "/member_recipient_id")?;
     let same = text(&case.inputs, "/same_core_successor_service_id")?;
     let replacement = text(&case.inputs, "/new_core_candidate_service_id")?;
     let projected = project_did_to_core_id(&entry.did)?;

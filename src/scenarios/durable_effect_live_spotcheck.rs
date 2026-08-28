@@ -183,7 +183,7 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     // The declaration is what the caller signs; the request body carries that
     // Event and nothing else.
     let declaration = arkret_models_collaboration::governance::realm_governance::RealmPolicyServerDeclarationPayload {
-        policy_server_service_id: arkret_identifiers::DidCoreId::new(
+        policy_server_id: arkret_identifiers::DidCoreId::new(
             "ak:did_core:web:spotcheck-policy.example".to_owned(),
         )?,
         policy_server_url: "https://spotcheck-policy.example/_arkret/self/policy/check".to_owned(),

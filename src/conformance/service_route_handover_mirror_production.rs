@@ -119,8 +119,8 @@ fn scheduled_notice(
 }
 
 fn mirror_entry(
-    source_service_id: &DidCoreId,
-    receiver_service_id: &DidCoreId,
+    source_id: &DidCoreId,
+    receiver_id: &DidCoreId,
     realm_id: &RealmId,
     request_id: &str,
     record: Option<ServiceResolutionRecord>,
@@ -145,8 +145,8 @@ fn mirror_entry(
     let ack = ServiceResolutionPublishAck {
         ack: ServiceResolutionPublishAckCore {
             request_id: request.request_id.clone(),
-            source_service_id: source_service_id.clone(),
-            receiver_service_id: receiver_service_id.clone(),
+            source_id: source_id.clone(),
+            receiver_id: receiver_id.clone(),
             realm_id: realm_id.clone(),
             request_digest: request_digest.clone(),
             artifact_key: artifact_key.clone(),
@@ -156,7 +156,7 @@ fn mirror_entry(
         proof: signature(&receiver_did, accepted_at)?,
     };
     Ok(ServiceResolutionMirrorEntry {
-        source_service_id: source_service_id.clone(),
+        source_id: source_id.clone(),
         realm_id: realm_id.clone(),
         request_id: request.request_id.clone(),
         request_digest,

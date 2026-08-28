@@ -52,7 +52,7 @@ fn base_claim() -> HandleClaim {
         handle_aliases: Vec::new(),
         subject: None,
         issuer: None,
-        issuer_service_id: None,
+        vouching_id: None,
         binding_state: None,
         claim_kind: None,
         visibility: None,
@@ -159,8 +159,8 @@ fn member_delivery_binding() -> DeliveryBindingHint {
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     DeliveryBindingHint {
-        recipient_service_id: DidCoreId::new("ak:did_core:web:rs.example").unwrap(),
-        recipient_service_kind: RecipientServiceKind::PrincipalServer,
+        recipient_id: DidCoreId::new("ak:did_core:web:rs.example").unwrap(),
+        recipient_kind: RecipientServiceKind::PrincipalServer,
         binding_source: HandleHintBindingSource::OrganizationPolicy,
         delivery_modes: modes,
         service_acceptance_ref: None,

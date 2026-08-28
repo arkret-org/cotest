@@ -28,7 +28,7 @@
         "root_contact_round_id": "sha256:55e2bdad8a06d2503f04e1d0cb5046a918f1002eab53e560ce399fe5aaf10c82",
         "accepted_contact_evidence_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
       },
-      "issuer_service_id": "ak:did_core:web:ps.example",
+      "issuer_id": "ak:did_core:web:ps.example",
       "accepted_at": "2026-08-08T00:00:00.000Z",
       "proof": {
         "verification_method": "did:web:ps.example#key-1",
@@ -55,7 +55,7 @@
         "tags": [],
         "pinned": true,
         "verified_title_at_save": "Engineering",
-        "verified_owning_organizations_at_save": [
+        "verified_owning_organization_ids_at_save": [
           "ak:did_core:web:acme.example"
         ],
         "saved_at": "2026-06-06T00:00:00.000Z",
@@ -78,7 +78,7 @@
         "tags": [],
         "pinned": true,
         "verified_title_at_save": "Engineering",
-        "verified_owning_organizations_at_save": [
+        "verified_owning_organization_ids_at_save": [
           "ak:did_core:web:acme.example"
         ],
         "saved_at": "2026-06-06T00:00:00.000Z",
@@ -197,7 +197,7 @@
     "binding_event_ref": "ak:event:AamoRNGFU65QceSF_1sOMBzEncXa6v055qULEAVWcDYs",
     "binding_payload": {
       "pair_key": "sha256:3d22d109393a4fea67b26165e9a766269af1cefe49520b84ed09132178e3df9b",
-      "participants_unordered": [
+      "unordered_participant_ids": [
         "ak:did_core:web:alice.example",
         "ak:did_core:web:bob.example"
       ],

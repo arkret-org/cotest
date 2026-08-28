@@ -1296,7 +1296,7 @@ fn receipt_for(
             account_authority_id: record.account_authority_id.clone(),
             account_id: record.account_id.clone(),
             status_seq: record.status_seq,
-            receiver_service_id: record.principal_authority.principal_server_id.clone(),
+            receiver_id: record.principal_authority.principal_server_id.clone(),
             accepted_at: at(1000 + index)?,
             verification_method: DidUrl::new(RECEIVER_METHOD).map_err(anyhow::Error::msg)?,
         },

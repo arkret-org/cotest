@@ -645,13 +645,13 @@ async fn create_invite_now(
 
 fn same_service_invite_payload(
     invitee: &str,
-    recipient_service_id: &str,
+    recipient_id: &str,
     expires_at: DateTime<Utc>,
 ) -> Result<(Value, IntroductionEvidence)> {
     let evidence = IntroductionEvidence::SamePrincipalServer;
     let evidence_digest = arkret_canonical::canonical_sha256(&evidence)?;
     let payload =
-        invite_create_payload(invitee, recipient_service_id, &evidence_digest, expires_at)?;
+        invite_create_payload(invitee, recipient_id, &evidence_digest, expires_at)?;
     Ok((payload, evidence))
 }
 
@@ -688,7 +688,7 @@ async fn cancel_invite_now(
         "ak.invite.cancel",
         serde_json::json!({
             "invite_id": invite_id,
-            "invitee": invitee,
+            "invitee_id": invitee,
             "target_state": "revoked",
             "reason": "admin_cancel",
         }),

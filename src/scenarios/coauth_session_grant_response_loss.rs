@@ -45,7 +45,7 @@ pub async fn coauth_session_grant_response_loss_run() -> Result<()> {
         .post(&bind_url)
         .json(&NonProtocolTestBody::new(json!({
             "actor_id": actor_id,
-            "audience": audience,
+            "audience_id": audience,
             "key_log_head": format!("sha256:{}", "1".repeat(64)),
             "account_handle": "coauth-ledger-chaos",
         })))
@@ -66,7 +66,7 @@ pub async fn coauth_session_grant_response_loss_run() -> Result<()> {
             "key_ops": ["verify"],
             "alg": "Ed25519"
         },
-        "audience": audience,
+        "audience_id": audience,
     });
     let canonical_request = arkret_canonical::canonical_json_bytes(&issue_body)?;
     let issue_url = format!(

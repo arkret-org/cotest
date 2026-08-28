@@ -597,7 +597,7 @@ async fn create_pairwise_realm(
             "plaintext_visible_services": [client.service_id()],
             "delivery_binding_policy": {
                 "allowed_binding_sources": ["realm_policy"],
-                "allowed_recipient_services": [client.service_id()],
+                "allowed_recipient_ids": [client.service_id()],
                 "unroutable_membership_allowed": true
             }
         }))
@@ -691,13 +691,13 @@ async fn install_pairwise_membership(
 }
 
 fn pairwise_member_binding(
-    recipient_service_id: DidCoreId,
+    recipient_id: DidCoreId,
     current_record_url: String,
     policy_event_ref: EventId,
 ) -> Result<MemberDeliveryBinding> {
     let binding = MemberDeliveryBinding {
-        recipient_service_id,
-        recipient_service_kind: RecipientServiceKind::PrincipalServer,
+        recipient_id,
+        recipient_kind: RecipientServiceKind::PrincipalServer,
         binding_scope: BindingScope::Realm,
         binding_source: BindingSource::RealmPolicy,
         delivery_modes: BTreeSet::from([DeliveryMode::Events, DeliveryMode::KeyPackages]),
@@ -830,8 +830,8 @@ fn signed_device_claim(
     target: &PairwiseKey,
     realm_id: &str,
     mls_group_id: String,
-    source_service_id: DidCoreId,
-    destination_service_id: DidCoreId,
+    source_id: DidCoreId,
+    destination_id: DidCoreId,
     request_label: &str,
     last_resort_allowed: bool,
 ) -> Result<KeyPackagesClaimRequestBody> {
@@ -840,7 +840,7 @@ fn signed_device_claim(
             requester.core_id.as_str().as_bytes(),
             target.actor_id.as_str().as_bytes(),
             realm_id.as_bytes(),
-            destination_service_id.as_str().as_bytes(),
+            destination_id.as_str().as_bytes(),
             request_label.as_bytes(),
         ])
         .as_bytes(),
@@ -871,8 +871,8 @@ fn signed_device_claim(
         last_resort_allowed: Some(last_resort_allowed),
     };
     let service_binding = KeyPackagesClaimServiceBinding {
-        source_service_id,
-        destination_service_id,
+        source_id,
+        destination_id,
     };
     let verification_method = wire_value(DidUrl::new(format!(
         "{}#{}",
@@ -1151,7 +1151,7 @@ async fn accept_welcome_and_consume(
                 recipient: RecipientMlsDurableSigner::MinimalMetadataPairwise {
                     recipient_pairwise_verification_method: target.verification_method.clone(),
                 },
-                recipient_service_id: DidCoreId::new(client.service_id().to_owned())?,
+                recipient_id: DidCoreId::new(client.service_id().to_owned())?,
                 realm_id: RealmId::new(realm_id.to_owned())?,
                 mls_group_id: wire_value(NonEmptyString::new(requester_group.group_id()))?,
                 mls_epoch: add.welcome.epoch,
@@ -1266,15 +1266,15 @@ fn signed_pairwise_claim(
     target: &PairwiseKey,
     realm_id: &str,
     mls_group_id: String,
-    source_service_id: DidCoreId,
-    destination_service_id: DidCoreId,
+    source_id: DidCoreId,
+    destination_id: DidCoreId,
 ) -> Result<KeyPackagesClaimRequestBody> {
     let request_token = URL_SAFE_NO_PAD.encode(
         arkret_canonical::canonical::sha256_digest_from_slices(&[
             requester.actor_id.as_str().as_bytes(),
             target.actor_id.as_str().as_bytes(),
             realm_id.as_bytes(),
-            destination_service_id.as_str().as_bytes(),
+            destination_id.as_str().as_bytes(),
         ])
         .as_bytes(),
     );
@@ -1304,8 +1304,8 @@ fn signed_pairwise_claim(
         last_resort_allowed: Some(false),
     };
     let service_binding = KeyPackagesClaimServiceBinding {
-        source_service_id,
-        destination_service_id,
+        source_id,
+        destination_id,
     };
     let mut authorization = PeerKeyPackageRequesterAuthorization::MinimalMetadataPairwise {
         verification_method: requester.verification_method.clone(),

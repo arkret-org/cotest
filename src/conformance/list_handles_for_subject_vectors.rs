@@ -78,7 +78,7 @@ fn claim_for(
         handle_aliases: Vec::new(),
         subject: Some(subj.clone()),
         issuer: Some(DidCoreId::new(issuer)?),
-        issuer_service_id: None,
+        vouching_id: None,
         binding_state: Some(HandleBindingState::Verified),
         claim_kind: None,
         visibility: None,
@@ -218,20 +218,20 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
     let s = subject()?;
     let trusted = claim_for("alice:acme.example", &s, ACME_ISSUER, None)?;
     let untrusted = claim_for("alice:other.example", &s, OTHER_ISSUER, None)?;
-    let accepted_issuers = [DidCoreId::new(ACME_ISSUER)?];
+    let accepted_issuer_ids = [DidCoreId::new(ACME_ISSUER)?];
 
     // Directory MUST drop claims whose issuer is not in policy
-    // accepted_issuers.
+    // accepted_issuer_ids.
     let visible: Vec<HandleClaim> = [trusted.clone(), untrusted]
         .into_iter()
         .filter(|c| match &c.issuer {
-            Some(i) => accepted_issuers.iter().any(|a| a == i),
+            Some(i) => accepted_issuer_ids.iter().any(|a| a == i),
             None => false,
         })
         .collect();
     if visible.len() != 1 || visible[0].issuer.as_ref().map(DidCoreId::as_str) != Some(ACME_ISSUER)
     {
-        bail!("issuer-trust filter MUST keep only accepted_issuers claims");
+        bail!("issuer-trust filter MUST keep only accepted_issuer_ids claims");
     }
     let res = DirectorySubjectHandleList {
         subject: s.clone(),

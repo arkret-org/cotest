@@ -174,11 +174,11 @@ fn expect_reason(error: AgentParticipationError, expected: &str) -> Result<()> {
 fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<AgentSelectorClaim> {
     Ok(AgentSelectorClaim {
         schema: SchemaId::AGENT_SELECTOR_CLAIM_V1.to_owned(),
-        controller_subject: did_field(case, "controller_subject")?,
+        controller_subject_id: did_field(case, "controller_subject_id")?,
         agent_slug: required_str(case, slug_field)?.to_owned(),
         subject: did_field(case, agent_field)?,
         issuer: DidCoreId::new("ak:did_core:web:directory.acme.example")?,
-        issuer_service_id: Some(DidCoreId::new("ak:did_core:web:directory.acme.example")?),
+        vouching_id: Some(DidCoreId::new("ak:did_core:web:directory.acme.example")?),
         binding_state: HandleBindingState::Verified,
         visibility: HandleVisibility::Restricted,
         audience: Some("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1".to_owned()),
@@ -206,7 +206,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
 
 fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorResolutionOutcome> {
     let outcome = DirectoryAgentSelectorResolutionOutcome {
-        controller_subject: claim.controller_subject.clone(),
+        controller_subject_id: claim.controller_subject_id.clone(),
         subject: claim.subject.clone(),
         agent_slug: claim.agent_slug.clone(),
         verified: true,
@@ -237,7 +237,7 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
 
     let mention = Mention::new(outcome.subject.clone())
         .with_agent_selector_metadata(
-            outcome.controller_subject.clone(),
+            outcome.controller_subject_id.clone(),
             Handle::parse(required_str(vector, "controller_handle")?)?,
             outcome.agent_slug.clone(),
         )
@@ -249,7 +249,7 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
     if mention.subject_id != expected_subject || node.target_id() != expected_subject.as_str() {
         bail!("agent selector mention did not persist agent DID as authoritative subject_id");
     }
-    if mention.controller_subject_id.as_ref() != Some(&claim.controller_subject) {
+    if mention.controller_subject_id.as_ref() != Some(&claim.controller_subject_id) {
         bail!("agent selector mention lost controller audit metadata");
     }
     if mention.agent_slug_at_time.as_deref() != Some(required_str(vector, "agent_slug_at_time")?) {
@@ -509,7 +509,7 @@ pub fn run_agent_participation_third_party_mention_gate_vector() -> Result<()> {
         &fixture,
         VECTOR_ID_AGENT_PARTICIPATION_THIRD_PARTY_MENTION_GATE,
     )?;
-    let controller = did_field(vector, "controller_subject")?;
+    let controller = did_field(vector, "controller_subject_id")?;
     let third_party = did_field(vector, "third_party_subject")?;
     let before = participation_field(vector, "effective_before")?;
     let after = participation_field(vector, "effective_after")?;

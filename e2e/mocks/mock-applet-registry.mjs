@@ -691,7 +691,7 @@ async function submitSignedAppletTransaction({
   const target = `${String(solandBase).replace(/\/$/, "")}/_arkret/edge/applet/transactions`;
   const targetUrl = new URL(target);
   const transaction = {
-    source_service_id: packageInfo.serviceId,
+    source_id: packageInfo.serviceId,
     events: [event],
   };
   const body = canonicalJson(transaction);
@@ -1215,7 +1215,7 @@ const server = createServer(async (req, res) => {
       try {
         provisionResponse = await submitSignedGhostProvision({
           solandBase,
-          destinationServiceId: body.destination_service_id,
+          destinationServiceId: body.destination_id,
           packageInfo,
           appletId: body.applet_id,
           idempotencyKey: `provision-${body.applet_id}-${safeToken(externalId)}`,
@@ -1271,10 +1271,10 @@ const server = createServer(async (req, res) => {
       );
       return;
     }
-    const destinationServiceId = body.destination_service_id;
+    const destinationServiceId = body.destination_id;
     if (!destinationServiceId) {
       res.statusCode = 400;
-      res.end(JSON.stringify({ error: "missing_destination_service_id" }));
+      res.end(JSON.stringify({ error: "missing_destination_id" }));
       return;
     }
     if (typeof body.strand_id !== "string" || !body.strand_id) {

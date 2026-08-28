@@ -1082,7 +1082,7 @@ fn validate_resolve_failure_blinding(case: &super::NamedCase, expected_op: &str)
     // 404 body shape must NOT carry any of these fields, regardless of the
     // underlying failure reason (missing / hidden / unauthorized). The query
     // inputs legitimately contain the looked-up selector fields (e.g.
-    // `controller_subject`), so the check is against `same_body_shape` — the
+    // `controller_subject_id`), so the check is against `same_body_shape` — the
     // declared response field set — not the request inputs.
     let body_shape_fields: Vec<&str> = body_shape.iter().filter_map(Value::as_str).collect();
     for field in must_not_include {

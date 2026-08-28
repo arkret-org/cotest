@@ -41,14 +41,14 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
                 "value": {
                     "resource_kind": "actor",
                     "discoverability": "public",
-                    "directory_services": ["ak:did_core:web:teabay.cotest.local"]
+                    "directory_ids": ["ak:did_core:web:teabay.cotest.local"]
                 }
             },
             "proofs": []
         },
         "source_refs": ["ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2"],
         "as_of": arkret_canonical::format_timestamp_canonical(Utc::now()),
-        "principal_server_service_id": "ak:did_core:web:soland.cotest.local"
+        "principal_server_id": "ak:did_core:web:soland.cotest.local"
     }))?;
 
     let now = Utc::now().timestamp();
