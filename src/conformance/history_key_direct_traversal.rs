@@ -110,6 +110,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     verify_rrk_production_projection_and_join(&fixture)?;
     verify_rrk_durable_before_gc(&fixture)?;
     verify_response_stream_fixture(&fixture)?;
+    verify_client_convergence_kat(&fixture)?;
     verify_history_candidate_store_kat(&fixture)?;
     verify_history_static_gates(&fixture)?;
     verify_scope_and_endpoint_kats(&fixture)?;
@@ -234,6 +235,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             "scope_and_endpoint_kats_valid": true,
             "history_access_widening_rejected": true,
             "response_capability_kat_valid": true,
+            "client_convergence_kat_valid": true,
             "streaming_scale_kats_valid": true,
         }),
         &json!({"status": "validated"}),
@@ -451,6 +453,19 @@ fn verify_response_stream_fixture(fixture: &Value) -> Result<()> {
             .context("response stream KAT omits sequence_ordered_list")?,
     )?;
     list.validate()?;
+    let empty: HistoryKeyResponseListOutcome = serde_json::from_value(
+        kat.pointer("/wire_instances/empty_list")
+            .cloned()
+            .context("response stream KAT omits empty_list")?,
+    )?;
+    empty.validate()?;
+    if !empty.ack_entries.is_empty()
+        || empty.ack_token.is_some()
+        || empty.cursor.is_some()
+        || empty.limited
+    {
+        bail!("response stream empty page is not the canonical non-ack shape");
+    }
     let ack: HistoryKeyResponseAckRequest = serde_json::from_value(
         kat.pointer("/wire_instances/ack_request")
             .cloned()
@@ -481,6 +496,62 @@ fn verify_response_stream_fixture(fixture: &Value) -> Result<()> {
     )?;
     if out_of_order.validate().is_ok() {
         bail!("response stream KAT accepted an out-of-order ack");
+    }
+    Ok(())
+}
+
+fn verify_client_convergence_kat(fixture: &Value) -> Result<()> {
+    let kat = fixture
+        .get("client_convergence_kat")
+        .context("history fixture omits client_convergence_kat")?;
+    let requester = &kat["requester"];
+    if requester["trigger"] != "exporter_all_history_missing_epoch"
+        || requester["crash_before_create_response"]["durable_pending_intent"] != true
+        || requester["crash_before_create_response"]["durable_recipient_hpke_private_key"] != true
+        || requester["crash_before_create_response"]["retry_reuses_request_id_and_key"] != true
+        || requester["crash_before_create_response"]["live_request_count"] != 1
+        || requester["empty_response_page"]["durable_pending_page"] != false
+        || requester["empty_response_page"]["ack_sent"] != false
+        || requester["empty_response_page"]["high_water_advanced"] != false
+        || requester["empty_response_page"]["next_after"] != "last_acked_cursor"
+        || requester["empty_response_page"]["later_manifest_visible"] != true
+        || requester["temporary_unavailability"]["diagnostic"]
+            != "awaiting_authorized_source_response"
+        || requester["temporary_unavailability"]["terminal"] != false
+        || requester["temporary_unavailability"]["retry_until_request_expiry"] != true
+    {
+        bail!("history requester convergence KAT drifted");
+    }
+    let empty: HistoryKeyResponseListOutcome =
+        serde_json::from_value(requester["empty_response_page"]["wire"].clone())?;
+    empty.validate()?;
+    if !empty.ack_entries.is_empty() || empty.ack_token.is_some() || empty.cursor.is_some() {
+        bail!("history requester convergence KAT permits an ackable empty page");
+    }
+
+    let source = &kat["source"];
+    if source["crash_after_ready_marker"]["retry_uses_exact_staged_bytes"] != true
+        || source["crash_after_ready_marker"]["new_response_ids"] != false
+        || source["later_material"]["completed_attempt_suppresses_new_manifest"] != false
+        || source["later_material"]["new_manifest_coverage"] != json!([8])
+    {
+        bail!("history source convergence KAT drifted");
+    }
+    let negative_cases = kat["negative_cases"]
+        .as_array()
+        .context("history convergence KAT omits negative_cases")?;
+    for (name, count_field) in [
+        ("since_join_missing_prejoin_epoch", "new_request_count"),
+        ("requester_not_currently_authorized", "new_request_count"),
+        ("source_not_currently_authorized", "new_attempt_count"),
+    ] {
+        let case = negative_cases
+            .iter()
+            .find(|case| case["name"] == name)
+            .with_context(|| format!("history convergence KAT omits {name}"))?;
+        if case[count_field] != 0 {
+            bail!("history convergence negative case {name} performed a forbidden write");
+        }
     }
     Ok(())
 }
