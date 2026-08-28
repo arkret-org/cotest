@@ -190,14 +190,15 @@ pub fn run_member_roster_shape_vector() -> Result<()> {
 
 // ── VECT-ROST-2 ─────────────────────────────────────────────────────────────
 
-/// VECT-ROST-2 — `members_limited=true` + `members_next_cursor` semantics
+/// VECT-ROST-2 — `member_roster_entries_limited=true` +
+/// `member_roster_entries_next_cursor` semantics
 /// on a roster frame. A roster wrapped in a sync frame that signals
 /// truncation MUST surface both fields together; clients MUST NOT treat
 /// such a frame as the complete member set.
 pub fn run_member_roster_limited_vector() -> Result<()> {
     let frame = json!({
         "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
-        "members": [
+        "member_roster_entries": [
             {
                 "actor_id": "ak:did_core:web:alice.acme.example",
                 "membership": "join",
@@ -208,35 +209,42 @@ pub fn run_member_roster_limited_vector() -> Result<()> {
                     "sha256:abababababababababababababababababababababababababababababababab"
             }
         ],
-        "members_limited": true,
-        "members_next_cursor":
+        "member_roster_entries_limited": true,
+        "member_roster_entries_next_cursor":
             "ak:cursor:eyJ2IjoiMSIsInB1cnBvc2UiOiJzdHJlYW0iLCJ0IjoiMjAyNi0wNS0yN1QwMDowMDowMFoiLCJ4IjoxOTAwMDAwMDAwMDAwfQ"
     });
 
-    if frame.get("members_limited").and_then(Value::as_bool) != Some(true) {
-        bail!("VECT-ROST-2: `members_limited` MUST be true when the roster is truncated");
+    if frame
+        .get("member_roster_entries_limited")
+        .and_then(Value::as_bool)
+        != Some(true)
+    {
+        bail!("VECT-ROST-2: `member_roster_entries_limited` MUST be true when the roster is truncated");
     }
     let cursor = frame
-        .get("members_next_cursor")
+        .get("member_roster_entries_next_cursor")
         .and_then(Value::as_str)
         .ok_or_else(|| {
-            anyhow!("VECT-ROST-2: a truncated roster MUST carry `members_next_cursor`")
+            anyhow!("VECT-ROST-2: a truncated roster MUST carry `member_roster_entries_next_cursor`")
         })?;
     if !cursor.starts_with("ak:cursor:") {
         bail!(
-            "VECT-ROST-2: members_next_cursor MUST be a `ak:cursor:` opaque \
+            "VECT-ROST-2: member_roster_entries_next_cursor MUST be a `ak:cursor:` opaque \
              cursor; got `{cursor}`"
         );
     }
     let unlimited = json!({
         "realm_id": "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K",
-        "members": []
+        "member_roster_entries": []
     });
-    if unlimited.get("members_limited").is_some() {
-        bail!("VECT-ROST-2: a non-truncated roster MUST NOT carry `members_limited`");
+    if unlimited.get("member_roster_entries_limited").is_some() {
+        bail!("VECT-ROST-2: a non-truncated roster MUST NOT carry `member_roster_entries_limited`");
     }
-    if unlimited.get("members_next_cursor").is_some() {
-        bail!("VECT-ROST-2: a non-truncated roster MUST NOT carry `members_next_cursor`");
+    if unlimited
+        .get("member_roster_entries_next_cursor")
+        .is_some()
+    {
+        bail!("VECT-ROST-2: a non-truncated roster MUST NOT carry `member_roster_entries_next_cursor`");
     }
     Ok(())
 }
