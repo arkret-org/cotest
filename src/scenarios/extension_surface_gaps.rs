@@ -1,7 +1,7 @@
 use anyhow::Result;
 use arkret::{
     AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody,
-    DidFullId, PrincipalAuthorityKey, project_full_id_to_core_id,
+    DidFullId,
 };
 use arkret_models_discovery::ServiceDescribe;
 use reqwest::StatusCode;
@@ -130,11 +130,6 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     assert!(empty_list["agents"].as_array().unwrap().is_empty());
 
     let requested_operation = "ak.self.events.command.submit.v1";
-    let controller_full_id = DidFullId::new(alice.actor.clone())?;
-    let controller_authority = PrincipalAuthorityKey::new(
-        project_full_id_to_core_id(&controller_full_id)?,
-        arkret::DidCoreId::new(alice.service_id().to_owned())?,
-    );
     let provision = AgentProvisionRequestBody::Prepare {
         operation_id: arkret::ProtocolOperationId::new(
             "ak:operation:extension-surface-agent-provision",
@@ -144,7 +139,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
             .expect("fixture idempotency key"),
         full_id: DidFullId::new("did:webvh:z6mkfixtureagent:agent.example")
             .expect("fixture managed Agent full id"),
-        controller_authority,
+        controller_principal_server_id: arkret::DidCoreId::new(alice.service_id().to_owned())?,
         slug: "planner".to_owned(),
         requested_scope: AgentKeyScope {
             actions: vec![
