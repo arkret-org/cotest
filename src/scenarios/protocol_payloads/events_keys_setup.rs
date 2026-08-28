@@ -201,14 +201,14 @@ async fn upload_and_inspect_keys(
                 arkret_models_crypto::KeysClaimRequestBody,
             >(json!({
                 "one_time_keys": {
-                    (actor_id): {(KEYS_DEVICE_ID): "signed_curve25519"}
+                    (&actor_core_id): {(KEYS_DEVICE_ID): "signed_curve25519"}
                 }
             }))?),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        claimed["one_time_keys"][actor_id][KEYS_DEVICE_ID]["signed_curve25519"]["key"],
+        claimed["one_time_keys"][&actor_core_id][KEYS_DEVICE_ID]["signed_curve25519"]["key"],
         "one-time"
     );
     Ok(())

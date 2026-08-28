@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
-use arkret_wire::{PayloadProof, Seal};
+use arkret_wire::{Did, PayloadProof, Seal, project_did_to_core_id};
 use serde_json::{Map, Value, json};
 
 use super::{
@@ -1614,11 +1614,22 @@ fn validate_inclusion_list_obligation(vector: &Value, vector_name: &str) -> Resu
             "vector {vector_name} inclusion-list signature contains members outside its closed schema"
         );
     }
-    if !signature
+    let (verification_controller, _) = signature
         .verification_method
         .as_str()
-        .starts_with(&format!("{signer}#"))
-    {
+        .rsplit_once('#')
+        .ok_or_else(|| {
+            anyhow!("vector {vector_name} inclusion-list verification method has no fragment")
+        })?;
+    let verification_controller = Did::new(verification_controller).map_err(|error| {
+        anyhow!("vector {vector_name} inclusion-list verification controller is not a DID: {error}")
+    })?;
+    let verification_signer = project_did_to_core_id(&verification_controller).map_err(|error| {
+        anyhow!(
+            "vector {vector_name} inclusion-list verification controller has no active method adapter: {error}"
+        )
+    })?;
+    if verification_signer.as_str() != signer {
         bail!("vector {vector_name} inclusion-list signature is not bound to signer {signer}");
     }
     if signature.jws.is_empty() {

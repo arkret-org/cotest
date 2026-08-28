@@ -29,6 +29,12 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
         .context("alice carries her provisioned principal")?
         .device_signing_key
         .clone();
+    let alice_id = alice
+        .principal
+        .as_ref()
+        .context("alice carries her provisioned principal")?
+        .core_id
+        .clone();
 
     expect_api_error(
         server
@@ -107,14 +113,14 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
                 arkret_models_crypto::KeysClaimRequestBody,
             >(json!({
                 "one_time_keys": {
-                    (&alice_did): {(alice_device): "signed_curve25519"}
+                    (alice_id.as_str()): {(alice_device): "signed_curve25519"}
                 }
             }))?),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        first_claim["one_time_keys"][&alice_did][alice_device]["signed_curve25519"]["key"],
+        first_claim["one_time_keys"][alice_id.as_str()][alice_device]["signed_curve25519"]["key"],
         "single-use"
     );
 
@@ -127,14 +133,14 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
                 arkret_models_crypto::KeysClaimRequestBody,
             >(json!({
                 "one_time_keys": {
-                    (&alice_did): {(alice_device): "signed_curve25519"}
+                    (alice_id.as_str()): {(alice_device): "signed_curve25519"}
                 }
             }))?),
         StatusCode::OK,
     )
     .await?;
     assert!(
-        second_claim["one_time_keys"][&alice_did]
+        second_claim["one_time_keys"][alice_id.as_str()]
             .as_object()
             .unwrap()
             .is_empty()
