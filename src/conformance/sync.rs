@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
-use arkret_models_collaboration::http_bodies::{EventsSubscribeFrame, EventsSubscribeFrameKind};
+use arkret_models_collaboration::http_bodies::EventsSubscribeFrameKind;
 use arkret_models_collaboration::sync_frames::account_subscribe::{
     AccountSubscribeFrame, AccountSubscribeFrameKind,
 };
@@ -125,21 +125,36 @@ impl StreamSurface {
 
 enum EmittedStreamFrame {
     Account(Box<AccountSubscribeFrame>),
-    Events(EventsSubscribeFrame),
+    Events(SyntheticEventsTraceFrame),
+}
+
+struct SyntheticEventsTraceFrame {
+    kind: EventsSubscribeFrameKind,
+    cursor: Option<String>,
 }
 
 impl StreamTraceFrame for EmittedStreamFrame {
     fn trace_kind(&self) -> StreamTraceFrameKind {
         match self {
             Self::Account(frame) => frame.trace_kind(),
-            Self::Events(frame) => frame.trace_kind(),
+            Self::Events(frame) => match frame.kind {
+                EventsSubscribeFrameKind::Event => StreamTraceFrameKind::Data,
+                EventsSubscribeFrameKind::Frontier => StreamTraceFrameKind::Frontier,
+                EventsSubscribeFrameKind::Heartbeat => StreamTraceFrameKind::Heartbeat,
+                EventsSubscribeFrameKind::CatchupComplete => StreamTraceFrameKind::CatchupComplete,
+                EventsSubscribeFrameKind::EpochRotation => StreamTraceFrameKind::EpochRotation,
+                EventsSubscribeFrameKind::Dropped => StreamTraceFrameKind::Dropped,
+                EventsSubscribeFrameKind::ResyncRequired => StreamTraceFrameKind::ResyncRequired,
+                EventsSubscribeFrameKind::Unauthorized => StreamTraceFrameKind::Unauthorized,
+                _ => panic!("unregistered events frame kind"),
+            },
         }
     }
 
     fn trace_cursor(&self) -> Option<&str> {
         match self {
             Self::Account(frame) => frame.trace_cursor(),
-            Self::Events(frame) => frame.trace_cursor(),
+            Self::Events(frame) => frame.cursor.as_deref(),
         }
     }
 }
@@ -208,7 +223,7 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
             priority: None,
             reconnect_after_ms,
         })),
-        StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
+        StreamSurface::Events => EmittedStreamFrame::Events(SyntheticEventsTraceFrame {
             kind: match kind {
                 "delta" => EventsSubscribeFrameKind::Event,
                 "frontier" => EventsSubscribeFrameKind::Frontier,
@@ -219,12 +234,7 @@ fn emit_stream_frame(surface: StreamSurface, frame: &Value) -> Result<EmittedStr
                 "unauthorized" => EventsSubscribeFrameKind::Unauthorized,
                 _ => unreachable!("validated stream trace frame kind"),
             },
-            realm_id: None,
-            cursor: cursor
-                .map(|cursor| arkret_identifiers::Cursor::new(cursor.to_owned()))
-                .transpose()?,
-            payload: None,
-            reconnect_after_ms,
+            cursor: cursor.map(ToOwned::to_owned),
         }),
     })
 }
@@ -244,12 +254,9 @@ fn emit_forbidden_cursorless_dropped(surface: StreamSurface) -> EmittedStreamFra
             priority: None,
             reconnect_after_ms: None,
         })),
-        StreamSurface::Events => EmittedStreamFrame::Events(EventsSubscribeFrame {
+        StreamSurface::Events => EmittedStreamFrame::Events(SyntheticEventsTraceFrame {
             kind: EventsSubscribeFrameKind::Dropped,
-            realm_id: None,
             cursor: None,
-            payload: None,
-            reconnect_after_ms: None,
         }),
     }
 }

@@ -5,7 +5,8 @@ use arkret_canonical::{canonical_json_bytes, from_canonical_json_slice};
 use arkret_crypto::secret_share::{SecretShareRequestContent, SecretShareSendContent};
 use arkret_identifiers::{DeviceId, DeviceMessageId, DidCoreId};
 use arkret_models_collaboration::sync_frames::account_sync::{
-    DeviceMessageEnvelope, DeviceMessageSender, DeviceMessageTarget, DeviceMessagesSendRequestBody,
+    DeviceMessageContent, DeviceMessageEnvelope, DeviceMessageSender, DeviceMessageTarget,
+    DeviceMessagesSendRequestBody,
 };
 use arkret_wire::{
     HPKE_SUITE_X25519_CHACHA20POLY1305_V1, ProtocolKind, SECRET_REQUEST_KIND, SECRET_SEND_KIND,
@@ -173,10 +174,10 @@ fn d2d_root_secret_share_rejects_unsolicited_or_tampered_sends() -> Result<()> {
     assert!(open_secret_send(&request, &wrong_recipient).is_err());
 
     let mut wrong_scheme = envelope.clone();
-    wrong_scheme.content.insert(
-        "scheme".to_owned(),
-        json!("ak.hpke_x25519_aead_aesgcm128.v1"),
-    );
+    let DeviceMessageContent::SecretSend(content) = &mut wrong_scheme.content else {
+        unreachable!("fixture is a secret send")
+    };
+    content.scheme = "ak.hpke_x25519_aead_aesgcm128.v1".to_owned();
     let err = open_secret_send(&request, &wrong_scheme).unwrap_err();
     assert!(format!("{err}").contains("scheme"));
 
@@ -387,7 +388,7 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
         recipient_device_id: device_id(NEW_DEVICE)?,
         sent_at: parse_utc("2026-06-10T00:00:00.000Z")?,
         expires_at: parse_utc(expires_at)?,
-        content: serde_json::from_value(content)?,
+        content: DeviceMessageContent::SecretSend(serde_json::from_value(content)?),
         device_proof: None,
         unsigned: None,
     })

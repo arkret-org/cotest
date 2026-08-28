@@ -25,7 +25,7 @@ use arkret_models_collaboration::governance::invite_addressing::{
 };
 use arkret_models_collaboration::governance_payloads::{ConsentObservedDot, ConsentRevokePayload};
 use arkret_models_collaboration::sync_frames::account_sync::{
-    ActorPrivateAccountDataOperation, ActorPrivateAccountDataUpdate, DeviceMessageSender,
+    ActorPrivateAccountDataOperation, DeviceMessageContent, DeviceMessageSender,
     DeviceMessagesAckRequestBody, DeviceMessagesGetOutcome,
 };
 use arkret_models_identity::ServiceResolutionCarrier;
@@ -192,11 +192,10 @@ async fn assert_service_account_data_fanout(
         if envelope.kind.as_str() != "ak.account_data.update" {
             continue;
         }
-        let Ok(update) = serde_json::from_value::<ActorPrivateAccountDataUpdate>(Value::Object(
-            envelope.content.clone().into_iter().collect(),
-        )) else {
+        let DeviceMessageContent::AccountDataUpdate(update) = &envelope.content else {
             continue;
         };
+        let update = update.clone();
         if update.account_data_key == expected_row.account_data_key
             && update.revision == expected_row.revision
         {
