@@ -19,7 +19,7 @@ import { operationSelector } from "./arkret-test";
 import {
   type SolandKey,
   solandBaseUrl,
-  solandServiceFullId,
+  solandServiceDid,
   solandServiceId,
   solandServiceResolution,
 } from "./env";
@@ -151,7 +151,7 @@ export function registerEventSigner(args: {
       : undefined);
   if (!verificationMethod) {
     throw new Error(
-      "registerEventSigner requires a full-DID verification method for a core actor id",
+      "registerEventSigner requires a DID verification method for a core actor id",
     );
   }
   const previous = registeredEventSigners.get(args.actorDid);
@@ -453,25 +453,25 @@ export function principalControlRealmForDidIfKnown(
 // Re-exported authoritative base64url encoder (single source: encoding.ts).
 export { base64url };
 
-export function projectFullDidToCoreId(fullDid: string): string {
-  if (fullDid.startsWith("did:webvh:")) {
-    const [scid] = fullDid.slice("did:webvh:".length).split(":", 1);
+export function projectDidToCoreId(did: string): string {
+  if (did.startsWith("did:webvh:")) {
+    const [scid] = did.slice("did:webvh:".length).split(":", 1);
     if (!scid) {
-      throw new Error(`invalid did:webvh notary DID: ${fullDid}`);
+      throw new Error(`invalid did:webvh notary DID: ${did}`);
     }
     return `ak:did_core:webvh:${scid}`;
   }
-  if (fullDid.startsWith("did:web:")) {
-    return `ak:did_core:web:${fullDid.slice("did:web:".length)}`;
+  if (did.startsWith("did:web:")) {
+    return `ak:did_core:web:${did.slice("did:web:".length)}`;
   }
-  if (fullDid.startsWith("did:key:")) {
-    return `ak:did_core:key:${fullDid.slice("did:key:".length)}`;
+  if (did.startsWith("did:key:")) {
+    return `ak:did_core:key:${did.slice("did:key:".length)}`;
   }
-  throw new Error(`unsupported notary DID method: ${fullDid}`);
+  throw new Error(`unsupported notary DID method: ${did}`);
 }
 
 export function canonicalDidCoreId(did: string): string {
-  return did.startsWith("ak:did_core:") ? did : projectFullDidToCoreId(did);
+  return did.startsWith("ak:did_core:") ? did : projectDidToCoreId(did);
 }
 
 // Default stand-in federation source for helpers that do not impersonate one
@@ -481,13 +481,13 @@ export function canonicalDidCoreId(did: string): string {
 // no-history / negative fixtures, so the retired `did:web:cotest-peer.example`
 // default no longer resolves. The `source-service-id` header carries the
 // projected core id (soland parses it as a `DidCoreId`); the Signature-Input
-// keyid must be the full DID URL whose controller projects back to it.
-const COTEST_PEER_FIXTURE_FULL_DID = "did:webvh:z6mkpeer:cotest-peer.example";
-const COTEST_PEER_FIXTURE_CORE_ID = projectFullDidToCoreId(
-  COTEST_PEER_FIXTURE_FULL_DID,
+// keyid must be the DID URL whose controller projects back to it.
+const COTEST_PEER_FIXTURE_DID = "did:webvh:z6mkpeer:cotest-peer.example";
+const COTEST_PEER_FIXTURE_CORE_ID = projectDidToCoreId(
+  COTEST_PEER_FIXTURE_DID,
 );
 
-// Inverse spelling of projectFullDidToCoreId for harness-synthetic services:
+// Inverse spelling of projectDidToCoreId for harness-synthetic services:
 // a federation Signature-Input keyid must be a DID URL whose controller
 // projects to the Source-Service-ID core id (soland federation signature.rs
 // validate_signature_input), even though the header itself carries the core
@@ -498,7 +498,7 @@ function serviceCoreIdToDid(serviceId: string): string {
     return `did:web:${serviceId.slice("ak:did_core:web:".length)}`;
   }
   if (serviceId === COTEST_PEER_FIXTURE_CORE_ID) {
-    return COTEST_PEER_FIXTURE_FULL_DID;
+    return COTEST_PEER_FIXTURE_DID;
   }
   return serviceId;
 }
@@ -509,16 +509,16 @@ function serviceCoreIdToDid(serviceId: string): string {
 // descriptor is derived from the same development seed soland freezes into
 // `service_notary_signer_descriptor()`. No controlling organization is derived
 // for the development deployment, so the org-diversity members stay absent.
-export function singleSignerNotaryFromFullDid(
-  fullDid: string,
+export function singleSignerNotaryFromDid(
+  did: string,
 ): RealmObject["notary"] {
-  const actorId = canonicalDidCoreId(fullDid);
+  const actorId = canonicalDidCoreId(did);
   const publicKey = serviceNotaryPublicKey(actorId);
   return {
     kind: "single_signer",
     signer: {
       actor_id: actorId,
-      verification_method: `${fullDid}#notary-key`,
+      verification_method: `${did}#notary-key`,
       key_kind: "ed25519_raw32",
       jose_algorithm: "Ed25519",
       frozen_public_key_b64u: publicKey.toString("base64url"),
@@ -647,7 +647,7 @@ export async function createRealmApi(
     // This helper creates Principal-Server-hosted collaboration Realms. The
     // service owns the notary key and materializes Event Seals; the principal
     // remains the Realm creator and root authority-cell controller.
-    notary: singleSignerNotaryFromFullDid(solandServiceFullId(opts.server)),
+    notary: singleSignerNotaryFromDid(solandServiceDid(opts.server)),
     // Create-locked (realm-and-space.md section 2.5): the reducer copies this
     // into the Realm authority-root cell, which is what gives the creator
     // effective `ak.realm.owner`. v1 issues no genesis self-grant.
@@ -767,10 +767,10 @@ export async function createRealmApi(
   }
   const creatorServiceId =
     data.creator_service_id ?? solandServiceId(opts.server);
-  const creatorFullDid =
+  const creatorDid =
     eventSignerFor(ownerDid)?.verificationMethod.split("#", 1)[0] ?? ownerDid;
   const didDocumentResponse = await request.get(
-    `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(creatorFullDid)}/did-document`,
+    `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(creatorDid)}/did-document`,
   );
   const didDocument = await expectJsonOk<Record<string, unknown>>(
     didDocumentResponse,
@@ -4455,7 +4455,7 @@ function signedFederationPushHeaders(
   const sourceKey = (["default", "alpha", "beta"] as SolandKey[]).find(
     (key) => solandServiceId(key) === sourceDid,
   );
-  const keyid = `${sourceKey ? solandServiceFullId(sourceKey) : serviceCoreIdToDid(sourceDid)}#federation-fanout-key`;
+  const keyid = `${sourceKey ? solandServiceDid(sourceKey) : serviceCoreIdToDid(sourceDid)}#federation-fanout-key`;
   const idempotencyComponent = opts.idempotencyKey ? ' "idempotency-key"' : "";
   const signatureParams =
     `("@method" "@target-uri" "@authority" "content-digest" "arkret-operation" "source-service-id" ` +
@@ -4572,7 +4572,7 @@ function trustDomainFromServiceId(serviceId: string): string {
   if (localKey) {
     return "ak:trust_domain:local.host";
   }
-  const locationDid = localKey ? solandServiceFullId(localKey) : serviceId;
+  const locationDid = localKey ? solandServiceDid(localKey) : serviceId;
   const webHost = locationDid.startsWith("did:web:")
     ? locationDid.slice("did:web:".length).split(":")[0]
     : locationDid.startsWith("ak:did_core:web:")

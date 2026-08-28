@@ -197,9 +197,9 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
 
 $SolandServiceId = $null
-$SolandServiceFullId = $null
+$SolandServiceDid = $null
 $SolandBetaServiceId = $null
-$SolandBetaServiceFullId = $null
+$SolandBetaServiceDid = $null
 $CoauthServiceId = $null
 $CoauthEnrollmentAuthorityDid = "did:key:z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
 
@@ -1347,7 +1347,7 @@ function Assert-JointTlsTopology {
     #    history is verified independently by cotest-wire (not by the service
     #    that published it).
     foreach ($service in $Services) {
-        $did = [string]$service.ServiceFullId
+        $did = [string]$service.ServiceDid
         $logUrl = Get-WebvhLogUrlFromDid -Did $did
         $logPath = Join-Path $EvidenceDir "$($service.Name)-did.jsonl"
         try {
@@ -1815,7 +1815,7 @@ function Get-DescribedServiceId {
     throw "Timed out waiting for $ServiceName describe at $url. Last error: $lastError"
 }
 
-function Get-DescribedServiceFullId {
+function Get-DescribedServiceDid {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUrl,
         [Parameter(Mandatory = $true)][string]$ServiceName,
@@ -1835,11 +1835,11 @@ function Get-DescribedServiceFullId {
                 "Arkret-Operation" = "ak.server.read.describe.v1"
             }
             $describe = Invoke-RestMethod -Uri $url -Method Get -TimeoutSec 10 -ErrorAction Stop @requestOptions
-            $fullId = [string]$describe.service_resolution.full_id
-            if (-not [string]::IsNullOrWhiteSpace($fullId) -and $fullId.StartsWith("did:", [System.StringComparison]::Ordinal)) {
-                return $fullId
+            $did = [string]$describe.service_resolution.did
+            if (-not [string]::IsNullOrWhiteSpace($did) -and $did.StartsWith("did:", [System.StringComparison]::Ordinal)) {
+                return $did
             }
-            $lastError = "response did not contain a valid service_resolution.full_id"
+            $lastError = "response did not contain a valid service_resolution.did"
         } catch {
             $lastError = $_.Exception.Message
         }
@@ -3722,7 +3722,7 @@ try {
     }
     Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
     $SolandServiceId = Get-DescribedServiceId -BaseUrl $SolandBaseUrl -ServiceName "soland"
-    $SolandServiceFullId = Get-DescribedServiceFullId -BaseUrl $SolandBaseUrl -ServiceName "soland"
+    $SolandServiceDid = Get-DescribedServiceDid -BaseUrl $SolandBaseUrl -ServiceName "soland"
 
     if ($DualSoland) {
         $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
@@ -3769,7 +3769,7 @@ try {
         }
         Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
         $SolandBetaServiceId = Get-DescribedServiceId -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
-        $SolandBetaServiceFullId = Get-DescribedServiceFullId -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
+        $SolandBetaServiceDid = Get-DescribedServiceDid -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
     }
 
     if ($StartCoauth) {
@@ -3895,11 +3895,11 @@ try {
             throw "joint TLS topology verification requires the cotest-wire binary; rerun without -SkipBuild or set COTEST_WIRE_BIN"
         }
         $jointTlsServices = @()
-        if ($solandPublicHost -and $SolandServiceFullId) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland"; ServiceFullId = $SolandServiceFullId }
+        if ($solandPublicHost -and $SolandServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland"; ServiceDid = $SolandServiceDid }
         }
-        if ($solandBetaPublicHost -and $SolandBetaServiceFullId) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-beta"; ServiceFullId = $SolandBetaServiceFullId }
+        if ($solandBetaPublicHost -and $SolandBetaServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-beta"; ServiceDid = $SolandBetaServiceDid }
         }
         Assert-JointTlsTopology `
             -TlsPort $jointTlsPort `
@@ -3917,7 +3917,7 @@ try {
     $env:COTEST_UI_VISUAL_BASELINE_DIR = $visualBaselineDir
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
-    $env:COTEST_SOLAND_SERVICE_FULL_ID = $SolandServiceFullId
+    $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
     if ($SkipInkson) {
         $env:COTEST_SKIP_INKSON = "1"
     } else {
@@ -3958,10 +3958,10 @@ try {
     if ($DualSoland) {
         $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
         $env:COTEST_SOLAND_ALPHA_SERVICE_ID = $SolandServiceId
-        $env:COTEST_SOLAND_ALPHA_SERVICE_FULL_ID = $SolandServiceFullId
+        $env:COTEST_SOLAND_ALPHA_SERVICE_DID = $SolandServiceDid
         $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
         $env:COTEST_SOLAND_BETA_SERVICE_ID = $SolandBetaServiceId
-        $env:COTEST_SOLAND_BETA_SERVICE_FULL_ID = $SolandBetaServiceFullId
+        $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
         if ($SolandBetaNotarySigningKey) {
             $env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY = $SolandBetaNotarySigningKey
         } else {

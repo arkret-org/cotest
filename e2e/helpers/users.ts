@@ -18,7 +18,7 @@ import {
   inksonBaseUrl,
   type SolandKey,
   solandBaseUrl,
-  solandServiceFullId,
+  solandServiceDid,
   solandServiceId,
 } from "./env";
 import { selectDxcOption } from "./dxc-select";
@@ -37,7 +37,7 @@ import {
   authHeaders,
   canonicalJson,
   cotestWire,
-  projectFullDidToCoreId,
+  projectDidToCoreId,
   registerEventSigner,
   registerPrincipalControlRealm,
   registerPrincipalControlEvents,
@@ -52,7 +52,7 @@ export type JointUser = {
   /// Stable business identity projected through the active DID method adapter.
   did: string;
   /// Resolvable DID retained only for registration and proof-method boundaries.
-  fullDid: string;
+  did: string;
   deviceId: string;
   handle: string;
   displayName: string;
@@ -1351,11 +1351,11 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   const scid = base58btcEncode(
     Buffer.concat([Buffer.from([0x12, 0x20]), randomBytes(32)]),
   );
-  const principalFullDid = (() => {
+  const principalDid = (() => {
     if (!server) {
       return `did:webvh:${scid}:${slug}.example`;
     }
-    const serviceDid = solandServiceFullId(server);
+    const serviceDid = solandServiceDid(server);
     const webvh = /^did:webvh:[^:]+:([^:]+)(?::.*)?$/.exec(serviceDid);
     if (webvh?.[1]) {
       return `did:webvh:${scid}:${webvh[1]}:webvh:${slug}`;
@@ -1368,8 +1368,8 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
   })();
   return {
     name: slug,
-    did: projectFullDidToCoreId(principalFullDid),
-    fullDid: principalFullDid,
+    did: projectDidToCoreId(principalDid),
+    did: principalDid,
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${slug}`,
     displayName: `${prefix} ${stamp}`,
@@ -1423,7 +1423,7 @@ export async function ensureRegistered(
             );
           }
           user.did = session.user.did;
-          user.fullDid = session.user.fullDid;
+          user.did = session.user.did;
           user.deviceId = session.user.deviceId;
           user.handle = session.user.handle;
           user.displayName = session.user.displayName;
@@ -1451,7 +1451,7 @@ async function ensureRegisteredRaw(
   const url = `${solandBaseUrl(opts.server)}/_soland/gate/account/project`;
   const data = {
     principal_id: user.did,
-    full_id: user.fullDid,
+    did: user.did,
     display_name: user.displayName,
     device_id: user.deviceId,
   };
@@ -1465,7 +1465,7 @@ async function ensureRegisteredRaw(
   registerEventSigner({
     actorDid: user.did,
     deviceId: user.deviceId,
-    verificationMethod: `${user.fullDid}#${user.deviceId}`,
+    verificationMethod: `${user.did}#${user.deviceId}`,
   });
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
   for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
@@ -1504,7 +1504,7 @@ export async function issueDevSession(
   registerEventSigner({
     actorDid: user.did,
     deviceId: opts.deviceId ?? user.deviceId,
-    verificationMethod: `${user.fullDid}#${opts.deviceId ?? user.deviceId}`,
+    verificationMethod: `${user.did}#${opts.deviceId ?? user.deviceId}`,
   });
   const backoffMs = [500, 1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
   for (let attempt = 0; attempt < backoffMs.length; attempt += 1) {
@@ -1614,7 +1614,7 @@ export async function createDpopUserSessionForAccount(
     ...seed,
     name: account.handle,
     did: grant.principalDid,
-    fullDid: account.fullDid,
+    did: account.did,
     handle: `@${account.handle}`,
     displayName: account.displayName,
   };
@@ -1623,7 +1623,7 @@ export async function createDpopUserSessionForAccount(
   registerEventSigner({
     actorDid: user.did,
     deviceId: user.deviceId,
-    verificationMethod: `${user.fullDid}#${user.deviceId}`,
+    verificationMethod: `${user.did}#${user.deviceId}`,
     signingSeedB64url: eventSigningSeedB64url,
   });
   const session = {
@@ -1689,7 +1689,7 @@ export async function createDpopUserSessionForAccount(
     },
   );
   session.recoveryMaterialEvidence = {
-    principal_id: user.fullDid,
+    principal_id: user.did,
     device_id: user.deviceId,
     principal_control_realm_id: principalControlRealmId,
     pcr_genesis_unit: checkpoint.pcr_genesis_unit,
@@ -1855,7 +1855,7 @@ export async function openUser(
       ? {
           grant_jwt: opts.grantJwt,
           dpop_seed_b64url: opts.dpopSeedB64url,
-          principal_full_id: user.fullDid,
+          principal_did: user.did,
           ...(opts.recoveryMaterialEvidence
             ? { recovery_material_evidence: opts.recoveryMaterialEvidence }
             : {}),
@@ -1880,7 +1880,7 @@ export async function openUser(
                 principal_server_id: solandServiceId(opts.server),
               },
               resolution: {
-                full_id: user.fullDid,
+                did: user.did,
                 method_history_head: "sha256:cotest-accepted-history-head",
                 version_id: "cotest-accepted-version",
                 resolution_event_ref: "ak:event:cotest-accepted-resolution",

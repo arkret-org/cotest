@@ -232,7 +232,7 @@ function sha256Hex(s) {
 function loadSigningConfig() {
   // `service-describe.schema.json#/properties/verified_profiles/items` requires
   // `verifier_service_id` to be a `did_core_id` (common-ids.schema.json), i.e.
-  // `ak:did_core:*`. The full DID URL signing key is separate and projects to
+  // `ak:did_core:*`. The DID URL signing key is separate and projects to
   // this value; the operator supplies both. Fail closed rather than minting a
   // prefix here — a fabricated `ak:` value would be dropped by the Rust loader
   // (arkret_models_discovery::parse_verified_profiles_artifact) at best.

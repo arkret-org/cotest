@@ -154,7 +154,7 @@ test.describe("tsp bootstrap", () => {
     const bootstrap = await bootstrapRelationship(
       request,
       endpoint.base,
-      alice.fullDid,
+      alice.did,
     );
     expect(bootstrap.ok).toBe(true);
     expect(bootstrap.endpoint_vid).toBe(bobExternVid);

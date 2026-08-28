@@ -10,13 +10,13 @@ use crate::harness::{
     submitted_event_id,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+    actor_did_for_service_did, seal_current_principal_control_frontier,
     spawn_with_harness_account_authority,
 };
 
 pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("directory-workflow", &[]).await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "directory-alice")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "directory-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -26,7 +26,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         .context("alice carries her provisioned principal")?
         .device_signing_key
         .clone();
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "directory-bob")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "directory-bob")?;
     let bob = server
         .register_client(
             &bob_did,

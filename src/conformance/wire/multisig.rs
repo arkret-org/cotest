@@ -16,7 +16,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_signatures::Ed25519PayloadSigner;
 use arkret_signatures::signer::verify_ed25519_payload_signature;
 use arkret_wire::{
-    DidFullId, DidUrl, MultiSigKind, PartialSignature, PayloadSigner as _, ThresholdAggregator,
+    Did, DidUrl, MultiSigKind, PartialSignature, PayloadSigner as _, ThresholdAggregator,
 };
 use base64::Engine as _;
 use serde_json::{Value, json};
@@ -67,8 +67,8 @@ fn seed_from_hex(vector_name: &str, seed_hex: &str) -> Result<[u8; 32]> {
 fn signer_for(vector_name: &str, vector: &Value, seed: [u8; 32]) -> Result<Ed25519PayloadSigner> {
     let did = required_str(vector, "did")?;
     let kid = required_str(vector, "kid")?;
-    let did = DidFullId::new(did)
-        .map_err(|err| anyhow!("vector {vector_name} did {did} invalid: {err}"))?;
+    let did =
+        Did::new(did).map_err(|err| anyhow!("vector {vector_name} did {did} invalid: {err}"))?;
     let kid =
         DidUrl::new(kid).map_err(|err| anyhow!("vector {vector_name} kid {kid} invalid: {err}"))?;
     Ok(Ed25519PayloadSigner::from_did_key_seed(seed, did, kid))
@@ -113,7 +113,7 @@ fn build_partial(vector_name: &str, partial: &Value) -> Result<PartialSignature>
         .map_err(|err| {
             anyhow!("vector {vector_name} partial signature_b64 is not base64url-no-pad: {err}")
         })?;
-    let signer_did = DidFullId::new(signer_did)
+    let signer_did = Did::new(signer_did)
         .map_err(|err| anyhow!("vector {vector_name} signer_did {signer_did} invalid: {err}"))?;
     let kid = DidUrl::new(kid)
         .map_err(|err| anyhow!("vector {vector_name} partial kid {kid} invalid: {err}"))?;

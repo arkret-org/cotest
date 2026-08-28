@@ -124,7 +124,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     const proof = received[1].proof as Record<string, unknown>;
     expect(proof.kind).toBe("detached_jws");
     expect(proof.verification_method).toBe(
-      `${alice.fullDid}#${alice.deviceId}`,
+      `${alice.did}#${alice.deviceId}`,
     );
   });
 });

@@ -3,8 +3,8 @@
 //! Stitches the cross-project pieces shipped across T1–T7 into one black-box
 //! strand. The scenario covers:
 //!
-//!   1. **subject DID mint** — Alice's DID passes the SDK-level `DidFullId::new` canonical-form
-//!      gate before it is handed to any downstream service.
+//!   1. **subject DID mint** — Alice's DID passes the SDK-level `Did::new` canonical-form gate
+//!      before it is handed to any downstream service.
 //!   2. **coauth issues a handle_claim** — exercised through the `MemberDeliveryBindingCandidate`
 //!      builder (matching T3.5's pattern; coauth's wire surface needs a real DB so we drive the SDK
 //!      candidate that the live coauth would mint).
@@ -45,7 +45,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
-use arkret_identifiers::{DidCoreId, DidFullId, EventId};
+use arkret_identifiers::{Did, DidCoreId, EventId};
 use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
     CandidateError, CandidateIntent, CandidateValidationContext, MemberDeliveryBindingCandidate,
 };
@@ -69,9 +69,9 @@ use crate::scenarios::_helpers::protocol_values::candidate_payload_proof;
 // ── Fixture knobs ──────────────────────────────────────────────────────────
 
 const ALICE_ID: &str = "ak:did_core:web:alice.acme.example";
-const ALICE_FULL_ID: &str = "did:web:alice.acme.example";
+const ALICE_DID: &str = "did:web:alice.acme.example";
 const BOB_ID: &str = "ak:did_core:web:bob.acme.example";
-const BOB_FULL_ID: &str = "did:web:bob.acme.example";
+const BOB_DID: &str = "did:web:bob.acme.example";
 /// R3.1 canonical handle `<localpart>:<domain>` (arkret-spec @ 7157ee8).
 const ALICE_HANDLE: &str = "alice:acme.example";
 const PRINCIPAL_ID: &str = "ak:did_core:web:principal.acme.example";
@@ -130,11 +130,11 @@ pub async fn full_stack_e2e_run() -> Result<()> {
 
 // ── Step 1: mint Alice's subject DID ───────────────────────────────────────
 
-/// Any DID we hand off downstream MUST parse as a `DidFullId`, which catches
+/// Any DID we hand off downstream MUST parse as a `Did`, which catches
 /// the canonical-form gate (rejecting empty strings, non-`did:` prefixes, and
 /// DIDs without a method).
 fn step_1_mint_alice_did() -> Result<MemberDeliveryBindingCandidate> {
-    let _alice = DidFullId::new(ALICE_FULL_ID.to_owned())
+    let _alice = Did::new(ALICE_DID.to_owned())
         .context("Alice's subject DID MUST be a parseable did:web")?;
     // Build the rest of the candidate as if `ak.find.directory.read.resolve_handle.v1`
     // returned it (T3.5 pattern).
@@ -265,7 +265,7 @@ fn step_5_inkson_mock_send_message() -> Result<Value> {
         "payload": {"body": "hello alice"},
         "proofs": [{
             "kind": "detached_jws",
-            "verification_method": format!("{BOB_FULL_ID}#inkson"),
+            "verification_method": format!("{BOB_DID}#inkson"),
             "event_digest":
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "created_at": arkret_canonical::format_timestamp_canonical(Utc::now()),
@@ -596,7 +596,7 @@ async fn live_stack_probe() -> Result<()> {
             .context("T8.1 live probe: spawn production-mode soland")?
     {
         let mut placeholder_event = crate::harness::event_envelope(
-            ALICE_FULL_ID,
+            ALICE_DID,
             TARGET_REALM_ID,
             "ak.message.create",
             crate::harness::message_create_text_payload(

@@ -29,7 +29,7 @@
 use anyhow::{Context, Result};
 
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 mod backup_delete;
@@ -46,8 +46,7 @@ pub async fn events_keys_device_blob_push_and_moderation_surfaces_work() -> Resu
         &[("SOLAND_DID_RESOLVER_ALLOW_METHODS", "web,webvh,key,uuid")],
     )
     .await?;
-    let actor_id =
-        actor_did_for_service_full_id(server.service_full_id(), "protocol-payloads-alice")?;
+    let actor_id = actor_did_for_service_did(server.service_did(), "protocol-payloads-alice")?;
     let client = server
         .demo_client(&actor_id, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;

@@ -6,12 +6,12 @@ use crate::harness::{
     TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status, submit_event,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("authz-grants", &[]).await?;
-    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "authz-alice")?;
+    let alice_actor = actor_did_for_service_did(server.service_did(), "authz-alice")?;
     let alice = server
         .demo_client(
             &alice_actor,
@@ -19,7 +19,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         )
         .await?;
     let _presence_realm = alice.create_realm("Presence Policy Realm").await?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "authz-bob")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "authz-bob")?;
     let bob = server
         .register_client(
             &bob_did,
@@ -274,7 +274,7 @@ async fn expect_authz_check_hard_deny(
 
 pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("presence-policy", &[]).await?;
-    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "presence-alice")?;
+    let alice_actor = actor_did_for_service_did(server.service_did(), "presence-alice")?;
     let alice = server
         .demo_client(
             &alice_actor,

@@ -10,7 +10,7 @@ use crate::harness::{
     member_transition_payload,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+    actor_did_for_service_did, seal_current_principal_control_frontier,
     spawn_with_harness_account_authority,
 };
 
@@ -18,7 +18,7 @@ const BOB_HANDLE: &str = "@collab-bob";
 
 pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let server = spawn_with_harness_account_authority("collaboration-workflow", &[]).await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "collab-alice")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "collab-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -28,7 +28,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .context("alice carries her provisioned principal")?
         .device_signing_key
         .clone();
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "collab-bob")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "collab-bob")?;
     let bob = server
         .register_client_with_localpart(
             &bob_did,
@@ -45,8 +45,8 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         .clone();
 
     let alice_core_id = crate::harness::actor_core_id(&alice.actor)?;
-    let bob_full_id = arkret_identifiers::DidFullId::new(bob.actor.clone())?;
-    let bob_core_id = arkret_identifiers::project_full_id_to_core_id(&bob_full_id)?;
+    let bob_did = arkret_identifiers::Did::new(bob.actor.clone())?;
+    let bob_core_id = arkret_identifiers::project_did_to_core_id(&bob_did)?;
     let hidden_bob = expect_json(
         server
             .http()

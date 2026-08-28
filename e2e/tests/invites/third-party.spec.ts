@@ -16,7 +16,7 @@ import {
   expectJsonOk,
   nextJoinPolicyRevision,
   prepareSignedEventCbaApi,
-  projectFullDidToCoreId,
+  projectDidToCoreId,
   registerEventSigner,
   retypeEventDerivedId,
   signedEventEnvelope,
@@ -53,8 +53,8 @@ function didKeyUser(prefix: string, identity: DidKeyIdentity): JointUser {
   const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
   return {
     name: `${prefix}-${stamp}`.toLowerCase(),
-    did: projectFullDidToCoreId(identity.did),
-    fullDid: identity.did,
+    did: projectDidToCoreId(identity.did),
+    did: identity.did,
     deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
     handle: `@${prefix}-${stamp}`.toLowerCase(),
     displayName: `${prefix} ${stamp}`,
@@ -184,7 +184,7 @@ async function submitSelfEvent(
 // Seed the Realm policy components cell with the verification-service allowlist
 // the reducer re-checks (third-party-invites.md §2.1 Allowlist MUST). The
 // allowlist entries are did_core_id and compared byte-for-byte against the
-// payload's verification_service_id, so the full DID is projected first. The
+// payload's verification_service_id, so the DID is projected first. The
 // createRealmApi genesis already occupies policy_revision 1.
 async function allowlistVerificationService(
   request: APIRequestContext,

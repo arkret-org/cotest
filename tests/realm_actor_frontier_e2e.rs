@@ -11,7 +11,7 @@ use cotest::harness::{
     query_method,
 };
 use cotest::scenarios::identity_test_support::{
-    ActorBootstrapRegistration, actor_did_for_service_full_id, bootstrap_registered_actor,
+    ActorBootstrapRegistration, actor_did_for_service_did, bootstrap_registered_actor,
 };
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -162,7 +162,7 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         }
         Err(_) => ArkretServer::spawn("realm-actor-frontier-e2e-memory").await?,
     };
-    let actor = actor_did_for_service_full_id(server.service_full_id(), "frontier-alice")?;
+    let actor = actor_did_for_service_did(server.service_did(), "frontier-alice")?;
     let actor = actor.as_str();
     let verification_method = default_event_verification_method(actor).to_string();
     let device_id = verification_method

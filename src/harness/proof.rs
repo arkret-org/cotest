@@ -50,15 +50,13 @@ fn event_value_with_parseable_proof_digests(event: &Value) -> Value {
     typed_value
 }
 
-fn controller_full_id(
-    verification_method: &arkret_wire::DidUrl,
-) -> Result<arkret_identifiers::DidFullId> {
+fn controller_did(verification_method: &arkret_wire::DidUrl) -> Result<arkret_identifiers::Did> {
     let controller = verification_method
         .as_str()
         .split_once('#')
         .map(|(controller, _)| controller)
         .ok_or_else(|| anyhow!("verification method has no controller fragment"))?;
-    arkret_identifiers::DidFullId::new(controller.to_owned())
+    arkret_identifiers::Did::new(controller.to_owned())
         .map_err(|error| anyhow!("invalid verification-method controller: {error}"))
 }
 
@@ -73,7 +71,7 @@ pub fn refresh_typed_event_proof_with_signing_seed(
         .find_map(arkret_wire::EventProof::as_producer)
         .map(|proof| proof.verification_method.clone())
         .ok_or_else(|| anyhow!("Event {} has no signing proof", event.event_id))?;
-    let signer_did = controller_full_id(&verification_method)?;
+    let signer_did = controller_did(&verification_method)?;
     let created_at = event.created_at;
     event.proofs.clear();
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(

@@ -96,7 +96,7 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       expect(proof.kind).toBe("detached_jws");
       expect(proof.alg).toBeUndefined();
       expect(proof.verification_method).toBe(
-        `${alice.fullDid}#${alice.deviceId}`,
+        `${alice.did}#${alice.deviceId}`,
       );
       expect(typeof proof.envelope_digest).toBe("string");
       expect(proof.envelope_digest as string).toMatch(

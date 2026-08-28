@@ -8,7 +8,7 @@ use arkret_models_collaboration::objects::interop::{
 };
 use arkret_signatures::Ed25519PayloadSigner;
 use arkret_signatures::signer::verify_ed25519_payload_signature;
-use arkret_wire::{DidFullId, DidUrl, Hash, MimiUri, PayloadProof, PayloadSigner as _};
+use arkret_wire::{Did, DidUrl, Hash, MimiUri, PayloadProof, PayloadSigner as _};
 use chrono::{Duration, Utc};
 
 pub const VECTOR_ID_MIMI_PROVIDER_DIRECTORY_SIGNATURE: &str =
@@ -75,8 +75,8 @@ fn validate_directory(
         .split_once('#')
         .map(|(controller, _)| controller)
         .ok_or_else(|| anyhow!("MIMI proof verification method has no fragment"))?;
-    let proof_controller = DidFullId::new(proof_controller.to_owned())?;
-    let proof_controller = arkret_wire::project_full_id_to_core_id(&proof_controller)?;
+    let proof_controller = Did::new(proof_controller.to_owned())?;
+    let proof_controller = arkret_wire::project_did_to_core_id(&proof_controller)?;
     if proof.kind != "detached_jws"
         || proof_controller != directory.service_id
         || now - proof.created_at > Duration::minutes(5)
@@ -149,10 +149,10 @@ fn assert_foreign_context_signature_is_rejected(
         bail!("the MIMI provider-directory context is not part of the signed projection bytes");
     }
 
-    let service_full_id = DidFullId::new("did:webvh:z6mkfixture:provider.example")?;
+    let service_did = Did::new("did:webvh:z6mkfixture:provider.example")?;
     let signer = Ed25519PayloadSigner::from_did_key_seed(
         [0x51; 32],
-        service_full_id,
+        service_did,
         directory.proof.0.verification_method.clone(),
     );
     let forged_signature = signer.sign_payload(&forged_bytes)?;
@@ -180,9 +180,9 @@ fn assert_foreign_context_signature_is_rejected(
 }
 
 fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)> {
-    let service_full_id = DidFullId::new("did:webvh:z6mkfixture:provider.example")?;
-    let service_id = arkret_wire::project_full_id_to_core_id(&service_full_id)?;
-    let verification_method = DidUrl::new(format!("{}#notary-key", service_full_id.as_str()))
+    let service_did = Did::new("did:webvh:z6mkfixture:provider.example")?;
+    let service_id = arkret_wire::project_did_to_core_id(&service_did)?;
+    let verification_method = DidUrl::new(format!("{}#notary-key", service_did.as_str()))
         .map_err(|error| anyhow!(error))?;
     let placeholder = PayloadProof {
         kind: "detached_jws".to_owned(),
@@ -231,7 +231,7 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
         extra: BTreeMap::new(),
     };
     let signer =
-        Ed25519PayloadSigner::from_did_key_seed([0x51; 32], service_full_id, verification_method);
+        Ed25519PayloadSigner::from_did_key_seed([0x51; 32], service_did, verification_method);
     let signature = signer.sign_payload(&directory.unsigned_projection_bytes()?)?;
     directory.proof = ProviderDirectoryProof(PayloadProof {
         kind: "detached_jws".to_owned(),

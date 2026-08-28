@@ -6,13 +6,12 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{TestServerGroup, expect_json, expect_response};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let group = TestServerGroup::single("events-resolve-selectors").await?;
     let server = group.server(0);
-    let alice_did =
-        actor_did_for_service_full_id(server.service_full_id(), "events-resolve-alice")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "events-resolve-alice")?;
     let alice = server
         .register_client(
             &alice_did,

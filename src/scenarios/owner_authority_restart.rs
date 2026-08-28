@@ -11,7 +11,7 @@ use serde_json::json;
 use crate::harness::{
     ArkretServer, actor_core_id, expect_json, invite_create_payload, submitted_event_id,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     let configured_database = std::env::var("COTEST_SOLAND_DATABASE_URL")
@@ -48,8 +48,8 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     ];
     let mut server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "owner-restart-alice")?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "owner-restart-bob")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "owner-restart-alice")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "owner-restart-bob")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000e1";
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000e2";
     let alice = server.demo_client(&alice_did, alice_device).await?;

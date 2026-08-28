@@ -136,13 +136,13 @@ function decryptDurableState(envelope, key) {
 // across runs that share a persistent backing store).
 const configuredRegistryDid =
   process.env.MOCK_APPLET_REGISTRY_DID ?? durableState.registryDid;
-const registryFullDid = configuredRegistryDid?.startsWith("ak:did_core:")
+const registryDid = configuredRegistryDid?.startsWith("ak:did_core:")
   ? `did:${configuredRegistryDid.slice("ak:did_core:".length)}`
   : (configuredRegistryDid ??
     `did:web:applet-registry-${randomUUID().slice(0, 8)}.joint-e2e.local`);
 const registryDid = configuredRegistryDid?.startsWith("ak:did_core:")
   ? configuredRegistryDid
-  : `ak:did_core:${registryFullDid.slice("did:".length)}`;
+  : `ak:did_core:${registryDid.slice("did:".length)}`;
 
 const persistedPrivateKey = durableState.registryPrivateJwk
   ? createPrivateKey({ key: durableState.registryPrivateJwk, format: "jwk" })
@@ -184,7 +184,7 @@ const packagesByApplet = new Map(
 const managedActorAuthoringOutcomes = new Map(
   durableState.managedActorAuthoringOutcomes ?? [],
 );
-let currentPrincipalServerVerificationMethod = `${principalServerFullId()}#notary-key`;
+let currentPrincipalServerVerificationMethod = `${principalServerDid()}#notary-key`;
 const provisionedGhosts = new Map();
 const actorSequences = new Map();
 
@@ -320,7 +320,7 @@ function registrationEpochHash(packageBase, evidence) {
       created_at: packageBase.created_at,
     },
     service_did_document: {
-      full_id: evidence.full_id,
+      did: evidence.did,
       document_digest: evidence.did_document_digest,
       method_version: evidence.method_version_evidence,
     },
@@ -357,9 +357,9 @@ function principalServerId() {
   );
 }
 
-function principalServerFullId() {
+function principalServerDid() {
   return (
-    process.env.COTEST_SOLAND_SERVICE_FULL_ID ??
+    process.env.COTEST_SOLAND_SERVICE_DID ??
     "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
   );
 }
@@ -409,7 +409,7 @@ function principalServerNotaryDescriptor() {
     kind: "single_signer",
     signer: {
       actor_id: principalServerId(),
-      verification_method: `${principalServerFullId()}#notary-key`,
+      verification_method: `${principalServerDid()}#notary-key`,
       key_kind: "ed25519_raw32",
       jose_algorithm: "Ed25519",
       frozen_public_key_b64u: publicKeyBytes.toString("base64url"),
@@ -511,7 +511,7 @@ function detachedEventProof(
   actorDid,
   verificationMethod,
   signingKey,
-  actorFullDid,
+  actorDid,
   proofCreatedAt,
 ) {
   const createdAt = proofCreatedAt ?? rfc3339Now();
@@ -521,7 +521,7 @@ function detachedEventProof(
   }
   return runCotestWire("event-envelope-proof", {
     actor_did:
-      actorFullDid ??
+      actorDid ??
       (actorDid.startsWith("ak:did_core:")
         ? `did:${actorDid.slice("ak:did_core:".length)}`
         : actorDid),
@@ -797,18 +797,18 @@ function signedPackage(body) {
       ? body.applet_id
       : typedId("applet");
   const createdAt = rfc3339Now();
-  const serviceFullId =
+  const serviceDid =
     body.service_id_document?.id ??
     body.service_id ??
     `did:webvh:z6mkfixture:applet-${safe}.joint-e2e.local`;
-  const serviceId = String(body.service_id ?? serviceFullId).startsWith(
+  const serviceId = String(body.service_id ?? serviceDid).startsWith(
     "ak:did_core:",
   )
     ? body.service_id
-    : `ak:did_core:${String(serviceFullId).slice("did:".length)}`;
+    : `ak:did_core:${String(serviceDid).slice("did:".length)}`;
   const webhookAuth = body.webhook_auth ?? {
     kind: "http_message_signature",
-    key_ref: `${serviceFullId}#applet-service-key`,
+    key_ref: `${serviceDid}#applet-service-key`,
     accepted_signature_algorithms: ["ed25519"],
   };
   const webhookPublicJwk =
@@ -816,18 +816,18 @@ function signedPackage(body) {
     developmentAppletPublicJwk(webhookAuth.key_ref);
   const webhookPublicKeyMaterial = canonicalJson(webhookPublicJwk);
   const serviceIdDocument = body.service_id_document ?? {
-    id: serviceFullId,
+    id: serviceDid,
     verificationMethod: {
       [webhookAuth.key_ref]: webhookPublicKeyMaterial,
     },
     updated: createdAt,
   };
   const registrationEpochEvidence = {
-    full_id: serviceIdDocument.id,
+    did: serviceIdDocument.id,
     did_document_digest: canonicalHash(serviceIdDocument),
     method_version_evidence:
       body.service_id_method_version_evidence ??
-      (serviceFullId.startsWith("did:webvh:")
+      (serviceDid.startsWith("did:webvh:")
         ? {
             method: "did:webvh",
             version_time: createdAt,
@@ -946,7 +946,7 @@ function signedPackage(body) {
     ...sealed,
     proof: {
       kind: "detached_jws",
-      verification_method: `${registryFullDid}#mock-applet-registry-key-1`,
+      verification_method: `${registryDid}#mock-applet-registry-key-1`,
       payload_digest: payloadDigest,
       created_at: createdAt,
       jws,
@@ -959,7 +959,7 @@ function signedPackage(body) {
     namespace,
     safe,
     serviceId,
-    serviceFullId,
+    serviceDid,
     packageDigest,
     registrationEpoch: packageBase.registration_epoch,
     botInitialResolution: body.bot_actor_initial_resolution,
@@ -1004,8 +1004,8 @@ const server = createServer(async (req, res) => {
   ) {
     const body = await readJson(req);
     currentPrincipalServerVerificationMethod = body?.rotated
-      ? `${principalServerFullId()}#notary-key-rotated`
-      : `${principalServerFullId()}#notary-key`;
+      ? `${principalServerDid()}#notary-key-rotated`
+      : `${principalServerDid()}#notary-key`;
     res.end(
       JSON.stringify({
         ok: true,

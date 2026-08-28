@@ -13,7 +13,7 @@ use arkret_bootstrap::{
 };
 use arkret_event_draft::EventPayloadExt;
 use arkret_identifiers::{
-    DeviceId, DidCoreId, DidFullId, Hash, Hlc, TrustDomainId, project_full_id_to_core_id,
+    DeviceId, Did, DidCoreId, Hash, Hlc, TrustDomainId, project_did_to_core_id,
 };
 use arkret_models_collaboration::events_payloads::device_identity::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
@@ -207,12 +207,12 @@ pub fn run_identity_model_generation_fence_suite() -> Result<()> {
 }
 
 fn validate_pcr_genesis_helpers() -> Result<()> {
-    let principal_full_id = DidFullId::new("did:webvh:z6mkfixture:alice.example")?;
-    let principal = project_full_id_to_core_id(&principal_full_id)?;
+    let principal_did = Did::new("did:webvh:z6mkfixture:alice.example")?;
+    let principal = project_did_to_core_id(&principal_did)?;
     let created_at = "2026-07-15T00:00:00.000Z".parse()?;
     let device_id = DeviceId::new("ak:device:01904100-0000-7000-8000-000000000001")?;
     let device_verification_method =
-        DidUrl::new(format!("{principal_full_id}#{device_id}")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{principal_did}#{device_id}")).map_err(anyhow::Error::msg)?;
     let device_key = SigningKey::from_bytes(&[0x42; 32]);
     let device_multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
         &device_key.verifying_key().to_bytes(),
@@ -266,10 +266,10 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
             principal_server_id: DidCoreId::new("ak:did_core:web:principal.example")?,
-            principal_full_id: principal_full_id.clone(),
+            principal_did: principal_did.clone(),
             notary: crate::fixture_single_signer_notary(principal.clone()),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
-                full_id: principal_full_id,
+                did: principal_did,
                 method_history_head: format!("sha256:{}", "1".repeat(64)),
                 version_id: "1-Qmfixture".to_owned(),
             },

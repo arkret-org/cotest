@@ -11,7 +11,7 @@ use arkret::{
     verify_call_media_token_outcome,
 };
 use arkret_canonical::base64url::base64url_encode;
-use arkret_identifiers::{CallId, CellRef, DeviceId, DidCoreId, DidFullId, Hash, RealmId};
+use arkret_identifiers::{CallId, CellRef, DeviceId, Did, DidCoreId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::call::ParticipantBinding;
 use arkret_models_collaboration::objects::media::{
     CallMediaParticipantBinding, CallMediaTokenExchangeOutcome, CallMediaTokenExchangeRequestBody,
@@ -117,13 +117,13 @@ fn fixture_now() -> DateTime<Utc> {
         .expect("fixture timestamp should be valid")
 }
 
-fn did(label: &str) -> DidCoreId {
+fn participant_id(label: &str) -> DidCoreId {
     DidCoreId::new(format!("ak:did_core:web:{label}.example"))
         .expect("fixture Core DID should be valid")
 }
 
-fn full_did(label: &str) -> DidFullId {
-    DidFullId::new(format!("did:web:{label}.example")).expect("fixture DID should be valid")
+fn did(label: &str) -> Did {
+    Did::new(format!("did:web:{label}.example")).expect("fixture DID should be valid")
 }
 
 fn issuer_key() -> SigningKey {
@@ -131,21 +131,18 @@ fn issuer_key() -> SigningKey {
 }
 
 fn anchors_with_issuer_key(key: &SigningKey) -> MediaServiceAnchors {
-    let full = full_did("media");
-    MediaServiceAnchors::new([(
-        arkret_wire::project_full_id_to_core_id(&full).unwrap(),
-        full,
-    )])
-    .unwrap()
-    .with_keys([(ISSUER_KID.to_owned(), key.verifying_key())])
-    .unwrap()
+    let did = did("media");
+    MediaServiceAnchors::new([(arkret_wire::project_did_to_core_id(&did).unwrap(), did)])
+        .unwrap()
+        .with_keys([(ISSUER_KID.to_owned(), key.verifying_key())])
+        .unwrap()
 }
 
 fn token_request() -> CallMediaTokenExchangeRequestBody {
     call_media_token_exchange(
         RealmId::new("ak:realm:AdDiiHSzv3bH7EOLwQDdq-UHvwHaUaPammx6UQbpQnb4").unwrap(),
         CallId::new("ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz").unwrap(),
-        did("alice"),
+        participant_id("alice"),
         DeviceId::new("ak:device:01904100-0000-7000-8000-000000000005").unwrap(),
         "fra-1",
     )

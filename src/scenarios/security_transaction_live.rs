@@ -1,7 +1,7 @@
 use anyhow::Result;
 use arkret_wire::{
     BackupId, BackupObjectRef, BackupRotationBinding, BackupRotationKind, BackupRotationPlan,
-    BackupSeriesId, CanonicalPublicMaterial, DidCoreId, DidFullId, EventInitialSubmission,
+    BackupSeriesId, CanonicalPublicMaterial, Did, DidCoreId, EventInitialSubmission,
     EventsSubmitBatchRequestBody, Hash, Hlc, RiskTier, ScopeRef, SealId,
     SecurityRotationTransactionCreateRequest, SecurityTransactionCreateRequest,
 };
@@ -10,7 +10,7 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{TestServerGroup, expect_api_error, expect_json};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const DEVICE: &str = "ak:device:01975510-0000-7000-8000-0000000000b1";
 const TRANSACTION: &str = "ak:transaction:01975510-0000-7000-8000-0000000000b2";
@@ -18,7 +18,7 @@ const TRANSACTION: &str = "ak:transaction:01975510-0000-7000-8000-0000000000b2";
 pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<()> {
     let group = TestServerGroup::single("security-transaction-live-create").await?;
     let server = group.server(0);
-    let actor = actor_did_for_service_full_id(server.service_full_id(), "security-transaction")?;
+    let actor = actor_did_for_service_did(server.service_did(), "security-transaction")?;
     let client = server.demo_client(&actor, DEVICE).await?;
     let pcr_realm = client
         .principal
@@ -80,8 +80,8 @@ fn rotation_create_request(
     actor: &str,
     pcr_realm: &str,
 ) -> Result<SecurityTransactionCreateRequest> {
-    let principal = DidFullId::new(actor.to_owned())?;
-    let principal_id = arkret_wire::project_full_id_to_core_id(&principal)?;
+    let principal = Did::new(actor.to_owned())?;
+    let principal_id = arkret_wire::project_did_to_core_id(&principal)?;
     let transaction_id = arkret_wire::TransactionId::new(TRANSACTION.to_owned())?;
     let revoke_submission = event_submission(&principal, pcr_realm, "ak.device.revoke")?;
     let revoke_unit = event_unit(revoke_submission)?;
@@ -105,7 +105,7 @@ fn rotation_create_request(
 }
 
 fn rotation_plan(
-    principal: &DidFullId,
+    principal: &Did,
     pcr_realm: &str,
     kind: BackupRotationKind,
     suffix: &str,
@@ -139,7 +139,7 @@ fn rotation_plan(
         BackupRotationKind::SecretStorage => "secret_storage",
         BackupRotationKind::MlsHistory => "mls_history",
     };
-    let principal_id = arkret_wire::project_full_id_to_core_id(principal)?;
+    let principal_id = arkret_wire::project_did_to_core_id(principal)?;
     let material = CanonicalPublicMaterial::canonical_json(json!({
         "backups": [{
             "actor_id": principal_id,
@@ -167,7 +167,7 @@ fn event_unit(submission: EventInitialSubmission) -> Result<arkret_wire::Prepare
 }
 
 fn event_submission(
-    principal: &DidFullId,
+    principal: &Did,
     pcr_realm: &str,
     kind: &str,
 ) -> Result<EventInitialSubmission> {
@@ -181,7 +181,7 @@ fn event_submission(
     let mut event = arkret_wire::test_support::raw_event_at(
         kind,
         scope_ref.clone(),
-        arkret_identifiers::project_full_id_to_core_id(principal)?,
+        arkret_identifiers::project_did_to_core_id(principal)?,
         DidCoreId::new("ak:did_core:web:principal.example")?,
         1,
         Hlc::new("01970e589d21-0004-c07e57aa".to_owned())?,

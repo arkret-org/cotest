@@ -24,7 +24,7 @@ use crate::harness::{
 };
 use crate::scenarios::_helpers::protocol_values::submitted_event_id;
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
@@ -34,9 +34,8 @@ pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
         spawn_with_harness_account_authority("account-subscribe-wait-for", &[]).await?;
     let server = &server_owner;
     let alice_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-wait-alice")?;
-    let bob_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-wait-bob")?;
+        actor_did_for_service_did(server.service_did(), "account-subscribe-wait-alice")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "account-subscribe-wait-bob")?;
     let alice = server
         .register_client(
             &alice_did,
@@ -122,7 +121,7 @@ pub async fn account_subscribe_omits_quiet_realm_at_unchanged_cursor() -> Result
         spawn_with_harness_account_authority("account-subscribe-quiet-realm", &[]).await?;
     let server = &server_owner;
     let alice_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-quiet-alice")?;
+        actor_did_for_service_did(server.service_did(), "account-subscribe-quiet-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -186,7 +185,7 @@ pub async fn account_subscribe_long_poll_wakes_on_visible_event() -> Result<()> 
         spawn_with_harness_account_authority("account-subscribe-long-poll", &[]).await?;
     let server = &server_owner;
     let alice_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-poll-alice")?;
+        actor_did_for_service_did(server.service_did(), "account-subscribe-poll-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -260,9 +259,8 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
         spawn_with_harness_account_authority("account-subscribe-invite-two-way", &[]).await?;
     let server = &server_owner;
     let alice_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-invite-alice")?;
-    let bob_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-invite-bob")?;
+        actor_did_for_service_did(server.service_did(), "account-subscribe-invite-alice")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "account-subscribe-invite-bob")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -468,9 +466,8 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
         spawn_with_harness_account_authority("account-subscribe-invite-cancel", &[]).await?;
     let server = &server_owner;
     let alice_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-cancel-alice")?;
-    let bob_did =
-        actor_did_for_service_full_id(server.service_full_id(), "account-subscribe-cancel-bob")?;
+        actor_did_for_service_did(server.service_did(), "account-subscribe-cancel-alice")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "account-subscribe-cancel-bob")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;

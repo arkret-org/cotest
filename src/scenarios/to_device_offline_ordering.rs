@@ -37,20 +37,19 @@ use serde_json::{Value, json};
 use crate::harness::{
     ArkretServer, device_message_send_request, encrypted_envelope, expect_api_error, expect_json,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 /// CT-10 scenario probe — see module docs for the 10-step walk-through.
 pub async fn to_device_offline_ordering_run() -> Result<()> {
     let server = ArkretServer::spawn("to-device-offline-ordering").await?;
 
     // ── Setup: alice (sender), bob (recipient, single device).
-    let alice_did =
-        actor_did_for_service_full_id(server.service_full_id(), "offline-ordering-alice")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "offline-ordering-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let alice_token = alice.token.clone();
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-offline-ordering")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "bob-offline-ordering")?;
     let bob_device = "ak:device:01904100-0000-7000-8000-0000000000ba";
     let bob = server.demo_client(&bob_did, bob_device).await?;
     let bob_token = bob.token.clone();

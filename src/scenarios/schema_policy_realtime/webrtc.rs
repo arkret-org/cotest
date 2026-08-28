@@ -3,18 +3,18 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let server = ArkretServer::spawn("rtc-media").await?;
-    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "alice-rtc")?;
+    let alice_actor = actor_did_for_service_did(server.service_did(), "alice-rtc")?;
     let alice = server
         .demo_client(
             &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let carol_actor = actor_did_for_service_full_id(server.service_full_id(), "carol-rtc")?;
+    let carol_actor = actor_did_for_service_did(server.service_did(), "carol-rtc")?;
     let carol = server
         .register_client(
             &carol_actor,

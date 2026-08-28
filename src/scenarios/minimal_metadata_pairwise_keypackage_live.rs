@@ -11,7 +11,7 @@ use std::time::Duration;
 use anyhow::{Context as _, Result, bail, ensure};
 use arkret::mls::{ArkretMlsGroup, ArkretMlsIdentity, ArkretMlsSigner};
 use arkret::{
-    Base64UrlString, ContentScheme, DeviceId, DidCoreId, DidFullId, DidUrl, KeyOperationSignature,
+    Base64UrlString, ContentScheme, DeviceId, Did, DidCoreId, DidUrl, KeyOperationSignature,
     KeyPackagesClaimOutcome, KeyPackagesClaimRequestBody, KeyPackagesClaimServiceBinding,
     KeyPackagesConsumeOutcome, KeyPackagesUploadOutcome, MlsKeyPackageRecord, NonEmptyString,
     PeerKeyPackageClaimPurpose, PeerKeyPackageRequesterAuthorization,
@@ -48,7 +48,7 @@ use crate::harness::{
     ArkretServer, ProvisionedTestPrincipal, TestActorClient, events_query_for_realm, expect_json,
 };
 use crate::scenarios::_helpers::external_binary::{SOLAND_SPEC, locate_external_binary};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const UPLOAD_PATH: &str = "/_arkret/self/keys/keypackages/upload";
 const CLAIM_PATH: &str = "/_arkret/self/keys/keypackages/claim";
@@ -66,7 +66,7 @@ fn wire_value<T>(value: std::result::Result<T, &'static str>) -> Result<T> {
 #[derive(Clone)]
 struct PairwiseKey {
     seed: [u8; 32],
-    full_id: DidFullId,
+    did: Did,
     actor_id: DidCoreId,
     verification_method: DidUrl,
 }
@@ -77,7 +77,7 @@ impl PairwiseKey {
         let multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(&public_key);
         Ok(Self {
             seed,
-            full_id: DidFullId::new(format!("did:key:{multibase}"))?,
+            did: Did::new(format!("did:key:{multibase}"))?,
             actor_id: DidCoreId::new(format!("ak:did_core:key:{multibase}"))?,
             verification_method: wire_value(DidUrl::new(format!(
                 "did:key:{multibase}#{multibase}"
@@ -117,8 +117,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     }
 
     let server = ArkretServer::spawn("pairwise-keypackage-live").await?;
-    let transport_did =
-        actor_did_for_service_full_id(server.service_full_id(), "pairwise-transport")?;
+    let transport_did = actor_did_for_service_did(server.service_did(), "pairwise-transport")?;
     let transport = server
         .register_client(&transport_did, "pairwise-transport", TRANSPORT_DEVICE)
         .await?;
@@ -127,7 +126,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
     let other = PairwiseKey::from_seed(OTHER_SEED)?;
 
     ensure!(
-        transport.actor != target.full_id.as_str() && transport.actor != requester.full_id.as_str(),
+        transport.actor != target.did.as_str() && transport.actor != requester.did.as_str(),
         "pairwise coverage must not authenticate as either pairwise actor"
     );
 
@@ -513,7 +512,7 @@ async fn verify_ordinary_keypackage_binding_matrix(
 
     reject_upload_mutation(client, &valid, |value| {
         value["keypackages"][0]["endpoint_signature"] = json!({
-            "kid": format!("{}#{}", principal.full_id, principal.device_id),
+            "kid": format!("{}#{}", principal.did, principal.device_id),
             "signature_algorithm": "Ed25519",
             "sig": "AA"
         });
@@ -877,7 +876,7 @@ fn signed_device_claim(
     };
     let verification_method = wire_value(DidUrl::new(format!(
         "{}#{}",
-        requester.full_id, requester.device_id
+        requester.did, requester.device_id
     )))?;
     let placeholder = KeyOperationSignature {
         kid: wire_value(NonEmptyString::new(verification_method.to_string()))?,
@@ -1060,7 +1059,7 @@ async fn accept_welcome_and_consume(
     let keypackage_ref = claimed.keypackage_ref.clone();
     let requester_method = wire_value(DidUrl::new(format!(
         "{}#{}",
-        requester.full_id, requester.device_id
+        requester.did, requester.device_id
     )))?;
     let unsigned_envelope = UnsignedMlsWelcomeClaimEnvelope::new(
         MlsWelcomeClaimEnvelopeSigningInput {
@@ -1409,7 +1408,7 @@ fn signed_ordinary_upload_with_records(
     let signature = KeyOperationSignature {
         kid: wire_value(NonEmptyString::new(format!(
             "{}#{}",
-            signer.full_id, signer.device_id
+            signer.did, signer.device_id
         )))?,
         signature_algorithm: Some(wire_value(NonEmptyString::new("Ed25519"))?),
         sig: wire_value(Base64UrlString::new(

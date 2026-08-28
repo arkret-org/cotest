@@ -3,20 +3,20 @@ use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const REQUEST_HASH: &str =
     "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()> {
     let server = ArkretServer::spawn("policy-documents").await?;
-    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "alice-policy")?;
+    let alice_actor = actor_did_for_service_did(server.service_did(), "alice-policy")?;
     let alice = server
         .demo_client(
             &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let bob_actor = actor_did_for_service_full_id(server.service_full_id(), "bob-policy")?;
+    let bob_actor = actor_did_for_service_did(server.service_did(), "bob-policy")?;
     let bob = server
         .register_client(
             &bob_actor,

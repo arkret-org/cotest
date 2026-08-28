@@ -9,7 +9,7 @@
 //! opt out through explicitly named builders instead of relying on a missing
 //! bootstrap step.
 
-use arkret_identifiers::{DeviceId, DidCoreId, DidFullId, EventId, RealmId};
+use arkret_identifiers::{DeviceId, Did, DidCoreId, EventId, RealmId};
 use ed25519_dalek::SigningKey;
 
 /// Typed handles produced by the canonical actor bootstrap: the deterministic
@@ -17,8 +17,8 @@ use ed25519_dalek::SigningKey;
 /// device key, and the accepted PCR genesis coordinates.
 #[derive(Clone)]
 pub struct ProvisionedTestPrincipal {
-    /// Full `did:webvh` principal id (carries the method history reference).
-    pub full_id: DidFullId,
+    /// `did:webvh` principal id (carries the method history reference).
+    pub did: Did,
     /// Projected `ak:did_core:` business identity.
     pub core_id: DidCoreId,
     /// Founding device id authorized by the genesis unit.

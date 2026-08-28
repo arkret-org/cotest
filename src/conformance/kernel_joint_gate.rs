@@ -17,9 +17,9 @@ use arkret_wire::offline_publication::{
     AuthorizationLease, LeaseBasisRef, RiskTier,
 };
 use arkret_wire::{
-    CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, DidFullId, DidUrl,
-    LatticeOp, LatticeOpType, NotarySig, NotaryValue, OperationKind, ProducerEventProof, SchemaId,
-    ScopeRef, Seal, SealSignature,
+    CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, Did, DidUrl, LatticeOp,
+    LatticeOpType, NotarySig, NotaryValue, OperationKind, ProducerEventProof, SchemaId, ScopeRef,
+    Seal, SealSignature,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
@@ -632,8 +632,8 @@ fn kernel_equivocation(input: &KernelGateInput) -> KernelGateOutcome {
     let parse_verification_method = |value: &str, signer: &str| {
         let method = DidUrl::new(value.to_owned()).ok()?;
         let (controller, _) = value.rsplit_once('#')?;
-        let controller = DidFullId::new(controller.to_owned()).ok()?;
-        let projected = arkret_wire::project_full_id_to_core_id(&controller).ok()?;
+        let controller = Did::new(controller.to_owned()).ok()?;
+        let projected = arkret_wire::project_did_to_core_id(&controller).ok()?;
         (projected.as_str() == signer).then_some(method)
     };
     let (Some(verification_method_a), Some(verification_method_b)) = (

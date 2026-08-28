@@ -18,14 +18,14 @@ use arkret_models_identity::delivery_binding::{
 use arkret_models_identity::{
     AuthenticatedServiceResolution, ServiceResolutionCarrier, ServiceResolutionRecord,
 };
-use arkret_wire::{DidCoreId, DidFullId, Event, EventId, EventKind, Hash};
+use arkret_wire::{Did, DidCoreId, Event, EventId, EventKind, Hash};
 use chrono::Utc;
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{TestActorClient, TestServerGroup, expect_json, member_join_payload};
 use crate::scenarios::identity_test_support::{
-    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_full_id, harness_account_authority_id,
+    HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_did, harness_account_authority_id,
 };
 
 const INSTALL_PATH: &str = "/_arkret/_conformance/realm-fixture/install";
@@ -103,9 +103,8 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     group.server(0).assert_tls_trust_boundaries().await?;
     group.server(1).assert_tls_trust_boundaries().await?;
 
-    let alice_did =
-        actor_did_for_service_full_id(group.server(0).service_full_id(), "fanout-alice")?;
-    let bob_did = actor_did_for_service_full_id(group.server(1).service_full_id(), "fanout-bob")?;
+    let alice_did = actor_did_for_service_did(group.server(0).service_did(), "fanout-alice")?;
+    let bob_did = actor_did_for_service_did(group.server(1).service_did(), "fanout-bob")?;
     let alice = group
         .server(0)
         .register_client(&alice_did, "fanout-alice", ALICE_DEVICE)
@@ -337,7 +336,7 @@ fn member_payload(
     membership: MembershipPayloadState,
 ) -> Result<serde_json::Value> {
     let realm_id = arkret_wire::RealmId::new(realm_id.to_owned())?;
-    let member = arkret_wire::project_full_id_to_core_id(&DidFullId::new(member.to_owned())?)?;
+    let member = arkret_wire::project_did_to_core_id(&Did::new(member.to_owned())?)?;
     if membership == MembershipPayloadState::Join {
         let binding = MemberDeliveryBinding {
             recipient_service_id: member_service.clone(),

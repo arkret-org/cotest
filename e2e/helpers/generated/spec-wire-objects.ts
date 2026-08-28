@@ -65,7 +65,7 @@ export type RealmObject = {
     "minimum_retention_ms"?: number;
   };
   "audit_policy"?: {
-    "range_completeness_witnesses": string[];
+    "range_completeness_witness_ids": string[];
     "witnessed_min_attestations": number;
     "witness_independence": "distinct_did" | "distinct_controlling_organization";
   };
@@ -537,7 +537,7 @@ export type InviteDeliveryRequestBody = {
         "record": {
           "service_id": string;
           "service_kind": string;
-          "full_id": string;
+          "did": string;
           "method_history_head": string;
           "version_id": string;
           "resolution_event_ref": string;
@@ -574,7 +574,7 @@ export type InviteDeliveryRequestBody = {
           "record": {
             "service_id": string;
             "service_kind": string;
-            "full_id": string;
+            "did": string;
             "method_history_head": string;
             "version_id": string;
             "resolution_event_ref": string;
@@ -653,7 +653,7 @@ export type InviteDeliveryRequestBody = {
             "record": {
               "service_id": string;
               "service_kind": string;
-              "full_id": string;
+              "did": string;
               "method_history_head": string;
               "version_id": string;
               "resolution_event_ref": string;
@@ -710,7 +710,7 @@ export type InviteDeliveryRequestBody = {
             "record": {
               "service_id": string;
               "service_kind": string;
-              "full_id": string;
+              "did": string;
               "method_history_head": string;
               "version_id": string;
               "resolution_event_ref": string;
@@ -1149,7 +1149,7 @@ export type EventFederationSubmission = {
   "ingress_receipts": Array<{
     "receipt_id": string;
     "event_digest": string;
-    "qualified_ingress_id": string;
+    "qualified_ingress_did": string;
     "received_at": string;
     "ingress_frontier": string[];
     "proofs": Array<{

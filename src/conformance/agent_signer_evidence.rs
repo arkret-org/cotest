@@ -27,9 +27,9 @@ use arkret_signatures::agent_evidence::{
 };
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
-    Base64UrlString, DidCoreId, DidFullId, DidUrl, DomainSeparationId, EventId, EventKind, Hash,
-    Hlc, NonEmptyString, NotarySig, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId,
-    SealSignature, SignerEvidenceRef, project_full_id_to_core_id,
+    Base64UrlString, Did, DidCoreId, DidUrl, DomainSeparationId, EventId, EventKind, Hash, Hlc,
+    NonEmptyString, NotarySig, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId,
+    SealSignature, SignerEvidenceRef, project_did_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -190,8 +190,8 @@ fn expected_class(expected: &str) -> Result<OutcomeClass> {
 }
 
 fn service_id(value: &str) -> Result<DidCoreId> {
-    let full_id = DidFullId::new(value.to_owned())?;
-    Ok(project_full_id_to_core_id(&full_id)?)
+    let did = Did::new(value.to_owned())?;
+    Ok(project_did_to_core_id(&did)?)
 }
 
 fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
@@ -890,31 +890,28 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let account_signing = SigningKey::from_bytes(&[14; 32]);
     let receiver_signing = SigningKey::from_bytes(&[15; 32]);
 
-    let signer_full_id = DidFullId::new("did:webvh:z6mkagent:agent.example")?;
-    let controller_full_id = DidFullId::new("did:webvh:z6mkcontroller:controller.example")?;
-    let authority_service_full_id = DidFullId::new("did:webvh:z6mkauthority:authority.example")?;
-    let account_authority_service_full_id =
-        DidFullId::new("did:webvh:z6mkaccount:account-authority.example")?;
-    let receiver_service_full_id = DidFullId::new("did:webvh:z6mkreceiver:receiver.example")?;
-    let signer_id = project_full_id_to_core_id(&signer_full_id)?;
-    let controller_id = project_full_id_to_core_id(&controller_full_id)?;
-    let authority_service_id = project_full_id_to_core_id(&authority_service_full_id)?;
-    let account_authority_service_id =
-        project_full_id_to_core_id(&account_authority_service_full_id)?;
-    let receiver_service_id = project_full_id_to_core_id(&receiver_service_full_id)?;
+    let signer_did = Did::new("did:webvh:z6mkagent:agent.example")?;
+    let controller_did = Did::new("did:webvh:z6mkcontroller:controller.example")?;
+    let authority_service_did = Did::new("did:webvh:z6mkauthority:authority.example")?;
+    let account_authority_service_did =
+        Did::new("did:webvh:z6mkaccount:account-authority.example")?;
+    let receiver_service_did = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
+    let signer_id = project_did_to_core_id(&signer_did)?;
+    let controller_id = project_did_to_core_id(&controller_did)?;
+    let authority_service_id = project_did_to_core_id(&authority_service_did)?;
+    let account_authority_service_id = project_did_to_core_id(&account_authority_service_did)?;
+    let receiver_service_id = project_did_to_core_id(&receiver_service_did)?;
     let verification_method =
-        DidUrl::new(format!("{signer_full_id}#runtime-1")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{signer_did}#runtime-1")).map_err(anyhow::Error::msg)?;
     let controller_verification_method =
-        DidUrl::new(format!("{controller_full_id}#controller-1")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{controller_did}#controller-1")).map_err(anyhow::Error::msg)?;
     let authority_verification_method =
-        DidUrl::new(format!("{authority_service_full_id}#assertion-1"))
-            .map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{authority_service_did}#assertion-1")).map_err(anyhow::Error::msg)?;
     let account_authority_verification_method =
-        DidUrl::new(format!("{account_authority_service_full_id}#assertion-1"))
+        DidUrl::new(format!("{account_authority_service_did}#assertion-1"))
             .map_err(anyhow::Error::msg)?;
     let receiver_verification_method =
-        DidUrl::new(format!("{receiver_service_full_id}#assertion-1"))
-            .map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{receiver_service_did}#assertion-1")).map_err(anyhow::Error::msg)?;
     let agent_key_id = nes("runtime-1")?;
     let authorize_event_id = event_id(1)?;
     let realm_id = RealmId::new("ak:realm:AUf0Zz23_ZBqZYNvzHTY6qhhx-2YyO94WTorNCFnnvvN")?;

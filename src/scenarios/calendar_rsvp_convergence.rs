@@ -23,7 +23,7 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{ArkretServer, TestActorClient, actor_core_id, eventually, expect_json};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const ALICE_LOCAL: &str = "cotest-rsvp-alice";
 const BOB_LOCAL: &str = "cotest-rsvp-bob";
@@ -332,8 +332,8 @@ async fn submit_prepared_event(
 
 pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()> {
     let server = ArkretServer::spawn("calendar-rsvp-convergence").await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), ALICE_LOCAL)?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), BOB_LOCAL)?;
+    let alice_did = actor_did_for_service_did(server.service_did(), ALICE_LOCAL)?;
+    let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
     let alice_core_id = actor_core_id(alice_did)?;
@@ -697,8 +697,8 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     ];
     let mut server =
         ArkretServer::spawn_with_database_url(test_name, &database_url, &keystore_env).await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), ALICE_LOCAL)?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), BOB_LOCAL)?;
+    let alice_did = actor_did_for_service_did(server.service_did(), ALICE_LOCAL)?;
+    let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
     let alice_core_id = actor_core_id(alice_did)?;
@@ -876,8 +876,8 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
 /// converge.
 pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
     let server = ArkretServer::spawn("calendar-rsvp-effectless").await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), ALICE_LOCAL)?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), BOB_LOCAL)?;
+    let alice_did = actor_did_for_service_did(server.service_did(), ALICE_LOCAL)?;
+    let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
     let alice_core_id = actor_core_id(alice_did)?;

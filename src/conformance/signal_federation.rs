@@ -1,9 +1,8 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_wire::{
-    DeviceId, DidCoreId, DidFullId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
-    MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmId, ScopeRef, SealId, SignalClass,
-    SignalEncryptedPayload, SignalEnvelope, SignalKeyRef, SignalProof, SignalRelayOutcome,
-    SignalRelayRequest, project_full_id_to_core_id,
+    DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES, MAX_SIGNAL_RELAY_ITEMS,
+    ProfileId, RealmId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
+    SignalKeyRef, SignalProof, SignalRelayOutcome, SignalRelayRequest, project_did_to_core_id,
 };
 use chrono::{Duration, TimeZone, Utc};
 use serde_json::Value;
@@ -76,9 +75,9 @@ fn device_authorization_gate(
         .as_str()
         .rsplit_once('#')
         .unwrap_or_default();
-    let controller_matches = DidFullId::new(controller.to_owned())
+    let controller_matches = Did::new(controller.to_owned())
         .ok()
-        .and_then(|full_id| project_full_id_to_core_id(&full_id).ok())
+        .and_then(|did| project_did_to_core_id(&did).ok())
         .is_some_and(|core_id| core_id == signal.sender_actor_id);
     controller_matches
         && fragment == signal.sender_device_id.as_str()

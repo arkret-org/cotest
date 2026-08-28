@@ -8,17 +8,17 @@ use crate::harness::{
     message_redact_payload, message_revise_text_payload, next_typed_id, submitted_event_id,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("interaction-messages", &[]).await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "interaction-alice")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "interaction-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
 
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "interaction-bob")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "interaction-bob")?;
     let bob = server
         .register_client(
             &bob_did,
@@ -27,7 +27,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         )
         .await?;
 
-    let carol_did = actor_did_for_service_full_id(server.service_full_id(), "interaction-carol")?;
+    let carol_did = actor_did_for_service_did(server.service_did(), "interaction-carol")?;
     let carol = server
         .register_client(
             &carol_did,
@@ -36,7 +36,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         )
         .await?;
 
-    let dave_did = actor_did_for_service_full_id(server.service_full_id(), "interaction-dave")?;
+    let dave_did = actor_did_for_service_did(server.service_did(), "interaction-dave")?;
     let dave = server
         .register_client(
             &dave_did,

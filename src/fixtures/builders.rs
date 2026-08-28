@@ -36,7 +36,7 @@ use std::fmt;
 use anyhow::{Context, Result};
 
 use crate::harness::{ArkretServer, TestActorClient};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 /// The fully-realised actor fixture returned by [`TestActorBuilder::create`].
 ///
@@ -95,7 +95,7 @@ impl<'a> TestActorBuilder<'a> {
     /// `handle` accepts either the bare nickname (`alice`) or the leading-`@`
     /// form (`@alice`) — both shapes appear in existing scenarios. The default
     /// DID is the deterministic harness DID for `bare-handle` scoped to the
-    /// server's service full id, and the default primary device id is
+    /// server's service DID, and the default primary device id is
     /// `dev_<bare-handle>`, both overridable.
     pub fn new(server: &'a ArkretServer, handle: &str) -> Self {
         let handle = handle.to_owned();
@@ -108,7 +108,7 @@ impl<'a> TestActorBuilder<'a> {
     }
 
     /// Override the DID. By default the builder derives the deterministic
-    /// harness DID for the bare handle scoped to the server's service full id.
+    /// harness DID for the bare handle scoped to the server's service DID.
     pub fn with_did(mut self, did: &str) -> Self {
         self.did = Some(did.to_owned());
         self
@@ -135,7 +135,7 @@ impl<'a> TestActorBuilder<'a> {
             .to_owned();
         let did = match self.did.clone() {
             Some(did) => did,
-            None => actor_did_for_service_full_id(self.server.service_full_id(), &bare_handle)?,
+            None => actor_did_for_service_did(self.server.service_did(), &bare_handle)?,
         };
         let primary_device = self
             .primary_device
@@ -182,7 +182,7 @@ mod tests {
 
         // Build the spec without driving create() so we can assert the
         // derivations the builder applies. The default DID derivation needs a
-        // live server's service full id, so it is covered by scenario-level
+        // live server's service DID, so it is covered by scenario-level
         // tests; here we pin the handle strip and the device derivation.
         let raw = "@alice";
         let bare = raw.strip_prefix('@').unwrap_or(raw);

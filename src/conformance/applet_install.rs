@@ -11,14 +11,14 @@ const REGISTRATION_EPOCH_FIXTURE: &str = "applet-registration-epoch-fixture.json
 const MANAGED_ACTOR_ENTRYPOINT: &str = "ak.suite.applet.managed_actor_authority.v1";
 const MANAGED_ACTOR_CASES: [&str; 26] = [
     "bot_exact_pair_and_initial_resolution",
-    "ghost_namespace_matches_verified_full_id",
+    "ghost_namespace_matches_verified_did",
     "ghost_external_tuple_is_single_closed_carrier",
     "ghost_external_tuple_rejects_legacy_or_extra_mirrors",
     "ghost_provision_requires_registration_service_signature",
     "remote_principal_server_claim",
     "actor_reuses_service_or_controller",
     "bot_does_not_equal_registration_bot",
-    "ghost_core_used_for_full_did_namespace",
+    "ghost_core_used_for_did_namespace",
     "invalid_method_history_or_witness",
     "non_webvh_method_evidence_is_not_a_managed_authority",
     "pcr_genesis_cross_binding_mismatch",
@@ -147,13 +147,13 @@ fn consume_managed_actor_case(
                 bail!("creation authority was reused after its epoch changed");
             }
         }
-        "ghost_namespace_matches_verified_full_id" => {
+        "ghost_namespace_matches_verified_did" => {
             if !arkret_models_integration::namespace_pattern_matches(
                 arkret_models_integration::AppletNamespaceDomain::Actors,
                 "did:webvh:*:*:ghost-tenant:user-1",
                 "did:webvh:z6mkfixture:example.test:ghost-tenant:user-1",
             ) {
-                bail!("verified full DID failed its exact managed namespace");
+                bail!("verified DID failed its exact managed namespace");
             }
         }
         "ghost_provision_requires_registration_service_signature" => {
@@ -182,13 +182,13 @@ fn consume_managed_actor_case(
                 bail!("Bot mismatch model is invalid");
             }
         }
-        "ghost_core_used_for_full_did_namespace" => {
+        "ghost_core_used_for_did_namespace" => {
             if arkret_models_integration::namespace_pattern_matches(
                 arkret_models_integration::AppletNamespaceDomain::Actors,
                 "did:webvh:*:*:ghost-tenant:user-1",
                 "ak:did_core:webvh:z6mkfixture",
             ) {
-                bail!("DID core was accepted in place of the verified full DID");
+                bail!("DID core was accepted in place of the verified DID");
             }
         }
         "invalid_method_history_or_witness" => {

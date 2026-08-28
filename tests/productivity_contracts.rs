@@ -245,8 +245,8 @@ use arkret_crypto::account_data_crypto::{
 use arkret_event_draft::TypedEventDraft;
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
 use arkret_wire::{
-    DidCoreId, DidFullId, DidUrl, Hash, Hlc, ProducerEventProof, ScopeRef, StrandId, event_spec,
-    project_full_id_to_core_id,
+    Did, DidCoreId, DidUrl, Hash, Hlc, ProducerEventProof, ScopeRef, StrandId, event_spec,
+    project_did_to_core_id,
 };
 use chrono::{TimeZone as _, Utc};
 use garth::queued_record::{
@@ -255,8 +255,8 @@ use garth::queued_record::{
 
 const SCHEDULED_SEND_ID: &str = "ak:scheduled_send:01904100-0000-7000-8000-000000000003";
 
-fn scheduled_send_core_id(full_id: &str) -> DidCoreId {
-    project_full_id_to_core_id(&DidFullId::new(full_id.to_owned()).unwrap()).unwrap()
+fn scheduled_send_core_id(did: &str) -> DidCoreId {
+    project_did_to_core_id(&Did::new(did.to_owned()).unwrap()).unwrap()
 }
 
 fn scheduled_send_test_payload(body: &str) -> MessageCreatePayload {

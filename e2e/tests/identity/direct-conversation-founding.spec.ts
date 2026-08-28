@@ -9,7 +9,7 @@ import {
   test,
   type APIRequestContext,
 } from "../../helpers/arkret-test";
-import { solandBaseUrl, solandServiceFullId } from "../../helpers/env";
+import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
   base64url,
   canonicalDidCoreId,
@@ -22,7 +22,7 @@ import {
   sha256CanonicalJson,
   signedEventEnvelope,
   signedRealmGenesisEnvelope,
-  singleSignerNotaryFromFullDid,
+  singleSignerNotaryFromDid,
   typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -331,7 +331,7 @@ function foundingEvents(args: {
         encryption_profile: "mls_rfc9420",
         security_class: "standard",
         digest_algorithm: "sha256",
-        notary: singleSignerNotaryFromFullDid(solandServiceFullId()),
+        notary: singleSignerNotaryFromDid(solandServiceDid()),
       },
     },
   });

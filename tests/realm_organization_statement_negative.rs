@@ -151,7 +151,7 @@ fn coverage_fixture_rejects_singleton_organization_ref_shape() {
 
 /// Resolver fixtures selected by the vector's `resolver` field. Mirrors the
 /// shapes verify_realm_organization_statement distinguishes.
-fn org_did() -> DidCoreId {
+fn organization_id() -> DidCoreId {
     DidCoreId::new("ak:did_core:web:example.test:orgs:01J0000000000000000000000A").unwrap()
 }
 
@@ -174,7 +174,7 @@ fn delegation(
     scopes: Vec<RealmOrganizationControlScope>,
 ) -> RealmOrganizationDelegation {
     RealmOrganizationDelegation {
-        organization_id: org_did(),
+        organization_id: organization_id(),
         is_live,
         covered_relationships: relationships,
         covered_control_scopes: scopes,

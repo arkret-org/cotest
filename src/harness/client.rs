@@ -9,9 +9,7 @@ use arkret::{
     ContactIntroductionEvidence, IdempotencyKey, PreparedEventDraft, ProtocolOperationId,
 };
 use arkret_http_client::Client as SdkClient;
-use arkret_identifiers::{
-    DidCoreId, DidFullId, EventId, Hash, Hlc, RealmId, project_full_id_to_core_id,
-};
+use arkret_identifiers::{Did, DidCoreId, EventId, Hash, Hlc, RealmId, project_did_to_core_id};
 use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::events_payloads::{
     CapabilityRevokePayload, RealmSetDefaultStrandPayload, StrandCreatePayload,
@@ -90,7 +88,7 @@ impl TestActorClient {
                 operation_id,
                 idempotency_key,
                 peer: ContactPeer::Human {
-                    principal_id: project_full_id_to_core_id(&DidFullId::new(target.to_owned())?)?,
+                    principal_id: project_did_to_core_id(&Did::new(target.to_owned())?)?,
                 },
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
                 introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
@@ -250,7 +248,7 @@ impl TestActorClient {
             event_signing_identity_for_device(&self.actor, &self.device_id);
         let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
             signing_seed,
-            DidFullId::new(self.actor.clone())?,
+            Did::new(self.actor.clone())?,
             verification_method.clone(),
         );
         arkret_signatures::sign_event(
@@ -300,14 +298,14 @@ impl TestActorClient {
 
     async fn events_frontier_with_retry(
         &self,
-        actor_id: &str,
+        actor_did: &str,
         realm_id: Option<&str>,
     ) -> Result<Value> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
             let response = expect_response(
                 self.query("/_arkret/self/events/frontier")
-                    .json(&events_frontier_request_body(actor_id, realm_id)?),
+                    .json(&events_frontier_request_body(actor_did, realm_id)?),
                 StatusCode::OK,
             )
             .await;
@@ -570,8 +568,8 @@ impl TestActorClient {
                 .to_owned(),
         )?;
         let event_response = bootstrap["event_response"].clone();
-        let actor_full_id = arkret_identifiers::DidFullId::new(self.actor.clone())?;
-        let actor_id = arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?;
+        let actor_did = arkret_identifiers::Did::new(self.actor.clone())?;
+        let actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)?;
         let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
         strand.tracks.clear();
         strand
@@ -770,12 +768,12 @@ impl TestActorClient {
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
             realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
-            issuer: project_full_id_to_core_id(&DidFullId::new(
+            issuer: project_did_to_core_id(&Did::new(
                 self.actor.clone(),
             )?)?,
             subject:
                 arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::CoreDid(
-                    project_full_id_to_core_id(&DidFullId::new(
+                    project_did_to_core_id(&Did::new(
                         subject.to_owned(),
                     )?)?,
                 ),
@@ -1004,7 +1002,7 @@ impl TestActorClient {
             ));
         };
         frontier.validate()?;
-        let expected_actor_id = project_full_id_to_core_id(&DidFullId::new(self.actor.clone())?)?;
+        let expected_actor_id = project_did_to_core_id(&Did::new(self.actor.clone())?)?;
         if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
             return Err(anyhow!("combined selector returned the wrong actor scope"));
         }

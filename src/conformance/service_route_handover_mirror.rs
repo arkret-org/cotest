@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_identifiers::{DidFullId, project_full_id_to_core_id};
+use arkret_identifiers::{Did, project_did_to_core_id};
 use arkret_models_identity::ServiceRouteCacheEntry;
 use chrono::{DateTime, Duration, Utc};
 use serde::Deserialize;
@@ -855,9 +855,9 @@ fn validate_core_boundary(fixture: &Fixture, case: &SemanticCase) -> Result<()> 
     let bound = text(&case.inputs, "/member_recipient_service_id")?;
     let same = text(&case.inputs, "/same_core_successor_service_id")?;
     let replacement = text(&case.inputs, "/new_core_candidate_service_id")?;
-    let projected = project_full_id_to_core_id(&entry.full_id)?;
-    let replacement_full = DidFullId::new("did:webvh:z6mkReplacement:replacement.example")?;
-    let replacement_projected = project_full_id_to_core_id(&replacement_full)?;
+    let projected = project_did_to_core_id(&entry.did)?;
+    let replacement_full = Did::new("did:webvh:z6mkReplacement:replacement.example")?;
+    let replacement_projected = project_did_to_core_id(&replacement_full)?;
     if projected.as_str() != bound
         || same != bound
         || replacement_projected.as_str() != replacement

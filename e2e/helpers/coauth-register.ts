@@ -26,7 +26,7 @@ import {
 import {
   canonicalJson,
   cotestWire,
-  projectFullDidToCoreId,
+  projectDidToCoreId,
   typedId,
 } from "./soland-api";
 
@@ -40,7 +40,7 @@ export type CoauthPasswordAccount = {
   /// Stable principal did_core_id used by business protocol objects.
   did: string;
   /// Resolvable DID used only for registration and proof verification methods.
-  fullDid: string;
+  did: string;
   principalId?: string;
   genesisDeviceId: string;
   recoveryKey: string;
@@ -475,8 +475,8 @@ export async function registerCoauthPasswordAccount(
       },
     },
   );
-  const fullDid = stringValue(fixture.checkpoint.did);
-  if (!fullDid || fixture.recovery_key.split(/\s+/).length !== 24) {
+  const did = stringValue(fixture.checkpoint.did);
+  if (!did || fixture.recovery_key.split(/\s+/).length !== 24) {
     throw new Error("cotest principal registration fixture is incomplete");
   }
   const challengeUrl = `${coauthBase}/_arkret/gate/account/identity-binding-challenges`;
@@ -527,14 +527,14 @@ export async function registerCoauthPasswordAccount(
   const deviceSigningSeed = stringValue(
     fixture.checkpoint.device_signing_seed_b64url,
   );
-  const principalId = projectFullDidToCoreId(fullDid);
+  const principalId = projectDidToCoreId(did);
   if (
     !registeredPrincipalId ||
     registeredPrincipalId !== principalId ||
     !receipt ||
     receipt.binding_state !== "bound" ||
     receipt.principal_id !== principalId ||
-    receipt.full_id !== fullDid ||
+    receipt.did !== did ||
     !pcrGenesisReceipt ||
     !sessionOutcome ||
     !grantId ||
@@ -549,8 +549,8 @@ export async function registerCoauthPasswordAccount(
         expectedPrincipalId: principalId,
         receiptState: receipt?.binding_state,
         receiptPrincipalId: receipt?.principal_id,
-        receiptFullId: receipt?.full_id,
-        expectedFullId: fullDid,
+        receiptDid: receipt?.did,
+        expectedDid: did,
         hasPcrGenesisReceipt: Boolean(pcrGenesisReceipt),
         hasSessionOutcome: Boolean(sessionOutcome),
         hasGrantId: Boolean(grantId),
@@ -582,7 +582,7 @@ export async function registerCoauthPasswordAccount(
     password,
     displayName,
     did: principalId,
-    fullDid,
+    did,
     principalId,
     genesisDeviceId,
     recoveryKey: fixture.recovery_key,

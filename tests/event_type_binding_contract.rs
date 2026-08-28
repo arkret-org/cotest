@@ -5,14 +5,14 @@ use arkret_models_collaboration::governance::realm_lifecycle::{
     RealmPolicyPayload, RealmPolicyValue,
 };
 use arkret_wire::{
-    ConfidentialityClass, DidCoreId, DidFullId, Event, EventKind, ExtensionManifest, Hash, Hlc,
+    ConfidentialityClass, Did, DidCoreId, Event, EventKind, ExtensionManifest, Hash, Hlc,
     ManifestResourceLimits, ProtocolLayerKind, RealmId, RegistryContentRef, ScopeRef, StrandId,
     WireError, event_spec,
 };
 use chrono::{TimeZone as _, Utc};
 
 const REALM_ID: &str = "ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir";
-const ACTOR_FULL_ID: &str = "did:webvh:z6mkfixture:alice.example";
+const ACTOR_DID: &str = "did:webvh:z6mkfixture:alice.example";
 const ACTOR_ID: &str = "ak:did_core:webvh:z6mkfixture";
 const STRAND_ID: &str = "ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9";
 const HLC: &str = "01970e589d21-0001-a13f9c2e";
@@ -24,8 +24,7 @@ fn scope() -> ScopeRef {
 }
 
 fn actor() -> DidCoreId {
-    let projected =
-        arkret_wire::project_full_id_to_core_id(&DidFullId::new(ACTOR_FULL_ID).unwrap()).unwrap();
+    let projected = arkret_wire::project_did_to_core_id(&Did::new(ACTOR_DID).unwrap()).unwrap();
     assert_eq!(projected.as_str(), ACTOR_ID);
     projected
 }

@@ -8,8 +8,7 @@ use arkret::{
     DeviceId, DeviceMessageId, DeviceMessageTarget, DeviceMessagesSendRequestBody, ProtocolKind,
 };
 use arkret_identifiers::{
-    DidCoreId, DidFullId, EventId, Hash, Hlc, MessageId, RealmId, StrandId,
-    project_full_id_to_core_id,
+    Did, DidCoreId, EventId, Hash, Hlc, MessageId, RealmId, StrandId, project_did_to_core_id,
 };
 use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::events_payloads::{
@@ -162,7 +161,7 @@ pub async fn register_account(
     device_id: &str,
 ) -> Result<String> {
     let device_id = canonical_device_id(device_id);
-    let full_id = arkret_identifiers::DidFullId::new(did.to_owned())?;
+    let did = arkret_identifiers::Did::new(did.to_owned())?;
     let requested_localpart = handle.trim().trim_start_matches('@');
     let localpart = arkret_wire::string_profiles::prepare_handle_localpart(requested_localpart)
         .unwrap_or_else(|_| {
@@ -172,7 +171,7 @@ pub async fn register_account(
             )
         });
     let body = crate::harness::NonProtocolTestBody::new(serde_json::json!({
-        "did": full_id,
+        "did": did,
         "handle": localpart,
         "display_name": handle.trim_start_matches('@'),
         "device_id": arkret_identifiers::DeviceId::new(device_id.clone())?,
@@ -209,7 +208,7 @@ pub async fn register_account_with_localpart(
 
 pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> Result<String> {
     let device_id = canonical_device_id(device_id);
-    let actor_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
+    let actor_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
     let login = expect_json(
         server
             .http()
@@ -260,7 +259,7 @@ pub fn device_message_send_request(
     devices.insert(DeviceId::new(device_id.to_owned())?, target);
     let mut messages = BTreeMap::new();
     messages.insert(
-        project_full_id_to_core_id(&DidFullId::new(recipient.to_owned())?)?,
+        project_did_to_core_id(&Did::new(recipient.to_owned())?)?,
         devices,
     );
     Ok(DeviceMessagesSendRequestBody { messages })
@@ -302,7 +301,7 @@ pub async fn create_realm(
 
 /// Author the exact signed DataEvent carried by the self moderation-report
 /// operation. The reporter is always the actor's core DID while Event proof
-/// verification methods remain full DID URLs through `TestActorClient`.
+/// verification methods remain DID URLs through `TestActorClient`.
 pub async fn moderation_report_request(
     actor: &TestActorClient,
     realm_id: &str,
@@ -314,7 +313,7 @@ pub async fn moderation_report_request(
             "moderation target scope does not belong to the requested Realm"
         ));
     }
-    let reporter = project_full_id_to_core_id(&DidFullId::new(actor.actor.clone())?)?;
+    let reporter = project_did_to_core_id(&Did::new(actor.actor.clone())?)?;
     let mut payload = json!({
         "realm_id": realm_id,
         "target_ref": target_ref,
@@ -624,7 +623,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         delivery_binding_policy.to_value()?,
         arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DELIVERY_BINDING_POLICY_V1),
     )?;
-    let creator_core_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
+    let creator_core_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
     push_followup(
         arkret_wire::event_kind_str::MEMBER_STATE,
         creator_member_join_payload_value(
@@ -789,7 +788,7 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         ));
     };
     frontier.validate()?;
-    let expected_actor_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
+    let expected_actor_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
     if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
         return Err(anyhow!("combined selector returned the wrong actor scope"));
     }
@@ -1057,8 +1056,8 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     // `created_at_before_causal_predecessor`. Anchor on the process clock and
     // step once per built Event so successors are strictly later.
     let created_at = harness_event_created_at();
-    let actor_full_id = DidFullId::new(actor.to_owned()).expect("cotest actor DID");
-    let actor_id = arkret_identifiers::project_full_id_to_core_id(&actor_full_id)
+    let actor_did = Did::new(actor.to_owned()).expect("cotest actor DID");
+    let actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)
         .expect("cotest actor DID projects to a core id");
     let principal_server_id = principal_server_id
         .cloned()
@@ -1104,7 +1103,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     );
     let signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
         signing_seed,
-        actor_full_id,
+        actor_did,
         verification_method.to_owned(),
     );
     let mut event = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
@@ -1297,8 +1296,8 @@ pub(crate) fn invite_create_payload(
     introduction_evidence_digest: impl Into<String>,
     expires_at: DateTime<Utc>,
 ) -> Result<Value> {
-    let invitee_full_id = DidFullId::new(invitee.to_owned())
-        .map_err(|err| anyhow!("invalid invitee full id: {err}"))?;
+    let invitee_did =
+        Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee DID: {err}"))?;
     let recipient_service_id = arkret_identifiers::DidCoreId::new(recipient_service_id.to_owned())
         .map_err(|err| anyhow!("invalid recipient service core id: {err}"))?;
     let current_record_url = format!(
@@ -1306,7 +1305,7 @@ pub(crate) fn invite_create_payload(
         arkret_models_identity::canonical_service_current_record_path(&recipient_service_id)
     );
     InviteCreatePayload::new(
-        arkret_identifiers::project_full_id_to_core_id(&invitee_full_id)?,
+        arkret_identifiers::project_did_to_core_id(&invitee_did)?,
         InviteDeliveryTarget::principal_server(
             recipient_service_id,
             arkret_models_identity::ServiceResolutionCarrier::CurrentRecordUrl {
@@ -1343,8 +1342,8 @@ fn member_payload(
         membership,
         strand_id: None,
         realm_id: Some(RealmId::new(realm_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
-        actor_id: Some(arkret_identifiers::project_full_id_to_core_id(
-            &DidFullId::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
+        actor_id: Some(arkret_identifiers::project_did_to_core_id(
+            &Did::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
         )?),
         delivery_status,
         delivery_binding,
@@ -1498,7 +1497,7 @@ mod realm_bootstrap_tests {
     fn ordinary_bootstrap_uses_the_registered_order_and_explicit_creator_member() {
         let (_, events) = build(draft(json!({
             "alias": "general:service.soland.local",
-            "alias_authority_service_full_id": SERVICE_FULL
+            "alias_authority_service_did": SERVICE_FULL
         })));
         let kinds: Vec<_> = events.iter().map(|event| event.kind.as_str()).collect();
         assert_eq!(

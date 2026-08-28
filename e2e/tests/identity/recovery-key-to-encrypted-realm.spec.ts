@@ -136,8 +136,8 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
 
       const identity = await readActiveIdentity(page);
       expect(identity.coreId).toMatch(/^ak:did_core:/);
-      expect(identity.fullId).toMatch(/^did:/);
-      expect(identity.coreId).not.toBe(identity.fullId);
+      expect(identity.did).toMatch(/^did:/);
+      expect(identity.coreId).not.toBe(identity.did);
 
       await test.step("Inkson publishes its RFC 9420 KeyPackage", async () => {
         await expect
@@ -162,7 +162,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           | { kid?: string }
           | undefined;
         expect(endpointSignature?.kid).toMatch(
-          new RegExp(`^${escapeRegex(identity.fullId)}#`),
+          new RegExp(`^${escapeRegex(identity.did)}#`),
         );
         const entries = upload.requestBody?.keypackages;
         expect(entries).toHaveLength(8);
@@ -416,7 +416,7 @@ function errorCode(
 
 async function readActiveIdentity(page: Page): Promise<{
   coreId: string;
-  fullId: string;
+  did: string;
   deviceId: string;
 }> {
   return page.evaluate(() => {
@@ -425,19 +425,19 @@ async function readActiveIdentity(page: Page): Promise<{
     ) as {
       active_account?: {
         authority?: { principal_id?: string };
-        resolution?: { full_id?: string };
+        resolution?: { did?: string };
         device_id?: string;
       };
     };
     const coreId = config.active_account?.authority?.principal_id ?? "";
-    const fullId = config.active_account?.resolution?.full_id ?? "";
+    const did = config.active_account?.resolution?.did ?? "";
     const deviceId = config.active_account?.device_id ?? "";
-    if (!coreId || !fullId || !deviceId) {
+    if (!coreId || !did || !deviceId) {
       throw new Error(
         "Inkson active account omitted its typed identity coordinates",
       );
     }
-    return { coreId, fullId, deviceId };
+    return { coreId, did, deviceId };
   });
 }
 

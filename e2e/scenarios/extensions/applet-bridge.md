@@ -29,8 +29,8 @@
 | ghost_actor | `ak:did_core:<method>:<core>` | 外部用户 X 在 portal realm 内的稳定代理 actor id;由 applet_service 在 Phase C 现场选择并 provision | Phase C 首次遇到该外部用户时 |
 
 > `bot_actor_id` / `ghost_actor_id` 都是不可直接解析的 `did_core_id`，不能靠字符串模板反拼 bare
-> `full_id`。测试必须为每个主体构造并发布独立 did:webvh inception，提交完整 method-history evidence，
-> 并验证 `project(initial_resolution.full_id)==actor_id`。durable record 保存 provision/PCR creation anchors，
+> `did`。测试必须为每个主体构造并发布独立 did:webvh inception，提交完整 method-history evidence，
+> 并验证 `project(initial_resolution.did)==actor_id`。durable record 保存 provision/PCR creation anchors，
 > current resolution 只从 `(actor_id, actor_principal_server_id)` PCR cell 取得。
 
 ## Pre-conditions
@@ -88,7 +88,7 @@
 11. mock 内部:
     - 正向 provision 前，把同一 `applet_managed_control` PCR genesis 分别投递到普通 `/_arkret/self/events` 与 peer federation 单 Event 入口；两者都必须以 `applet_managed_pcr_genesis_requires_closed_aggregate` 拒绝，证明只能由固定四事件 formal aggregate 注入
     - 用 active registration service key 对 exact body/path/Idempotency-Key 生成 RFC 9421 `service_signature`，调 `POST /_arkret/self/applets/{applet_id}/ghosts/provision`；不得用 bearer session 替代
-    - 请求携带完整 `actor_principal_server_id`、service-signed managed provision、Ghost PCR genesis、accountability grant 与 profile 四事件；Principal Server 独立验证 DID method evidence 和 full-id namespace 后原子提交，不代签、不重建
+    - 请求携带完整 `actor_principal_server_id`、service-signed managed provision、Ghost PCR genesis、accountability grant 与 profile 四事件；Principal Server 独立验证 DID method evidence 和 DID namespace 后原子提交，不代签、不重建
     - ghost 消息通过 `POST /_arkret/edge/applet/transactions` 提交，`actor_id=ghost_actor_id`、`executed_by=applet_service.did`，并引用安装时颁发的 message capability
     - Realm 为私有明文时，必须在 `plaintext_visible_services` 中显式授权 applet service 的 `message_content`
     - 返回 `{ ghost_actor_id, message_id }`

@@ -57,21 +57,21 @@ export function solandServiceId(key: SolandKey = "default"): string {
   );
 }
 
-export function solandServiceFullId(key: SolandKey = "default"): string {
+export function solandServiceDid(key: SolandKey = "default"): string {
   if (key === "alpha") {
     return (
-      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_FULL_ID") ??
+      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_DID") ??
       "did:webvh:z6mkfixture:soland-alpha.joint-e2e.local"
     );
   }
   if (key === "beta") {
     return (
-      optionalEnv("COTEST_SOLAND_BETA_SERVICE_FULL_ID") ??
+      optionalEnv("COTEST_SOLAND_BETA_SERVICE_DID") ??
       "did:webvh:z6mkfixture:soland-beta.joint-e2e.local"
     );
   }
   return (
-    optionalEnv("COTEST_SOLAND_SERVICE_FULL_ID") ??
+    optionalEnv("COTEST_SOLAND_SERVICE_DID") ??
     "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
   );
 }

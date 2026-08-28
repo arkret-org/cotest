@@ -4,9 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
 use arkret_event_draft::EventPayloadExt as _;
-use arkret_identifiers::{
-    ConsentId, DeviceId, DidCoreId, DidFullId, Hash, project_full_id_to_core_id,
-};
+use arkret_identifiers::{ConsentId, DeviceId, Did, DidCoreId, Hash, project_did_to_core_id};
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
 use arkret_wire::{
     Audience, AuditReasonText, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof,
@@ -352,7 +350,7 @@ fn install_managed_actor_author(input: Value) -> Result<Value> {
         .clone()
         .context("registration Event omits the accepted Realm Seal basis")?;
     let seed = signing_key_from_seed(&input.service_signing_seed_b64url)?.to_bytes();
-    let service_full_id = DidFullId::new(
+    let service_did = Did::new(
         input
             .service_verification_method
             .as_str()
@@ -362,7 +360,7 @@ fn install_managed_actor_author(input: Value) -> Result<Value> {
     )?;
     let signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
         seed,
-        service_full_id,
+        service_did,
         input.service_verification_method,
     );
     let request_digest = request.canonical_digest()?;
@@ -405,9 +403,7 @@ fn mls_keypackage_upload_entry(input: Value) -> Result<Value> {
     let principal_id = if input.principal_id.starts_with("ak:did_core:") {
         DidCoreId::new(input.principal_id).context("parse core principal id")?
     } else {
-        project_full_id_to_core_id(
-            &DidFullId::new(input.principal_id).context("parse full principal id")?,
-        )?
+        project_did_to_core_id(&Did::new(input.principal_id).context("parse full principal id")?)?
     };
     let seed = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(input.signing_seed_b64url)
@@ -490,7 +486,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             witness_policy: None,
         })
         .context("prepare principal inception")?;
-    let principal = DidFullId::new(draft.did.clone()).context("parse prepared principal DID")?;
+    let principal = Did::new(draft.did.clone()).context("parse prepared principal DID")?;
     let genesis_salt = arkret::GenesisSalt::generate()?;
     // The create Event has no Realm id yet. This value is only a local HLC
     // allocator namespace and is never emitted as the PCR coordinate.
@@ -606,7 +602,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
 /// projector is the same `DigestSuite::Sha256` projection Inkson routes through.
 #[allow(clippy::too_many_arguments)]
 fn build_pcr_genesis_unit(
-    principal: &DidFullId,
+    principal: &Did,
     principal_server_id: DidCoreId,
     genesis_salt: arkret::GenesisSalt,
     trust_domain: &str,
@@ -620,7 +616,7 @@ fn build_pcr_genesis_unit(
     created_at: chrono::DateTime<Utc>,
     hlc: &str,
 ) -> Result<(Event, Event, String)> {
-    let principal_id = project_full_id_to_core_id(principal)?;
+    let principal_id = project_did_to_core_id(principal)?;
     let principal_device_id = DeviceId::new(device_id.to_owned()).context("parse device id")?;
     let device_seed: [u8; 32] = Sha256::digest(
         [
@@ -707,10 +703,10 @@ fn build_pcr_genesis_unit(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal_id.clone(),
             principal_server_id,
-            principal_full_id: principal.clone(),
+            principal_did: principal.clone(),
             notary: founding_notary,
             initial_resolution: arkret_models_identity::ResolutionCommitment {
-                full_id: principal.clone(),
+                did: principal.clone(),
                 method_history_head: method_history_head.to_owned(),
                 version_id: version_id.to_owned(),
             },
@@ -735,7 +731,7 @@ fn build_pcr_genesis_unit(
     )
     .context("build self principal PCR create")?;
 
-    let root_did = DidFullId::new(format!("did:key:{root_public_key_multibase}"))
+    let root_did = Did::new(format!("did:key:{root_public_key_multibase}"))
         .context("parse identity root did:key")?;
     let root_verification_method = arkret_wire::DidUrl::new(root_verification_method.to_owned())
         .map_err(anyhow::Error::msg)
@@ -758,7 +754,7 @@ fn build_pcr_genesis_unit(
         arkret::ScopeRef::Realm {
             realm_id: create.realm_id.clone(),
         },
-        project_full_id_to_core_id(principal)
+        project_did_to_core_id(principal)
             .context("project principal DID for founding DeviceAuthorize")?,
         create.principal_server_id.clone(),
         authorize_payload,
@@ -772,7 +768,7 @@ fn build_pcr_genesis_unit(
     )?;
     let device_method =
         arkret_wire::DidUrl::new(format!("{principal}#{device_id}")).map_err(anyhow::Error::msg)?;
-    let device_did = DidFullId::new(format!("did:key:{device_multibase}"))?;
+    let device_did = Did::new(format!("did:key:{device_multibase}"))?;
     let device_signer = arkret::Ed25519PayloadSigner::from_did_key_seed(
         device_seed,
         device_did,
@@ -832,7 +828,7 @@ fn webvh_placeholder_did_command(input: Value) -> Result<Value> {
 fn webvh_verify_log(input: Value) -> Result<Value> {
     let input: WebvhVerifyLogInput =
         serde_json::from_value(input).context("parse webvh verify-log input")?;
-    let did = DidFullId::new(input.did).context("parse webvh DID")?;
+    let did = Did::new(input.did).context("parse webvh DID")?;
     let bytes = std::fs::read(&input.log_path)
         .with_context(|| format!("read webvh log {}", input.log_path))?;
     let verified = match input.profile.as_deref() {
@@ -980,7 +976,7 @@ fn identity_creation_register_request(input: Value) -> Result<Value> {
     serde_json::to_value(request).context("serialize identity-creation register request")
 }
 
-fn trusted_actor_signer_material(event: &Event) -> Result<(DidFullId, DidUrl)> {
+fn trusted_actor_signer_material(event: &Event) -> Result<(Did, DidUrl)> {
     let verification_method = event
         .proofs
         .iter()
@@ -993,9 +989,9 @@ fn trusted_actor_signer_material(event: &Event) -> Result<(DidFullId, DidUrl)> {
         .split_once('#')
         .map(|(controller, _)| controller)
         .context("founding DeviceAuthorize proof method lacks a controller fragment")?;
-    let controller = DidFullId::new(controller.to_owned())
+    let controller = Did::new(controller.to_owned())
         .context("parse founding DeviceAuthorize proof controller DID")?;
-    let controller_actor = project_full_id_to_core_id(&controller)
+    let controller_actor = project_did_to_core_id(&controller)
         .context("project founding DeviceAuthorize proof controller")?;
     if controller_actor != event.actor_id {
         bail!("founding DeviceAuthorize proof controller does not match its actor core id");
@@ -1018,9 +1014,9 @@ fn principal_bootstrap_seal(input: Value) -> Result<Value> {
         .founding_device_descriptor
         .context("PCR create omits founding device descriptor")?;
     let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
-    let (signer_full_id, verification_method) = trusted_actor_signer_material(authorize)?;
+    let (signer_did, verification_method) = trusted_actor_signer_material(authorize)?;
     let signer =
-        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_full_id, verification_method);
+        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_did, verification_method);
     let mut hlc = arkret_hlc::HlcGenerator::new(
         create.realm_id.as_str(),
         descriptor.device_id.as_str(),
@@ -1072,9 +1068,9 @@ fn principal_successor_seal(input: Value) -> Result<Value> {
     let availability = serde_json::from_value(input.availability_receipt_issue_outcome)
         .context("parse principal successor availability receipt issue outcome")?;
     let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
-    let (signer_full_id, verification_method) = trusted_actor_signer_material(founding_authorize)?;
+    let (signer_did, verification_method) = trusted_actor_signer_material(founding_authorize)?;
     let signer =
-        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_full_id, verification_method);
+        arkret::Ed25519PayloadSigner::from_did_key_seed(seed, signer_did, verification_method);
     let mut hlc = arkret_hlc::HlcGenerator::new(
         create.realm_id.as_str(),
         descriptor.device_id.as_str(),
@@ -1135,9 +1131,9 @@ fn sha256_canonical_json(input: Value) -> Result<Value> {
 fn join_receipt_proof(input: Value) -> Result<Value> {
     let input: JoinReceiptProofInput =
         serde_json::from_value(input).context("parse join receipt proof input")?;
-    let actor_full_id = DidFullId::new(input.actor_did).context("parse join receipt actor DID")?;
-    let actor_id = project_full_id_to_core_id(&actor_full_id)
-        .context("project join receipt actor DID to core id")?;
+    let actor_did = Did::new(input.actor_did).context("parse join receipt actor DID")?;
+    let actor_id =
+        project_did_to_core_id(&actor_did).context("project join receipt actor DID to core id")?;
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .context("parse join receipt proof created_at")?;
 
@@ -1188,7 +1184,7 @@ fn join_receipt_proof(input: Value) -> Result<Value> {
 fn principal_control_realm(input: Value) -> Result<Value> {
     let input: PrincipalControlRealmInput =
         serde_json::from_value(input).context("parse principal-control realm input")?;
-    let _principal = DidFullId::new(input.principal_id).context("parse principal DID")?;
+    let _principal = Did::new(input.principal_id).context("parse principal DID")?;
     bail!(
         "principal-control Realm is event-derived; this command requires an accepted create Event and cannot derive it from a DID"
     )
@@ -1202,9 +1198,8 @@ enum EventDigestMode {
 fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let input: EventProofInput =
         serde_json::from_value(input).context("parse event proof input")?;
-    let actor_full_id = DidFullId::new(input.actor_did.clone()).context("parse actor DID")?;
-    let actor =
-        project_full_id_to_core_id(&actor_full_id).context("project actor DID to its core id")?;
+    let actor_did = Did::new(input.actor_did.clone()).context("parse actor DID")?;
+    let actor = project_did_to_core_id(&actor_did).context("project actor DID to its core id")?;
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
     let event_digest =
@@ -1376,10 +1371,10 @@ fn development_event_signing_key(verification_method: &str) -> SigningKey {
 mod tests {
     use super::*;
 
-    fn actor_ids(value: &str) -> (DidFullId, DidCoreId) {
-        let full_id = DidFullId::new(value.to_owned()).unwrap();
-        let core_id = project_full_id_to_core_id(&full_id).unwrap();
-        (full_id, core_id)
+    fn actor_ids(value: &str) -> (Did, DidCoreId) {
+        let did = Did::new(value.to_owned()).unwrap();
+        let core_id = project_did_to_core_id(&did).unwrap();
+        (did, core_id)
     }
 
     #[test]
@@ -1532,8 +1527,8 @@ mod tests {
 
     #[test]
     fn event_proof_with_registered_seed_verifies_through_sdk() {
-        let (actor_full_id, actor_id) = actor_ids("did:webvh:z6mkfixture:alice.example");
-        let verification_method = format!("{actor_full_id}#principal-signing-key");
+        let (actor_did, actor_id) = actor_ids("did:webvh:z6mkfixture:alice.example");
+        let verification_method = format!("{actor_did}#principal-signing-key");
         let seed = [42u8; 32];
         let signing_key = SigningKey::from_bytes(&seed);
         let event = json!({
@@ -1562,7 +1557,7 @@ mod tests {
         });
         let proof_value = event_proof(
             json!({
-                "actor_did": actor_full_id,
+                "actor_did": actor_did,
                 "verification_method": verification_method,
                 "created_at": "2026-07-07T05:45:49.000Z",
                 "event": event,

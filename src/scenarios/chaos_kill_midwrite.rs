@@ -25,7 +25,7 @@ use crate::harness::{
     ArkretServer, dev_login, event_envelope, expect_json, message_create_text_payload,
 };
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const TEST_NAME: &str = "chaos-midwrite";
 const DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-00000000c0de";
@@ -47,7 +47,7 @@ pub async fn chaos_kill_midwrite_run() -> Result<()> {
     // bootstrap replays against the durable database on every later spawn.
     let (actor_did, event) = {
         let probe = ArkretServer::spawn_with_database_url(TEST_NAME, &database.url, &[]).await?;
-        let actor_did = actor_did_for_service_full_id(probe.service_full_id(), "chaos-midwrite")?;
+        let actor_did = actor_did_for_service_did(probe.service_did(), "chaos-midwrite")?;
         probe
             .register_client(&actor_did, "@chaos_midwrite", DEVICE_ID)
             .await?;

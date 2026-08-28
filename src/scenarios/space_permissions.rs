@@ -8,14 +8,14 @@ use crate::harness::{
     ArkretServer, add_member, create_realm, expect_api_error, expect_json,
     member_join_payload_value, message_create_text_payload,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()> {
     // CT-12: scaffold-driven, parallel-safe.
     let scaffold = crate::fixtures::TestScaffold::fresh("space-permissions").await?;
     let server = scaffold.server();
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "space-alice")?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-space")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "space-alice")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "bob-space")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -82,8 +82,8 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
 
 pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Result<()> {
     let server = ArkretServer::spawn("space-visibility").await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "visible-alice")?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-visible")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "visible-alice")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "bob-visible")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -198,8 +198,8 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
 
 fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<()> {
     let verification_method = crate::harness::default_event_verification_method(actor).to_string();
-    let actor_full_id = arkret_identifiers::DidFullId::new(actor.to_owned())?;
-    event.actor_id = arkret_identifiers::project_full_id_to_core_id(&actor_full_id)?;
+    let actor_did = arkret_identifiers::Did::new(actor.to_owned())?;
+    event.actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)?;
     event.actor_seq = 0;
     event.prev_refs.clear();
     if event.kind.is_control_plane() {

@@ -10,7 +10,7 @@
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   solandBaseUrl,
-  solandServiceFullId,
+  solandServiceDid,
   solandServiceId,
 } from "../../helpers/env";
 import {
@@ -41,13 +41,13 @@ import {
 // media-service-binding.md §3 anchors every issued issuer_kid /
 // participant_binding.issuer_kid on the cell's service_id, and the joint runner leaves
 // SOLAND_MEDIA_ISSUER_KID unset, so the deployment default signing key is
-// `<service full id>#media-1`. The LiveKit JWT `iss` is instead the
+// `<service DID>#media-1`. The LiveKit JWT `iss` is instead the
 // runner-configured SOLAND_LIVEKIT_API_KEY, a backend credential that never
 // enters the Realm cell.
 // These stay lazy functions: the joint preflight lists Playwright tests with
 // no services up, so env reads must not run at module load.
 const serviceId = (): string => solandServiceId();
-const issuerKid = (): string => `${solandServiceFullId()}#media-1`;
+const issuerKid = (): string => `${solandServiceDid()}#media-1`;
 const LIVEKIT_API_KEY = "did:web:media.example#media-token";
 // token_endpoint origin must equal the deployment's public base URL —
 // soland refuses to mint for a focus whose token endpoint names another

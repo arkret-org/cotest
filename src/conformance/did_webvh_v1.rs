@@ -9,7 +9,7 @@ use arkret_models_identity::did_document::validate_did_webvh_v1_method;
 use arkret_signatures::webvh::skeleton::{
     derive_webvh_scid, finalize_webvh_scid_substitution, webvh_entry_hash_multibase,
 };
-use arkret_wire::{DidFullId, ProfileId};
+use arkret_wire::{Did, ProfileId};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
@@ -184,7 +184,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             })?
             .log_entry;
             rotation["proof"][0]["verificationMethod"] = json!(inception.root_verification_method);
-            let did = DidFullId::new(inception.did)?;
+            let did = Did::new(inception.did)?;
             expect_rejected(
                 verify_did_webvh_v1_log(&did, &[inception.log_entry, rotation]),
                 name,
@@ -208,7 +208,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
                 .as_object_mut()
                 .ok_or_else(|| anyhow!("canonical rotation parameters are not an object"))?
                 .remove("updateKeys");
-            let did = DidFullId::new(inception.did)?;
+            let did = Did::new(inception.did)?;
             expect_rejected(
                 verify_did_webvh_v1_log(&did, &[inception.log_entry, rotation]),
                 name,
@@ -236,7 +236,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             let inception = principal_inception()?;
             let mut entry = inception.log_entry;
             entry["state"]["id"] = required_value(input, "current_state")?["id"].clone();
-            let did = DidFullId::new(required_str(input, "resolved_did")?)?;
+            let did = Did::new(required_str(input, "resolved_did")?)?;
             expect_rejected(verify_did_webvh_v1_log(&did, &[entry]), name)?;
             Ok(reject())
         }
@@ -333,7 +333,7 @@ mod tests {
         })
         .unwrap();
 
-        let did = DidFullId::new(inception.did).unwrap();
+        let did = Did::new(inception.did).unwrap();
         let mut complete_log = history;
         complete_log.push(second_rotation.log_entry);
         verify_did_webvh_v1_log(&did, &complete_log).unwrap();

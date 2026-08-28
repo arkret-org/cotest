@@ -3,7 +3,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
 #[test]
-fn notary_value_uses_core_actor_id_and_rejects_full_did_spelling() {
+fn notary_value_uses_core_actor_id_and_rejects_did_spelling() {
     let actor_id = arkret_wire::DidCoreId::new("ak:did_core:web:notary.example").unwrap();
     let recovery_id =
         arkret_wire::DidCoreId::new("ak:did_core:web:recovery.notary.example").unwrap();

@@ -16,7 +16,7 @@ recovery coverage.
 1. Read `/_arkret/describe?service_kind=principal_server`.
 2. Fetch the exact advertised service core from
    `/_arkret/open/services/{service_id}/resolution` without redirects.
-3. Cross-check service core, full DID, method-history head, version, role,
+3. Cross-check service core, DID, method-history head, version, role,
    canonical base URL, and the registered Describe projection digest.
 4. Confirm the record proof names an assertion method in the returned
    normalized DID document and the time window is ordered.

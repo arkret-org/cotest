@@ -40,7 +40,7 @@ use crate::harness::{
     next_typed_id,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+    actor_did_for_service_did, seal_current_principal_control_frontier,
 };
 
 #[derive(Debug)]
@@ -366,16 +366,12 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     let server = group.server(0);
     let inviter = server
         .demo_client(
-            &actor_did_for_service_full_id(
-                server.service_full_id(),
-                "alice-invite-service-fanout",
-            )?,
+            &actor_did_for_service_did(server.service_did(), "alice-invite-service-fanout")?,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await
         .context("bootstrap inviter client")?;
-    let holder_did =
-        actor_did_for_service_full_id(server.service_full_id(), "bob-invite-service-fanout")?;
+    let holder_did = actor_did_for_service_did(server.service_did(), "bob-invite-service-fanout")?;
     let holder = server
         .register_client(
             &holder_did,

@@ -17,7 +17,7 @@ type AuthenticatedServiceResolution = {
     record: {
       service_id: string;
       service_kind: string;
-      full_id: string;
+      did: string;
       method_history_head: string;
       version_id: string;
       record_sequence: number;
@@ -66,7 +66,7 @@ test.describe("service resolution bootstrap @fully-implemented", () => {
 
     expect(record.service_id).toBe(describe.service_id);
     expect(record.service_kind).toBe(describe.service_kind);
-    expect(record.full_id).toBe(describe.service_resolution.full_id);
+    expect(record.did).toBe(describe.service_resolution.did);
     expect(record.method_history_head).toBe(
       describe.service_resolution.method_history_head,
     );
@@ -89,7 +89,7 @@ test.describe("service resolution bootstrap @fully-implemented", () => {
       .digest("hex")}`;
     expect(record.describe_digest).toBe(expectedDescribeDigest);
 
-    expect(first.normalized_did_document.id).toBe(record.full_id);
+    expect(first.normalized_did_document.id).toBe(record.did);
     expect(first.method_history_evidence).toBeTruthy();
     const assertionMethods = (first.normalized_did_document.assertionMethod ?? [])
       .map((method) => (typeof method === "string" ? method : method.id))

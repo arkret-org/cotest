@@ -20,7 +20,7 @@ import {
 import {
   mockAppletRegistryBaseUrl,
   solandBaseUrl,
-  solandServiceFullId,
+  solandServiceDid,
   solandServiceId,
 } from "../../helpers/env";
 import {
@@ -47,7 +47,7 @@ import {
   resolveDefaultStrandId,
   signedEventEnvelope,
   signedRealmGenesisEnvelope,
-  singleSignerNotaryFromFullDid,
+  singleSignerNotaryFromDid,
   submitSignedEventApi,
   rawPushFederationEvents,
   typedId,
@@ -1064,7 +1064,7 @@ test.describe("applet bridge", () => {
     await expectNestedEvidenceRejected("empty accepted key set", emptyKeys);
 
     const swappedService = structuredClone(registrationEvidence);
-    swappedService.full_id = "did:web:swapped-applet.example";
+    swappedService.did = "did:web:swapped-applet.example";
     await expectNestedEvidenceRejected("swapped service DID", swappedService);
 
     const rotatedSnapshot = structuredClone(registrationEvidence);
@@ -1245,7 +1245,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
       `ak:did_core:web:bot-applet-${args.stamp}.joint-e2e.local`;
     const verificationMethod =
       args.verificationMethod ??
-      `${sourceServiceId === solandServiceId() ? solandServiceFullId() : sourceServiceId}#applet-service-key`;
+      `${sourceServiceId === solandServiceId() ? solandServiceDid() : sourceServiceId}#applet-service-key`;
     const authKeyId = verificationMethod.includes("#")
       ? verificationMethod.slice(verificationMethod.indexOf("#") + 1)
       : verificationMethod;
@@ -1458,7 +1458,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         "Content-Digest":
           "sha-256=:b3JCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
         "Signature-Input":
-          `sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-id" "destination-service-id" "idempotency-key");created=1700000000;expires=1700000200;keyid="${solandServiceFullId()}#key-1";alg="ed25519"`,
+          `sig1=("@method" "@target-uri" "@authority" "content-digest" "source-service-id" "destination-service-id" "idempotency-key");created=1700000000;expires=1700000200;keyid="${solandServiceDid()}#key-1";alg="ed25519"`,
         Signature:
           "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
       },
@@ -2182,7 +2182,7 @@ function appletRegistrationPayload(
     delegation_policy: pkg.delegation_policy,
     e2ee_policy: pkg.e2ee_policy,
     registration_epoch_evidence: {
-      full_id: operation.did,
+      did: operation.did,
       did_document_digest: canonicalHash(operation.didDocument),
       method_version_evidence: {
         method: "did:webvh",
@@ -2252,7 +2252,7 @@ function webvhManagedActorEvidence(built: BuiltWebvhGenesis) {
     .update(canonicalJson([]), "utf8")
     .digest("hex")}`;
   const initialResolution = {
-    full_id: built.did,
+    did: built.did,
     method_history_head: historyHead,
     version_id: built.versionId,
   };
@@ -2394,7 +2394,7 @@ function buildGhostManagedActorCreation(args: {
         encryption_profile: "mls_rfc9420",
         security_class: "standard",
         digest_algorithm: "sha256",
-        notary: singleSignerNotaryFromFullDid(solandServiceFullId()),
+        notary: singleSignerNotaryFromDid(solandServiceDid()),
         initial_resolution: evidence.initialResolution,
       },
     },

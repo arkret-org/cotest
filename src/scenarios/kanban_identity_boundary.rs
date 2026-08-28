@@ -24,12 +24,12 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{TestActorClient, TestServerGroup, events_query_for_realm, expect_json};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry() -> Result<()> {
     let group = TestServerGroup::single("kanban-identity-boundary").await?;
     let server = group.server(0);
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-kanban-id")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "alice-kanban-id")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-00000000ab01")
         .await?;

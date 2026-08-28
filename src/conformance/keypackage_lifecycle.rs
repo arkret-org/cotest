@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context as _, Result, anyhow, bail};
-use arkret_identifiers::{DeviceId, DidCoreId, DidFullId, Hash, RealmId};
+use arkret_identifiers::{DeviceId, Did, DidCoreId, Hash, RealmId};
 use arkret_models_collaboration::events_payloads::{
     MlsKeypackagePayload, MlsWelcomePayload, MlsWelcomeRecipient,
     validate_mls_welcome_claim_envelope,
@@ -162,8 +162,8 @@ fn core_did(value: &str) -> Result<DidCoreId> {
     DidCoreId::new(value.to_owned()).map_err(Into::into)
 }
 
-fn full_did(value: &str) -> Result<DidFullId> {
-    DidFullId::new(value.to_owned()).map_err(Into::into)
+fn did(value: &str) -> Result<Did> {
+    Did::new(value.to_owned()).map_err(Into::into)
 }
 
 fn verification_method(value: &str) -> Result<DidUrl> {
@@ -1037,10 +1037,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         .rsplit_once('#')
         .ok_or_else(|| anyhow!("requester verification method omits fragment"))?;
     // The claim envelope binds `requester_actor_id`, a core id (encryption-and-audit.md:576).
-    // The full DID exists only inside the verification method controller, so derive it there
+    // The DID exists only inside the verification method controller, so derive it there
     // and prove the two agree instead of carrying a second copy in the vector.
-    let requester_did = full_did(requester_method_controller)?;
-    let requester_core_id = arkret_identifiers::project_full_id_to_core_id(&requester_did)?;
+    let requester_did = did(requester_method_controller)?;
+    let requester_core_id = arkret_identifiers::project_did_to_core_id(&requester_did)?;
     if requester_core_id.as_str() != requester_actor_id
         || requester_method_fragment != requester_device_id
     {

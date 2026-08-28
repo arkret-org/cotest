@@ -50,7 +50,7 @@
 //! The raw standard constructor is not public outside `arkret-wire`:
 //!
 //! ```compile_fail
-//! use arkret_wire::{DidFullId, Event, Hlc, RealmId, ScopeRef};
+//! use arkret_wire::{Did, Event, Hlc, RealmId, ScopeRef};
 //!
 //! let scope = ScopeRef::Realm {
 //!     realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir").unwrap(),
@@ -58,7 +58,7 @@
 //! let _ = Event::new(
 //!     "ak.message.create",
 //!     scope,
-//!     DidFullId::new("did:webvh:z6mkfixture:alice.example").unwrap(),
+//!     Did::new("did:webvh:z6mkfixture:alice.example").unwrap(),
 //!     1,
 //!     Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
 //!     serde_json::json!({}),
@@ -120,7 +120,7 @@ pub fn fixture_notary_signer(
         .unwrap_or_else(|| panic!("fixture notary actor is not a DID-core id: {actor_id}"))
         .to_owned();
     // A WebVH core intentionally retains only the SCID, so prefix
-    // substitution cannot recreate a resolvable full DID. Fixtures still need
+    // substitution cannot recreate a resolvable DID. Fixtures still need
     // a syntactically complete verification-method controller that projects
     // back to the same core; use a closed test-only method coordinate for it.
     let controller = if controller.starts_with("webvh:") {

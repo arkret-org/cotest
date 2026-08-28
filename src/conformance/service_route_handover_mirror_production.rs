@@ -15,7 +15,7 @@ use arkret_models_identity::{
     canonical_service_current_record_path,
 };
 use arkret_wire::{
-    Base64UrlString, DidCoreId, DidFullId, DidUrl, Hash, ProtocolSignature, RealmId, RequestId,
+    Base64UrlString, Did, DidCoreId, DidUrl, Hash, ProtocolSignature, RealmId, RequestId,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
@@ -38,13 +38,13 @@ fn digest(value: &impl serde::Serialize) -> Result<Hash> {
     Ok(Hash::new(arkret_canonical::canonical_sha256(value)?)?)
 }
 
-fn service_id(full_id: &DidFullId) -> Result<DidCoreId> {
-    Ok(arkret_wire::project_full_id_to_core_id(full_id)?)
+fn service_id(did: &Did) -> Result<DidCoreId> {
+    Ok(arkret_wire::project_did_to_core_id(did)?)
 }
 
-fn signature(full_id: &DidFullId, created_at: DateTime<Utc>) -> Result<ProtocolSignature> {
+fn signature(did: &Did, created_at: DateTime<Utc>) -> Result<ProtocolSignature> {
     Ok(ProtocolSignature {
-        verification_method: DidUrl::new(format!("{full_id}#assertion-1"))
+        verification_method: DidUrl::new(format!("{did}#assertion-1"))
             .map_err(|error| anyhow!(error))?,
         created_at,
         jws: Base64UrlString::new("AA".to_owned()).map_err(|error| anyhow!(error))?,
@@ -57,14 +57,14 @@ fn record(
     previous_record_digest: Option<Hash>,
     base_url: &str,
 ) -> Result<ServiceResolutionRecord> {
-    let full_id = DidFullId::new(full)?;
-    let service_id = service_id(&full_id)?;
+    let did = Did::new(full)?;
+    let service_id = service_id(&did)?;
     let issued_at = Utc.with_ymd_and_hms(2026, 8, 10, 0, 0, 0).unwrap();
     Ok(ServiceResolutionRecord {
         record: ServiceResolutionRecordCore {
             service_id: service_id.clone(),
             service_kind: SERVICE_KIND.to_owned(),
-            full_id: full_id.clone(),
+            did: did.clone(),
             method_history_head: format!("did-history-{sequence}-{base_url}"),
             version_id: format!("version-{sequence}"),
             resolution_event_ref: format!("did-webvh-entry-sha256:{sequence:064x}"),
@@ -81,7 +81,7 @@ fn record(
             refresh_after: issued_at + Duration::minutes(30),
             expires_at: issued_at + Duration::hours(2),
         },
-        proof: signature(&full_id, issued_at)?,
+        proof: signature(&did, issued_at)?,
     })
 }
 
@@ -114,7 +114,7 @@ fn scheduled_notice(
             previous_notice_digest: None,
             expires_at: issued_at + Duration::minutes(30),
         },
-        proof: signature(&floor_record.record.full_id, issued_at)?,
+        proof: signature(&floor_record.record.did, issued_at)?,
     })
 }
 
@@ -141,7 +141,7 @@ fn mirror_entry(
     };
     let artifact_key = request.validate()?;
     let request_digest = request.canonical_digest()?;
-    let receiver_full_id = DidFullId::new("did:web:mirror.example")?;
+    let receiver_did = Did::new("did:web:mirror.example")?;
     let ack = ServiceResolutionPublishAck {
         ack: ServiceResolutionPublishAckCore {
             request_id: request.request_id.clone(),
@@ -153,7 +153,7 @@ fn mirror_entry(
             artifact_digest: artifact_digest.clone(),
             accepted_at,
         },
-        proof: signature(&receiver_full_id, accepted_at)?,
+        proof: signature(&receiver_did, accepted_at)?,
     };
     Ok(ServiceResolutionMirrorEntry {
         source_service_id: source_service_id.clone(),
@@ -181,7 +181,7 @@ impl ProductionFetcher {
             service_id: record.record.service_id.clone(),
             service_kind: record.record.service_kind.clone(),
             service_resolution: arkret_models_identity::ResolutionCommitment {
-                full_id: record.record.full_id.clone(),
+                did: record.record.did.clone(),
                 method_history_head: record.record.method_history_head.clone(),
                 version_id: record.record.version_id.clone(),
             },
@@ -235,10 +235,10 @@ impl ServiceRouteFetcher for ProductionFetcher {
 
 async fn exercise_atomic_mirror_store() -> Result<()> {
     let store = MemoryServiceRouteStore::new();
-    let source_full_id = DidFullId::new("did:web:source.example")?;
-    let receiver_full_id = DidFullId::new("did:web:mirror.example")?;
-    let source = service_id(&source_full_id)?;
-    let receiver = service_id(&receiver_full_id)?;
+    let source_did = Did::new("did:web:source.example")?;
+    let receiver_did = Did::new("did:web:mirror.example")?;
+    let source = service_id(&source_did)?;
+    let receiver = service_id(&receiver_did)?;
     let realm = RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
     let accepted_at = Utc.with_ymd_and_hms(2026, 8, 10, 0, 6, 0).unwrap();
     let first = record(
@@ -443,7 +443,7 @@ async fn exercise_resolver_safety() -> Result<()> {
     .await
     .0?;
     ensure!(
-        successor_entry.record_sequence == 1 && service_id(&successor_entry.full_id)? == expected,
+        successor_entry.record_sequence == 1 && service_id(&successor_entry.did)? == expected,
         "same-core handover was treated as a rebind"
     );
     restart_store

@@ -1,6 +1,6 @@
 use anyhow::{Context as _, Result, anyhow};
 use arkret_identifiers::{
-    BackupId, BackupSeriesId, DeviceId, DidFullId, EventId, project_full_id_to_core_id,
+    BackupId, BackupSeriesId, DeviceId, Did, EventId, project_did_to_core_id,
 };
 use arkret_models_crypto::{
     BackupKind, HistorySecretRangeIndex, HistorySecretRangesItemKind, KeyBackup, KeyBackupAead,
@@ -16,7 +16,7 @@ use serde_json::Value;
 use crate::harness::{
     ArkretServer, TestServerGroup, expect_api_error, expect_json, wire_negative_from_sdk,
 };
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-0000000000d3";
 const DEVICE_A: &str = "ak:device:01975510-0000-7000-8000-0000000000a1";
@@ -25,11 +25,11 @@ const DEVICE_B: &str = "ak:device:01975510-0000-7000-8000-0000000000b2";
 pub async fn key_backup_put_get_negative_run() -> Result<()> {
     let group = TestServerGroup::single("d3-key-backup-negative").await?;
     let server = group.server(0);
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-d3")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "alice-d3")?;
     let alice = server
         .register_client(&alice_did, "@alice-d3", DEVICE_A)
         .await?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-d3")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "bob-d3")?;
     let bob = server
         .register_client(
             &bob_did,
@@ -189,7 +189,7 @@ async fn reject_digest_mismatch_on_put(
 
 fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBackup> {
     let created_at = ts("2026-05-18T00:00:00.000Z")?;
-    let actor_id = project_full_id_to_core_id(&DidFullId::new(actor.to_owned())?)?;
+    let actor_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
     let effective_scope = ScopeRef::Realm {
         realm_id: RealmId::new("ak:realm:Aa1JCF6pnQnSgl8DnT6vNtPcFGPCxLnEY130o2lmyDSh".to_owned())?,
     };

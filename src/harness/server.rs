@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 use std::{fs, mem};
 
 use anyhow::{Context, Result, anyhow};
-use arkret::{DidCoreId, DidFullId, TrustDomainId};
+use arkret::{Did, DidCoreId, TrustDomainId};
 use arkret_http_client::{Auth, Client as SdkClient};
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE_NO_PAD};
@@ -126,7 +126,7 @@ pub struct ArkretServer {
     external_restart: Option<ExternalRestartConfig>,
     base_url: Url,
     service_id: DidCoreId,
-    service_full_id: DidFullId,
+    service_did: Did,
     service_notary_signer: arkret_wire::NotarySignerDescriptor,
     trust_domain: TrustDomainId,
     blob_root: Option<PathBuf>,
@@ -269,7 +269,7 @@ fn test_service_signing_key(name: &str) -> (String, [u8; 32]) {
 
 fn test_service_notary_signer(
     service_id: &DidCoreId,
-    service_full_id: &DidFullId,
+    service_did: &Did,
     signing_seed: [u8; 32],
 ) -> Result<arkret_wire::NotarySignerDescriptor> {
     let public_key = ed25519_dalek::SigningKey::from_bytes(&signing_seed)
@@ -277,7 +277,7 @@ fn test_service_notary_signer(
         .to_bytes();
     let descriptor = arkret_wire::NotarySignerDescriptor {
         actor_id: service_id.clone(),
-        verification_method: arkret_wire::DidUrl::new(format!("{service_full_id}#notary-key"))
+        verification_method: arkret_wire::DidUrl::new(format!("{service_did}#notary-key"))
             .map_err(anyhow::Error::msg)?,
         key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
         jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
@@ -484,7 +484,7 @@ impl ArkretServer {
             let _ = child.wait();
             return Err(error);
         }
-        let (service_id, service_full_id, trust_domain) =
+        let (service_id, service_did, trust_domain) =
             match fetch_service_identity(&base_url, Some(&tls)).await {
                 Ok(identity) => identity,
                 Err(error) => {
@@ -494,7 +494,7 @@ impl ArkretServer {
                 }
             };
         let service_notary_signer =
-            test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
+            test_service_notary_signer(&service_id, &service_did, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Local(child),
@@ -512,7 +512,7 @@ impl ArkretServer {
             }),
             base_url,
             service_id,
-            service_full_id,
+            service_did,
             service_notary_signer,
             trust_domain,
             blob_root: Some(blob_root),
@@ -628,7 +628,7 @@ impl ArkretServer {
             };
             return Err(anyhow!("{error}{log_suffix}"));
         }
-        let (service_id, service_full_id, trust_domain) =
+        let (service_id, service_did, trust_domain) =
             match fetch_service_identity(&base_url, None).await {
                 Ok(identity) => identity,
                 Err(error) => {
@@ -639,7 +639,7 @@ impl ArkretServer {
                 }
             };
         let service_notary_signer =
-            test_service_notary_signer(&service_id, &service_full_id, notary_signing_seed)?;
+            test_service_notary_signer(&service_id, &service_did, notary_signing_seed)?;
 
         Ok(Self {
             handle: SutHandle::Docker { container_name },
@@ -647,7 +647,7 @@ impl ArkretServer {
             external_restart: None,
             base_url,
             service_id,
-            service_full_id,
+            service_did,
             service_notary_signer,
             trust_domain,
             blob_root: None,
@@ -675,8 +675,8 @@ impl ArkretServer {
         &self.service_id
     }
 
-    pub fn service_full_id(&self) -> &DidFullId {
-        &self.service_full_id
+    pub fn service_did(&self) -> &Did {
+        &self.service_did
     }
 
     pub fn service_notary_signer(&self) -> &arkret_wire::NotarySignerDescriptor {
@@ -830,10 +830,10 @@ impl ArkretServer {
             let _ = restarted.wait();
             return Err(error);
         }
-        let (service_id, service_full_id, trust_domain) =
+        let (service_id, service_did, trust_domain) =
             fetch_service_identity(&self.base_url, self._tls.as_deref()).await?;
         if service_id != self.service_id
-            || service_full_id != self.service_full_id
+            || service_did != self.service_did
             || trust_domain != self.trust_domain
         {
             let _ = restarted.kill();
@@ -1024,7 +1024,7 @@ impl ArkretServer {
     }
 
     pub(crate) fn account_localpart_request(&self, did: &str) -> Result<reqwest::RequestBuilder> {
-        let account_id = arkret::project_full_id_to_core_id(&DidFullId::new(did.to_owned())?)?;
+        let account_id = arkret::project_did_to_core_id(&Did::new(did.to_owned())?)?;
         let mut url = self.base_url();
         url.path_segments_mut()
             .map_err(|_| anyhow!("SUT base URL cannot carry path segments"))?
@@ -1700,7 +1700,7 @@ fn test_trust_domain(name: &str) -> String {
 async fn fetch_service_identity(
     base_url: &Url,
     tls: Option<&HarnessTls>,
-) -> Result<(DidCoreId, DidFullId, TrustDomainId)> {
+) -> Result<(DidCoreId, Did, TrustDomainId)> {
     let url = base_url.join("/_arkret/describe")?;
     let response = probe_http_client(tls)?
         .get(url.clone())
@@ -1718,13 +1718,13 @@ async fn fetch_service_identity(
         .validate()
         .with_context(|| format!("service describe at {url} failed validation"))?;
     let service_id = description.service_id;
-    let service_full_id = description.service_resolution.full_id;
+    let service_did = description.service_resolution.did;
     anyhow::ensure!(
-        arkret::project_full_id_to_core_id(&service_full_id)? == service_id,
-        "service describe at {url} returned a mismatched service_id/full_id"
+        arkret::project_did_to_core_id(&service_did)? == service_id,
+        "service describe at {url} returned a mismatched service_id/did"
     );
     let trust_domain = description.trust_domain;
-    Ok((service_id, service_full_id, trust_domain))
+    Ok((service_id, service_did, trust_domain))
 }
 
 fn probe_http_client(tls: Option<&HarnessTls>) -> Result<HttpClient> {

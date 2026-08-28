@@ -3,19 +3,19 @@ use serde_json::{Value, json};
 
 use crate::harness::actor_core_id;
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("typing-push-rules", &[]).await?;
-    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "alice-typing")?;
+    let alice_actor = actor_did_for_service_did(server.service_did(), "alice-typing")?;
     let alice = server
         .demo_client(
             &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let bob_actor = actor_did_for_service_full_id(server.service_full_id(), "bob-typing")?;
+    let bob_actor = actor_did_for_service_did(server.service_did(), "bob-typing")?;
     let bob = server
         .register_client(
             &bob_actor,

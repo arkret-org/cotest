@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::harness::{actor_core_id, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, seal_current_principal_control_frontier,
+    actor_did_for_service_did, seal_current_principal_control_frontier,
     spawn_with_harness_account_authority,
 };
 
@@ -20,7 +20,7 @@ fn realm_id_from(created: &serde_json::Value, label: &str) -> Result<String> {
 
 pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("directory-privacy", &[]).await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "privacy-alice")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "privacy-alice")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -33,7 +33,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     // Register account-first, then publish bob's primary localpart through the
     // authenticated localpart lifecycle. Soland derives the canonical handle
     // domain and signed handle claim from that binding.
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "privacy-bob")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "privacy-bob")?;
     let bob = server
         .register_client_with_localpart(
             &bob_did,

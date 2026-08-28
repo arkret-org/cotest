@@ -62,8 +62,8 @@ pub fn query_method() -> reqwest::Method {
 }
 
 pub fn actor_core_id(actor: &str) -> Result<String> {
-    let full_id = arkret_identifiers::DidFullId::new(actor.to_owned())?;
-    Ok(arkret_identifiers::project_full_id_to_core_id(&full_id)?.to_string())
+    let did = arkret_identifiers::Did::new(actor.to_owned())?;
+    Ok(arkret_identifiers::project_did_to_core_id(&did)?.to_string())
 }
 
 /// Read the one canonical Event id from a single-Event submit outcome.
@@ -95,13 +95,13 @@ pub fn submitted_event_id(outcome: &Value) -> Result<arkret_identifiers::EventId
 }
 
 pub fn events_frontier_request_body(
-    actor_id: &str,
+    actor_did: &str,
     realm_id: Option<&str>,
 ) -> Result<arkret_models_collaboration::event_query::EventsFrontierRequestBody> {
     Ok(
         arkret_models_collaboration::event_query::EventsFrontierRequestBody {
-            actor_id: arkret_identifiers::DidFullId::new(actor_id.to_owned())
-                .and_then(|full_id| arkret_identifiers::project_full_id_to_core_id(&full_id))?,
+            actor_id: arkret_identifiers::Did::new(actor_did.to_owned())
+                .and_then(|did| arkret_identifiers::project_did_to_core_id(&did))?,
             realm_id: realm_id
                 .map(|value| arkret_identifiers::RealmId::new(value.to_owned()))
                 .transpose()?,
@@ -372,16 +372,16 @@ pub fn realm_create_payload_with_notary(
         .get("alias")
         .and_then(Value::as_str)
         .map(|value| {
-            let authority_service_full_id = input
-                .get("alias_authority_service_full_id")
+            let authority_service_did = input
+                .get("alias_authority_service_did")
                 .and_then(Value::as_str)
                 .ok_or_else(|| {
                     arkret_wire::WireError::Protocol(
-                        "cotest Realm bootstrap alias requires alias_authority_service_full_id"
+                        "cotest Realm bootstrap alias requires alias_authority_service_did"
                             .to_owned(),
                     )
                 })?;
-            let authority = arkret_models_collaboration::objects::realm_alias::RealmAlias::authority_domain_for_service(authority_service_full_id)?;
+            let authority = arkret_models_collaboration::objects::realm_alias::RealmAlias::authority_domain_for_service(authority_service_did)?;
             let alias = arkret_models_collaboration::objects::realm_alias::RealmAlias::prepare_under_authority(value, &authority)?;
             Ok::<_, arkret_wire::WireError>(
                 arkret_models_collaboration::governance::realm_governance::RealmAliasPayload::declaration(alias),

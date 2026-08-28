@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::fixtures::TestScaffold;
 use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json, expect_status};
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, spawn_with_harness_account_authority,
+    actor_did_for_service_did, spawn_with_harness_account_authority,
 };
 
 pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<()> {
@@ -42,9 +42,8 @@ pub async fn framework_errors_and_invalid_json_use_arkret_envelopes() -> Result<
 
 pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("account-auth").await?;
-    let account_full_id =
-        arkret_identifiers::DidFullId::new("did:web:alice-auth.example".to_owned())?;
-    let account_core_id = arkret_identifiers::project_full_id_to_core_id(&account_full_id)?;
+    let account_did = arkret_identifiers::Did::new("did:web:alice-auth.example".to_owned())?;
+    let account_core_id = arkret_identifiers::project_did_to_core_id(&account_did)?;
 
     expect_api_error(
         server
@@ -56,7 +55,7 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
     .await?;
 
     let registration_body = crate::harness::NonProtocolTestBody::new(json!({
-        "did": account_full_id,
+        "did": account_did,
         "handle": "@alice-auth",
         "display_name": "alice-auth",
         "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
@@ -136,14 +135,14 @@ pub async fn account_auth_and_session_edges_are_enforced() -> Result<()> {
 
 pub async fn contact_edges_are_rejected() -> Result<()> {
     let server = spawn_with_harness_account_authority("contact-edges", &[]).await?;
-    let alice_actor = actor_did_for_service_full_id(server.service_full_id(), "alice-contact")?;
+    let alice_actor = actor_did_for_service_did(server.service_did(), "alice-contact")?;
     let alice = server
         .demo_client(
             &alice_actor,
             "ak:device:01904100-0000-7000-8000-0000000000a1",
         )
         .await?;
-    let bob_actor = actor_did_for_service_full_id(server.service_full_id(), "bob-contact")?;
+    let bob_actor = actor_did_for_service_did(server.service_did(), "bob-contact")?;
     let bob = server
         .demo_client(&bob_actor, "ak:device:01904100-0000-7000-8000-0000000000b0")
         .await?;

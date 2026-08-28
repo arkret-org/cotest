@@ -8,12 +8,12 @@ use crate::harness::{
     expect_text,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_full_id, signed_keys_upload_body, spawn_with_harness_account_authority,
+    actor_did_for_service_did, signed_keys_upload_body, spawn_with_harness_account_authority,
 };
 
 pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
     let server = spawn_with_harness_account_authority("delivery-keys", &[]).await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "delivery-alice")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "delivery-alice")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let alice = server
         .register_client(&alice_did, "@delivery-alice", alice_device)
@@ -145,7 +145,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
 
 pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Result<()> {
     let server = ArkretServer::spawn("device-delivery").await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "delivery-to-device")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "delivery-to-device")?;
     let alice_device = "ak:device:01904100-0000-7000-8000-0000000000a1";
     let alice = server.demo_client(&alice_did, alice_device).await?;
     let token = alice.token.clone();
@@ -324,11 +324,11 @@ pub(crate) fn blob_upload_form(bytes: &[u8], media_type: &str) -> Result<reqwest
 
 pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
     let server = ArkretServer::spawn("blob-media").await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-blob")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "alice-blob")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-blob")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "bob-blob")?;
     let bob = server
         .register_client(
             &bob_did,
@@ -336,7 +336,7 @@ pub async fn blob_integrity_head_range_and_missing_edges_work() -> Result<()> {
             "ak:device:01904100-0000-7000-8000-0000000000b0",
         )
         .await?;
-    let carol_did = actor_did_for_service_full_id(server.service_full_id(), "carol-blob")?;
+    let carol_did = actor_did_for_service_did(server.service_did(), "carol-blob")?;
     let carol = server
         .register_client(
             &carol_did,
@@ -466,12 +466,12 @@ async fn create_blob_access_realm(
 
 pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     let server = ArkretServer::spawn("push-moderation").await?;
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-moderation")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "alice-moderation")?;
     let alice_client = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
     let alice = alice_client.token.clone();
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-delivery")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "bob-delivery")?;
     let bob = server
         .register_client(
             &bob_did,

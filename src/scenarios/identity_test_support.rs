@@ -9,9 +9,7 @@ use arkret_bootstrap::{
 };
 use arkret_canonical::multibase::ed25519_pubkey_to_did_key_multibase;
 use arkret_canonical::{canonical_json_bytes, canonical_sha256};
-use arkret_identifiers::{
-    DeviceId, DidCoreId, DidFullId, Hlc, RealmId, project_full_id_to_core_id,
-};
+use arkret_identifiers::{DeviceId, Did, DidCoreId, Hlc, RealmId, project_did_to_core_id};
 use arkret_models_collaboration::events_payloads::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
@@ -64,9 +62,9 @@ use crate::harness::{
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_KEY_SEED: [u8; 32] = [0xac; 32];
 pub(crate) const HARNESS_ACCOUNT_AUTHORITY_ORIGIN: &str = "https://account-authority.cotest.local";
 
-pub(crate) fn harness_account_authority_full_id() -> DidFullId {
+pub(crate) fn harness_account_authority_did() -> Did {
     let key = SigningKey::from_bytes(&HARNESS_ACCOUNT_AUTHORITY_KEY_SEED);
-    DidFullId::new(format!(
+    Did::new(format!(
         "did:key:{}",
         ed25519_pubkey_to_did_key_multibase(&key.verifying_key().to_bytes())
     ))
@@ -74,7 +72,7 @@ pub(crate) fn harness_account_authority_full_id() -> DidFullId {
 }
 
 pub(crate) fn harness_account_authority_id() -> DidCoreId {
-    project_full_id_to_core_id(&harness_account_authority_full_id())
+    project_did_to_core_id(&harness_account_authority_did())
         .expect("deterministic account authority core id")
 }
 
@@ -341,10 +339,10 @@ pub async fn bootstrap_registered_actor(
         device_method.as_str().to_owned(),
         server.service_id().clone(),
     );
-    let full_id = DidFullId::new(actor.to_owned())?;
+    let did = Did::new(actor.to_owned())?;
     let principal = ProvisionedTestPrincipal {
-        core_id: project_full_id_to_core_id(&full_id)?,
-        full_id,
+        core_id: project_did_to_core_id(&did)?,
+        did,
         device_id: DeviceId::new(device_id)?,
         device_signing_key: device_key,
         root_key_seed: test_principal_root_key_seed(actor)?,
@@ -376,7 +374,7 @@ async fn authorize_additional_principal_device(
     device_id: &str,
     device_signing_key: &SigningKey,
 ) -> Result<arkret_identifiers::EventId> {
-    let actor = founding.full_id.as_str();
+    let actor = founding.did.as_str();
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
     let new_device_id = DeviceId::new(device_id.to_owned())?;
@@ -503,7 +501,7 @@ pub async fn seal_current_principal_control_frontier(
     client: &TestActorClient,
     device_signing_key: &SigningKey,
 ) -> Result<()> {
-    let principal = DidFullId::new(client.actor.clone())?;
+    let principal = Did::new(client.actor.clone())?;
     let provisioned = client
         .principal
         .as_ref()
@@ -749,8 +747,8 @@ async fn bootstrap_test_device_authorization(
         .split_once(":webvh:")
         .context("test principal DID has no local id")?;
     let host = method_authority.replace("%3A", ":").replace("%3a", ":");
-    let principal = DidFullId::new(actor.to_owned()).context("invalid test principal DID")?;
-    let principal_core_id = project_full_id_to_core_id(&principal)?;
+    let principal = Did::new(actor.to_owned()).context("invalid test principal DID")?;
+    let principal_core_id = project_did_to_core_id(&principal)?;
     let principal_actor_id = principal_core_id.clone();
     let created_at = chrono::DateTime::parse_from_rfc3339("2026-05-02T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
@@ -818,7 +816,7 @@ async fn bootstrap_test_device_authorization(
         SelfPrincipalPcrCreateInput {
             principal_id: principal_actor_id.clone(),
             principal_server_id: server.service_id().clone(),
-            principal_full_id: principal.clone(),
+            principal_did: principal.clone(),
             notary: arkret_wire::NotaryValue::single_signer(
                 crate::fixture_notary_signer_for_method(
                     principal_actor_id.clone(),
@@ -826,7 +824,7 @@ async fn bootstrap_test_device_authorization(
                 ),
             ),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
-                full_id: principal.clone(),
+                did: principal.clone(),
                 method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,
                 version_id: prepared.version_id.clone(),
             },
@@ -841,7 +839,7 @@ async fn bootstrap_test_device_authorization(
     )?;
     let root_seed: [u8; 32] =
         Sha256::digest(format!("cotest:webvh:root:{host}:{local_id}").as_bytes()).into();
-    let root_did = DidFullId::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
+    let root_did = Did::new(format!("did:key:{}", prepared.root_public_key_multibase))?;
     let root_verification_method =
         crate::fixture_did_url(prepared.root_verification_method.clone());
     let root_signer = arkret_signatures::Ed25519PayloadSigner::from_did_key_seed(
@@ -917,7 +915,7 @@ async fn bootstrap_test_device_authorization(
             challenge: format!("cotest-pcr-genesis-challenge-{local_id}"),
             purpose: IdentityBindingPurpose::AccountBindingAndPcrGenesis,
             principal_id: principal_core_id.clone(),
-            full_id: principal.clone(),
+            did: principal.clone(),
             account_subject,
             operation_digest: validated_inception.operation_digest.clone(),
             did_version_id: validated_inception.did_version_id.clone(),
@@ -946,7 +944,7 @@ async fn bootstrap_test_device_authorization(
     let request = arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody {
         account_authority_id: harness_account_authority_id(),
         principal_id: principal_core_id,
-        full_id: principal,
+        did: principal,
         pcr_realm_id: realm_id,
         idempotency_key: idempotency_key.clone(),
         registration_request_digest: Hash::new(format!("sha256:{}", "1".repeat(64)))?,
@@ -1052,10 +1050,7 @@ async fn submit_harness_pcr_genesis(
     ];
     let created = chrono::Utc::now().timestamp();
     let expires = created + 120;
-    let key_id = format!(
-        "{}#federation-fanout-key",
-        harness_account_authority_full_id()
-    );
+    let key_id = format!("{}#federation-fanout-key", harness_account_authority_did());
     let signature_input = format!(
         "{};created={created};expires={expires};keyid=\"{key_id}\";alg=\"ed25519\"",
         format_signature_input_component_list("sig1", &components)?
@@ -1097,18 +1092,18 @@ async fn submit_harness_pcr_genesis(
     serde_json::from_value(value).context("decode harness PCR genesis outcome")
 }
 
-pub fn actor_did_for_service_full_id(service_full_id: &DidFullId, actor: &str) -> Result<String> {
-    Ok(prepare_actor_inception_for_service_full_id(service_full_id, actor)?.did)
+pub fn actor_did_for_service_did(service_did: &Did, actor: &str) -> Result<String> {
+    Ok(prepare_actor_inception_for_service_did(service_did, actor)?.did)
 }
 
 /// Prepare the deterministic native WebVH inception used by live principal
 /// scenarios without submitting it, so endpoint tests can inspect the exact
 /// request and outcome themselves.
-pub fn prepare_actor_inception_for_service_full_id(
-    service_full_id: &DidFullId,
+pub fn prepare_actor_inception_for_service_did(
+    service_did: &Did,
     actor: &str,
 ) -> Result<PreparedPrincipalInception> {
-    let service_host = did_authority_from_full_id(service_full_id);
+    let service_host = did_authority_from_did(service_did);
     let service_authority = did_web_host_to_url_authority(&service_host);
     let webvh_host = if service_authority.contains('.') {
         service_authority
@@ -1178,9 +1173,9 @@ fn test_principal_genesis_salt(
 
 /// Extract the DID method authority while retaining an encoded local port.
 /// Principal inception needs the port to address the local WebVH endpoint.
-fn did_authority_from_full_id(service_full_id: &DidFullId) -> String {
-    let service_full_id = service_full_id.as_str();
-    if let Some(rest) = service_full_id.strip_prefix("did:webvh:") {
+fn did_authority_from_did(service_did: &Did) -> String {
+    let service_did = service_did.as_str();
+    if let Some(rest) = service_did.strip_prefix("did:webvh:") {
         let mut parts = rest.split(':');
         let scid = parts.next().unwrap_or_default();
         if let Some(host) = parts.next()
@@ -1190,15 +1185,15 @@ fn did_authority_from_full_id(service_full_id: &DidFullId) -> String {
             return host.to_ascii_lowercase();
         }
     }
-    if let Some(rest) = service_full_id.strip_prefix("did:web:")
+    if let Some(rest) = service_did.strip_prefix("did:web:")
         && let Some(host) = rest.split(':').next()
         && !host.is_empty()
     {
         return host.to_ascii_lowercase();
     }
-    service_full_id
+    service_did
         .strip_prefix("did:key:")
-        .unwrap_or(service_full_id)
+        .unwrap_or(service_did)
         .to_ascii_lowercase()
         .replace(':', ".")
 }

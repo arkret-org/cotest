@@ -6,8 +6,8 @@
 //! Wire-breaking cleanup:
 //!   * `claim_kind` enum lost `service_handle` — only `handle_binding` / `organization_handle`
 //!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
-//!   * `subject` MUST be a holder/principal did_core_id. A full DID, account id, or generic
-//!     resource id MUST reject (VECT-COT-7), enforced by
+//!   * `subject` MUST be a holder/principal did_core_id. A DID, account id, or generic resource id
+//!     MUST reject (VECT-COT-7), enforced by
 //!     [`arkret_models_identity::validate_handle_claim_subject`] and by the schema `subject`
 //!     pattern.
 //!

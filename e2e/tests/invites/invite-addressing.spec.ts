@@ -3,7 +3,7 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 
 import {
   solandBaseUrl,
-  solandServiceFullId,
+  solandServiceDid,
   solandServiceId,
   solandServiceResolution,
 } from "../../helpers/env";
@@ -274,7 +274,7 @@ test.describe("invite addressing", () => {
       "recipient_service_acceptance",
     );
     expect(locator.proofs?.[0]?.proof?.verification_method).toBe(
-      `${solandServiceFullId()}#notary-key`,
+      `${solandServiceDid()}#notary-key`,
     );
 
     const rotate = await request.post(rotateUrl, {

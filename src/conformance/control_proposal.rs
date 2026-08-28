@@ -137,9 +137,8 @@ pub fn run_control_proposal_ack_suite() -> Result<()> {
                 .rsplit_once('#')
                 .map(|(controller, _)| controller)
                 .ok_or_else(|| anyhow!("member verification method is not a DID URL"))?;
-            let full_id = arkret_wire::DidFullId::new(controller.to_owned())?;
-            let actor_id =
-                arkret_wire::project_full_id_to_core_id(&full_id).map_err(anyhow::Error::msg)?;
+            let did = arkret_wire::Did::new(controller.to_owned())?;
+            let actor_id = arkret_wire::project_did_to_core_id(&did).map_err(anyhow::Error::msg)?;
             Ok(crate::fixture_notary_signer_for_method(
                 actor_id,
                 member.signature.verification_method.clone(),

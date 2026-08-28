@@ -159,8 +159,8 @@ pub async fn two_ordinary_events_under_one_key_epoch_run() -> Result<()> {
     let Some((server, metrics)) = metered_soland("did-c02-ordinary-events").await? else {
         return Ok(());
     };
-    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_full_id(
-        server.service_full_id(),
+    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
+        server.service_did(),
         "did-c02-ordinary-alice",
     )?;
     let alice = seeded_actor(
@@ -218,8 +218,8 @@ pub async fn a_reused_binding_still_rejects_a_bad_signature_run() -> Result<()> 
     let Some((server, metrics)) = metered_soland("did-c02-bad-signature").await? else {
         return Ok(());
     };
-    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_full_id(
-        server.service_full_id(),
+    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
+        server.service_did(),
         "did-c02-badsig-alice",
     )?;
     let alice = seeded_actor(
@@ -312,8 +312,8 @@ pub async fn unknown_issuer_fails_closed_run() -> Result<()> {
     let Some((server, metrics)) = metered_soland("did-c02-unknown-issuer").await? else {
         return Ok(());
     };
-    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_full_id(
-        server.service_full_id(),
+    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
+        server.service_did(),
         "did-c02-unknown-alice",
     )?;
     let alice = seeded_actor(
@@ -384,8 +384,8 @@ pub async fn repeated_requests_under_one_binding_run() -> Result<()> {
     let Some((server, metrics)) = metered_soland("did-c02-repeated-requests").await? else {
         return Ok(());
     };
-    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_full_id(
-        server.service_full_id(),
+    let alice_did = crate::scenarios::identity_test_support::actor_did_for_service_did(
+        server.service_did(),
         "did-c02-repeated-alice",
     )?;
     let alice = seeded_actor(

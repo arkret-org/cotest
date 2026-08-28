@@ -1,19 +1,18 @@
 use anyhow::Result;
 use arkret::{
-    AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody,
-    DidFullId,
+    AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody, Did,
 };
 use arkret_models_discovery::ServiceDescribe;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{NonProtocolTestBody, TestServerGroup, expect_api_error, expect_json};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-applet").await?;
     let server = group.server(0);
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-applet")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "alice-applet")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -88,7 +87,7 @@ pub async fn applet_lifecycle_surfaces_are_advertised_when_routes_exist() -> Res
 pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Result<()> {
     let group = TestServerGroup::single("extension-surface-agent").await?;
     let server = group.server(0);
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-agent")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "alice-agent")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
@@ -137,8 +136,8 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         .expect("fixture operation id"),
         idempotency_key: arkret::IdempotencyKey::new("extension-surface-agent-provision")
             .expect("fixture idempotency key"),
-        full_id: DidFullId::new("did:webvh:z6mkfixtureagent:agent.example")
-            .expect("fixture managed Agent full id"),
+        did: Did::new("did:webvh:z6mkfixtureagent:agent.example")
+            .expect("fixture managed Agent DID"),
         controller_principal_server_id: arkret::DidCoreId::new(alice.service_id().to_owned())?,
         slug: "planner".to_owned(),
         requested_scope: AgentKeyScope {

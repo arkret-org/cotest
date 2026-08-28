@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json, expect_status};
 use crate::scenarios::_helpers::bridge::{EnvOverride, MockCoauthIntrospectionServer};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 /// A grant-shaped bearer credential (JWT with `kind = "ak.session.grant"`).
 /// The mock never verifies its signature; the shape only matters so the SUT
@@ -41,7 +41,7 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     // Canonical self-sovereign principal: deterministic did:webvh plus the
     // closed §5.1 genesis unit, so the grant's device selector replays a real
     // accepted founding `ak.device.authorize` Event.
-    let alice = actor_did_for_service_full_id(server.service_full_id(), "alice-session-grant")?;
+    let alice = actor_did_for_service_did(server.service_did(), "alice-session-grant")?;
     let client = server
         .register_client(&alice, "Alice Session Grant", "session-grant-device")
         .await?;

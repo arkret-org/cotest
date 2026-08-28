@@ -39,7 +39,7 @@ use serde_json::{Value, json};
 
 use crate::harness::eventually;
 use crate::scenarios::_helpers::joint_service_bootstrap::{JointServiceConfig, bootstrap_required};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 /// CT-8 scenario probe. Boots the joint service stack, drives a profile update
 /// on soland, and verifies teabay's directory search reflects the new
@@ -57,7 +57,7 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
 
     // Register alice on soland — gives us a bearer token for the profile
     // update call below.
-    let alice_did = actor_did_for_service_full_id(stack.soland.service_full_id(), "ct8-alice")?;
+    let alice_did = actor_did_for_service_did(stack.soland.service_did(), "ct8-alice")?;
     let alice = stack
         .soland
         .register_client(

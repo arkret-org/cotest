@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{TestServerGroup, expect_json, submitted_event_id};
-use crate::scenarios::identity_test_support::actor_did_for_service_full_id;
+use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() -> Result<()> {
     let group = TestServerGroup::single("event-backfill").await?;
@@ -13,11 +13,11 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     // the demo principal at server boot), so the builder shape uses
     // `demo_client` directly here. Bob is freshly created via the builder so
     // we can demonstrate the new fixture surface in a real scenario.
-    let alice_did = actor_did_for_service_full_id(server.service_full_id(), "alice-backfill")?;
+    let alice_did = actor_did_for_service_did(server.service_did(), "alice-backfill")?;
     let alice = server
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-0000000000a1")
         .await?;
-    let bob_did = actor_did_for_service_full_id(server.service_full_id(), "bob-backfill")?;
+    let bob_did = actor_did_for_service_did(server.service_did(), "bob-backfill")?;
     let bob = TestActorBuilder::new(server, "@bob-backfill")
         .with_did(&bob_did)
         .with_device("ak:device:01904100-0000-7000-8000-0000000000b0")

@@ -19,7 +19,7 @@
 //! field tamper MUST fail verification.
 
 use arkret_canonical::base64url::base64url_decode;
-use arkret_identifiers::{DidCoreId, DidFullId, RealmId, project_full_id_to_core_id};
+use arkret_identifiers::{Did, DidCoreId, RealmId, project_did_to_core_id};
 use arkret_models_collaboration::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
     RealmOrganizationPayload, RealmOrganizationRelationship, RealmOrganizationStatus,
@@ -105,7 +105,7 @@ fn organization_signed_statement_verifies_through_soland_shape() {
     let statement = active_statement();
 
     // Anchor: the verification method is controlled by organization_id.
-    let vm_full_id = DidFullId::new(
+    let vm_did = Did::new(
         statement
             .authorization
             .verification_method
@@ -115,7 +115,7 @@ fn organization_signed_statement_verifies_through_soland_shape() {
     )
     .unwrap();
     assert_eq!(
-        project_full_id_to_core_id(&vm_full_id).unwrap(),
+        project_did_to_core_id(&vm_did).unwrap(),
         statement.organization_id,
         "verification-method DID must equal organization_id (security anchor)"
     );

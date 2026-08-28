@@ -483,7 +483,7 @@ let bob_client = bob.client(); // reuse existing TestActorClient API
 Defaults the builder applies when fields are omitted:
 
 - DID: the deterministic harness DID for the bare handle scoped to the
-  server's service full id (handle's leading `@` stripped)
+  server's service DID (handle's leading `@` stripped)
 - primary device id: `dev_<bare-handle>`
 
 `with_device` sets the primary device label; the first call wins. Scenarios

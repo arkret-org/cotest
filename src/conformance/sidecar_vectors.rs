@@ -36,8 +36,8 @@ use arkret::{
     AgentSidecarExchangeOrigin, AgentSidecarExchangeProjection,
     AgentSidecarExchangeProjectionSchema, AgentSidecarExchangeRequestContext,
     AgentSidecarExchangeStatus, AgentSidecarMlsContext, AgentSidecarProjectionProvenance,
-    AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, DidCoreId,
-    DidFullId, DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata,
+    AgentSidecarSchema, AgentSidecarSourceTrackRef, AgentSidecarState, AgentSidecarView, Did,
+    DidCoreId, DidUrl, Event, EventId, EventRef, Hash, Hlc, MessageMetadata,
     MlsGovernanceBindingPayload, NonEmptyString, PendingSidecarAccessReconciliationItem,
     PendingSidecarAccessReconciliationStage, PreparedEventDraft, RealmId, ScopeRef, SidecarId,
     SidecarMlsBinding, StrandId, agent_sidecar_exchange_event_set_digest,
@@ -1278,12 +1278,12 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         bail!("Sidecar prepare idempotency conflict changed staged or durable state");
     }
 
-    let controller_full_id = DidFullId::new("did:web:controller.example")?;
+    let controller_did = Did::new("did:web:controller.example")?;
     let verification_method =
-        DidUrl::new(format!("{controller_full_id}#device-sidecar")).map_err(anyhow::Error::msg)?;
+        DidUrl::new(format!("{controller_did}#device-sidecar")).map_err(anyhow::Error::msg)?;
     let signer = Ed25519PayloadSigner::from_did_key_seed(
         [73_u8; 32],
-        controller_full_id,
+        controller_did,
         verification_method.clone(),
     );
     let create_event = sign_prepared_draft(create_event_draft, &signer, &verification_method)

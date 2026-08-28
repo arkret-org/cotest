@@ -215,7 +215,7 @@ export function buildSignalEnvelope(args: {
       key_ref: {
         algorithm: "MLS-EXPORTER-AEAD",
         // Frozen accepted MLS group-state Event fixture. Event references use
-        // full identity tokens, never UUID placeholders.
+        // DID tokens, never UUID placeholders.
         group_state_ref:
           "ak:event:Ab8fF-_JIKTb1BX6GXVZLOEoeeVFftSuQTq3Y8wtAvJT",
       },
@@ -788,7 +788,7 @@ export interface MediaFocusConfig {
  * can resolve `service_id` and `foci[]`. `service_id` anchors every issued
  * `participant_binding.issuer_kid`
  * (media-service-binding.md §3): the deployment's media signing key
- * (`SOLAND_MEDIA_ISSUER_KID`, default `<service full id>#media-1`) must
+ * (`SOLAND_MEDIA_ISSUER_KID`, default `<service DID>#media-1`) must
  * project onto it, and each focus `token_endpoint` origin must be this
  * deployment's public base URL, or issuance fails closed.
  */

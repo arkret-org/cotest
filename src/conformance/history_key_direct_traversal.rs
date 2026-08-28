@@ -28,7 +28,7 @@ use arkret_state::lattice::{CasRegister, Lattice, SealedOp};
 use arkret_state::{BottomMode, CellState, LatticeKind, MemoryCellRegistry, compute_state_root};
 use arkret_wire::event_envelope::ScopeRef;
 use arkret_wire::{
-    AvailabilityReceipt, CellFamilyId, CellRef, DidCoreId, DidFullId, DidUrl, Event,
+    AvailabilityReceipt, CellFamilyId, CellRef, Did, DidCoreId, DidUrl, Event,
     EventCandidateBinding, EventCandidateBindingKey, EventCandidateBindingOutcome, EventId,
     EventKind, HISTORY_STORE_LIMITS, Hash, HistoryAccess, HistoryCandidateMaterialKey,
     HistoryEffectiveScope, Hlc, LatticeOp, LatticeOpType, NotarySig, NotarySignerDescriptor,
@@ -1636,10 +1636,10 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
         bail!("replay KAT seed does not derive its frozen public key");
     }
 
-    let actor_full_id = DidFullId::new(
-        signing["actor_full_id"]
+    let actor_did = Did::new(
+        signing["actor_did"]
             .as_str()
-            .context("replay KAT omits actor_full_id")?
+            .context("replay KAT omits actor_did")?
             .to_owned(),
     )?;
     let actor_id = DidCoreId::new(
@@ -1742,14 +1742,14 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
             leaves: vec![successor_seal.id.clone()],
         },
     };
-    if actor_full_id.as_str()
+    if actor_did.as_str()
         != method
             .as_str()
             .split_once('#')
             .map(|pair| pair.0)
             .unwrap_or("")
     {
-        bail!("replay KAT method controller drifted from actor_full_id");
+        bail!("replay KAT method controller drifted from actor_did");
     }
     Ok(ReplayKatMaterial {
         request,

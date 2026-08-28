@@ -13,7 +13,7 @@ import { createHash, createPrivateKey, sign } from "node:crypto";
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import {
   solandBaseUrl,
-  solandServiceFullId,
+  solandServiceDid,
   solandServiceId,
 } from "../../helpers/env";
 import {
@@ -482,7 +482,7 @@ function localMimiRoomUri(roomId: string): string {
 }
 
 function localMimiProviderId(): string {
-  const serviceId = solandServiceFullId();
+  const serviceId = solandServiceDid();
   if (serviceId.startsWith("did:web:")) {
     return `mimi://${serviceId
       .slice("did:web:".length)

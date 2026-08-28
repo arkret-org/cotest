@@ -1,14 +1,14 @@
 use arkret_event_draft::TypedEventDraft;
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
 use arkret_wire::{
-    DidCoreId, DidFullId, DidKey, DidUrl, Event, EventProof, Hash, Hlc, PrincipalAuthorityKey,
+    Did, DidCoreId, DidKey, DidUrl, Event, EventProof, Hash, Hlc, PrincipalAuthorityKey,
     PrincipalServerAdmissionProof, PrincipalServerAdmissionProofKind, ProducerEventProof, RealmId,
-    ScopeRef, StrandId, event_spec, project_full_id_to_core_id,
+    ScopeRef, StrandId, event_spec, project_did_to_core_id,
 };
 use chrono::{TimeZone as _, Utc};
 
-fn core(full_id: &str) -> DidCoreId {
-    project_full_id_to_core_id(&DidFullId::new(full_id.to_owned()).unwrap()).unwrap()
+fn core(did: &str) -> DidCoreId {
+    project_did_to_core_id(&Did::new(did.to_owned()).unwrap()).unwrap()
 }
 
 fn producer_event() -> Event {

@@ -116,7 +116,7 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
         "pub async fn moderation_report_request(",
         "pub async fn create_realm_with_signing_seed(",
     );
-    assert!(helper.contains("project_full_id_to_core_id"));
+    assert!(helper.contains("project_did_to_core_id"));
     assert!(helper.contains("EventInitialSubmission::online"));
     assert!(helper.contains("author_event("));
     assert!(helper.contains("validate_authoring_context"));

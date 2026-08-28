@@ -14,7 +14,7 @@ a live soland instance.
    Issuance configuration (`issuer_kid`, TTL, e2ee key source) is deployment
    configuration of the issuing service, never Realm cell state: the joint
    runner leaves `SOLAND_MEDIA_ISSUER_KID` unset, so `issuer_kid` /
-   `participant_binding.issuer_kid` anchors on `<service full id>#media-1`, and each
+   `participant_binding.issuer_kid` anchors on `<service DID>#media-1`, and each
    focus `token_endpoint` origin must equal the deployment's public base URL
    (`POST /_arkret/self/rtc/token`) or issuance fails closed
    (media-service-binding.md §2.1/§3).
