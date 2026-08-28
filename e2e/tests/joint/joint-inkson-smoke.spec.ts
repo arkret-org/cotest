@@ -8,6 +8,7 @@ import {
   grantCapabilityEventApi,
   prepareSignedEventCbaApi,
   readRealmSealBasis,
+  retypeEventDerivedId,
   signedEventEnvelope,
 } from "../../helpers/soland-api";
 import {
@@ -315,7 +316,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         {
           strand_id: strandId,
           track_name: "discussion",
-          reply_to: controllerMessageId,
+          reply_to: retypeEventDerivedId(controllerMessageId, "message"),
           content: {
             kind: "ak.content.text",
             body: replyBody,
@@ -517,11 +518,10 @@ async function submitSignedEvent(
     serverUrl,
     realmId,
   );
-  const sealBasis = await readRealmSealBasis(
-    request,
-    session.grantJwt,
-    realmId,
-  );
+  const sealBasis =
+    kind === "ak.member.state"
+      ? await readRealmSealBasis(request, session.grantJwt, realmId)
+      : undefined;
   const envelope = signedEventEnvelope({
     actorDid,
     realmId,

@@ -272,13 +272,14 @@ test.describe("consent grant", () => {
       await alicePage.page.getByTestId("consent-request-submit-button").click();
 
       await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /requested/i,
+        /accepted for processing/i,
         {
           timeout: 30_000,
         },
       );
-      // Consent cells are holder-private. Alice can observe her own outgoing
-      // request projection, but MUST NOT read Bob's underlying consent cell.
+      // Peer submission is deliberately opaque: it only enters the holder's
+      // quarantine/anti-abuse path and creates no consent cell, pending state,
+      // contact fact, or requester-visible outgoing projection.
       const holderCellUrl =
         `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(bob.did)}` +
         `?peer=${encodeURIComponent(alice.did)}&scope=message`;
@@ -287,10 +288,8 @@ test.describe("consent grant", () => {
       });
       expect(peerRead.status()).toBe(403);
       await expect(
-        alicePage.page
-          .getByTestId("consent-outgoing-request-row")
-          .filter({ hasText: bob.did }),
-      ).toBeVisible({ timeout: 30_000 });
+        alicePage.page.getByTestId("consent-outgoing-request-row"),
+      ).toHaveCount(0);
       await stepShot(alicePage.page, testInfo, "consent-outbound-request");
     } finally {
       await alicePage.close();

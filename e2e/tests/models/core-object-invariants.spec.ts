@@ -29,6 +29,7 @@ import {
   createRealmApi,
   prepareSignedEventCbaApi,
   readAcceptedSeal,
+  retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -219,13 +220,17 @@ test.describe("core object invariants", () => {
       // ── Step 4: read the event log for this Realm to recover the
       // `created_at` + `event_id` + `actor_id` + `kind` fields that
       // RealmLifecycleResponse does not currently surface. The events
-      // query response item shape follows the Event Envelope projection:
-      // { event_id, realm_id, kind, actor_id, payload, created_at, ... }.
+      // query response items are canonical Event Envelopes. The required
+      // security scope is carried by scope_ref; top-level realm_id is not a
+      // required producer field.
       const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const eventsRes = await request.fetch(eventsUrl, {
         method: "QUERY",
         data: canonicalJson({ realms: [realmId], limit: 20 }),
-        headers: authFor("QUERY", eventsUrl),
+        headers: {
+          ...authFor("QUERY", eventsUrl),
+          "content-type": "application/json",
+        },
       });
       expect(eventsRes.status()).toBe(200);
       const eventsBody = (await eventsRes.json()) as {
@@ -234,7 +239,7 @@ test.describe("core object invariants", () => {
           kind?: string;
           actor_id?: string;
           created_at?: string;
-          realm_id?: string;
+          scope_ref?: { kind?: string; realm_id?: string };
         }>;
       };
       const events = eventsBody.events ?? [];
@@ -259,8 +264,17 @@ test.describe("core object invariants", () => {
       // Common-field: kind (§2.2 — Event Envelope `kind`).
       expect(typeof lifecycleEvent.kind).toBe("string");
       expect(lifecycleEvent.kind?.length ?? 0).toBeGreaterThan(0);
-      // Realm scoping: event must reference the Realm we just created.
-      expect(lifecycleEvent.realm_id).toBe(realmId);
+      // Realm genesis omits realm_id from both the top-level envelope and
+      // scope_ref to avoid a digest cycle. Its Realm id is self-authenticating
+      // through retype(event_id, "realm").
+      if (lifecycleEvent.kind === "ak.realm.create") {
+        expect(lifecycleEvent.scope_ref).toEqual({ kind: "realm_genesis" });
+        expect(retypeEventDerivedId(lifecycleEvent.event_id!, "realm")).toBe(
+          realmId,
+        );
+      } else {
+        expect(lifecycleEvent.scope_ref?.realm_id).toBe(realmId);
+      }
 
       await stepShot(
         alicePage.page,

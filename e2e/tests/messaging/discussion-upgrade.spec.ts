@@ -19,6 +19,7 @@ import {
   alignSignedEventToActorFrontierApi,
   canonicalJson,
   canonicalTimestamp,
+  prepareSignedEventCbaApi,
   rawSubmitSignedEventApi,
   retypeEventDerivedId,
   resolveDefaultStrandId,
@@ -501,10 +502,18 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       fixture.aliceToken,
       envelope,
     );
+    await prepareSignedEventCbaApi(
+      request,
+      fixture.aliceToken,
+      envelope,
+    );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(fixture.aliceToken),
+        headers: {
+          ...authHeaders(fixture.aliceToken),
+          "content-type": "application/json",
+        },
         data: canonicalJson(envelope),
       },
     );

@@ -21,7 +21,6 @@ import {
 } from "../../helpers/users";
 import {
   buildSignalEnvelope,
-  postCallSignalRaw,
   prepareSignalEnvelope,
 } from "../../helpers/webrtc";
 import {
@@ -312,16 +311,15 @@ test.describe("discovery", () => {
     browser,
     request,
   }) => {
+    test.setTimeout(300_000);
     // profiles-presence.md §3 requires an active device-bound proof on every
     // presence Signal. The browser drives the close/reopen lifecycle; the
-    // explicit API send below gives the post-subscription prerequisite a
-    // deterministic acceptance boundary.
+    // explicit API send below exercises the fail-closed signature boundary.
     const stamp = Date.now();
     const aliceSession = await openDpopUserPage(
       browser,
       request,
       `s24-presence-alice-${stamp}`,
-      { prepareMlsDevice: false },
     );
     if (!aliceSession) {
       assertJointStackNotRequired("directory presence browser login");
@@ -374,13 +372,25 @@ test.describe("discovery", () => {
         title: `S24 Presence ${stamp}`,
         discoverability: "unlisted",
         historyAccess: "since_join",
-        encryptionProfile: "none",
+        encryptionProfile: "mls_rfc9420",
       });
       await bobPage.inviteFromAdmin(presenceRealmId, alice.did);
       await alicePage.acceptInviteFromNotifications(presenceRealmId);
       await Promise.all([
         alicePage.gotoTimelineRealm(presenceRealmId),
         bobPage.gotoTimelineRealm(presenceRealmId),
+      ]);
+      // MLS admission and Welcome delivery are a separate durable convergence
+      // flow from the Signal latency asserted below. Do not charge its Seal
+      // finality window against presence: both endpoints must first hold the
+      // verified post-admission group state.
+      await Promise.all([
+        expect(
+          alicePage.page.getByTestId("epoch-update-required-banner"),
+        ).toHaveCount(0, { timeout: 120_000 }),
+        expect(
+          bobPage.page.getByTestId("epoch-update-required-banner"),
+        ).toHaveCount(0, { timeout: 120_000 }),
       ]);
       // Alice's subscription is now established. Re-enter Bob's timeline so
       // the browser emits a fresh heartbeat after that subscription instead of
@@ -412,36 +422,26 @@ test.describe("discovery", () => {
       const forgedSignature = `${signature.startsWith("A") ? "B" : "A"}${signature.slice(1)}`;
       forgedProof.jws = `${protectedHeader}..${forgedSignature}`;
       const forged = await request.post(signalUrl, {
-        headers: selfPathHeadersForDpopSession(
-          bobSession.session,
-          "POST",
-          signalUrl,
-        ),
+        headers: {
+          ...selfPathHeadersForDpopSession(
+            bobSession.session,
+            "POST",
+            signalUrl,
+          ),
+          "content-type": "application/json",
+        },
         data: canonicalJson(forgedEnvelope),
       });
       const forgedText = await forged.text();
       expect(forged.status(), forgedText).toBe(400);
-      expect(wireErrCode(JSON.parse(forgedText))).toBe("proof_invalid");
-
-      // Seed the observed online transition through encrypted Signal after
-      // Alice's subscription is established. The receiver decrypts presence;
-      // account snapshots/deltas do not carry a server-projected ephemeral.
-      const onlineAt = new Date();
-      const onlineEnvelope = buildSignalEnvelope({
-        actorDid: bob.did,
-        deviceId: bob.deviceId,
-        realmId: presenceRealmId,
-        sentAt: onlineAt,
-        plaintext: {
-          kind: "ak.presence",
-          actor_id: bob.did,
-          state: "online",
-          payload_sequence: Date.now() + 1,
-          ttl_ms: 25_000,
-        },
-      });
-      const online = await postCallSignalRaw(request, bobToken, onlineEnvelope);
-      expect(online.status(), await online.text()).toBe(200);
+      const forgedBody = JSON.parse(forgedText) as {
+        reason_code?: unknown;
+        error?: { reason_code?: unknown };
+      };
+      expect(wireErrCode(forgedBody)).toBe("param_invalid");
+      expect(
+        forgedBody.reason_code ?? forgedBody.error?.reason_code,
+      ).toBe("proof_invalid");
 
       const bobPresenceRow = alicePage.page.locator(
         `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.did)}"]`,

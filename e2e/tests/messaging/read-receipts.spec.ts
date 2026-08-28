@@ -186,7 +186,10 @@ test.describe("read receipts + privacy", () => {
     const receipt = await request.post(
       `${solandBaseUrl()}/_arkret/self/signal`,
       {
-        headers: authHeaders(outsiderToken),
+        headers: {
+          ...authHeaders(outsiderToken),
+          "content-type": "application/json",
+        },
         data: canonicalJson(envelope),
       },
     );

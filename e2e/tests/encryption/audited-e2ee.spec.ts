@@ -209,7 +209,6 @@ async function fileModerationReport(
   const keyIdFragment =
     verificationMethod.split("#").at(-1) ?? verificationMethod;
   reportEvent.auth_context = {
-    actor_id: setup.reporterDid,
     key_id: keyIdFragment.startsWith("ak:")
       ? keyIdFragment.slice(3)
       : keyIdFragment,
