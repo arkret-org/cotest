@@ -10,10 +10,10 @@ use arkret_models_collaboration::history_key::{
     HistoryGovernanceTraversalRetention, HistoryKeyResponseAckRequest,
     HistoryKeyResponseListOutcome, HistoryKeyResponseSendReceipt, HistoryKeyResponseSendRequest,
     HistoryKeyResponseSigningInput, HistoryResponseId, HistorySourceAgentObservationInput,
-    OrganizationRecoveryArchiveListOutcome, OrganizationRecoveryArchiveListQuery,
-    OrganizationRecoveryArchiveReplica, OrganizationRecoveryArchiveReplicaOutcome,
-    PeerHistoryTraversalAccess, ResponseSenderOriginRef, ResponseSenderQuotaDomain,
-    SelfHistoryTraversalAccess, response_capability_commitment,
+    HistorySourceSendDisposition, OrganizationRecoveryArchiveListOutcome,
+    OrganizationRecoveryArchiveListQuery, OrganizationRecoveryArchiveReplica,
+    OrganizationRecoveryArchiveReplicaOutcome, PeerHistoryTraversalAccess, ResponseSenderOriginRef,
+    ResponseSenderQuotaDomain, SelfHistoryTraversalAccess, response_capability_commitment,
 };
 use arkret_models_identity::AuthenticatedSignerResolutionEvidence;
 use arkret_state::direct_traversal::{
@@ -41,7 +41,7 @@ use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde_json::{Value, json};
 
-use super::load_artifact_json;
+use super::{load_artifact_json, required_str};
 use crate::transcripts::record_vector_event;
 
 pub fn run_history_key_direct_traversal_suite() -> Result<()> {
@@ -551,6 +551,214 @@ fn verify_client_convergence_kat(fixture: &Value) -> Result<()> {
             .with_context(|| format!("history convergence KAT omits {name}"))?;
         if case[count_field] != 0 {
             bail!("history convergence negative case {name} performed a forbidden write");
+        }
+    }
+    verify_send_rejection_disposition(source)?;
+    Ok(())
+}
+
+/// Execute the `history-visibility.md` 6.2 rejection-disposition partition.
+///
+/// The fixture table, the SDK classifier and the operation's closed error
+/// surface all have to agree: if any one of them drifts, two conforming sources
+/// could split between exact retry, manifest replacement and giving up.
+fn verify_send_rejection_disposition(source: &Value) -> Result<()> {
+    let kat = source
+        .get("send_rejection_disposition")
+        .context("history source convergence KAT omits send_rejection_disposition")?;
+
+    let statuses: Vec<&str> = kat["attempt_status_closed_set"]
+        .as_array()
+        .context("send_rejection_disposition omits attempt_status_closed_set")?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    if statuses != ["unfinished", "completed", "permanently_rejected", "expired"] {
+        bail!("history source attempt status set drifted from the closed four-element set");
+    }
+    if kat["unfinished_concurrency_counts"] != json!(["unfinished"]) {
+        bail!("only unfinished attempts may consume the concurrency budget");
+    }
+    for field in [
+        "transport_failure_disposition",
+        "unregistered_code_disposition",
+    ] {
+        if kat[field] != "retry_same_attempt" {
+            bail!("{field} must not churn response ids");
+        }
+    }
+
+    let table = [
+        (
+            "retry_same_attempt",
+            HistorySourceSendDisposition::RetrySameAttempt,
+            HistorySourceSendDisposition::RETRY_SAME_ATTEMPT,
+        ),
+        (
+            "replace_manifest",
+            HistorySourceSendDisposition::ReplaceManifest,
+            HistorySourceSendDisposition::REPLACE_MANIFEST,
+        ),
+        (
+            "request_terminal",
+            HistorySourceSendDisposition::RequestTerminal,
+            HistorySourceSendDisposition::REQUEST_TERMINAL,
+        ),
+    ];
+    let mut classified: BTreeSet<String> = BTreeSet::new();
+    for (name, expected, sdk_codes) in table {
+        let mut fixture_codes: Vec<&str> = kat["dispositions"][name]
+            .as_array()
+            .with_context(|| format!("send_rejection_disposition omits {name}"))?
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        fixture_codes.sort_unstable();
+        let mut expected_codes = sdk_codes.to_vec();
+        expected_codes.sort_unstable();
+        if fixture_codes != expected_codes {
+            bail!("fixture {name} codes drifted from the SDK classification: {fixture_codes:?}");
+        }
+        for code in fixture_codes {
+            if HistorySourceSendDisposition::classify(code) != expected {
+                bail!("SDK classifies {code} outside {name}");
+            }
+            if !classified.insert(code.to_owned()) {
+                bail!("{code} appears in more than one disposition class");
+            }
+        }
+    }
+
+    // The classification keys on the registered top-level code, so every
+    // classified entry must be one, and every top-level code the operation can
+    // return must be classified. Entries that are only registered as
+    // reason_codes travel under a top-level code; they are covered by naming
+    // them in an executable case instead.
+    let registry = load_artifact_json("registry/error-code-registry.json")?;
+    let top_level: BTreeSet<&str> = registry["codes"]
+        .as_array()
+        .context("error code registry omits codes[]")?
+        .iter()
+        .filter_map(|row| row["code"].as_str())
+        .collect();
+    let reason_codes: BTreeSet<&str> = registry["reason_codes"]
+        .as_array()
+        .context("error code registry omits reason_codes[]")?
+        .iter()
+        .filter_map(|row| row["code"].as_str())
+        .collect();
+    for code in &classified {
+        if !top_level.contains(code.as_str()) {
+            bail!("{code} is classified but is not a registered top-level error code");
+        }
+    }
+
+    let case_reason_codes: BTreeSet<&str> = kat["cases"]
+        .as_array()
+        .context("send_rejection_disposition omits cases[]")?
+        .iter()
+        .filter_map(|case| case["reason_code"].as_str())
+        .collect();
+
+    let mapping = load_artifact_json("registry/operations-error-mapping.json")?;
+    let universal = mapping["rules"]["universal_codes"]
+        .as_str()
+        .context("operations error mapping omits rules.universal_codes")?;
+    let operations = mapping["operations"]
+        .as_array()
+        .context("operations error mapping omits operations[]")?;
+    let mut closed: BTreeSet<&str> = universal
+        .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+        .filter(|token| top_level.contains(token))
+        .collect();
+    for operation_id in kat["operations"]
+        .as_array()
+        .context("send_rejection_disposition omits operations[]")?
+        .iter()
+        .filter_map(Value::as_str)
+    {
+        let entry = operations
+            .iter()
+            .find(|entry| entry["operation_id"] == operation_id)
+            .with_context(|| format!("{operation_id} is not in the operations error mapping"))?;
+        for code in entry["operation_specific"]
+            .as_array()
+            .context("operation entry omits operation_specific[]")?
+            .iter()
+            .filter_map(Value::as_str)
+        {
+            if top_level.contains(code) {
+                closed.insert(code);
+            } else if reason_codes.contains(code) {
+                if !case_reason_codes.contains(code) {
+                    bail!("reason_code {code} is reachable but no disposition case exercises it");
+                }
+            } else {
+                bail!("{code} is neither a registered code nor a registered reason_code");
+            }
+        }
+    }
+    if closed.len() < 20 {
+        bail!(
+            "universal error surface parsed too small: {} codes",
+            closed.len()
+        );
+    }
+    for code in &closed {
+        if !classified.contains(*code) {
+            bail!("closed error {code} has no source disposition");
+        }
+    }
+
+    for case in kat["cases"]
+        .as_array()
+        .context("send_rejection_disposition omits cases[]")?
+    {
+        let name = required_str(case, "name")?;
+        let code = required_str(case, "code")?;
+        let expected = required_str(case, "disposition")?;
+        let actual = match HistorySourceSendDisposition::classify(code) {
+            HistorySourceSendDisposition::RetrySameAttempt => "retry_same_attempt",
+            HistorySourceSendDisposition::ReplaceManifest => "replace_manifest",
+            HistorySourceSendDisposition::RequestTerminal => "request_terminal",
+        };
+        if actual != expected {
+            bail!("case {name} expects {expected} but the SDK classifies {code} as {actual}");
+        }
+        let new_manifests = case["new_manifest_count"]
+            .as_u64()
+            .context("disposition case omits new_manifest_count")?;
+        match expected {
+            "retry_same_attempt" => {
+                if new_manifests != 0
+                    || case["attempt_status_after"] != "unfinished"
+                    || case["resends_exact_staged_bytes"] != true
+                {
+                    bail!("case {name} must retry the exact staged bytes without a new manifest");
+                }
+            }
+            "replace_manifest" => {
+                if new_manifests != 1
+                    || case["attempt_status_after"] != "permanently_rejected"
+                    || case["old_attempt_marked_completed"] != false
+                {
+                    bail!("case {name} must replace the manifest without completing the attempt");
+                }
+            }
+            "request_terminal" => {
+                if new_manifests != 0
+                    || case["attempt_status_after"] != "permanently_rejected"
+                    || case["old_attempt_marked_completed"] != false
+                {
+                    bail!("case {name} must stop both retry and replacement");
+                }
+            }
+            other => bail!("unknown disposition {other}"),
+        }
+        if case["restart_before_replacement"] == true
+            && case["reverts_to_unfinished_after_restart"] != false
+        {
+            bail!("case {name} must keep its disposition branch across restart");
         }
     }
     Ok(())

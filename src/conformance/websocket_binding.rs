@@ -25,8 +25,10 @@ use arkret_models_collaboration::sync_frames::websocket_session::{
     WebSocketHandshakeFailure, WebSocketOpenAdmission, WebSocketServerEvent,
     WebSocketTransportDecision,
 };
-use arkret_models_discovery::TransportBinding;
-use arkret_models_discovery::websocket_binding::validate_websocket_transport;
+use arkret_models_discovery::websocket_binding::{
+    select_websocket_binding, validate_websocket_transport,
+};
+use arkret_models_discovery::{ServiceDescribe, TransportBinding};
 use arkret_signatures::websocket_auth::{
     WebSocketAuthProofRequest, WebSocketAuthVerificationRequest, build_websocket_auth_proof,
     verify_websocket_auth_proof, websocket_holder_thumbprint,
@@ -76,6 +78,7 @@ pub fn run_websocket_binding_suite() -> Result<()> {
     let env = SchemaEnv::load()?;
 
     let discovery = run_discovery_cases(&fixture, &env)?;
+    let bundle_closure = run_bundle_closure_cases(&fixture, &env)?;
     let kat = run_dpop_kat(&fixture, &env)?;
     let negatives = run_dpop_negative_cases(&fixture, &kat)?;
     let frames = run_frame_schema_cases(&fixture, &env)?;
@@ -88,7 +91,7 @@ pub fn run_websocket_binding_suite() -> Result<()> {
     eprintln!(
         "[cotest {SUITE}] discovery={discovery} dpop_kat=1 dpop_negative={negatives} \
          frame_schema={frames_len} wire_negative={wire_negatives} multiplex=1 reauth=2 \
-         drain_and_close=6 fallback=2",
+         drain_and_close=6 fallback=2 bundle_closure={bundle_closure}",
         frames_len = frames.len()
     );
     Ok(())
@@ -151,8 +154,8 @@ fn case_name(case: &Value) -> Result<&str> {
 
 fn run_discovery_cases(fixture: &Value, env: &SchemaEnv) -> Result<usize> {
     let cases = cases(fixture, "discovery_cases")?;
-    if cases.len() != 4 {
-        bail!("{FIXTURE} discovery_cases must cover the closed descriptor and three rejections");
+    if cases.len() != 3 {
+        bail!("{FIXTURE} discovery_cases must cover the closed descriptor and two rejections");
     }
     let schema_ref = required_str(&cases[0], "schema_ref")?;
     let validator = env.compile(schema_ref)?;
@@ -203,22 +206,6 @@ fn discovery_case_instances(name: &str, case: &Value, base: &Value) -> Result<Ve
     if let Some(instance) = case.get("instance") {
         return Ok(vec![instance.clone()]);
     }
-    if let Some(mutation) = case.get("mutation").and_then(Value::as_str) {
-        let removed = mutation.strip_prefix("remove ").ok_or_else(|| {
-            anyhow!("discovery case {name} mutation must be a `remove <operation>` directive")
-        })?;
-        let mut instance = base.clone();
-        let operations = instance
-            .get_mut("operations")
-            .and_then(Value::as_array_mut)
-            .ok_or_else(|| anyhow!("discovery case {name} base has no operations array"))?;
-        let before = operations.len();
-        operations.retain(|operation| operation.as_str() != Some(removed));
-        if operations.len() == before {
-            bail!("discovery case {name} mutation removed nothing");
-        }
-        return Ok(vec![instance]);
-    }
     if let Some(base_urls) = case.get("base_urls").and_then(Value::as_array) {
         return base_urls
             .iter()
@@ -250,6 +237,94 @@ fn discovery_case_instances(name: &str, case: &Value, base: &Value) -> Result<Ve
             .collect();
     }
     bail!("discovery case {name} declares no executable mutation")
+}
+
+/// Execute the ServiceDescribe-level operation reachability cases.
+///
+/// The transport descriptor is a closed object without `operations[]`, so
+/// "does this service actually expose the three streaming operations over
+/// WebSocket" is answered by expanding `supported_operation_bundles`
+/// (`websocket-binding.md` 2). Each declared mutation must name a carrier the
+/// base instance really has; a mutation that cannot be materialised fails the
+/// suite instead of being skipped.
+fn run_bundle_closure_cases(fixture: &Value, env: &SchemaEnv) -> Result<usize> {
+    let cases = cases(fixture, "bundle_closure_cases")?;
+    if cases.len() != 3 {
+        bail!("{FIXTURE} bundle_closure_cases must cover the advertised closure and two fallbacks");
+    }
+    let base_case = &cases[0];
+    if case_name(base_case)? != "advertised_bundle_closure_selects_websocket" {
+        bail!("{FIXTURE} bundle_closure_cases must start with the advertised closure case");
+    }
+    let schema_ref = required_str(base_case, "schema_ref")?;
+    let validator = env.compile(schema_ref)?;
+    let base = super::required_field(base_case, "instance")?.clone();
+
+    for case in cases {
+        let name = case_name(case)?;
+        let expected_transport = required_str(case, "expected_transport")?;
+        let instance = bundle_closure_case_instance(name, case, &base)?;
+        if !validator.is_valid(&instance) {
+            bail!("bundle closure case {name} instance is not a valid ServiceDescribe");
+        }
+        let describe: ServiceDescribe = serde_json::from_value(instance)?;
+        let selected = select_websocket_binding(&describe, u32::MAX);
+        match expected_transport {
+            "websocket" => {
+                let binding = selected.ok_or_else(|| {
+                    anyhow!("bundle closure case {name} must select the websocket transport")
+                })?;
+                if binding.kind() != arkret_wire::BindingKind::Websocket {
+                    bail!("bundle closure case {name} selected a non-websocket transport");
+                }
+            }
+            "http_json" => {
+                if selected.is_some() {
+                    bail!(
+                        "bundle closure case {name} must fall back to the mandatory HTTP binding"
+                    );
+                }
+            }
+            other => bail!("bundle closure case {name} has an unsupported expectation: {other}"),
+        }
+    }
+    Ok(cases.len())
+}
+
+fn bundle_closure_case_instance(name: &str, case: &Value, base: &Value) -> Result<Value> {
+    if let Some(instance) = case.get("instance") {
+        return Ok(instance.clone());
+    }
+    if let Some(bundle) = case.get("remove_bundle").and_then(Value::as_str) {
+        let mut instance = base.clone();
+        let bundles = instance
+            .get_mut("supported_operation_bundles")
+            .and_then(Value::as_array_mut)
+            .ok_or_else(|| anyhow!("bundle closure base has no supported_operation_bundles"))?;
+        let before = bundles.len();
+        bundles.retain(|value| value.as_str() != Some(bundle));
+        if bundles.len() == before {
+            bail!("bundle closure case {name} names a bundle the base does not advertise");
+        }
+        return Ok(instance);
+    }
+    if let Some(kind) = case.get("remove_transport_kind").and_then(Value::as_str) {
+        let mut instance = base.clone();
+        let bindings = instance
+            .get_mut("transport_bindings")
+            .and_then(Value::as_array_mut)
+            .ok_or_else(|| anyhow!("bundle closure base has no transport_bindings"))?;
+        let before = bindings.len();
+        bindings.retain(|value| value.get("kind").and_then(Value::as_str) != Some(kind));
+        if bindings.len() == before {
+            bail!("bundle closure case {name} names a transport the base does not advertise");
+        }
+        if bindings.is_empty() {
+            bail!("bundle closure case {name} removed the mandatory HTTP binding");
+        }
+        return Ok(instance);
+    }
+    bail!("bundle closure case {name} declares no executable mutation")
 }
 
 fn select_descriptor(instance: &Value) -> Option<TransportBinding> {
