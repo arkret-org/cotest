@@ -392,9 +392,31 @@ export async function submitPrincipalSuccessorSealApi(
     leaves[0],
     opts.server,
   );
+  const eventDigest = (
+    event.proofs as Array<Record<string, unknown>> | undefined
+  )?.[0]?.event_digest;
+  if (typeof eventDigest !== "string") {
+    throw new Error("principal successor Event proof omits event_digest");
+  }
+  const availabilityUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals/availability-receipts`;
+  const availability = await expectJsonOk<Record<string, unknown>>(
+    await request.post(availabilityUrl, {
+      headers: {
+        ...authHeaders(token, "POST", availabilityUrl),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
+        realm_id: realmId,
+        predecessor_refs: [leaves[0]],
+        event_digests: [eventDigest],
+      }),
+    }),
+    `issue principal successor availability receipts for ${actorId}`,
+  );
   const seal = cotestWire<Record<string, unknown>>("principal-successor-seal", {
     events: [...events, event],
     predecessor_seal: predecessorSeal,
+    availability_receipt_issue_outcome: availability,
     device_signing_seed_b64url: signer.signingSeedB64url,
   });
   const sealUrl = `${solandBaseUrl(opts.server)}/_arkret/self/seals`;
@@ -4415,7 +4437,9 @@ function signedFederationPushHeaders(
   const method = opts.method ?? "POST";
   const selector = operationSelector(method, targetUri);
   if (!selector) {
-    throw new Error(`federation request has no registered operation selector: ${method} ${targetUri}`);
+    throw new Error(
+      `federation request has no registered operation selector: ${method} ${targetUri}`,
+    );
   }
   const bodyBytes = Buffer.from(canonicalJson(body), "utf8");
   const contentDigest = `sha-256=:${createHash("sha256").update(bodyBytes).digest("base64")}:`;

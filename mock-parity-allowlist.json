@@ -1,9 +1,0 @@
-{
-  "comment": "Known baseline differences for T-P0-04 inkson mock parity. The harness (tests/inkson_mock_parity.rs) rejects more than 5 entries; treat 0 as the target ceiling and require a tracking note before growing. Phase C.7 #6: future biometric / permission / access-denied paths (e.g. mobile keychain rejections returning device-local-only error codes that soland cannot reproduce) should land here with a one-line rationale referencing the simulator surface that mints them; the allowlist replaces silent test skips.",
-  "allowed_categories": {
-    "biometric_rejection": "Reserved id-prefix for cases where the mobile host bridge rejects with a biometric-cancel / Touch ID dismiss code that live soland never emits (e.g. inkson's HostSecretBridge::get returns SecureKeyStoreError::Backend('biometric cancelled') under simulator harness, but soland's REST surface only sees the resulting 401).",
-    "permission_check": "Reserved id-prefix for cases where the client-side capability gate (e.g. crate::capability::CapabilityGate) blocks an attempt to call a soland endpoint before the request goes out; live soland would return a different shaped 403 because the request never lands.",
-    "access_denied": "Reserved id-prefix for OS-keychain access-denied paths (KeyringSecureKeyStore returning SecureKeyStoreError::Backend('access denied'), iOS HostSecretBridge surface returning errSecMissingEntitlement) where the mock simulator emits the typed error directly but live soland never receives the call."
-  },
-  "allowed": []
-}

@@ -4,7 +4,11 @@
 // the first candidate cannot be explained by a hidden min-id tie-breaker.
 
 import { createHash, randomBytes } from "node:crypto";
-import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+} from "../../helpers/arkret-test";
 import { solandBaseUrl, solandServiceFullId } from "../../helpers/env";
 import {
   base64url,
@@ -81,10 +85,32 @@ async function sealPrincipalControlEvent(
     (candidate) => candidate.id === leaves![0],
   );
   expect(predecessorSeal, "resolved principal predecessor Seal").toBeTruthy();
+  const eventDigest = (event.proofs as JsonObject[] | undefined)?.[0]
+    ?.event_digest;
+  expect(eventDigest, "principal successor Event proof digest").toEqual(
+    expect.any(String),
+  );
+  const availabilityUrl = `${solandBaseUrl()}/_arkret/self/seals/availability-receipts`;
+  const availabilityResponse = await request.post(availabilityUrl, {
+    headers: {
+      ...selfPathHeadersForDpopSession(session, "POST", availabilityUrl),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({
+      realm_id: realmId,
+      predecessor_refs: [leaves![0]],
+      event_digests: [eventDigest],
+    }),
+  });
+  const availability = await expectJsonOk<JsonObject>(
+    availabilityResponse,
+    "issue principal successor availability receipts",
+  );
   const events = [...session.principalControlEvents, event];
   const seal = cotestWire<JsonObject>("principal-successor-seal", {
     events,
     predecessor_seal: predecessorSeal,
+    availability_receipt_issue_outcome: availability,
     device_signing_seed_b64url: session.eventSigningSeedB64url,
   });
   const sealUrl = `${solandBaseUrl()}/_arkret/self/seals`;

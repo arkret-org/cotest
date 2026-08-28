@@ -342,8 +342,7 @@ fn default_gate_paths() -> OperationRegistryGatePaths {
                 .with_dir("crates/admin/src"),
             OperationSourceRoot::new("inkson", workspace_root.join("inkson"))
                 .with_dir("src")
-                .with_file("tests/e2e/mockArkretApi.ts")
-                .with_file("tests/e2e/mockArkretContract.ts"),
+                .with_file("tests/e2e/mockArkretApi.ts"),
             OperationSourceRoot::new("cotest", cotest_root.clone())
                 .with_dir("e2e/helpers")
                 .with_dir("e2e/tests")

@@ -602,10 +602,31 @@ pub async fn seal_current_principal_control_frontier(
     );
     let physical_millis = chrono::Utc::now().timestamp_millis();
     for (index, event) in pending_events.into_iter().enumerate() {
+        let event_digest = Hash::new(
+            event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
+        )?;
         history.push(event);
+        let availability_request =
+            arkret_models_collaboration::governance_dependencies::SealAvailabilityReceiptIssueRequest {
+                realm_id: predecessor.realm_id.clone(),
+                predecessor_refs: vec![predecessor.id.clone()],
+                event_digests: vec![event_digest],
+            };
+        let availability = serde_json::from_value::<
+            arkret_models_collaboration::governance_dependencies::SealAvailabilityReceiptIssueOutcome,
+        >(
+            expect_json(
+                client
+                    .post("/_arkret/self/seals/availability-receipts")
+                    .json(&availability_request),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
         let seal = build_self_principal_linear_successor_seal(
             &history,
             &predecessor,
+            &availability,
             Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
             &signer,
             &crate::publication::project_cells,

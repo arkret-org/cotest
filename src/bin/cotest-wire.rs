@@ -138,6 +138,7 @@ struct PrincipalBootstrapSealInput {
 struct PrincipalSuccessorSealInput {
     events: Vec<Value>,
     predecessor_seal: Value,
+    availability_receipt_issue_outcome: Value,
     device_signing_seed_b64url: String,
 }
 
@@ -1068,6 +1069,8 @@ fn principal_successor_seal(input: Value) -> Result<Value> {
     }
     let predecessor: arkret_wire::Seal = serde_json::from_value(input.predecessor_seal)
         .context("parse resolved principal predecessor Seal")?;
+    let availability = serde_json::from_value(input.availability_receipt_issue_outcome)
+        .context("parse principal successor availability receipt issue outcome")?;
     let seed = signing_key_from_seed(&input.device_signing_seed_b64url)?.to_bytes();
     let (signer_full_id, verification_method) = trusted_actor_signer_material(founding_authorize)?;
     let signer =
@@ -1080,6 +1083,7 @@ fn principal_successor_seal(input: Value) -> Result<Value> {
     let seal = arkret_bootstrap::build_self_principal_linear_successor_seal(
         &events,
         &predecessor,
+        &availability,
         hlc.generate(),
         &signer,
         &|event| {

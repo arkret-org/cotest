@@ -165,8 +165,8 @@ publish packages, tags, releases, or remote workflow artifacts.
 
 The latest recorded local protocol release gate is
 `artifacts/runs/20260525-055932`: 28 passed, 0 failed, coverage gate passed,
-secret scan passed, and `mock-parity-allowlist.json` remained empty. The
-human-readable evidence is tracked in `docs/release-evidence-0.9.0.md`.
+and secret scan passed. The human-readable evidence is tracked in
+`docs/release-evidence-0.9.0.md`.
 
 ## Joint UI E2E
 

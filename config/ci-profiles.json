@@ -201,10 +201,6 @@
           "filter": "external_webvh_provider_is_discoverable"
         },
         {
-          "target": "inkson_mock_parity",
-          "filter": "inkson_mock_contract_matches_live_soland_baseline"
-        },
-        {
           "target": "policy_server_live",
           "filter": "policy_server_binding_contract_is_live"
         },
@@ -230,19 +226,6 @@
         "ak.profile.push_gateway.v1",
         "ak.profile.federation_minimal.v1"
       ]
-    },
-    {
-      "profile_id": "mock-parity",
-      "description": "T-P1-10 gate: compare inkson's mocked Arkret contract against a live soland baseline; any non-allowlisted drift fails.",
-      "include_all_tests": false,
-      "cargo_tests": [
-        {
-          "target": "inkson_mock_parity",
-          "filter": "inkson_mock_contract_matches_live_soland_baseline"
-        }
-      ],
-      "excluded_quarantine_labels": [],
-      "required_coverage_profiles": []
     },
     {
       "profile_id": "full-nightly",

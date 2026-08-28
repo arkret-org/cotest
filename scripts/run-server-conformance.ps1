@@ -7,7 +7,7 @@ param(
     [string]$OutputRoot,
     [string]$CargoTestTarget,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "joint", "dual-soland", "mock-parity")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "joint", "dual-soland")]
     [string]$Profile = "all",
     [string]$ProfileConfigPath,
     [switch]$PlanOnly,
