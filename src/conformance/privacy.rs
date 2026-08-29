@@ -230,16 +230,29 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     })?;
                 let rounded_retry_after =
                     seconds_until_roll.div_ceil(retry_quantum) * retry_quantum;
-                let body_shape = expected
-                    .get("body_shape")
+                let problem_schema_matches = expected
+                    .get("class_b_problem_schema_ref")
+                    .and_then(Value::as_str)
+                    == Some("schemas/directory-operations.schema.json#/$defs/psi_padded_problem");
+                let problem_projection_matches = expected
+                    .get("class_b_problem_projections")
                     .and_then(Value::as_array)
-                    .ok_or_else(|| anyhow!("privacy fixture {} missing body shape", case.name))?;
-                let required_body_fields = ["ok", "error.code", "error.message", "request_id"];
-                let body_shape_matches = required_body_fields.iter().all(|required| {
-                    body_shape
-                        .iter()
-                        .any(|field| field.as_str() == Some(required))
-                });
+                    .is_some_and(|projections| {
+                        projections.iter().any(|projection| {
+                            projection.get("phase").and_then(Value::as_str) == Some("blind")
+                                && projection.get("error_code").and_then(Value::as_str)
+                                    == Some("psi_quota_exhausted")
+                                && projection.get("status").and_then(Value::as_u64) == Some(429)
+                                && projection
+                                    .get("response_bucket_field")
+                                    .and_then(Value::as_str)
+                                    == Some("blind_response_bucket_bytes")
+                                && projection
+                                    .get("retry_after_required")
+                                    .and_then(Value::as_bool)
+                                    == Some(true)
+                        })
+                    });
                 let blinded_elements_present = input
                     .pointer("/blind_request/blinded_elements")
                     .and_then(Value::as_array)
@@ -287,7 +300,8 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         .get("unknown_wrong_device_or_expired_batch_error_code")
                         .and_then(Value::as_str)
                         == Some("psi_batch_unavailable")
-                    && body_shape_matches
+                    && problem_schema_matches
+                    && problem_projection_matches
                     && claims_hold;
                 if !valid {
                     bail!(
@@ -304,7 +318,8 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                         "http_status": 429,
                         "error_code": "psi_quota_exhausted",
                         "retry_after_seconds": rounded_retry_after,
-                        "body_shape_matches": body_shape_matches,
+                        "problem_schema_matches": problem_schema_matches,
+                        "problem_projection_matches": problem_projection_matches,
                         "privacy_claims_hold": claims_hold,
                     }),
                 );

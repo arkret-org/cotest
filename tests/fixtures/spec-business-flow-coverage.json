@@ -626,7 +626,7 @@
     {
       "id": "directory_discovery_takedown",
       "title": "Directory search, handle resolution, private discovery, announce, withdraw, and takedown",
-      "status": "implemented",
+      "status": "partially_implemented",
       "surfaces": [
         "directory_discovery"
       ],
@@ -693,14 +693,6 @@
         }
       ],
       "coverage": [
-        {
-          "kind": "ordinary",
-        "path": "../soland/crates/http/src/routing/spaces/directory/discovery.rs",
-        "markers": [
-          "ak.find.directory.read.private_contact_discovery",
-          "ak.private_contact_discovery.v1"
-          ]
-        },
         {
           "kind": "ordinary",
           "path": "../teabay/crates/server/tests/it/conformance.rs",
@@ -1016,10 +1008,10 @@
       "coverage": [
         {
           "kind": "ordinary",
-          "path": "../soland/crates/server/tests/http_api/federation.rs",
+          "path": "../soland/crates/http/src/routing/events/peer.rs",
           "markers": [
             "ak.peer.events.command.submit.v1",
-            "/_arkret/peer/events/frontier"
+            "peer_events_submit"
           ]
         },
         {

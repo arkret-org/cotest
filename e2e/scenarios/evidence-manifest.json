@@ -1844,26 +1844,6 @@
       ]
     },
     {
-      "scenario_key": "spaces/knock-application",
-      "suite_kind": "joint-e2e",
-      "realism_level": "fixture-only",
-      "evidence_class": "fixture-only",
-      "real_services": [],
-      "mocks": [],
-      "identity_establishment": [
-        "session_injection"
-      ],
-      "protocol_object_producers": [
-        "fixture_or_not_applicable"
-      ],
-      "declared_test_bypasses": [
-        "session_injection"
-      ],
-      "claims_excluded": [
-        "registration_login_authorization"
-      ]
-    },
-    {
       "scenario_key": "spaces/knock-auto-resolve",
       "suite_kind": "joint-e2e",
       "realism_level": "server-contract",

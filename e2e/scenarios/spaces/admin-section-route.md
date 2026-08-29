@@ -9,7 +9,7 @@
 2. `realm-admin-active-section` 这个 testid 反映 URL 路径段(本 probe 期望文本为 `"Members"`)
 3. 上述断言在 fresh browser context、fresh login session 下成立 — 也就是说,即使没有任何 client-side state 残留,RealmAdminPanel 也必须从 URL 推出来正确的 active section
 
-不验证:invite-member / refresh-members-button 等具体 admin 操作本身(那是 `messaging/triad-collaboration`、`spaces/knock-application` 等业务 scenario 的事);其他 admin section(`settings` / `roles` / `audit` …)的等价 routing 行为(本 probe 只覆盖 `members`,其他 section 如果有 routing race 应该再加一条对应 probe)。
+不验证:invite-member / refresh-members-button 等具体 admin 操作本身(那是 `messaging/triad-collaboration` 等业务 scenario 的事);其他 admin section(`settings` / `roles` / `audit` …)的等价 routing 行为(本 probe 只覆盖 `members`,其他 section 如果有 routing race 应该再加一条对应 probe)。
 
 ## Spec 锚点
 
@@ -57,7 +57,7 @@
 
 ## Implementation notes
 
-- **历史背景**:本 probe 的出现是因为 `messaging/triad-collaboration` Phase C 与 `spaces/knock-application` Phase B 都遇到过 `invite-member` 按钮"渲染不出来"的问题,人工 trace 发现 `RealmAdminPanel` 在 hard nav 时把 `active_section` 误初始化为 `overview`,导致 members section 没渲染。本 probe 把这个 race 单独抽出,fail 时无歧义指向 inkson routing 而不是 invite 逻辑
+- **历史背景**:多个成员管理流程都遇到过 `invite-member` 按钮"渲染不出来"的问题,人工 trace 发现 `RealmAdminPanel` 在 hard nav 时把 `active_section` 误初始化为 `overview`,导致 members section 没渲染。本 probe 把这个 race 单独抽出,fail 时无歧义指向 inkson routing 而不是 invite 逻辑
 - **不要混进 invite/role 业务断言**:本 probe 故意只读 `active_section` 文本,不点 invite 按钮、不调 invite API — 任何额外断言都会模糊"是 routing fail 还是 invite fail"的判断
 - **120s 超时不是 routing 问题的征兆**:首次加载 inkson 的 React bundle + soland 初始 claim 在 cold start 下可能慢,本 spec 容忍长 timeout,只在 `active_section` 文本错时 fail
 - **若以后想覆盖更多 section**:复制本 probe,把 `members` 换成 `settings` / `roles` / `audit`,断言文本换成对应的人类可读名;不要在本 spec 里 loop section,会让失败时定位变难

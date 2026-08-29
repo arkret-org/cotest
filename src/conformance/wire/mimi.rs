@@ -494,9 +494,9 @@ pub fn run_mimi_components_fixture_suite() -> Result<()> {
         );
     }
 
-    if bidirectional < 5 {
+    if bidirectional < 4 {
         bail!(
-            "mimi component fixture must cover at least 5 bidirectional mappings, got {bidirectional}"
+            "mimi component fixture must cover at least 4 bidirectional mappings, got {bidirectional}"
         );
     }
     if arkret_only < 5 {

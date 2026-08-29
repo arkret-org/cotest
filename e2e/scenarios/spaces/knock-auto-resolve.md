@@ -2,7 +2,7 @@
 
 ## 目标
 
-spaces/knock-application 的姊妹篇:`default_join_rule=knock_restricted` 且所有 gates 都 `auto_resolve=true`(claim_required + challenge_response)— applicant 直接提交 `ak.member.state{join}` 携带 `gate_proofs[]`,reducer 内联校验,无需 application + review。这是 spec §3.5 的快路径。
+当 `default_join_rule=knock_restricted` 且所有 gates 都 `auto_resolve=true`（claim_required + challenge_response）时，applicant 直接提交携带 `gate_proofs[]` 的 `ak.member.state{join}`，由 reducer 内联校验，不需要独立的申请资源与审核命令。这是 spec §3.5 的直接 Event 路径。
 
 ## Spec 锚点
 

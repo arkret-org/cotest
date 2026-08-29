@@ -189,7 +189,6 @@ jobs:
           export COTEST_SOLAND_SERVICE_ID
           COTEST_SOLAND_SERVICE_ID="$(curl -fsS "$COTEST_SOLAND_BASE_URL/health" | jq -er '.checks.service_identity.service_id')"
           npx playwright test --config playwright.config.ts --project=chromium tests/sync/service-surface-contract.spec.ts --grep "soland /_arkret/describe"
-          npx playwright test --config playwright.config.ts --project=chromium tests/spaces/knock-application.spec.ts
       - name: run federation security hardening Playwright
         working-directory: cotest/e2e
         # Each node gets its own hostname (mapped to loopback below) instead of

@@ -3537,7 +3537,6 @@ try {
             SOLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
             SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
-            SOLAND_CANDIDATE_JOIN_POLICY = "true"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
         if ($CoauthBaseUrl) {
@@ -3602,7 +3601,6 @@ try {
             SOLAND_LIVEKIT_API_KEY = "did:web:media.example#media-token"
             SOLAND_LIVEKIT_API_SECRET = "joint-e2e-livekit-secret"
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
-            SOLAND_CANDIDATE_JOIN_POLICY = "true"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
         if ($CoauthBaseUrl) {

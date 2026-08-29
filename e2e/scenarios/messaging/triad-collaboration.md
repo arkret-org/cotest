@@ -4,7 +4,7 @@
 
 验证在同一个 principal server 上,三个 actor 完成「建 Realm → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_access` 看到正确历史」的完整协作链路;过程中 anchor frontier 在所有成员之间收敛一致。
 
-不验证:跨服务器联邦 (见 federation/cross-server)、审核封禁 (见 spaces/moderation-ban)、knock 申请 (见 spaces/knock-application)、第三方邮件邀请 (后续 invites/third-party)、设备授权 (后续 identity/account-device-auth)。
+不验证:跨服务器联邦 (见 federation/cross-server)、审核封禁 (见 spaces/moderation-ban)、第三方邮件邀请 (后续 invites/third-party)、设备授权 (后续 identity/account-device-auth)。
 
 ## Spec 锚点
 

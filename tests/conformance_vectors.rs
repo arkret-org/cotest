@@ -220,7 +220,7 @@ fn account_status_issuer_ledger_vector_runs_clean() {
 }
 
 /// 2026-08-17 — the over-broad `ak.directory_operation_proof.v1` /
-/// `ak.mimi_operation_proof.v1` contexts were replaced by twelve per-object-
+/// `ak.mimi_operation_proof.v1` contexts were replaced by eleven per-object-
 /// family contexts. Domain separation is what stops a proof minted for one
 /// operation from being replayed onto a sibling, and no JSON Schema can
 /// express it.
@@ -230,7 +230,7 @@ fn proof_context_domain_separation_vector_runs_clean() {
         cotest::conformance::DIRECTORY_PER_FAMILY_PROOF_CONTEXTS.len(),
         5
     );
-    assert_eq!(cotest::conformance::MIMI_PER_FAMILY_PROOF_CONTEXTS.len(), 7);
+    assert_eq!(cotest::conformance::MIMI_PER_FAMILY_PROOF_CONTEXTS.len(), 6);
     cotest::conformance::run_proof_context_domain_separation_vector()
         .expect("per-family proof context domain separation must hold");
 }

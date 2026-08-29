@@ -7,7 +7,7 @@
 //! signature minted for one family can never be replayed onto another. This
 //! module drives that closure from three sides:
 //!
-//! 1. **Registry closure** — the twelve per-family contexts exist in `registry/proof-context-
+//! 1. **Registry closure** — the eleven per-family contexts exist in `registry/proof-context-
 //!    registry.json`, are bound to their own `object_family`, are pairwise distinct and are all
 //!    reachable through the shared [`ProofContextId`] vocabulary. The two retired over-broad
 //!    contexts resolve nowhere.
@@ -178,9 +178,9 @@ fn assert_registry_closure() -> Result<()> {
             bail!("per-family proof context `{context}` is absent from the shared vocabulary");
         }
     }
-    if seen.len() != 12 {
+    if seen.len() != 11 {
         bail!(
-            "expected 12 per-family directory/MIMI proof contexts, found {}",
+            "expected 11 per-family directory/MIMI proof contexts, found {}",
             seen.len()
         );
     }
