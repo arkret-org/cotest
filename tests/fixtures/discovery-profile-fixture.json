@@ -40,8 +40,7 @@
       "realm_governance_links",
       "realm_object_read",
       "realm_read",
-      "realtime_media",
-      "view_projection"
+      "realtime_media"
     ],
     "interop_bridge": [
       "applet",

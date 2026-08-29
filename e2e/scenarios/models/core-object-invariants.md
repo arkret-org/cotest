@@ -23,8 +23,6 @@
 - `arkret-spec/spec/v1/zh/models/realm-and-space.md` §3.4 — Space lifecycle：`ak.space.archive` 不级联子 Space、`ak.space.tombstone` 存在 live dependents 时 `space_has_live_dependents`
 - `arkret-spec/spec/v1/zh/models/relation.md` §3.1 / §3.2 — 标准 relation_kind 与默认基数表；未声明为 multi-edge 的 Relation MUST 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重
 - `arkret-spec/spec/v1/zh/models/relation.md` §4.4 — 跨 Realm 强约束（`contains` / `belongs_to` MUST NOT 跨 Realm）
-- `arkret-spec/spec/v1/zh/models/views.md` §2.2 / §6 — View.kind 是响应族；Board projection 按 query → contains → strand 派生，不依赖预先注册 View
-- `arkret-spec/spec/v1/zh/models/views.md` §6.3 — `CollectionProjectionView` 形状（`view_id` 缺失时仍能返回派生 projection）
 
 ## 拓扑
 
@@ -46,7 +44,7 @@
 - 两个 DID 都通过 `POST /_soland/self/account/register` 注册过（与现有 `ensureRegistered` 行为一致）
 - 两个 actor 都持有有效 dev session token (`POST /_soland/gate/auth/dev-login`)
 - alice 的 browser context 通过 `inkson.config.v1` localStorage 注入 server_url + account_did + device_id + session_credential
-- Phase B–E 不需要 browser context，纯 soland HTTP API 直调即可
+- Phase B–D 不需要 browser context，纯 soland HTTP API 直调即可
 
 ## Steps
 
@@ -114,17 +112,6 @@
 18. **alice** 重复提交完全相同的 edge（同 `from_ref` / `to_ref` / `relation_kind`）：断言幂等——服务端要么 200 + 同一个 `relation_id`，要么 409，**MUST NOT** 创建第二条 active 副本（spec §3.2 末段 "未声明为 multi-edge 的 Relation MUST 由 reducer 按 `(realm_id, relation_kind, from_ref, to_ref)` 去重"）。
 19. **alice** 提交一条跨 Realm 的 `ak.relation.create` `relation_kind="contains"`，`from_ref` 在 `spaceId` 而 `to_ref` 指向另一个 Realm 的 Strand：断言 HTTP 4xx + `error_code = "failed_precondition"` + `reason = "cross_space_structural_relation"`（spec §4.4）。
 
-### Phase E — View projection fallback（fixme，需要 soland board projection endpoint）
-
-20. **alice** 在新建的 `spaceId` 上请求一个"用户从未注册过"的 view：`GET /_soland/self/spaces/${spaceId}/views/projection?renderer=board`（或 `?kind=collection&renderer=board`）。这是一个全新 Space，没有调用过 `ak.view.create`，因此**不存在**任何 user-defined View 对象。
-21. 断言：HTTP 200（**不是** 404），响应 body 形如 `views.md` §6.3 `CollectionProjectionView`：
-    - `kind = "collection"`
-    - `renderer = "board"`
-    - `view_id` 为派生默认（典型实现：`ak:view:default:${spaceId}` 或服务端临时 id；测试侧只断言字段存在 + 是 `ak:view:` typed prefix，不 hardcode 具体 uuid）
-    - `frontier` 至少有一项 `ak:event:...`（这个 Space 至少有 create event）
-    - `groups[]` 是数组（可以为空，因为没有 List Space / Strand placement，但字段必须存在 — spec §2.2 View.kind 是响应族）
-22. 再请求同一 endpoint 但用一个 spec 没注册的 renderer：`?renderer=bogus_renderer_${stamp}`：断言 HTTP 4xx + `error_code = "unknown_renderer"`（或类似），**MUST NOT** 静默回退到 `board`——fallback 只对"未注册 View"生效，不对"未注册 renderer"生效。这是 spec §2.2 "保留 5 个 View.kind 作为 response family" 与 §11 "未声明 renderer MUST fail-closed" 的边界。
-
 ## Observable assertions（合并清单）
 
 - Phase A 步骤 3：`/_soland/self/spaces/${spaceId}` 返回 `space_id` / `owner` / `members` / `deleted` 四字段齐全
@@ -137,8 +124,6 @@
 - Phase D 步骤 17：`has_default_view` 第二条 edge 不与第一条同时 active
 - Phase D 步骤 18：完全重复的 Relation create 幂等
 - Phase D 步骤 19：跨 Realm `contains` 被 reducer 拒绝
-- Phase E 步骤 21：没有 user-defined View 时 board projection 仍返回 200 + canonical 响应族字段
-- Phase E 步骤 22：未注册 renderer fail-closed
 
 ## Edge cases / sub-tests
 
@@ -159,11 +144,10 @@
   不能把读取到的旧 Seal 或无关 fixture Seal 当作 accepted state。
 - **soland gap**：Phase C cascade 规则在 soland 当前 lifecycle 实现里部分落地（archive / delete 路径存在），但 `space_has_live_dependents` 错误码与 child cascade locked projection 尚未在 wire 上稳定。整 phase 标 fixme，sketch API。
 - **已落地**：Phase D 覆盖 `ak.relation.create` reducer、`has_default_view` many-to-one、duplicate idempotency 与 cross-Realm structural relation reject。
-- **soland gap**：Phase E `/_soland/self/spaces/{id}/views/projection` board fallback endpoint 当前未实现；这是 spec §6 "派生响应" 的 wire 出口，需要 soland 在 view module 中补一条"无 View 时也能跑 query → contains → strand 派生"的 path。整 phase 标 fixme。
-- **不需要新 helper**：Phase A 复用 `JointUserPage.createRealm()` 和现有 New Space 表单 helper、`ensureRegistered`、`issueDevSession`、`openUserPage`。Phase B–E 只用 Playwright `request` fixture 直打 soland，不需要 browser context。
+- **不需要新 helper**：Phase A 复用 `JointUserPage.createRealm()` 和现有 New Space 表单 helper、`ensureRegistered`、`issueDevSession`、`openUserPage`。Phase B–D 只用 Playwright `request` fixture 直打 soland，不需要 browser context。
 - **测试侧 wire-shape 容忍度**：spec 用中文写公共字段语义（"创建主体" / "最近一次 state 转换时间"），但 soland wire 上的字段名是 snake_case（`owner` / `deleted` / `created_at` / `sender`）。本 scenario 的断言**绑定到 wire field 名**，spec 锚点用 §号 引用语义。如果 soland 将来改名（如把 `deleted` 改成 `state`），断言要相应更新，但本 scenario 仍是 spec §3 公共字段的 e2e guard。
 
 ## 总耗时预估
 
 当前 live Phase A + D：约 15-25s（1 个 browser context + HTTP 调用）。
-全 phase live 后预计 30-45s（Phase B–E 都是 HTTP 直调，无 browser context）。
+全 phase live 后预计 30-45s（Phase B–D 都是 HTTP 直调，无 browser context）。

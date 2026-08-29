@@ -266,7 +266,6 @@
         "realm_governance_links",
         "realm_read",
         "realm_object_read",
-        "view_projection",
         "authz_policy",
         "consent_management",
         "moderation_reports"
@@ -321,12 +320,6 @@
           ]
         },
         {
-          "operation_id": "ak.self.realm.command.archive.v1",
-          "surfaces": [
-            "realm_read"
-          ]
-        },
-        {
           "operation_id": "ak.self.realm.read.export.v1",
           "surfaces": [
             "realm_read"
@@ -342,12 +335,6 @@
           "operation_id": "ak.self.space.read.list.v1",
           "surfaces": [
             "realm_object_read"
-          ]
-        },
-        {
-          "operation_id": "ak.self.views.collection_projection.command.materialize.v1",
-          "surfaces": [
-            "view_projection"
           ]
         },
         {
