@@ -552,7 +552,6 @@ test.describe("discovery", () => {
     expect(body.organizations.length).toBeGreaterThanOrEqual(1);
     const demoEnvelope = body.organizations.find(
       (r: {
-        organization_did?: string;
         handle?: string;
         display_name?: string;
         source_refs?: string[];

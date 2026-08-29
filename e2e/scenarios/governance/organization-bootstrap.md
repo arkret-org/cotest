@@ -10,7 +10,7 @@ COT-ORG-05 回答:“**没有共享账号时,谁控制了组织 principal?**”
 
 - `identity/identity-did.md` §6 — Organization 是 DID Principal
 - `governance/content-moderation.md` §7
-- `event-payload.schema.json#/$defs/realm_organization_payload`(`authorization.issuer_role` ∈ {`organization_did`, `governance_service`, `account_authority`, `threshold_quorum`};后两者必须携带 `delegation_ref`)
+- `event-payload.schema.json#/$defs/realm_organization_payload`(`authorization.issuer_role` ∈ {`organization_principal_id`, `governance_service`, `account_authority`, `threshold_quorum`};后两者必须携带 `delegation_ref`)
 
 ## 拓扑
 
@@ -28,7 +28,7 @@ COT-ORG-05 回答:“**没有共享账号时,谁控制了组织 principal?**”
 
 4. coauth 为组织 DID 颁发 delegation,purpose 覆盖 `ak.realm.organization` + 目标 relationship/control_scopes。
 5. 以 `issuer_role=governance_service`(或 `account_authority`)携带 `delegation_ref` 签发声明。
-6. 断言:coauth 成功签发,soland 接受;`issuer_role=organization_did`(DID controller 直签)同样成功。
+6. 断言:coauth 成功签发,soland 接受;`issuer_role=organization_principal_id`(DID controller 直签)同样成功。
 
 ### Case C — expired / revoked delegation 不能继续签发,且不被 soland 接受
 

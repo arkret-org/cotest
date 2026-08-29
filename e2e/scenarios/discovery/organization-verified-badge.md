@@ -2,7 +2,7 @@
 
 ## 目标
 
-COT-ORG-04 守护:directory / teabay 的 **verified organization badge** 与协议治理 badge 同源 —— 它来自 **active verified `ak.realm.organization` 关系**,而不是 Realm 单方面在 `owning_organizations[]` 里的声明,也不是本地 `_soland/self/organizations` 镜像。
+COT-ORG-04 守护:directory / teabay 的 **verified organization badge** 与协议治理 badge 同源 —— 它来自 **active verified `ak.realm.organization` 关系**,而不是 Realm 单方面在 `owning_organization_ids[]` 里的声明,也不是本地 `_soland/self/organizations` 镜像。
 
 ## Spec 锚点
 
@@ -14,7 +14,7 @@ COT-ORG-04 守护:directory / teabay 的 **verified organization badge** 与协�
 
 ### Case A — declared-only 不显示 badge
 
-1. alice 建 Realm,`owning_organizations: [acme-org.did]`,不写 `ak.realm.organization`。
+1. alice 建 Realm,`owning_organization_ids: [acme-org.organization_id]`,不写 `ak.realm.organization`。
 2. directory `tab-organizations` 搜该组织。
 3. 断言:行存在(若组织本身可被发现),但**不**显示 `organization-verified-badge`;API `verified_badge` 为 false / 缺省。
 
