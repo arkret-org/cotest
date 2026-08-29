@@ -444,7 +444,7 @@ test.describe("discovery", () => {
       ).toBe("proof_invalid");
 
       const bobPresenceRow = alicePage.page.locator(
-        `[data-testid="presence-row"][data-actor-did="${cssStringEscape(bob.id)}"]`,
+        `[data-testid="presence-row"][data-actor-id="${cssStringEscape(bob.id)}"]`,
       );
       await expect(bobPresenceRow).toHaveAttribute(
         "data-presence-state",
