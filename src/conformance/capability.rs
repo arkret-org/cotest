@@ -7,21 +7,48 @@
 //! mistaken for cross-implementation conformance.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::ops::Deref;
 
 use anyhow::{Result, anyhow, bail};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::{load_fixture_value, required_str, validate_profile};
+use super::{load_fixture_value, required_str};
 use crate::transcripts::record_vector_event;
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CapabilityFixtureRoot {
+    runner: Value,
+    profile: String,
+    version: String,
+    covers_vectors: Vec<String>,
+    fixtures: Vec<CapabilityCase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(transparent)]
+struct CapabilityCase(Value);
+
+impl Deref for CapabilityCase {
+    type Target = Value;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 pub fn run_capability_fixture_suite() -> Result<()> {
-    let value = load_fixture_value("capability-fixture.json")?;
-    validate_profile(&value, "ak.vector_group.capability.v1")?;
-    let fixtures = value
-        .get("fixtures")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("capability artifact missing fixtures"))?;
-    for fixture in fixtures {
+    let fixture: CapabilityFixtureRoot =
+        serde_json::from_value(load_fixture_value("capability-fixture.json")?)?;
+    if fixture.profile != "ak.vector_group.capability.v1"
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+        || fixture.covers_vectors.is_empty()
+    {
+        bail!("capability fixture metadata drifted");
+    }
+    for fixture in &fixture.fixtures {
         let name = required_str(fixture, "name")?;
         if fixture.get("expected").is_none()
             && fixture.get("requests").is_none()
@@ -134,7 +161,7 @@ struct ChainResult {
     audience: bool,
 }
 
-fn parse_authority_chain(fixture: &Value) -> Result<Vec<AuthorityGrant>> {
+fn parse_authority_chain(fixture: &CapabilityCase) -> Result<Vec<AuthorityGrant>> {
     let raw = fixture
         .get("authority_chain")
         .and_then(Value::as_array)
@@ -302,7 +329,7 @@ fn deny_reason_for_request(request: &Value) -> &'static str {
     }
 }
 
-fn evaluate_direct_grant_request_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_direct_grant_request_fixture(fixture: &CapabilityCase) -> Result<()> {
     let name = required_str(fixture, "name")?;
     let grants = fixture
         .get("grants")
@@ -341,7 +368,7 @@ fn evaluate_direct_grant_request_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_membership_without_capability_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_membership_without_capability_fixture(fixture: &CapabilityCase) -> Result<()> {
     let name = required_str(fixture, "name")?;
     let memberships = fixture
         .get("memberships")
@@ -526,7 +553,7 @@ fn evaluate_chain(base: &Value, grants: &[AuthorityGrant], query: &ActionQuery) 
 /// scope, rate, audience) holds. The evaluator must not authorize directly
 /// from the root (skipping a middle grant), must not ignore the audience
 /// scope limitation, and must not authorize after the temporal window expires.
-fn evaluate_authority_chain_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_authority_chain_fixture(fixture: &CapabilityCase) -> Result<()> {
     let base = fixture
         .get("base")
         .ok_or_else(|| anyhow!("authority_chain fixture missing base grant"))?;
@@ -762,7 +789,7 @@ fn evaluate_regrant_candidate(
 /// reducer. It treats only ordinary `authority_control` constraints as
 /// regrant carriers, defaults `authority_regrant_allowed` to false, and
 /// applies every referenced accepted grant as a fail-closed parent boundary.
-fn evaluate_authority_regrant_terminal_child_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_authority_regrant_terminal_child_fixture(fixture: &CapabilityCase) -> Result<()> {
     const VECTOR_ID: &str = "ak.vector.capability.authority_regrant_terminal_child.v1";
     const REQUIRED_CASES: [&str; 9] = [
         "ordinary_parent_without_authority_control_is_not_a_grant_ref",
@@ -867,7 +894,7 @@ fn message_event_authorized(
 /// revoke back MUST make the same event authorized in a forward recompute,
 /// the rollback MUST produce an independent auditable reference, and it MUST
 /// NOT mutate the existing event id chain.
-fn evaluate_revoke_rollback_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_revoke_rollback_fixture(fixture: &CapabilityCase) -> Result<()> {
     let events = fixture
         .get("events")
         .and_then(Value::as_array)
@@ -949,7 +976,7 @@ fn evaluate_revoke_rollback_fixture(fixture: &Value) -> Result<()> {
 /// by a downstream child grant C, MUST invalidate every allow-cache entry that
 /// depends on G or C in the same transaction, MUST retain the historical event
 /// as an audit fact, and MUST treat G as no longer currently valid.
-fn evaluate_revoke_downstream_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_revoke_downstream_fixture(fixture: &CapabilityCase) -> Result<()> {
     let grants = fixture
         .get("grants")
         .and_then(Value::as_array)
@@ -1108,7 +1135,7 @@ fn fixture_grant_live(
     live
 }
 
-fn evaluate_authority_liveness_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_authority_liveness_fixture(fixture: &CapabilityCase) -> Result<()> {
     let root = fixture
         .get("root")
         .ok_or_else(|| anyhow!("authority liveness fixture missing root"))?;
@@ -1281,7 +1308,7 @@ fn evaluate_authority_liveness_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_relinquish_pending_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_relinquish_pending_fixture(fixture: &CapabilityCase) -> Result<()> {
     let cases = fixture
         .get("cases")
         .and_then(Value::as_array)
@@ -1332,7 +1359,7 @@ fn evaluate_relinquish_pending_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_unified_authority_constraints(fixture: &Value) -> Result<()> {
+fn evaluate_unified_authority_constraints(fixture: &CapabilityCase) -> Result<()> {
     let cases = fixture
         .get("cases")
         .and_then(Value::as_array)
@@ -1406,7 +1433,7 @@ fn authority_root_identity(root: &Value) -> Result<String> {
 }
 
 fn materialize_authority_audit(
-    fixture: &Value,
+    fixture: &CapabilityCase,
     reverse_parents: bool,
 ) -> Result<(u64, Vec<Value>, String)> {
     let parent_values = fixture
@@ -1457,7 +1484,7 @@ fn materialize_authority_audit(
     ))
 }
 
-fn evaluate_authority_audit_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_authority_audit_fixture(fixture: &CapabilityCase) -> Result<()> {
     let (depth, roots, digest) = materialize_authority_audit(fixture, false)?;
     let (reverse_depth, reverse_roots, reverse_digest) =
         materialize_authority_audit(fixture, true)?;
@@ -1508,7 +1535,7 @@ fn evaluate_authority_audit_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn evaluate_derived_authority_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_derived_authority_fixture(fixture: &CapabilityCase) -> Result<()> {
     let descriptor = arkret_schema::embedded_capability_action("ak.capability.derived")?
         .ok_or_else(|| anyhow!("derived capability action descriptor missing"))?;
     let active = fixture.get("source_refs_active").and_then(Value::as_bool) == Some(true)
@@ -1547,7 +1574,7 @@ fn evaluate_derived_authority_fixture(fixture: &Value) -> Result<()> {
 ///   - `hash` without a digest key → fall back to omitting the field entirely.
 ///   - `redact` → fixed `[redacted]` marker.
 ///   - default (no handling declared) → omit.
-fn evaluate_sensitive_field_handling_fixture(fixture: &Value) -> Result<()> {
+fn evaluate_sensitive_field_handling_fixture(fixture: &CapabilityCase) -> Result<()> {
     let name = required_str(fixture, "name")?;
     let constraint = fixture
         .get("constraint")

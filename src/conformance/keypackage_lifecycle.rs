@@ -14,6 +14,7 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_models_crypto::{KeyPackagesClaimOutcome, KeyPackagesUploadOutcome};
 use arkret_wire::{DidUrl, ProfileId};
 use chrono::{DateTime, Utc};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -53,32 +54,56 @@ const MLS_KEYPACKAGE_PAYLOAD_SCHEMA: &str =
     "schemas/event-payload.schema.json#/$defs/mls_keypackage_payload";
 const LAST_RESORT_FEATURE: &str = "ak.feature.mls_last_resort_keypackage.v1";
 
-fn keypackage_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(KEYPACKAGE_LIFECYCLE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1)?;
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeypackageLifecycleFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    /// Free-form protocol instances validated by their referenced JSON Schemas.
+    schema_validation_cases: Vec<Value>,
+    covers_vectors: Vec<String>,
+    unsigned_selector_transcripts: Vec<Value>,
+    cases: Vec<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PairwiseWelcomeFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    /// Free-form protocol instances validated by their referenced JSON Schemas.
+    schema_validation_cases: Vec<Value>,
+}
+
+fn keypackage_fixture() -> Result<KeypackageLifecycleFixture> {
+    let fixture: KeypackageLifecycleFixture = serde_json::from_value(super::load_fixture_value(
+        KEYPACKAGE_LIFECYCLE_FIXTURE_FILE,
+    )?)?;
     validate_keypackage_lifecycle_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_keypackage_lifecycle_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("keypackage_lifecycle") {
+fn validate_keypackage_lifecycle_fixture_metadata(
+    fixture: &KeypackageLifecycleFixture,
+) -> Result<()> {
+    if fixture.profile != ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1
+        || fixture.suite != "keypackage_lifecycle"
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+    {
         bail!("keypackage lifecycle fixture suite drifted");
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("keypackage lifecycle fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("keypackage lifecycle fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_KEYPACKAGE_LIFECYCLE_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("keypackage lifecycle fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -106,15 +131,11 @@ fn validate_keypackage_lifecycle_fixture_metadata(fixture: &Value) -> Result<()>
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a KeypackageLifecycleFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("keypackage lifecycle fixture missing case {vector_id}"))
 }
 
@@ -1251,13 +1272,12 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     arkret_wire::EventId::new(device_authorization_event_id.to_owned())?;
     require_model_generation_ref(vector, "model_generation_ref")?;
 
-    let request = fixture["schema_validation_cases"]
-        .as_array()
-        .and_then(|cases| {
-            cases.iter().find(|case| {
-                case.get("name").and_then(Value::as_str)
-                    == Some("local_and_remote_claim_share_closed_authorization_carrier")
-            })
+    let request = fixture
+        .schema_validation_cases
+        .iter()
+        .find(|case| {
+            case.get("name").and_then(Value::as_str)
+                == Some("local_and_remote_claim_share_closed_authorization_carrier")
         })
         .and_then(|case| case.get("instance"))
         .cloned()
@@ -1367,10 +1387,8 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
     Ok(())
 }
 
-fn validate_unsigned_selector_transcripts(fixture: &Value) -> Result<()> {
-    let rows = fixture["unsigned_selector_transcripts"]
-        .as_array()
-        .ok_or_else(|| anyhow!("fixture omits unsigned_selector_transcripts[]"))?;
+fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) -> Result<()> {
+    let rows = &fixture.unsigned_selector_transcripts;
     if rows.len() != 3 {
         bail!("unsigned selector transcript fixture must cover exactly three branches");
     }
@@ -1457,9 +1475,7 @@ pub fn run_keypackage_minimal_metadata_pairwise_full_lifecycle_vector() -> Resul
         &fixture,
         VECTOR_ID_KEYPACKAGE_MINIMAL_METADATA_PAIRWISE_FULL_LIFECYCLE,
     )?;
-    let cases = fixture["schema_validation_cases"]
-        .as_array()
-        .ok_or_else(|| anyhow!("keypackage fixture missing schema_validation_cases[]"))?;
+    let cases = &fixture.schema_validation_cases;
     for name in [
         "minimal_metadata_pairwise_keypackage_upload_valid",
         "minimal_metadata_pairwise_claim_selects_exact_target_authority",
@@ -1514,11 +1530,18 @@ pub fn run_keypackage_minimal_metadata_pairwise_full_lifecycle_vector() -> Resul
         bail!("pairwise claim did not deserialize to the exact pairwise endpoint branch");
     }
 
-    let welcome_fixture = super::load_fixture_value("keypackage-pairwise-welcome-fixture.json")?;
-    super::validate_profile(&welcome_fixture, ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1)?;
-    let welcome_cases = welcome_fixture["schema_validation_cases"]
-        .as_array()
-        .ok_or_else(|| anyhow!("pairwise Welcome fixture missing schema_validation_cases[]"))?;
+    let welcome_fixture: PairwiseWelcomeFixture = serde_json::from_value(
+        super::load_fixture_value("keypackage-pairwise-welcome-fixture.json")?,
+    )?;
+    if welcome_fixture.profile != ProfileId::MLS_GOVERNANCE_BINDING_FULL_V1
+        || welcome_fixture.version.trim().is_empty()
+        || welcome_fixture.suite.trim().is_empty()
+        || welcome_fixture.runner.is_null()
+        || welcome_fixture.covers_vectors.is_empty()
+    {
+        bail!("pairwise Welcome fixture metadata drifted");
+    }
+    let welcome_cases = &welcome_fixture.schema_validation_cases;
     let valid_welcome = welcome_cases
         .iter()
         .find(|row| {

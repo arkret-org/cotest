@@ -25,7 +25,10 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
     .context("load embedded security transaction resilience fixture")?;
     let sdk = arkret_models_crypto::run_security_transaction_resilience_fixture(&fixture)
         .context("SDK resilience runner failed")?;
-    let reference = security_transaction_resilience_reference::run(&fixture)
+    let reference_fixture: security_transaction_resilience_reference::SecurityTransactionResilienceFixture =
+        serde_json::from_value(fixture.clone())
+            .context("parse security transaction resilience fixture root")?;
+    let reference = security_transaction_resilience_reference::run(&reference_fixture)
         .map_err(anyhow::Error::msg)
         .context("independent resilience runner failed")?;
 

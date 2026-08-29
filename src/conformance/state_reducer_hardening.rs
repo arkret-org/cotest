@@ -28,6 +28,17 @@ const STATE_REDUCER_HARDENING_PROFILE: &str = "ak.vector_group.cba_lattice.v1";
 const STATE_REDUCER_HARDENING_SUITE_ENTRYPOINT: &str = "ak.suite.reducer.hardening.v1";
 const STRAND_TRACKS_CELL_FAMILY: &str = arkret_wire::CellFamilyId::STRAND_TRACKS_V1;
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StateReducerHardeningFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
+
 pub fn run_state_reducer_hardening_fixture_suite() -> Result<()> {
     let fixture = state_reducer_hardening_fixture()?;
     run_state_root_incremental_case(case(&fixture, VECTOR_ID_STATE_ROOT_INCREMENTAL)?)?;
@@ -57,19 +68,24 @@ pub fn run_strand_tracks_update_atomic_vector() -> Result<()> {
     run_strand_tracks_update_atomic_case(case(&fixture, VECTOR_ID_STRAND_TRACKS_UPDATE_ATOMIC)?)
 }
 
-fn state_reducer_hardening_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(STATE_REDUCER_HARDENING_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, STATE_REDUCER_HARDENING_PROFILE)?;
+fn state_reducer_hardening_fixture() -> Result<StateReducerHardeningFixture> {
+    let fixture: StateReducerHardeningFixture = serde_json::from_value(super::load_fixture_value(
+        STATE_REDUCER_HARDENING_FIXTURE_FILE,
+    )?)?;
     validate_state_reducer_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_state_reducer_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("state_reducer_hardening") {
+fn validate_state_reducer_fixture_metadata(fixture: &StateReducerHardeningFixture) -> Result<()> {
+    if fixture.profile != STATE_REDUCER_HARDENING_PROFILE
+        || fixture.suite != "state_reducer_hardening"
+        || fixture.version.trim().is_empty()
+    {
         bail!("state reducer hardening fixture suite drifted");
     }
     if fixture
-        .pointer("/runner/entrypoint")
+        .runner
+        .pointer("/entrypoint")
         .and_then(Value::as_str)
         != Some(STATE_REDUCER_HARDENING_SUITE_ENTRYPOINT)
     {
@@ -79,20 +95,11 @@ fn validate_state_reducer_fixture_metadata(fixture: &Value) -> Result<()> {
         );
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("state reducer hardening fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("state reducer hardening fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_STATE_REDUCER_HARDENING_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("state reducer hardening fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -109,15 +116,11 @@ fn validate_state_reducer_fixture_metadata(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a StateReducerHardeningFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("state reducer hardening fixture missing case {vector_id}"))
 }
 

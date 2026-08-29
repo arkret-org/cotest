@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::helpers::assert_expected_subset;
@@ -42,6 +43,17 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
 
 const FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE: &str = "final-conformance-closure-fixture.json";
 const APPLET_TRANSACTION_DEFAULT_DIRECTION: &str = "applet_to_arkret_inbound";
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FinalConformanceClosureFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 struct AppletTransactionReplayIdentity {
@@ -150,38 +162,34 @@ pub fn run_sync_range_completeness_client_query_vector() -> Result<()> {
     )?)
 }
 
-fn final_conformance_closure_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE)?;
-    super::validate_profile(
-        &fixture,
-        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+fn final_conformance_closure_fixture() -> Result<FinalConformanceClosureFixture> {
+    let fixture: FinalConformanceClosureFixture = serde_json::from_value(
+        super::load_fixture_value(FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE)?,
     )?;
     validate_final_conformance_closure_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_final_conformance_closure_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("final_conformance_closure") {
+fn validate_final_conformance_closure_fixture_metadata(
+    fixture: &FinalConformanceClosureFixture,
+) -> Result<()> {
+    if fixture.profile != crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE
+        || fixture.suite != "final_conformance_closure"
+        || fixture.version.trim().is_empty()
+    {
         bail!("final conformance closure fixture suite drifted");
     }
-    if super::fixture_runner_entrypoint(fixture)? != "ak.suite.conformance.final_closure.v1" {
+    if fixture.runner.get("entrypoint").and_then(Value::as_str)
+        != Some("ak.suite.conformance.final_closure.v1")
+    {
         bail!("final conformance closure fixture runner drifted");
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("final conformance closure fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("final conformance closure fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("final conformance closure fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -198,15 +206,11 @@ fn validate_final_conformance_closure_fixture_metadata(fixture: &Value) -> Resul
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a FinalConformanceClosureFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("final conformance closure fixture missing case {vector_id}"))
 }
 

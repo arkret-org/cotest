@@ -21,7 +21,10 @@ pub fn run_authorization_lease_issuance_joint_gate() -> Result<()> {
             .context("load embedded authorization lease issuance fixture")?;
     let sdk = arkret_wire::run_authorization_lease_issuance_fixture(&fixture)
         .context("SDK authorization lease runner failed")?;
-    let reference = authorization_lease_issuance_reference::run(&fixture)
+    let reference_fixture: authorization_lease_issuance_reference::AuthorizationLeaseIssuanceFixture =
+        serde_json::from_value(fixture.clone())
+            .context("parse authorization lease issuance fixture root")?;
+    let reference = authorization_lease_issuance_reference::run(&reference_fixture)
         .map_err(anyhow::Error::msg)
         .context("independent authorization lease runner failed")?;
     ensure!(sdk.len() == 6, "SDK runner did not execute all six cases");

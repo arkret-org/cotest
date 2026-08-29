@@ -5,11 +5,30 @@ use arkret_lattice_registry::{
     ActorPrivateCandidate, ActorPrivateMergeOutcome, build_actor_private_registry,
 };
 use arkret_models_identity::delivery_binding::DevicePushRoutePayload;
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
 
 const FAMILY: &str = "ak.private.device.push_route.v1";
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PushNotifyOutcomeFixture {
+    suite: String,
+    fixture_kind: String,
+    profile: String,
+    covers_vectors: Vec<Value>,
+    version: String,
+    spec_anchor: String,
+    source_refs: Vec<Value>,
+    description: String,
+    runner: Value,
+    request_context: Value,
+    /// Free-form instances validated by their referenced JSON Schemas.
+    schema_validation_cases: Vec<Value>,
+    device_push_route_revision_cases: Vec<Value>,
+}
 
 fn candidate(value: Value, expected_revision: u64) -> ActorPrivateCandidate {
     ActorPrivateCandidate {
@@ -23,12 +42,25 @@ fn candidate(value: Value, expected_revision: u64) -> ActorPrivateCandidate {
 }
 
 pub fn run_push_route_revision_suite() -> Result<()> {
-    let fixture = load_artifact_json("fixtures/push-notify-outcome-fixture.json")?;
+    let fixture: PushNotifyOutcomeFixture = serde_json::from_value(load_artifact_json(
+        "fixtures/push-notify-outcome-fixture.json",
+    )?)?;
+    if fixture.suite.trim().is_empty()
+        || fixture.fixture_kind.trim().is_empty()
+        || fixture.profile.trim().is_empty()
+        || fixture.covers_vectors.is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.spec_anchor.trim().is_empty()
+        || fixture.source_refs.is_empty()
+        || fixture.description.trim().is_empty()
+        || fixture.runner.is_null()
+        || fixture.request_context.is_null()
+    {
+        bail!("push notification fixture metadata drifted");
+    }
     verify_closed_sdk_payloads(&fixture)?;
     let registry = build_actor_private_registry()?;
-    let cases = fixture["device_push_route_revision_cases"]
-        .as_array()
-        .context("push fixture omits device_push_route_revision_cases")?;
+    let cases = &fixture.device_push_route_revision_cases;
 
     let lifecycle = cases
         .iter()
@@ -119,17 +151,12 @@ pub fn run_push_route_revision_suite() -> Result<()> {
     Ok(())
 }
 
-fn verify_closed_sdk_payloads(fixture: &Value) -> Result<()> {
-    for case in fixture["schema_validation_cases"]
-        .as_array()
-        .context("push fixture omits schema_validation_cases")?
-        .iter()
-        .filter(|case| {
-            case["name"]
-                .as_str()
-                .is_some_and(|name| name.starts_with("device_push_route_"))
-        })
-    {
+fn verify_closed_sdk_payloads(fixture: &PushNotifyOutcomeFixture) -> Result<()> {
+    for case in fixture.schema_validation_cases.iter().filter(|case| {
+        case["name"]
+            .as_str()
+            .is_some_and(|name| name.starts_with("device_push_route_"))
+    }) {
         let accepted =
             serde_json::from_value::<DevicePushRoutePayload>(case["instance"].clone()).is_ok();
         if accepted != case["expect_valid"].as_bool().unwrap_or(false) {

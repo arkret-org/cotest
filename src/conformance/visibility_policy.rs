@@ -11,6 +11,7 @@ use arkret_models_collaboration::governance::circle::{
     validate_metadata_encryption_floor_ratchet,
 };
 use arkret_wire::{EncryptionProfile, ProfileId};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 pub const VECTOR_ID_CONTENT_FLOOR_DOWNGRADE_REJECTED: &str =
@@ -40,32 +41,38 @@ const LOCKED_OPAQUE_COMMITMENT: &str =
 const PREVIEW_OPAQUE_COMMITMENT: &str =
     "sha256:1111111111111111111111111111111111111111111111111111111111111111";
 
-fn visibility_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(VISIBILITY_POLICY_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, ProfileId::CIRCLE_CONFORMANCE_V1)?;
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VisibilityPolicyFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
+
+fn visibility_fixture() -> Result<VisibilityPolicyFixture> {
+    let fixture: VisibilityPolicyFixture =
+        serde_json::from_value(super::load_fixture_value(VISIBILITY_POLICY_FIXTURE_FILE)?)?;
     validate_visibility_policy_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_visibility_policy_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("visibility_policy") {
+fn validate_visibility_policy_fixture_metadata(fixture: &VisibilityPolicyFixture) -> Result<()> {
+    if fixture.profile != ProfileId::CIRCLE_CONFORMANCE_V1
+        || fixture.suite != "visibility_policy"
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+    {
         bail!("visibility policy fixture suite drifted");
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("visibility policy fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("visibility policy fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_VISIBILITY_POLICY_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("visibility policy fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -82,15 +89,11 @@ fn validate_visibility_policy_fixture_metadata(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a VisibilityPolicyFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("visibility policy fixture missing case {vector_id}"))
 }
 

@@ -17,6 +17,7 @@ use arkret_signatures::http_signature::{
 use arkret_wire::{ProfileId, ProofContextId};
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::{SigningKey, VerifyingKey};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -41,32 +42,38 @@ const SESSION_GRANT_OUTCOME_SCHEMA: &str =
 const MAX_HTTP_SIGNATURE_WINDOW_SECONDS: i64 = 300;
 const HTTP_SIGNATURE_SKEW_SECONDS: i64 = 30;
 
-fn auth_session_proof_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(AUTH_SESSION_PROOF_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, ProfileId::AUTH_SERVER_V1)?;
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AuthSessionProofFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
+
+fn auth_session_proof_fixture() -> Result<AuthSessionProofFixture> {
+    let fixture: AuthSessionProofFixture =
+        serde_json::from_value(super::load_fixture_value(AUTH_SESSION_PROOF_FIXTURE_FILE)?)?;
     validate_auth_session_proof_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_auth_session_proof_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("auth_session_proof") {
+fn validate_auth_session_proof_fixture_metadata(fixture: &AuthSessionProofFixture) -> Result<()> {
+    if fixture.profile != ProfileId::AUTH_SERVER_V1
+        || fixture.suite != "auth_session_proof"
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+    {
         bail!("auth session proof fixture suite drifted");
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("auth session proof fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("auth session proof fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_AUTH_SESSION_PROOF_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("auth session proof fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -83,15 +90,11 @@ fn validate_auth_session_proof_fixture_metadata(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a AuthSessionProofFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("auth session proof fixture missing case {vector_id}"))
 }
 

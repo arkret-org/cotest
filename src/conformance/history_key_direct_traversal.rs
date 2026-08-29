@@ -43,16 +43,62 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{load_artifact_json, required_str};
 use crate::transcripts::record_vector_event;
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HistoryKeyRecoveryFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    client_convergence_kat: Value,
+    sender_crypto_kats: Value,
+    rrk_registration_rotation_kat: Value,
+    candidate_store_kat: Value,
+    scope_and_endpoint_kats: Vec<Value>,
+    direct_traversal_kat: Value,
+    authenticated_signer_resolution_evidence_kat: Value,
+    governance_dependency_resolve_kat: Value,
+    streaming_direct_traversal_scale_kats: Vec<Value>,
+    streaming_direct_traversal_scale_negative_kats: Vec<Value>,
+    direct_traversal_scale_generator_contract: Value,
+    history_source_agent_observation_digest_kat: Value,
+    response_stream_cases: Value,
+    history_response_capability_kat: Value,
+    direct_traversal_replay_kat: Value,
+    organization_recovery_archive_durable_before_gc_kat: Value,
+}
+
 pub fn run_history_key_direct_traversal_suite() -> Result<()> {
-    let fixture = load_artifact_json("fixtures/history-key-recovery-fixture.json")?;
+    let fixture: HistoryKeyRecoveryFixture = serde_json::from_value(load_artifact_json(
+        "fixtures/history-key-recovery-fixture.json",
+    )?)?;
+    if fixture.profile.trim().is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.suite.trim().is_empty()
+        || fixture.runner.is_null()
+        || fixture.streaming_direct_traversal_scale_kats.is_empty()
+        || fixture
+            .streaming_direct_traversal_scale_negative_kats
+            .is_empty()
+        || fixture.direct_traversal_scale_generator_contract.is_null()
+        || fixture
+            .history_source_agent_observation_digest_kat
+            .is_null()
+        || fixture.history_response_capability_kat.is_null()
+    {
+        bail!("history-key recovery fixture metadata drifted");
+    }
     let retention: HistoryGovernanceTraversalRetention = serde_json::from_value(
         fixture
-            .pointer("/direct_traversal_kat/member_retention")
+            .direct_traversal_kat
+            .pointer("/member_retention")
             .cloned()
             .context("history-key fixture omits member_retention")?,
     )?;
@@ -60,7 +106,8 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
 
     let archive_intent: HistoryGovernanceTraversalIntent = serde_json::from_value(
         fixture
-            .pointer("/direct_traversal_kat/organization_recovery_intent")
+            .direct_traversal_kat
+            .pointer("/organization_recovery_intent")
             .cloned()
             .context("history-key fixture omits organization_recovery_intent")?,
     )?;
@@ -89,25 +136,24 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     }
 
     let negative_cases = fixture
-        .pointer("/direct_traversal_kat/negative_cases")
+        .direct_traversal_kat
+        .pointer("/negative_cases")
         .and_then(Value::as_array)
         .context("history-key fixture omits direct traversal negative cases")?;
     verify_direct_cut_graph_mutations(
         fixture
-            .pointer("/direct_traversal_kat/direct_cut")
+            .direct_traversal_kat
+            .pointer("/direct_cut")
             .context("history-key fixture omits direct_cut")?,
         negative_cases,
     )?;
     verify_since_join_lineage(
         fixture
-            .pointer("/direct_traversal_kat/since_join_lineage")
+            .direct_traversal_kat
+            .pointer("/since_join_lineage")
             .context("history-key fixture omits since_join_lineage")?,
     )?;
-    verify_direct_traversal_replay_kat(
-        fixture
-            .pointer("/direct_traversal_replay_kat")
-            .context("history-key fixture omits direct_traversal_replay_kat")?,
-    )?;
+    verify_direct_traversal_replay_kat(&fixture.direct_traversal_replay_kat)?;
     verify_history_digest_and_sender_kats(&fixture)?;
     verify_governance_dependency_kats(&fixture)?;
     verify_rrk_method_evaluator(&fixture)?;
@@ -129,9 +175,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     .validate()
     .expect_err("history access widening must fail closed");
 
-    let capability_kat = fixture
-        .pointer("/history_response_capability_kat")
-        .context("history-key fixture omits history response capability KAT")?;
+    let capability_kat = &fixture.history_response_capability_kat;
     let capability = capability_kat["response_capability_b64u"]
         .as_str()
         .context("history response capability KAT omits capability")?;
@@ -173,10 +217,7 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
         }
     }
 
-    let scale_cases = fixture
-        .pointer("/streaming_direct_traversal_scale_kats")
-        .and_then(Value::as_array)
-        .context("history-key fixture omits streaming scale KATs")?;
+    let scale_cases = &fixture.streaming_direct_traversal_scale_kats;
     let expected_scale = [
         (
             26_298_u64,
@@ -209,7 +250,8 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
         }
     }
     let over_limit = fixture
-        .pointer("/streaming_direct_traversal_scale_negative_kats/0")
+        .streaming_direct_traversal_scale_negative_kats
+        .first()
         .context("history-key fixture omits 65,537-epoch prewrite rejection")?;
     if over_limit["epoch_count"].as_u64() != Some(65_537)
         || over_limit["rejected_before_staging"].as_bool() != Some(true)
@@ -247,10 +289,8 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     Ok(())
 }
 
-fn verify_rrk_production_projection_and_join(fixture: &Value) -> Result<()> {
-    let kat = fixture
-        .get("rrk_registration_rotation_kat")
-        .context("history-key fixture omits rrk_registration_rotation_kat")?;
+fn verify_rrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let kat = &fixture.rrk_registration_rotation_kat;
     let register_event: Event = serde_json::from_value(kat["events"]["register"].clone())?;
     let rotate_event: Event = serde_json::from_value(kat["events"]["rotate"].clone())?;
     let register_write = arkret_schema::project_registered_cell_writes(
@@ -334,10 +374,8 @@ fn verify_rrk_production_projection_and_join(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_rrk_durable_before_gc(fixture: &Value) -> Result<()> {
-    let kat = fixture
-        .get("organization_recovery_archive_durable_before_gc_kat")
-        .context("history-key fixture omits RRK durable-before-GC KAT")?;
+fn verify_rrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let kat = &fixture.organization_recovery_archive_durable_before_gc_kat;
     let replica: OrganizationRecoveryArchiveReplica =
         serde_json::from_value(kat["replica"].clone())?;
     let receipt: OrganizationRecoveryArchiveReplicaOutcome =
@@ -432,10 +470,8 @@ fn verify_rrk_durable_before_gc(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_response_stream_fixture(fixture: &Value) -> Result<()> {
-    let kat = fixture
-        .get("response_stream_cases")
-        .context("history fixture omits response_stream_cases")?;
+fn verify_response_stream_fixture(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let kat = &fixture.response_stream_cases;
     let send: HistoryKeyResponseSendRequest = serde_json::from_value(
         kat.pointer("/wire_instances/manifest_send")
             .cloned()
@@ -491,10 +527,8 @@ fn verify_response_stream_fixture(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_client_convergence_kat(fixture: &Value) -> Result<()> {
-    let kat = fixture
-        .get("client_convergence_kat")
-        .context("history fixture omits client_convergence_kat")?;
+fn verify_client_convergence_kat(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let kat = &fixture.client_convergence_kat;
     let requester = &kat["requester"];
     if requester["trigger"] != "exporter_all_history_missing_epoch"
         || requester["crash_before_create_response"]["durable_pending_intent"] != true
@@ -755,7 +789,7 @@ fn verify_send_rejection_disposition(source: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_history_static_gates(fixture: &Value) -> Result<()> {
+fn verify_history_static_gates(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
     let operation_registry = load_artifact_json("registry/operation-registry.json")?;
     let operations = operation_registry["operations"]
         .as_array()
@@ -799,13 +833,10 @@ fn verify_history_static_gates(fixture: &Value) -> Result<()> {
                 == Some("ak.vector.history_key.frontier_traversal_split.v1")
         });
     if !registered
-        || !fixture["covers_vectors"]
-            .as_array()
-            .context("history-key fixture omits covers_vectors[]")?
+        || !fixture
+            .covers_vectors
             .iter()
-            .any(|vector| {
-                vector.as_str() == Some("ak.vector.history_key.frontier_traversal_split.v1")
-            })
+            .any(|vector| vector == "ak.vector.history_key.frontier_traversal_split.v1")
     {
         bail!("history frontier/direct-traversal split vector is not closed in registry+fixture");
     }
@@ -816,10 +847,8 @@ fn sha256_hash(bytes: &[u8]) -> arkret_wire::Result<Hash> {
     Ok(Hash::new(arkret_canonical::sha256_digest(bytes))?)
 }
 
-fn verify_history_digest_and_sender_kats(fixture: &Value) -> Result<()> {
-    let sender_kat = fixture
-        .pointer("/sender_crypto_kats")
-        .context("history-key fixture omits sender_crypto_kats")?;
+fn verify_history_digest_and_sender_kats(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let sender_kat = &fixture.sender_crypto_kats;
     let authoritative_name = sender_kat["authoritative_fixture"]
         .as_str()
         .context("history sender KAT omits authoritative_fixture")?;
@@ -850,9 +879,7 @@ fn verify_history_digest_and_sender_kats(fixture: &Value) -> Result<()> {
         }
     }
 
-    let observation_kat = fixture
-        .pointer("/history_source_agent_observation_digest_kat")
-        .context("history-key fixture omits source Agent observation digest KAT")?;
+    let observation_kat = &fixture.history_source_agent_observation_digest_kat;
     let input: HistorySourceAgentObservationInput =
         serde_json::from_value(observation_kat["preimage"].clone())?;
     input.validate()?;
@@ -884,10 +911,8 @@ fn verify_history_digest_and_sender_kats(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_governance_dependency_kats(fixture: &Value) -> Result<()> {
-    let signer_kat = fixture
-        .pointer("/authenticated_signer_resolution_evidence_kat")
-        .context("history-key fixture omits authenticated signer evidence KAT")?;
+fn verify_governance_dependency_kats(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let signer_kat = &fixture.authenticated_signer_resolution_evidence_kat;
     let signer_evidence: AuthenticatedSignerResolutionEvidence =
         serde_json::from_value(signer_kat["evidence"].clone())?;
     let signer_digest = signer_evidence.canonical_sha256_digest()?;
@@ -913,9 +938,7 @@ fn verify_governance_dependency_kats(fixture: &Value) -> Result<()> {
         );
     }
 
-    let dependency_kat = fixture
-        .pointer("/governance_dependency_resolve_kat")
-        .context("history-key fixture omits governance dependency resolve KAT")?;
+    let dependency_kat = &fixture.governance_dependency_resolve_kat;
     let receipt: AvailabilityReceipt =
         serde_json::from_value(dependency_kat["availability_receipt"].clone())?;
     receipt.validate_structural()?;
@@ -1028,10 +1051,8 @@ fn candidate_binding_key(
     })
 }
 
-fn verify_history_candidate_store_kat(fixture: &Value) -> Result<()> {
-    let kat = fixture
-        .pointer("/candidate_store_kat")
-        .context("history-key fixture omits candidate_store_kat")?;
+fn verify_history_candidate_store_kat(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let kat = &fixture.candidate_store_kat;
     let declared_limits = [
         (
             "received_candidates_per_scope_group_epoch",
@@ -1164,11 +1185,8 @@ fn verify_history_candidate_store_kat(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_scope_and_endpoint_kats(fixture: &Value) -> Result<()> {
-    let cases = fixture
-        .pointer("/scope_and_endpoint_kats")
-        .and_then(Value::as_array)
-        .context("history-key fixture omits scope_and_endpoint_kats")?;
+fn verify_scope_and_endpoint_kats(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let cases = &fixture.scope_and_endpoint_kats;
     for case in cases {
         for branch in ["realm", "circle"] {
             let Some(scope_case) = case.get(branch) else {
@@ -1266,12 +1284,10 @@ fn verify_scope_and_endpoint_kats(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn verify_rrk_method_evaluator(fixture: &Value) -> Result<()> {
+fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
     use arkret_identity::history_recovery::resolve_realm_history_recovery_key;
 
-    let kat = fixture
-        .get("rrk_registration_rotation_kat")
-        .context("history fixture omits rrk_registration_rotation_kat")?;
+    let kat = &fixture.rrk_registration_rotation_kat;
     let document = kat
         .pointer("/did_documents/register")
         .cloned()

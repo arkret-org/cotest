@@ -11,6 +11,29 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SecurityTransactionResilienceFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: FixtureRunner,
+    covers_vectors: Vec<String>,
+    /// Free-form instances validated by their referenced JSON Schemas.
+    schema_validation_cases: Vec<Value>,
+    fault_matrix: Value,
+    assertions: Vec<String>,
+    rotation_cases: Vec<Value>,
+    equivalence_output: Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FixtureRunner {
+    kind: String,
+    entrypoint: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReferenceProjection {
@@ -146,11 +169,8 @@ fn is_digest(value: Option<&Value>) -> bool {
     })
 }
 
-fn validate_schema_cases(fixture: &Value) -> Result<(), String> {
-    let cases = fixture
-        .get("schema_validation_cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "schema_validation_cases must be an array".to_owned())?;
+fn validate_schema_cases(fixture: &SecurityTransactionResilienceFixture) -> Result<(), String> {
+    let cases = &fixture.schema_validation_cases;
     if cases.len() != 2 {
         return Err("fixture must contain two schema cases".to_owned());
     }
@@ -213,20 +233,24 @@ fn validate_schema_cases(fixture: &Value) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_fixture(fixture: &Value) -> Result<(), String> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("security_transaction_resilience")
+fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<(), String> {
+    if fixture.suite != "security_transaction_resilience"
+        || fixture.runner.kind != "named_suite"
+        || fixture.runner.entrypoint != "ak.suite.security_transaction.resilience.v1"
         || fixture
-            .pointer("/runner/entrypoint")
-            .and_then(Value::as_str)
-            != Some("ak.suite.security_transaction.resilience.v1")
-        || fixture
-            .pointer("/equivalence_output/minimum_independent_runners")
+            .equivalence_output
+            .get("minimum_independent_runners")
             .and_then(Value::as_u64)
             != Some(2)
+        || fixture.profile.trim().is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.covers_vectors.is_empty()
+        || fixture.fault_matrix.is_null()
+        || fixture.assertions.is_empty()
     {
         return Err("resilience fixture metadata changed".to_owned());
     }
-    let fields = strings_at(fixture, "/equivalence_output/canonical_fields")?;
+    let fields = strings_at(&fixture.equivalence_output, "/canonical_fields")?;
     if fields
         != [
             "transaction_id",
@@ -238,8 +262,10 @@ fn validate_fixture(fixture: &Value) -> Result<(), String> {
     {
         return Err("resilience equivalence fields changed".to_owned());
     }
-    let assertions = strings_at(fixture, "/assertions")?
-        .into_iter()
+    let assertions = fixture
+        .assertions
+        .iter()
+        .map(String::as_str)
         .collect::<BTreeSet<_>>();
     if assertions.len() != 9
         || !assertions.contains("device_attestation_readiness_is_derived_from_canonical_next_step")
@@ -249,11 +275,10 @@ fn validate_fixture(fixture: &Value) -> Result<(), String> {
     validate_schema_cases(fixture)
 }
 
-fn run_rotation_cases(fixture: &Value) -> Result<Vec<ReferenceProjection>, String> {
-    let cases = fixture
-        .get("rotation_cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "rotation_cases must be an array".to_owned())?;
+fn run_rotation_cases(
+    fixture: &SecurityTransactionResilienceFixture,
+) -> Result<Vec<ReferenceProjection>, String> {
+    let cases = &fixture.rotation_cases;
     if cases.len() != 2
         || cases[0].get("name").and_then(Value::as_str)
             != Some("partial_secret_storage_erase_then_restart")
@@ -290,11 +315,13 @@ fn run_rotation_cases(fixture: &Value) -> Result<Vec<ReferenceProjection>, Strin
     ])
 }
 
-pub fn run(fixture: &Value) -> Result<Vec<ReferenceProjection>, String> {
+pub fn run(
+    fixture: &SecurityTransactionResilienceFixture,
+) -> Result<Vec<ReferenceProjection>, String> {
     validate_fixture(fixture)?;
-    let kinds = strings_at(fixture, "/fault_matrix/transaction_kinds")?;
-    let positions = strings_at(fixture, "/fault_matrix/fault_positions")?;
-    let faults = strings_at(fixture, "/fault_matrix/faults")?;
+    let kinds = strings_at(&fixture.fault_matrix, "/transaction_kinds")?;
+    let positions = strings_at(&fixture.fault_matrix, "/fault_positions")?;
+    let faults = strings_at(&fixture.fault_matrix, "/faults")?;
     if kinds != ["security_rotation"] || positions.len() != 3 || faults.len() != 7 {
         return Err("resilience fault matrix cardinality changed".to_owned());
     }

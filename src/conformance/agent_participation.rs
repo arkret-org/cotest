@@ -16,6 +16,7 @@ use arkret_models_identity::claim_presentation::AgentSelectorClaim;
 use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
 use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId};
 use chrono::{TimeZone, Utc};
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -45,32 +46,40 @@ const AGENT_PARTICIPATION_FIXTURE_FILE: &str = "agent-participation-fixture.json
 const AGENT_PARTICIPATION_ENTRY_SCHEMA: &str =
     "schemas/agent-operations.schema.json#/$defs/agent_participation_entry";
 
-fn participation_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(AGENT_PARTICIPATION_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, ProfileId::AGENT_PARTICIPATION_POLICY_V1)?;
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentParticipationFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
+
+fn participation_fixture() -> Result<AgentParticipationFixture> {
+    let fixture: AgentParticipationFixture =
+        serde_json::from_value(super::load_fixture_value(AGENT_PARTICIPATION_FIXTURE_FILE)?)?;
     validate_agent_participation_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_agent_participation_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("agent_participation") {
+fn validate_agent_participation_fixture_metadata(
+    fixture: &AgentParticipationFixture,
+) -> Result<()> {
+    if fixture.profile != ProfileId::AGENT_PARTICIPATION_POLICY_V1
+        || fixture.suite != "agent_participation"
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+    {
         bail!("agent participation fixture suite drifted");
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("agent participation fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("agent participation fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_AGENT_PARTICIPATION_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("agent participation fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -87,15 +96,11 @@ fn validate_agent_participation_fixture_metadata(fixture: &Value) -> Result<()> 
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a AgentParticipationFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("agent participation fixture missing case {vector_id}"))
 }
 
@@ -562,5 +567,21 @@ mod tests {
     #[test]
     fn agent_participation_vectors_run_clean() {
         run_agent_participation_fixture_suite().unwrap();
+    }
+
+    #[test]
+    fn renamed_top_level_fixture_key_is_reported() {
+        let mut value = super::super::load_fixture_value(AGENT_PARTICIPATION_FIXTURE_FILE).unwrap();
+        let cases = value.as_object_mut().unwrap().remove("cases").unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .insert("renamed_cases".to_owned(), cases);
+
+        let error = serde_json::from_value::<AgentParticipationFixture>(value).unwrap_err();
+        assert!(
+            error.to_string().contains("renamed_cases"),
+            "strict fixture root did not name the changed key: {error}"
+        );
     }
 }

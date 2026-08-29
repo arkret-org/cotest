@@ -26,6 +26,7 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_wire::{Audience, DidUrl, Event, EventRef, NonEmptyString, ProducerEventProof};
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::load_fixture_value;
@@ -33,13 +34,46 @@ use super::load_fixture_value;
 const KDF_FIXTURE: &str = "identity-recovery-kdf-fixture.json";
 const ROOT_ANCHOR_FIXTURE: &str = "identity-root-anchor-fixture.json";
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IdentityRecoveryKdfFixture {
+    suite: String,
+    version: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    contract: Value,
+    cases: Vec<Value>,
+    negative_mutations: Vec<Value>,
+    expected_negative_decision: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct IdentityRootAnchorFixture {
+    suite: String,
+    version: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
+
 pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
-    let fixture = load_fixture_value(KDF_FIXTURE)?;
-    require_vector(&fixture, "ak.vector.identity.recovery_kdf.v1")?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("{KDF_FIXTURE} missing cases[]"))?;
+    let fixture: IdentityRecoveryKdfFixture =
+        serde_json::from_value(load_fixture_value(KDF_FIXTURE)?)?;
+    require_vector(
+        &fixture.covers_vectors,
+        "ak.vector.identity.recovery_kdf.v1",
+    )?;
+    if fixture.suite.trim().is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+        || fixture.contract.is_null()
+        || fixture.negative_mutations.is_empty()
+        || fixture.expected_negative_decision.trim().is_empty()
+    {
+        bail!("{KDF_FIXTURE} metadata drifted");
+    }
+    let cases = &fixture.cases;
     if cases.len() != 2 {
         bail!("{KDF_FIXTURE} must contain the BIP-39 and raw KAT cases");
     }
@@ -184,14 +218,21 @@ pub fn run_identity_recovery_kdf_fixture_suite() -> Result<()> {
 /// This is deliberately named a checkpoint suite: presence checks for the
 /// 62-case formal matrix are not reported as executed reducer coverage.
 pub fn run_identity_root_anchor_checkpoint_suite() -> Result<()> {
-    let fixture = load_fixture_value(ROOT_ANCHOR_FIXTURE)?;
+    let fixture: IdentityRootAnchorFixture =
+        serde_json::from_value(load_fixture_value(ROOT_ANCHOR_FIXTURE)?)?;
+    if fixture.suite.trim().is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+    {
+        bail!("{ROOT_ANCHOR_FIXTURE} metadata drifted");
+    }
     for vector in [
         "ak.vector.identity.root_anchor_exclusivity.v1",
         "ak.vector.identity.device_reanchor.v1",
         "ak.vector.identity.recovery_secret_handoff.v1",
         "ak.vector.identity.recovery_key_role_separation.v1",
     ] {
-        require_vector(&fixture, vector)?;
+        require_vector(&fixture.covers_vectors, vector)?;
     }
     require_declared_case_checkpoints(&fixture)?;
     validate_pcr_genesis_helpers()?;
@@ -390,11 +431,8 @@ fn validate_reanchor_helpers() -> Result<()> {
     Ok(())
 }
 
-fn validate_recovery_handoff_checkpoints(fixture: &Value) -> Result<()> {
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("{ROOT_ANCHOR_FIXTURE} missing cases[]"))?;
+fn validate_recovery_handoff_checkpoints(fixture: &IdentityRootAnchorFixture) -> Result<()> {
+    let cases = &fixture.cases;
     let actual = cases
         .iter()
         .filter_map(|case| {
@@ -432,11 +470,8 @@ fn validate_recovery_handoff_checkpoints(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn require_declared_case_checkpoints(fixture: &Value) -> Result<()> {
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("{ROOT_ANCHOR_FIXTURE} missing cases[]"))?;
+fn require_declared_case_checkpoints(fixture: &IdentityRootAnchorFixture) -> Result<()> {
+    let cases = &fixture.cases;
     if cases.len() != 62 {
         bail!(
             "{ROOT_ANCHOR_FIXTURE} formal reducer matrix must declare 62 cases, found {}",
@@ -508,12 +543,8 @@ fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Re
     Ok(event)
 }
 
-fn require_vector(fixture: &Value, vector: &str) -> Result<()> {
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("fixture missing covers_vectors[]"))?;
-    if !covers.iter().any(|value| value.as_str() == Some(vector)) {
+fn require_vector(covers: &[String], vector: &str) -> Result<()> {
+    if !covers.iter().any(|value| value == vector) {
         bail!("fixture does not cover {vector}");
     }
     Ok(())

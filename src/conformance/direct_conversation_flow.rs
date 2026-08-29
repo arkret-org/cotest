@@ -2,6 +2,7 @@
 //! durability and MLS finality fences.
 
 use anyhow::{Result, anyhow, bail};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::load_artifact_json;
@@ -9,6 +10,23 @@ use crate::transcripts::record_vector_event;
 
 const FOUNDER_LOSS_VECTOR: &str = "ak.vector.direct_conversation.founder_loss_terminality.v1";
 const CONTACT_MIRROR_VECTOR: &str = "ak.vector.contact.pending_incoming_request_receipt.v1";
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DirectConversationFixture {
+    suite: String,
+    fixture_kind: String,
+    profile: String,
+    covers_vectors: Vec<String>,
+    version: String,
+    spec_anchor: String,
+    source_refs: Vec<Value>,
+    description: String,
+    runner: Value,
+    /// Free-form protocol instances validated by their referenced JSON Schemas.
+    schema_validation_cases: Vec<Value>,
+    semantic_cases: Vec<Value>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DurableFoundingStage {
@@ -91,17 +109,13 @@ fn advance_admission(stage: AdmissionStage, observation: &str) -> Result<Admissi
     }
 }
 
-fn validate_founder_loss_terminality(fixture: &Value) -> Result<()> {
-    let covered = fixture["covers_vectors"]
-        .as_array()
-        .ok_or_else(|| anyhow!("Direct Conversation fixture missing covers_vectors[]"))?;
+fn validate_founder_loss_terminality(fixture: &DirectConversationFixture) -> Result<()> {
+    let covered = &fixture.covers_vectors;
     if !covered.iter().any(|value| value == FOUNDER_LOSS_VECTOR) {
         bail!("Direct Conversation fixture does not cover {FOUNDER_LOSS_VECTOR}");
     }
 
-    let cases = fixture["semantic_cases"]
-        .as_array()
-        .ok_or_else(|| anyhow!("Direct Conversation fixture missing semantic_cases[]"))?;
+    let cases = &fixture.semantic_cases;
     let selected = cases
         .iter()
         .filter(|case| case["vector_id"] == FOUNDER_LOSS_VECTOR)
@@ -151,10 +165,8 @@ fn validate_founder_loss_terminality(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn validate_contact_verified_mirror_contract(fixture: &Value) -> Result<()> {
-    let covered = fixture["covers_vectors"]
-        .as_array()
-        .ok_or_else(|| anyhow!("Direct Conversation fixture missing covers_vectors[]"))?;
+fn validate_contact_verified_mirror_contract(fixture: &DirectConversationFixture) -> Result<()> {
+    let covered = &fixture.covers_vectors;
     if !covered.iter().any(|value| value == CONTACT_MIRROR_VECTOR) {
         bail!("Direct Conversation fixture does not cover {CONTACT_MIRROR_VECTOR}");
     }
@@ -204,17 +216,15 @@ fn validate_contact_verified_mirror_contract(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn semantic_case<'a>(fixture: &'a Value, name: &str) -> Result<&'a Value> {
+fn semantic_case<'a>(fixture: &'a DirectConversationFixture, name: &str) -> Result<&'a Value> {
     fixture
-        .get("semantic_cases")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+        .semantic_cases
+        .iter()
         .find(|case| case.get("name").and_then(Value::as_str) == Some(name))
         .ok_or_else(|| anyhow!("Direct Conversation fixture omits semantic case `{name}`"))
 }
 
-fn validate_event_id_digest_mirror_removal(fixture: &Value) -> Result<()> {
+fn validate_event_id_digest_mirror_removal(fixture: &DirectConversationFixture) -> Result<()> {
     const REMOVED_PAIRS: [(&str, &str); 6] = [
         ("head_event_ref", "head_digest"),
         ("request_event_ref", "request_digest"),
@@ -246,7 +256,7 @@ fn validate_event_id_digest_mirror_removal(fixture: &Value) -> Result<()> {
         Ok(())
     }
 
-    reject_mirrors(fixture, "$")?;
+    reject_mirrors(&serde_json::to_value(fixture)?, "$")?;
     let event_id =
         arkret_wire::EventId::new("ak:event:AWAIb405aEEenVBHYRG-ZfDs-f9_j3E67tWGI36uYxFJ")?;
     if event_id.event_digest().as_str()
@@ -257,7 +267,7 @@ fn validate_event_id_digest_mirror_removal(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn validate_founding_and_crash_replay(fixture: &Value) -> Result<()> {
+fn validate_founding_and_crash_replay(fixture: &DirectConversationFixture) -> Result<()> {
     for name in [
         "founding_coordinates_are_derived_from_unit_bytes",
         "founding_unit_strand_uses_bootstrap_no_basis_shape",
@@ -408,7 +418,21 @@ fn validate_commit_welcome_fences() -> Result<()> {
 }
 
 pub fn run_direct_conversation_flow_suite() -> Result<()> {
-    let fixture = load_artifact_json("fixtures/direct-conversation-fixture.json")?;
+    let fixture: DirectConversationFixture = serde_json::from_value(load_artifact_json(
+        "fixtures/direct-conversation-fixture.json",
+    )?)?;
+    if fixture.suite != "direct_conversation_realm_conformance"
+        || fixture.fixture_kind.trim().is_empty()
+        || fixture.profile.trim().is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.spec_anchor.trim().is_empty()
+        || fixture.source_refs.is_empty()
+        || fixture.description.trim().is_empty()
+        || fixture.runner.is_null()
+        || fixture.schema_validation_cases.is_empty()
+    {
+        bail!("Direct Conversation fixture metadata drifted");
+    }
     validate_event_id_digest_mirror_removal(&fixture)?;
     validate_founding_and_crash_replay(&fixture)?;
     validate_bilateral_continuity_checkpoint_fixture()?;

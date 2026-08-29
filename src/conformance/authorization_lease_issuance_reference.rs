@@ -10,6 +10,25 @@ use serde_json::Value;
 
 const ANCHOR_ORDER: [&str; 2] = ["ak.realm.create", "ak.capability.grant"];
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AuthorizationLeaseIssuanceFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: FixtureRunner,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+    minimum_independent_runners: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FixtureRunner {
+    kind: String,
+    entrypoint: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReferenceProjection {
@@ -262,23 +281,20 @@ fn run_case(case: &Value) -> Result<ReferenceProjection, String> {
     }
 }
 
-pub fn run(fixture: &Value) -> Result<Vec<ReferenceProjection>, String> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("authorization_lease_issuance")
-        || fixture
-            .pointer("/runner/entrypoint")
-            .and_then(Value::as_str)
-            != Some("ak.suite.authz.authorization_lease_issuance.v1")
-        || fixture
-            .get("minimum_independent_runners")
-            .and_then(Value::as_u64)
-            != Some(2)
+pub fn run(
+    fixture: &AuthorizationLeaseIssuanceFixture,
+) -> Result<Vec<ReferenceProjection>, String> {
+    if fixture.suite != "authorization_lease_issuance"
+        || fixture.runner.kind != "named_suite"
+        || fixture.runner.entrypoint != "ak.suite.authz.authorization_lease_issuance.v1"
+        || fixture.minimum_independent_runners != 2
+        || fixture.profile.trim().is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.covers_vectors.is_empty()
     {
         return Err("authorization lease fixture metadata changed".to_owned());
     }
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| "cases must be an array".to_owned())?;
+    let cases = &fixture.cases;
     let mut seen = BTreeSet::new();
     let mut output = Vec::with_capacity(cases.len());
     for case in cases {

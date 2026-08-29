@@ -33,13 +33,25 @@ use arkret_wire::{
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{fixture_runner_entrypoint, load_fixture_value, validate_profile};
+use super::load_fixture_value;
 
 pub const AGENT_SIGNER_EVIDENCE_FIXTURE: &str = "agent-signer-evidence-fixture.json";
 pub const AGENT_SIGNER_EVIDENCE_SUITE: &str = "ak.suite.agent.signer_evidence.v1";
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentSignerEvidenceFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    binding_vector: Value,
+    cases: Vec<Value>,
+}
 
 pub const ALL_AGENT_SIGNER_EVIDENCE_CASES: &[&str] = &[
     "query_success_returns_cas_frozen_authenticated_root",
@@ -149,17 +161,20 @@ struct ExecutableEvidence {
 }
 
 pub fn run_agent_signer_evidence_vector_suite() -> Result<()> {
-    let fixture = load_fixture_value(AGENT_SIGNER_EVIDENCE_FIXTURE)?;
-    validate_profile(&fixture, "ak.profile.agent_signer_evidence.v1")?;
-    if fixture_runner_entrypoint(&fixture)? != AGENT_SIGNER_EVIDENCE_SUITE {
+    let fixture: AgentSignerEvidenceFixture =
+        serde_json::from_value(load_fixture_value(AGENT_SIGNER_EVIDENCE_FIXTURE)?)?;
+    if fixture.profile != "ak.profile.agent_signer_evidence.v1"
+        || fixture.suite.trim().is_empty()
+        || fixture.version.trim().is_empty()
+        || fixture.covers_vectors.is_empty()
+        || fixture.runner.get("entrypoint").and_then(Value::as_str)
+            != Some(AGENT_SIGNER_EVIDENCE_SUITE)
+    {
         bail!("Agent signer-evidence fixture runner entrypoint drifted");
     }
     validate_binding_requirements(&fixture)?;
 
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .context("Agent signer-evidence fixture cases missing")?;
+    let cases = &fixture.cases;
     let names = cases
         .iter()
         .map(|case| case.get("name").and_then(Value::as_str))
@@ -1399,12 +1414,10 @@ fn contains_forbidden_local_identity(value: &Value) -> bool {
     }
 }
 
-fn validate_binding_requirements(fixture: &Value) -> Result<()> {
-    let vector = fixture
-        .get("binding_vector")
-        .context("binding_vector missing")?;
-    let requirements = fixture
-        .pointer("/binding_vector/requirements")
+fn validate_binding_requirements(fixture: &AgentSignerEvidenceFixture) -> Result<()> {
+    let vector = &fixture.binding_vector;
+    let requirements = vector
+        .pointer("/requirements")
         .and_then(Value::as_array)
         .context("binding_vector.requirements missing")?;
     let expected = [

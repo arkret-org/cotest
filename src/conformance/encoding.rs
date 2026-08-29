@@ -1,19 +1,38 @@
 use anyhow::{Result, anyhow, bail};
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{
     EncodingFixture, RANK_MAX_LENGTH, canonical_json, decode_cursor_shape, encode_cursor_shape,
     load_fixture_value, looks_like_sha256_digest, parse_fixture_value, rank_between,
-    rebalance_assignments, sha256_prefixed, validate_profile, validate_rank,
-    validate_rebalance_assignment_count, value_field_str,
+    rebalance_assignments, sha256_prefixed, validate_rank, validate_rebalance_assignment_count,
+    value_field_str,
 };
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EncodingArtifactFixture {
+    runner: Value,
+    profile: String,
+    version: String,
+    description: String,
+    generator_semantics: String,
+    vectors: Vec<Value>,
+    rank_order: Vec<Value>,
+    expected_order: Vec<String>,
+}
 
 pub fn run_encoding_fixture_suite() -> Result<()> {
     let value = load_fixture_value("encoding-fixture.json")?;
-    if value.get("suite").is_none() {
-        return run_encoding_artifact_suite(&value);
+    if value.get("suite").is_some() {
+        let fixture: EncodingFixture = parse_fixture_value("encoding-fixture.json", value)?;
+        return run_legacy_encoding_fixture(fixture);
     }
-    let fixture: EncodingFixture = parse_fixture_value("encoding-fixture.json", value)?;
+    let fixture: EncodingArtifactFixture = serde_json::from_value(value)?;
+    run_encoding_artifact_suite(&fixture)
+}
+
+fn run_legacy_encoding_fixture(fixture: EncodingFixture) -> Result<()> {
     if fixture.suite != "encoding" {
         bail!("unexpected fixture suite {}", fixture.suite);
     }
@@ -193,17 +212,16 @@ pub fn run_encoding_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-fn run_encoding_artifact_suite(value: &Value) -> Result<()> {
-    validate_profile(value, "ak.vector_group.encoding.v1")?;
-    let rank_order = value
-        .get("rank_order")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("encoding artifact missing rank_order"))?;
-    let expected = value
-        .get("expected_order")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("encoding artifact missing expected_order"))?;
-    let mut sorted = rank_order.clone();
+fn run_encoding_artifact_suite(fixture: &EncodingArtifactFixture) -> Result<()> {
+    if fixture.profile != "ak.vector_group.encoding.v1"
+        || fixture.version.trim().is_empty()
+        || fixture.description.trim().is_empty()
+        || fixture.generator_semantics.trim().is_empty()
+        || fixture.runner.is_null()
+    {
+        bail!("encoding artifact metadata drifted");
+    }
+    let mut sorted = fixture.rank_order.clone();
     sorted.sort_by(|left, right| {
         left.get("rank")
             .and_then(Value::as_str)
@@ -213,25 +231,19 @@ fn run_encoding_artifact_suite(value: &Value) -> Result<()> {
         .iter()
         .map(rank_order_entry_id)
         .collect::<Result<Vec<_>>>()?;
-    let expected = expected
-        .iter()
-        .map(|entry| entry.as_str().unwrap_or_default())
-        .collect::<Vec<_>>();
-    if actual != expected {
+    if actual != fixture.expected_order {
         bail!("encoding rank_order did not match expected_order");
     }
-    run_accountability_scope_set_subject_vector(value)?;
-    run_encrypted_envelope_digest_vector(value)?;
+    run_accountability_scope_set_subject_vector(fixture)?;
+    run_encrypted_envelope_digest_vector(fixture)?;
     Ok(())
 }
 
-fn run_encrypted_envelope_digest_vector(fixture: &Value) -> Result<()> {
+fn run_encrypted_envelope_digest_vector(fixture: &EncodingArtifactFixture) -> Result<()> {
     const VECTOR_ID: &str = "ak.vector.encoding.encrypted_envelope_digest.v1";
     let vector = fixture
-        .get("vectors")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+        .vectors
+        .iter()
         .find(|vector| vector.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID))
         .ok_or_else(|| anyhow!("encoding fixture missing {VECTOR_ID}"))?;
     let metadata = vector
@@ -259,18 +271,14 @@ fn run_encrypted_envelope_digest_vector(fixture: &Value) -> Result<()> {
     Ok(())
 }
 
-fn run_accountability_scope_set_subject_vector(fixture: &Value) -> Result<()> {
+fn run_accountability_scope_set_subject_vector(fixture: &EncodingArtifactFixture) -> Result<()> {
     use arkret_models_collaboration::governance::accountability::AccountabilityScope;
 
     const VECTOR_ID: &str = "ak.vector.identity.accountability_scope_set_subject.v1";
     let vector = fixture
-        .get("vectors")
-        .and_then(Value::as_array)
-        .and_then(|vectors| {
-            vectors
-                .iter()
-                .find(|vector| vector.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID))
-        })
+        .vectors
+        .iter()
+        .find(|vector| vector.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID))
         .ok_or_else(|| anyhow!("encoding fixture missing {VECTOR_ID}"))?;
     let issuer = value_field_str(vector, "issuer_id")?;
     let principal_server_id = value_field_str(vector, "principal_server_id")?;

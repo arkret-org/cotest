@@ -3,6 +3,7 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::helpers::assert_expected_subset;
@@ -31,6 +32,17 @@ pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
 ];
 
 const SERVICE_CLOSURE_HARDENING_FIXTURE_FILE: &str = "service-closure-hardening-fixture.json";
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ServiceClosureHardeningFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
 
 pub fn run_service_closure_hardening_fixture_suite() -> Result<()> {
     let fixture = service_closure_hardening_fixture()?;
@@ -97,35 +109,30 @@ pub fn run_push_wakeup_policy_vector() -> Result<()> {
     run_push_wakeup_policy_case(case(&fixture, VECTOR_ID_PUSH_WAKEUP_POLICY)?)
 }
 
-fn service_closure_hardening_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(SERVICE_CLOSURE_HARDENING_FIXTURE_FILE)?;
-    super::validate_profile(
-        &fixture,
-        crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE,
+fn service_closure_hardening_fixture() -> Result<ServiceClosureHardeningFixture> {
+    let fixture: ServiceClosureHardeningFixture = serde_json::from_value(
+        super::load_fixture_value(SERVICE_CLOSURE_HARDENING_FIXTURE_FILE)?,
     )?;
     validate_service_closure_hardening_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_service_closure_hardening_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("service_closure_hardening") {
+fn validate_service_closure_hardening_fixture_metadata(
+    fixture: &ServiceClosureHardeningFixture,
+) -> Result<()> {
+    if fixture.profile != crate::conformance::security_closure::SECURITY_CLOSURE_VECTORS_PROFILE
+        || fixture.suite != "service_closure_hardening"
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+    {
         bail!("service closure hardening fixture suite drifted");
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("service closure hardening fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("service closure hardening fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("service closure hardening fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -142,15 +149,11 @@ fn validate_service_closure_hardening_fixture_metadata(fixture: &Value) -> Resul
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a ServiceClosureHardeningFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("service closure hardening fixture missing case {vector_id}"))
 }
 

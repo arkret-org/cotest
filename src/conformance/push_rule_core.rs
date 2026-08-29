@@ -12,8 +12,12 @@ const PUSH_RULE_CORE_VECTOR_IDS: &[&str] = &[
 ];
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Fixture {
+    runner: Value,
     suite: String,
+    profile: String,
+    description: String,
     #[serde(default)]
     covers_vectors: Vec<String>,
     cases: Vec<VectorCase>,
@@ -83,10 +87,12 @@ fn default_mentions_actor_known() -> bool {
 
 pub fn run_push_rule_core_fixture_suite() -> Result<()> {
     let fixture_value = super::load_fixture_value(PUSH_RULE_CORE_FIXTURE_FILE)?;
-    super::validate_profile(&fixture_value, ProfileId::PUSH_GATEWAY_BLIND_WAKEUP_V1)?;
-    validate_push_rule_core_fixture_metadata(&fixture_value)?;
     let fixture: Fixture = super::parse_fixture_value(PUSH_RULE_CORE_FIXTURE_FILE, fixture_value)?;
-    if fixture.suite != "push_rule_core_consistency" {
+    if fixture.suite != "push_rule_core_consistency"
+        || fixture.profile != ProfileId::PUSH_GATEWAY_BLIND_WAKEUP_V1
+        || fixture.description.trim().is_empty()
+        || fixture.runner.is_null()
+    {
         bail!(
             "unexpected push rule fixture suite {}, expected push_rule_core_consistency",
             fixture.suite
@@ -136,35 +142,6 @@ pub fn run_push_rule_client_only_vector() -> Result<()> {
     }));
     if server.is_ok() {
         bail!("v1 push rule accepted forbidden evaluation_locus=server");
-    }
-    Ok(())
-}
-
-fn validate_push_rule_core_fixture_metadata(fixture: &Value) -> Result<()> {
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("push rule fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("push rule fixture missing cases[]"))?;
-    for vector_id in PUSH_RULE_CORE_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
-            bail!("push rule fixture missing covers_vectors entry {vector_id}");
-        }
-        if !cases.iter().any(|case| {
-            case.get("vector_id").and_then(Value::as_str) == Some(*vector_id)
-                && case
-                    .get("assertions")
-                    .and_then(Value::as_array)
-                    .is_some_and(|assertions| !assertions.is_empty())
-        }) {
-            bail!("push rule fixture missing asserted case {vector_id}");
-        }
     }
     Ok(())
 }

@@ -459,6 +459,7 @@ pub use wire::{
 // ── Shared fixture types ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct EncodingFixture {
     pub(crate) suite: String,
     pub(crate) cases: EncodingCases,

@@ -3,6 +3,7 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_models_crypto::{BackupKind, KeyBackupKeybag, KeyBackupPlaintext, KeyBackupUnlockProof};
 use arkret_wire::ProfileId;
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;
@@ -24,32 +25,41 @@ const KEY_BACKUP_UNLOCK_REQUEST_SCHEMA: &str =
     "schemas/keys-operations.schema.json#/$defs/keys_backups_unlock_request_body";
 const KEY_BACKUP_PLAINTEXT_SCHEMA_FILE: &str = "schemas/key-backup-plaintext.schema.json";
 
-fn key_backup_hardening_fixture() -> Result<Value> {
-    let fixture = super::load_fixture_value(KEY_BACKUP_HARDENING_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, ProfileId::E2EE_CLIENT_V1)?;
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeyBackupHardeningFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: Value,
+    covers_vectors: Vec<String>,
+    cases: Vec<Value>,
+}
+
+fn key_backup_hardening_fixture() -> Result<KeyBackupHardeningFixture> {
+    let fixture: KeyBackupHardeningFixture = serde_json::from_value(super::load_fixture_value(
+        KEY_BACKUP_HARDENING_FIXTURE_FILE,
+    )?)?;
     validate_key_backup_hardening_fixture_metadata(&fixture)?;
     Ok(fixture)
 }
 
-fn validate_key_backup_hardening_fixture_metadata(fixture: &Value) -> Result<()> {
-    if fixture.get("suite").and_then(Value::as_str) != Some("key_backup_hardening") {
+fn validate_key_backup_hardening_fixture_metadata(
+    fixture: &KeyBackupHardeningFixture,
+) -> Result<()> {
+    if fixture.profile != ProfileId::E2EE_CLIENT_V1
+        || fixture.suite != "key_backup_hardening"
+        || fixture.version.trim().is_empty()
+        || fixture.runner.is_null()
+    {
         bail!("key backup hardening fixture suite drifted");
     }
 
-    let covers = fixture
-        .get("covers_vectors")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("key backup hardening fixture missing covers_vectors[]"))?;
-    let cases = fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("key backup hardening fixture missing cases[]"))?;
+    let covers = &fixture.covers_vectors;
+    let cases = &fixture.cases;
 
     for vector_id in ALL_KEY_BACKUP_HARDENING_VECTOR_IDS {
-        if !covers
-            .iter()
-            .any(|entry| entry.as_str() == Some(*vector_id))
-        {
+        if !covers.iter().any(|entry| entry == vector_id) {
             bail!("key backup hardening fixture missing covers_vectors entry {vector_id}");
         }
         if !cases.iter().any(|case| {
@@ -66,15 +76,11 @@ fn validate_key_backup_hardening_fixture_metadata(fixture: &Value) -> Result<()>
     Ok(())
 }
 
-fn case<'a>(fixture: &'a Value, vector_id: &str) -> Result<&'a Value> {
+fn case<'a>(fixture: &'a KeyBackupHardeningFixture, vector_id: &str) -> Result<&'a Value> {
     fixture
-        .get("cases")
-        .and_then(Value::as_array)
-        .and_then(|cases| {
-            cases
-                .iter()
-                .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
-        })
+        .cases
+        .iter()
+        .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("key backup hardening fixture missing case {vector_id}"))
 }
 
