@@ -1953,8 +1953,7 @@ mod tests {
 
     #[test]
     fn regex_alternative_group_expands_to_literal_paths() {
-        let line =
-            r#"url.pathname.match(/^\/_arkret\/self\/agents\/([^/]+)\/(pause|resume)$/)"#;
+        let line = r#"url.pathname.match(/^\/_arkret\/self\/agents\/([^/]+)\/(pause|resume)$/)"#;
         let paths = extract_regex_path_candidates(line);
         assert_eq!(
             paths,

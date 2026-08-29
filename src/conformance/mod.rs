@@ -205,8 +205,7 @@ pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
 pub use direct_conversation_flow::run_direct_conversation_flow_suite;
 pub use downstream_impact::{
     run_downstream_impact_contract_suite, run_error_status_context_vector,
-    run_moderation_dismiss_and_concurrent_fold_vector,
-    run_private_view_account_data_vector,
+    run_moderation_dismiss_and_concurrent_fold_vector, run_private_view_account_data_vector,
 };
 pub use encoding::{
     run_encoding_fixture_suite, run_projection_position_discriminator_fixture_suite,

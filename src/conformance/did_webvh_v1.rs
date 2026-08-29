@@ -287,8 +287,9 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
         }
         "accept_relocation_when_predecessor_portable_true" => {
             let inception = portable_principal_inception()?;
-            relocate(&inception, &inception.log_entry)?
-                .map_err(|error| anyhow!("{name} was rejected by the canonical SDK path: {error}"))?;
+            relocate(&inception, &inception.log_entry)?.map_err(|error| {
+                anyhow!("{name} was rejected by the canonical SDK path: {error}")
+            })?;
             Ok(accept(None))
         }
         _ => bail!("unrecognized did:webvh adapter fixture case {name}"),

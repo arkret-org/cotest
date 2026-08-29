@@ -5,11 +5,11 @@ use std::collections::BTreeSet;
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_wire::{
     AcceptedDevicePossessionProof, AcceptedDevicePossessionProofContext,
-    AcceptedDevicePossessionVerification, AcceptedDeviceRefreshPossessionPurpose, Base64UrlString,
-    DEVICE_REVOCATION_DENIED_ACTIONS, DeviceId, DeviceRevocationGateActionClass,
-    DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody,
-    DeviceRevocationGateDecision, DeviceRevocationGateDecisionReceipt, DidCoreId, DidUrl, EventId,
-    Hash, PrincipalAuthorityKey, SessionGrantId, UnsignedAcceptedDeviceRefreshPossessionProof,
+    AcceptedDeviceRefreshPossessionPurpose, Base64UrlString, DEVICE_REVOCATION_DENIED_ACTIONS,
+    DeviceId, DeviceRevocationGateActionClass, DeviceRevocationGateCheckOutcome,
+    DeviceRevocationGateCheckRequestBody, DeviceRevocationGateDecision,
+    DeviceRevocationGateDecisionReceipt, DidCoreId, DidUrl, EventId, Hash, PrincipalAuthorityKey,
+    SessionGrantId, UnsignedAcceptedDeviceRefreshPossessionProof,
     UnsignedDeviceRevocationGateDecisionReceipt,
 };
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
@@ -298,15 +298,11 @@ fn signed_receipt(
         } else {
             (None, None)
         };
-    let accepted_device_possession_verification =
-        if let Some(proof) = request.accepted_device_possession_proof.as_ref() {
-            Some(AcceptedDevicePossessionVerification {
-                proof_digest: proof.proof_digest()?,
-                verification_method: proof.verification_method().clone(),
-            })
-        } else {
-            None
-        };
+    let accepted_device_possession_proof_digest = request
+        .accepted_device_possession_proof
+        .as_ref()
+        .map(AcceptedDevicePossessionProof::proof_digest)
+        .transpose()?;
     let unsigned = UnsignedDeviceRevocationGateDecisionReceipt {
         principal_authority: request.principal_authority.clone(),
         device_id: request.device_id.clone(),
@@ -314,7 +310,7 @@ fn signed_receipt(
         target_device_generation_ref,
         action_class: request.action_class,
         intent_digest: request.intent_digest.clone(),
-        accepted_device_possession_verification,
+        accepted_device_possession_proof_digest,
         decision,
         linearization_seq: 9,
         linearized_at: at(1)?,
