@@ -382,7 +382,6 @@ export async function grantCallCapability(
     [
       "ak.moderation.decision",
       "ak.moderation.decision.lift",
-      "ak.realm.moderation_policy",
     ].includes(action)
   ) {
     authorityConstraint.depends_on_moderation_state = true;

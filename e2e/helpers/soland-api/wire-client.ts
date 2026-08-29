@@ -8,7 +8,6 @@ type CotestWireCommand =
   | "event-envelope-proof"
   | "event-derived-id"
   | "mimi-consent-proof"
-  | "join-receipt-proof"
   | "mls-keypackage-upload-entry"
   | "principal-control-realm-id"
   | "webvh-placeholder-did"
@@ -112,32 +111,6 @@ export function sdkMimiConsentProof(args: {
     created_at: args.createdAt,
     domain: args.domain,
     audience: args.audience,
-    signing_seed_b64url: args.signingSeedB64url,
-  });
-}
-
-export function sdkJoinReceiptProof(args: {
-  actorId: string;
-  realmId: string;
-  receiptDigest: string;
-  createdAt: string;
-  context: string;
-  applicationRef?: string;
-  applicationRevisionDigest?: string;
-  executedBy?: string;
-  verificationMethod: string;
-  signingSeedB64url?: string;
-}): Record<string, unknown> {
-  return cotestWire<Record<string, unknown>>("join-receipt-proof", {
-    actor_did: args.actorId,
-    realm_id: args.realmId,
-    receipt_digest: args.receiptDigest,
-    created_at: args.createdAt,
-    context: args.context,
-    application_ref: args.applicationRef,
-    application_revision_digest: args.applicationRevisionDigest,
-    executed_by: args.executedBy,
-    verification_method: args.verificationMethod,
     signing_seed_b64url: args.signingSeedB64url,
   });
 }

@@ -100,7 +100,7 @@ fn sdk_and_cotest_keep_full_proof_urls_and_core_reporter_ids() {
     let method = source_between(
         &client,
         "pub async fn moderation_report(",
-        "pub async fn realm_moderation_policy_replace(",
+        "/// Fetch and verify",
     );
     assert!(method.contains("request.validate(digest_suite)?"));
     assert!(method.contains("request.report_id(digest_suite)?"));

@@ -42,20 +42,6 @@ struct MimiConsentProofInput {
 }
 
 #[derive(Debug, Deserialize)]
-struct JoinReceiptProofInput {
-    actor_did: String,
-    realm_id: String,
-    receipt_digest: Hash,
-    created_at: String,
-    context: String,
-    application_ref: Option<String>,
-    application_revision_digest: Option<String>,
-    executed_by: Option<String>,
-    verification_method: DidUrl,
-    signing_seed_b64url: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
 struct MlsKeyPackageUploadEntryInput {
     principal_id: DidCoreId,
     device_id: DeviceId,
@@ -176,7 +162,6 @@ fn main() -> Result<()> {
         "event-derived-id" => event_derived_id(input)?,
         "event-envelope-parse" => event_envelope_parse(input)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
-        "join-receipt-proof" => join_receipt_proof(input)?,
         "mls-keypackage-upload-entry" => mls_keypackage_upload_entry(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
         "webvh-placeholder-did" => webvh_placeholder_did_command(input)?,
@@ -1123,59 +1108,6 @@ fn sha256_canonical_json(input: Value) -> Result<Value> {
     }))
 }
 
-fn join_receipt_proof(input: Value) -> Result<Value> {
-    let input: JoinReceiptProofInput =
-        serde_json::from_value(input).context("parse join receipt proof input")?;
-    let actor_did = Did::new(input.actor_did).context("parse join receipt actor DID")?;
-    let actor_id =
-        project_did_to_core_id(&actor_did).context("project join receipt actor DID to core id")?;
-    let created_at = canonical::parse_timestamp_canonical(&input.created_at)
-        .context("parse join receipt proof created_at")?;
-
-    let mut binding = serde_json::Map::from_iter([
-        ("context".to_owned(), json!(input.context)),
-        ("receipt_digest".to_owned(), json!(input.receipt_digest)),
-        ("realm_id".to_owned(), json!(input.realm_id)),
-        ("actor_id".to_owned(), json!(actor_id)),
-        (
-            "verification_method".to_owned(),
-            json!(input.verification_method),
-        ),
-        ("created_at".to_owned(), json!(created_at)),
-    ]);
-    for (name, value) in [
-        ("application_ref", input.application_ref),
-        (
-            "application_revision_digest",
-            input.application_revision_digest,
-        ),
-        ("executed_by", input.executed_by),
-    ] {
-        if let Some(value) = value {
-            binding.insert(name.to_owned(), json!(value));
-        }
-    }
-    let binding_bytes = canonical::canonical_json_bytes(&Value::Object(binding))
-        .context("canonicalize join receipt proof binding")?;
-    let signing_key = match input.signing_seed_b64url.as_deref() {
-        Some(seed) => signing_key_from_seed(seed).context("parse join receipt signing seed")?,
-        None => development_event_signing_key(input.verification_method.as_str()),
-    };
-    let jws = arkret_signatures::proof::sign_ed25519_detached_jws(&signing_key, &binding_bytes)
-        .map_err(|error| anyhow::anyhow!("sign join receipt proof: {error}"))?;
-    let proof = PayloadProof {
-        kind: proof_kind::DETACHED_JWS.to_owned(),
-        verification_method: input.verification_method,
-        payload_digest: input.receipt_digest,
-        created_at,
-        domain: None,
-        audience: None,
-        proof_purpose: None,
-        jws,
-    };
-    serde_json::to_value(proof).context("serialize join receipt proof")
-}
-
 fn principal_control_realm(input: Value) -> Result<Value> {
     let input: PrincipalControlRealmInput =
         serde_json::from_value(input).context("parse principal-control realm input")?;
@@ -1474,50 +1406,6 @@ mod tests {
                 "did:webvh:z6mkfixture:alice.example#other-device"
             )
         );
-    }
-
-    #[test]
-    fn join_receipt_proof_uses_typed_payload_proof_and_sdk_signer() {
-        let actor_did = "did:webvh:z6mkfixture:alice.example";
-        let verification_method = format!("{actor_did}#device");
-        let seed = [17u8; 32];
-        let proof_value = join_receipt_proof(json!({
-            "actor_did": actor_did,
-            "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
-            "receipt_digest": format!("sha256:{}", "1".repeat(64)),
-            "created_at": "2026-07-07T05:45:49.000Z",
-            "context": "ak.join_application_receipt_proof.v1",
-            "application_ref": null,
-            "application_revision_digest": null,
-            "executed_by": null,
-            "verification_method": verification_method,
-            "signing_seed_b64url": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(seed),
-        }))
-        .unwrap();
-        let proof: PayloadProof = serde_json::from_value(proof_value).unwrap();
-        let (_, actor_id) = actor_ids(actor_did);
-        let binding = json!({
-            "context": "ak.join_application_receipt_proof.v1",
-            "receipt_digest": format!("sha256:{}", "1".repeat(64)),
-            "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
-            "actor_id": actor_id,
-            "verification_method": verification_method,
-            "created_at": proof.created_at.clone(),
-        });
-        let binding_bytes = canonical::canonical_json_bytes(&binding).unwrap();
-        let public_key = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
-            bytes: SigningKey::from_bytes(&seed)
-                .verifying_key()
-                .to_bytes()
-                .to_vec(),
-        };
-
-        arkret_signatures::proof::verify_ed25519_detached_jws_payload_proof(
-            &proof,
-            &binding_bytes,
-            &public_key,
-        )
-        .unwrap();
     }
 
     #[test]

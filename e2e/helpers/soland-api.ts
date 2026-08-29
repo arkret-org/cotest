@@ -50,7 +50,6 @@ import {
   sdkEventDerivedIds,
   sdkEventDerivedObjectId,
   sdkEventEnvelopeProof,
-  sdkJoinReceiptProof,
   sdkMimiConsentProof,
   sha256CanonicalJson,
   stripUndefined,
@@ -70,7 +69,6 @@ export {
   sdkEventDerivedIds,
   sdkEventDerivedObjectId,
   sdkEventEnvelopeProof,
-  sdkJoinReceiptProof,
   sdkMimiConsentProof,
   sha256CanonicalJson,
   wireErrCode,
@@ -1395,48 +1393,12 @@ export function nextJoinPolicyRevision(
   return next;
 }
 const knockRefCache = new Map<string, string>();
-const joinApplicationCache = new Map<
-  string,
-  {
-    applicantId: string;
-    realmId: string;
-    applicationRevisionDigest: string;
-  }
->();
-
 function joinWorkflowKey(
   server: SolandKey | undefined,
   realmId: string,
   actorId?: string,
 ): string {
   return `${server ?? "default"}\0${realmId}\0${actorId ?? ""}`;
-}
-
-function joinReceiptProof(args: {
-  actorId: string;
-  realmId: string;
-  receiptDigest: string;
-  createdAt: string;
-  context: string;
-  applicationRef?: string;
-  applicationRevisionDigest?: string;
-  executedBy?: string;
-}): Record<string, unknown> {
-  const registeredSigner = eventSignerFor(args.actorId);
-  const verificationMethod =
-    registeredSigner?.verificationMethod ?? `${args.actorId}#device`;
-  return sdkJoinReceiptProof({
-    actorId: args.actorId,
-    realmId: args.realmId,
-    receiptDigest: args.receiptDigest,
-    createdAt: args.createdAt,
-    context: args.context,
-    applicationRef: args.applicationRef,
-    applicationRevisionDigest: args.applicationRevisionDigest,
-    executedBy: args.executedBy,
-    verificationMethod,
-    signingSeedB64url: registeredSigner?.signingSeedB64url,
-  });
 }
 
 export async function submitKnockApi(
@@ -1471,172 +1433,6 @@ export async function submitKnockApi(
     );
   }
   return { ...outcome, event_id: knockRef };
-}
-
-// join-policy.md §7.1.1 / §7.2 — signed profile-private application receipt.
-export async function submitApplicationApi(
-  request: APIRequestContext,
-  token: string,
-  actorId: string,
-  realmId: string,
-  application: {
-    knockRef?: string;
-    policyVersionDigest?: string;
-    answers?: Array<{ question_id: string; value: unknown }>;
-    receiptDigest?: string;
-  },
-  opts: { server?: SolandKey; createdAt?: string } = {},
-): Promise<string> {
-  const policyVersionDigest =
-    application.policyVersionDigest ??
-    joinPolicyDigestCache.get(joinWorkflowKey(opts.server, realmId));
-  const knockRef =
-    application.knockRef ??
-    knockRefCache.get(joinWorkflowKey(opts.server, realmId, actorId));
-  if (!policyVersionDigest || !knockRef) {
-    throw new Error(
-      "join application requires a known policyVersionDigest and knockRef",
-    );
-  }
-  const submittedAt = canonicalTimestamp(
-    opts.createdAt === undefined ? undefined : new Date(opts.createdAt),
-  );
-  const answers = application.answers ?? [];
-  const gateProofs: Array<Record<string, unknown>> = [];
-  const privateBody = {
-    mode: "server_protected",
-    answers,
-  };
-  const applicationRevisionDigest = `sha256:${sha256CanonicalJson({
-    answers,
-    gate_proofs: gateProofs,
-    policy_version_digest: policyVersionDigest,
-  })}`;
-  const unsignedReceipt = {
-    candidate_kind: "member.application",
-    realm_id: realmId,
-    applicant_id: actorId,
-    knock_ref: knockRef,
-    policy_version_digest: policyVersionDigest,
-    application_revision_digest: applicationRevisionDigest,
-    private_body_digest: `sha256:${sha256CanonicalJson(privateBody)}`,
-    submitted_at: submittedAt,
-  };
-  const applicationReceiptDigest =
-    application.receiptDigest ??
-    `sha256:${sha256CanonicalJson(unsignedReceipt)}`;
-  const receipt = {
-    ...unsignedReceipt,
-    application_receipt_digest: applicationReceiptDigest,
-    proof: joinReceiptProof({
-      actorId,
-      realmId,
-      receiptDigest: applicationReceiptDigest,
-      createdAt: submittedAt,
-      context: "ak.join_application_receipt_proof.v1",
-    }),
-  };
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/join-applications`,
-    {
-      headers: {
-        ...authHeaders(token),
-        "Idempotency-Key": `application:${applicationReceiptDigest}`,
-      },
-      data: { receipt, private_body: privateBody },
-    },
-  );
-  const outcome = await expectJsonOk<{
-    application_ref: string;
-    receipt_ref?: string;
-  }>(response, `submit join application ${realmId}`);
-  joinApplicationCache.set(applicationReceiptDigest, {
-    applicantId: actorId,
-    realmId,
-    applicationRevisionDigest,
-  });
-  return outcome.application_ref;
-}
-
-// join-policy.md §7.1.1 / §7.3 — signed profile-private review receipt.
-export async function submitApplicationReviewApi(
-  request: APIRequestContext,
-  token: string,
-  reviewerId: string,
-  applicantId: string,
-  realmId: string,
-  review: {
-    applicationRef: string;
-    decision: "accept" | "reject" | "request_changes";
-    reasonCode?: string;
-    reasonText?: string;
-    grantId: string;
-    reviewReceiptDigest?: string;
-  },
-  opts: { server?: SolandKey; createdAt?: string } = {},
-): Promise<string> {
-  const application = joinApplicationCache.get(review.applicationRef);
-  if (
-    !application ||
-    application.realmId !== realmId ||
-    application.applicantId !== applicantId
-  ) {
-    throw new Error(`unknown join application ${review.applicationRef}`);
-  }
-  const reviewedAt = canonicalTimestamp(
-    opts.createdAt === undefined ? undefined : new Date(opts.createdAt),
-  );
-  const grantId = review.grantId;
-  const unsignedReceipt = stripUndefined({
-    candidate_kind: "member.application.review",
-    realm_id: realmId,
-    application_ref: review.applicationRef,
-    application_revision_digest: application.applicationRevisionDigest,
-    reviewer_id: reviewerId,
-    decision: review.decision,
-    reason_code: review.reasonCode,
-    reason_text: review.reasonText,
-    reviewer_capability_proof: {
-      grant_id: grantId,
-      frontier_digest: `sha256:${sha256CanonicalJson({
-        grant_id: grantId,
-        realm_id: realmId,
-        reviewer_id: reviewerId,
-      })}`,
-    },
-    reviewed_at: reviewedAt,
-  }) as Record<string, unknown>;
-  const reviewReceiptDigest =
-    review.reviewReceiptDigest ??
-    `sha256:${sha256CanonicalJson(unsignedReceipt)}`;
-  const receipt = {
-    ...unsignedReceipt,
-    review_receipt_digest: reviewReceiptDigest,
-    proof: joinReceiptProof({
-      actorId: reviewerId,
-      realmId,
-      receiptDigest: reviewReceiptDigest,
-      createdAt: reviewedAt,
-      context: "ak.join_application_review_receipt_proof.v1",
-      applicationRef: review.applicationRef,
-      applicationRevisionDigest: application.applicationRevisionDigest,
-    }),
-  };
-  const response = await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/join-applications/${encodeURIComponent(review.applicationRef)}/reviews`,
-    {
-      headers: {
-        ...authHeaders(token),
-        "Idempotency-Key": `review:${reviewReceiptDigest}`,
-      },
-      data: { receipt },
-    },
-  );
-  const outcome = await expectJsonOk<{ receipt_ref?: string }>(
-    response,
-    `review join application ${review.applicationRef}`,
-  );
-  return outcome.receipt_ref ?? reviewReceiptDigest;
 }
 
 // join-policy.md §5 — auto-resolve join: `ak.member.state{membership=join}`
@@ -1762,43 +1558,6 @@ export async function submitInviteCreateApi(
       data: envelope,
     },
   );
-}
-
-// join-policy.md §7.1.1 / §9 — list viewer-scoped private applications.
-export async function listMemberApplicationsApi(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  opts: { server?: SolandKey } = {},
-): Promise<{
-  applications: Array<Record<string, unknown>>;
-  viewer_is_reviewer: boolean;
-}> {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/join-applications`,
-    { headers: authHeaders(token) },
-  );
-  return await expectJsonOk<{
-    applications: Array<Record<string, unknown>>;
-    viewer_is_reviewer: boolean;
-  }>(response, `list applications ${realmId}`);
-}
-
-export async function listJoinApplicationAuditApi(
-  request: APIRequestContext,
-  token: string,
-  realmId: string,
-  applicationRef: string,
-  opts: { server?: SolandKey } = {},
-): Promise<Array<Record<string, unknown>>> {
-  const response = await request.get(
-    `${solandBaseUrl(opts.server)}/_arkret/self/realms/${encodeURIComponent(realmId)}/join-applications/${encodeURIComponent(applicationRef)}/audit`,
-    { headers: authHeaders(token) },
-  );
-  const outcome = await expectJsonOk<{
-    entries: Array<Record<string, unknown>>;
-  }>(response, `list application audit ${applicationRef}`);
-  return outcome.entries;
 }
 
 export async function acceptInviteApi(

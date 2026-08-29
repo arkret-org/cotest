@@ -28,8 +28,8 @@ test.describe("realm links", () => {
       // PROMOTED + reshaped to the real surface. soland's realm-link +
       // inheritance pipeline is fully wired (routing/realms.rs +
       // reducer/realm_links.rs):
-      //   - POST /_arkret/self/realms/{id}/links writes ak.realm.link with
-      //     reducer-side self-reference / kind / status validation.
+      //   - POST /_arkret/self/events admits caller-signed ak.realm.link Events
+      //     with reducer-side self-reference / kind / status validation.
       //   - ak.realm.inheritance_policy (signed event) is the §6 opt-in.
       //   - GET /_arkret/self/realms/{id}/effective-policy walks active
       //     governed_by / inherits_policy_from links and merges the source
@@ -75,19 +75,23 @@ test.describe("realm links", () => {
         title: `models/realm-links Team Realm ${stamp}`,
         ownerId: alice.id,
       });
-      const linkRes = await request.post(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
-        {
-          headers: aliceAuth,
-          data: {
+      const linkRes = await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorId: alice.id,
+          realmId: teamRealmId,
+          kind: "ak.realm.link",
+          payload: {
             target_realm_id: govRealmId,
             link_kind: "governed_by",
             status: "active",
             label: `Gov realm ${stamp}`,
           },
-        },
+        }),
+        { context: "T declares governed_by G" },
       );
-      expect(linkRes.ok()).toBeTruthy();
+      expect(linkRes.rejected ?? []).toEqual([]);
 
       const teamPolicyEnvelope = signedEventEnvelope({
         actorId: alice.id,
@@ -124,12 +128,16 @@ test.describe("realm links", () => {
         title: `models/realm-links Team Realm 2 ${stamp}`,
         ownerId: alice.id,
       });
-      await request.post(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(team2RealmId)}/links`,
-        {
-          headers: aliceAuth,
-          data: { target_realm_id: govRealmId, link_kind: "governed_by", status: "active" },
-        },
+      await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorId: alice.id,
+          realmId: team2RealmId,
+          kind: "ak.realm.link",
+          payload: { target_realm_id: govRealmId, link_kind: "governed_by", status: "active" },
+        }),
+        { context: "T2 declares governed_by G" },
       );
       const eff2NoOptIn = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(team2RealmId)}/effective-policy`,
@@ -143,14 +151,18 @@ test.describe("realm links", () => {
 
       // Phase E — alice rejects the T --> G link; inheritance is severed even
       // though T's inheritance_policy declaration is still on file (§6.3).
-      const rejectRes = await request.post(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/links`,
-        {
-          headers: aliceAuth,
-          data: { target_realm_id: govRealmId, link_kind: "governed_by", status: "rejected" },
-        },
+      const rejectRes = await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorId: alice.id,
+          realmId: teamRealmId,
+          kind: "ak.realm.link",
+          payload: { target_realm_id: govRealmId, link_kind: "governed_by", status: "rejected" },
+        }),
+        { context: "T rejects governed_by G" },
       );
-      expect(rejectRes.ok()).toBeTruthy();
+      expect(rejectRes.rejected ?? []).toEqual([]);
 
       const eff3 = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
@@ -184,19 +196,26 @@ test.describe("realm links", () => {
       const C = await mk("C");
 
       const link = async (src: string, dst: string) =>
-        request.post(`${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(src)}/links`, {
-          headers: auth,
-          data: {
+        submitSignedEventApi(
+          request,
+          aliceToken,
+          signedEventEnvelope({
+            actorId: alice.id,
+            realmId: src,
+            kind: "ak.realm.link",
+            payload: {
             target_realm_id: dst,
             link_kind: "governed_by",
             status: "active",
-          },
-        });
+            },
+          }),
+          { context: `${src} governed_by ${dst}` },
+        );
 
       const ab = await link(A, B);
-      expect(ab.ok()).toBeTruthy();
+      expect(ab.rejected ?? []).toEqual([]);
       const bc = await link(B, C);
-      expect(bc.ok()).toBeTruthy();
+      expect(bc.rejected ?? []).toEqual([]);
 
       const outboundA = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(A)}/links?direction=outbound`,
@@ -212,7 +231,7 @@ test.describe("realm links", () => {
 
       // General graph cycles are valid; only a Realm linking to itself is rejected.
       const ca = await link(C, A);
-      expect(ca.ok()).toBeTruthy();
+      expect(ca.rejected ?? []).toEqual([]);
 
       const outboundC = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(C)}/links?direction=outbound`,
@@ -277,12 +296,16 @@ test.describe("realm links", () => {
         ownerId: alice.id,
       });
       for (const G of [G1, G2]) {
-        await request.post(
-          `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(T)}/links`,
-          {
-            headers: auth,
-            data: { target_realm_id: G, link_kind: "governed_by", status: "active" },
-          },
+        await submitSignedEventApi(
+          request,
+          aliceToken,
+          signedEventEnvelope({
+            actorId: alice.id,
+            realmId: T,
+            kind: "ak.realm.link",
+            payload: { target_realm_id: G, link_kind: "governed_by", status: "active" },
+          }),
+          { context: `T governed_by ${G}` },
         );
         await submitSignedEventApi(
           request,
@@ -363,14 +386,18 @@ test.describe("realm links", () => {
       // on whichever realm the actor controls; here alice declares G's
       // outbound view — the non-propagation invariant holds regardless of
       // declaration side).
-      const linkRes = await request.post(
-        `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(G)}/links`,
-        {
-          headers: aliceAuth,
-          data: { target_realm_id: T, link_kind: "governed_by", status: "active" },
-        },
+      const linkRes = await submitSignedEventApi(
+        request,
+        aliceToken,
+        signedEventEnvelope({
+          actorId: alice.id,
+          realmId: G,
+          kind: "ak.realm.link",
+          payload: { target_realm_id: T, link_kind: "governed_by", status: "active" },
+        }),
+        { context: "G declares governed_by T" },
       );
-      expect(linkRes.ok()).toBeTruthy();
+      expect(linkRes.rejected ?? []).toEqual([]);
 
       // alice (no membership / capability in T) tries to ban bob in T via the
       // canonical member-state event. MUST fail closed — the governed_by link

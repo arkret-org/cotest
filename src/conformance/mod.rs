@@ -71,7 +71,6 @@ mod read_receipt_signal;
 mod recovery_completion_grant;
 pub mod recovery_transaction_faults;
 mod redaction;
-mod reviewer_authority_pair;
 mod scaffold_gate;
 mod scalability_limits;
 mod schema_validation;
@@ -358,7 +357,6 @@ pub use read_receipt_signal::{
 };
 pub use recovery_completion_grant::run_recovery_completion_grant_suite;
 pub use redaction::run_redaction_fixture_suite;
-pub use reviewer_authority_pair::run_reviewer_authority_pair_suite;
 pub use scaffold_gate::{
     run_live_describe_profile_gate_suite, run_scaffold_profile_gate_suite,
     validate_scaffold_profile_gate,
