@@ -79,6 +79,9 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         serde_json::to_string_pretty(&invite_event)?
     );
     let invite_event_id = submitted_event_id(&invite_event)?;
+    alice
+        .await_event_seal_coverage(&invite_realm_id, &invite_event_id)
+        .await?;
     let invite_id = arkret_identifiers::InviteId::from_event_id(&invite_event_id).to_string();
     let invite_token = dispatch_accepted_invite_and_read_token(
         &alice,
