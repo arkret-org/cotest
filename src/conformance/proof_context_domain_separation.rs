@@ -30,8 +30,8 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::http_bodies::{
-    MimiGroupInfoOutcome, MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody,
-    MimiKeyMaterialOutcome, MimiKeyMaterialRequestBody, MimiRequestConsentRequestBody,
+    MimiIdentifierQueryOutcome, MimiIdentifierQueryRequestBody, MimiKeyMaterialOutcome,
+    MimiKeyMaterialRequestBody, MimiRequestConsentRequestBody,
 };
 use arkret_models_discovery::{
     DirectoryListHandlesForSubjectRequestBody, DirectoryResolveAgentSelectorRequestBody,
@@ -71,13 +71,9 @@ pub const DIRECTORY_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
     ),
 ];
 
-/// The seven MIMI operation families that replaced the retired over-broad
+/// The six MIMI operation families that replaced the retired over-broad
 /// `ak.mimi_operation_proof.v1`.
 pub const MIMI_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
-    (
-        ProofContextId::MIMI_GROUP_INFO_OUTCOME_PROOF_V1,
-        "mimi_group_info_outcome",
-    ),
     (
         ProofContextId::MIMI_IDENTIFIER_QUERY_OUTCOME_PROOF_V1,
         "mimi_identifier_query_outcome",
@@ -467,14 +463,6 @@ fn directory_families() -> Result<Vec<FamilyUnderTest>> {
 }
 
 fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
-    let group_info_outcome: MimiGroupInfoOutcome = serde_json::from_value(json!({
-        "group_info": {
-            "mls_group_id": "Z3JvdXA",
-            "epoch": 7,
-            "group_info": "Z3JvdXAtaW5mbw"
-        },
-        "room_binding_ref": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC"
-    }))?;
     let identifier_query_outcome: MimiIdentifierQueryOutcome = serde_json::from_value(json!({
         "matches": [{
             "identifier_commitment":
@@ -504,12 +492,6 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
     }))?;
 
     Ok(vec![
-        family(
-            "mimi_group_info_outcome",
-            ProofContextId::MIMI_GROUP_INFO_OUTCOME_PROOF_V1,
-            group_info_outcome.payload_digest()?,
-            move |proof| Ok(group_info_outcome.proof_binding_bytes(proof)?),
-        ),
         family(
             "mimi_identifier_query_outcome",
             ProofContextId::MIMI_IDENTIFIER_QUERY_OUTCOME_PROOF_V1,

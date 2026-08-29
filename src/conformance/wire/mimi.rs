@@ -177,7 +177,6 @@ fn validate_provider_directory_case(case: &Value, drafts: &Value) -> Result<()> 
     for required in [
         "key_material",
         "submit_message",
-        "group_info",
         "consent",
         "identifier_query",
         "report_abuse",
@@ -307,8 +306,7 @@ fn validate_identifier_query_source_signature_case(case: &Value) -> Result<()> {
     let inheritance = rows
         .iter()
         .find(|row| {
-            row.get("name").and_then(Value::as_str)
-                == Some("group_info_and_directory_do_not_inherit_profile")
+            row.get("name").and_then(Value::as_str) == Some("directory_does_not_inherit_profile")
         })
         .ok_or_else(|| {
             anyhow!("MIMI identifier-query signature vector omits the profile-scope row")
@@ -322,10 +320,7 @@ fn validate_identifier_query_source_signature_case(case: &Value) -> Result<()> {
                 .collect::<BTreeSet<_>>()
         })
         .unwrap_or_default();
-    for operation_id in [
-        "ak.open.mimi.read.group_info.v1",
-        "ak.open.mimi.read.provider_directory.v1",
-    ] {
+    for operation_id in ["ak.open.mimi.read.provider_directory.v1"] {
         if !siblings.contains(operation_id) {
             bail!("profile-scope row must name {operation_id}");
         }

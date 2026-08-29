@@ -209,7 +209,6 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
                 .expect("canonical MIMI provider id"),
             endpoints: [
                 ("consent", "/consent/request"),
-                ("group_info", "/strands/{strand_id}/group-info"),
                 ("submit_message", "/strands/{strand_id}/messages"),
             ]
             .into_iter()
@@ -218,7 +217,7 @@ fn signed_directory() -> Result<(ProviderDirectory, ed25519_dalek::VerifyingKey)
                 relative_path: relative_path.to_owned(),
             })
             .collect(),
-            features: ["consent", "group_info", "submit_message"]
+            features: ["consent", "submit_message"]
                 .into_iter()
                 .map(ToOwned::to_owned)
                 .collect(),
