@@ -1,8 +1,8 @@
 // Circle administration HTTP helpers (`/_arkret/self/circles/*`).
 //
 // Face note: Circle administration is now a NORMATIVE Arkret protocol surface.
-// The `ak.self.circle.*` operations (list/create/get/members/scope-rotate/
-// archive/restore/tombstone) are published in the arkret-spec OpenAPI artifact
+// The `ak.self.circle.*` operations (list/create/get/members/scope-rotate) are
+// published in the arkret-spec OpenAPI artifact
 // (`/_arkret/self/circles*`), the operation registry, and the contract catalog,
 // so soland mounts them under the `/_arkret` tree. `/_soland/self/circles` is
 // not a mounted surface.
@@ -426,10 +426,10 @@ export async function removeCircleMemberArkret(
   );
 }
 
-// The three lifecycle endpoints share `object_lifecycle_payload`, which
-// single-sources the target Circle by `target_ref`; the service checks it
-// against the path. `reason` is free text on that payload — it is not a wire
-// reason code, which is why the argument lost the `Code` suffix.
+// The lifecycle helpers share `object_lifecycle_payload`, which single-sources
+// the target Circle by `target_ref`. Lifecycle writes use the
+// canonical Event submission surface directly; `reason` is free text on that
+// payload, not a wire reason code.
 type CircleLifecycleArgs = {
   actorId: string;
   realmId: string;
@@ -441,10 +441,10 @@ async function submitCircleLifecycleArkret(
   request: APIRequestContext,
   token: string,
   circleId: string,
-  action: "archive" | "restore" | "tombstone",
+  action: "archive" | "restore",
   args: CircleLifecycleArgs,
 ): Promise<CircleOutcome> {
-  const lifecycleEvent = await prepareSignedEventSubmissionApi(
+  await submitSignedEventApi(
     request,
     token,
     signedEventEnvelope({
@@ -456,23 +456,11 @@ async function submitCircleLifecycleArkret(
         ...(args.reason !== undefined ? { reason: args.reason } : {}),
       },
     }),
-    { server: args.server, context: `prepare ${action} circle ${circleId}` },
+    { server: args.server, context: `${action} circle ${circleId}` },
   );
-  const response = await request.post(
-    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/${action}`,
-    {
-      headers: { ...authHeaders(token), "content-type": "application/json" },
-      data: canonicalJson({
-        lifecycle_event: {
-          ...lifecycleEvent,
-        },
-      }),
-    },
-  );
-  return await expectJsonOk<CircleOutcome>(
-    response,
-    `${action} circle ${circleId}`,
-  );
+  return await getCircleArkret(request, token, circleId, {
+    server: args.server,
+  });
 }
 
 export async function archiveCircleArkret(

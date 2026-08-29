@@ -899,18 +899,6 @@
           ]
         },
         {
-          "operation_id": "ak.self.agent.grant.command.attach.v1",
-          "surfaces": [
-            "agent_runtime"
-          ]
-        },
-        {
-          "operation_id": "ak.self.agent.grant.resource.delete.v1",
-          "surfaces": [
-            "agent_runtime"
-          ]
-        },
-        {
           "operation_id": "ak.self.agent.sidecar.command.ensure.v1",
           "surfaces": [
             "agent_runtime"

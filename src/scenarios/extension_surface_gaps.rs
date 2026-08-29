@@ -115,8 +115,6 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         "ak.self.agent.command.resume.v1",
         "ak.self.agent.command.deactivate.v1",
         "ak.self.agent.command.renew_pairing.v1",
-        "ak.self.agent.grant.command.attach.v1",
-        "ak.self.agent.grant.resource.delete.v1",
         "ak.self.agent.sidecar.command.ensure.v1",
     ] {
         assert!(

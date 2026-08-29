@@ -851,8 +851,6 @@ pub fn run_agent_controller_lifecycle_vector() -> Result<()> {
         arkret_wire::ServiceOperationId::SELF_AGENT_READ_LIST_V1,
         arkret_wire::ServiceOperationId::SELF_AGENT_RESOURCE_GET_V1,
         arkret_wire::ServiceOperationId::SELF_AGENT_COMMAND_RENEW_PAIRING_V1,
-        arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_COMMAND_ATTACH_V1,
-        arkret_wire::ServiceOperationId::SELF_AGENT_GRANT_RESOURCE_DELETE_V1,
         arkret_wire::ServiceOperationId::SELF_AGENT_SIDECAR_COMMAND_ENSURE_V1,
     ] {
         if !op.starts_with("ak.agent.")

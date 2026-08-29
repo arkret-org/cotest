@@ -1946,21 +1946,21 @@ mod tests {
 
     #[test]
     fn regex_capture_group_path_preserves_tail_segments() {
-        let line = r#"url.pathname.match(/^\/_arkret\/self\/agents\/([^/]+)\/grants$/)"#;
+        let line = r#"url.pathname.match(/^\/_arkret\/self\/circles\/([^/]+)\/members$/)"#;
         let paths = extract_regex_path_candidates(line);
-        assert_eq!(paths, vec!["/_arkret/self/agents/{wildcard}/grants"]);
+        assert_eq!(paths, vec!["/_arkret/self/circles/{wildcard}/members"]);
     }
 
     #[test]
     fn regex_alternative_group_expands_to_literal_paths() {
         let line =
-            r#"url.pathname.match(/^\/_arkret\/self\/circles\/([^/]+)\/(archive|restore)$/)"#;
+            r#"url.pathname.match(/^\/_arkret\/self\/agents\/([^/]+)\/(pause|resume)$/)"#;
         let paths = extract_regex_path_candidates(line);
         assert_eq!(
             paths,
             vec![
-                "/_arkret/self/circles/{wildcard}/archive",
-                "/_arkret/self/circles/{wildcard}/restore",
+                "/_arkret/self/agents/{wildcard}/pause",
+                "/_arkret/self/agents/{wildcard}/resume",
             ]
         );
     }
