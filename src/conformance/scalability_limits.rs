@@ -356,7 +356,7 @@ fn validate_decoded_canonical_size_matrix(case: &Value, generator: &Value) -> Re
         ),
         ("resource_selector.required_claims", 32, "schema_violation"),
         (
-            "resource_selector.required_claims[].trusted_issuer_ids",
+            "resource_selector.required_claims[].trusted_issuers",
             16,
             "schema_violation",
         ),

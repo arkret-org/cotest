@@ -1372,7 +1372,7 @@ fn signed_pairwise_upload_with_records(
         intended_realm_id: Some(RealmId::new(realm_id.to_owned())?),
         agent_verification_method: None,
         agent_key_authorize_event_id: None,
-        keypackage_upload_entries: records
+        keypackages: records
             .iter()
             .map(|record| mls_key_package_record_upload_entry(record).map_err(anyhow::Error::msg))
             .collect::<Result<Vec<_>>>()?,
@@ -1396,7 +1396,7 @@ fn signed_ordinary_upload_with_records(
         intended_realm_id: None,
         agent_verification_method: None,
         agent_key_authorize_event_id: None,
-        keypackage_upload_entries: records
+        keypackages: records
             .iter()
             .map(|record| mls_key_package_record_upload_entry(record).map_err(anyhow::Error::msg))
             .collect::<Result<Vec<_>>>()?,

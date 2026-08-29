@@ -65,16 +65,16 @@ pub async fn external_webvh_provider_is_discoverable() -> Result<()> {
             .any(|value| value.as_str() == Some("webvh")),
         "did:webvh should be discoverable when an external provider is configured"
     );
-    let trust_root_ids = identity["trust_root_ids"]
+    let trust_roots = identity["trust_roots"]
         .as_array()
-        .expect("resolver policy trust_root_ids");
+        .expect("resolver policy trust_roots");
     assert!(
-        trust_root_ids
+        trust_roots
             .iter()
             .any(local_trust_root_has_webvh_validation),
         "soland must publish its local identity trust root and webvh proof-validation policy: {describe}"
     );
-    let external_root = trust_root_ids
+    let external_root = trust_roots
         .iter()
         .find(|root| root["id"] == "external.webvh")
         .expect("external webvh trust root");

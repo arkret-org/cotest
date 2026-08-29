@@ -1,4 +1,6 @@
 use anyhow::Result;
+use arkret_models_collaboration::objects::media::{MediaIceConfigRequestBody, MediaIceMode};
+use arkret_wire::{DeviceId, DidCoreId, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -31,15 +33,13 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     expect_api_error(
         carol
             .post("/_arkret/self/rtc/ice-config")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
-            >(json!({
-                "realm_id": realm_id,
-                "call_id": call_id,
-                "actor_id": carol_core,
-                "device_id": carol.device_id.as_str(),
-                "mode": "p2p"
-            }))?),
+            .json(&MediaIceConfigRequestBody {
+                realm_id: RealmId::new(realm_id.clone())?,
+                call_id: call_id.to_owned(),
+                actor_id: DidCoreId::new(carol_core.clone())?,
+                device_id: DeviceId::new(carol.device_id.clone())?,
+                mode: MediaIceMode::P2p,
+            }),
         StatusCode::FORBIDDEN,
         "capability_denied",
     )
@@ -63,15 +63,13 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     expect_api_error(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
-            >(json!({
-                "realm_id": realm_id,
-                "call_id": call_id,
-                "actor_id": carol_core,
-                "device_id": alice.device_id.as_str(),
-                "mode": "p2p"
-            }))?),
+            .json(&MediaIceConfigRequestBody {
+                realm_id: RealmId::new(realm_id.clone())?,
+                call_id: call_id.to_owned(),
+                actor_id: DidCoreId::new(carol_core)?,
+                device_id: DeviceId::new(alice.device_id.clone())?,
+                mode: MediaIceMode::P2p,
+            }),
         StatusCode::BAD_REQUEST,
         "param_invalid",
     )
@@ -80,15 +78,13 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let ice = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
-            >(json!({
-                "realm_id": realm_id,
-                "call_id": call_id,
-                "actor_id": alice_core,
-                "device_id": alice.device_id.as_str(),
-                "mode": "p2p"
-            }))?),
+            .json(&MediaIceConfigRequestBody {
+                realm_id: RealmId::new(realm_id.clone())?,
+                call_id: call_id.to_owned(),
+                actor_id: DidCoreId::new(alice_core.clone())?,
+                device_id: DeviceId::new(alice.device_id.clone())?,
+                mode: MediaIceMode::P2p,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -144,15 +140,13 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     let turn_only = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
-            >(json!({
-                "realm_id": realm_id,
-                "call_id": "ak:call:AYVFZWhohYwHaEnPNmKhgMBK35WYy2igGfoeZIIOtwAy",
-                "actor_id": alice_core,
-                "device_id": alice.device_id.as_str(),
-                "mode": "turn"
-            }))?),
+            .json(&MediaIceConfigRequestBody {
+                realm_id: RealmId::new(realm_id.clone())?,
+                call_id: "ak:call:AYVFZWhohYwHaEnPNmKhgMBK35WYy2igGfoeZIIOtwAy".to_owned(),
+                actor_id: DidCoreId::new(alice_core)?,
+                device_id: DeviceId::new(alice.device_id.clone())?,
+                mode: MediaIceMode::Turn,
+            }),
         StatusCode::OK,
     )
     .await?;

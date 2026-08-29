@@ -1,6 +1,5 @@
 use anyhow::Result;
 use reqwest::StatusCode;
-use serde_json::json;
 
 use crate::fixtures::TestScaffold;
 use crate::harness::expect_json;
@@ -33,9 +32,12 @@ pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()>
         server_a
             .http()
             .post(server_a.url("/_arkret/root/identity/resolve"))
-            .json(&serde_json::from_value::<
-                arkret_models_identity::identity::IdentityResolveRequestBody,
-            >(json!({"did": "did:web:alice.example"}))?),
+            .json(
+                &arkret_models_identity::identity::IdentityResolveRequestBody {
+                    did: arkret_wire::Did::new("did:web:alice.example")?,
+                    requested_evidence_kinds: Vec::new(),
+                },
+            ),
         StatusCode::OK,
     )
     .await?;

@@ -69,11 +69,16 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-realms"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchRealmsRequestBody,
-            >(
-                json!({"query": "Visibility Matrix", "limit": 20})
-            )?),
+            .json(&arkret_models_discovery::DirectorySearchRealmsRequestBody {
+                query: Some("Visibility Matrix".to_owned()),
+                organization_principal_id: None,
+                source_realm_id: None,
+                requester_id: None,
+                proof_challenge: None,
+                claim_presentations: Vec::new(),
+                cursor: None,
+                limit: Some(20),
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -88,9 +93,15 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(json!({"realm_id": public_realm_id}))?),
+            .json(&arkret_models_discovery::DirectoryResolveRealmRequestBody {
+                realm_id: Some(arkret_wire::RealmId::new(public_realm_id)?),
+                alias: None,
+                invite_token: None,
+                signed_link: None,
+                requester_id: None,
+                proof_challenge: None,
+                claim_presentations: Vec::new(),
+            }),
         StatusCode::NOT_FOUND,
         "not_found",
     )
@@ -100,9 +111,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-actors"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchActorsRequestBody,
-            >(json!({"query": "bob-privacy"}))?),
+            .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
+                query: Some("bob-privacy".to_owned()),
+                realm_id: None,
+                organization_principal_id: None,
+                cursor: None,
+                limit: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -117,9 +132,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-users"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchUsersRequestBody,
-            >(json!({"query": "bob-privacy"}))?),
+            .json(&arkret_models_discovery::DirectorySearchUsersRequestBody {
+                query: "bob-privacy".to_owned(),
+                realm_id: None,
+                cursor: None,
+                limit: None,
+                intent: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -134,9 +153,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-actors"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchActorsRequestBody,
-            >(json!({"query": "alice"}))?),
+            .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
+                query: Some("alice".to_owned()),
+                realm_id: None,
+                organization_principal_id: None,
+                cursor: None,
+                limit: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -151,11 +174,15 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     );
 
     let alice_before_contact = expect_json(
-        alice
-            .post("/_arkret/find/directory/search-actors")
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchActorsRequestBody,
-            >(json!({"query": "bob-privacy"}))?),
+        alice.post("/_arkret/find/directory/search-actors").json(
+            &arkret_models_discovery::DirectorySearchActorsRequestBody {
+                query: Some("bob-privacy".to_owned()),
+                realm_id: None,
+                organization_principal_id: None,
+                cursor: None,
+                limit: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -167,10 +194,15 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     );
 
     let bob_self = expect_json(
-        bob.post("/_arkret/find/directory/search-actors")
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchActorsRequestBody,
-            >(json!({"query": "bob-privacy"}))?),
+        bob.post("/_arkret/find/directory/search-actors").json(
+            &arkret_models_discovery::DirectorySearchActorsRequestBody {
+                query: Some("bob-privacy".to_owned()),
+                realm_id: None,
+                organization_principal_id: None,
+                cursor: None,
+                limit: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -185,11 +217,15 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let alice_after_contact = expect_json(
-        alice
-            .post("/_arkret/find/directory/search-actors")
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchActorsRequestBody,
-            >(json!({"query": "bob-privacy"}))?),
+        alice.post("/_arkret/find/directory/search-actors").json(
+            &arkret_models_discovery::DirectorySearchActorsRequestBody {
+                query: Some("bob-privacy".to_owned()),
+                realm_id: None,
+                organization_principal_id: None,
+                cursor: None,
+                limit: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -199,11 +235,15 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     );
 
     let alice_user_after_contact = expect_json(
-        alice
-            .post("/_arkret/find/directory/search-users")
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchUsersRequestBody,
-            >(json!({"query": "bob-privacy"}))?),
+        alice.post("/_arkret/find/directory/search-users").json(
+            &arkret_models_discovery::DirectorySearchUsersRequestBody {
+                query: "bob-privacy".to_owned(),
+                realm_id: None,
+                cursor: None,
+                limit: None,
+                intent: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -219,9 +259,13 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-actors"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchActorsRequestBody,
-            >(json!({"query": "bob-privacy"}))?),
+            .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
+                query: Some("bob-privacy".to_owned()),
+                realm_id: None,
+                organization_principal_id: None,
+                cursor: None,
+                limit: None,
+            }),
         StatusCode::OK,
     )
     .await?;

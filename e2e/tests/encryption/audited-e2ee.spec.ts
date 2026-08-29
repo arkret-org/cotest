@@ -178,7 +178,7 @@ async function fileModerationReport(
       realm_id: setup.realmId,
       target_ref: setup.message.event_id,
       report_reason_code: "harassment",
-      reporter: setup.reporterId,
+      reporter_id: setup.reporterId,
       provenance: "self",
       description: "ordinary moderation report for scoped administrators",
       evidence_refs: [],

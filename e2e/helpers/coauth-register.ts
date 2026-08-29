@@ -470,7 +470,7 @@ export async function registerCoauthPasswordAccount(
       trust_domain: trustDomain,
       initial_session: {
         session_public_key: canonicalJson(handoff.deviceKey.publicJwk),
-        audience,
+        audience_id: audience,
       },
     },
   );

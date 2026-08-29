@@ -2328,10 +2328,23 @@ function eventEnvelopeProof(args: {
     args.actorId,
     args.verificationMethod,
   );
+  // event-envelope.schema.json: a did_core_id is never concatenated into a DID
+  // URL. Without this guard an unregistered `ak:did_core:` actor silently
+  // produced `ak:did_core:...#device`, which only surfaces later as an opaque
+  // SDK parse error instead of naming the missing registerEventSigner call.
+  const fallbackVerificationMethod = args.actorId.startsWith("did:")
+    ? `${args.actorId}#device`
+    : undefined;
   const verificationMethod =
     args.verificationMethod ??
     registeredSigner?.verificationMethod ??
-    `${args.actorId}#device`;
+    fallbackVerificationMethod;
+  if (verificationMethod === undefined) {
+    throw new Error(
+      `no event signer registered for ${args.actorId}; call registerEventSigner ` +
+        "with a DID URL verification method before authoring its Events",
+    );
+  }
   const createdAt = canonicalEventTimestamp();
 
   if (mode === "dev-proof") {

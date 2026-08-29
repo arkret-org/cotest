@@ -51,11 +51,13 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/search-users"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchUsersRequestBody,
-            >(
-                json!({"query": BOB_HANDLE.trim_start_matches('@')})
-            )?),
+            .json(&arkret_models_discovery::DirectorySearchUsersRequestBody {
+                query: BOB_HANDLE.trim_start_matches('@').to_owned(),
+                realm_id: None,
+                cursor: None,
+                limit: None,
+                intent: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -92,13 +94,15 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let visible_bob = expect_json(
-        alice
-            .post("/_arkret/find/directory/search-users")
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectorySearchUsersRequestBody,
-            >(
-                json!({"query": BOB_HANDLE.trim_start_matches('@')})
-            )?),
+        alice.post("/_arkret/find/directory/search-users").json(
+            &arkret_models_discovery::DirectorySearchUsersRequestBody {
+                query: BOB_HANDLE.trim_start_matches('@').to_owned(),
+                realm_id: None,
+                cursor: None,
+                limit: None,
+                intent: None,
+            },
+        ),
         StatusCode::OK,
     )
     .await?;
@@ -124,9 +128,15 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(json!({"realm_id": realm_id}))?),
+            .json(&arkret_models_discovery::DirectoryResolveRealmRequestBody {
+                realm_id: Some(arkret_wire::RealmId::new(realm_id.clone())?),
+                alias: None,
+                invite_token: None,
+                signed_link: None,
+                requester_id: None,
+                proof_challenge: None,
+                claim_presentations: Vec::new(),
+            }),
         StatusCode::NOT_FOUND,
     )
     .await?;
@@ -145,7 +155,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     )
     .await?;
     assert!(
-        with_bob["members"]
+        with_bob["member_ids"]
             .as_array()
             .unwrap()
             .iter()
@@ -231,7 +241,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     )
     .await?;
     assert!(
-        !removed["members"]
+        !removed["member_ids"]
             .as_array()
             .unwrap()
             .iter()

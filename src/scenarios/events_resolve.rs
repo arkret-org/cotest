@@ -2,6 +2,10 @@
 
 use anyhow::{Result, anyhow};
 use arkret_models_collaboration::event_query::EventsDescribeRequestBody;
+use arkret_models_collaboration::http_bodies::{
+    EventsResolveRequestBody, SelfSealResolveRequestBody,
+};
+use arkret_wire::{EventId, Hash, RealmId, SealId};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
@@ -39,11 +43,11 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let seal_only = expect_json(
         alice
             .query("/_arkret/self/seals/resolve")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::http_bodies::SelfSealResolveRequestBody,
-            >(
-                json!({"realm_id": realm_id, "seal_refs": [missing_seal]}),
-            )?),
+            .json(&SelfSealResolveRequestBody {
+                realm_id: RealmId::new(realm_id)?,
+                seal_refs: vec![SealId::new(missing_seal.clone())?],
+                history_traversal_access: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -55,12 +59,13 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let mixed = expect_json(
         alice
             .query("/_arkret/self/events/resolve")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
-            >(json!({
-                "event_ids": [missing_event],
-                "event_digests": [missing_digest]
-            }))?),
+            .json(&EventsResolveRequestBody {
+                event_ids: vec![EventId::new(missing_event)?],
+                event_digests: vec![Hash::new(missing_digest.clone())?],
+                include_payload: None,
+                history_traversal_access: None,
+                max_response_bytes: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -75,15 +80,19 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
             .any(|value| value == &json!(missing_digest))
     );
 
-    let at_budget: Vec<String> = (0..max_resolve)
-        .map(|index| crate::fixture_event_id(format!("events-resolve:{index}")).to_string())
+    let at_budget: Vec<EventId> = (0..max_resolve)
+        .map(|index| crate::fixture_event_id(format!("events-resolve:{index}")))
         .collect();
     let at_budget_outcome = expect_json(
         alice
             .query("/_arkret/self/events/resolve")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
-            >(json!({"event_ids": at_budget}))?),
+            .json(&EventsResolveRequestBody {
+                event_ids: at_budget.clone(),
+                event_digests: Vec::new(),
+                include_payload: None,
+                history_traversal_access: None,
+                max_response_bytes: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -95,12 +104,13 @@ pub async fn events_resolve_selector_budget_run() -> Result<()> {
     let over_budget = expect_response(
         alice
             .query("/_arkret/self/events/resolve")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::http_bodies::EventsResolveRequestBody,
-            >(json!({
-                "event_ids": at_budget,
-                "event_digests": [missing_digest]
-            }))?),
+            .json(&EventsResolveRequestBody {
+                event_ids: at_budget,
+                event_digests: vec![Hash::new(missing_digest)?],
+                include_payload: None,
+                history_traversal_access: None,
+                max_response_bytes: None,
+            }),
         StatusCode::PAYLOAD_TOO_LARGE,
     )
     .await?;

@@ -409,7 +409,7 @@ test.describe("personal blocklist", () => {
         headers: authHeaders(aliceToken),
         data: {
           device_id: alice.deviceId,
-          push_gateway: "https://push.example",
+          push_gateway_url: "https://push.example",
           push_key: `s31e112-${stamp}`,
           platform: "desktop",
           app_id: "inkson",

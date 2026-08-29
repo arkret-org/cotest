@@ -62,15 +62,16 @@ pub async fn session_grant_presentation_uses_configured_coauth_introspection() -
     let grant_jwt =
         mock_session_grant_jwt(&principal_core_id, &device_id, server.service_id().as_str());
     let push_url = server.url("/_arkret/edge/push/register-device");
-    let push_body = serde_json::from_value::<
-        arkret_models_integration::PushRegisterDeviceRequestBody,
-    >(json!({
-        "device_id": device_id,
-        "push_gateway": "https://floria.example/_arkret/edge/push/notify",
-        "push_key": "webpush:opaque-token",
-        "platform": "web",
-        "app_id": "inkson"
-    }))?;
+    let push_body = arkret_models_integration::PushRegisterDeviceRequestBody {
+        device_id: arkret_wire::DeviceId::new(device_id.clone())?,
+        push_gateway_url: "https://floria.example/_arkret/edge/push/notify".to_owned(),
+        push_key: arkret_models_integration::PushKey::new("webpush:opaque-token")
+            .map_err(anyhow::Error::msg)?,
+        platform: Some("web".to_owned()),
+        app_id: Some("inkson".to_owned()),
+        display_name: None,
+        recipient_id: None,
+    };
 
     // §3.3 presentation: `Authorization: DPoP <grant jwt>` plus a
     // sender-constrained DPoP proof bound to the grant (`ath`) and to this

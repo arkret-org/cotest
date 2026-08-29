@@ -571,24 +571,38 @@ test.describe("conformance encoding vectors", () => {
   test("§3 redaction visibility matrix matches projection (owner vs guest)", async ({
     request,
   }) => {
-    // redaction-fixture.json today only declares `preserve` field lists and
-    // pending/late/audit semantic stubs — it does NOT carry concrete
-    // (original_event, redaction_event, expected_retained_fields_*) tuples.
-    // Until that fixture grows real projection vectors, this test drives
-    // soland's projection rule directly: an event with `sender == alice`,
-    // a redaction over `payload.content`, viewed by both the owner and a
-    // guest. Owner sees full event; guest sees content stripped + a
-    // `redacted_because` marker added.
+    // redaction-fixture.json carries (event, redaction_receipt,
+    // expected_projection) triples but no owner-vs-guest visibility tuple, so
+    // this test still drives soland's projection rule directly: an event whose
+    // author is alice, a redaction over `payload.content`, viewed by both the
+    // owner and a guest. Owner sees the full event; guest sees content
+    // stripped plus a `redacted_because` marker. The synthetic event mirrors
+    // the envelope shape of that fixture's cases so it cannot drift away from
+    // event-envelope.schema.json.
     const ownerId = "ak:did_core:web:alice.example";
     const guestId = "ak:did_core:web:guest.example";
+    const realmId = "ak:realm:ATB8eFsjx2SsBFehta_0LQT_Gm9Fe3YTrFRzNi9_ve_v";
     const event = {
       event_id: "ak:event:AY3Ymj4NJ7YEqOwLhBjWKXoD1P7PbP5OfU_ed6ZWIIMc",
       kind: "ak.message.create",
+      realm_id: realmId,
+      scope_ref: { kind: "realm", realm_id: realmId },
+      actor_id: ownerId,
       sender_actor_id: ownerId,
+      created_at: "2026-04-26T00:00:00.000Z",
       payload: {
         strand_id: "ak:strand:ASH_OYgk3yTng0ptjCny23EVDMiKLUxD8bxiWI7MuZ8E",
         content: { kind: "ak.content.text", body: "private message" },
       },
+      proofs: [
+        {
+          verification_method: "did:web:alice.example#ak_device_0197",
+          payload_digest:
+            "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          signature: "signature-base64url-placeholder",
+        },
+      ],
+      principal_server_id: "ak:did_core:web:principal-server.example",
     };
     const redaction = {
       target_event_id: event.event_id,
@@ -604,7 +618,7 @@ test.describe("conformance encoding vectors", () => {
           vector_id: "ak.vector.redaction.owner_view.synthetic.v1",
           event,
           redaction,
-          viewer_id: ownerId,
+          viewer_did: ownerId,
         }),
       },
     );
@@ -624,7 +638,7 @@ test.describe("conformance encoding vectors", () => {
           vector_id: "ak.vector.redaction.guest_view.synthetic.v1",
           event,
           redaction,
-          viewer_id: guestId,
+          viewer_did: guestId,
         }),
       },
     );

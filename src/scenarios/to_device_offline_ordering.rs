@@ -32,7 +32,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::harness::{
     ArkretServer, device_message_send_request, encrypted_envelope, expect_api_error, expect_json,
@@ -262,9 +262,11 @@ async fn ack_to_device(
             .http()
             .post(server.url("/_arkret/self/device_messages/ack"))
             .bearer_auth(recipient_token)
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckRequestBody,
-            >(json!({ "ack_token": ack_token }))?),
+            .json(
+                &arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckRequestBody {
+                    ack_token: ack_token.to_owned(),
+                },
+            ),
         StatusCode::OK,
     )
     .await?)?;

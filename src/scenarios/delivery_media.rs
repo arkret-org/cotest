@@ -1,4 +1,14 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result, anyhow};
+use arkret_models_collaboration::sync_frames::account_sync::{
+    DeviceMessagesAckRequestBody, DeviceMessagesSendRequestBody,
+};
+use arkret_models_crypto::{KeysClaimRequestBody, KeysQueryRequestBody};
+use arkret_models_integration::{
+    PushDeviceRoute, PushNotificationEnvelope, PushNotifyRequestBody, PushTimingProfileHint,
+};
+use arkret_wire::{DeviceId, NonEmptyString, PushTargetId};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -55,9 +65,10 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/self/keys/query"))
-            .json(&serde_json::from_value::<
-                arkret_models_crypto::KeysQueryRequestBody,
-            >(json!({"device_keys": {}}))?),
+            .json(&KeysQueryRequestBody {
+                device_keys: BTreeMap::new(),
+                timeout_ms: None,
+            }),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -109,13 +120,15 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
-            .json(&serde_json::from_value::<
-                arkret_models_crypto::KeysClaimRequestBody,
-            >(json!({
-                "one_time_keys": {
-                    (alice_id.as_str()): {(alice_device): "signed_curve25519"}
-                }
-            }))?),
+            .json(&KeysClaimRequestBody {
+                one_time_keys: BTreeMap::from([(
+                    alice_id.clone(),
+                    BTreeMap::from([(
+                        DeviceId::new(alice_device)?,
+                        NonEmptyString::new("signed_curve25519").map_err(anyhow::Error::msg)?,
+                    )]),
+                )]),
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -129,13 +142,15 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
-            .json(&serde_json::from_value::<
-                arkret_models_crypto::KeysClaimRequestBody,
-            >(json!({
-                "one_time_keys": {
-                    (alice_id.as_str()): {(alice_device): "signed_curve25519"}
-                }
-            }))?),
+            .json(&KeysClaimRequestBody {
+                one_time_keys: BTreeMap::from([(
+                    alice_id.clone(),
+                    BTreeMap::from([(
+                        DeviceId::new(alice_device)?,
+                        NonEmptyString::new("signed_curve25519").map_err(anyhow::Error::msg)?,
+                    )]),
+                )]),
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -161,9 +176,9 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
             .http()
             .post(server.url("/_arkret/self/device_messages"))
             .header("Idempotency-Key", "device-noauth")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesSendRequestBody,
-            >(json!({"messages": {}}))?),
+            .json(&DeviceMessagesSendRequestBody {
+                messages: BTreeMap::new(),
+            }),
         StatusCode::UNAUTHORIZED,
         "unauthenticated",
     )
@@ -238,19 +253,19 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
     );
 
     let ack: arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckOutcome =
-        serde_json::from_value(expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/self/device_messages/ack"))
-            .bearer_auth(&token)
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::sync_frames::account_sync::DeviceMessagesAckRequestBody,
-            >(json!({
-                "ack_token": delivered["ack_token"].as_str().unwrap()
-            }))?),
-        StatusCode::OK,
-    )
-    .await?)?;
+        serde_json::from_value(
+            expect_json(
+                server
+                    .http()
+                    .post(server.url("/_arkret/self/device_messages/ack"))
+                    .bearer_auth(&token)
+                    .json(&DeviceMessagesAckRequestBody {
+                        ack_token: delivered["ack_token"].as_str().unwrap().to_owned(),
+                    }),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
     assert_eq!(ack.pruned_count, 1);
 
     let drained = expect_json(
@@ -521,15 +536,12 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     // and `deny_unknown_fields`, so it structurally cannot carry a plaintext
     // `content` field — a push that tries to violates the declared schema and
     // is rejected as `schema_violation` (422) before any rule evaluation.
-    let push_baseline =
-        serde_json::from_value::<arkret_models_integration::PushNotifyRequestBody>(json!({
-            "notification": {
-                "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
-                "wakeup_kind": "message",
-                "timing_profile_hint": "default",
-                "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]
-            }
-        }))?;
+    let push_baseline = PushNotifyRequestBody {
+        notification: unregistered_device_notification()?,
+        event_kind: None,
+        reason_code: None,
+        audit_envelope: None,
+    };
     let plaintext_push = crate::harness::wire_negative_from_sdk(&push_baseline, |body| {
         body["notification"]["content"] = json!({"body": "plaintext leak"});
     })?;
@@ -546,16 +558,12 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/edge/push/notify"))
-            .json(&serde_json::from_value::<
-                arkret_models_integration::PushNotifyRequestBody,
-            >(json!({
-                "notification": {
-                    "push_target_id": "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
-                    "wakeup_kind": "message",
-                    "timing_profile_hint": "default",
-                    "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000ff"}]
-                }
-            }))?),
+            .json(&PushNotifyRequestBody {
+                notification: unregistered_device_notification()?,
+                event_kind: None,
+                reason_code: None,
+                audit_envelope: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -581,7 +589,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     )
     .await?;
     let wrong_reporter = crate::harness::wire_negative_from_sdk(&moderation_request, |body| {
-        body["report_event"]["event"]["payload"]["reporter"] =
+        body["report_event"]["event"]["payload"]["reporter_id"] =
             json!("ak:did_core:web:bob-delivery.example");
     })?;
     expect_api_error(
@@ -606,4 +614,24 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
     .await?;
 
     Ok(())
+}
+
+/// Metadata-only wakeup envelope aimed at a device that was never registered.
+fn unregistered_device_notification() -> Result<PushNotificationEnvelope> {
+    Ok(PushNotificationEnvelope {
+        push_target_id: Some(PushTargetId::new(
+            "ak:pseudonym:push:kosc9iQ4gVct1OB-b6X364WIFIsJFVbVzn7BMBs1sm8",
+        )?),
+        wakeup_kind: Some("message".to_owned()),
+        timing_profile_hint: Some(PushTimingProfileHint::Default),
+        devices: vec![PushDeviceRoute {
+            device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-0000000000ff")?,
+            push_key: None,
+            app_id: None,
+            platform: None,
+            target_route_token: None,
+            visible_notification_opt_in: false,
+        }],
+        ..PushNotificationEnvelope::default()
+    })
 }

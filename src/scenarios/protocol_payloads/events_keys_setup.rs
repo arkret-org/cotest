@@ -102,11 +102,13 @@ async fn upload_and_inspect_keys(
             .http()
             .post(server.url("/_arkret/self/keys/query"))
             .bearer_auth(token)
-            .json(&serde_json::from_value::<
-                arkret_models_crypto::KeysQueryRequestBody,
-            >(
-                json!({"device_keys": {(&actor_core_id): [KEYS_DEVICE_ID]}}),
-            )?),
+            .json(&arkret_models_crypto::KeysQueryRequestBody {
+                device_keys: std::collections::BTreeMap::from([(
+                    arkret_identifiers::DidCoreId::new(actor_core_id.clone())?,
+                    vec![arkret_identifiers::DeviceId::new(KEYS_DEVICE_ID)?],
+                )]),
+                timeout_ms: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -140,7 +142,7 @@ async fn upload_and_inspect_keys(
         "principal_server_id",
         "device_id",
         "device_status",
-        "device_signing_key",
+        "device_signing_key_did",
         "hpke_key",
         "device_authorize_event_id",
         "authorized_generation_ref",
@@ -155,7 +157,7 @@ async fn upload_and_inspect_keys(
     let attestation = &queried_device["device_projection_attestation"];
     assert_eq!(attestation["attestation"]["device_status"], "active");
     assert!(
-        attestation["attestation"]["device_signing_key"]
+        attestation["attestation"]["device_signing_key_did"]
             .as_str()
             .is_some_and(|key| key.starts_with("did:key:z6Mk")),
         "query must expose the authoritative active device signing key: {queried_device}"
@@ -197,13 +199,16 @@ async fn upload_and_inspect_keys(
             .http()
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(token)
-            .json(&serde_json::from_value::<
-                arkret_models_crypto::KeysClaimRequestBody,
-            >(json!({
-                "one_time_keys": {
-                    (&actor_core_id): {(KEYS_DEVICE_ID): "signed_curve25519"}
-                }
-            }))?),
+            .json(&arkret_models_crypto::KeysClaimRequestBody {
+                one_time_keys: std::collections::BTreeMap::from([(
+                    arkret_identifiers::DidCoreId::new(actor_core_id.clone())?,
+                    std::collections::BTreeMap::from([(
+                        arkret_identifiers::DeviceId::new(KEYS_DEVICE_ID)?,
+                        arkret_wire::NonEmptyString::new("signed_curve25519")
+                            .map_err(anyhow::Error::msg)?,
+                    )]),
+                )]),
+            }),
         StatusCode::OK,
     )
     .await?;

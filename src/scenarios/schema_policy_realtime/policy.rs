@@ -1,4 +1,8 @@
 use anyhow::Result;
+use arkret_models_collaboration::governance::policy_check::{
+    PolicyCheckRequestBody, PolicyCheckSource,
+};
+use arkret_wire::{DidCoreId, Hash, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -99,23 +103,25 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
 
     let denied = expect_json(
         bob.post("/_arkret/self/policy/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
-            >(json!({
+            .json(&PolicyCheckRequestBody {
                 // `service-operation-dtos.schema.json#/$defs/PolicyCheckRequestBody`
                 // pins `request_id` to `^(?!ak:)`: it is a caller-chosen
                 // correlation id, not a typed Arkret identifier.
-                "request_id": "policy-check-deny-0001",
-                "request_canonical_digest": REQUEST_HASH,
-                "action": "ak.message.create",
-                "actor_id": bob_core,
-                "realm_id": realm_id,
-                "source": {
-                    "service_id": alice.service_id(),
-                    "service_kind": "principal_server",
-                    "signed_transport": true
-                }
-            }))?),
+                request_id: "policy-check-deny-0001".to_owned(),
+                realm_id: RealmId::new(realm_id.clone())?,
+                request_canonical_digest: Hash::new(REQUEST_HASH)?,
+                action: "ak.message.create".to_owned(),
+                actor_id: DidCoreId::new(bob_core.clone())?,
+                device_id: None,
+                source: PolicyCheckSource {
+                    service_id: DidCoreId::new(alice.service_id())?,
+                    service_kind: "principal_server".to_owned(),
+                    source_ip_digest: None,
+                    signed_transport: true,
+                },
+                event_preview: None,
+                auth_context: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -156,20 +162,22 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
 
     let allowed = expect_json(
         bob.post("/_arkret/self/policy/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
-            >(json!({
-                "request_id": "policy-check-allow-0001",
-                "request_canonical_digest": REQUEST_HASH,
-                "action": "ak.message.create",
-                "actor_id": bob_core,
-                "realm_id": realm_id,
-                "source": {
-                    "service_id": alice.service_id(),
-                    "service_kind": "principal_server",
-                    "signed_transport": true
-                }
-            }))?),
+            .json(&PolicyCheckRequestBody {
+                request_id: "policy-check-allow-0001".to_owned(),
+                realm_id: RealmId::new(realm_id.clone())?,
+                request_canonical_digest: Hash::new(REQUEST_HASH)?,
+                action: "ak.message.create".to_owned(),
+                actor_id: DidCoreId::new(bob_core.clone())?,
+                device_id: None,
+                source: PolicyCheckSource {
+                    service_id: DidCoreId::new(alice.service_id())?,
+                    service_kind: "principal_server".to_owned(),
+                    source_ip_digest: None,
+                    signed_transport: true,
+                },
+                event_preview: None,
+                auth_context: None,
+            }),
         StatusCode::OK,
     )
     .await?;

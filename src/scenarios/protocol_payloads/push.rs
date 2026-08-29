@@ -5,10 +5,28 @@
 //! `rejected` gateway_status while the registered one is accepted.
 
 use anyhow::{Context, Result};
+use arkret_models_integration::{
+    PushDeviceRoute, PushKey, PushNotificationEnvelope, PushNotifyRequestBody,
+    PushRegisterDeviceRequestBody, PushTimingProfileHint,
+};
+use arkret_wire::DeviceId;
 use reqwest::StatusCode;
-use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json};
+
+const REGISTERED_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-0000000000a1";
+const UNREGISTERED_DEVICE_ID: &str = "ak:device:01904100-0000-7000-8000-00000000dead";
+
+fn push_device_route(device_id: &str) -> Result<PushDeviceRoute> {
+    Ok(PushDeviceRoute {
+        device_id: DeviceId::new(device_id)?,
+        push_key: None,
+        app_id: None,
+        platform: None,
+        target_route_token: None,
+        visible_notification_opt_in: false,
+    })
+}
 
 pub async fn run(server: &ArkretServer, token: &str) -> Result<()> {
     let push_target_id = register_device(server, token).await?;
@@ -22,15 +40,15 @@ async fn register_device(server: &ArkretServer, token: &str) -> Result<arkret_wi
             .http()
             .post(server.url("/_arkret/edge/push/register-device"))
             .bearer_auth(token)
-            .json(&serde_json::from_value::<
-                arkret_models_integration::PushRegisterDeviceRequestBody,
-            >(json!({
-                "device_id": "ak:device:01904100-0000-7000-8000-0000000000a1",
-                "push_gateway": "https://push.example",
-                "push_key": "opaque",
-                "platform": "desktop",
-                "app_id": "inkson"
-            }))?),
+            .json(&PushRegisterDeviceRequestBody {
+                device_id: DeviceId::new(REGISTERED_DEVICE_ID)?,
+                push_gateway_url: "https://push.example".to_owned(),
+                push_key: PushKey::new("opaque").map_err(anyhow::Error::msg)?,
+                platform: Some("desktop".to_owned()),
+                app_id: Some("inkson".to_owned()),
+                display_name: None,
+                recipient_id: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -52,16 +70,21 @@ async fn notify_blind_wakeup(
         server
             .http()
             .post(server.url("/_arkret/edge/push/notify"))
-            .json(&serde_json::from_value::<
-                arkret_models_integration::PushNotifyRequestBody,
-            >(json!({
-                "notification": {
-                    "push_target_id": push_target_id.as_str(),
-                    "wakeup_kind": "message",
-                    "timing_profile_hint": "default",
-                    "devices": [{"device_id": "ak:device:01904100-0000-7000-8000-0000000000a1"}, {"device_id": "ak:device:01904100-0000-7000-8000-00000000dead"}]
-                }
-            }))?),
+            .json(&PushNotifyRequestBody {
+                notification: PushNotificationEnvelope {
+                    push_target_id: Some(push_target_id.clone()),
+                    wakeup_kind: Some("message".to_owned()),
+                    timing_profile_hint: Some(PushTimingProfileHint::Default),
+                    devices: vec![
+                        push_device_route(REGISTERED_DEVICE_ID)?,
+                        push_device_route(UNREGISTERED_DEVICE_ID)?,
+                    ],
+                    ..PushNotificationEnvelope::default()
+                },
+                event_kind: None,
+                reason_code: None,
+                audit_envelope: None,
+            }),
         StatusCode::OK,
     )
     .await?;

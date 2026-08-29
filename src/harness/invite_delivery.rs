@@ -16,6 +16,7 @@ use arkret_models_collaboration::governance::invite_addressing::{
     SelfInviteDispatchRequestBody,
 };
 use arkret_models_identity::ServiceResolutionCarrier;
+use arkret_models_identity::account::AccountDataList;
 use arkret_wire::AccountDataKey;
 use reqwest::StatusCode;
 
@@ -127,14 +128,17 @@ async fn dispatch_invite(
 /// list surface (`ak.self.account_data.read.list.v1`) returns every non-internal
 /// cell without the single-key registration gate.
 async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str) -> Result<String> {
-    let listed = expect_json(invitee.get("/_arkret/self/account_data"), StatusCode::OK).await?;
-    let entries = listed["entries"].as_array().cloned().unwrap_or_default();
-    let cell = entries.iter().find(|entry| {
-        entry["account_data_key"].as_str() == Some(AccountDataKey::ACCOUNT_INVITE_DELIVERY)
-    });
+    let listed_value =
+        expect_json(invitee.get("/_arkret/self/account_data"), StatusCode::OK).await?;
+    let listed: AccountDataList = serde_json::from_value(listed_value)
+        .context("account-data list is not an AccountDataList")?;
+    let cell = listed
+        .account_data_entries
+        .iter()
+        .find(|entry| entry.account_data_key == AccountDataKey::ACCOUNT_INVITE_DELIVERY);
     let token = match cell {
         Some(cell) => {
-            let delivery: InviteDelivery = serde_json::from_value(cell["content"].clone())
+            let delivery: InviteDelivery = serde_json::from_value(cell.content.clone())
                 .context("invite_delivery account-data cell is not an InviteDelivery")?;
             delivery
                 .delivery_entries
@@ -147,7 +151,7 @@ async fn read_delivered_invite_token(invitee: &TestActorClient, invite_id: &str)
     token.ok_or_else(|| {
         anyhow::anyhow!(
             "no delivered invite credential for {invite_id} in the invitee account-data list: {}",
-            serde_json::to_string_pretty(&entries).unwrap_or_default()
+            serde_json::to_string_pretty(&listed.account_data_entries).unwrap_or_default()
         )
     })
 }

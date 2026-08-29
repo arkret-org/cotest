@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use reqwest::{Client, StatusCode};
-use serde_json::{Value as JsonValue, json};
+use serde_json::Value as JsonValue;
 
 use crate::scenarios::_helpers::external_binary::{TEABAY_SPEC, try_spawn};
 
@@ -86,9 +86,19 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
 
     let not_found = http
         .post(directory.url("/_arkret/find/directory/resolve-handle"))
-        .json(&serde_json::from_value::<
-            arkret_models_discovery::DirectoryResolveHandleRequestBody,
-        >(json!({ "handle": "absent.example" }))?)
+        .json(
+            &arkret_models_discovery::DirectoryResolveHandleRequestBody {
+                handle: "absent.example".to_owned(),
+                expected_principal_id: None,
+                proof_challenge: None,
+                claim_presentations: Vec::new(),
+                intent: None,
+                requester_id: None,
+                audience: None,
+                realm_id: None,
+                proofs: Vec::new(),
+            },
+        )
         .send()
         .await?;
     assert_eq!(not_found.status(), StatusCode::NOT_FOUND);

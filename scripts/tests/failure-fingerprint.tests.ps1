@@ -85,9 +85,62 @@ correlation_id: 01JQZ7K3NB4S9WTX
         -SystemOut ""
     Assert-True ($delta.fingerprint -ne $alpha.fingerprint) "a different assertion site must fingerprint differently"
 
+    # One broken shared helper is one root cause, however many specs trip over
+    # it. Each caller fails at its own spec line, so only the helper frame can
+    # hold them together.
+    $helperDetail = @"
+Error: cotest-wire principal-registration-fixture failed with exit 1:
+Caused by:
+    missing field ``audience_id``
+    at cotestWire (D:\cotest\e2e\helpers\soland-api\wire-client.ts:163:11)
+    at registerCoauthPasswordAccount (D:\cotest\e2e\helpers\coauth-register.ts:462:19)
+    at D:\cotest\e2e\tests\authz\capability-chain.spec.ts:177:59
+"@
+    $helperAlpha = Get-FailureFingerprint `
+        -Scenario "authz/capability-chain.spec.ts" `
+        -TestName "grant lifecycle" `
+        -Message "cotest-wire principal-registration-fixture failed" `
+        -Detail $helperDetail `
+        -SystemOut ""
+    $helperBeta = Get-FailureFingerprint `
+        -Scenario "calls/webrtc.spec.ts" `
+        -TestName "ICE config endpoint rejects unauthenticated callers" `
+        -Message "cotest-wire principal-registration-fixture failed" `
+        -Detail ($helperDetail -replace 'authz\\capability-chain\.spec\.ts:177:59', 'calls\webrtc.spec.ts:37:5') `
+        -SystemOut ""
+    Assert-True ($helperAlpha.origin_site -eq "helpers/soland-api/wire-client.ts:163") "the deepest shared helper frame must be extracted, got '$($helperAlpha.origin_site)'"
+    Assert-True ($helperAlpha.fingerprint -eq $helperBeta.fingerprint) "two scenarios failing in the same helper share one root cause"
+    Assert-True ($helperAlpha.assertion_site -ne $helperBeta.assertion_site) "each caller must still report its own assertion site"
+
+    # A different helper line is a different break.
+    $helperGamma = Get-FailureFingerprint `
+        -Scenario "authz/capability-chain.spec.ts" `
+        -TestName "grant lifecycle" `
+        -Message "cotest-wire principal-registration-fixture failed" `
+        -Detail ($helperDetail -replace 'wire-client\.ts:163:11', 'wire-client.ts:207:11') `
+        -SystemOut ""
+    Assert-True ($helperGamma.fingerprint -ne $helperAlpha.fingerprint) "a different helper line must fingerprint differently"
+
+    # The same helper line throwing for a different reason is a different break.
+    $helperDelta = Get-FailureFingerprint `
+        -Scenario "invites/invite-addressing.spec.ts" `
+        -TestName "peer invite delivery defers explicit_address evidence" `
+        -Message "cotest-wire event-envelope-proof failed" `
+        -Detail @"
+Error: cotest-wire event-envelope-proof failed with exit 1:
+Caused by:
+    DID URL must start with did:
+    at cotestWire (D:\cotest\e2e\helpers\soland-api\wire-client.ts:163:11)
+    at D:\cotest\e2e\tests\invites\invite-addressing.spec.ts:170:24
+"@ `
+        -SystemOut ""
+    Assert-True ($helperAlpha.error_token -eq "missing_field:audience_id") "a serde field name must be extracted, got '$($helperAlpha.error_token)'"
+    Assert-True ($helperDelta.error_token -eq "cotest_wire:event-envelope-proof") "the cotest-wire command must discriminate, got '$($helperDelta.error_token)'"
+    Assert-True ($helperDelta.fingerprint -ne $helperAlpha.fingerprint) "one helper line throwing for two reasons must not merge into one root cause"
+
     # Missing evidence degrades to empty fields rather than throwing.
     $sparse = Get-FailureFingerprint -Scenario "" -TestName "" -Message "" -Detail "" -SystemOut ""
-    Assert-True ($sparse.endpoint -eq "" -and $sparse.wire_code -eq "" -and $sparse.assertion_site -eq "") "a failure with no structural evidence must degrade to empty fields"
+    Assert-True ($sparse.endpoint -eq "" -and $sparse.wire_code -eq "" -and $sparse.assertion_site -eq "" -and $sparse.origin_site -eq "" -and $sparse.error_token -eq "") "a failure with no structural evidence must degrade to empty fields"
     Assert-True ($sparse.fingerprint.Length -eq 16) "even an evidence-free failure must get a fingerprint"
 
     # The record must carry no free-form failure text: a failing object

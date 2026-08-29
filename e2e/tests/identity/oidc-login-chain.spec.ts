@@ -76,7 +76,8 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     const methods: Array<{
       method: string;
       client_id?: string;
-      issuer?: string;
+      issuer_uri?: string;
+      openid_configuration_url?: string;
       grant_exchange?: { kind?: string };
     }> = authMetadata.methods ?? [];
     const oidc = methods.find((m) => m.method === "oidc");
@@ -107,7 +108,9 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     expect(accountAuthority.gate_account_base_url).toBe(`${coauthOrigin}/_arkret/gate/account`);
 
     // The advertised OIDC issuer is the Auth Server too (OIDC discovery target).
-    expect(new URL(oidc!.issuer!).origin).toBe(coauthOrigin);
+    // service-describe.schema.json makes both required once method is `oidc`.
+    expect(new URL(oidc!.issuer_uri!).origin).toBe(coauthOrigin);
+    expect(new URL(oidc!.openid_configuration_url!).origin).toBe(coauthOrigin);
   });
 
   // ── Session-grant + DPoP on a root path ──────────────────────────────────

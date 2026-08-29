@@ -313,12 +313,12 @@ pub async fn moderation_report_request(
             "moderation target scope does not belong to the requested Realm"
         ));
     }
-    let reporter = project_did_to_core_id(&Did::new(actor.actor.clone())?)?;
+    let reporter_id = project_did_to_core_id(&Did::new(actor.actor.clone())?)?;
     let mut payload = json!({
         "realm_id": realm_id,
         "target_ref": target_ref,
         "report_reason_code": "spam",
-        "reporter": reporter,
+        "reporter_id": reporter_id,
         "provenance": "self"
     });
     if matches!(effective_scope, ScopeRef::Circle { .. }) {
@@ -336,7 +336,7 @@ pub async fn moderation_report_request(
         ),
     };
     request.validate_authoring_context(
-        &reporter,
+        &reporter_id,
         &ModerationReportAcceptedTargetBasis {
             target_ref: target_ref.to_owned(),
             effective_scope,

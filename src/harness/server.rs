@@ -438,12 +438,20 @@ impl ArkretServer {
             .stdout(stdout)
             .stderr(stderr);
         tls.apply_to_command(&mut command);
-        if extra_env.iter().any(|(key, _)| {
+        // `SOLAND_KEYSTORE_PATH` / `_MASTER_KEY` only mean anything to the
+        // `encrypted_file` backend, so injecting them under a caller-chosen
+        // backend hands soland a contradictory keystore config that it rejects
+        // at startup. A caller that names a backend owns the whole trio.
+        let durable_keystore_needed = extra_env.iter().any(|(key, _)| {
             matches!(
                 *key,
                 "DATABASE_URL" | "SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
             )
-        }) {
+        });
+        let keystore_backend_chosen = extra_env
+            .iter()
+            .any(|(key, _)| *key == "SOLAND_KEYSTORE_BACKEND");
+        if durable_keystore_needed && !keystore_backend_chosen {
             command
                 .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
                 .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))
@@ -790,12 +798,20 @@ impl ArkretServer {
         if let Some(tls) = &self._tls {
             tls.apply_to_command(&mut command);
         }
-        if config.extra_env.iter().any(|(key, _)| {
+        // Same rule as the initial spawn: a caller-chosen backend owns the whole
+        // keystore trio, so the `encrypted_file`-only path and master key are
+        // never mixed into it.
+        let durable_keystore_needed = config.extra_env.iter().any(|(key, _)| {
             matches!(
                 key.as_str(),
                 "DATABASE_URL" | "SOLAND_EXTERNAL_WEBVH_REGISTRATION_BEARER"
             )
-        }) {
+        });
+        let keystore_backend_chosen = config
+            .extra_env
+            .iter()
+            .any(|(key, _)| key == "SOLAND_KEYSTORE_BACKEND");
+        if durable_keystore_needed && !keystore_backend_chosen {
             command
                 .env("SOLAND_KEYSTORE_BACKEND", "encrypted_file")
                 .env("SOLAND_KEYSTORE_PATH", blob_root.join("keystore.v1"))

@@ -663,22 +663,21 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
 /// available; environments without either Postgres source report an explicit
 /// live-row skip while the always-on in-memory convergence scenario still runs.
 pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
-    let configured_database = std::env::var("COTEST_SOLAND_DATABASE_URL")
-        .ok()
-        .filter(|url| !url.trim().is_empty());
-    let mut ephemeral = None;
-    let database_url = if let Some(url) = configured_database {
-        url
-    } else {
-        ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?;
-        let Some(database) = ephemeral.as_ref() else {
-            eprintln!(
-                "calendar RSVP restart row skipped: no COTEST_SOLAND_DATABASE_URL and Docker/Postgres unavailable"
-            );
-            return Ok(());
-        };
-        database.connect_url.clone()
+    // `COTEST_SOLAND_DATABASE_URL` is an administrator connection, not a test
+    // database: used directly, every run replays onto the previous run's rows
+    // and a stale `service_identity` fails this restart assertion for reasons
+    // that have nothing to do with the code under test. This helper creates a
+    // per-run database from it (and falls back to Docker), dropping it on Drop.
+    let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
+        "COTEST_SOLAND_DATABASE_URL",
+    )?;
+    let Some(database) = ephemeral.as_ref() else {
+        eprintln!(
+            "calendar RSVP restart row skipped: no COTEST_SOLAND_DATABASE_URL and Docker/Postgres unavailable"
+        );
+        return Ok(());
     };
+    let database_url = database.connect_url.clone();
 
     let test_name = "calendar-rsvp-restart";
     let keystore_dir = tempfile::tempdir()?;

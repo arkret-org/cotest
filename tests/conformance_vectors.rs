@@ -61,7 +61,7 @@ fn domain_wire_constraint_vectors_reject_drift() {
 
     let consent = json!({
         "consent_id": "ak:consent:01904100-0000-7000-8000-000000000001",
-        "peer": "ak:did_core:webvh:z6mkfixture",
+        "peer_id": "ak:did_core:webvh:z6mkfixture",
         "consent_scope": "direct_message"
     });
     serde_json::from_value::<arkret::ConsentGrantPayload>(consent.clone())

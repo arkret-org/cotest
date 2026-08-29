@@ -47,36 +47,59 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
     // Construct a body that *would* be shape-valid if the transport were
     // signed. We aren't testing the verify chain here — we're testing that
     // the request never reaches it without a Signature/Signature-Input pair.
-    let body =
-        serde_json::from_value::<arkret_models_discovery::DirectoryAnnounceRequestBody>(json!({
-            "discovery_event": {
-                "event_id": "ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2",
-                "kind": "ak.actor.discovery",
-                "realm_id": "ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa",
-                "scope_ref": {
-                    "kind": "realm",
-                    "realm_id": "ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa"
-                },
-                "actor_id": "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
-                "principal_server_id": "ak:did_core:web:soland.cotest.local",
-                "actor_seq": 1,
-                "created_at": "2026-05-18T00:00:00.000Z",
-                "prev_refs": [],
-                "refs": [],
-                "payload": {
-                    "resource_id": "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
-                    "value": {
-                        "resource_kind": "actor",
-                        "discoverability": "public",
-                        "directory_ids": ["ak:did_core:web:teabay.cotest.local"]
-                    }
-                },
-                "proofs": []
+    let discovery_event_id =
+        arkret_wire::EventId::new("ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2")?;
+    let discovery_realm_id =
+        arkret_wire::RealmId::new("ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa")?;
+    let discovery_actor_id = arkret_wire::DidCoreId::new(
+        "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
+    )?;
+    let principal_server_id = arkret_wire::DidCoreId::new("ak:did_core:web:soland.cotest.local")?;
+    let body = arkret_models_discovery::DirectoryAnnounceRequestBody {
+        discovery_event: arkret_wire::Event {
+            event_id: discovery_event_id.clone(),
+            kind: arkret_wire::EventKind::ActorDiscovery,
+            realm_id: discovery_realm_id.clone(),
+            scope_ref: arkret_wire::event_envelope::ScopeRef::Realm {
+                realm_id: discovery_realm_id,
             },
-            "source_refs": ["ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2"],
-            "as_of": arkret_canonical::format_timestamp_canonical(Utc::now()),
-            "principal_server_id": "ak:did_core:web:soland.cotest.local"
-        }))?;
+            actor_id: discovery_actor_id.clone(),
+            executed_by: None,
+            principal_server_id: principal_server_id.clone(),
+            authorization_ref: None,
+            applet_id: None,
+            external_ref: None,
+            actor_kind: None,
+            actor_seq: 1,
+            created_at: arkret_canonical::parse_timestamp_canonical("2026-05-18T00:00:00.000Z")?,
+            hlc: None,
+            prev_refs: Vec::new(),
+            refs: Vec::new(),
+            causal_refs: Vec::new(),
+            preconditions: Vec::new(),
+            seal_ref: None,
+            auth_context: None,
+            seal_basis: None,
+            // `Event::payload` is an open `BTreeMap<String, Value>` on the wire
+            // type; the discovery record shape lives in the schema, not in Rust.
+            payload: serde_json::from_value(json!({
+                "resource_id": discovery_actor_id.as_str(),
+                "value": {
+                    "resource_kind": "actor",
+                    "discoverability": "public",
+                    "directory_ids": ["ak:did_core:web:teabay.cotest.local"]
+                }
+            }))?,
+            unsigned: std::collections::BTreeMap::new(),
+            proofs: Vec::new(),
+            requirements: arkret_wire::EventRequirements::default(),
+        },
+        source_refs: vec![discovery_event_id.into_string()],
+        as_of: Utc::now(),
+        principal_server_id,
+        ttl_seconds: None,
+        supersedes_announce_id: None,
+    };
 
     // Notice: no Signature-Input / Signature / Content-Digest headers. This
     // is precisely the wire-shape of an attacker replaying / fabricating an

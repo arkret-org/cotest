@@ -344,14 +344,16 @@ pub async fn declared_durable_effects_match_live_producers() -> Result<()> {
     let before = realm_event_kinds(&alice, &realm_id).await?;
     let response = alice
         .post("/_arkret/edge/push/register-device")
-        .canonical_json(&serde_json::from_value::<
-            arkret_models_integration::PushRegisterDeviceRequestBody,
-        >(json!({
-            "device_id": alice.device_id,
-            "push_gateway": "https://push.example/spotcheck",
-            "push_key": "cotest-spotcheck-key",
-            "platform": "web",
-        }))?)?
+        .canonical_json(&arkret_models_integration::PushRegisterDeviceRequestBody {
+            device_id: arkret_wire::DeviceId::new(alice.device_id.clone())?,
+            push_gateway_url: "https://push.example/spotcheck".to_owned(),
+            push_key: arkret_models_integration::PushKey::new("cotest-spotcheck-key")
+                .map_err(anyhow::Error::msg)?,
+            platform: Some("web".to_owned()),
+            app_id: None,
+            display_name: None,
+            recipient_id: None,
+        })?
         .send()
         .await?;
     let push_status = response.status();

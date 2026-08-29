@@ -125,9 +125,12 @@ async fn install_test_principal_control_document(
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&serde_json::from_value::<
-                arkret_models_identity::identity::IdentityResolveRequestBody,
-            >(json!({"did": actor}))?),
+            .json(
+                &arkret_models_identity::identity::IdentityResolveRequestBody {
+                    did: arkret_wire::Did::new(actor)?,
+                    requested_evidence_kinds: Vec::new(),
+                },
+            ),
         StatusCode::OK,
     )
     .await?;

@@ -74,9 +74,13 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
     // Baseline: nobody named "Alice Wonderland" yet.
     let before: Value = http
         .post(&teabay_search_url)
-        .json(&serde_json::from_value::<
-            arkret_models_discovery::DirectorySearchActorsRequestBody,
-        >(json!({"query": "Alice Wonderland"}))?)
+        .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
+            query: Some("Alice Wonderland".to_owned()),
+            realm_id: None,
+            organization_principal_id: None,
+            cursor: None,
+            limit: None,
+        })
         .send()
         .await?
         .json()
@@ -117,9 +121,13 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
         || async {
             let after: Value = http
                 .post(&teabay_search_url)
-                .json(&serde_json::from_value::<
-                    arkret_models_discovery::DirectorySearchActorsRequestBody,
-                >(json!({"query": "Alice Wonderland"}))?)
+                .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
+                    query: Some("Alice Wonderland".to_owned()),
+                    realm_id: None,
+                    organization_principal_id: None,
+                    cursor: None,
+                    limit: None,
+                })
                 .send()
                 .await?
                 .json()

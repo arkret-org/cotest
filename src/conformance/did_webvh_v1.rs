@@ -9,6 +9,10 @@ use arkret_models_identity::did_document::validate_did_webvh_v1_method;
 use arkret_signatures::webvh::skeleton::{
     derive_webvh_scid, finalize_webvh_scid_substitution, webvh_entry_hash_multibase,
 };
+use arkret_signatures::webvh::{
+    PreparedWebvhRelocation, WebvhInceptionError, WebvhRelocationInput,
+    prepare_portable_principal_inception, prepare_webvh_relocation,
+};
 use arkret_wire::{Did, ProfileId};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
@@ -257,8 +261,87 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             )?;
             Ok(reject())
         }
+        "reject_relocation_when_predecessor_portable_absent" => {
+            // A relocation is only authorized by `portable: true` in the
+            // predecessor's own inception parameters. This predecessor is an
+            // ordinary (non-portable) inception, and the successor satisfies
+            // every other relocation precondition -- same SCID, changed host,
+            // successor state id equal to the target, alsoKnownAs naming the
+            // direct predecessor -- so the missing portability is the only
+            // reason the SDK may reject.
+            let inception = principal_inception()?;
+            expect_rejected(relocate(&inception, &inception.log_entry)?, name)?;
+            Ok(reject())
+        }
+        "reject_relocation_when_predecessor_portable_false" => {
+            // No SDK path emits `portable: false` -- a non-portable inception
+            // simply omits the parameter — so this predecessor is the shape a
+            // foreign implementation would publish. The portability gate runs
+            // before history verification, which is what makes an entry built
+            // this way a valid model of the case.
+            let inception = principal_inception()?;
+            let mut predecessor = inception.log_entry.clone();
+            predecessor["parameters"]["portable"] = Value::Bool(false);
+            expect_rejected(relocate(&inception, &predecessor)?, name)?;
+            Ok(reject())
+        }
+        "accept_relocation_when_predecessor_portable_true" => {
+            let inception = portable_principal_inception()?;
+            relocate(&inception, &inception.log_entry)?
+                .map_err(|error| anyhow!("{name} was rejected by the canonical SDK path: {error}"))?;
+            Ok(accept(None))
+        }
         _ => bail!("unrecognized did:webvh adapter fixture case {name}"),
     }
+}
+
+/// Move an inception's DID to a new host while preserving its SCID, keeping
+/// every other relocation precondition satisfied so that the predecessor's
+/// declared portability is the only thing the SDK can be reacting to.
+fn relocate(
+    inception: &PreparedPrincipalInception,
+    predecessor: &Value,
+) -> Result<std::result::Result<PreparedWebvhRelocation, WebvhInceptionError>> {
+    let scid = inception
+        .did
+        .split(':')
+        .nth(2)
+        .ok_or_else(|| anyhow!("inception DID carries no SCID"))?;
+    let target_did = format!("did:webvh:{scid}:relocated.local:webvh:alice");
+    let mut state: Value = serde_json::from_str(
+        &serde_json::to_string(&inception.log_entry["state"])?.replace(&inception.did, &target_did),
+    )?;
+    state["alsoKnownAs"] = json!([inception.did.clone()]);
+    Ok(prepare_webvh_relocation(&WebvhRelocationInput {
+        current_did: &inception.did,
+        target_did: &target_did,
+        previous_entries: std::slice::from_ref(predecessor),
+        version_time: timestamp("2026-07-16T00:00:00.000Z")?,
+        current_update_seed: &RELOCATION_UPDATE_SEED,
+        next_update_public_key_multibase: &public_multikey([4_u8; 32]),
+        state: &state,
+    }))
+}
+
+/// Seed whose public key every relocation predecessor pre-commits as its next
+/// update key, so the relocation entry is signed by the expected key.
+const RELOCATION_UPDATE_SEED: [u8; 32] = [9_u8; 32];
+
+fn portable_principal_inception() -> Result<PreparedPrincipalInception> {
+    let endpoint = Url::parse("https://webvh-provider.local/")?;
+    let next_root = public_multikey(RELOCATION_UPDATE_SEED);
+    Ok(prepare_portable_principal_inception(
+        &PrincipalInceptionInput {
+            provider_endpoint: &endpoint,
+            principal_endpoint: &endpoint,
+            local_id: "alice",
+            also_known_as: &[],
+            version_time: timestamp("2026-07-15T00:00:00.000Z")?,
+            root_seed: &[1_u8; 32],
+            next_root_public_key_multibase: &next_root,
+            witness_policy: None,
+        },
+    )?)
 }
 
 fn principal_inception() -> Result<PreparedPrincipalInception> {

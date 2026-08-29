@@ -193,7 +193,7 @@ fn require_local_oidc_provider(name: &str, case: &Value) -> Result<()> {
     if case.pointer("/idp/kind").and_then(Value::as_str) != Some("local_oidc_provider") {
         bail!("{name} must use a local_oidc_provider fixture");
     }
-    require_non_empty(case, "/idp/issuer", name)?;
+    require_non_empty(case, "/idp/oidc_issuer_uri", name)?;
     require_non_empty(case, "/idp/subject", name)?;
     let keys = case
         .pointer("/idp/jwks/keys")

@@ -310,6 +310,19 @@ fn evaluate_applet_transaction(
         return Ok(json!({"decision": "reject", "reason": "http_signature_required"}));
     }
 
+    // Covered components come first when the transaction declares them: a
+    // signature that does not cover the required components authenticates none
+    // of the identity fields below, so such a transaction may legitimately omit
+    // them. Reading those fields first turned that case into a fixture-parse
+    // error instead of the rejection it asserts. A transaction that declares no
+    // covered_components at all is asserting some other rejection and falls
+    // through to the checks below.
+    if transaction.get("covered_components").is_some()
+        && !covered_components_include_all(transaction, required_components)?
+    {
+        return Ok(json!({"decision": "reject", "reason": "http_signature_invalid"}));
+    }
+
     let source_header = required_str(transaction, "source_id_header")?;
     let source_body = required_str(transaction, "source_id_body")?;
     let destination_header = required_str(transaction, "destination_id_header")?;
@@ -329,7 +342,6 @@ fn evaluate_applet_transaction(
             .and_then(Value::as_bool)
             != Some(true)
         || required_str(transaction, "keyid")? != required_str_obj(active_install, "key_ref")?
-        || !covered_components_include_all(transaction, required_components)?
     {
         return Ok(json!({"decision": "reject", "reason": "http_signature_invalid"}));
     }

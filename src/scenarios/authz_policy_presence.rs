@@ -1,6 +1,18 @@
 use anyhow::Result;
+use arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody;
+use arkret_models_collaboration::governance::policy_check::{
+    PolicyCheckRequestBody, PolicyCheckSource,
+};
+use arkret_models_collaboration::objects::media::{MediaIceConfigRequestBody, MediaIceMode};
+use arkret_models_integration::{
+    PushKey, PushRegisterDeviceRequestBody, PushUnregisterDeviceRequestBody,
+};
+use arkret_wire::{
+    DeviceId, DidCoreId, Hash, MorphId, RealmId, RelationId, ResourceSelectorKind, StrandId,
+    WireResourceSelector,
+};
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use crate::harness::{
     TestActorClient, actor_core_id, expect_api_error, expect_json, expect_status, submit_event,
@@ -8,6 +20,9 @@ use crate::harness::{
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
+
+const ZERO_SHA256_DIGEST: &str =
+    "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("authz-grants", &[]).await?;
@@ -32,16 +47,12 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let denied_before_grant = expect_json(
         bob.post("/_arkret/self/authz/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
-            >(json!({
-                "actor_id": bob_core_id,
-                "action": "ak.realm.admin",
-                "resource": {
-                    "kind": "realm",
-                    "realm_id": realm_id
-                }
-            }))?),
+            .json(&AuthzCheckRequestBody {
+                actor_id: DidCoreId::new(bob_core_id.clone())?,
+                action: "ak.realm.admin".to_owned(),
+                resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
+                context: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -116,16 +127,12 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let allowed_after_grant = expect_json(
         bob.post("/_arkret/self/authz/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
-            >(json!({
-                "actor_id": bob_core_id,
-                "action": "ak.realm.admin",
-                "resource": {
-                    "kind": "realm",
-                    "realm_id": realm_id
-                }
-            }))?),
+            .json(&AuthzCheckRequestBody {
+                actor_id: DidCoreId::new(bob_core_id.clone())?,
+                action: "ak.realm.admin".to_owned(),
+                resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
+                context: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -148,58 +155,45 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     // the Realm token into unrelated object kinds.
     let relation_id = "ak:relation:AU2FuIl7Kq70taw5RT2eOqgjJZDbJIZs_nCtuwEaOLTH";
     let morph_id = "ak:morph:AeoIMm0SoT07OMMZlyYNG7b9bvXo9Dj-aK28dRBThbn7";
+    let negative_realm = RealmId::new(realm_id.clone())?;
+    let negative_strand = StrandId::new(strand_id)?;
     let negative_checks = [
         (
             "ak.message.create",
-            json!({
-                "kind": "strand",
-                "realm_id": realm_id,
-                "strand_id": strand_id
-            }),
+            WireResourceSelector::strand(negative_realm.clone(), negative_strand.clone()),
             "no_strand_track_message_grant",
         ),
         (
             "ak.pin.add",
-            json!({
-                "kind": "strand",
-                "realm_id": realm_id,
-                "strand_id": strand_id
-            }),
+            WireResourceSelector::strand(negative_realm.clone(), negative_strand.clone()),
             "capability_denied",
         ),
         (
             "ak.rsvp.set",
-            json!({
-                "kind": "strand",
-                "realm_id": realm_id,
-                "strand_id": strand_id
-            }),
+            WireResourceSelector::strand(negative_realm.clone(), negative_strand),
             "capability_denied",
         ),
         (
             "ak.policy.manage",
-            json!({
-                "kind": "realm",
-                "realm_id": realm_id
-            }),
+            WireResourceSelector::realm(negative_realm.clone()),
             "capability_denied",
         ),
         (
             "ak.relation.create",
-            json!({
-                "kind": "relation",
-                "realm_id": realm_id,
-                "relation_id": relation_id
-            }),
+            WireResourceSelector {
+                kind: ResourceSelectorKind::Relation,
+                relation_id: Some(RelationId::new(relation_id)?),
+                ..WireResourceSelector::realm(negative_realm.clone())
+            },
             "capability_denied",
         ),
         (
             "ak.morph.create",
-            json!({
-                "kind": "morph",
-                "realm_id": realm_id,
-                "morph_id": morph_id
-            }),
+            WireResourceSelector {
+                kind: ResourceSelectorKind::Morph,
+                morph_id: Some(MorphId::new(morph_id)?),
+                ..WireResourceSelector::realm(negative_realm)
+            },
             "capability_denied",
         ),
     ];
@@ -221,16 +215,12 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
     let denied_after_revoke = expect_json(
         bob.post("/_arkret/self/authz/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
-            >(json!({
-                "actor_id": bob_core_id,
-                "action": "ak.realm.admin",
-                "resource": {
-                    "kind": "realm",
-                    "realm_id": realm_id
-                }
-            }))?),
+            .json(&AuthzCheckRequestBody {
+                actor_id: DidCoreId::new(bob_core_id)?,
+                action: "ak.realm.admin".to_owned(),
+                resource: Some(WireResourceSelector::realm(RealmId::new(realm_id)?)),
+                context: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -244,19 +234,18 @@ async fn expect_authz_check_hard_deny(
     client: &TestActorClient,
     actor_id: &str,
     action: &str,
-    resource: Value,
+    resource: WireResourceSelector,
     reason_code: &str,
 ) -> Result<()> {
     let denied = expect_json(
         client
             .post("/_arkret/self/authz/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody,
-            >(json!({
-                "actor_id": actor_id,
-                "action": action,
-                "resource": resource
-            }))?),
+            .json(&AuthzCheckRequestBody {
+                actor_id: DidCoreId::new(actor_id)?,
+                action: action.to_owned(),
+                resource: Some(resource),
+                context: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -300,17 +289,17 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let push_registration: arkret_models_integration::PushRegisterDeviceOutcome =
         serde_json::from_value(
             expect_json(
-                alice
-                    .post("/_arkret/edge/push/register-device")
-                    .json(&serde_json::from_value::<
-                        arkret_models_integration::PushRegisterDeviceRequestBody,
-                    >(json!({
-                        "device_id": alice.device_id.as_str(),
-                        "push_gateway": "https://push.example",
-                        "push_key": "opaque",
-                        "platform": "desktop",
-                        "app_id": "inkson"
-                    }))?),
+                alice.post("/_arkret/edge/push/register-device").json(
+                    &PushRegisterDeviceRequestBody {
+                        device_id: DeviceId::new(alice.device_id.clone())?,
+                        push_gateway_url: "https://push.example".to_owned(),
+                        push_key: PushKey::new("opaque").map_err(anyhow::Error::msg)?,
+                        platform: Some("desktop".to_owned()),
+                        app_id: Some("inkson".to_owned()),
+                        display_name: None,
+                        recipient_id: None,
+                    },
+                ),
                 StatusCode::OK,
             )
             .await?,
@@ -320,13 +309,11 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     expect_status(
         alice
             .post("/_arkret/edge/push/unregister-device")
-            .json(&serde_json::from_value::<
-                arkret_models_integration::PushUnregisterDeviceRequestBody,
-            >(json!({
-                "device_id": alice.device_id.as_str(),
-                "push_key": "opaque",
-                "app_id": "inkson"
-            }))?),
+            .json(&PushUnregisterDeviceRequestBody {
+                device_id: DeviceId::new(alice.device_id.clone())?,
+                push_key: Some(PushKey::new("opaque").map_err(anyhow::Error::msg)?),
+                app_id: Some("inkson".to_owned()),
+            }),
         StatusCode::NO_CONTENT,
     )
     .await?;
@@ -335,20 +322,22 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let review_policy = expect_json(
         alice
             .post("/_arkret/self/policy/check")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
-            >(json!({
-                "request_id": "req-review",
-                "realm_id": policy_realm_id,
-                "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "action": "ak.realm.destroy",
-                "actor_id": alice_core_id,
-                "source": {
-                    "service_id": server.service_id(),
-                    "service_kind": "principal_server",
-                    "signed_transport": true
-                }
-            }))?),
+            .json(&PolicyCheckRequestBody {
+                request_id: "req-review".to_owned(),
+                realm_id: RealmId::new(policy_realm_id.clone())?,
+                request_canonical_digest: Hash::new(ZERO_SHA256_DIGEST)?,
+                action: "ak.realm.destroy".to_owned(),
+                actor_id: DidCoreId::new(alice_core_id.clone())?,
+                device_id: None,
+                source: PolicyCheckSource {
+                    service_id: server.service_id().clone(),
+                    service_kind: "principal_server".to_owned(),
+                    source_ip_digest: None,
+                    signed_transport: true,
+                },
+                event_preview: None,
+                auth_context: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -356,20 +345,22 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     assert_eq!(review_policy["reason_code"], "review_required");
     assert!(review_policy["signature"].is_object());
 
-    let policy_baseline = serde_json::from_value::<
-        arkret_models_collaboration::governance::policy_check::PolicyCheckRequestBody,
-    >(json!({
-        "request_id": "req-invalid",
-        "realm_id": "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1",
-        "request_canonical_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-        "action": "ak.message.create",
-        "actor_id": alice_core_id,
-        "source": {
-            "service_id": server.service_id(),
-            "service_kind": "principal_server",
-            "signed_transport": true
-        }
-    }))?;
+    let policy_baseline = PolicyCheckRequestBody {
+        request_id: "req-invalid".to_owned(),
+        realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
+        request_canonical_digest: Hash::new(ZERO_SHA256_DIGEST)?,
+        action: "ak.message.create".to_owned(),
+        actor_id: DidCoreId::new(alice_core_id.clone())?,
+        device_id: None,
+        source: PolicyCheckSource {
+            service_id: server.service_id().clone(),
+            service_kind: "principal_server".to_owned(),
+            source_ip_digest: None,
+            signed_transport: true,
+        },
+        event_preview: None,
+        auth_context: None,
+    };
     let invalid_actor_body = crate::harness::wire_negative_from_sdk(&policy_baseline, |body| {
         body["actor_id"] = json!("alice")
     })?;
@@ -385,15 +376,13 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     let ice = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")
-            .json(&serde_json::from_value::<
-                arkret_models_collaboration::objects::media::MediaIceConfigRequestBody,
-            >(json!({
-                "realm_id": policy_realm_id,
-                "call_id": "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it",
-                "actor_id": alice_core_id,
-                "device_id": alice.device_id.as_str(),
-                "mode": "p2p"
-            }))?),
+            .json(&MediaIceConfigRequestBody {
+                realm_id: RealmId::new(policy_realm_id)?,
+                call_id: "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it".to_owned(),
+                actor_id: DidCoreId::new(alice_core_id.clone())?,
+                device_id: DeviceId::new(alice.device_id.clone())?,
+                mode: MediaIceMode::P2p,
+            }),
         StatusCode::OK,
     )
     .await?;

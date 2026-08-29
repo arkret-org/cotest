@@ -5,8 +5,8 @@ use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
 use arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody;
 use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
+use arkret_wire::{DidCoreId, RealmId, WireResourceSelector};
 use reqwest::StatusCode;
-use serde_json::json;
 
 use crate::harness::{
     ArkretServer, actor_core_id, expect_json, invite_create_payload, submitted_event_id,
@@ -14,22 +14,21 @@ use crate::harness::{
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
-    let configured_database = std::env::var("COTEST_SOLAND_DATABASE_URL")
-        .ok()
-        .filter(|url| !url.trim().is_empty());
-    let mut ephemeral = None;
-    let database_url = if let Some(url) = configured_database {
-        url
-    } else {
-        ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?;
-        let Some(database) = ephemeral.as_ref() else {
-            eprintln!(
-                "owner restart row skipped: no COTEST_SOLAND_DATABASE_URL and Docker/Postgres unavailable"
-            );
-            return Ok(());
-        };
-        database.connect_url.clone()
+    // `COTEST_SOLAND_DATABASE_URL` is an administrator connection, not a test
+    // database: used directly, every run replays onto the previous run's rows
+    // and a stale `service_identity` fails this restart assertion for reasons
+    // that have nothing to do with the code under test. This helper creates a
+    // per-run database from it (and falls back to Docker), dropping it on Drop.
+    let ephemeral = crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
+        "COTEST_SOLAND_DATABASE_URL",
+    )?;
+    let Some(database) = ephemeral.as_ref() else {
+        eprintln!(
+            "owner restart row skipped: no COTEST_SOLAND_DATABASE_URL and Docker/Postgres unavailable"
+        );
+        return Ok(());
     };
+    let database_url = database.connect_url.clone();
 
     let test_name = "owner-authority-restart";
     let keystore_dir = tempfile::tempdir()?;
@@ -98,13 +97,13 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
         .await?;
     let bob_core = actor_core_id(&bob.actor)?;
     let allowed = expect_json(
-        bob.post("/_arkret/self/authz/check").json(
-            &serde_json::from_value::<AuthzCheckRequestBody>(json!({
-                "actor_id": bob_core,
-                "action": "ak.message.create",
-                "resource": {"kind": "realm", "realm_id": realm_id}
-            }))?,
-        ),
+        bob.post("/_arkret/self/authz/check")
+            .json(&AuthzCheckRequestBody {
+                actor_id: DidCoreId::new(bob_core.clone())?,
+                action: "ak.message.create".to_owned(),
+                resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
+                context: None,
+            }),
         StatusCode::OK,
     )
     .await?;
@@ -122,13 +121,13 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
         .await_event_seal_coverage(&realm_id, &submitted_event_id(&revoked)?)
         .await?;
     let denied = expect_json(
-        bob.post("/_arkret/self/authz/check").json(
-            &serde_json::from_value::<AuthzCheckRequestBody>(json!({
-                "actor_id": actor_core_id(&bob.actor)?,
-                "action": "ak.message.create",
-                "resource": {"kind": "realm", "realm_id": realm_id}
-            }))?,
-        ),
+        bob.post("/_arkret/self/authz/check")
+            .json(&AuthzCheckRequestBody {
+                actor_id: DidCoreId::new(actor_core_id(&bob.actor)?)?,
+                action: "ak.message.create".to_owned(),
+                resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
+                context: None,
+            }),
         StatusCode::OK,
     )
     .await?;

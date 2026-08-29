@@ -12,10 +12,16 @@
 #     code -- look like two unrelated problems when the only thing compared is
 #     free-form assertion text.
 #
-# So each final failure gets a fingerprint built from the structural facts:
-# the endpoint, the wire code, the first assertion site, and the managed-service
-# correlation id. The first three form a stable dedupe key; the correlation id
-# varies per run and is carried for lookup only.
+#   * A break inside a shared helper fails every caller at its own `.spec.ts`
+#     line. Keyed on that line, one wrong field in the registration helper
+#     reports as dozens of unrelated root causes.
+#
+# So each final failure gets a fingerprint built from the structural facts: the
+# deepest shared helper frame, the endpoint, the wire code, the first assertion
+# site, and the managed-service correlation id. The helper frame -- or, absent
+# one, the scenario and assertion site -- forms a stable dedupe key with the
+# endpoint and wire code; the correlation id varies per run and is carried for
+# lookup only.
 #
 # Classification is reporting only. It never changes a test's verdict: the
 # junit result is the outcome, and this only explains it.
@@ -89,6 +95,50 @@ function Get-FailureAssertionSite {
     return "$($file):$($match.Groups[2].Value)"
 }
 
+# Deepest shared origin: the first `e2e/helpers/**` frame in the stack.
+#
+# When a shared helper throws, every caller fails at its own `.spec.ts` line, so
+# keying on the assertion site alone splits one break across as many
+# fingerprints as there are tests -- a single wrong field in the registration
+# helper reported as 88 distinct root causes. The helper frame is the same in
+# all of them and is the actual thing to fix, so it takes precedence.
+function Get-FailureOriginSite {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text)
+
+    $match = [regex]::Match($Text, '(?:^|[\\/(\s])helpers[\\/]([A-Za-z0-9_\-./\\]*\.ts):(\d+)(?::\d+)?')
+    if (-not $match.Success) {
+        return ""
+    }
+    $file = $match.Groups[1].Value -replace '\\', '/'
+    return "helpers/$($file):$($match.Groups[2].Value)"
+}
+
+# Bounded discriminator for failures that share an origin frame.
+#
+# One helper line can throw for unrelated reasons -- `wire-client.ts` raises the
+# same error for every cotest-wire command -- so the origin frame alone
+# over-merges. These three shapes name the break without carrying failure text:
+# a serde field name and a cotest-wire command are closed-set identifiers that
+# already appear in the spec and in cotest-wire's own command table, and the
+# match is capped to identifier characters so no serialised value can ride along.
+function Get-FailureErrorToken {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Text)
+
+    $match = [regex]::Match($Text, 'missing field `([a-z0-9_-]{1,64})`')
+    if ($match.Success) {
+        return "missing_field:$($match.Groups[1].Value)"
+    }
+    $match = [regex]::Match($Text, 'unknown field `([a-z0-9_-]{1,64})`')
+    if ($match.Success) {
+        return "unknown_field:$($match.Groups[1].Value)"
+    }
+    $match = [regex]::Match($Text, 'cotest-wire ([a-z0-9-]{1,64}) failed')
+    if ($match.Success) {
+        return "cotest_wire:$($match.Groups[1].Value)"
+    }
+    return ""
+}
+
 # Managed-service correlation / request id, for pulling the server side of the
 # failure out of services/<service>.log. Varies per run, so it is NOT part of
 # the dedupe key.
@@ -131,10 +181,20 @@ function Get-FailureFingerprint {
     $endpoint = Get-FailureEndpoint -Text $evidence
     $wireCode = Get-FailureWireCode -Text $evidence
     $assertionSite = Get-FailureAssertionSite -Text $evidence
+    $originSite = Get-FailureOriginSite -Text $evidence
+    $errorToken = Get-FailureErrorToken -Text $evidence
     $correlationId = Get-FailureCorrelationId -Text $evidence
     $httpStatus = Get-FailureHttpStatus -Text $evidence
 
-    $key = @($Scenario, $endpoint, $wireCode, $assertionSite) -join '|'
+    # A helper-origin break is one root cause no matter which scenario tripped
+    # over it, so neither the scenario nor the per-test assertion site may enter
+    # its key. Without a shared origin the assertion site is the strongest
+    # available structural signal and the scenario keeps unrelated specs apart.
+    $key = if ($originSite) {
+        @($originSite, $errorToken, $endpoint, $wireCode) -join '|'
+    } else {
+        @($Scenario, $errorToken, $endpoint, $wireCode, $assertionSite) -join '|'
+    }
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
         $hashBytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($key))
@@ -150,6 +210,8 @@ function Get-FailureFingerprint {
         endpoint       = $endpoint
         wire_code      = $wireCode
         assertion_site = $assertionSite
+        origin_site    = $originSite
+        error_token    = $errorToken
         http_status    = $httpStatus
         correlation_id = $correlationId
     }

@@ -18,6 +18,7 @@ const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
     "ak.vector.mimi.keypackage_claim_lifecycle.v1",
     "ak.vector.mimi.content_roundtrip.v1",
     "ak.vector.mimi.identifier_query_privacy.v1",
+    "ak.vector.mimi.identifier_query_source_signature.v1",
     "ak.vector.mimi.consent_isolation.v1",
     "ak.vector.mimi.proxy_download_policy.v1",
     "ak.vector.mimi.unsupported_draft_fail_closed.v1",
@@ -65,6 +66,9 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
             "ak.vector.mimi.keypackage_claim_lifecycle.v1" => validate_keypackage_claim_case(case)?,
             "ak.vector.mimi.content_roundtrip.v1" => validate_content_roundtrip_case(case)?,
             "ak.vector.mimi.identifier_query_privacy.v1" => validate_identifier_query_case(case)?,
+            "ak.vector.mimi.identifier_query_source_signature.v1" => {
+                validate_identifier_query_source_signature_case(case)?
+            }
             "ak.vector.mimi.consent_isolation.v1" => validate_consent_isolation_case(case)?,
             "ak.vector.mimi.proxy_download_policy.v1" => validate_proxy_download_case(case)?,
             "ak.vector.mimi.unsupported_draft_fail_closed.v1" => {
@@ -262,6 +266,73 @@ fn validate_identifier_query_case(case: &Value) -> Result<()> {
     require_expected(
         case,
         "returns_psi_match_bits_and_invite_handoff_without_exposing_contact_graph",
+    )
+}
+
+/// `ak.open.mimi.read.identifiers.v1` carries a per-request source signature
+/// whose absence or invalidity MUST fail the request before any PSI evaluation
+/// runs — an identifier query that reached PSI has already spent the privacy
+/// budget the signature exists to protect. The profile is scoped to this
+/// operation and MUST NOT be inherited by the sibling read operations.
+fn validate_identifier_query_source_signature_case(case: &Value) -> Result<()> {
+    let rows = case
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("MIMI identifier-query source-signature vector omits cases[]"))?;
+    let expected_rejections = [
+        (
+            "unsigned_query_rejected_before_psi",
+            "http_signature_required",
+        ),
+        (
+            "invalid_source_signature_rejected_before_psi",
+            "http_signature_invalid",
+        ),
+    ];
+    for (name, error_code) in expected_rejections {
+        let row = rows
+            .iter()
+            .find(|row| row.get("name").and_then(Value::as_str) == Some(name))
+            .ok_or_else(|| anyhow!("MIMI identifier-query signature vector omits row {name}"))?;
+        if row.get("expected_http_status").and_then(Value::as_u64) != Some(401) {
+            bail!("{name} must reject with 401");
+        }
+        if required_str(row, "expected_error_code")? != error_code {
+            bail!("{name} must reject with {error_code}");
+        }
+        if row.get("psi_evaluated").and_then(Value::as_bool) != Some(false) {
+            bail!("{name} must fail closed before PSI evaluation");
+        }
+    }
+    let inheritance = rows
+        .iter()
+        .find(|row| {
+            row.get("name").and_then(Value::as_str)
+                == Some("group_info_and_directory_do_not_inherit_profile")
+        })
+        .ok_or_else(|| {
+            anyhow!("MIMI identifier-query signature vector omits the profile-scope row")
+        })?;
+    let siblings = inheritance
+        .get("operation_ids")
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(Value::as_str)
+                .collect::<BTreeSet<_>>()
+        })
+        .unwrap_or_default();
+    for operation_id in [
+        "ak.open.mimi.read.group_info.v1",
+        "ak.open.mimi.read.provider_directory.v1",
+    ] {
+        if !siblings.contains(operation_id) {
+            bail!("profile-scope row must name {operation_id}");
+        }
+    }
+    require_expected(
+        inheritance,
+        "no_http_signature_required_error_from_this_profile",
     )
 }
 

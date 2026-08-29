@@ -24,6 +24,7 @@ import {
   selfInviteDispatchBody,
   readRealmSealBasis,
   refreshEventEnvelopeProof,
+  registerEventSigner,
   sha256CanonicalJson,
   signedEventEnvelope,
   submitPeerInviteDeliveryApi,
@@ -167,8 +168,19 @@ test.describe("invite addressing", () => {
       recipient_id: recipientServiceId,
       recipient_kind: "principal_server" as const,
     };
+    // This inviter is synthetic — it never registers through the client path,
+    // so its Event proof has no signer unless one is registered here. The
+    // verification method must be a real DID URL: event-envelope.schema.json
+    // forbids concatenating a did_core_id into one.
+    const inviter = "ak:did_core:web:cotest-inviter.example";
+    const inviterDeviceId = "ak:device:01904100-0000-7000-8000-0000000000a1";
+    registerEventSigner({
+      actorId: inviter,
+      deviceId: inviterDeviceId,
+      verificationMethod: `did:web:cotest-inviter.example#${inviterDeviceId}`,
+    });
     const inviteEvent = signedEventEnvelope({
-      actorId: "ak:did_core:web:cotest-inviter.example",
+      actorId: inviter,
       realmId: typedId("realm"),
       kind: "ak.invite.create",
       payload: {

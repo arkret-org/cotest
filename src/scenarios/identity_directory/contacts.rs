@@ -47,7 +47,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let contacts = expect_json(bob.get("/_arkret/self/contacts"), StatusCode::OK).await?;
-    assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
+    assert_eq!(contacts["contact_list_rows"].as_array().unwrap().len(), 1);
 
     let invite_realm = alice
         .create_realm_with(json!({
@@ -113,11 +113,15 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(
-                json!({"invite_token": "ak:invite-token:invalid"})
-            )?),
+            .json(&arkret_models_discovery::DirectoryResolveRealmRequestBody {
+                realm_id: None,
+                alias: None,
+                invite_token: Some("ak:invite-token:invalid".to_owned()),
+                signed_link: None,
+                requester_id: None,
+                proof_challenge: None,
+                claim_presentations: Vec::new(),
+            }),
         StatusCode::NOT_FOUND,
     )
     .await?;
@@ -126,9 +130,15 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/find/directory/resolve-realm"))
-            .json(&serde_json::from_value::<
-                arkret_models_discovery::DirectoryResolveRealmRequestBody,
-            >(json!({"invite_token": invite_token}))?),
+            .json(&arkret_models_discovery::DirectoryResolveRealmRequestBody {
+                realm_id: None,
+                alias: None,
+                invite_token: Some(invite_token),
+                signed_link: None,
+                requester_id: None,
+                proof_challenge: None,
+                claim_presentations: Vec::new(),
+            }),
         StatusCode::OK,
     )
     .await?;

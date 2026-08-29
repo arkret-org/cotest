@@ -151,17 +151,13 @@ fn submission_bytes(event: &arkret_wire::Event) -> Result<Vec<u8>> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial]
 async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Result<()> {
-    let server = match std::env::var("COTEST_SOLAND_DATABASE_URL") {
-        Ok(database_url) => {
-            ArkretServer::spawn_with_database_url(
-                "realm-actor-frontier-e2e-postgres",
-                &database_url,
-                &[("SOLAND_KEYSTORE_BACKEND", "platform")],
-            )
-            .await?
-        }
-        Err(_) => ArkretServer::spawn("realm-actor-frontier-e2e-memory").await?,
-    };
+    // `ArkretServer::spawn` already derives a per-run database from
+    // `COTEST_SOLAND_DATABASE_URL` (or a Docker instance) and provisions an
+    // isolated encrypted_file keystore under the server's own blob root.
+    // Passing the configured URL through verbatim skipped that isolation, and
+    // the `platform` keystore backend it also asked for is the developer's own
+    // OS credential store — neither per-run nor available on CI.
+    let server = ArkretServer::spawn("realm-actor-frontier-e2e").await?;
     let actor = actor_did_for_service_did(server.service_did(), "frontier-alice")?;
     let actor = actor.as_str();
     let verification_method = default_event_verification_method(actor).to_string();

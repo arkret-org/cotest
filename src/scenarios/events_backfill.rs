@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow, bail};
+use arkret_models_collaboration::event_query::EventsQueryPostRequestBody;
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::fixtures::TestActorBuilder;
 use crate::harness::{TestServerGroup, expect_json, submitted_event_id};
@@ -49,7 +50,12 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     let mut collected = Vec::new();
     let mut reached_end = false;
     for _ in 0..256 {
-        let body = json!({"realms": [realm_id], "limit": 1, "after": cursor});
+        let body = EventsQueryPostRequestBody {
+            realm_ids: vec![arkret_identifiers::RealmId::new(realm_id.clone())?],
+            after: cursor.clone().map(arkret_wire::Cursor::new).transpose()?,
+            limit: Some(1),
+            ..Default::default()
+        };
         let page = expect_json(
             alice.query("/_arkret/self/events").json(&body),
             StatusCode::OK,

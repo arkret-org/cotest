@@ -45,7 +45,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use super::schema_validation_fixture::SchemaEnv;
-use super::{fixture_runner_entrypoint, load_fixture_value, required_str, validate_profile};
+use super::{load_fixture_value, required_str};
 
 const FIXTURE: &str = "websocket-binding-fixture.json";
 const PROFILE: &str = "ak.profile.binding.websocket.v1";
@@ -74,18 +74,19 @@ const MULTIPLEX_STEPS: &[&str] = &[
 ];
 
 pub fn run_websocket_binding_suite() -> Result<()> {
-    let fixture = load_fixture_value(FIXTURE)?;
+    let fixture: WebSocketBindingFixture = serde_json::from_value(load_fixture_value(FIXTURE)?)
+        .map_err(|error| anyhow!("{FIXTURE} did not parse: {error}"))?;
     let limits = validate_metadata(&fixture)?;
     let env = SchemaEnv::load()?;
 
     let discovery = run_discovery_cases(&fixture, &env)?;
     let bundle_closure = run_bundle_closure_cases(&fixture, &env)?;
     let kat = run_dpop_kat(&fixture, &env)?;
-    let negatives = run_dpop_negative_cases(&fixture, &kat)?;
+    let negatives = run_dpop_negative_cases(&fixture, kat)?;
     let frames = run_frame_schema_cases(&fixture, &env)?;
     let wire_negatives = run_wire_negative_cases(&fixture, &env, &limits)?;
-    run_multiplex_trace(&fixture, &frames, &limits)?;
-    run_reauth_trace(&fixture, &kat)?;
+    run_multiplex_trace(&fixture, frames, &limits)?;
+    run_reauth_trace(&fixture, kat)?;
     run_drain_and_close_traces(&fixture, &limits)?;
     run_fallback_cases(&fixture)?;
 
@@ -100,6 +101,41 @@ pub fn run_websocket_binding_suite() -> Result<()> {
 
 // ── Fixture metadata ────────────────────────────────────────────────────────
 
+/// The whole fixture, deserialised once. `deny_unknown_fields` at the top level
+/// is what makes a renamed or added *section* fail on load, naming the section,
+/// instead of surfacing much later as a "missing field" inside whichever runner
+/// happened to reach for it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WebSocketBindingFixture {
+    profile: String,
+    version: String,
+    suite: String,
+    runner: FixtureRunner,
+    covers_vectors: Vec<String>,
+    limits: FixtureLimits,
+    discovery_cases: Vec<DiscoveryCase>,
+    /// Left as `Value`: each row's `instance` is a free-form ServiceDescribe
+    /// descriptor already checked by its JSON Schema, so a Rust shape here would
+    /// be a second, competing model of the same object.
+    bundle_closure_cases: Vec<Value>,
+    dpop_kat: DpopKat,
+    dpop_negative_cases: Vec<DpopNegativeCase>,
+    frame_schema_cases: Vec<FrameSchemaCase>,
+    wire_negative_cases: Vec<WireNegativeCase>,
+    multiplex_trace: MultiplexTrace,
+    reauth_trace: Vec<ReauthCase>,
+    drain_and_close_traces: Vec<DrainCase>,
+    fallback_cases: Vec<FallbackCase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FixtureRunner {
+    kind: String,
+    entrypoint: String,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 struct FixtureLimits {
     hard_max_frame_bytes: usize,
@@ -109,28 +145,33 @@ struct FixtureLimits {
     replay_ledger_retention_seconds: u64,
 }
 
-fn validate_metadata(fixture: &Value) -> Result<FixtureLimits> {
-    validate_profile(fixture, PROFILE)?;
-    if required_str(fixture, "suite")? != SUITE {
+fn validate_metadata(fixture: &WebSocketBindingFixture) -> Result<FixtureLimits> {
+    if fixture.profile != PROFILE {
+        bail!(
+            "fixture profile drifted: expected {PROFILE}, got {}",
+            fixture.profile
+        );
+    }
+    if fixture.suite != SUITE {
         bail!("{FIXTURE} suite drifted from {SUITE}");
     }
-    if fixture
-        .get("runner")
-        .and_then(|runner| runner.get("kind"))
-        .and_then(Value::as_str)
-        != Some("named_suite")
-    {
+    if fixture.runner.kind != "named_suite" {
         bail!("{FIXTURE} runner kind must be named_suite");
     }
-    if fixture_runner_entrypoint(fixture)? != ENTRYPOINT {
+    if fixture.runner.entrypoint != ENTRYPOINT {
         bail!("{FIXTURE} runner entrypoint must be {ENTRYPOINT}");
     }
-    if super::string_array_field(fixture, "covers_vectors")? != [VECTOR_ID] {
+    if fixture.covers_vectors != [VECTOR_ID] {
         bail!("{FIXTURE} must cover exactly {VECTOR_ID}");
     }
+    // Same shape the other fixture-backed suites use: the revision is read but
+    // not pinned, so a regeneration does not churn this file while an empty or
+    // dropped version still fails.
+    if fixture.version.trim().is_empty() {
+        bail!("{FIXTURE} version must not be empty");
+    }
 
-    let limits: FixtureLimits =
-        serde_json::from_value(super::required_field(fixture, "limits")?.clone())?;
+    let limits = fixture.limits;
     if limits.hard_max_frame_bytes != WEBSOCKET_HARD_MAX_FRAME_BYTES {
         bail!("{FIXTURE} hard_max_frame_bytes drifted from the SDK ceiling");
     }
@@ -143,46 +184,79 @@ fn validate_metadata(fixture: &Value) -> Result<FixtureLimits> {
     Ok(limits)
 }
 
-fn cases<'a>(fixture: &'a Value, field: &str) -> Result<&'a Vec<Value>> {
-    super::value_array(super::required_field(fixture, field)?, field)
-}
-
 fn case_name(case: &Value) -> Result<&str> {
     required_str(case, "name")
 }
 
 // ── §2 Discovery ────────────────────────────────────────────────────────────
 
-fn run_discovery_cases(fixture: &Value, env: &SchemaEnv) -> Result<usize> {
-    let cases = cases(fixture, "discovery_cases")?;
+/// One `discovery_cases[]` row.
+///
+/// Typed rather than probed key-by-key: `deny_unknown_fields` turns a renamed
+/// or misspelled fixture key into a deserialization error that names the field,
+/// where the previous `case.get("base_uris")` chain silently matched nothing
+/// and surfaced as "declares no executable mutation" — a message that points at
+/// the runner instead of the key that moved.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiscoveryCase {
+    name: String,
+    /// Only the first case carries the descriptor schema every case is checked
+    /// against.
+    #[serde(default)]
+    schema_ref: Option<String>,
+    expect_valid: bool,
+    expected_transport: DiscoveryTransport,
+    /// The descriptor itself stays `Value`: it is validated against
+    /// `transport-binding.schema.json`, so giving it a second Rust shape here
+    /// would be a competing model of the same object.
+    #[serde(default)]
+    instance: Option<Value>,
+    #[serde(default)]
+    base_urls: Option<Vec<String>>,
+    #[serde(default)]
+    remove_each: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum DiscoveryTransport {
+    Websocket,
+    HttpJson,
+}
+
+fn run_discovery_cases(fixture: &WebSocketBindingFixture, env: &SchemaEnv) -> Result<usize> {
+    let cases = &fixture.discovery_cases;
     if cases.len() != 3 {
         bail!("{FIXTURE} discovery_cases must cover the closed descriptor and two rejections");
     }
-    let schema_ref = required_str(&cases[0], "schema_ref")?;
+    let schema_ref = cases[0]
+        .schema_ref
+        .as_deref()
+        .ok_or_else(|| anyhow!("{FIXTURE} first discovery case must carry schema_ref"))?;
     let validator = env.compile(schema_ref)?;
-    let base = super::required_field(&cases[0], "instance")?.clone();
+    let base = cases[0]
+        .instance
+        .clone()
+        .ok_or_else(|| anyhow!("{FIXTURE} first discovery case must carry the base instance"))?;
 
     for case in cases {
-        let name = case_name(case)?;
-        let expect_valid = case
-            .get("expect_valid")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| anyhow!("discovery case {name} must state expect_valid"))?;
-        let expected_transport = required_str(case, "expected_transport")?;
-        let instances = discovery_case_instances(name, case, &base)?;
+        let name = case.name.as_str();
+        let instances = discovery_case_instances(case, &base)?;
         if instances.is_empty() {
             bail!("discovery case {name} produced no instance to execute");
         }
         for instance in instances {
             let schema_valid = validator.is_valid(&instance);
-            if schema_valid != expect_valid {
+            if schema_valid != case.expect_valid {
                 bail!(
-                    "discovery case {name} schema validity {schema_valid} != expected {expect_valid}"
+                    "discovery case {name} schema validity {schema_valid} != expected {}",
+                    case.expect_valid
                 );
             }
             let selected = select_descriptor(&instance);
-            match (expect_valid, expected_transport) {
-                (true, "websocket") => {
+            match (case.expect_valid, case.expected_transport) {
+                (true, DiscoveryTransport::Websocket) => {
                     let descriptor = selected.ok_or_else(|| {
                         anyhow!("discovery case {name} must yield a usable websocket binding")
                     })?;
@@ -190,7 +264,7 @@ fn run_discovery_cases(fixture: &Value, env: &SchemaEnv) -> Result<usize> {
                         bail!("discovery case {name} must select websocket transport");
                     }
                 }
-                (false, "http_json") => {
+                (false, DiscoveryTransport::HttpJson) => {
                     if selected.is_some() {
                         bail!("discovery case {name} must fall back to the mandatory HTTP binding");
                     }
@@ -203,30 +277,24 @@ fn run_discovery_cases(fixture: &Value, env: &SchemaEnv) -> Result<usize> {
 }
 
 /// Materialise every instance one declarative discovery case stands for.
-fn discovery_case_instances(name: &str, case: &Value, base: &Value) -> Result<Vec<Value>> {
-    if let Some(instance) = case.get("instance") {
-        return Ok(vec![instance.clone()]);
-    }
-    if let Some(base_uris) = case.get("base_uris").and_then(Value::as_array) {
-        return base_uris
+fn discovery_case_instances(case: &DiscoveryCase, base: &Value) -> Result<Vec<Value>> {
+    let name = case.name.as_str();
+    match (&case.instance, &case.base_urls, &case.remove_each) {
+        (Some(instance), None, None) => Ok(vec![instance.clone()]),
+        (None, Some(base_urls), None) => base_urls
             .iter()
             .map(|base_url| {
                 let mut instance = base.clone();
                 instance
                     .as_object_mut()
                     .ok_or_else(|| anyhow!("discovery base must be an object"))?
-                    .insert("base_url".to_owned(), base_url.clone());
+                    .insert("base_url".to_owned(), Value::String(base_url.clone()));
                 Ok(instance)
             })
-            .collect();
-    }
-    if let Some(remove_each) = case.get("remove_each").and_then(Value::as_array) {
-        return remove_each
+            .collect(),
+        (None, None, Some(remove_each)) => remove_each
             .iter()
             .map(|field| {
-                let field = field
-                    .as_str()
-                    .ok_or_else(|| anyhow!("remove_each entries must be strings"))?;
                 let mut instance = base.clone();
                 instance
                     .as_object_mut()
@@ -235,9 +303,11 @@ fn discovery_case_instances(name: &str, case: &Value, base: &Value) -> Result<Ve
                     .ok_or_else(|| anyhow!("discovery base has no {field} to remove"))?;
                 Ok(instance)
             })
-            .collect();
+            .collect(),
+        _ => bail!(
+            "discovery case {name} must declare exactly one of instance, base_urls, remove_each"
+        ),
     }
-    bail!("discovery case {name} declares no executable mutation")
 }
 
 /// Execute the ServiceDescribe-level operation reachability cases.
@@ -248,8 +318,8 @@ fn discovery_case_instances(name: &str, case: &Value, base: &Value) -> Result<Ve
 /// (`websocket-binding.md` 2). Each declared mutation must name a carrier the
 /// base instance really has; a mutation that cannot be materialised fails the
 /// suite instead of being skipped.
-fn run_bundle_closure_cases(fixture: &Value, env: &SchemaEnv) -> Result<usize> {
-    let cases = cases(fixture, "bundle_closure_cases")?;
+fn run_bundle_closure_cases(fixture: &WebSocketBindingFixture, env: &SchemaEnv) -> Result<usize> {
+    let cases = &fixture.bundle_closure_cases;
     if cases.len() != 3 {
         bail!("{FIXTURE} bundle_closure_cases must cover the advertised closure and two fallbacks");
     }
@@ -422,8 +492,8 @@ impl DpopKat {
     }
 }
 
-fn run_dpop_kat(fixture: &Value, env: &SchemaEnv) -> Result<DpopKat> {
-    let kat: DpopKat = serde_json::from_value(super::required_field(fixture, "dpop_kat")?.clone())?;
+fn run_dpop_kat<'a>(fixture: &'a WebSocketBindingFixture, env: &SchemaEnv) -> Result<&'a DpopKat> {
+    let kat = &fixture.dpop_kat;
     if kat.expected != "accepted" {
         bail!("{FIXTURE} dpop_kat must be the accepted known answer");
     }
@@ -562,14 +632,13 @@ struct DpopNegativeCase {
     grant_cnf_jkt: Option<String>,
 }
 
-fn run_dpop_negative_cases(fixture: &Value, kat: &DpopKat) -> Result<usize> {
-    let cases: Vec<DpopNegativeCase> =
-        serde_json::from_value(super::required_field(fixture, "dpop_negative_cases")?.clone())?;
+fn run_dpop_negative_cases(fixture: &WebSocketBindingFixture, kat: &DpopKat) -> Result<usize> {
+    let cases = &fixture.dpop_negative_cases;
     if cases.len() != 11 {
         bail!("{FIXTURE} must execute all eleven DPoP negative cases");
     }
     let key = kat.signing_key()?;
-    for case in &cases {
+    for case in cases {
         if case.expected != "rejected" {
             bail!("dpop negative case {} must expect rejection", case.name);
         }
@@ -691,9 +760,11 @@ fn direction_of(schema_ref: &str) -> Result<Direction> {
     bail!("{schema_ref} is not one of the two registered direction schemas")
 }
 
-fn run_frame_schema_cases(fixture: &Value, env: &SchemaEnv) -> Result<Vec<FrameSchemaCase>> {
-    let frames: Vec<FrameSchemaCase> =
-        serde_json::from_value(super::required_field(fixture, "frame_schema_cases")?.clone())?;
+fn run_frame_schema_cases<'a>(
+    fixture: &'a WebSocketBindingFixture,
+    env: &SchemaEnv,
+) -> Result<&'a [FrameSchemaCase]> {
+    let frames = fixture.frame_schema_cases.as_slice();
     if frames.len() != 22 {
         bail!("{FIXTURE} must execute all twenty-two frame schema cases");
     }
@@ -701,7 +772,7 @@ fn run_frame_schema_cases(fixture: &Value, env: &SchemaEnv) -> Result<Vec<FrameS
     // ceiling so an over-2048 positive case is a schema question, not a byte
     // gate question.
     let codec = WebSocketFrameCodec::new(WEBSOCKET_HARD_MAX_FRAME_BYTES as u32, None);
-    for case in &frames {
+    for case in frames {
         let direction = direction_of(&case.direction_schema_ref)?;
         let validator = env.compile(&case.direction_schema_ref)?;
         let instance: Value = serde_json::from_str(&case.wire_utf8)
@@ -826,18 +897,17 @@ impl OversizeGenerator {
 }
 
 fn run_wire_negative_cases(
-    fixture: &Value,
+    fixture: &WebSocketBindingFixture,
     env: &SchemaEnv,
     limits: &FixtureLimits,
 ) -> Result<usize> {
-    let cases: Vec<WireNegativeCase> =
-        serde_json::from_value(super::required_field(fixture, "wire_negative_cases")?.clone())?;
+    let cases = &fixture.wire_negative_cases;
     if cases.len() != 8 {
         bail!("{FIXTURE} must execute all eight wire negative cases");
     }
     let codec = WebSocketFrameCodec::new(limits.fixture_advertised_max_frame_bytes, None);
 
-    for case in &cases {
+    for case in cases {
         match case.rejection_stage.as_str() {
             "json_duplicate_scan" | "schema" | "direction_schema" => {
                 let wire = case
@@ -1064,12 +1134,11 @@ struct MultiplexExpectation {
 }
 
 fn run_multiplex_trace(
-    fixture: &Value,
+    fixture: &WebSocketBindingFixture,
     frames: &[FrameSchemaCase],
     limits: &FixtureLimits,
 ) -> Result<()> {
-    let trace: MultiplexTrace =
-        serde_json::from_value(super::required_field(fixture, "multiplex_trace")?.clone())?;
+    let trace = &fixture.multiplex_trace;
     if trace.steps != MULTIPLEX_STEPS {
         bail!("{FIXTURE} multiplex steps drifted from what this runner executes");
     }
@@ -1224,9 +1293,8 @@ struct ReauthCase {
     old_authorization_continues: Option<bool>,
 }
 
-fn run_reauth_trace(fixture: &Value, kat: &DpopKat) -> Result<()> {
-    let cases: Vec<ReauthCase> =
-        serde_json::from_value(super::required_field(fixture, "reauth_trace")?.clone())?;
+fn run_reauth_trace(fixture: &WebSocketBindingFixture, kat: &DpopKat) -> Result<()> {
+    let cases = &fixture.reauth_trace;
     if cases.len() != 2 {
         bail!("{FIXTURE} reauth_trace must cover the fresh and the replayed proof");
     }
@@ -1235,7 +1303,7 @@ fn run_reauth_trace(fixture: &Value, kat: &DpopKat) -> Result<()> {
     let reauth_grant = "ak.session.grant.fixture.websocket.v1.reauth";
     let reauth_jti = "d3MtYXV0aC1qdGktMDAwMg";
 
-    for case in &cases {
+    for case in cases {
         if case.server_frame != "reauth_required" {
             bail!("reauth case {} must start from reauth_required", case.name);
         }
@@ -1354,13 +1422,15 @@ struct DrainCase {
     attempts: Option<u8>,
 }
 
-fn run_drain_and_close_traces(fixture: &Value, limits: &FixtureLimits) -> Result<()> {
-    let cases: Vec<DrainCase> =
-        serde_json::from_value(super::required_field(fixture, "drain_and_close_traces")?.clone())?;
+fn run_drain_and_close_traces(
+    fixture: &WebSocketBindingFixture,
+    limits: &FixtureLimits,
+) -> Result<()> {
+    let cases = &fixture.drain_and_close_traces;
     if cases.len() != 6 {
         bail!("{FIXTURE} drain_and_close_traces must cover all six outcomes");
     }
-    for case in &cases {
+    for case in cases {
         match case.name.as_str() {
             "channel_error_isolated" => {
                 if case.websocket_close.is_some() || case.other_channels_continue != Some(true) {
@@ -1508,13 +1578,12 @@ struct FallbackCase {
     expected_transport: String,
 }
 
-fn run_fallback_cases(fixture: &Value) -> Result<()> {
-    let cases: Vec<FallbackCase> =
-        serde_json::from_value(super::required_field(fixture, "fallback_cases")?.clone())?;
+fn run_fallback_cases(fixture: &WebSocketBindingFixture) -> Result<()> {
+    let cases = &fixture.fallback_cases;
     if cases.len() != 2 {
         bail!("{FIXTURE} fallback_cases must cover the handshake and the owner switch");
     }
-    for case in &cases {
+    for case in cases {
         if case.expected_transport != "http_json" {
             bail!(
                 "fallback case {} must end on the mandatory binding",

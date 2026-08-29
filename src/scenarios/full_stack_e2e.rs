@@ -555,15 +555,19 @@ async fn live_stack_probe() -> Result<()> {
         .build()?;
     let resp = client
         .post(&resolve_url)
-        .json(&serde_json::from_value::<
-            arkret_models_discovery::DirectoryResolveHandleRequestBody,
-        >(json!({
-            "handle": ALICE_HANDLE,
-            "intent": "member_add",
-            "requester": PRINCIPAL_ID,
-            "audience": TARGET_REALM_ID,
-            "realm_id": TARGET_REALM_ID,
-        }))?)
+        .json(
+            &arkret_models_discovery::DirectoryResolveHandleRequestBody {
+                handle: ALICE_HANDLE.to_owned(),
+                expected_principal_id: None,
+                proof_challenge: None,
+                claim_presentations: Vec::new(),
+                intent: Some(arkret_models_discovery::DirectoryIntent::MemberAdd),
+                requester_id: Some(arkret_wire::DidCoreId::new(PRINCIPAL_ID)?),
+                audience: Some(TARGET_REALM_ID.to_owned()),
+                realm_id: Some(arkret_wire::RealmId::new(TARGET_REALM_ID)?),
+                proofs: Vec::new(),
+            },
+        )
         .send()
         .await
         .context("POST /_arkret/find/directory/resolve-handle on live teabay")?;

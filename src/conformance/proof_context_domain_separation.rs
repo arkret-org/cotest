@@ -409,19 +409,19 @@ fn signed_proof(
 
 fn directory_families() -> Result<Vec<FamilyUnderTest>> {
     let list_handles: DirectoryListHandlesForSubjectRequestBody = serde_json::from_value(json!({
-        "subject": "ak:did_core:web:bob.example",
-        "requester": REQUESTER_ID,
+        "subject_id": "ak:did_core:web:bob.example",
+        "requester_id": REQUESTER_ID,
     }))?;
     let agent_selector: DirectoryResolveAgentSelectorRequestBody = serde_json::from_value(json!({
         "controller_handle": "alice:alice.example",
         "agent_slug": "scheduler",
         "intent": "lookup",
-        "requester": REQUESTER_ID,
+        "requester_id": REQUESTER_ID,
     }))?;
     let resolve_handle: DirectoryResolveHandleRequestBody = serde_json::from_value(json!({
         "handle": "alice:alice.example",
         "intent": "lookup",
-        "requester": REQUESTER_ID,
+        "requester_id": REQUESTER_ID,
     }))?;
     let resolve_organization: DirectoryResolveOrganizationRequestBody =
         serde_json::from_value(json!({
@@ -429,7 +429,7 @@ fn directory_families() -> Result<Vec<FamilyUnderTest>> {
         }))?;
     let resolve_target: DirectoryResolveTargetRequestBody = serde_json::from_value(json!({
         "address": "arkret://alice.example/@alice",
-        "requester": REQUESTER_ID,
+        "requester_id": REQUESTER_ID,
     }))?;
 
     Ok(vec![
@@ -489,11 +489,11 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
             "identifier_commitment":
                 "sha256:1111111111111111111111111111111111111111111111111111111111111111"
         }],
-        "requester": REQUESTER_ID
+        "requester_id": REQUESTER_ID
     }))?;
     let key_material_outcome: MimiKeyMaterialOutcome = serde_json::from_value(json!({}))?;
     let key_material_request: MimiKeyMaterialRequestBody = serde_json::from_value(json!({
-        "requester": REQUESTER_ID,
+        "requester_id": REQUESTER_ID,
         "strand_id": "ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",
         "device_id": "ak:device:01904100-0000-7000-8000-000000000001"
     }))?;

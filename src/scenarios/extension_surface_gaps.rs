@@ -126,7 +126,12 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
     }
 
     let empty_list = expect_json(alice.get("/_arkret/self/agents"), StatusCode::OK).await?;
-    assert!(empty_list["agents"].as_array().unwrap().is_empty());
+    assert!(
+        empty_list["agent_projections"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     let requested_operation = "ak.self.events.command.submit.v1";
     let provision = AgentProvisionRequestBody::Prepare {

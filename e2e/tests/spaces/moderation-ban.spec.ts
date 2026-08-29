@@ -99,7 +99,7 @@ test.describe("moderation and ban", () => {
         target_ref: sent.event_id,
         report_reason_code: "harassment",
         description: "S5 abusive content posted by mallory",
-        reporter: bob.id,
+        reporter_id: bob.id,
         evidence_refs: [sent.event_id],
       },
     });

@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use reqwest::StatusCode;
-use serde_json::json;
 
 use crate::harness::{ArkretServer, expect_json};
 use crate::scenarios::identity_test_support::prepare_actor_inception_for_service_did;
@@ -21,9 +20,12 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&serde_json::from_value::<
-                arkret_models_identity::identity::IdentityResolveRequestBody,
-            >(json!({"did": "did:web:alice.example"}))?),
+            .json(
+                &arkret_models_identity::identity::IdentityResolveRequestBody {
+                    did: arkret_wire::Did::new("did:web:alice.example")?,
+                    requested_evidence_kinds: Vec::new(),
+                },
+            ),
         StatusCode::OK,
     )
     .await?;
@@ -69,9 +71,12 @@ pub async fn identity_surface_and_receipts_work() -> Result<()> {
         server
             .http()
             .post(server.url("/_arkret/root/identity/resolve"))
-            .json(&serde_json::from_value::<
-                arkret_models_identity::identity::IdentityResolveRequestBody,
-            >(json!({"did": actor_id}))?),
+            .json(
+                &arkret_models_identity::identity::IdentityResolveRequestBody {
+                    did: arkret_wire::Did::new(actor_id.clone())?,
+                    requested_evidence_kinds: Vec::new(),
+                },
+            ),
         StatusCode::OK,
     )
     .await?;

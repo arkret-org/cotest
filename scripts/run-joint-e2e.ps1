@@ -4856,11 +4856,11 @@ if ($fingerprintedFailures.Count -eq 0) {
 } else {
     $failureLines += "## distinct root causes"
     $failureLines += ""
-    $failureLines += "| Fingerprint | Count | Scenario | Endpoint | Wire code | Assertion site |"
-    $failureLines += "| --- | --- | --- | --- | --- | --- |"
+    $failureLines += "| Fingerprint | Count | Shared origin | Scenario | Endpoint | Wire code | Assertion site |"
+    $failureLines += "| --- | --- | --- | --- | --- | --- | --- |"
     foreach ($group in $distinctFingerprints) {
         $sample = $group.Group[0]
-        $failureLines += "| $($sample.fingerprint) | $($group.Count) | $($sample.scenario) | $($sample.endpoint) | $($sample.wire_code) | $($sample.assertion_site) |"
+        $failureLines += "| $($sample.fingerprint) | $($group.Count) | $($sample.origin_site) | $($sample.scenario) | $($sample.endpoint) | $($sample.wire_code) | $($sample.assertion_site) |"
     }
     $failureLines += ""
     $failureLines += "## final failures"
