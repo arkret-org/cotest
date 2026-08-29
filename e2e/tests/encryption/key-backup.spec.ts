@@ -688,6 +688,7 @@ async function openDpopDeviceForAccount(
     grantJwt: session.grantJwt,
     dpopSeedB64url: session.dpopSeedB64url,
     grantId: session.grantId,
+    serviceAccountId: session.serviceAccountId,
     grantAudience: session.grantAudience,
     autoCompleteRecoveryKeySetup,
   });

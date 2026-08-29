@@ -78,6 +78,7 @@ export type UserSession = {
 export type SessionGrantMaterial = {
   grantJwt: string;
   grantId: string;
+  serviceAccountId: string;
   audience: string;
   /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
   /// bound to (`cnf.jkt`).
@@ -108,6 +109,8 @@ export type OpenUserOpts = {
   /// coauth-assigned grant id (DB row id), persisted by inkson with the grant
   /// so refresh/logout paths can identify the current grant chain.
   grantId?: string;
+  /// Coauth-owned service account that issued the injected grant.
+  serviceAccountId?: string;
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
   recoveryKey?: string;
@@ -121,6 +124,7 @@ export type DpopUserSession = {
   account: CoauthPasswordAccount;
   grantJwt: string;
   grantId: string;
+  serviceAccountId: string;
   grantAudience: string;
   dpopSeedB64url: string;
   eventSigningSeedB64url: string;
@@ -282,6 +286,19 @@ export class JointUserPage {
         return;
       }
     }
+    const storageKeys = await this.page
+      .evaluate(() => Object.keys(window.localStorage).sort())
+      .catch(() => [] as string[]);
+    pushDiagnosticLine(
+      this.session.consoleLines,
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        type: "goto_home_failure",
+        url: this.page.url(),
+        local_storage_keys: storageKeys,
+      }),
+    );
+    flushUserDiagnostics(this.session);
     await expect(shell).toBeVisible({ timeout: 1_000 });
     await this.dismissDeviceAuthorizationPrompt();
   }
@@ -1631,6 +1648,7 @@ export async function createDpopUserSessionForAccount(
     account,
     grantJwt: grant.grantJwt,
     grantId: grant.grantId,
+    serviceAccountId: grant.serviceAccountId,
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     eventSigningSeedB64url,
@@ -1690,6 +1708,7 @@ export async function createDpopUserSessionForAccount(
   );
   session.recoveryMaterialEvidence = {
     principal_id: user.id,
+    service_account_id: session.serviceAccountId,
     principal_did: user.did,
     device_id: user.deviceId,
     principal_control_realm_id: principalControlRealmId,
@@ -1807,6 +1826,7 @@ export async function openDpopUserPageFromSession(
     dpopSeedB64url: session.dpopSeedB64url,
     eventSigningSeedB64url: session.eventSigningSeedB64url,
     grantId: session.grantId,
+    serviceAccountId: session.serviceAccountId,
     grantAudience: session.grantAudience,
     recoveryKey: session.recoveryKey,
     recoveryMaterialEvidence: session.recoveryMaterialEvidence,
@@ -1851,10 +1871,16 @@ export async function openUser(
     sanitize(`${Date.now()}-${user.name}`),
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
+  if (opts.grantJwt && opts.dpopSeedB64url && !opts.serviceAccountId) {
+    throw new Error(
+      "Inkson test session injection requires the issuing service_account_id",
+    );
+  }
   const sessionInjection =
     opts.grantJwt && opts.dpopSeedB64url
       ? {
           grant_jwt: opts.grantJwt,
+          service_account_id: opts.serviceAccountId,
           dpop_seed_b64url: opts.dpopSeedB64url,
           principal_did: user.did,
           ...(opts.recoveryMaterialEvidence
@@ -2099,6 +2125,7 @@ export async function openUser(
       ? {
           grantJwt: opts.grantJwt,
           grantId: opts.grantId ?? "",
+          serviceAccountId: opts.serviceAccountId!,
           audience: opts.grantAudience ?? "",
           dpopSeedB64url: opts.dpopSeedB64url,
         }
@@ -2129,16 +2156,7 @@ export async function openUserPage(
 }
 
 export async function closeUser(session: UserSession) {
-  fs.writeFileSync(
-    path.join(session.diagnosticsDir, "console.jsonl"),
-    session.consoleLines.join("\n"),
-    "utf8",
-  );
-  fs.writeFileSync(
-    path.join(session.diagnosticsDir, "network.jsonl"),
-    session.networkLines.join("\n"),
-    "utf8",
-  );
+  flushUserDiagnostics(session);
   try {
     await session.context.close();
   } catch (error) {
@@ -2149,6 +2167,19 @@ export async function closeUser(session: UserSession) {
       throw error;
     }
   }
+}
+
+function flushUserDiagnostics(session: UserSession) {
+  fs.writeFileSync(
+    path.join(session.diagnosticsDir, "console.jsonl"),
+    session.consoleLines.join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(session.diagnosticsDir, "network.jsonl"),
+    session.networkLines.join("\n"),
+    "utf8",
+  );
 }
 
 function sanitize(value: string): string {

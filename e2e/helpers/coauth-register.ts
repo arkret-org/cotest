@@ -521,6 +521,7 @@ export async function registerCoauthPasswordAccount(
   const registeredPrincipalId = stringValue(registered.principal_id);
   const grantId = stringValue(sessionOutcome?.session_grant_id);
   const grantJwt = stringValue(sessionOutcome?.session_grant);
+  const serviceAccountId = stringValue(sessionOutcome?.service_account_id);
   const grantAudience = stringValue(sessionOutcome?.audience_id);
   const expiresAt = stringValue(sessionOutcome?.expires_at);
   const deviceSigningSeed = stringValue(
@@ -538,6 +539,7 @@ export async function registerCoauthPasswordAccount(
     !sessionOutcome ||
     !grantId ||
     !grantJwt ||
+    !serviceAccountId ||
     !grantAudience ||
     !expiresAt ||
     !deviceSigningSeed
@@ -554,6 +556,7 @@ export async function registerCoauthPasswordAccount(
         hasSessionOutcome: Boolean(sessionOutcome),
         hasGrantId: Boolean(grantId),
         hasGrantJwt: Boolean(grantJwt),
+        serviceAccountId,
         grantAudience,
         expiresAt,
         hasDeviceSigningSeed: Boolean(deviceSigningSeed),
@@ -564,6 +567,7 @@ export async function registerCoauthPasswordAccount(
   const initialGrant: DpopBoundGrant = {
     grantId,
     grantJwt,
+    serviceAccountId,
     dpopJkt: handoff.deviceKey.thumbprint,
     audience: grantAudience,
     scopes: Array.isArray(sessionOutcome.granted_scope)

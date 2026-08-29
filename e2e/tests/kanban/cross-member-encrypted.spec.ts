@@ -519,6 +519,7 @@ test.describe("cross-member encrypted kanban", () => {
       grantJwt: creatorSession.grantJwt,
       dpopSeedB64url: creatorSession.dpopSeedB64url,
       grantId: creatorSession.grantId,
+      serviceAccountId: creatorSession.serviceAccountId,
       grantAudience: creatorSession.grantAudience,
     });
     const boardTitle = `Secure cache board ${stamp}`;
