@@ -129,13 +129,6 @@
       "reason": "Negative-surface probe: extension_surface_gaps.rs asserts this realm-scoped applet path responds 404 unrecognized_endpoint (applets install via /_arkret/self/applets/install); confirms absence, not a protocol operation."
     },
     {
-      "source": "cotest",
-      "method": "PUT",
-      "path": "/_arkret/self/policy/check",
-      "classification": "product-private",
-      "reason": "policy-server-check.spec.ts builds a mockPolicyServerBaseUrl()/_arkret/self/policy/check URL string for its mock policy server; the canonical soland operation is POST /_arkret/self/policy/check, so this PUT-flavoured mock URL is not a protocol operation."
-    },
-    {
       "source": "sdk",
       "method": "GET",
       "path": "/_arkret/edge/applet",

@@ -1,16 +1,10 @@
 use anyhow::Result;
-use arkret_models_collaboration::governance::policy_check::{
-    PolicyCheckRequestBody, PolicyCheckSource,
-};
-use arkret_wire::{DidCoreId, Hash, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
 
 use crate::harness::{ArkretServer, actor_core_id, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
-const REQUEST_HASH: &str =
-    "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()> {
     let server = ArkretServer::spawn("policy-documents").await?;
     let alice_actor = actor_did_for_service_did(server.service_did(), "alice-policy")?;
@@ -32,7 +26,6 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     let realm_id = alice.create_realm("Policy Document Realm").await?;
     alice.add_member(&realm_id, &bob).await?;
     let alice_core = actor_core_id(&alice.actor)?;
-    let bob_core = actor_core_id(&bob.actor)?;
 
     let initial = expect_json(alice.get("/_soland/self/policies"), StatusCode::OK).await?;
     assert!(initial["policies"].as_array().unwrap().is_empty());
@@ -44,9 +37,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
                 "scope": realm_id,
                 "subject_ref": bob.actor,
                 "policy_kind": "ak.message.create",
-                // Rule effects are the spec four-value `policy_effect` closed
-                // set (allow/deny/quarantine/require_review); `deny` surfaces
-                // as the `hard_deny` decision on the policy/check path.
+                // Rule effects use the closed
+                // allow/deny/quarantine/require_review set.
                 "effect": "deny",
                 "actions": ["ak.message.create"],
                 // Realm-scoped resource: soland matches resource.kind against the
@@ -61,8 +53,8 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     assert!(policy_id.starts_with("ak:policy:"));
     assert_eq!(policy["owner"], alice_core);
 
-    // Negative vector: `hard_deny` is a Policy Server *decision* verb, not a
-    // registered rule effect (v1 enum is allow/deny/quarantine/require_review).
+    // Negative vector: `hard_deny` is an authorization decision verb, not a
+    // registered stored rule effect.
     expect_api_error(
         alice
             .post("/_soland/self/policies")
@@ -101,46 +93,6 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     )
     .await?;
 
-    let denied = expect_json(
-        bob.post("/_arkret/self/policy/check")
-            .json(&PolicyCheckRequestBody {
-                // `service-operation-dtos.schema.json#/$defs/PolicyCheckRequestBody`
-                // pins `request_id` to `^(?!ak:)`: it is a caller-chosen
-                // correlation id, not a typed Arkret identifier.
-                request_id: "policy-check-deny-0001".to_owned(),
-                realm_id: RealmId::new(realm_id.clone())?,
-                request_canonical_digest: Hash::new(REQUEST_HASH)?,
-                action: "ak.message.create".to_owned(),
-                actor_id: DidCoreId::new(bob_core.clone())?,
-                device_id: None,
-                source: PolicyCheckSource {
-                    service_id: DidCoreId::new(alice.service_id())?,
-                    service_kind: "principal_server".to_owned(),
-                    source_ip_digest: None,
-                    signed_transport: true,
-                },
-                event_preview: None,
-                auth_context: None,
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(denied["decision"], "hard_deny");
-    assert_eq!(denied["reason_code"], "policy_denied");
-    assert_eq!(denied["obligations"].as_array().unwrap().len(), 1);
-    assert!(
-        denied["signature"].is_object(),
-        "policy/check must sign decisions that carry obligations"
-    );
-    assert!(
-        denied["policy_frontier_digest"].is_string(),
-        "policy/check must bind the policy frontier"
-    );
-    assert!(
-        denied["membership_frontier_digest"].is_string(),
-        "policy/check must bind the membership frontier"
-    );
-
     let inactive = expect_json(
         alice
             .post("/_soland/self/policies")
@@ -159,30 +111,6 @@ pub async fn policy_documents_shape_decisions_and_ownership_work() -> Result<()>
     )
     .await?;
     assert_eq!(inactive["active"], false);
-
-    let allowed = expect_json(
-        bob.post("/_arkret/self/policy/check")
-            .json(&PolicyCheckRequestBody {
-                request_id: "policy-check-allow-0001".to_owned(),
-                realm_id: RealmId::new(realm_id.clone())?,
-                request_canonical_digest: Hash::new(REQUEST_HASH)?,
-                action: "ak.message.create".to_owned(),
-                actor_id: DidCoreId::new(bob_core.clone())?,
-                device_id: None,
-                source: PolicyCheckSource {
-                    service_id: DidCoreId::new(alice.service_id())?,
-                    service_kind: "principal_server".to_owned(),
-                    source_ip_digest: None,
-                    signed_transport: true,
-                },
-                event_preview: None,
-                auth_context: None,
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(allowed["decision"], "require_review");
-    assert_eq!(allowed["reason_code"], "review_required");
 
     let hidden_in_default_list =
         expect_json(alice.get("/_soland/self/policies"), StatusCode::OK).await?;

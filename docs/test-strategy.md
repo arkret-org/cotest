@@ -345,14 +345,14 @@ failures can be debugged without reconstructing paths from HAR files.
 `run-joint-e2e.ps1` can spin up ten in-process mock services under
 `e2e/mocks/` to cover spec sections that depend on external infrastructure.
 Toggle them individually (`-StartMockIdp`, `-StartMockEmail`,
-`-StartMockWitness`, `-StartMockPolicyServer`,
+`-StartMockWitness`,
 `-StartMockPushGateway`, `-StartMockAppletRegistry`, `-StartMockTspEndpoint`,
 `-StartMockMimiFacade`, `-StartMockClaimIssuer`,
 `-StartMockChallengeProvider`) or all at once with
 `-StartMocks`. Specs read the live base URLs via the helpers in
 `e2e/helpers/env.ts` (`mockIdpBaseUrl()`, `mockEmailBaseUrl()`,
 `mockWitnessBaseUrl()`, and the matching helpers
-for policy, push, applet, TSP, MIMI, claim issuance, and challenge providers).
+for push, applet, TSP, MIMI, claim issuance, and challenge providers).
 
 When `-StartCoauth -StartMockEmail` are both enabled, the generated Coauth
 config uses the `email.http_webhook` provider with the mock email
@@ -374,7 +374,6 @@ single-witness env vars and the quorum lists
 | `mock-idp.mjs` | S4/S7 OIDC onboarding | `/.well-known/openid-configuration`, `/jwks`, `/authorize` (PKCE), `/token`, `/scenarios` (bind sub/email or force OIDC error), `/inspect` |
 | `mock-email.mjs` | S3 third-party invite, S7 email onboarding | `/mock/email/verification/send` (with `ttl_seconds` + `body_html`), `/mock/email/verification/inbox?to=`, `/mock/email/verification/claim` (returns 410 on expiry, 409 on double-consume), `/inspect` |
 | `mock-witness.mjs` | S9 did:webvh rotation | `/mock/witness/sign` (enforces `prev_entry_hash` chain, entry-number monotonicity, `entry_timestamp` staleness vs `MOCK_WITNESS_STALE_SECONDS`), `/mock/witness/policy`, `/mock/witness/health` test hook, `/inspect` |
-| `mock-policy-server.mjs` | authz policy server / obligation transcript | `/_arkret/self/policy/check`, `/_arkret/self/policy/health`, `/scenarios`, `/inspect`, `/jwks` |
 | `mock-push-gateway.mjs` | notification push / blind wake | `/_arkret/edge/push/register-device`, `/_arkret/edge/push/notify`, `/mock/push/inbox`, `/scenarios`, `/jwks` |
 | `mock-applet-registry.mjs` | applet manifest / bot DID / ghost actor | `/_arkret/edge/applet/register`, `/_arkret/edge/applet/:id/ghost-actor`, `/identity`, `/inspect`, `/jwks` |
 | `mock-tsp-endpoint.mjs` | TSP relationship bootstrap / message ACK | `/tsp/relationship-bootstrap`, `/tsp/message`, `/tsp/inbox`, `/tsp/outbox`, `/identity`, `/inspect` |

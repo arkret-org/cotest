@@ -34,7 +34,6 @@ pub mod kanban_identity_boundary;
 pub mod key_backup_negative;
 pub mod minimal_metadata_pairwise_keypackage_live;
 pub mod owner_authority_restart;
-pub mod policy_server_live;
 pub mod production_rejects_placeholder_proof_e2e;
 pub mod profile_claim_gate;
 pub mod protocol_payloads;

@@ -9,6 +9,6 @@ async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
 
 #[tokio::test]
 #[serial]
-async fn push_policy_and_ice_contracts_work() -> Result<()> {
-    cotest::scenarios::authz_policy_presence::push_policy_and_ice_contracts_work().await
+async fn push_and_ice_contracts_work() -> Result<()> {
+    cotest::scenarios::authz_policy_presence::push_and_ice_contracts_work().await
 }

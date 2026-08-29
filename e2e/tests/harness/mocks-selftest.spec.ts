@@ -14,7 +14,6 @@ import {
   mockAppletRegistryBaseUrl,
   mockEmailBaseUrl,
   mockIdpBaseUrl,
-  mockPolicyServerBaseUrl,
   mockPushGatewayBaseUrl,
   mockTspEndpointBaseUrl,
   mockWitnessBaseUrl,
@@ -255,70 +254,6 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     expect(rotatedBody).toContain("#key-2");
 
     await didHost.resetDocuments();
-  });
-
-  test("mock-policy-server: rule injection, deny + obligation, signed transcript", async ({
-    request,
-  }) => {
-    const baseUrl = mockPolicyServerBaseUrl();
-    test.skip(!baseUrl, "mock-policy-server not started for this run");
-
-    // Reset rules to a known fail-closed baseline.
-    const resetResp = await request.delete(`${baseUrl}/scenarios`);
-    expect(resetResp.status()).toBe(200);
-    expect((await resetResp.json()).default).toBe("deny");
-
-    const defaultDenyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ak.member.invite", actor_id: "ak:did_core:web:alice", target: "ak:did_core:web:carol" },
-    });
-    expect(defaultDenyResp.status()).toBe(200);
-    expect((await defaultDenyResp.json()).decision).toBe("deny");
-
-    await request.post(`${baseUrl}/scenarios`, {
-      data: { default: "allow" },
-    });
-
-    // Explicit permissive baseline when no rules match.
-    const allowResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ak.member.invite", actor_id: "ak:did_core:web:alice", target: "ak:did_core:web:carol" },
-    });
-    expect(allowResp.status()).toBe(200);
-    expect((await allowResp.json()).decision).toBe("allow");
-
-    // Inject a deny rule + obligation.
-    await request.post(`${baseUrl}/scenarios`, {
-      data: {
-        rules: [
-          {
-            action: "ak.member.invite",
-            actor: "ak:did_core:web:alice",
-            target: "ak:did_core:web:bob",
-            decision: "deny",
-            reason: "abuse_filter",
-            obligations: [{ kind: "log_event", target: "audit_log" }],
-          },
-        ],
-      },
-    });
-
-    const denyResp = await request.post(`${baseUrl}/_arkret/self/policy/check`, {
-      data: { action: "ak.member.invite", actor_id: "ak:did_core:web:alice", target: "ak:did_core:web:bob" },
-    });
-    expect(denyResp.status()).toBe(200);
-    const denyBody = await denyResp.json();
-    expect(denyBody.decision).toBe("deny");
-    expect(denyBody.reason).toBe("abuse_filter");
-    expect(Array.isArray(denyBody.obligations)).toBe(true);
-    expect(denyBody.obligations[0]?.kind).toBe("log_event");
-    expect(typeof denyBody.signed_transcript).toBe("string");
-    // JWT-shaped 3-segment transcript.
-    expect(denyBody.signed_transcript.split(".").length).toBe(3);
-
-    const jwks = await (await request.get(`${baseUrl}/jwks`)).json();
-    expect(jwks.keys?.[0]?.kid).toBe("mock-policy-server-key-1");
-
-    const inspect = await (await request.get(`${baseUrl}/inspect`)).json();
-    expect(inspect.kinds.checks.length).toBeGreaterThanOrEqual(3);
   });
 
   test("mock-push-gateway: register, notify, DnD suppression, blind-wake validation", async ({

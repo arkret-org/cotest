@@ -45,7 +45,6 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
         "ak.self.keys.backups.read.list.v1",
         "ak.self.call.media.exchange.issue_token.v1",
         "ak.self.media.read.ice_config.v1",
-        "ak.self.policy.read.check.v1",
         "ak.self.moderation.command.report.v1",
     ] {
         assert!(

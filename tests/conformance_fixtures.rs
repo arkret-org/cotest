@@ -161,12 +161,6 @@ conformance_test!(
 );
 
 conformance_test!(
-    policy_server_fixture_suite_matches_reference_semantics,
-    "policy_server_fixture",
-    cotest::conformance::run_policy_server_fixture_suite,
-);
-
-conformance_test!(
     event_envelope_fixture_suite_matches_reference_semantics,
     "event_envelope_fixture",
     cotest::conformance::run_event_envelope_fixture_suite,

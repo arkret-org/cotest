@@ -52,7 +52,7 @@ The current harness tracks the sibling `arkret-spec` checkout and includes:
   (`delivery_binding_stale` / `_handed_over` / `historical_only`), the
   `ak:space:` id-kind in `object_ref`, and the new schema `$defs`
   (`EventsSubscribeFrame`, `SnapshotBootstrap`, the three
-  `EventsFrontier*Response` variants, `PolicyCheck{Request,Response}`,
+  `EventsFrontier*Response` variants,
   `FederationServiceBindingRef`, `EventsSubmit{Batch,Federation}Request`,
   and the `third_party_invite` / `space_state_transition_payload` /
   `space_object_tombstone_payload` payloads).

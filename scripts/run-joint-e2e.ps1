@@ -119,8 +119,6 @@ param(
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
-    [switch]$StartMockPolicyServer,
-    [string]$MockPolicyServerDid,
     [switch]$StartMockPushGateway,
     [string]$MockPushGatewayIss,
     [switch]$StartMockAppletRegistry,
@@ -158,7 +156,6 @@ if ($StartMocks) {
     $StartMockIdp = $true
     $StartMockEmail = $true
     $StartMockWitness = $true
-    $StartMockPolicyServer = $true
     $StartMockPushGateway = $true
     $StartMockAppletRegistry = $true
     $StartMockTspEndpoint = $true
@@ -2791,12 +2788,6 @@ if ($StartMockDidHost) {
     $mockDidHostPort = Get-FreeTcpPort
     $mockDidHostBaseUrl = "http://127.0.0.1:$mockDidHostPort"
 }
-$mockPolicyServerPort = $null
-$mockPolicyServerBaseUrl = $null
-if ($StartMockPolicyServer) {
-    $mockPolicyServerPort = Get-FreeTcpPort
-    $mockPolicyServerBaseUrl = "http://127.0.0.1:$mockPolicyServerPort"
-}
 $mockPushGatewayPort = $null
 $mockPushGatewayBaseUrl = $null
 if ($StartMockPushGateway) {
@@ -3278,15 +3269,6 @@ try {
         $mockDidHostCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-did-host.mjs"))
         $managedServices.Add((Start-ManagedCommand -Name "mock-did-host" -Command $mockDidHostCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$mockDidHostBaseUrl/health" -TimeoutSeconds 30
-    }
-    if ($StartMockPolicyServer) {
-        $envExpr = "`$env:MOCK_POLICY_SERVER_PORT='$mockPolicyServerPort'"
-        if ($MockPolicyServerDid) {
-            $envExpr = "$envExpr; `$env:MOCK_POLICY_SERVER_DID=" + (Quote-PsLiteral $MockPolicyServerDid)
-        }
-        $mockPolicyServerCmd = "$envExpr; node " + (Quote-PsLiteral (Join-Path $mocksRoot "mock-policy-server.mjs"))
-        $managedServices.Add((Start-ManagedCommand -Name "mock-policy-server" -Command $mockPolicyServerCmd -WorkingDirectory $mocksRoot -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$mockPolicyServerBaseUrl/_arkret/self/policy/health" -TimeoutSeconds 30
     }
     if ($StartMockPushGateway) {
         $envExpr = "`$env:MOCK_PUSH_GATEWAY_PORT='$mockPushGatewayPort'"
@@ -4083,17 +4065,6 @@ try {
         Remove-Item Env:COTEST_MOCK_WITNESS_DID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_WITNESS_QUORUM_BASE_URLS -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_MOCK_WITNESS_QUORUM_DIDS -ErrorAction SilentlyContinue
-    }
-    if ($mockPolicyServerBaseUrl) {
-        $env:COTEST_MOCK_POLICY_SERVER_BASE_URL = $mockPolicyServerBaseUrl
-        if ($MockPolicyServerDid) {
-            $env:COTEST_MOCK_POLICY_SERVER_DID = $MockPolicyServerDid
-        } else {
-            Remove-Item Env:COTEST_MOCK_POLICY_SERVER_DID -ErrorAction SilentlyContinue
-        }
-    } else {
-        Remove-Item Env:COTEST_MOCK_POLICY_SERVER_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_MOCK_POLICY_SERVER_DID -ErrorAction SilentlyContinue
     }
     if ($mockPushGatewayBaseUrl) {
         $env:COTEST_MOCK_PUSH_GATEWAY_BASE_URL = $mockPushGatewayBaseUrl

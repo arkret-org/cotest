@@ -109,7 +109,7 @@ function Get-FixmeEntriesFromSpec {
 
     # Path-derived group used when @blocking-on is absent or is free prose
     # rather than a feature-id: soland#<dir>-<spec-basename>-gap.
-    # e2e/tests/authz/policy-server-check.spec.ts -> soland#authz-policy-server-check-gap
+    # e2e/tests/authz/capability-chain.spec.ts -> soland#authz-capability-chain-gap
     $relForId = $relPath -replace '^e2e/tests/', '' -replace '\.spec\.ts$', ''
     $derivedFeatureId = "soland#" + (($relForId -replace '/', '-') + "-gap")
 

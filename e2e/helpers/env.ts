@@ -208,14 +208,6 @@ export function mockWitnessQuorumDids(): string[] {
     .filter(Boolean);
 }
 
-export function mockPolicyServerBaseUrl(): string | undefined {
-  return optionalEnv("COTEST_MOCK_POLICY_SERVER_BASE_URL")?.replace(/\/$/, "");
-}
-
-export function mockPolicyServerDid(): string | undefined {
-  return optionalEnv("COTEST_MOCK_POLICY_SERVER_DID");
-}
-
 export function mockPushGatewayBaseUrl(): string | undefined {
   return optionalEnv("COTEST_MOCK_PUSH_GATEWAY_BASE_URL")?.replace(/\/$/, "");
 }

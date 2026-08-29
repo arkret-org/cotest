@@ -976,7 +976,7 @@ impl TestActorClient {
     /// Author an Event that carries its own guards.
     ///
     /// A precondition is inside the bytes the caller signs, so a surface that
-    /// requires one -- the policy-server writes, for instance -- can only get it
+    /// requires one can only get it
     /// from the caller. Attaching it here rather than in the scenario is what
     /// keeps it on the same envelope that already resolves `seal_basis` from
     /// the Realm Seal frontier: a Control Move authored without that basis is

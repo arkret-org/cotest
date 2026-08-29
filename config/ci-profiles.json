@@ -201,10 +201,6 @@
           "filter": "external_webvh_provider_is_discoverable"
         },
         {
-          "target": "policy_server_live",
-          "filter": "policy_server_binding_contract_is_live"
-        },
-        {
           "target": "invite_frozen_prestate_live",
           "filter": "invite_frozen_prestate_is_enforced_before_acceptance"
         },

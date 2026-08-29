@@ -671,12 +671,12 @@ fn cas_register_single_set_returns_value() -> Result<()> {
 pub fn run_lattice_cas_register_supersession_vector() -> Result<()> {
     let lattice = CasRegister;
     let cref = cell(
-        arkret_wire::CellFamilyId::REALM_POLICY_SERVER_V1,
+        arkret_wire::CellFamilyId::REALM_POLICY_BUNDLE_V1,
         "ak.realm.01js0sp0000000000000000002",
     );
-    let declaration = json!({"policy_server_id": "ak:did_core:web:policy.example"});
+    let declaration = json!({"policy_revision": 1});
     let tombstone = json!({"tombstone": true});
-    let replacement = json!({"policy_server_id": "ak:did_core:web:replacement.example"});
+    let replacement = json!({"policy_revision": 2});
 
     let chain = vec![
         SealedOp::new(issuer_digest("d1"), op_set(declaration.clone())),

@@ -54,7 +54,6 @@ mod object_addressing_vectors;
 mod operation_clause_registry;
 mod operation_registry_gate;
 mod pcr_outward_exposure;
-mod policy_server;
 mod poll_reducer;
 mod presence_signal;
 mod primary_handle_vectors;
@@ -207,7 +206,7 @@ pub use did_webvh_v1::run_did_webvh_v1_adapter_fixture_suite;
 pub use direct_conversation_flow::run_direct_conversation_flow_suite;
 pub use downstream_impact::{
     run_downstream_impact_contract_suite, run_error_status_context_vector,
-    run_moderation_dismiss_and_concurrent_fold_vector, run_policy_transcript_tamper_vector,
+    run_moderation_dismiss_and_concurrent_fold_vector,
     run_private_view_account_data_vector,
 };
 pub use encoding::{
@@ -318,7 +317,6 @@ pub use operation_registry_gate::{
     validate_operation_registry_gate_report,
 };
 pub use pcr_outward_exposure::run_pcr_outward_exposure_suite;
-pub use policy_server::run_policy_server_fixture_suite;
 pub use poll_reducer::run_poll_reducer_fixture_suite;
 pub use presence_signal::{
     ALL_PRESENCE_SIGNAL_VECTOR_IDS, run_last_active_at_bucket_vector,

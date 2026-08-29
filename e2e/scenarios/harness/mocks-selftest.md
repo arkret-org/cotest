@@ -17,7 +17,6 @@
 | OIDC IdP | [`mocks/mock-idp.mjs`](../../mocks/mock-idp.mjs) | identity/onboarding, identity/account-device-auth |
 | Email 3PID | [`mocks/mock-email.mjs`](../../mocks/mock-email.mjs) | invites/third-party, identity/onboarding |
 | WebVH witness | [`mocks/mock-witness.mjs`](../../mocks/mock-witness.mjs) | harness/mocks-selftest |
-| Policy server | [`mocks/mock-policy-server.mjs`](../../mocks/mock-policy-server.mjs) | authz/policy-server-check, governance/organization-policy |
 | Push gateway | [`mocks/mock-push-gateway.mjs`](../../mocks/mock-push-gateway.mjs) | discovery/notifications |
 | Applet registry | [`mocks/mock-applet-registry.mjs`](../../mocks/mock-applet-registry.mjs) | extensions/applet-bridge |
 | TSP endpoint | [`mocks/mock-tsp-endpoint.mjs`](../../mocks/mock-tsp-endpoint.mjs) | identity/tsp-bootstrap, extensions/mimi-federation |
@@ -33,7 +32,7 @@
 - 0..8 类本 scenario 覆盖的 mock service — 由 `run-joint-e2e.ps1` 的 `-StartMockXxx` 或 `-StartMocks` 决定启动哪些;未启动的对应测试跳过
 - 1 × Playwright `request` fixture — 直接打 mock 的 HTTP 端点,不开 browser context
 
-`scripts/run-joint-e2e.ps1` 的 `-StartMocks` 会启动全部 10 个 mock,而本 scenario 覆盖的 helper `mockXxxBaseUrl()` 在未启动时返回 `undefined`,测试在 setup 阶段就 skip。
+`scripts/run-joint-e2e.ps1` 的 `-StartMocks` 会启动全部 11 个 mock,而本 scenario 覆盖的 helper `mockXxxBaseUrl()` 在未启动时返回 `undefined`,测试在 setup 阶段就 skip。
 
 ## Actors
 
@@ -57,11 +56,10 @@
 2. **mock-email**:`POST /mock/email/verification/send` 写一个 TTL=1s 的过期 token → 等 1.5s → `POST /mock/email/verification/claim` 必须返回 410 + `error="token_expired"`;再发一个 TTL=600s 的好 token,`claim` 必须返回 200 + `binding_proof` + `token_commitment.startsWith("sha256:")`;`/inspect` 必有一条 `consumed=true`。
 3. **mock-witness**:`POST /mock/witness/sign` 连发 (h1, n=1, fresh `entry_timestamp`) 与 (h2, n=2, prev=h1, fresh `entry_timestamp`) → 200;再发 (h3, n=3, prev=WRONG) → 409 + `error="prev_entry_hash_mismatch"`;skip n=4 直接发 n=5 → 409 + `error="non_monotonic_entry_number"`;发一个 `entry_timestamp` 过旧的 → 422 + `error="entry_timestamp_stale"`;`/inspect` 中该 scid 的 `last_entry_number === 2`。
    另有一条独立 live test 遍历配置的 witness quorum，确认每个实例都暴露与配置 DID 一致的健康 policy。
-4. **mock-policy-server**:`DELETE /scenarios` 清规则 → 默认 `POST /_arkret/self/policy/check` 返回 `decision="allow"`;`POST /scenarios` 注入一条 deny + obligation 规则 → 再 check 返回 `decision="deny"`、`reason="abuse_filter"`、`obligations[0].kind="log_event"`、`signed_transcript` 是 3 段 JWT;`/jwks` kid 为 `mock-policy-server-key-1`;`/inspect.kinds.checks.length >= 2`。
-5. **mock-push-gateway**:`DELETE /scenarios` 清空 → `POST /_arkret/edge/push/register-device` 注册 pusher → `POST /_arkret/edge/push/notify` 收到 `delivered=true` + `delivery_receipt` 是 3 段 JWT;再 `notify` 一条 `blind_wake: true` 且 payload 含明文 body → 必须返回 4xx/422(blind-wake 模式禁明文键);`/mock/push/inbox` 至少有一条历史;`/jwks` kid 为 `mock-push-gateway-key-1`。
-6. **mock-applet-registry**:`POST /sign-package` 生成 controller-signed `ak.schema.applet_package.v1` → 返回 `package_digest`、`applet_package.bot_actor_id`、`proof.payload_digest` 与可提交到 soland identity store 的 `service_id_document`;`GET /identity` 返回 registry 自身 DID。ghost 生成通过 soland 的 typed applet ingress 在 applet-bridge e2e 中覆盖。
-7. **mock-tsp-endpoint**:`DELETE /scenarios` 清空 → `POST /tsp/relationship-bootstrap` 立一个 remote_vid 关系 → 返回 `endpoint_vid` + `established_at`;用一个**未 bootstrap** 的 remote 发消息 → 412(`relationship_not_established` 语义);用 bootstrap 过的 remote 再发 → 200 + `accepted=true`;`/jwks` kid 为 `mock-tsp-endpoint-key-1`。
-8. **mock-mimi-facade**:`DELETE /scenarios` 清空 → `POST /mock/mimi/join-requests` 预置 `bob_mimi` join → `POST /mock/mimi/approve` 返回 realm-scoped `did:pairwise:`;`POST /mock/mimi/outbound` happy path 返回 `delivered`;设置 `unavailable=true` 后 outbound 返回 503 + `status="deferred"`;`POST /mock/mimi/inbound` 对未知 `content_kind=m.location.share.live` 返回 202 + `status="quarantined"` + `unknown_content_kind`;`/inspect` 至少记录 join、approval、outbound、inbound、quarantine。
+4. **mock-push-gateway**:`DELETE /scenarios` 清空 → `POST /_arkret/edge/push/register-device` 注册 pusher → `POST /_arkret/edge/push/notify` 收到 `delivered=true` + `delivery_receipt` 是 3 段 JWT;再 `notify` 一条 `blind_wake: true` 且 payload 含明文 body → 必须返回 4xx/422(blind-wake 模式禁明文键);`/mock/push/inbox` 至少有一条历史;`/jwks` kid 为 `mock-push-gateway-key-1`。
+5. **mock-applet-registry**:`POST /sign-package` 生成 controller-signed `ak.schema.applet_package.v1` → 返回 `package_digest`、`applet_package.bot_actor_id`、`proof.payload_digest` 与可提交到 soland identity store 的 `service_id_document`;`GET /identity` 返回 registry 自身 DID。ghost 生成通过 soland 的 typed applet ingress 在 applet-bridge e2e 中覆盖。
+6. **mock-tsp-endpoint**:`DELETE /scenarios` 清空 → `POST /tsp/relationship-bootstrap` 立一个 remote_vid 关系 → 返回 `endpoint_vid` + `established_at`;用一个**未 bootstrap** 的 remote 发消息 → 412(`relationship_not_established` 语义);用 bootstrap 过的 remote 再发 → 200 + `accepted=true`;`/jwks` kid 为 `mock-tsp-endpoint-key-1`。
+7. **mock-mimi-facade**:`DELETE /scenarios` 清空 → `POST /mock/mimi/join-requests` 预置 `bob_mimi` join → `POST /mock/mimi/approve` 返回 realm-scoped `did:pairwise:`;`POST /mock/mimi/outbound` happy path 返回 `delivered`;设置 `unavailable=true` 后 outbound 返回 503 + `status="deferred"`;`POST /mock/mimi/inbound` 对未知 `content_kind=m.location.share.live` 返回 202 + `status="quarantined"` + `unknown_content_kind`;`/inspect` 至少记录 join、approval、outbound、inbound、quarantine。
 
 ## Observable assertions(合并清单)
 
@@ -70,7 +68,6 @@
   - mock-idp 的 PKCE happy path + force_error matrix
   - mock-email 的 TTL 过期 → 410 / happy path → binding_proof + `sha256:` 前缀的 `token_commitment`
   - mock-witness 的 chain 链头单调、prev hash 一致、stale timestamp 拒绝
-  - mock-policy-server 的 default allow / 注入 deny+obligation / 3-段 signed transcript
   - mock-push-gateway 的 register/notify/blind-wake 拒明文/inbox 可读 / jwks
   - mock-applet-registry 的 bot DID `did:web:applet.` 命名 / ghost DID `did:web:ghost.` 命名 / accountability 回指 bot
   - mock-tsp-endpoint 的 bootstrap-then-message gate / 412 on unestablished / jwks kid
@@ -81,7 +78,7 @@
 - **不要把 harness 自检放进任何业务 scenario 的 setup**:本套件只在 `tests/harness/mocks-selftest.spec.ts` 跑,业务 scenario 直接信任 helper 的返回值;否则一个 mock 漂移会让 N 个业务 scenario 同时 fail,排查反而更难
 - **`test.skip(!baseUrl, ...)` 必须在 `test(...)` 体内第一行**,不要挪到 `beforeAll` — Playwright 会把 `test.skip` 标记为 skipped 而非 failed,只有写在 test 体内才生效
 - **mock 实现升级时同步更新本 spec**:任何 mock 加端点、改状态码、改错误码、改 kid,必须同步改 `mocks-selftest.spec.ts`,这是 "spec drift 拦截器" 的核心价值
-- **`/scenarios` reset 顺序**:某些 mock 的注入是累积的(policy-server / push-gateway / tsp-endpoint),测试开头必须 `DELETE /scenarios` 清空,否则前一次 run 残留会影响断言
+- **`/scenarios` reset 顺序**:某些 mock 的注入是累积的(push-gateway / tsp-endpoint),测试开头必须 `DELETE /scenarios` 清空,否则前一次 run 残留会影响断言
 - **selftest stamp 用 `Date.now()`**:避免跨 run 撞 scid / pusher_id / namespace;同一 run 内多个 mock 之间也用同一个 stamp 没问题,因为他们的命名空间互不重叠
 
 ## 总耗时预估

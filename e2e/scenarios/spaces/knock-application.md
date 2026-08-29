@@ -10,7 +10,7 @@
 4. reject 后 `cooldown_after_reject`(默认 72h) 内同一 actor 再申请被 reducer 拒绝
 5. application 正文只对 reviewer 可见,Matrix knock.reason spam 通道被堵
 
-不验证:自动解析路径(§3.5,留作 spaces/knock-auto-resolve 子 scenario)、E2EE Realm 中 application encryption envelope(§3.7,需要 MLS)、Policy Server runtime challenge(§3.10)。
+不验证:自动解析路径(§3.5,留作 spaces/knock-auto-resolve 子 scenario)、E2EE Realm 中 application encryption envelope(§3.7,需要 MLS)、runtime challenge(§3.10)。
 
 ## Spec 锚点
 

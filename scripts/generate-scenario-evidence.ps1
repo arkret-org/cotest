@@ -42,7 +42,7 @@ foreach ($file in Get-ChildItem -LiteralPath $testsRoot -Recurse -File -Filter "
     }
 
     $mocks = New-Object System.Collections.Generic.List[string]
-    foreach ($mock in @("idp", "email", "witness", "did_host", "policy_server", "push_gateway", "mimi_facade", "applet_registry", "savfox_model", "tsp_endpoint", "challenge_provider", "claim_issuer")) {
+    foreach ($mock in @("idp", "email", "witness", "did_host", "push_gateway", "mimi_facade", "applet_registry", "savfox_model", "tsp_endpoint", "challenge_provider", "claim_issuer")) {
         $pattern = 'mock[_-]?' + [regex]::Escape($mock)
         if ($source -match $pattern) { $mocks.Add($mock) }
     }

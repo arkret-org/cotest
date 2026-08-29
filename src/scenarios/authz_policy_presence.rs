@@ -1,14 +1,11 @@
 use anyhow::Result;
 use arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody;
-use arkret_models_collaboration::governance::policy_check::{
-    PolicyCheckRequestBody, PolicyCheckSource,
-};
 use arkret_models_collaboration::objects::media::{MediaIceConfigRequestBody, MediaIceMode};
 use arkret_models_integration::{
     PushKey, PushRegisterDeviceRequestBody, PushUnregisterDeviceRequestBody,
 };
 use arkret_wire::{
-    DeviceId, DidCoreId, Hash, MorphId, RealmId, RelationId, ResourceSelectorKind, StrandId,
+    DeviceId, DidCoreId, MorphId, RealmId, RelationId, ResourceSelectorKind, StrandId,
     WireResourceSelector,
 };
 use reqwest::StatusCode;
@@ -20,9 +17,6 @@ use crate::harness::{
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
 };
-
-const ZERO_SHA256_DIGEST: &str =
-    "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("authz-grants", &[]).await?;
@@ -261,7 +255,7 @@ async fn expect_authz_check_hard_deny(
     Ok(())
 }
 
-pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
+pub async fn push_and_ice_contracts_work() -> Result<()> {
     let server = spawn_with_harness_account_authority("presence-policy", &[]).await?;
     let alice_actor = actor_did_for_service_did(server.service_did(), "presence-alice")?;
     let alice = server
@@ -318,66 +312,13 @@ pub async fn push_policy_and_ice_contracts_work() -> Result<()> {
     )
     .await?;
 
-    let policy_realm_id = alice.create_realm("Presence Policy Check Realm").await?;
-    let review_policy = expect_json(
-        alice
-            .post("/_arkret/self/policy/check")
-            .json(&PolicyCheckRequestBody {
-                request_id: "req-review".to_owned(),
-                realm_id: RealmId::new(policy_realm_id.clone())?,
-                request_canonical_digest: Hash::new(ZERO_SHA256_DIGEST)?,
-                action: "ak.realm.destroy".to_owned(),
-                actor_id: DidCoreId::new(alice_core_id.clone())?,
-                device_id: None,
-                source: PolicyCheckSource {
-                    service_id: server.service_id().clone(),
-                    service_kind: "principal_server".to_owned(),
-                    source_ip_digest: None,
-                    signed_transport: true,
-                },
-                event_preview: None,
-                auth_context: None,
-            }),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(review_policy["decision"], "require_review");
-    assert_eq!(review_policy["reason_code"], "review_required");
-    assert!(review_policy["signature"].is_object());
-
-    let policy_baseline = PolicyCheckRequestBody {
-        request_id: "req-invalid".to_owned(),
-        realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
-        request_canonical_digest: Hash::new(ZERO_SHA256_DIGEST)?,
-        action: "ak.message.create".to_owned(),
-        actor_id: DidCoreId::new(alice_core_id.clone())?,
-        device_id: None,
-        source: PolicyCheckSource {
-            service_id: server.service_id().clone(),
-            service_kind: "principal_server".to_owned(),
-            source_ip_digest: None,
-            signed_transport: true,
-        },
-        event_preview: None,
-        auth_context: None,
-    };
-    let invalid_actor_body = crate::harness::wire_negative_from_sdk(&policy_baseline, |body| {
-        body["actor_id"] = json!("alice")
-    })?;
-    expect_api_error(
-        alice
-            .post("/_arkret/self/policy/check")
-            .json(&invalid_actor_body),
-        StatusCode::UNPROCESSABLE_ENTITY,
-        "schema_violation",
-    )
-    .await?;
+    let media_realm_id = alice.create_realm("Presence Media Realm").await?;
 
     let ice = expect_json(
         alice
             .post("/_arkret/self/rtc/ice-config")
             .json(&MediaIceConfigRequestBody {
-                realm_id: RealmId::new(policy_realm_id)?,
+                realm_id: RealmId::new(media_realm_id)?,
                 call_id: "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it".to_owned(),
                 actor_id: DidCoreId::new(alice_core_id.clone())?,
                 device_id: DeviceId::new(alice.device_id.clone())?,

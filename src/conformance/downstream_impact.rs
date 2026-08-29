@@ -2,12 +2,8 @@ use anyhow::{Result, anyhow, bail};
 use arkret_event_draft::ProjectedEventOperation as Operation;
 use arkret_event_draft::test_support::raw_projected_operation;
 use arkret_models_collaboration::events_payloads::private_view_account_data_key;
-use arkret_models_collaboration::governance::policy_check::{
-    PolicyCheckOutcome, policy_decision_transcript_bytes,
-};
 use arkret_models_collaboration::objects::queries::View;
 use arkret_wire::{ErrorCode, ErrorStatusContext, EventKind, OperationId, RealmId};
-use ed25519_dalek::{Signer as _, SigningKey, Verifier as _};
 use serde_json::{Value, json};
 use soland_domain::hlc::ServerHlc;
 use soland_domain::reducer::{ProjectionEffect, ProjectionState};
@@ -15,7 +11,6 @@ use soland_domain::reducer::{ProjectionEffect, ProjectionState};
 pub fn run_downstream_impact_contract_suite() -> Result<()> {
     run_private_view_account_data_vector()?;
     run_moderation_dismiss_and_concurrent_fold_vector()?;
-    run_policy_transcript_tamper_vector()?;
     run_error_status_context_vector()?;
     run_error_code_vocabulary_unregistered_spelling_vector()?;
     run_event_kind_unregistered_spelling_vector()?;
@@ -123,56 +118,6 @@ fn operation(index: u32, realm: &RealmId, payload: Value) -> Result<Operation> {
         arkret_wire::event_kind_str::MODERATION_DECISION,
         payload,
     ))
-}
-
-pub fn run_policy_transcript_tamper_vector() -> Result<()> {
-    let outcome: PolicyCheckOutcome = serde_json::from_value(json!({
-        "request_id": "policy-cotest-1",
-        "decision": "hard_deny",
-        "bound_to": {
-            "realm_id": "ak:realm:AeizpTttgA_DDran5rmKMGep4EOHjx10JTeYxZ6aopwg",
-            "actor_id": "ak:did_core:web:holder.example",
-            "action": "ak.message.create",
-            "request_canonical_digest": format!("sha256:{}", "1".repeat(64)),
-            "policy_server_id": "ak:did_core:web:policy.example"
-        },
-        "reason_code": "policy_denied",
-        "freshness_state": "fresh",
-        "expires_at": "2026-08-01T00:05:00.000Z",
-        "auth_state_digest": format!("sha256:{}", "2".repeat(64)),
-        "policy_frontier_digest": format!("sha256:{}", "3".repeat(64)),
-        "membership_frontier_digest": format!("sha256:{}", "4".repeat(64)),
-        "signature": {"kid": "did:web:policy.example#signing", "sig": "placeholder"},
-        "next_retry_at": "2026-08-01T00:00:30.000Z",
-        "obligations": [{"type": "audit", "level": "high"}]
-    }))?;
-    let key = SigningKey::from_bytes(&[7_u8; 32]);
-    let signature = key.sign(&policy_decision_transcript_bytes(&outcome)?);
-
-    let mut retry_tampered = outcome.clone();
-    retry_tampered.next_retry_at = Some(arkret_canonical::parse_timestamp_canonical(
-        "2026-08-01T00:00:31.000Z",
-    )?);
-    assert!(
-        key.verifying_key()
-            .verify(
-                &policy_decision_transcript_bytes(&retry_tampered)?,
-                &signature
-            )
-            .is_err()
-    );
-
-    let mut obligations_tampered = outcome;
-    obligations_tampered.obligations[0]["level"] = json!("low");
-    assert!(
-        key.verifying_key()
-            .verify(
-                &policy_decision_transcript_bytes(&obligations_tampered)?,
-                &signature
-            )
-            .is_err()
-    );
-    Ok(())
 }
 
 pub fn run_error_status_context_vector() -> Result<()> {
