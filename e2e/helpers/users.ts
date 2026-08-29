@@ -478,11 +478,10 @@ export class JointUserPage {
     // Realm context navigation (Board is the only top-level product surface).
     // Use a real same-origin document navigation so Dioxus initializes from
     // the canonical route while the browser keeps the durable account store.
-    const destination = new URL(
-      `/chat/${encodeURIComponent(realmId)}`,
-      this.page.url(),
-    );
-    await this.page.goto(destination.toString(), { waitUntil: "domcontentloaded" });
+    const destination = `/chat/${encodeURIComponent(realmId)}`;
+    await this.page.goto(destination, {
+      waitUntil: "domcontentloaded",
+    });
     await expect(this.page).toHaveURL(
       (url) => url.pathname === `/chat/${realmId}`,
       { timeout: 60_000 },
