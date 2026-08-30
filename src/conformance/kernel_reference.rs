@@ -428,15 +428,18 @@ fn notary_authorities(notary: &Value) -> Option<BTreeSet<String>> {
         "single_signer" => Some(
             notary
                 .pointer("/signer/actor_id")
-                .and_then(Value::as_str)
-                .map(|actor_id| BTreeSet::from([actor_id.to_owned()]))
+                .and_then(notary_actor_principal)
+                .map(|actor_id| BTreeSet::from([actor_id]))
                 .unwrap_or_default(),
         ),
         "open_set" | "threshold" => Some(notary_descriptor_actor_set(notary.get("signers"))),
         "mixed" => {
             let mut members = notary_descriptor_actor_set(notary.get("recovery_signers"));
-            if let Some(actor_id) = notary.pointer("/signer/actor_id").and_then(Value::as_str) {
-                members.insert(actor_id.to_owned());
+            if let Some(actor_id) = notary
+                .pointer("/signer/actor_id")
+                .and_then(notary_actor_principal)
+            {
+                members.insert(actor_id);
             }
             Some(members)
         }
@@ -457,9 +460,14 @@ fn notary_descriptor_actor_set(value: Option<&Value>) -> BTreeSet<String> {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|entry| entry.get("actor_id").and_then(Value::as_str))
-        .map(ToOwned::to_owned)
+        .filter_map(|entry| entry.get("actor_id").and_then(notary_actor_principal))
         .collect()
+}
+
+fn notary_actor_principal(value: &Value) -> Option<String> {
+    serde_json::from_value::<arkret_wire::ActorId>(value.clone())
+        .ok()
+        .map(|actor_id| actor_id.signing_principal_id().as_str().to_owned())
 }
 
 fn string_set(value: Option<&Value>) -> BTreeSet<String> {

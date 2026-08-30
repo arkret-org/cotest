@@ -636,7 +636,7 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
         "event_encryption_floor": "e2ee_required"
     });
     if genesis["created_by"] != agent
-        || genesis["notary"]["signer"]["actor_id"] != agent
+        || genesis["notary"]["signer"]["actor_id"]["service_id"] != agent
         || genesis["purpose"] != "managed_agent_control"
         || genesis["encryption_profile"] != "e2ee_required"
         || genesis["event_encryption_floor"] != "e2ee_required"

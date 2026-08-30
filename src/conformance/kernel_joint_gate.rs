@@ -675,9 +675,8 @@ fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
             recovery_signers,
             ..
         } => {
-            let mut members = BTreeSet::from([
-                signer.actor_id.signing_principal_id().as_str().to_owned(),
-            ]);
+            let mut members =
+                BTreeSet::from([signer.actor_id.signing_principal_id().as_str().to_owned()]);
             members.extend(
                 recovery_signers
                     .iter()
@@ -694,9 +693,8 @@ fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
             recovery_signers,
             ..
         } => {
-            let mut members = BTreeSet::from([
-                signer.actor_id.signing_principal_id().as_str().to_owned(),
-            ]);
+            let mut members =
+                BTreeSet::from([signer.actor_id.signing_principal_id().as_str().to_owned()]);
             members.extend(
                 recovery_signers
                     .iter()
