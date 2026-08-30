@@ -33,7 +33,7 @@ const SEMANTIC_CASES: &[&str] = &[
     "durable_floor_survives_restart_cache_may_disappear",
     "durable_notice_state_survives_restart",
     "route_cache_enforces_local_and_signed_hard_expiry",
-    "same_core_route_refresh_does_not_rebind_new_core_does",
+    "same_core_route_refresh_preserves_account_new_core_requires_new_membership",
     "one_to_one_cutover_requires_cross_ack",
 ];
 
@@ -869,7 +869,10 @@ fn validate_core_boundary(fixture: &Fixture, case: &SemanticCase) -> Result<()> 
             "/new_core_account_membership_required",
         )?
     {
-        bail!("{} blurred route refresh and service rebind", case.name);
+        bail!(
+            "{} blurred route refresh and a distinct account identity",
+            case.name
+        );
     }
     Ok(())
 }

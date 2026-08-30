@@ -41,13 +41,19 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
-            .json(&backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?),
+            .json(&backup_body(
+                server.service_id(),
+                &alice.actor,
+                DEVICE_A,
+                BACKUP_ID,
+            )?),
         StatusCode::BAD_REQUEST,
         "param_invalid",
     )
     .await?;
 
-    let missing_ciphertext_baseline = backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?;
+    let missing_ciphertext_baseline =
+        backup_body(server.service_id(), &alice.actor, DEVICE_A, BACKUP_ID)?;
     let missing_ciphertext = wire_negative_from_sdk(&missing_ciphertext_baseline, |value| {
         value
             .as_object_mut()
@@ -65,6 +71,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     .await?;
 
     let body_id_mismatch = backup_body(
+        server.service_id(),
         &alice.actor,
         DEVICE_A,
         "ak:backup:01975510-0000-7000-8000-0000000000ff",
@@ -79,7 +86,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )
     .await?;
 
-    let wrong_actor = backup_body(&bob.actor, DEVICE_A, BACKUP_ID)?;
+    let wrong_actor = backup_body(server.service_id(), &bob.actor, DEVICE_A, BACKUP_ID)?;
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
@@ -90,7 +97,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     )
     .await?;
 
-    let accepted_body = backup_body(&alice.actor, DEVICE_A, BACKUP_ID)?;
+    let accepted_body = backup_body(server.service_id(), &alice.actor, DEVICE_A, BACKUP_ID)?;
     let accepted = expect_json(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
@@ -147,7 +154,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
 
 async fn reject_wrong_device_on_put(server: &ArkretServer, token: &str, actor: &str) -> Result<()> {
     let id = "ak:backup:01975510-0000-7000-8000-0000000000d4";
-    let body = backup_body(actor, DEVICE_B, id)?;
+    let body = backup_body(server.service_id(), actor, DEVICE_B, id)?;
     expect_backup_error(
         server
             .http()
@@ -167,7 +174,7 @@ async fn reject_digest_mismatch_on_put(
     actor: &str,
 ) -> Result<()> {
     let id = "ak:backup:01975510-0000-7000-8000-0000000000d5";
-    let baseline = backup_body(actor, DEVICE_A, id)?;
+    let baseline = backup_body(server.service_id(), actor, DEVICE_A, id)?;
     let body = wire_negative_from_sdk(&baseline, |value| {
         value["ciphertext"] = Value::String("tampered-ciphertext".to_owned());
         value["ciphertext_digest"] = Value::String(
@@ -187,7 +194,12 @@ async fn reject_digest_mismatch_on_put(
     .await
 }
 
-fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBackup> {
+fn backup_body(
+    station_id: &arkret_wire::DidCoreId,
+    actor: &str,
+    device_id: &str,
+    backup_id: &str,
+) -> Result<KeyBackup> {
     let created_at = ts("2026-05-18T00:00:00.000Z")?;
     let actor_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
     let effective_scope = ScopeRef::Realm {
@@ -196,7 +208,10 @@ fn backup_body(actor: &str, device_id: &str, backup_id: &str) -> Result<KeyBacku
     let history_scope = HistoryEffectiveScope::try_from(effective_scope)?;
     let backup = KeyBackup {
         backup_id: BackupId::new(backup_id.to_owned())?,
-        actor_id: actor_id.clone(),
+        actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            actor_id.clone(),
+            station_id.clone(),
+        )),
         device_id: Some(DeviceId::new(device_id.to_owned())?),
         backup_kind: BackupKind::MlsHistory,
         mixed_secret_storage: false,

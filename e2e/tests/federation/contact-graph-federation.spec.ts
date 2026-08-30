@@ -409,16 +409,15 @@ test.describe("contact graph federation (α/β)", () => {
     const alice = uniqueUser(`cgf-s4-alice-${stamp}`, "alpha");
     const bob = uniqueUser(`cgf-s4-bob-${stamp}`, "beta");
 
-    // bob lives on β. alice is registered on BOTH α (her home, where she signs
-    // the realm + delivery) AND β (so the bob->alice invite consent cell, which
-    // β verifies the evidence against, can be created on β).
+    // Bob has a β account. Alice has independent accounts on BOTH α (where
+    // she signs the Realm events) AND β (where the bob->alice invite consent
+    // cell and the evidence β verifies are created).
     await ensureRegistered(request, alice, { server: "alpha" });
     await ensureRegistered(request, alice, { server: "beta" });
     await ensureRegistered(request, bob, { server: "beta" });
-    // A join candidate authenticates the signing principal independently of
-    // Bob's home Station. The harness obtains a candidate-scoped
-    // session on α, while Bob's account-private inbox and delivery binding
-    // remain on β.
+    // The harness creates an independent α account for Bob and obtains its
+    // candidate-scoped session. Bob's β account keeps its own account-private
+    // inbox and Station-bound data; neither account takes over the other.
     await ensureRegistered(request, bob, { server: "alpha" });
     const aliceTokenAlpha = await issueDevSession(request, alice, {
       server: "alpha",

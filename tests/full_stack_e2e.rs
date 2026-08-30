@@ -3,7 +3,7 @@
 //! Drives the entire cross-project strand from subject DID mint through
 //! coauth handle_claim, teabay directory resolve_handle, soland
 //! member_add, inkson mock message send, floria blind-wakeup gateway,
-//! chime mock receive, rebind handover, and revocation.
+//! chime mock receive, same-Station route handover, and revocation.
 //!
 //! The scenario in `cotest::scenarios::full_stack_e2e`:
 //!  - Always exercises the SDK contract surface (happy path + every negative case).

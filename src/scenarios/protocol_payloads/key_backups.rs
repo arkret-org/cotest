@@ -73,7 +73,7 @@ async fn put_backup(server: &ArkretServer, token: &str, actor_id: &str) -> Resul
             .put(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}")))
             .bearer_auth(token)
             .header("Idempotency-Key", "protocol-payloads-key-backup-put")
-            .json(&signed_backup_envelope(actor_id)?),
+            .json(&signed_backup_envelope(actor_id, server.service_id())?),
         StatusCode::OK,
     )
     .await?;
@@ -85,7 +85,7 @@ async fn put_backup(server: &ArkretServer, token: &str, actor_id: &str) -> Resul
 /// Build the `ak.schema.key_backup.v1` envelope including the §7.4.1
 /// `auth_data` device-signature block. The device authorization Event is the
 /// trust anchor for this signature.
-fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
+fn signed_backup_envelope(actor_id: &str, station_id: &DidCoreId) -> Result<KeyBackup> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
@@ -96,7 +96,10 @@ fn signed_backup_envelope(actor_id: &str) -> Result<KeyBackup> {
     let history_scope = HistoryEffectiveScope::try_from(effective_scope)?;
     let envelope = KeyBackup {
         backup_id: backup_id(BACKUP_ID)?,
-        actor_id: did(actor_id)?,
+        actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            did(actor_id)?,
+            station_id.clone(),
+        )),
         device_id: Some(device_id(ENVELOPE_DEVICE_ID)?),
         backup_kind: BackupKind::MlsHistory,
         mixed_secret_storage: false,

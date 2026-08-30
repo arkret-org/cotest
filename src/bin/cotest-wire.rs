@@ -294,7 +294,8 @@ fn install_managed_actor_author(input: Value) -> Result<Value> {
         .basis
         .install()
         .context("validated install request has no install basis")?;
-    if input.bot_actor_id != input.applet_package.bot_actor_id
+    if arkret_wire::ActorId::hosted_principal(input.bot_actor_id.clone(), input.station_id.clone())
+        != input.applet_package.bot_actor_id
         || input.service_verification_method != input.applet_package.webhook_auth.key_ref
     {
         return Ok(author_rejection(

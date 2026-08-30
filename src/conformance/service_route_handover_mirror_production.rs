@@ -444,7 +444,7 @@ async fn exercise_resolver_safety() -> Result<()> {
     .0?;
     ensure!(
         successor_entry.record_sequence == 1 && service_id(&successor_entry.did)? == expected,
-        "same-core handover was treated as a rebind"
+        "same-core handover changed the service identity"
     );
     restart_store
         .evict_route_cache(&expected, SERVICE_KIND)
@@ -476,7 +476,7 @@ async fn exercise_resolver_safety() -> Result<()> {
         replacement_id != expected,
         "replacement fixture did not change core id"
     );
-    let (without_rebind, _) = resolve_with(
+    let (wrong_service_identity, _) = resolve_with(
         restart_store.clone(),
         &expected,
         replacement.clone(),
@@ -484,14 +484,14 @@ async fn exercise_resolver_safety() -> Result<()> {
     )
     .await;
     ensure!(
-        matches!(without_rebind, Err(ServiceError::NotFound(_)))
+        matches!(wrong_service_identity, Err(ServiceError::NotFound(_)))
             && restart_store
                 .last_seen_floor(&replacement_id, SERVICE_KIND)
                 .await?
                 .is_none(),
-        "new core route was accepted without a new binding"
+        "new core route was accepted as the existing service identity"
     );
-    let rebound = resolve_with(
+    let new_service_route = resolve_with(
         restart_store,
         &replacement_id,
         replacement,
@@ -500,8 +500,8 @@ async fn exercise_resolver_safety() -> Result<()> {
     .await
     .0?;
     ensure!(
-        rebound.service_id == replacement_id,
-        "new core route was not accepted after expected binding changed"
+        new_service_route.service_id == replacement_id,
+        "new core route was not resolved under its own distinct service identity"
     );
 
     let quarantine_store = Arc::new(MemoryServiceRouteStore::new());
@@ -584,7 +584,7 @@ pub async fn run_service_route_handover_mirror_production_suite() -> Result<()> 
             "fork_fail_closed": true,
             "restart_floor": true,
             "same_core_handover": true,
-            "new_core_rebind": true
+            "new_core_identity_isolation": true
         }),
         &serde_json::json!({"status": "validated"}),
     );

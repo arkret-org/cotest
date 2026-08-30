@@ -842,8 +842,8 @@ async fn remove_pairwise_leaf(
         base_epoch,
         base_epoch + 1,
     )?;
-    let removal = requester_group.remove_members_by_principal_with_governance_binding(
-        std::slice::from_ref(&target.actor_id),
+    let removal = requester_group.remove_members_by_actor_with_governance_binding(
+        &[arkret_wire::ActorId::service(target.actor_id.clone())],
         &binding,
     )?;
     let commit_payload = MlsCommitPayload::new(

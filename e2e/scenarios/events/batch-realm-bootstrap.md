@@ -13,7 +13,7 @@ by subsequent owner writes.
    before the Realm exists.
 3. Submit the complete registered founding unit: `ak.realm.create`, profile,
    policy bundle, join rule, history visibility, discovery, conditional
-   plaintext-visible services, delivery binding policy, and creator membership. v1 has
+   plaintext-visible services, durability policy, and creator membership. v1 has
    **no** founding `ak.capability.grant` slot.
 4. Query accepted history and assert every registered slot forms one exact
    `actor_seq / prev_refs` chain, with no `ak.capability.grant` at all.

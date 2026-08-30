@@ -951,8 +951,8 @@ test.describe("cross-server federation", () => {
     );
     await waitForMember(request, aliceToken, bob.id, realmId, "alpha");
 
-    // Alice (Realm owner) delegates the federation delivery binding policy to
-    // β's service DID, then confirms a baseline message still fans out to β.
+    // Alice (Realm owner) grants a Realm-scoped capability to β's service
+    // actor, then confirms a baseline message still fans out to β.
     const grantId = await grantServiceCapabilityApi(request, aliceToken, {
       ownerId: alice.id,
       realmId,

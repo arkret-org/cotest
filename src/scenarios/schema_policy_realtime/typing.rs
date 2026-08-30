@@ -50,7 +50,10 @@ pub async fn typing_and_push_rules_strand_work() -> Result<()> {
     let push_rules_carrier = serde_json::to_value(
         arkret::account_data_crypto::seal_account_data_value_with_nonce(
             &[7u8; 32],
-            &arkret_identifiers::DidCoreId::new(bob_core.clone())?,
+            &arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+                arkret_identifiers::DidCoreId::new(bob_core.clone())?,
+                server.service_id().clone(),
+            )),
             "ak.push_rules",
             &json!({"rules": [], "muted_realms": []}),
             [9u8; 24],
