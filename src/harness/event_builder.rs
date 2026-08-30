@@ -758,7 +758,7 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
     frontier.validate()?;
     let expected_actor_id = ActorId::account(AccountId::new(
         project_did_to_core_id(&Did::new(actor.to_owned())?)?,
-        event_station_id(actor),
+        server.service_id().clone(),
     ));
     if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
         return Err(anyhow!("combined selector returned the wrong actor scope"));
@@ -772,7 +772,7 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         frontier.frontier_event_ids,
         signing_seed,
         verification_method,
-        None,
+        Some(server.service_id()),
     );
     let event_kind = arkret_wire::EventKind::from(kind);
     let is_control_move = event_kind.is_control_plane();

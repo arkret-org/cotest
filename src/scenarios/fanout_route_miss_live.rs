@@ -14,7 +14,7 @@ use arkret_wire::{AccountId, ActorId, Did, DidCoreId, Event, EventId, EventKind}
 use reqwest::StatusCode;
 use serde_json::json;
 
-use crate::harness::{TestActorClient, TestServerGroup, expect_json, member_join_payload};
+use crate::harness::{TestActorClient, TestServerGroup, expect_json};
 use crate::scenarios::identity_test_support::{
     HARNESS_ACCOUNT_AUTHORITY_ORIGIN, actor_did_for_service_did, harness_account_authority_id,
 };
@@ -182,7 +182,12 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         .submit_event(
             &realm_id,
             EventKind::MemberState.as_str(),
-            member_join_payload(&realm_id, "did:web:fanout-carol.example"),
+            member_payload(
+                &realm_id,
+                "did:web:fanout-carol.example",
+                group.server(0).service_id().clone(),
+                MembershipPayloadState::Join,
+            )?,
         )
         .await?;
     let first_event_id = crate::harness::submitted_event_id(&first)?;
@@ -243,7 +248,12 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         .submit_event(
             &realm_id,
             EventKind::MemberState.as_str(),
-            member_join_payload(&realm_id, "did:web:fanout-david.example"),
+            member_payload(
+                &realm_id,
+                "did:web:fanout-david.example",
+                group.server(0).service_id().clone(),
+                MembershipPayloadState::Join,
+            )?,
         )
         .await?;
     let second_event_id = crate::harness::submitted_event_id(&second)?;
