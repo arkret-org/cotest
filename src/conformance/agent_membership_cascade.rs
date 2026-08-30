@@ -166,7 +166,10 @@ fn validate_cleanup_intent_digest_and_states(
             station_id: binding.controller_account_id.station_id.clone(),
         }),
         controller_terminal_event_id: terminal_event_id,
-        expected_agent_ids: vec![DidCoreId::new("ak:did_core:webvh:z6mkfixtureagentexample")?],
+        expected_agent_ids: vec![arkret_wire::ActorId::hosted_principal(
+            DidCoreId::new("ak:did_core:webvh:z6mkfixtureagentexample")?,
+            DidCoreId::new("ak:did_core:web:agent-station.example")?,
+        )],
         cleanup_intent_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         accepted_at,
         cleanup_due_at: accepted_at + Duration::hours(1),

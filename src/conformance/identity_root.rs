@@ -378,8 +378,7 @@ fn validate_reanchor_helpers() -> Result<()> {
     let principal = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
     let station_id = DidCoreId::new("ak:did_core:web:principal.example")?;
     let value = json!({
-        "principal_id": principal,
-        "station_id": station_id,
+        "account_id": {"principal_id": principal, "station_id": station_id},
         "recovery_authority_kind": "pcr_policy",
         "recovery_policy_id": "ak:policy:01904100-0000-7000-8000-000000000001",
         "recovery_policy_version": 1,

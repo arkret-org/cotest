@@ -103,10 +103,13 @@ async fn upload_and_inspect_keys(
             .post(server.url("/_arkret/self/keys/query"))
             .bearer_auth(token)
             .json(&arkret_models_crypto::KeysQueryRequestBody {
-                device_keys: std::collections::BTreeMap::from([(
-                    arkret_identifiers::DidCoreId::new(actor_core_id.clone())?,
-                    vec![arkret_identifiers::DeviceId::new(KEYS_DEVICE_ID)?],
-                )]),
+                device_keys: vec![arkret_models_crypto::QueryAccountDeviceSelector {
+                    account_id: arkret_wire::AccountId::new(
+                        arkret_identifiers::DidCoreId::new(actor_core_id.clone())?,
+                        server.service_id().clone(),
+                    ),
+                    device_ids: vec![arkret_identifiers::DeviceId::new(KEYS_DEVICE_ID)?],
+                }],
                 timeout_ms: None,
             }),
         StatusCode::OK,
@@ -120,17 +123,18 @@ async fn upload_and_inspect_keys(
     // row itself carries just prekeys, trust algorithms and that attestation.
     // The upload request signature authorizes the mutation; it is not a prekey
     // algorithm entry and therefore is not echoed under `algorithms`.
-    let principal_id = arkret_identifiers::DidCoreId::new(actor_core_id.clone())?;
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new(actor_core_id.clone())?,
+        server.service_id().clone(),
+    );
     let device_id = arkret_identifiers::DeviceId::new(KEYS_DEVICE_ID.to_owned())?;
     let queried_record = query_keys
-        .device_keys
-        .get(&principal_id)
+        .devices_for(&account_id)
         .and_then(|devices| devices.get(&device_id))
         .context("keys/query omitted the requested device record")?;
-    queried_record.validate_attestation_binding(&principal_id, &device_id)?;
+    queried_record.validate_attestation_binding(&account_id, &device_id)?;
     let generation = query_keys
-        .device_generations
-        .get(&principal_id)
+        .generation_for(&account_id)
         .context("keys/query omitted the principal generation fence")?;
     assert!(
         queried_record.is_usable_in_generation(Some(generation)),
@@ -200,20 +204,20 @@ async fn upload_and_inspect_keys(
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(token)
             .json(&arkret_models_crypto::KeysClaimRequestBody {
-                one_time_keys: std::collections::BTreeMap::from([(
-                    arkret_identifiers::DidCoreId::new(actor_core_id.clone())?,
-                    std::collections::BTreeMap::from([(
+                one_time_keys: vec![arkret_models_crypto::AccountDeviceAlgorithmEntry {
+                    account_id: account_id.clone(),
+                    device_algorithms: std::collections::BTreeMap::from([(
                         arkret_identifiers::DeviceId::new(KEYS_DEVICE_ID)?,
                         arkret_wire::NonEmptyString::new("signed_curve25519")
                             .map_err(anyhow::Error::msg)?,
                     )]),
-                )]),
+                }],
             }),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        claimed["one_time_keys"][&actor_core_id][KEYS_DEVICE_ID]["signed_curve25519"]["key"],
+        claimed["one_time_keys"][0]["device_keys"][KEYS_DEVICE_ID]["signed_curve25519"]["key"],
         "one-time"
     );
     Ok(())

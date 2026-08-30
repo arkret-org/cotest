@@ -1288,7 +1288,6 @@ fn member_payload_at_station(
             station_id,
         )),
         gate_proofs: Vec::new(),
-        via_ids: Vec::new(),
         reason,
         invite_ref,
         membership_cause: None,

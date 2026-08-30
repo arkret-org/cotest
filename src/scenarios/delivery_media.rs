@@ -66,7 +66,7 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .http()
             .post(server.url("/_arkret/self/keys/query"))
             .json(&KeysQueryRequestBody {
-                device_keys: BTreeMap::new(),
+                device_keys: Vec::new(),
                 timeout_ms: None,
             }),
         StatusCode::UNAUTHORIZED,
@@ -121,19 +121,22 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
             .json(&KeysClaimRequestBody {
-                one_time_keys: BTreeMap::from([(
-                    alice_id.clone(),
-                    BTreeMap::from([(
+                one_time_keys: vec![arkret_models_crypto::AccountDeviceAlgorithmEntry {
+                    account_id: arkret_wire::AccountId::new(
+                        alice_id.clone(),
+                        server.service_id().clone(),
+                    ),
+                    device_algorithms: BTreeMap::from([(
                         DeviceId::new(alice_device)?,
                         NonEmptyString::new("signed_curve25519").map_err(anyhow::Error::msg)?,
                     )]),
-                )]),
+                }],
             }),
         StatusCode::OK,
     )
     .await?;
     assert_eq!(
-        first_claim["one_time_keys"][alice_id.as_str()][alice_device]["signed_curve25519"]["key"],
+        first_claim["one_time_keys"][0]["device_keys"][alice_device]["signed_curve25519"]["key"],
         "single-use"
     );
 
@@ -143,19 +146,22 @@ pub async fn key_upload_query_and_claim_edges_are_enforced() -> Result<()> {
             .post(server.url("/_arkret/self/keys/claim"))
             .bearer_auth(&token)
             .json(&KeysClaimRequestBody {
-                one_time_keys: BTreeMap::from([(
-                    alice_id.clone(),
-                    BTreeMap::from([(
+                one_time_keys: vec![arkret_models_crypto::AccountDeviceAlgorithmEntry {
+                    account_id: arkret_wire::AccountId::new(
+                        alice_id.clone(),
+                        server.service_id().clone(),
+                    ),
+                    device_algorithms: BTreeMap::from([(
                         DeviceId::new(alice_device)?,
                         NonEmptyString::new("signed_curve25519").map_err(anyhow::Error::msg)?,
                     )]),
-                )]),
+                }],
             }),
         StatusCode::OK,
     )
     .await?;
     assert!(
-        second_claim["one_time_keys"][alice_id.as_str()]
+        second_claim["one_time_keys"][0]["device_keys"]
             .as_object()
             .unwrap()
             .is_empty()
