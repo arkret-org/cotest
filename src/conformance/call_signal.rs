@@ -24,8 +24,8 @@ use arkret_signatures::PublicKeyMaterial;
 use arkret_signatures::proof::verify_ed25519_signal_proof;
 use arkret_wire::signal::{SIGNAL_AEAD_PURPOSE, SIGNAL_AEAD_SCHEME};
 use arkret_wire::{
-    ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope, SignalKeyRef,
-    SignalProof,
+    AccountId, ActorId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
+    SignalKeyRef, SignalProof,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::SigningKey;
@@ -148,7 +148,7 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     let key = CallSignalSeqKey {
         realm_id: RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?,
         call_id: CallId::new("ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz")?,
-        actor_id: DidCoreId::new("ak:did_core:web:alice.example.com")?,
+        actor_id: fixture_actor("ak:did_core:web:station-a.example.com")?,
         device_id: DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?,
     };
 
@@ -174,6 +174,18 @@ pub fn run_seq_monotonic_vector() -> Result<()> {
     };
     observe_seq(&mut frontier, &sibling, 1)
         .map_err(|err| anyhow!("a sibling device's stream must have its own frontier: {err}"))?;
+    let other_account = CallSignalSeqKey {
+        actor_id: fixture_actor("ak:did_core:web:station-b.example.com")?,
+        ..key.clone()
+    };
+    observe_seq(&mut frontier, &other_account, 1).map_err(|err| {
+        anyhow!(
+            "the same principal and device at another Station must have its own frontier: {err}"
+        )
+    })?;
+    if frontier.get(&key) != Some(&3) || frontier.get(&other_account) != Some(&1) {
+        bail!("call signal frontiers leaked across Station accounts");
+    }
     Ok(())
 }
 
@@ -214,6 +226,20 @@ pub fn run_proof_detached_jws_vector() -> Result<()> {
     rescoped.signal_class = SignalClass::Session;
     if rescoped.validate_structural().is_ok() {
         bail!("a rewritten signal_class still matched the recorded aad_digest");
+    }
+
+    // The proof controller is unchanged, but the Station is part of both the
+    // authenticated envelope and the AAD, not an inferred routing hint.
+    let mut other_account = envelope.clone();
+    other_account.sender_actor_id = fixture_actor("ak:did_core:web:station-b.example.com")?;
+    if other_account.validate_structural().is_ok() {
+        bail!("a rewritten sender Station still matched the recorded aad_digest");
+    }
+    other_account.encrypted_payload.aad_digest = other_account.expected_aad_digest()?;
+    other_account.proof.envelope_digest = other_account.envelope_digest()?;
+    other_account.validate_structural()?;
+    if verify_ed25519_signal_proof(&other_account, &public).is_ok() {
+        bail!("a proof was replayed under another Station account with the same principal");
     }
 
     // Negative: a wrong key MUST NOT verify.
@@ -272,7 +298,7 @@ pub fn run_outer_metadata_minimal_vector() -> Result<()> {
 struct CallSignalSeqKey {
     realm_id: RealmId,
     call_id: CallId,
-    actor_id: DidCoreId,
+    actor_id: ActorId,
     device_id: DeviceId,
 }
 
@@ -327,6 +353,13 @@ fn sent_at() -> DateTime<Utc> {
         .expect("static fixture instant is unambiguous")
 }
 
+fn fixture_actor(station_id: &str) -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.example.com")?,
+        DidCoreId::new(station_id)?,
+    )))
+}
+
 /// A fully signed call-signal envelope. The ciphertext is opaque to this
 /// vector on purpose: every assertion here is about what a receiver can decide
 /// from the outer envelope, which is exactly the boundary §5 draws.
@@ -336,7 +369,7 @@ fn signed_call_signal_envelope(
     signing_key: &SigningKey,
 ) -> Result<SignalEnvelope> {
     let realm_id = RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
-    let actor_id = DidCoreId::new("ak:did_core:web:alice.example.com")?;
+    let actor_id = fixture_actor("ak:did_core:web:station-a.example.com")?;
     let device_id = DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?;
     let mut envelope = SignalEnvelope {
         realm_id: realm_id.clone(),

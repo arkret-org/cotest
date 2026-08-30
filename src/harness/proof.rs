@@ -241,7 +241,13 @@ mod tests {
         let mut envelope = json!({
             "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA"},
-            "sender_actor_id": "ak:did_core:web:alice.example",
+            "sender_actor_id": {
+                "kind": "account",
+                "account_id": {
+                    "principal_id": "ak:did_core:web:alice.example",
+                    "station_id": "ak:did_core:web:station-a.example"
+                }
+            },
             "sender_device_id": "ak:device:019f3b1c-76c8-7000-8000-000000000001",
             "seal_ref": format!("ak:seal:sha256:{}", "a".repeat(64)),
             "signal_class": "session",
@@ -287,5 +293,9 @@ mod tests {
         assert_eq!(wire["signal_class"], "session");
         assert!(wire.get("kind").is_none());
         assert!(wire.get("payload").is_none());
+        assert_eq!(
+            wire["sender_actor_id"]["account_id"]["station_id"],
+            "ak:did_core:web:station-a.example"
+        );
     }
 }
