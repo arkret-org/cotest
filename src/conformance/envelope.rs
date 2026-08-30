@@ -896,10 +896,10 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
             }
             // A joining member is an exact ActorId. Its AccountId or hosted
             // Station component is the route truth; no delivery sidecar exists.
-            if content.get("membership").and_then(Value::as_str) == Some("join") {
-                if let Some(err) = missing_payload_fields(content, &["realm_id"]) {
-                    return Some(err);
-                }
+            if content.get("membership").and_then(Value::as_str) == Some("join")
+                && let Some(err) = missing_payload_fields(content, &["realm_id"])
+            {
+                return Some(err);
             }
             None
         }
