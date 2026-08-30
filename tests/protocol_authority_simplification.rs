@@ -1,9 +1,9 @@
 use arkret_event_draft::TypedEventDraft;
 use arkret_models_collaboration::events_payloads::{ContentBlock, MessageCreatePayload};
 use arkret_wire::{
-    AccountId, Did, DidCoreId, DidKey, DidUrl, Event, EventProof, Hash, Hlc, ProducerEventProof,
-    RealmId, ScopeRef, StationAdmissionProof, StationAdmissionProofKind, StrandId, event_spec,
-    project_did_to_core_id,
+    AccountId, ActorId, Did, DidCoreId, DidKey, DidUrl, Event, EventProof, Hash, Hlc,
+    ProducerEventProof, RealmId, ScopeRef, StationAdmissionProof, StationAdmissionProofKind,
+    StrandId, event_spec, project_did_to_core_id,
 };
 use chrono::{TimeZone as _, Utc};
 
@@ -24,8 +24,7 @@ fn producer_event() -> Event {
             realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir")
                 .unwrap(),
         },
-        actor_id,
-        station_id,
+        ActorId::account(AccountId::new(actor_id, station_id)),
         payload,
     )
     .unwrap()
@@ -103,7 +102,10 @@ fn accepted_event_requires_exact_origin_and_producer_binding() {
         .unwrap();
 
     let mut wrong_origin = accepted.clone();
-    wrong_origin.station_id = core("did:web:replica.example");
+    wrong_origin.actor_id = ActorId::account(AccountId::new(
+        core("did:web:alice.example"),
+        core("did:web:replica.example"),
+    ));
     assert!(
         wrong_origin
             .validate_station_admission_binding(arkret_canonical::DigestSuite::Sha256)
@@ -136,10 +138,10 @@ fn accepted_event_requires_exact_origin_and_producer_binding() {
 fn deleted_event_wire_members_are_hard_rejected() {
     let event = accept(producer_event());
     let mut value = serde_json::to_value(&event).unwrap();
-    value["accepted_by"] = serde_json::json!(event.station_id);
+    value["accepted_by"] = serde_json::json!(event.actor_id.route_service_id());
     assert!(serde_json::from_value::<Event>(value).is_err());
 
     let mut missing_origin = serde_json::to_value(event).unwrap();
-    missing_origin.as_object_mut().unwrap().remove("station_id");
+    missing_origin.as_object_mut().unwrap().remove("actor_id");
     assert!(serde_json::from_value::<Event>(missing_origin).is_err());
 }

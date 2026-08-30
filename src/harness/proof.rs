@@ -109,6 +109,7 @@ pub fn refresh_typed_event_proof(event: &mut arkret_wire::Event) -> Result<()> {
         .executed_by
         .as_ref()
         .unwrap_or(&event.actor_id)
+        .signing_principal_id()
         .as_str();
     let signing_seed =
         super::event_builder::registered_event_signing_seed(signer, &verification_method)

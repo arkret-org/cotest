@@ -968,7 +968,7 @@ async fn bootstrap_test_device_authorization(
     let mut account_subject_preimage = b"ak.account-subject.v1\n".to_vec();
     account_subject_preimage.extend(canonical_json_bytes(&serde_json::json!({
         "account_authority_id": harness_account_authority_id(),
-        "service_account_id": local_id,
+        "account_local_id": local_id,
     }))?);
     let account_subject = Hash::new(arkret_canonical::canonical::sha256_digest(
         &account_subject_preimage,

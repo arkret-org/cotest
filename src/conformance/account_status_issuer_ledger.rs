@@ -44,7 +44,7 @@ use arkret_signatures::account_status::{
 };
 use arkret_wire::{
     AccountId, AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, RealmId, ReasonCode, ReceiptId,
-    SchemaId, ServiceAccountId, ServiceOperationId,
+    SchemaId, ServiceOperationId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
@@ -438,7 +438,7 @@ async fn assert_gap_recovery_through_bounded_resolve(
     // type is what proves it.
     let request = AccountStatusResolveRequestBody {
         account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: ServiceAccountId::new(account).map_err(anyhow::Error::msg)?,
+        account_id: AccountId::new(DidCoreId::new(PRINCIPAL_ID)?, DidCoreId::new(STATION_ID)?),
         from_status_seq: required_status_seq,
         limit: 128,
     };
@@ -446,7 +446,7 @@ async fn assert_gap_recovery_through_bounded_resolve(
     let resolved = ledger
         .resolve(
             request.account_authority_id.as_str(),
-            request.account_id.as_str(),
+            &request.account_id.canonical_key()?,
             request.from_status_seq,
             request.limit,
         )
@@ -765,12 +765,9 @@ async fn assert_below_head_is_stale_against_the_durable_head(
     assert_head_is(replicas, &third).await?;
     // The receiver still holds the row for the submitted sequence, so a
     // history-row baseline would have something to match against.
+    let second_account_key = second.account_id.canonical_key()?;
     if replicas
-        .receipt(
-            second.account_authority_id.as_str(),
-            second.account_id.as_str(),
-            2,
-        )
+        .receipt(second.account_authority_id.as_str(), &second_account_key, 2)
         .await?
         .as_ref()
         != Some(&second_receipt)
@@ -826,12 +823,9 @@ async fn assert_below_head_is_stale_against_the_durable_head(
     assert_head_is(replicas, &third).await?;
     // Zero write: the retained row keeps its original receipt, and the replay
     // receipt was never made durable.
+    let second_account_key = second.account_id.canonical_key()?;
     let stored = replicas
-        .receipt(
-            second.account_authority_id.as_str(),
-            second.account_id.as_str(),
-            2,
-        )
+        .receipt(second.account_authority_id.as_str(), &second_account_key, 2)
         .await?
         .ok_or_else(|| anyhow!("the stale replay dropped the retained status_seq 2 receipt"))?;
     if stored != second_receipt || stored == replay_receipt {
@@ -1208,11 +1202,9 @@ async fn assert_head_is(
     replicas: &dyn AccountStatusReplicaStore,
     expected: &AccountStatusRecord,
 ) -> Result<()> {
+    let account_key = expected.account_id.canonical_key()?;
     let head = replicas
-        .current(
-            expected.account_authority_id.as_str(),
-            expected.account_id.as_str(),
-        )
+        .current(expected.account_authority_id.as_str(), &account_key)
         .await?
         .ok_or_else(|| {
             anyhow!(
@@ -1247,7 +1239,7 @@ fn at(second: u32) -> Result<DateTime<Utc>> {
 }
 
 fn unsigned(
-    account_id: &str,
+    _account_id: &str,
     status_seq: u64,
     previous_account_status_record_id: Option<AccountStatusRecordId>,
     binding_version: u64,
@@ -1258,7 +1250,6 @@ fn unsigned(
     Ok(UnsignedAccountStatusRecord {
         schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
         account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        service_account_id: ServiceAccountId::new(account_id).map_err(anyhow::Error::msg)?,
         account_id: AccountId::new(DidCoreId::new(PRINCIPAL_ID)?, DidCoreId::new(STATION_ID)?),
         principal_control_realm_id: RealmId::new(PRINCIPAL_CONTROL_REALM)?,
         binding_version,

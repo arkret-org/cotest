@@ -22,6 +22,7 @@ use arkret::identity::{
 use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::events_payloads::mention::Mention;
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+use arkret_wire::AccountId;
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::json;
 
@@ -58,6 +59,13 @@ fn subject() -> Result<DidCoreId> {
     DidCoreId::new("ak:did_core:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
 }
 
+fn subject_account(subject: &DidCoreId) -> Result<AccountId> {
+    Ok(AccountId::new(
+        subject.clone(),
+        DidCoreId::new("ak:did_core:web:station.acme.example")?,
+    ))
+}
+
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(year, month, day, 0, 0, 0)
         .single()
@@ -83,18 +91,17 @@ fn verified_claim(
 ) -> Result<HandleClaim> {
     Ok(HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
+        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?,
         handle_aliases: Vec::new(),
-        subject_id: Some(subject.clone()),
-        issuer_id: Some(DidCoreId::new(ISSUER)?),
+        subject_account_id: subject_account(subject)?,
+        issuer_id: DidCoreId::new(ISSUER)?,
         vouching_id: None,
-        binding_state: Some(HandleBindingState::Verified),
+        binding_state: HandleBindingState::Verified,
         claim_kind: None,
         visibility: None,
         audience: audience.map(str::to_owned),
         challenge: None,
         claim_scope: Default::default(),
-        member_delivery_binding: None,
         claims: Vec::new(),
         created_at: at(2026, 5, 1),
         expires_at: Some(at(2026, 7, 1)),
@@ -105,11 +112,11 @@ fn verified_claim(
 }
 
 fn empty_selection<'a>(
-    subject: &'a DidCoreId,
+    account_id: &'a AccountId,
     snapshot: &'a [HandleClaim],
 ) -> PrimaryHandleSelectInput<'a> {
     PrimaryHandleSelectInput {
-        subject_id: subject.as_str(),
+        account_id,
         context: None,
         claim_set_snapshot: snapshot,
         handle_issuer_policies: &[],
@@ -154,13 +161,14 @@ pub fn run_new_shape_accepted_vector() -> Result<()> {
 
 pub fn run_render_step1_unique_success_vector() -> Result<()> {
     let s = subject()?;
+    let account = subject_account(&s)?;
     let snapshot = vec![verified_claim("alice:acme.example", &s, None)?];
     let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
         handle_issuer_policies: &accepted,
-        ..empty_selection(&s, &snapshot)
+        ..empty_selection(&account, &snapshot)
     };
-    let render = render_mention(&s, &selection, None, Some("Alice Zhang"));
+    let render = render_mention(&selection, None, Some("Alice Zhang"));
     match render {
         MentionRender::Verified { handle } if handle.canonical() == "alice:acme.example" => Ok(()),
         other => bail!("step 1 unique projection MUST render Verified; got {other:?}"),
@@ -171,6 +179,7 @@ pub fn run_render_step1_unique_success_vector() -> Result<()> {
 
 pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
     let s = subject()?;
+    let account = subject_account(&s)?;
     let realm_ctx = "ak:realm:AWEs1cV4Rn1CVWdYoOUZ1yiMPe9Ze6ZYmP0ChDr89cPl";
     // Two candidates: the Realm-scoped projection is "not unique" until the
     // live audience context discriminates. With context set, §3.2.1 picks
@@ -182,14 +191,14 @@ pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
     ];
     let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &account,
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted,
         holder_primary_handle_at_as_of: None,
         resolution_as_of: now_anchor(),
     };
-    let render = render_mention(&s, &selection, None, Some("Alice Zhang"));
+    let render = render_mention(&selection, None, Some("Alice Zhang"));
     match render {
         MentionRender::Verified { handle } if handle.canonical() == "alice:acme.example" => Ok(()),
         other => bail!(
@@ -202,12 +211,13 @@ pub fn run_render_step1_multi_to_step2_live_vector() -> Result<()> {
 
 pub fn run_render_fallback_cached_vector() -> Result<()> {
     let s = subject()?;
+    let account = subject_account(&s)?;
     // No verifiable projection (empty accepted_issuer_ids drops the claim),
     // but a stale local cache verified handle exists.
     let snapshot = vec![verified_claim("alice:acme.example", &s, None)?];
-    let selection = empty_selection(&s, &snapshot); // accepted_issuer_ids empty → Step 0 drops it
+    let selection = empty_selection(&account, &snapshot); // accepted_issuer_ids empty → Step 0 drops it
     let cached = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
-    let render = render_mention(&s, &selection, Some(&cached), Some("Alice Zhang"));
+    let render = render_mention(&selection, Some(&cached), Some("Alice Zhang"));
     match render {
         MentionRender::Cached { handle } if handle.canonical() == "alice:acme.example" => Ok(()),
         other => bail!("resolution failure with a local cache MUST render Cached; got {other:?}"),
@@ -218,9 +228,10 @@ pub fn run_render_fallback_cached_vector() -> Result<()> {
 
 pub fn run_render_fallback_name_only_vector() -> Result<()> {
     let s = subject()?;
+    let account = subject_account(&s)?;
     let snapshot: Vec<HandleClaim> = vec![];
-    let selection = empty_selection(&s, &snapshot);
-    let render = render_mention(&s, &selection, None, Some("Alice Zhang"));
+    let selection = empty_selection(&account, &snapshot);
+    let render = render_mention(&selection, None, Some("Alice Zhang"));
     match render {
         MentionRender::NameOnly { name } if name == "Alice Zhang" => Ok(()),
         other => bail!("no claim + no cache MUST fall back to NameOnly; got {other:?}"),
@@ -231,13 +242,16 @@ pub fn run_render_fallback_name_only_vector() -> Result<()> {
 
 pub fn run_render_fallback_unresolved_vector() -> Result<()> {
     let s = subject()?;
+    let account = subject_account(&s)?;
     let snapshot: Vec<HandleClaim> = vec![];
-    let selection = empty_selection(&s, &snapshot);
-    let render = render_mention(&s, &selection, None, None);
+    let selection = empty_selection(&account, &snapshot);
+    let render = render_mention(&selection, None, None);
     match render {
-        MentionRender::Unresolved { truncated_did } => {
-            if truncated_did.is_empty() {
-                bail!("unresolved render MUST surface a truncated DID");
+        MentionRender::Unresolved {
+            truncated_account_id,
+        } => {
+            if truncated_account_id.is_empty() {
+                bail!("unresolved render MUST surface a truncated account id");
             }
             Ok(())
         }
@@ -249,6 +263,7 @@ pub fn run_render_fallback_unresolved_vector() -> Result<()> {
 
 pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()> {
     let s = subject()?;
+    let account = subject_account(&s)?;
     // A mention whose audit `handle_at_time` is deliberately nonsense /
     // stale. Actor attribution MUST come from `subject_id` only.
     let mention = Mention::new(s.clone())
@@ -266,9 +281,9 @@ pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()
     let accepted = vec![issuer_policy()];
     let selection = PrimaryHandleSelectInput {
         handle_issuer_policies: &accepted,
-        ..empty_selection(&s, &snapshot)
+        ..empty_selection(&account, &snapshot)
     };
-    let render = render_mention(&mention.subject_id, &selection, None, None);
+    let render = render_mention(&selection, None, None);
     match render {
         MentionRender::Verified { handle } if handle.canonical() == "alice:acme.example" => {}
         other => bail!(

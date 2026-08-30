@@ -78,7 +78,7 @@ export type UserSession = {
 export type SessionGrantMaterial = {
   grantJwt: string;
   grantId: string;
-  serviceAccountId: string;
+  accountId: { principal_id: string; station_id: string };
   audience: string;
   /// base64url-no-pad 32-byte Ed25519 seed of the DPoP device key the grant is
   /// bound to (`cnf.jkt`).
@@ -109,8 +109,8 @@ export type OpenUserOpts = {
   /// coauth-assigned grant id (DB row id), persisted by inkson with the grant
   /// so refresh/logout paths can identify the current grant chain.
   grantId?: string;
-  /// Coauth-owned service account that issued the injected grant.
-  serviceAccountId?: string;
+  /// Exact Station account that issued the injected grant.
+  accountId?: { principal_id: string; station_id: string };
   /// Audience the grant is bound to (the soland service DID).
   grantAudience?: string;
   recoveryKey?: string;
@@ -124,7 +124,7 @@ export type DpopUserSession = {
   account: CoauthPasswordAccount;
   grantJwt: string;
   grantId: string;
-  serviceAccountId: string;
+  accountId: { principal_id: string; station_id: string };
   grantAudience: string;
   dpopSeedB64url: string;
   eventSigningSeedB64url: string;
@@ -1647,7 +1647,7 @@ export async function createDpopUserSessionForAccount(
     account,
     grantJwt: grant.grantJwt,
     grantId: grant.grantId,
-    serviceAccountId: grant.serviceAccountId,
+    accountId: grant.accountId,
     grantAudience: grant.audience,
     dpopSeedB64url: dpopDeviceSeedB64url(deviceKey),
     eventSigningSeedB64url,
@@ -1707,7 +1707,7 @@ export async function createDpopUserSessionForAccount(
   );
   session.recoveryMaterialEvidence = {
     principal_id: user.id,
-    service_account_id: session.serviceAccountId,
+    account_id: session.accountId,
     principal_did: user.did,
     device_id: user.deviceId,
     principal_control_realm_id: principalControlRealmId,
@@ -1825,7 +1825,7 @@ export async function openDpopUserPageFromSession(
     dpopSeedB64url: session.dpopSeedB64url,
     eventSigningSeedB64url: session.eventSigningSeedB64url,
     grantId: session.grantId,
-    serviceAccountId: session.serviceAccountId,
+    accountId: session.accountId,
     grantAudience: session.grantAudience,
     recoveryKey: session.recoveryKey,
     recoveryMaterialEvidence: session.recoveryMaterialEvidence,
@@ -1870,16 +1870,16 @@ export async function openUser(
     sanitize(`${Date.now()}-${user.name}`),
   );
   fs.mkdirSync(diagnosticsDir, { recursive: true });
-  if (opts.grantJwt && opts.dpopSeedB64url && !opts.serviceAccountId) {
+  if (opts.grantJwt && opts.dpopSeedB64url && !opts.accountId) {
     throw new Error(
-      "Inkson test session injection requires the issuing service_account_id",
+      "Inkson test session injection requires the issuing account_id",
     );
   }
   const sessionInjection =
     opts.grantJwt && opts.dpopSeedB64url
       ? {
           grant_jwt: opts.grantJwt,
-          service_account_id: opts.serviceAccountId,
+          account_id: opts.accountId,
           dpop_seed_b64url: opts.dpopSeedB64url,
           principal_did: user.did,
           ...(opts.recoveryMaterialEvidence
@@ -2124,7 +2124,7 @@ export async function openUser(
       ? {
           grantJwt: opts.grantJwt,
           grantId: opts.grantId ?? "",
-          serviceAccountId: opts.serviceAccountId!,
+          accountId: opts.accountId!,
           audience: opts.grantAudience ?? "",
           dpopSeedB64url: opts.dpopSeedB64url,
         }

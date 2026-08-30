@@ -1,14 +1,8 @@
 //! T3.5 — Handle → Join end-to-end conformance entrypoint.
 //!
-//! Stitches the four pieces shipped in T3.1–T3.4:
-//!
-//!   - T3.1 ships `MemberDeliveryBindingCandidate` + typed SDK validator.
-//!   - T3.2 wires `handle_claim` issuance in coauth (canonical `arkret://...` URI +
-//!     `member_delivery_binding`).
-//!   - T3.3 lands the soland `delivery_binding_policy` reducer (`recipient_service_not_allowed` /
-//!     `binding_source_not_allowed`).
-//!   - T3.4 adds the teabay `ak.find.directory.read.resolve_handle.v1(intent="member_add")`
-//!     allow-list filter.
+//! Pins the clean-break chain: a handle claim resolves an exact `AccountId`,
+//! membership carries it as an `ActorId`, and the Station coordinate remains
+//! both identity and routing truth.
 //!
 //! The scenario in `cotest::scenarios::handle_to_join_e2e` always exercises
 //! the SDK happy path + all seven negatives, and best-effort drives a live

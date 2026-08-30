@@ -973,7 +973,7 @@ struct WelcomePayloadFixture<'a> {
     device_authorize_event_id: &'a str,
     requester_device_id: &'a str,
     intended_realm_id: &'a str,
-    requester_actor_id: &'a str,
+    requester_actor_id: &'a arkret_wire::ActorId,
     requester_verification_method: &'a str,
     claim_receipt: &'a Value,
     welcome_digest: &'a str,
@@ -1067,6 +1067,10 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     {
         bail!("requester verification method does not bind requester actor id and device");
     }
+    let requester_actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        requester_core_id.clone(),
+        DidCoreId::new("ak:did_core:web:station.example")?,
+    ));
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 
     let principal_id = core_did("ak:did_core:web:alice.example")?;
@@ -1099,7 +1103,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         device_authorize_event_id,
         requester_device_id,
         intended_realm_id: intended_realm_id.as_str(),
-        requester_actor_id: requester_core_id.as_str(),
+        requester_actor_id: &requester_actor,
         requester_verification_method: requester_verification_method.as_str(),
         claim_receipt: &claim_receipt,
         welcome_digest: welcome_digest.as_str(),
@@ -1112,7 +1116,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &claim,
         &published,
         &intended_realm_id,
-        &requester_core_id,
+        &requester_actor,
         &welcome_digest,
         Some(device_authorize_event_id),
         None,
@@ -1137,7 +1141,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
             &claim,
             &published,
             &intended_realm_id,
-            &requester_core_id,
+            &requester_actor,
             &welcome_digest,
             Some(device_authorize_event_id),
             None,
@@ -1166,7 +1170,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         &claim,
         &published,
         &intended_realm_id,
-        &requester_core_id,
+        &requester_actor,
         &welcome_digest,
         Some(device_authorize_event_id),
         None,

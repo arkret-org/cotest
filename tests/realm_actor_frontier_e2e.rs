@@ -35,7 +35,11 @@ async fn frontier(
         server
             .http()
             .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(actor, Some(realm_id))?)
+            .json(&events_frontier_request_body(
+                actor,
+                server.service_id().as_str(),
+                Some(realm_id),
+            )?)
             .bearer_auth(token),
         StatusCode::OK,
     )

@@ -11,7 +11,7 @@
 //! Coverage map:
 //!
 //! - R2.1 positive — `ak.realm.create` / `ak.space.create` (container) /
-//!   `ak.realm.delivery_binding_policy` / `ak.realm.link` build via SDK typed `Event`, encode via
+//!   `ak.realm.link` builds via SDK typed `Event`, encodes via
 //!   `canonical_json_bytes`, round-trip back to the same kind + payload, and classify into the
 //!   `EventProductClass::Realm` / `EventProductClass::Space` families.
 

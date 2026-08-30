@@ -48,8 +48,7 @@ The current harness tracks the sibling `arkret-spec` checkout and includes:
   string-payload `ak.self.events.stream.subscribe.v1` usage, and
   `compute_audit_policy_version_digest` calls with fewer than 4 arguments.
 - **Drift-validator allowlists extended** for the new capability action
-  `ak.morph.create`, the three new error codes
-  (`delivery_binding_stale` / `_handed_over` / `historical_only`), the
+  `ak.morph.create`, the `historical_only` diagnostic error code, the
   `ak:space:` id-kind in `object_ref`, and the new schema `$defs`
   (`EventsSubscribeFrame`, `SnapshotBootstrap`, the three
   `EventsFrontier*Response` variants,

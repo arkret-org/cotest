@@ -707,6 +707,7 @@ async fn submit_event_now(
             .query("/_arkret/self/events/frontier")
             .json(&events_frontier_request_body(
                 actor.actor.as_str(),
+                actor.service_id(),
                 Some(realm_id),
             )?),
         StatusCode::OK,

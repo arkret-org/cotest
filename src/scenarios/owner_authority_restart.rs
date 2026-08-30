@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow};
 use arkret_canonical::canonical_sha256;
 use arkret_models_collaboration::governance::authorization::AuthzCheckRequestBody;
 use arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence;
-use arkret_wire::{DidCoreId, RealmId, WireResourceSelector};
+use arkret_wire::{AccountId, ActorId, DidCoreId, RealmId, WireResourceSelector};
 use reqwest::StatusCode;
 
 use crate::harness::{
@@ -99,7 +99,10 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     let allowed = expect_json(
         bob.post("/_arkret/self/authz/check")
             .json(&AuthzCheckRequestBody {
-                actor_id: DidCoreId::new(bob_core.clone())?,
+                actor_id: ActorId::account(AccountId::new(
+                    DidCoreId::new(bob_core.clone())?,
+                    DidCoreId::new(bob.service_id().to_owned())?,
+                )),
                 action: "ak.message.create".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
                 context: None,
@@ -123,7 +126,10 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
     let denied = expect_json(
         bob.post("/_arkret/self/authz/check")
             .json(&AuthzCheckRequestBody {
-                actor_id: DidCoreId::new(actor_core_id(&bob.actor)?)?,
+                actor_id: ActorId::account(AccountId::new(
+                    DidCoreId::new(actor_core_id(&bob.actor)?)?,
+                    DidCoreId::new(bob.service_id().to_owned())?,
+                )),
                 action: "ak.message.create".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
                 context: None,

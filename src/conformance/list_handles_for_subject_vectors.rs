@@ -21,6 +21,7 @@ use arkret_models_discovery::{
     DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList,
 };
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+use arkret_wire::AccountId;
 use chrono::{DateTime, TimeZone, Utc};
 
 pub const VECTOR_ID_LH_HAPPY_SINGLE: &str =
@@ -52,8 +53,11 @@ pub const ALL_LIST_HANDLES_FOR_SUBJECT_VECTOR_IDS: &[&str] = &[
 const ACME_ISSUER: &str = "ak:did_core:web:coauth.acme.example";
 const OTHER_ISSUER: &str = "ak:did_core:web:coauth.other.example";
 
-fn subject() -> Result<DidCoreId> {
-    DidCoreId::new("ak:did_core:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
+fn subject() -> Result<AccountId> {
+    Ok(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.principal.example")?,
+        DidCoreId::new("ak:did_core:web:station.acme.example")?,
+    ))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
@@ -68,24 +72,23 @@ fn now_anchor() -> DateTime<Utc> {
 
 fn claim_for(
     handle: &str,
-    subj: &DidCoreId,
+    subj: &AccountId,
     issuer: &str,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
     Ok(HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
+        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?,
         handle_aliases: Vec::new(),
-        subject_id: Some(subj.clone()),
-        issuer_id: Some(DidCoreId::new(issuer)?),
+        subject_account_id: subj.clone(),
+        issuer_id: DidCoreId::new(issuer)?,
         vouching_id: None,
-        binding_state: Some(HandleBindingState::Verified),
+        binding_state: HandleBindingState::Verified,
         claim_kind: None,
         visibility: None,
         audience: audience.map(str::to_owned),
         challenge: None,
         claim_scope: Default::default(),
-        member_delivery_binding: None,
         claims: Vec::new(),
         created_at: at(2026, 5, 1),
         expires_at: Some(at(2026, 7, 1)),
@@ -101,7 +104,7 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
     let s = subject()?;
     // Request shape round-trips and carries the holder DID as the lookup key.
     let req = DirectoryListHandlesForSubjectRequestBody {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         realm_id: None,
         intent: Some("mention".to_owned()),
         requester_id: None,
@@ -112,12 +115,12 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
         limit: None,
     };
     let req_wire = serde_json::to_value(&req).map_err(|e| anyhow!("serialise req: {e}"))?;
-    if req_wire.get("subject_id").and_then(|v| v.as_str()) != Some(s.as_str()) {
-        bail!("request MUST carry `subject_id` as the reverse-lookup key");
+    if req_wire.get("account_id") != Some(&serde_json::to_value(&s)?) {
+        bail!("request MUST carry `account_id` as the reverse-lookup key");
     }
 
     let res = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: Some(Handle::parse("alice:acme.example").map_err(|e| anyhow!("h: {e}"))?),
         as_of: now_anchor(),
@@ -133,7 +136,7 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
     let wire = serde_json::to_value(&res).map_err(|e| anyhow!("serialise res: {e}"))?;
     let decoded: DirectorySubjectHandleList =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise res: {e}"))?;
-    if decoded.subject_id != s {
+    if decoded.account_id != s {
         bail!("response subject drifted under round-trip");
     }
     Ok(())
@@ -143,10 +146,13 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
 
 pub fn run_subject_mismatch_rejected_vector() -> Result<()> {
     let s = subject()?;
-    let other = DidCoreId::new("ak:did_core:web:mallory.principal.example")?;
+    let other = AccountId::new(
+        DidCoreId::new("ak:did_core:web:mallory.principal.example")?,
+        DidCoreId::new("ak:did_core:web:station.acme.example")?,
+    );
     // A claim whose subject != response.subject MUST fail closed.
     let res = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: vec![claim_for(
             "mallory:acme.example",
             &other,
@@ -197,9 +203,9 @@ pub fn run_audience_filter_applied_vector() -> Result<()> {
         bail!("audience filter MUST drop the context-mismatched claim");
     }
     let res = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: visible,
-        primary_handle: in_scope.handle.clone(),
+        primary_handle: Some(in_scope.handle.clone()),
         as_of: now_anchor(),
         next_cursor: None,
         has_more: false,
@@ -224,20 +230,19 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
     // accepted_issuer_ids.
     let visible: Vec<HandleClaim> = [trusted.clone(), untrusted]
         .into_iter()
-        .filter(|c| match &c.issuer_id {
-            Some(i) => accepted_issuer_ids.iter().any(|a| a == i),
-            None => false,
+        .filter(|c| {
+            accepted_issuer_ids
+                .iter()
+                .any(|accepted| accepted == &c.issuer_id)
         })
         .collect();
-    if visible.len() != 1
-        || visible[0].issuer_id.as_ref().map(DidCoreId::as_str) != Some(ACME_ISSUER)
-    {
+    if visible.len() != 1 || visible[0].issuer_id.as_str() != ACME_ISSUER {
         bail!("issuer-trust filter MUST keep only accepted_issuer_ids claims");
     }
     let res = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: visible,
-        primary_handle: trusted.handle.clone(),
+        primary_handle: Some(trusted.handle.clone()),
         as_of: now_anchor(),
         next_cursor: None,
         has_more: false,
@@ -253,7 +258,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
     let s = subject()?;
     // First page: limit=1, has_more=true, opaque next_cursor present.
     let page1 = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,
         as_of: now_anchor(),
@@ -273,7 +278,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
 
     // A follow-up request echoes the cursor.
     let req2 = DirectoryListHandlesForSubjectRequestBody {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         realm_id: None,
         intent: None,
         requester_id: None,
@@ -290,7 +295,7 @@ pub fn run_cursor_pagination_vector() -> Result<()> {
 
     // Last page: no cursor, has_more=false.
     let page2 = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: vec![claim_for("alice:other.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,
         as_of: now_anchor(),
@@ -334,7 +339,7 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
     // The directory's `primary_handle` field MUST equal the §3.2.1
     // selection output for the same context + policy.
     let selection = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted,
@@ -343,13 +348,10 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
     };
     let selected = select_primary_handle(&selection)
         .ok_or_else(|| anyhow!("§3.2.1 MUST select a primary handle"))?;
-    let selected_handle = selected
-        .handle
-        .clone()
-        .ok_or_else(|| anyhow!("selected claim has no handle"))?;
+    let selected_handle = selected.handle.clone();
 
     let res = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: snapshot.clone(),
         primary_handle: Some(selected_handle.clone()),
         as_of: now_anchor(),
@@ -380,7 +382,7 @@ pub fn run_as_of_historical_replay_vector() -> Result<()> {
     // set effective at that instant.
     let historical_as_of = at(2026, 5, 10);
     let req = DirectoryListHandlesForSubjectRequestBody {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         realm_id: None,
         intent: None,
         requester_id: None,
@@ -398,7 +400,7 @@ pub fn run_as_of_historical_replay_vector() -> Result<()> {
     // The historical response MUST echo the as_of it replayed at (NOT the
     // current wall clock), so downstream caches key off the right instant.
     let res = DirectorySubjectHandleList {
-        subject_id: s.clone(),
+        account_id: s.clone(),
         claims: vec![claim_for("alice:acme.example", &s, ACME_ISSUER, None)?],
         primary_handle: None,
         as_of: historical_as_of,

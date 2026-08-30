@@ -82,11 +82,21 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
     assert_eq!(
-        request_receipt.core.holder.contact_actor_id().as_str(),
+        request_receipt
+            .core
+            .holder
+            .contact_actor_id()
+            .signing_principal_id()
+            .as_str(),
         alice_core_id
     );
     assert_eq!(
-        request_receipt.core.peer.contact_actor_id().as_str(),
+        request_receipt
+            .core
+            .peer
+            .contact_actor_id()
+            .signing_principal_id()
+            .as_str(),
         bob_core_id.as_str()
     );
     seal_current_principal_control_frontier(&alice, &alice_device_key).await?;

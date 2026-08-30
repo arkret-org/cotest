@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::Ordering;
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
@@ -14,19 +14,13 @@ use arkret_models_collaboration::event_query::SealFrontierRequestBody;
 use arkret_models_collaboration::events_payloads::{
     ContentBlock, MessageCreatePayload, MessageRedactPayload, MessageRevisePayload,
 };
-use arkret_models_collaboration::governance::invite_addressing::InviteDeliveryTarget;
 use arkret_models_collaboration::governance::membership_invite::{
     InviteCreatePayload, MembershipInviteRef, MembershipPayload, MembershipPayloadState,
 };
 use arkret_models_collaboration::governance::moderation::{
     ModerationReportAcceptedTargetBasis, ModerationReportRequestBody,
 };
-use arkret_models_identity::delivery_binding::{
-    BindingScope, BindingSource, DeliveryMode, DeliveryStatus, MemberDeliveryBinding,
-    RecipientServiceKind,
-};
-use arkret_models_identity::{ServiceResolutionCarrier, canonical_service_current_record_path};
-use arkret_wire::{AuthContext, DidUrl, Event, ScopeRef};
+use arkret_wire::{AccountId, ActorId, AuthContext, DidUrl, Event, ScopeRef};
 use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -236,6 +230,7 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
 
 pub fn device_message_send_request(
     recipient: &str,
+    recipient_station_id: &str,
     device_id: &str,
     device_message_id: &str,
     kind: &str,
@@ -258,7 +253,10 @@ pub fn device_message_send_request(
     devices.insert(DeviceId::new(device_id.to_owned())?, target);
     let mut messages = BTreeMap::new();
     messages.insert(
-        project_did_to_core_id(&Did::new(recipient.to_owned())?)?,
+        ActorId::account(AccountId::new(
+            project_did_to_core_id(&Did::new(recipient.to_owned())?)?,
+            DidCoreId::new(recipient_station_id.to_owned())?,
+        )),
         devices,
     );
     Ok(DeviceMessagesSendRequestBody { messages })
@@ -313,6 +311,10 @@ pub async fn moderation_report_request(
         ));
     }
     let reporter_id = project_did_to_core_id(&Did::new(actor.actor.clone())?)?;
+    let reporter_account_id = AccountId::new(
+        reporter_id.clone(),
+        DidCoreId::new(actor.service_id.clone())?,
+    );
     let mut payload = json!({
         "realm_id": realm_id,
         "target_ref": target_ref,
@@ -335,7 +337,7 @@ pub async fn moderation_report_request(
         ),
     };
     request.validate_authoring_context(
-        &reporter_id,
+        &reporter_account_id,
         &ModerationReportAcceptedTargetBasis {
             target_ref: target_ref.to_owned(),
             effective_scope,
@@ -501,40 +503,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         discovery,
         alias,
         plaintext_visible_services,
-        mut delivery_binding_policy,
     } = draft;
-    if let Some(station_id) = station_id {
-        use arkret_models_collaboration::events_payloads::realm::AllowedRecipientServices;
-
-        match &delivery_binding_policy.allowed_binding_sources {
-            None => {
-                delivery_binding_policy.allowed_binding_sources =
-                    Some(BTreeSet::from([BindingSource::RealmPolicy]));
-            }
-            Some(sources) if sources.contains(&BindingSource::RealmPolicy) => {}
-            Some(_) => {
-                return Err(anyhow!(
-                    "device/account Realm bootstrap policy must allow realm_policy for the creator binding"
-                ));
-            }
-        }
-        match &delivery_binding_policy.allowed_recipient_ids {
-            None => {
-                delivery_binding_policy.allowed_recipient_ids =
-                    Some(AllowedRecipientServices::Allowlist(vec![
-                        station_id.clone(),
-                    ]));
-            }
-            Some(AllowedRecipientServices::Unrestricted) => {}
-            Some(AllowedRecipientServices::Allowlist(services))
-                if services.contains(station_id) => {}
-            Some(AllowedRecipientServices::Allowlist(_)) => {
-                return Err(anyhow!(
-                    "device/account Realm bootstrap policy does not allow the creator Station"
-                ));
-            }
-        }
-    }
     // Genesis carries no Realm id at all — the scope is `realm_genesis` and the
     // id falls out of the signed Event. The placeholder below is never read.
     let realm_event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
@@ -617,21 +586,21 @@ fn realm_bootstrap_event_batch_with_signing_identity(
             ),
         )?;
     };
-    let delivery_binding_policy_event_id = push_followup(
-        arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,
-        delivery_binding_policy.to_value()?,
-        arkret_wire::null_subject_cell(arkret_wire::CellFamilyId::REALM_DELIVERY_BINDING_POLICY_V1),
-    )?;
     let creator_core_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
+    let creator_station_id = station_id
+        .cloned()
+        .unwrap_or_else(|| event_station_id(actor));
+    let creator_actor_id = ActorId::account(AccountId::new(creator_core_id, creator_station_id));
+    let creator_subject = arkret_canonical::canonical::canonical_json_bytes(&creator_actor_id)?;
+    let creator_subject = String::from_utf8(creator_subject)?;
+    let creator_cell_subject = arkret_wire::composite_subject(&[creator_subject])?;
     push_followup(
         arkret_wire::event_kind_str::MEMBER_STATE,
-        creator_member_join_payload_value(
-            &derived_realm_id,
-            actor,
-            station_id,
-            Some(&delivery_binding_policy_event_id),
-        )?,
-        format!("ak:cell:ak.component.member.state.v1:{creator_core_id}"),
+        creator_member_join_payload_value(&derived_realm_id, actor, station_id)?,
+        arkret_wire::subject_cell(
+            arkret_wire::CellFamilyId::MEMBER_STATE_V1,
+            &creator_cell_subject,
+        ),
     )?;
     for followup in &events[1..] {
         arkret_schema::validate_registered_cell_writes_in_context(
@@ -772,7 +741,11 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         server
             .http()
             .request(query_method(), server.url("/_arkret/self/events/frontier"))
-            .json(&events_frontier_request_body(actor, Some(realm_id))?)
+            .json(&events_frontier_request_body(
+                actor,
+                server.service_id().as_str(),
+                Some(realm_id),
+            )?)
             .bearer_auth(token),
         StatusCode::OK,
     )
@@ -787,7 +760,10 @@ pub(crate) async fn prepare_event_submission_with_signing_identity(
         ));
     };
     frontier.validate()?;
-    let expected_actor_id = project_did_to_core_id(&Did::new(actor.to_owned())?)?;
+    let expected_actor_id = ActorId::account(AccountId::new(
+        project_did_to_core_id(&Did::new(actor.to_owned())?)?,
+        event_station_id(actor),
+    ));
     if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
         return Err(anyhow!("combined selector returned the wrong actor scope"));
     }
@@ -1217,56 +1193,22 @@ pub(crate) fn message_redact_payload(target_event_id: &str, reason: Option<&str>
 }
 
 pub(crate) fn member_join_payload_value(realm_id: &str, actor_id: &str) -> Result<Value> {
-    member_payload(
-        realm_id,
-        actor_id,
-        MembershipPayloadState::Join,
-        Some(DeliveryStatus::Unroutable),
-        None,
-        None,
-        None,
-    )
+    member_payload(realm_id, actor_id, MembershipPayloadState::Join, None, None)
 }
 
 fn creator_member_join_payload_value(
     realm_id: &str,
     actor_id: &str,
     station_id: Option<&DidCoreId>,
-    policy_event_ref: Option<&EventId>,
 ) -> Result<Value> {
-    let Some(station_id) = station_id else {
-        return member_join_payload_value(realm_id, actor_id);
-    };
-    let policy_event_ref = policy_event_ref
+    let station_id = station_id
         .cloned()
-        .ok_or_else(|| anyhow!("routable creator binding requires the bootstrap policy Event"))?;
-    let binding = MemberDeliveryBinding {
-        recipient_id: station_id.clone(),
-        recipient_kind: RecipientServiceKind::Station,
-        binding_scope: BindingScope::Realm,
-        binding_source: BindingSource::RealmPolicy,
-        delivery_modes: BTreeSet::from([DeliveryMode::Events]),
-        service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
-            current_record_url: format!(
-                "https://cotest.invalid{}",
-                canonical_service_current_record_path(station_id)
-            ),
-            pinned_record_digest: None,
-        },
-        document_digest: None,
-        resolved_at: Utc::now(),
-        service_acceptance_ref: None,
-        holder_proof_ref: None,
-        policy_event_ref: Some(policy_event_ref),
-        expires_at: None,
-    };
-    binding.validate()?;
-    member_payload(
+        .unwrap_or_else(|| event_station_id(actor_id));
+    member_payload_at_station(
         realm_id,
         actor_id,
+        station_id,
         MembershipPayloadState::Join,
-        Some(DeliveryStatus::Routable),
-        Some(serde_json::to_value(binding)?),
         None,
         None,
     )
@@ -1283,8 +1225,6 @@ pub(crate) fn member_transition_payload(
         actor_id,
         membership,
         None,
-        None,
-        None,
         reason.map(ToOwned::to_owned),
     )
 }
@@ -1297,20 +1237,12 @@ pub(crate) fn invite_create_payload(
 ) -> Result<Value> {
     let invitee_did =
         Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee DID: {err}"))?;
-    let recipient_id = arkret_identifiers::DidCoreId::new(recipient_id.to_owned())
-        .map_err(|err| anyhow!("invalid recipient service core id: {err}"))?;
-    let current_record_url = format!(
-        "https://cotest.invalid{}",
-        arkret_models_identity::canonical_service_current_record_path(&recipient_id)
-    );
+    let station_id = arkret_identifiers::DidCoreId::new(recipient_id.to_owned())
+        .map_err(|err| anyhow!("invalid recipient Station core id: {err}"))?;
     InviteCreatePayload::new(
-        arkret_identifiers::project_did_to_core_id(&invitee_did)?,
-        InviteDeliveryTarget::station(
-            recipient_id,
-            arkret_models_identity::ServiceResolutionCarrier::CurrentRecordUrl {
-                current_record_url,
-                pinned_record_digest: None,
-            },
+        AccountId::new(
+            arkret_identifiers::project_did_to_core_id(&invitee_did)?,
+            station_id,
         ),
         Hash::new(introduction_evidence_digest.into())
             .map_err(|err| anyhow!("invalid introduction_evidence_digest: {err}"))?,
@@ -1324,15 +1256,27 @@ fn member_payload(
     realm_id: &str,
     actor_id: &str,
     membership: MembershipPayloadState,
-    delivery_status: Option<DeliveryStatus>,
-    delivery_binding: Option<Value>,
     invite_ref: Option<String>,
     reason: Option<String>,
 ) -> Result<Value> {
-    let delivery_binding = delivery_binding
-        .map(serde_json::from_value::<MemberDeliveryBinding>)
-        .transpose()
-        .map_err(|error| anyhow!("invalid member delivery binding: {error}"))?;
+    member_payload_at_station(
+        realm_id,
+        actor_id,
+        event_station_id(actor_id),
+        membership,
+        invite_ref,
+        reason,
+    )
+}
+
+fn member_payload_at_station(
+    realm_id: &str,
+    actor_id: &str,
+    station_id: DidCoreId,
+    membership: MembershipPayloadState,
+    invite_ref: Option<String>,
+    reason: Option<String>,
+) -> Result<Value> {
     let invite_ref = invite_ref
         .map(|value| serde_json::from_value::<MembershipInviteRef>(Value::String(value)))
         .transpose()
@@ -1341,11 +1285,12 @@ fn member_payload(
         membership,
         strand_id: None,
         realm_id: Some(RealmId::new(realm_id.to_owned()).map_err(|err| anyhow!("{err}"))?),
-        actor_id: Some(arkret_identifiers::project_did_to_core_id(
-            &Did::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
-        )?),
-        delivery_status,
-        delivery_binding,
+        member_id: ActorId::account(AccountId::new(
+            arkret_identifiers::project_did_to_core_id(
+                &Did::new(actor_id.to_owned()).map_err(|err| anyhow!("{err}"))?,
+            )?,
+            station_id,
+        )),
         gate_proofs: Vec::new(),
         via_ids: Vec::new(),
         reason,
@@ -1418,6 +1363,7 @@ mod realm_bootstrap_tests {
     const ACTOR: &str = "did:webvh:z6mkfixture:alice.soland.local";
     const ACTOR_CORE: &str = "ak:did_core:webvh:z6mkfixture";
     const SERVICE: &str = "ak:did_core:web:service.soland.local";
+    const DEFAULT_STATION: &str = "ak:did_core:web:principal.example";
     const SERVICE_FULL: &str = "did:web:service.soland.local";
     const SALT: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
@@ -1509,7 +1455,6 @@ mod realm_bootstrap_tests {
                 arkret_wire::event_kind_str::REALM_HISTORY_ACCESS,
                 arkret_wire::event_kind_str::REALM_DISCOVERY,
                 arkret_wire::event_kind_str::REALM_ALIAS,
-                arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,
                 arkret_wire::event_kind_str::MEMBER_STATE,
             ]
         );
@@ -1525,9 +1470,15 @@ mod realm_bootstrap_tests {
             1
         );
         assert_eq!(
-            membership.payload.get("actor_id"),
-            Some(&json!(ACTOR_CORE)),
-            "the membership subject is the creator"
+            membership.payload.get("member_id"),
+            Some(&json!({
+                "kind": "account",
+                "account_id": {
+                    "principal_id": ACTOR_CORE,
+                    "station_id": DEFAULT_STATION,
+                }
+            })),
+            "the membership subject is the creator's exact Station account"
         );
         assert_eq!(
             membership.payload.get("membership"),
@@ -1542,72 +1493,46 @@ mod realm_bootstrap_tests {
             "the creator member cell genesis write carries exactly one precondition"
         );
         let precondition = &membership.preconditions[0];
+        let actor_id = ActorId::account(AccountId::new(
+            DidCoreId::new(ACTOR_CORE.to_owned()).expect("valid actor id"),
+            DidCoreId::new(DEFAULT_STATION.to_owned()).expect("valid Station id"),
+        ));
+        let actor_json = String::from_utf8(
+            arkret_canonical::canonical::canonical_json_bytes(&actor_id)
+                .expect("canonical actor id"),
+        )
+        .expect("actor id is UTF-8");
+        let cell_subject =
+            arkret_wire::composite_subject(&[actor_json]).expect("canonical member subject");
         assert_eq!(
             precondition.cell_id.as_str(),
-            format!("ak:cell:ak.component.member.state.v1:{ACTOR_CORE}")
+            arkret_wire::subject_cell(arkret_wire::CellFamilyId::MEMBER_STATE_V1, &cell_subject,)
         );
         assert_eq!(
             precondition.predicate.op,
             arkret_wire::cba::PredicateOp::HeadEq
         );
         assert_eq!(precondition.predicate.value, Some(Value::Null));
-        assert_eq!(
-            membership.payload.get("delivery_status"),
-            Some(&json!("unroutable")),
-            "a bootstrap without a known Station cannot claim routability"
-        );
+        assert!(membership.payload.get("delivery_status").is_none());
+        assert!(membership.payload.get("delivery_binding").is_none());
     }
 
     #[test]
-    fn device_bootstrap_binds_the_creator_to_its_station() {
+    fn device_bootstrap_carries_the_creator_station_in_the_actor_id() {
         let (_, events) = build_for_device(draft(json!({})));
-        let policy = events
-            .iter()
-            .find(|event| {
-                event.kind.as_str() == arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY
-            })
-            .expect("delivery-binding policy event");
-        assert_eq!(
-            policy.payload.get("allowed_binding_sources"),
-            Some(&json!(["realm_policy"]))
-        );
-        assert_eq!(
-            policy.payload.get("allowed_recipient_ids"),
-            Some(&json!([SERVICE]))
-        );
-
         let membership = events.last().expect("creator membership slot");
         assert_eq!(
-            membership.payload.get("delivery_status"),
-            Some(&json!("routable"))
+            membership.payload.get("member_id"),
+            Some(&json!({
+                "kind": "account",
+                "account_id": {
+                    "principal_id": ACTOR_CORE,
+                    "station_id": SERVICE,
+                }
+            }))
         );
-        let binding: MemberDeliveryBinding = serde_json::from_value(
-            membership
-                .payload
-                .get("delivery_binding")
-                .cloned()
-                .expect("routable creator binding"),
-        )
-        .expect("typed creator binding");
-        binding.validate().expect("valid creator binding");
-        assert_eq!(binding.recipient_id.as_str(), SERVICE);
-        assert_eq!(binding.binding_source, BindingSource::RealmPolicy);
-        assert_eq!(
-            binding.delivery_modes,
-            BTreeSet::from([DeliveryMode::Events])
-        );
-        assert_eq!(
-            binding.service_resolution,
-            ServiceResolutionCarrier::CurrentRecordUrl {
-                current_record_url: format!(
-                    "https://cotest.invalid{}",
-                    canonical_service_current_record_path(&binding.recipient_id)
-                ),
-                pinned_record_digest: None,
-            }
-        );
-        assert_eq!(binding.document_digest, None);
-        assert_eq!(binding.policy_event_ref.as_ref(), Some(&policy.event_id));
+        assert!(membership.payload.get("delivery_status").is_none());
+        assert!(membership.payload.get("delivery_binding").is_none());
     }
 
     #[test]

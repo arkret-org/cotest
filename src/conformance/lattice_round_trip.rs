@@ -529,8 +529,12 @@ fn op_append(value: serde_json::Value, issuer_seq: u64) -> LatticeOp {
 fn issued_op(issuer: &str, suffix: &str, op: LatticeOp) -> IssuedOp {
     let did = Did::new(issuer.to_owned()).expect("test fixture issuer should be a valid did");
     IssuedOp {
-        issuer_id: arkret_identifiers::project_did_to_core_id(&did)
-            .expect("test fixture issuer should project to a core id"),
+        issuer_id: arkret_wire::ActorId::hosted_principal(
+            arkret_identifiers::project_did_to_core_id(&did)
+                .expect("test fixture issuer should project to a core id"),
+            arkret_wire::DidCoreId::new("ak:did_core:web:station.example")
+                .expect("fixture Station should be valid"),
+        ),
         op: SealedOp::new(issuer_digest(suffix), op),
     }
 }

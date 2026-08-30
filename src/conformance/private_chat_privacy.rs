@@ -274,9 +274,15 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
         direct_conversation_may_found,
     };
 
-    let alice = arkret_identifiers::DidCoreId::new("ak:did_core:web:alice.example")?;
-    let bob = arkret_identifiers::DidCoreId::new("ak:did_core:web:bob.example")?;
-    let carol = arkret_identifiers::DidCoreId::new("ak:did_core:web:carol.example")?;
+    let actor = |principal_id: &str| -> Result<arkret_wire::ActorId> {
+        Ok(arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            arkret_identifiers::DidCoreId::new(principal_id)?,
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:station.example")?,
+        )))
+    };
+    let alice = actor("ak:did_core:web:alice.example")?;
+    let bob = actor("ak:did_core:web:bob.example")?;
+    let carol = actor("ak:did_core:web:carol.example")?;
 
     // A requests, B accepts -> B founds.
     let normal = DirectConversationFoundingAuthority::Normal {

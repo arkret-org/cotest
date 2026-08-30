@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use arkret_lattice_registry::{
     ActorPrivateCandidate, ActorPrivateMergeOutcome, build_actor_private_registry,
 };
-use arkret_models_identity::delivery_binding::DevicePushRoutePayload;
+use arkret_models_identity::device_push_route::DevicePushRoutePayload;
 use serde::Deserialize;
 use serde_json::{Value, json};
 

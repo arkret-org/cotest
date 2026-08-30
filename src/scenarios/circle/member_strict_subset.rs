@@ -12,11 +12,15 @@
 use anyhow::{Result, anyhow};
 use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::governance::circle::{Circle, CircleScopeError};
+use arkret_wire::{AccountId, ActorId};
 
-fn did(local: &str) -> Result<DidCoreId> {
-    format!("ak:did_core:web:{local}.example")
-        .parse()
-        .map_err(|e| anyhow!("did {local}: {e}"))
+fn did(local: &str) -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        format!("ak:did_core:web:{local}.example")
+            .parse()
+            .map_err(|e| anyhow!("did {local}: {e}"))?,
+        DidCoreId::new("ak:did_core:web:station.example")?,
+    )))
 }
 
 pub async fn member_strict_subset_run() -> Result<()> {
@@ -45,12 +49,12 @@ pub async fn member_strict_subset_run() -> Result<()> {
             "strict-subset MUST reject `mallory` ∉ realm; got Ok"
         )),
         Err(CircleScopeError::MemberNotInRealm { circle_member }) => {
-            if circle_member.as_str() == mallory.as_str() {
+            if circle_member == mallory {
                 Ok(())
             } else {
                 Err(anyhow!(
                     "expected MemberNotInRealm(mallory); got MemberNotInRealm({})",
-                    circle_member.as_str()
+                    circle_member
                 ))
             }
         }

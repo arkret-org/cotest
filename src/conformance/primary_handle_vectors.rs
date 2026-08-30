@@ -21,7 +21,7 @@ use arkret::identity::{
 };
 use arkret_identifiers::{DidCoreId, Hash};
 use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
-use arkret_wire::PayloadProof;
+use arkret_wire::{AccountId, PayloadProof};
 use chrono::{DateTime, TimeZone, Utc};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =
@@ -69,8 +69,11 @@ pub const ALL_PRIMARY_HANDLE_VECTOR_IDS: &[&str] = &[
 const ACME_ISSUER: &str = "ak:did_core:web:coauth.acme.example";
 const OTHER_ISSUER: &str = "ak:did_core:web:coauth.other.example";
 
-fn subject() -> Result<DidCoreId> {
-    DidCoreId::new("ak:did_core:web:alice.principal.example").map_err(|e| anyhow!("subject: {e}"))
+fn subject() -> Result<AccountId> {
+    Ok(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.principal.example")?,
+        DidCoreId::new("ak:did_core:web:station.acme.example")?,
+    ))
 }
 
 fn at(year: i32, month: u32, day: u32) -> DateTime<Utc> {
@@ -94,18 +97,17 @@ fn claim(
 ) -> Result<HandleClaim> {
     Ok(HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse {handle}: {e}"))?),
+        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse {handle}: {e}"))?,
         handle_aliases: Vec::new(),
-        subject_id: Some(subject()?),
-        issuer_id: Some(DidCoreId::new(issuer)?),
+        subject_account_id: subject()?,
+        issuer_id: DidCoreId::new(issuer)?,
         vouching_id: None,
-        binding_state: Some(HandleBindingState::Verified),
+        binding_state: HandleBindingState::Verified,
         claim_kind: None,
         visibility: None,
         audience: audience.map(str::to_owned),
         challenge: None,
         claim_scope: Default::default(),
-        member_delivery_binding: None,
         claims: Vec::new(),
         created_at: created,
         expires_at: Some(expires),
@@ -131,11 +133,7 @@ fn accepted(issuers: &[&str]) -> Vec<HandleIssuerPolicyEntry> {
 }
 
 fn chosen_handle(claim: &HandleClaim) -> Result<String> {
-    claim
-        .handle
-        .as_ref()
-        .map(|h| h.canonical().to_owned())
-        .ok_or_else(|| anyhow!("selected claim has no handle"))
+    Ok(claim.handle.canonical().to_owned())
 }
 
 // ── VECT-COT-1.1 — empty candidate fallback ─────────────────────────────────
@@ -143,7 +141,7 @@ fn chosen_handle(claim: &HandleClaim) -> Result<String> {
 pub fn run_empty_candidate_fallback_vector() -> Result<()> {
     let s = subject()?;
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &[],
         handle_issuer_policies: &accepted(&[ACME_ISSUER]),
@@ -168,7 +166,7 @@ pub fn run_single_candidate_passthrough_vector() -> Result<()> {
         None,
     )?];
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER]),
@@ -206,7 +204,7 @@ pub fn run_audience_match_wins_vector() -> Result<()> {
     )?;
     let snapshot = vec![newer, audience_scoped];
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: Some(realm_ctx),
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
@@ -244,7 +242,7 @@ pub fn run_holder_flag_wins_over_most_recent_vector() -> Result<()> {
     )?;
     let snapshot = vec![newer, holder_flagged];
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
@@ -282,7 +280,7 @@ pub fn run_most_recent_wins_when_neither_vector() -> Result<()> {
     )?;
     let snapshot = vec![older, newer];
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER]),
@@ -309,7 +307,7 @@ pub fn run_tie_break_by_accepted_issuer_ids_position_vector() -> Result<()> {
     let snapshot = vec![from_other, from_acme];
     // ACME listed first → more trusted → wins the tie.
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER, OTHER_ISSUER]),
@@ -357,7 +355,7 @@ pub fn run_tie_break_by_created_at_vector() -> Result<()> {
     )?;
     let snapshot = vec![earlier, later];
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER]),
@@ -394,7 +392,7 @@ pub fn run_tie_break_by_claim_digest_vector() -> Result<()> {
     };
     let snapshot = vec![c1, c2];
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER]),
@@ -436,7 +434,7 @@ pub fn run_holder_primary_null_skips_layer_vector() -> Result<()> {
     // With holder_primary=null the holder layer is empty, so selection
     // falls through to most-recent.
     let input = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER]),
@@ -479,7 +477,7 @@ pub fn run_as_of_replay_vs_realtime_vector() -> Result<()> {
     // Historical replay at as_of=2026-05-10: claim not yet issued → Step 0
     // drops it → no selection.
     let replay = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &accepted(&[ACME_ISSUER]),
@@ -551,7 +549,7 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
 
     // A semantic change (the handle itself) MUST move the digest.
     let mut semantic = canonical.clone();
-    semantic.handle = Some(Handle::parse("bob:acme.example").map_err(|e| anyhow!("handle: {e}"))?);
+    semantic.handle = Handle::parse("bob:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     let semantic_digest = claim_digest(&semantic).map_err(|e| anyhow!("semantic: {e}"))?;
     if semantic_digest == base {
         bail!("claim_digest MUST change when a semantic field (handle) changes");
@@ -577,7 +575,7 @@ pub fn run_policy_snapshot_as_of_replay_vector() -> Result<()> {
     // historical replay output deterministically.
     let policy_v1 = accepted(&[OTHER_ISSUER]);
     let replay_v1 = PrimaryHandleSelectInput {
-        subject_id: s.as_str(),
+        account_id: &s,
         context: None,
         claim_set_snapshot: &snapshot,
         handle_issuer_policies: &policy_v1,

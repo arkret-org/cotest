@@ -1,6 +1,5 @@
 //! Two-Soland live closure for durable Realm fanout route misses.
 
-use std::collections::BTreeSet;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
@@ -11,15 +10,7 @@ use arkret_models_collaboration::http_bodies::{
     EventDeliveryStatusOutcome, EventDeliveryStatusRequestBody, EventDeliveryTargetState,
     EventsResolveOutcome, EventsResolveRequestBody, EventsSubmitOutcome,
 };
-use arkret_models_identity::delivery_binding::{
-    BindingScope, BindingSource, DeliveryMode, DeliveryStatus, MemberDeliveryBinding,
-    RecipientServiceKind,
-};
-use arkret_models_identity::{
-    AuthenticatedServiceResolution, ServiceResolutionCarrier, ServiceResolutionRecord,
-};
-use arkret_wire::{Did, DidCoreId, Event, EventId, EventKind, Hash};
-use chrono::Utc;
+use arkret_wire::{AccountId, ActorId, Did, DidCoreId, Event, EventId, EventKind};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -113,19 +104,12 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         .server(1)
         .register_client(&bob_did, "fanout-bob", BOB_DEVICE)
         .await?;
-    let target_record = current_service_record(group.server(1)).await?;
     let bootstrap = alice
         .create_realm_bootstrap_with(json!({
             "title": "Fanout route miss",
             "summary": "Fanout route miss",
             "public": false,
-            "plaintext_visible_services": [alice.service_id()],
-            "delivery_binding_policy": {
-                "allowed_binding_sources": ["realm_policy", "did_document_default"],
-                "did_document_default_allowed": true,
-                "allowed_recipient_ids": ["*"],
-                "unroutable_membership_allowed": true
-            }
+            "plaintext_visible_services": [alice.service_id()]
         }))
         .await?;
     let realm_id = bootstrap["realm_id"]
@@ -146,7 +130,6 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         &realm_id,
         &bob_did,
         group.server(1).service_id().clone(),
-        &target_record,
         MembershipPayloadState::Join,
     )?;
     wait_for_bootstrap_seal(&alice, &realm_id).await?;
@@ -184,7 +167,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     let target_id = initial.targets[0].target_id.clone();
     ensure!(
         initial.targets[0].service_id.as_ref() == Some(group.server(1).service_id()),
-        "Realm controller could not see its exact member delivery binding"
+        "Realm controller could not see the Station routed by Bob's ActorId"
     );
 
     group.server_mut(0).restart_external_process().await?;
@@ -232,7 +215,6 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         &realm_id,
         &bob_did,
         group.server(1).service_id().clone(),
-        &target_record,
         MembershipPayloadState::Leave,
     )?;
     submit_and_settle_member_transition(&alice, &realm_id, bob_leave).await?;
@@ -248,7 +230,6 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         &realm_id,
         &bob_did,
         group.server(1).service_id().clone(),
-        &target_record,
         MembershipPayloadState::Join,
     )?;
     submit_and_settle_member_transition(&alice, &realm_id, bob_rejoin).await?;
@@ -294,17 +275,6 @@ async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Re
     }
 }
 
-async fn current_service_record(
-    server: &crate::harness::ArkretServer,
-) -> Result<ServiceResolutionRecord> {
-    let path = arkret_models_identity::canonical_service_current_record_path(server.service_id());
-    let resolution: AuthenticatedServiceResolution = serde_json::from_value(
-        expect_json(server.http().get(server.url(&path)), StatusCode::OK).await?,
-    )
-    .context("decode authenticated target service resolution")?;
-    Ok(resolution.service_resolution_record)
-}
-
 async fn install_fixture_events(
     server: &crate::harness::ArkretServer,
     events: &[Event],
@@ -332,37 +302,15 @@ fn member_payload(
     realm_id: &str,
     member: &str,
     member_service: DidCoreId,
-    target_record: &ServiceResolutionRecord,
     membership: MembershipPayloadState,
 ) -> Result<serde_json::Value> {
     let realm_id = arkret_wire::RealmId::new(realm_id.to_owned())?;
     let member = arkret_wire::project_did_to_core_id(&Did::new(member.to_owned())?)?;
+    let member = ActorId::account(AccountId::new(member, member_service));
     if membership == MembershipPayloadState::Join {
-        let binding = MemberDeliveryBinding {
-            recipient_id: member_service.clone(),
-            recipient_kind: RecipientServiceKind::Station,
-            binding_scope: BindingScope::Realm,
-            binding_source: BindingSource::DidDocumentDefault,
-            delivery_modes: BTreeSet::from([DeliveryMode::Events]),
-            service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
-                current_record_url: target_record.record.current_record_url.clone(),
-                pinned_record_digest: None,
-            },
-            document_digest: Some(Hash::new(format!("sha256:{}", "2".repeat(64)))?),
-            resolved_at: Utc::now(),
-            service_acceptance_ref: None,
-            holder_proof_ref: None,
-            policy_event_ref: None,
-            expires_at: None,
-        };
-        let payload = MembershipPayload::join(
-            realm_id.clone(),
-            member.clone(),
-            DeliveryStatus::Routable,
-            "fanout route-miss fixture",
-        )
-        .with_delivery_binding(binding)
-        .to_value()?;
+        let payload =
+            MembershipPayload::join(realm_id.clone(), member, "fanout route-miss fixture")
+                .to_value()?;
         arkret_schema::event_payload_validator_catalog()?
             .validate_payload(EventKind::MemberState.as_str(), &payload)
             .context("fanout membership payload must satisfy the registered schema")?;

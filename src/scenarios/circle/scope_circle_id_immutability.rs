@@ -22,6 +22,7 @@
 use anyhow::{Result, anyhow};
 use arkret_identifiers::{CircleId, Did, DidCoreId, RealmId, StrandId, project_did_to_core_id};
 use arkret_models_collaboration::objects::strand::Strand;
+use arkret_wire::{AccountId, ActorId};
 use serde_json::Value;
 
 fn realm_id() -> Result<RealmId> {
@@ -47,9 +48,12 @@ fn circle_b() -> Result<CircleId> {
         .map_err(|e| anyhow!("circle b: {e}"))
 }
 
-fn actor() -> Result<DidCoreId> {
+fn actor() -> Result<ActorId> {
     let did = Did::new("did:web:alice.example").map_err(|e| anyhow!("actor DID: {e}"))?;
-    Ok(project_did_to_core_id(&did)?)
+    Ok(ActorId::account(AccountId::new(
+        project_did_to_core_id(&did)?,
+        DidCoreId::new("ak:did_core:web:station.example")?,
+    )))
 }
 
 /// Reducer-pure invariant: for two sequential states of the same Strand /

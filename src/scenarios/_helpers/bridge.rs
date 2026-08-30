@@ -223,8 +223,10 @@ async fn coauth_introspect(req: &mut Request, depot: &mut Depot, res: &mut Respo
         "grant": {
             "id": "ak:session_grant:AREUYrj1_BH7OOg12-uDdXYf2SrPpdqagciUGa9tJ-nD",
             "issuer_id": "ak:did_core:web:coauth.cotest.local",
-            "subject_id": binding.subject,
-            "service_account_id": "alice-session-grant",
+            "account_id": {
+                "principal_id": binding.subject,
+                "station_id": audience
+            },
             "device_id": binding.device_id,
             "audience_id": audience,
             "scopes": [

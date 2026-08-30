@@ -74,15 +74,6 @@ fn positive_vectors() -> Vec<WireVector> {
             expected_class: EventProductClass::Space,
         },
         WireVector {
-            label: "ak.realm.delivery_binding_policy",
-            kind: arkret_wire::event_kind_str::REALM_DELIVERY_BINDING_POLICY,
-            payload: json!({
-                "allowed_recipient_ids": ["ak:did_core:web:soland.example"],
-                "binding_source_policy": "endorsed_only",
-            }),
-            expected_class: EventProductClass::Realm,
-        },
-        WireVector {
             label: "ak.realm.link",
             kind: arkret_wire::event_kind_str::REALM_LINK,
             payload: json!({

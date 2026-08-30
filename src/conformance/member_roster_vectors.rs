@@ -27,6 +27,7 @@ use arkret_models_identity::{
     EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,
     RosterHandleClaimDigestEntry, member_display_state_digest,
 };
+use arkret_wire::{AccountId, ActorId};
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
 
@@ -56,13 +57,18 @@ pub const ALL_MEMBER_ROSTER_VECTOR_IDS: &[&str] = &[
 
 // ── Fixture helpers ─────────────────────────────────────────────────────────
 
-fn alice() -> Result<DidCoreId> {
-    DidCoreId::new("ak:did_core:web:alice.acme.example").map_err(|e| anyhow!("alice did: {e}"))
+fn alice() -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.acme.example")?,
+        DidCoreId::new("ak:did_core:web:station.acme.example")?,
+    )))
 }
 
-fn alice_subject() -> Result<DidCoreId> {
-    DidCoreId::new("ak:did_core:web:alice.principal.example")
-        .map_err(|e| anyhow!("alice principal did: {e}"))
+fn alice_subject() -> Result<AccountId> {
+    Ok(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.principal.example")?,
+        DidCoreId::new("ak:did_core:web:station.acme.example")?,
+    ))
 }
 
 fn fake_realm() -> Result<RealmId> {
@@ -90,21 +96,20 @@ fn pinned_claim_digest(byte: &str) -> Result<Hash> {
 }
 
 /// A verified handle claim whose `subject` is `alice_subject()`.
-fn verified_claim_for_subject(handle: &str, subject: &DidCoreId) -> Result<HandleClaim> {
+fn verified_claim_for_subject(handle: &str, subject: &AccountId) -> Result<HandleClaim> {
     Ok(HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Some(Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?),
+        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?,
         handle_aliases: Vec::new(),
-        subject_id: Some(subject.clone()),
-        issuer_id: Some(DidCoreId::new("ak:did_core:web:coauth.acme.example")?),
+        subject_account_id: subject.clone(),
+        issuer_id: DidCoreId::new("ak:did_core:web:coauth.acme.example")?,
         vouching_id: None,
-        binding_state: Some(HandleBindingState::Verified),
+        binding_state: HandleBindingState::Verified,
         claim_kind: None,
         visibility: None,
         audience: None,
         challenge: None,
         claim_scope: Default::default(),
-        member_delivery_binding: None,
         claims: Vec::new(),
         created_at: Utc
             .with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
@@ -131,7 +136,7 @@ pub fn run_member_roster_shape_vector() -> Result<()> {
     let entry = MemberRosterEntry {
         actor_id: alice()?,
         membership: MembershipState::Join,
-        subject_id: None,
+        subject_account_id: None,
         identity_event_ids: vec![fake_event(0xe01)?, fake_event(0xe02)?],
         member_display_state_digest: Some(pinned_state_digest()?),
         identity_events: vec![],
@@ -347,7 +352,7 @@ pub fn run_member_roster_subject_undisclosed_omits_gated_fields_vector() -> Resu
     let clean = MemberRosterEntry {
         actor_id: alice()?,
         membership: MembershipState::Join,
-        subject_id: None,
+        subject_account_id: None,
         identity_event_ids: vec![fake_event(0xf01)?],
         member_display_state_digest: Some(pinned_state_digest()?),
         identity_events: vec![],
@@ -408,7 +413,7 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
     let aligned = MemberRosterEntry {
         actor_id: alice()?,
         membership: MembershipState::Join,
-        subject_id: Some(subject.clone()),
+        subject_account_id: Some(subject.clone()),
         identity_event_ids: vec![fake_event(0xf11)?],
         member_display_state_digest: Some(pinned_state_digest()?),
         identity_events: vec![],
@@ -424,7 +429,10 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
         .map_err(|e| anyhow!("VECT-COT-4b: aligned subject MUST validate: {e}"))?;
 
     // Mismatched claim subject MUST fail closed.
-    let other_subject = DidCoreId::new("ak:did_core:web:mallory.principal.example")?;
+    let other_subject = AccountId::new(
+        DidCoreId::new("ak:did_core:web:mallory.principal.example")?,
+        DidCoreId::new("ak:did_core:web:station.acme.example")?,
+    );
     let mismatched = MemberRosterEntry {
         handle_claims: Some(vec![verified_claim_for_subject(
             "mallory:acme.example",
@@ -515,7 +523,7 @@ pub fn run_member_roster_handle_claims_limited_semantics_vector() -> Result<()> 
     let limited = MemberRosterEntry {
         actor_id: alice()?,
         membership: MembershipState::Join,
-        subject_id: Some(subject.clone()),
+        subject_account_id: Some(subject.clone()),
         identity_event_ids: vec![fake_event(0xf31)?],
         member_display_state_digest: Some(pinned_state_digest()?),
         identity_events: vec![],

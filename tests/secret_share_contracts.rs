@@ -372,7 +372,13 @@ fn device_message_body(
     let mut by_device = BTreeMap::new();
     by_device.insert(recipient_device_id, target);
     let mut messages = BTreeMap::new();
-    messages.insert(DidCoreId::new(ACCOUNT_ID.to_owned())?, by_device);
+    messages.insert(
+        arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            DidCoreId::new(ACCOUNT_ID.to_owned())?,
+            DidCoreId::new("ak:did_core:web:station.example")?,
+        )),
+        by_device,
+    );
     Ok(DeviceMessagesSendRequestBody { messages })
 }
 

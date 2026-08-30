@@ -289,7 +289,11 @@ fn kernel_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
             return error("schema_violation", "offline_write_identifier_invalid");
         };
         ops.push(IssuedOp {
-            issuer_id: issuer,
+            issuer_id: arkret_wire::ActorId::hosted_principal(
+                issuer,
+                DidCoreId::new("ak:did_core:web:station.example")
+                    .expect("fixture Station is valid"),
+            ),
             op: SealedOp::new(
                 move_id,
                 lattice_op(LatticeOpType::Append, None, Some(value), Some(0)),
@@ -880,8 +884,10 @@ fn sample_lease(
             SealId::new(format!("ak:seal:{}", repeated_hash(0x62).as_str()))
                 .expect("fixed Seal id is valid"),
         ),
-        actor_id: DidCoreId::new("ak:did_core:web:alice.example")
-            .expect("fixed actor DID is valid"),
+        actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            DidCoreId::new("ak:did_core:web:alice.example").expect("fixed actor DID is valid"),
+            DidCoreId::new("ak:did_core:web:station.example").expect("fixed Station is valid"),
+        )),
         device_id: DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
             .expect("fixed device id is valid"),
         scope_ref,

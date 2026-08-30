@@ -5,9 +5,9 @@ use arkret_models_collaboration::governance::realm_lifecycle::{
     RealmPolicyPayload, RealmPolicyValue,
 };
 use arkret_wire::{
-    ConfidentialityClass, Did, DidCoreId, Event, EventKind, ExtensionManifest, Hash, Hlc,
-    ManifestResourceLimits, ProtocolLayerKind, RealmId, RegistryContentRef, ScopeRef, StrandId,
-    WireError, event_spec,
+    AccountId, ActorId, ConfidentialityClass, Did, DidCoreId, Event, EventKind, ExtensionManifest,
+    Hash, Hlc, ManifestResourceLimits, ProtocolLayerKind, RealmId, RegistryContentRef, ScopeRef,
+    StrandId, WireError, event_spec,
 };
 use chrono::{TimeZone as _, Utc};
 
@@ -23,10 +23,10 @@ fn scope() -> ScopeRef {
     }
 }
 
-fn actor() -> DidCoreId {
+fn actor() -> ActorId {
     let projected = arkret_wire::project_did_to_core_id(&Did::new(ACTOR_DID).unwrap()).unwrap();
     assert_eq!(projected.as_str(), ACTOR_ID);
-    projected
+    ActorId::account(AccountId::new(projected, station()))
 }
 
 fn station() -> DidCoreId {
@@ -43,7 +43,7 @@ fn message_event() -> Event {
         "main",
         ContentBlock::text("typed authoring KAT"),
     );
-    TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), station(), payload)
+    TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), payload)
         .unwrap()
         .author_with_digest_suite(7, Hlc::new(HLC).unwrap(), created_at(), DigestSuite::Sha256)
         .unwrap()
@@ -56,7 +56,6 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
     let policy = TypedEventDraft::<event_spec::RealmPolicy>::new(
         scope(),
         actor(),
-        station(),
         RealmPolicyPayload {
             value: RealmPolicyValue {
                 policy_id: arkret_wire::PolicyId::new(
@@ -167,7 +166,6 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
         .author(arkret_event_draft::EventAuthoringContext {
             scope_ref: scope(),
             actor_id: actor(),
-            station_id: station(),
             actor_seq: 7,
             hlc: Hlc::new(HLC).unwrap(),
             created_at: created_at(),

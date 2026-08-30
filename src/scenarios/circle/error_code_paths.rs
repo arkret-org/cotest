@@ -1,21 +1,16 @@
 //! P2F.3 — every AKP-0007 reason code is reachable from the Wire registry.
 //!
-//! Eight of the nine AKP-0007 error codes are `failed_precondition` /
-//! `schema_violation` sub-reasons; the ninth (`delivery_binding_handed_over`)
-//! is a top-level wire error code introduced in AKP-0006 and re-used by the
-//! Circle delivery binding migration path. This scenario pins:
+//! The AKP-0007 error codes are `failed_precondition` /
+//! `schema_violation` sub-reasons. This scenario pins:
 //!
 //!   - the sub-reason set [`KNOWN_REASON_CODES_CKP_0007`] is exactly 10,
 //!   - each sub-reason string is non-empty, lowercase, snake_case, and does not duplicate a known
 //!     reason from another release,
-//!   - the top-level `arkret_wire::ErrorCode::DELIVERY_BINDING_HANDED_OVER` is registered via
-//!     [`is_known_error_code`] and resolves to a non-`None` HTTP status binding.
 //!
 //! Together this protects the wire-error surface the moderation /
 //! anti-enumeration scenarios will fire in P2F.4.
 
 use anyhow::{Result, anyhow};
-use arkret_wire::{error_code_http_status, is_known_error_code};
 
 const KNOWN_REASON_CODES_CKP_0007: [&str; 10] = [
     arkret_wire::ReasonCode::CIRCLE_REALM_MISMATCH,
@@ -120,20 +115,6 @@ pub async fn error_code_paths_run() -> Result<()> {
         }
     }
 
-    // Sixth AKP-0007 code is a top-level wire error.
-    if !is_known_error_code(arkret_wire::ErrorCode::DELIVERY_BINDING_HANDED_OVER) {
-        return Err(anyhow!(
-            "arkret_wire::ErrorCode::DELIVERY_BINDING_HANDED_OVER (`delivery_binding_handed_over`) \
-             not registered with is_known_error_code"
-        ));
-    }
-    let status = error_code_http_status(arkret_wire::ErrorCode::DELIVERY_BINDING_HANDED_OVER);
-    if status.is_none() {
-        return Err(anyhow!(
-            "arkret_wire::ErrorCode::DELIVERY_BINDING_HANDED_OVER has no HTTP status binding; \
-             error-code-registry.json must list one"
-        ));
-    }
     Ok(())
 }
 

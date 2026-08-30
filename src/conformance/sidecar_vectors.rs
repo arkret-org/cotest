@@ -927,7 +927,7 @@ fn fixed_unsigned_sidecar_event(
     kind: EventKind,
     realm_id: RealmId,
     scope_ref: ScopeRef,
-    actor_id: DidCoreId,
+    actor_id: arkret_wire::ActorId,
     actor_seq: u64,
     prev_refs: Vec<EventId>,
     refs: Vec<EventRef>,
@@ -949,8 +949,6 @@ fn fixed_unsigned_sidecar_event(
         realm_id,
         scope_ref,
         actor_id,
-        station_id: DidCoreId::new("ak:did_core:web:principal.example")
-            .map_err(|_| SidecarModelError::ModelInvariant)?,
         executed_by: None,
         authorization_ref: None,
         applet_id: None,
@@ -977,8 +975,12 @@ fn fixed_unsigned_sidecar_event(
     Ok(event)
 }
 
-fn sidecar_actor_id(actor_id: &DidCoreId) -> SidecarModelResult<DidCoreId> {
-    Ok(actor_id.clone())
+fn sidecar_actor_id(actor_id: &DidCoreId) -> SidecarModelResult<arkret_wire::ActorId> {
+    Ok(arkret_wire::ActorId::hosted_principal(
+        actor_id.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")
+            .map_err(|_| SidecarModelError::ModelInvariant)?,
+    ))
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<PreparedEventDraft> {

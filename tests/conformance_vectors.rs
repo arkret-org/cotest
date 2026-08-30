@@ -564,11 +564,19 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
         MemberIdentityReplacementRef, MemberIdentitySegment, MemberIdentitySignatureAlgorithm,
         MemberIdentityUpdatePayload, effective_identity_events,
     };
+    use arkret_wire::{AccountId, ActorId};
 
     let realm = RealmId::new("ak:realm:AQfJRAZvIVyNOdrjtAPw9Q2gKR0o_3Ud-xQZQB8gx_r9")
         .map_err(|e| anyhow!("realm: {e}"))?;
-    let alice = DidCoreId::new("ak:did_core:web:alice.acme.example")?;
-    let subject = DidCoreId::new("ak:did_core:web:alice.principal.example")?;
+    let station = DidCoreId::new("ak:did_core:web:station.acme.example")?;
+    let alice = ActorId::account(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.acme.example")?,
+        station.clone(),
+    ));
+    let subject = ActorId::account(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.principal.example")?,
+        station,
+    ));
 
     // R3.2: MemberIdentity discloses subject_id + display_profile only;
     // handle lifecycle (the retired `primary_handle` / `handles[]`) has
@@ -578,7 +586,7 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
             schema: "ak.schema.member_identity.v1".to_owned(),
             realm_id: realm.clone(),
             actor_id: alice.clone(),
-            subject_id: subject.clone(),
+            subject_actor_id: subject.clone(),
             display_profile: DisplayProfile {
                 display_name: name.to_owned(),
                 avatar_blob_ref: None,
@@ -656,22 +664,11 @@ fn test_7_cx_member_identity_update_replacement_shape() -> Result<()> {
 
 #[test]
 fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
-    // SDK-level positive control: invite by canonical handle
-    // `alice:acme.example`. The `MemberDeliveryBindingCandidate` carries
-    // `payload.handle` (NOT `handle_uri`) and the directory's
-    // `resolve_handle` response surface MUST round-trip the same wire
-    // form. The full wire round-trip across coauth/soland/teabay is the
-    // live `#[ignore]` companion below.
-    use std::collections::BTreeSet;
-
-    use arkret_identifiers::{DidCoreId, EventId, Hash};
-    use arkret_models_collaboration::governance::member_delivery_binding_candidate::{
-        CandidateIntent, MemberDeliveryBindingCandidate,
-    };
-    use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
-    use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
-    use arkret_models_identity::handle_claim::DeliveryBindingHint;
-    use arkret_wire::{AccountId, Audience, ProducerEventProof};
+    // SDK-level positive control: a canonical handle resolves one exact
+    // Station account and round-trips without a parallel delivery identity.
+    use arkret_identifiers::DidCoreId;
+    use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+    use arkret_wire::AccountId;
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     if invite_handle.canonical() != "alice:acme.example" {
@@ -681,58 +678,35 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
         );
     }
 
-    let principal = DidCoreId::new("ak:did_core:web:principal.acme.example")?;
     let subject = DidCoreId::new("ak:did_core:web:alice.acme.example")?;
-    let account_id = AccountId::new(subject.clone(), principal.clone());
-    let mut modes = BTreeSet::new();
-    modes.insert(DeliveryMode::Events);
-    let candidate = MemberDeliveryBindingCandidate {
-        subject_id: subject,
-        account_id,
+    let station = DidCoreId::new("ak:did_core:web:station.acme.example")?;
+    let account_id = AccountId::new(subject, station);
+    let claim = HandleClaim {
+        schema: HandleClaim::SCHEMA.to_owned(),
         handle: invite_handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
-        member_delivery_binding: DeliveryBindingHint {
-            recipient_id: principal.clone(),
-            recipient_kind: RecipientServiceKind::Station,
-            binding_source: HandleHintBindingSource::OrganizationPolicy,
-            delivery_modes: modes,
-            service_acceptance_ref: None,
-            policy_event_ref: None,
-        },
-        issuer_id: principal,
-        audience: "ak:realm:01904100-0000-8000-8000-test8audience".to_owned(),
-        // Fixed RFC3339 constants — vectors are deterministic, not wall-clock.
-        expires_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00.000Z")?
+        subject_account_id: account_id.clone(),
+        issuer_id: DidCoreId::new("ak:did_core:web:directory.acme.example")?,
+        vouching_id: None,
+        binding_state: HandleBindingState::Verified,
+        claim_kind: None,
+        visibility: None,
+        audience: Some("ak:realm:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-".to_owned()),
+        challenge: None,
+        claim_scope: Default::default(),
+        claims: Vec::new(),
+        created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
             .with_timezone(&chrono::Utc),
-        issued_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
-            .with_timezone(&chrono::Utc),
-        source_refs: vec![EventId::new(
-            "ak:event:AZYdi3qlzHC9BLa3vihHvgrhFh0AYuNTNpOD7a8MiN5J",
-        )?],
-        proofs: vec![ProducerEventProof {
-            kind: "detached_jws".to_owned(),
-            verification_method: cotest::fixture_did_url("did:web:principal.acme.example#key-1"),
-            event_digest: Hash::new(
-                "sha256:0000000000000000000000000000000000000000000000000000000000000088",
-            )?,
-            signer_resolution_evidence_ref: None,
-            signer_resolution_evidence_digest: None,
-            created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
+        expires_at: Some(
+            chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00.000Z")?
                 .with_timezone(&chrono::Utc),
-            domain: None,
-            audience: Some(Audience::Single(
-                "ak:realm:01904100-0000-8000-8000-test8audience".to_owned(),
-            )),
-            proof_purpose: None,
-            jws: "test8.real.shaped.jws".to_owned(),
-        }],
-        claim_digest: None,
-        intent: CandidateIntent::MemberAdd,
+        ),
+        verified_at: None,
+        source_refs: Vec::new(),
+        proofs: Vec::new(),
     };
 
-    // Round-trip through serde to confirm the wire form carries `handle`
-    // (NOT `handle_uri`) and round-trips back to the same Handle.
-    let wire = serde_json::to_value(&candidate).map_err(|e| anyhow!("serialise: {e}"))?;
+    let wire = serde_json::to_value(&claim).map_err(|e| anyhow!("serialise: {e}"))?;
     if wire.get("handle").is_none() {
         bail!(
             "TEST-8: serialised candidate MUST carry `handle` field (R3.1 wire \
@@ -745,13 +719,19 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
              `handle_uri` field"
         );
     }
-    let decoded: MemberDeliveryBindingCandidate =
+    if wire.get("subject_account_id") != Some(&serde_json::to_value(&account_id)?) {
+        bail!("TEST-8: handle claim must carry the complete Station account");
+    }
+    let decoded: HandleClaim =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise: {e}"))?;
     if decoded.handle.canonical() != "alice:acme.example" {
         bail!(
             "TEST-8: handle wire round-trip drifted; got `{}`",
             decoded.handle.canonical()
         );
+    }
+    if decoded.subject_account_id != account_id {
+        bail!("TEST-8: exact account wire round-trip drifted");
     }
     Ok(())
 }

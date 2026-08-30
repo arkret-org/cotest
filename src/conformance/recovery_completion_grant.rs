@@ -13,9 +13,9 @@ use arkret_models_identity::{
     CanonicalSessionPublicJwk, InitialSessionGrantIntent, standard_initial_session_grant_scope,
 };
 use arkret_wire::{
-    Did, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
-    ServiceAccountId, UnsignedRecoveryCompletionAttestation,
-    UnsignedRecoveryCompletionAttestationBody, project_did_to_core_id,
+    AccountId, Did, IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest,
+    UnsignedRecoveryCompletionAttestation, UnsignedRecoveryCompletionAttestationBody,
+    project_did_to_core_id,
 };
 use base64::Engine as _;
 use chrono::{Duration, TimeZone as _, Utc};
@@ -183,8 +183,7 @@ fn completion_vector() -> Result<CompletionVector> {
         encode_json(&grant_claims)?
     );
     let grant = SessionGrantOutcome {
-        principal_id: principal_id.parse()?,
-        service_account_id: ServiceAccountId::new("account-1")?,
+        account_id: AccountId::new(principal_id.parse()?, audience.parse()?),
         device_id: Some(device_id.parse()?),
         session_grant: jwt,
         expires_at: completed_at + Duration::hours(1),

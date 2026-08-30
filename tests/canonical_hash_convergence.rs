@@ -47,17 +47,14 @@ fn vectors() -> Vec<CanonicalVector> {
             // changes because both the field name and the value bytes change.
             payload: json!({
                 "type": "ak.handle.claim",
-                "subject_id": "ak:did_core:web:alice.example",
+                "subject_account_id": {
+                    "principal_id": "ak:did_core:web:alice.example",
+                    "station_id": "ak:did_core:web:station.example"
+                },
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_id": "ak:did_core:web:coauth.example",
                 "audience": "https://soland.example/_arkret",
-                "member_delivery_binding": {
-                    "recipient_id": "ak:did_core:web:soland.example",
-                    "recipient_kind": "station",
-                    "binding_source": "organization_policy",
-                    "delivery_modes": ["events"],
-                },
                 "issued_at": "2026-05-20T00:00:00.000Z",
                 "expires_at": "2026-05-20T00:05:00.000Z",
             }),
@@ -131,17 +128,14 @@ fn vectors() -> Vec<CanonicalVector> {
             // fixed deterministic test constant (NOT a live anchored value).
             payload: json!({
                 "type": "ak.handle.claim",
-                "subject_id": "ak:did_core:webvh:zcotesthandleclaimscid000000000000",
+                "subject_account_id": {
+                    "principal_id": "ak:did_core:webvh:zcotesthandleclaimscid000000000000",
+                    "station_id": "ak:did_core:webvh:zcoteststationscid000000000000000"
+                },
                 "handle": "alice:arkret.example",
                 "handle_aliases": ["acct:alice@arkret.example"],
                 "issuer_id": "ak:did_core:webvh:zcotestcoauthscid0000000000000000",
                 "audience": "https://soland.example/_arkret",
-                "member_delivery_binding": {
-                    "recipient_id": "ak:did_core:webvh:zcotestsolandscid0000000000000000",
-                    "recipient_kind": "station",
-                    "binding_source": "organization_policy",
-                    "delivery_modes": ["events"],
-                },
                 "issued_at": "2026-05-20T00:00:00.000Z",
                 "expires_at": "2026-05-20T00:05:00.000Z",
             }),
@@ -289,7 +283,7 @@ fn event_proof_builder_matches_low_level_canonical_helpers() {
 
 fn pinned_r3_2_inputs() -> (
     arkret_identifiers::RealmId,
-    arkret_identifiers::DidCoreId,
+    arkret_wire::ActorId,
     Vec<arkret_models_identity::EffectiveIdentityEntry>,
     Vec<arkret_models_identity::RosterHandleClaimDigestEntry>,
 ) {
@@ -300,7 +294,10 @@ fn pinned_r3_2_inputs() -> (
     };
 
     let realm = RealmId::new("ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K").unwrap();
-    let actor = DidCoreId::new("ak:did_core:web:alice.acme.example".to_owned()).unwrap();
+    let actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.acme.example".to_owned()).unwrap(),
+        DidCoreId::new("ak:did_core:web:station.acme.example".to_owned()).unwrap(),
+    ));
     let events = vec![
         EffectiveIdentityEntry {
             event_id: EventId::new("ak:event:AaaV5G8rACWz0A_AfDNtAvW_ConNcll4oFZ_LaD4uJgJ")

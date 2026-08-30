@@ -170,11 +170,21 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     let bob_core_id = actor_core_id(&bob.actor)?;
     let missing_receipt = alice.request_contact(missing_target).await?;
     assert_eq!(
-        missing_receipt.core.holder.contact_actor_id().as_str(),
+        missing_receipt
+            .core
+            .holder
+            .contact_actor_id()
+            .signing_principal_id()
+            .as_str(),
         alice_core_id
     );
     assert_eq!(
-        missing_receipt.core.peer.contact_actor_id().as_str(),
+        missing_receipt
+            .core
+            .peer
+            .contact_actor_id()
+            .signing_principal_id()
+            .as_str(),
         missing_target_core_id
     );
 
@@ -182,8 +192,24 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     // device-signed successor Seal. Exercise the independent valid-target
     // branch from Bob's fresh PCR rather than bypassing that finality fence.
     let receipt = bob.request_contact(&alice.actor).await?;
-    assert_eq!(receipt.core.holder.contact_actor_id().as_str(), bob_core_id);
-    assert_eq!(receipt.core.peer.contact_actor_id().as_str(), alice_core_id);
+    assert_eq!(
+        receipt
+            .core
+            .holder
+            .contact_actor_id()
+            .signing_principal_id()
+            .as_str(),
+        bob_core_id
+    );
+    assert_eq!(
+        receipt
+            .core
+            .peer
+            .contact_actor_id()
+            .signing_principal_id()
+            .as_str(),
+        alice_core_id
+    );
 
     Ok(())
 }

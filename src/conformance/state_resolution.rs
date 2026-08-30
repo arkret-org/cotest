@@ -1064,7 +1064,6 @@ fn validate_actor_chain_realm_scope(vector: &Value, vector_name: &str) -> Result
                     "ak.realm.join_rule",
                     "ak.realm.history_access",
                     "ak.realm.discovery",
-                    "ak.realm.delivery_binding_policy",
                     "ak.member.state",
                 ];
                 if events.len() != expected_kinds.len() {

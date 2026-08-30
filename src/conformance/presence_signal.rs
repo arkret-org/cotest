@@ -15,7 +15,9 @@
 
 use anyhow::{Result, bail};
 use arkret_models_discovery::{PresenceStatus, validate_last_active_at, validate_status_message};
-use arkret_wire::{DeviceId, DidCoreId, RealmId, ScopeRef, SealId, SignalClass};
+use arkret_wire::{
+    AccountId, ActorId, DeviceId, DidCoreId, RealmId, ScopeRef, SealId, SignalClass,
+};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use garth::signal::{PresenceProjection, SIGNAL_PLAINTEXT_KIND_PRESENCE, SignalPlaintext};
 use serde_json::{Value, json};
@@ -233,8 +235,11 @@ pub fn run_multi_device_aggregation_vector() -> Result<()> {
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-fn actor() -> Result<DidCoreId> {
-    Ok(DidCoreId::new("ak:did_core:web:alice.example")?)
+fn actor() -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.example")?,
+        DidCoreId::new("ak:did_core:web:station.example")?,
+    )))
 }
 
 fn realm() -> Result<RealmId> {
@@ -266,7 +271,7 @@ fn device_presence(
     const TTL_MS: u64 = 30_000;
     let mut body = serde_json::Map::new();
     body.insert("kind".to_owned(), json!(SIGNAL_PLAINTEXT_KIND_PRESENCE));
-    body.insert("actor_id".to_owned(), json!(actor()?.as_str()));
+    body.insert("actor_id".to_owned(), json!(actor()?));
     body.insert("payload_sequence".to_owned(), json!(payload_sequence));
     body.insert("ttl_ms".to_owned(), json!(TTL_MS));
     if let Some(extra) = fields.as_object() {

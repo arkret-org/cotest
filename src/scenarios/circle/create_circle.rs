@@ -12,6 +12,7 @@ use arkret_models_collaboration::governance::circle::{
     Circle, CircleColorToken, CircleDirectoryVisibility, CircleDisplay, CircleGlyph,
     CircleJoinRule, CircleState, CircleSymbol,
 };
+use arkret_wire::{AccountId, ActorId};
 
 fn display() -> CircleDisplay {
     CircleDisplay {
@@ -33,10 +34,13 @@ fn realm_id() -> Result<RealmId> {
         .map_err(|e| anyhow!("realm id: {e}"))
 }
 
-fn actor() -> Result<DidCoreId> {
-    "ak:did_core:web:alice.example"
-        .parse()
-        .map_err(|e| anyhow!("actor did: {e}"))
+fn actor() -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        "ak:did_core:web:alice.example"
+            .parse()
+            .map_err(|e| anyhow!("actor did: {e}"))?,
+        DidCoreId::new("ak:did_core:web:station.example")?,
+    )))
 }
 
 /// Build a canonical Circle and verify the SDK happy-path round-trip.

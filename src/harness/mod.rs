@@ -96,13 +96,17 @@ pub fn submitted_event_id(outcome: &Value) -> Result<arkret_identifiers::EventId
 
 pub fn events_frontier_request_body(
     actor_did: &str,
+    station_id: &str,
     realm_id: Option<&str>,
 ) -> Result<arkret_models_collaboration::event_query::EventsFrontierRequestBody> {
     let actor_did = arkret_identifiers::Did::new(actor_did.to_owned())?;
-    let actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)?;
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::project_did_to_core_id(&actor_did)?,
+        arkret_identifiers::DidCoreId::new(station_id.to_owned())?,
+    );
     Ok(
         arkret_models_collaboration::event_query::EventsFrontierRequestBody {
-            actor_id,
+            actor_id: arkret_wire::ActorId::account(account_id),
             realm_id: realm_id
                 .map(|value| arkret_identifiers::RealmId::new(value.to_owned()))
                 .transpose()?,
@@ -229,8 +233,6 @@ pub struct RealmBootstrapDraft {
     pub plaintext_visible_services: Option<
         arkret_models_collaboration::governance::plaintext_visibility::PlaintextVisibleServicesPayload,
     >,
-    pub delivery_binding_policy:
-        arkret_models_collaboration::events_payloads::realm::RealmDeliveryBindingPolicyPayload,
 }
 
 pub fn realm_create_payload(service_id: &str, input: &Value) -> Result<RealmBootstrapDraft> {
@@ -389,24 +391,6 @@ pub fn realm_create_payload_with_notary(
             )
         })
         .transpose()?;
-    let delivery_binding_policy = input
-        .get("delivery_binding_policy")
-        .cloned()
-        .map(serde_json::from_value)
-        .transpose()?
-        .unwrap_or(
-            arkret_models_collaboration::events_payloads::realm::RealmDeliveryBindingPolicyPayload {
-                realm_id: None,
-                allowed_binding_sources: None,
-                did_document_default_allowed: None,
-                allowed_recipient_ids: None,
-                required_endorser_ids: None,
-                unroutable_membership_allowed: Some(true),
-                rebind_authorization: None,
-                handover_grace_seconds: None,
-                expires_after_seconds: None,
-            },
-        );
     Ok(RealmBootstrapDraft {
         create: arkret_models_collaboration::events_payloads::RealmCreatePayload::new(genesis),
         profile,
@@ -422,6 +406,5 @@ pub fn realm_create_payload_with_notary(
             ),
         alias,
         plaintext_visible_services,
-        delivery_binding_policy,
     })
 }

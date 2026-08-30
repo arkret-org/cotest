@@ -206,7 +206,10 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
 fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<()> {
     let verification_method = crate::harness::default_event_verification_method(actor).to_string();
     let actor_did = arkret_identifiers::Did::new(actor.to_owned())?;
-    event.actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)?;
+    event.actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_identifiers::project_did_to_core_id(&actor_did)?,
+        event.actor_id.route_service_id().clone(),
+    ));
     event.actor_seq = 0;
     event.prev_refs.clear();
     if event.kind.is_control_plane() {

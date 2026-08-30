@@ -1,28 +1,8 @@
-//! T8.2 — cross-service property tests for the SDK's handle-claim
-//! validator. These run from cotest's vantage point so the same
-//! invariants the conformance suite asserts on the wire are also
-//! exercised on randomly-generated inputs.
-//!
-//! Invariants pinned (post R3.1 wire rename — arkret-spec @ 7157ee8):
-//!
-//!  1. **Canonical round-trip.** Any valid `<localpart>:<domain>` handle survives parse → canonical
-//!     without re-shape.
-//!  2. **alias canonicalisation.** `acct:` interop form maps to the same canonical handle
-//!     regardless of localpart casing.
-//!  3. **audience mismatch is fatal.** When `member_delivery_binding` is set, the claim MUST also
-//!     carry `audience` + `handle` + `expires_at` or `validate()` rejects.
-//!  4. **expiry boundary.** `binding_state=verified` MUST require `expires_at` regardless of
-//!     whether `verified_at` is set.
-//!  5. **issuer is typed.** Valid random issuer core ids do not change validation outcome on their
-//!     own; arbitrary strings are no longer accepted.
-
-use std::collections::BTreeSet;
+//! Property checks for canonical handles and Station-scoped handle claims.
 
 use arkret_identifiers::DidCoreId;
-use arkret_models_identity::{
-    DeliveryBindingHint, DeliveryMode, Handle, HandleBindingState, HandleClaim,
-    HandleHintBindingSource, RecipientServiceKind,
-};
+use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+use arkret_wire::AccountId;
 use chrono::{Duration, Utc};
 use proptest::prelude::*;
 
@@ -33,33 +13,34 @@ fn arb_localpart() -> impl Strategy<Value = String> {
 }
 
 fn arb_domain() -> impl Strategy<Value = String> {
-    // R3.1 schema-conformant domain — at least 2 dot-separated labels.
-    proptest::collection::vec("[a-z0-9]{1,6}", 2..=3).prop_map(|l| l.join("."))
+    proptest::collection::vec("[a-z0-9]{1,6}", 2..=3).prop_map(|labels| labels.join("."))
 }
 
-/// R3.1 canonical handle generator — `<localpart>:<domain>`.
 fn arb_handle() -> impl Strategy<Value = String> {
-    (arb_localpart(), arb_domain()).prop_map(|(l, d)| format!("{l}:{d}"))
+    (arb_localpart(), arb_domain()).prop_map(|(local, domain)| format!("{local}:{domain}"))
 }
 
-/// Claim shell with every field written explicitly: `HandleClaim` has no
-/// `Default` impl because the schema-required `created_at` must come from a
-/// real constructor, not a fabricated placeholder.
-fn base_claim() -> HandleClaim {
+fn account(station: &str) -> AccountId {
+    AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.example").unwrap(),
+        DidCoreId::new(station).unwrap(),
+    )
+}
+
+fn base_claim(handle: &str, station: &str) -> HandleClaim {
     HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
-        handle: None,
+        handle: Handle::parse(handle).unwrap(),
         handle_aliases: Vec::new(),
-        subject_id: None,
-        issuer_id: None,
+        subject_account_id: account(station),
+        issuer_id: DidCoreId::new("ak:did_core:web:issuer.example").unwrap(),
         vouching_id: None,
-        binding_state: None,
+        binding_state: HandleBindingState::Pending,
         claim_kind: None,
         visibility: None,
         audience: None,
         challenge: None,
         claim_scope: Default::default(),
-        member_delivery_binding: None,
         claims: Vec::new(),
         created_at: Utc::now(),
         expires_at: None,
@@ -72,14 +53,12 @@ fn base_claim() -> HandleClaim {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(PROPTEST_CASES))]
 
-    /// Canonical handle parse → canonical() yields exactly the input bytes.
     #[test]
     fn canonical_handle_round_trip(handle in arb_handle()) {
-        let p = Handle::parse(&handle).expect("valid canonical handle parses");
-        prop_assert_eq!(p.canonical(), handle.as_str());
+        let parsed = Handle::parse(&handle).expect("valid canonical handle parses");
+        prop_assert_eq!(parsed.canonical(), handle.as_str());
     }
 
-    /// `acct:` alias maps to the same canonical regardless of casing.
     #[test]
     fn acct_alias_canonical_independent_of_case(
         local in "[A-Za-z0-9]{1,10}",
@@ -90,80 +69,23 @@ proptest! {
         prop_assert_eq!(lower.canonical(), mixed.canonical());
     }
 
-    /// `audience` MUST be present when `member_delivery_binding` is set,
-    /// or `validate()` rejects.
     #[test]
-    fn audience_mismatch_rejected(
-        handle in arb_handle(),
-        audience in prop::option::of("[a-z0-9.]{2,16}"),
-    ) {
-        let claim = HandleClaim {
-            handle: Some(Handle::parse(&handle).unwrap()),
-            member_delivery_binding: Some(member_delivery_binding()),
-            expires_at: Some(Utc::now() + Duration::minutes(5)),
-            audience: audience.clone().map(|a| format!("did:web:{a}.example")),
-            ..base_claim()
-        };
-        let outcome = claim.validate();
-        if audience.is_some() {
-            prop_assert!(outcome.is_ok(), "complete claim should validate");
-        } else {
-            prop_assert!(outcome.is_err(), "missing audience MUST reject");
-        }
+    fn verified_requires_expiry(handle in arb_handle(), with_expiry in any::<bool>()) {
+        let mut claim = base_claim(&handle, "ak:did_core:web:station-a.example");
+        claim.binding_state = HandleBindingState::Verified;
+        claim.expires_at = with_expiry.then(|| Utc::now() + Duration::minutes(5));
+        prop_assert_eq!(claim.validate().is_ok(), with_expiry);
     }
 
-    /// `binding_state=verified` requires `expires_at` even when
-    /// `verified_at` is supplied. Issuer / aliases never relax this.
     #[test]
-    fn verified_requires_expires_regardless_of_verified_at(
-        handle in arb_handle(),
-        with_expiry in any::<bool>(),
-        with_verified_at in any::<bool>(),
-    ) {
-        let claim = HandleClaim {
-            binding_state: Some(HandleBindingState::Verified),
-            handle: Some(Handle::parse(&handle).unwrap()),
-            issuer_id: Some(DidCoreId::new("ak:did_core:web:issuer.example").unwrap()),
-            expires_at: with_expiry.then(|| Utc::now() + Duration::minutes(5)),
-            verified_at: with_verified_at.then(Utc::now),
-            ..base_claim()
-        };
-        let outcome = claim.validate();
-        if with_expiry {
-            prop_assert!(outcome.is_ok());
-        } else {
-            prop_assert!(outcome.is_err(), "verified+no_expiry MUST reject");
-        }
-    }
-
-    /// Issuer is a role-typed core id; valid random issuers do not change the
-    /// outcome of an otherwise-valid claim.
-    #[test]
-    fn issuer_is_validation_opaque(
-        handle in arb_handle(),
-        issuer in "[a-z][a-z0-9-]{3,20}",
-    ) {
-        let claim = HandleClaim {
-            handle: Some(Handle::parse(&handle).unwrap()),
-            issuer_id: Some(
-                DidCoreId::new(format!("ak:did_core:web:{issuer}.example")).unwrap(),
-            ),
-            ..base_claim()
-        };
-        // No binding_state, no recipient — should validate trivially.
-        prop_assert!(claim.validate().is_ok());
-    }
-}
-
-fn member_delivery_binding() -> DeliveryBindingHint {
-    let mut modes = BTreeSet::new();
-    modes.insert(DeliveryMode::Events);
-    DeliveryBindingHint {
-        recipient_id: DidCoreId::new("ak:did_core:web:rs.example").unwrap(),
-        recipient_kind: RecipientServiceKind::Station,
-        binding_source: HandleHintBindingSource::OrganizationPolicy,
-        delivery_modes: modes,
-        service_acceptance_ref: None,
-        policy_event_ref: None,
+    fn same_principal_at_different_stations_is_not_the_same_subject(handle in arb_handle()) {
+        let claim_a = base_claim(&handle, "ak:did_core:web:station-a.example");
+        let claim_b = base_claim(&handle, "ak:did_core:web:station-b.example");
+        prop_assert_eq!(&claim_a.subject_account_id.principal_id, &claim_b.subject_account_id.principal_id);
+        prop_assert_ne!(&claim_a.subject_account_id, &claim_b.subject_account_id);
+        prop_assert_ne!(
+            claim_a.subject_account_id.canonical_key().unwrap(),
+            claim_b.subject_account_id.canonical_key().unwrap()
+        );
     }
 }

@@ -1,7 +1,8 @@
 use arkret::{
-    DeviceId, DidCoreId, Event, Hlc, MessageCreatePayload, MessageId, MessageStreamDelta,
-    MessageStreamFormat, MessageStreamFrame, MessageStreamId, MessageStreamKeyframe,
-    MessageStreamProducer, RealmId, ScopeRef, SealId, SignalPlaintext as SignalPayload, StrandId,
+    AccountId, ActorId, DeviceId, DidCoreId, Event, Hlc, MessageCreatePayload, MessageId,
+    MessageStreamDelta, MessageStreamFormat, MessageStreamFrame, MessageStreamId,
+    MessageStreamKeyframe, MessageStreamProducer, RealmId, ScopeRef, SealId,
+    SignalPlaintext as SignalPayload, StrandId,
 };
 use chrono::{DateTime, Utc};
 use garth::{
@@ -9,8 +10,15 @@ use garth::{
 };
 use serde_json::{Value, json};
 
-fn actor() -> DidCoreId {
+fn principal() -> DidCoreId {
     DidCoreId::new("ak:did_core:web:alice.example").unwrap()
+}
+
+fn actor() -> ActorId {
+    ActorId::account(AccountId::new(
+        principal(),
+        DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
+    ))
 }
 
 fn device() -> DeviceId {
@@ -34,7 +42,7 @@ fn final_event() -> Event {
     arkret_wire::test_support::raw_event_at(
         "ak.message.create",
         ScopeRef::Realm { realm_id: realm() },
-        actor(),
+        principal(),
         DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
         1,
         Hlc::new("01970e589d21-0000-a13f9c2e").unwrap(),

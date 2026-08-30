@@ -16,7 +16,8 @@ use arkret_identifiers::{DidCoreId, RealmId, TrustDomainId};
 use arkret_models_collaboration::governance::circle::EncryptionFloor;
 use arkret_models_collaboration::objects::realm::Realm;
 use arkret_wire::{
-    Discoverability, EncryptionProfile, FederationPolicy, HistoryAccess, JoinRule, SecurityClass,
+    AccountId, ActorId, Discoverability, EncryptionProfile, FederationPolicy, HistoryAccess,
+    JoinRule, SecurityClass,
 };
 
 const REALM_ID: &str = "ak:realm:AWdkiR5jlnGgdx6sVlaEmGK5CATkDmi21Mn8gxnUmrZe";
@@ -50,7 +51,10 @@ fn build_realm(
         trust_domain,
         summary: None,
         security_class,
-        created_by: principal.clone(),
+        created_by: ActorId::account(AccountId::new(
+            principal.clone(),
+            DidCoreId::new("ak:did_core:web:station.example")?,
+        )),
         owning_organization_ids: Vec::new(),
         schema_refs: vec!["ak.profile.realm.v1".to_owned()],
         policy_id: None,

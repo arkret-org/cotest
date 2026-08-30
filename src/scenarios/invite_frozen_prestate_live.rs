@@ -107,6 +107,7 @@ async fn author_invite_move(
             .query("/_arkret/self/events/frontier")
             .json(&events_frontier_request_body(
                 actor.actor.as_str(),
+                actor.service_id(),
                 Some(realm_id),
             )?),
         StatusCode::OK,

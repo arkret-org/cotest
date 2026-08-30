@@ -2,7 +2,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::{DeviceId, DidCoreId, Hash, ServiceAccountId, SessionGrantId};
+use arkret_identifiers::{DeviceId, DidCoreId, Hash, SessionGrantId};
 use arkret_models_collaboration::session_grant_bodies::{
     SessionGrantOutcome, SessionGrantRefreshRequestBody, SessionGrantRequestBody,
     human_session_grant_intent_digest, session_grant_refresh_request_digest,
@@ -14,7 +14,7 @@ use arkret_signatures::http_signature::{
     Component, ContentDigest, ContentDigestAlgorithm, SignatureInput, SignatureVerificationPolicy,
     SignedRequestParts, canonical_message, sign_message, verify_signed_http_message,
 };
-use arkret_wire::{ProfileId, ProofContextId};
+use arkret_wire::{AccountId, ProfileId, ProofContextId};
 use chrono::{DateTime, Duration, Utc};
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::Deserialize;
@@ -220,9 +220,7 @@ fn issue_session_grant(
     }
 
     Ok(SessionGrantOutcome {
-        principal_id: request.principal_id.clone(),
-        service_account_id: ServiceAccountId::new("account-1")
-            .map_err(|_| arkret_wire::ReasonCode::PROOF_INVALID)?,
+        account_id: AccountId::new(request.principal_id.clone(), request.audience_id.clone()),
         device_id: Some(request.device_id.clone()),
         session_grant: "ak.session.grant.test".to_owned(),
         expires_at: now + server_max_ttl,

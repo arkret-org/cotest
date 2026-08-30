@@ -7,7 +7,7 @@ use arkret_models_collaboration::objects::productivity::{
     validate_private_account_data_key,
 };
 use arkret_schema::event_payload_validator_catalog_from_spec_artifacts;
-use arkret_wire::{MessageId, RealmId, ScheduledSendId};
+use arkret_wire::{AccountId, ActorId, MessageId, RealmId, ScheduledSendId};
 use serde_json::{Value, json};
 
 fn artifacts_root() -> PathBuf {
@@ -350,8 +350,10 @@ fn scheduled_send_signed_event(body: &str) -> arkret_wire::AuthoredEvent {
             realm_id: RealmId::new("ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir")
                 .unwrap(),
         },
-        scheduled_send_core_id("did:web:alice.example"),
-        scheduled_send_core_id("did:web:principal.example"),
+        ActorId::account(AccountId::new(
+            scheduled_send_core_id("did:web:alice.example"),
+            scheduled_send_core_id("did:web:principal.example"),
+        )),
         scheduled_send_test_payload(body),
     )
     .unwrap()

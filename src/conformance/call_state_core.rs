@@ -18,7 +18,7 @@ use arkret_models_collaboration::objects::media::{
     MediaBackendKind, MediaBackendToken,
 };
 use arkret_state::lattice::{CellState, Fsm, Lattice, SealedOp};
-use arkret_wire::{BottomKind, LatticeOp, LatticeOpType, ProfileId};
+use arkret_wire::{AccountId, ActorId, BottomKind, LatticeOp, LatticeOpType, ProfileId};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
 use serde_json::{Value, json};
@@ -117,9 +117,12 @@ fn fixture_now() -> DateTime<Utc> {
         .expect("fixture timestamp should be valid")
 }
 
-fn participant_id(label: &str) -> DidCoreId {
-    DidCoreId::new(format!("ak:did_core:web:{label}.example"))
-        .expect("fixture Core DID should be valid")
+fn participant_id(label: &str) -> ActorId {
+    ActorId::account(AccountId::new(
+        DidCoreId::new(format!("ak:did_core:web:{label}.example"))
+            .expect("fixture Core DID should be valid"),
+        DidCoreId::new("ak:did_core:web:station.example").expect("fixture Station should be valid"),
+    ))
 }
 
 fn did(label: &str) -> Did {

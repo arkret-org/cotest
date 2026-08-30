@@ -1186,7 +1186,7 @@ async function openAndPairSecondController(
     dpopSeedB64url: session!.dpopSeedB64url,
     eventSigningSeedB64url: session!.eventSigningSeedB64url,
     grantId: session!.grantId,
-    serviceAccountId: session!.serviceAccountId,
+    accountId: session!.accountId,
     grantAudience: session!.grantAudience,
   });
   try {

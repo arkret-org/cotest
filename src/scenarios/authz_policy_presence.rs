@@ -5,8 +5,8 @@ use arkret_models_integration::{
     PushKey, PushRegisterDeviceRequestBody, PushUnregisterDeviceRequestBody,
 };
 use arkret_wire::{
-    DeviceId, DidCoreId, MorphId, RealmId, RelationId, ResourceSelectorKind, StrandId,
-    WireResourceSelector,
+    AccountId, ActorId, DeviceId, DidCoreId, MorphId, RealmId, RelationId, ResourceSelectorKind,
+    StrandId, WireResourceSelector,
 };
 use reqwest::StatusCode;
 use serde_json::json;
@@ -42,7 +42,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_before_grant = expect_json(
         bob.post("/_arkret/self/authz/check")
             .json(&AuthzCheckRequestBody {
-                actor_id: DidCoreId::new(bob_core_id.clone())?,
+                actor_id: account_actor(&bob, &bob_core_id)?,
                 action: "ak.realm.admin".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
                 context: None,
@@ -122,7 +122,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let allowed_after_grant = expect_json(
         bob.post("/_arkret/self/authz/check")
             .json(&AuthzCheckRequestBody {
-                actor_id: DidCoreId::new(bob_core_id.clone())?,
+                actor_id: account_actor(&bob, &bob_core_id)?,
                 action: "ak.realm.admin".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id.clone())?)),
                 context: None,
@@ -210,7 +210,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let denied_after_revoke = expect_json(
         bob.post("/_arkret/self/authz/check")
             .json(&AuthzCheckRequestBody {
-                actor_id: DidCoreId::new(bob_core_id)?,
+                actor_id: account_actor(&bob, &bob_core_id)?,
                 action: "ak.realm.admin".to_owned(),
                 resource: Some(WireResourceSelector::realm(RealmId::new(realm_id)?)),
                 context: None,
@@ -235,7 +235,7 @@ async fn expect_authz_check_hard_deny(
         client
             .post("/_arkret/self/authz/check")
             .json(&AuthzCheckRequestBody {
-                actor_id: DidCoreId::new(actor_id)?,
+                actor_id: account_actor(client, actor_id)?,
                 action: action.to_owned(),
                 resource: Some(resource),
                 context: None,
@@ -320,16 +320,26 @@ pub async fn push_and_ice_contracts_work() -> Result<()> {
             .json(&MediaIceConfigRequestBody {
                 realm_id: RealmId::new(media_realm_id)?,
                 call_id: "ak:call:AbhvODyrIRCskAIoS9IXLjMfD-Zsr8lwDpiCU_zLR4it".to_owned(),
-                actor_id: DidCoreId::new(alice_core_id.clone())?,
+                actor_id: account_actor(&alice, &alice_core_id)?,
                 device_id: DeviceId::new(alice.device_id.clone())?,
                 mode: MediaIceMode::P2p,
             }),
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(ice["actor_id"], alice_core_id);
+    assert_eq!(
+        ice["actor_id"],
+        serde_json::to_value(account_actor(&alice, &alice_core_id)?)?
+    );
     assert!(ice["ice_servers"].is_array());
     assert!(ice["signature"].is_object());
 
     Ok(())
+}
+
+fn account_actor(client: &TestActorClient, principal_id: &str) -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        DidCoreId::new(principal_id)?,
+        DidCoreId::new(client.service_id().to_owned())?,
+    )))
 }

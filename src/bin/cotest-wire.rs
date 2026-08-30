@@ -733,9 +733,7 @@ fn build_pcr_genesis_unit(
         arkret::ScopeRef::Realm {
             realm_id: create.realm_id.clone(),
         },
-        project_did_to_core_id(principal)
-            .context("project principal DID for founding DeviceAuthorize")?,
-        create.station_id.clone(),
+        create.actor_id.clone(),
         authorize_payload,
     )?
     .with_prev_refs(vec![create.event_id.clone()])
@@ -972,7 +970,7 @@ fn trusted_actor_signer_material(event: &Event) -> Result<(Did, DidUrl)> {
         .context("parse founding DeviceAuthorize proof controller DID")?;
     let controller_actor = project_did_to_core_id(&controller)
         .context("project founding DeviceAuthorize proof controller")?;
-    if controller_actor != event.actor_id {
+    if &controller_actor != event.actor_id.signing_principal_id() {
         bail!("founding DeviceAuthorize proof controller does not match its actor core id");
     }
     Ok((controller, verification_method))
@@ -1125,7 +1123,19 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
     let input: EventProofInput =
         serde_json::from_value(input).context("parse event proof input")?;
     let actor_did = Did::new(input.actor_did.clone()).context("parse actor DID")?;
-    let actor = project_did_to_core_id(&actor_did).context("project actor DID to its core id")?;
+    let actor_core =
+        project_did_to_core_id(&actor_did).context("project actor DID to its core id")?;
+    let actor: arkret_wire::ActorId = serde_json::from_value(
+        input
+            .event
+            .get("actor_id")
+            .cloned()
+            .context("Event proof input requires actor_id")?,
+    )
+    .context("parse Event actor_id")?;
+    if actor.signing_principal_id() != &actor_core {
+        bail!("Event actor_id does not match actor_did");
+    }
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
     let event_digest =
@@ -1171,11 +1181,14 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         .get("decision")
         .cloned()
         .context("MIMI consent request requires decision")?;
-    let actor_id = input
-        .request
-        .get("actor_id")
-        .and_then(Value::as_str)
-        .context("MIMI consent request requires actor_id")?;
+    let actor_id: arkret_wire::ActorId = serde_json::from_value(
+        input
+            .request
+            .get("actor_id")
+            .cloned()
+            .context("MIMI consent request requires actor_id")?,
+    )
+    .context("parse MIMI consent actor_id")?;
     let consent_event = input
         .request
         .get("consent_event")
@@ -1198,7 +1211,7 @@ fn mimi_consent_proof(input: Value) -> Result<Value> {
         consent_id: ConsentId::new(consent_id.to_owned()).context("parse consent id")?,
         decision: serde_json::from_value::<MimiConsentDecision>(decision)
             .context("parse consent decision")?,
-        actor_id: DidCoreId::new(actor_id).context("parse consent actor core id")?,
+        actor_id,
         consent_event: serde_json::from_value::<EventInitialSubmission>(consent_event)
             .context("parse MIMI consent Event")?,
         signature: PayloadProof {
@@ -1410,6 +1423,10 @@ mod tests {
     #[test]
     fn event_proof_with_registered_seed_verifies_through_sdk() {
         let (actor_did, actor_id) = actor_ids("did:webvh:z6mkfixture:alice.example");
+        let actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            actor_id.clone(),
+            DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
+        ));
         let verification_method = format!("{actor_did}#principal-signing-key");
         let seed = [42u8; 32];
         let signing_key = SigningKey::from_bytes(&seed);
@@ -1418,8 +1435,7 @@ mod tests {
             "kind": "ak.member.state",
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
-            "actor_id": actor_id,
-            "station_id": "ak:did_core:web:principal.example",
+            "actor_id": actor,
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -1433,7 +1449,7 @@ mod tests {
             "payload": {
                 "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
                 "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
-                "actor_id": actor_id,
+                "actor_id": actor,
                 "membership": "join"
             }
         });
@@ -1464,7 +1480,7 @@ mod tests {
         arkret_signatures::proof::verify_ed25519_detached_jws_proof(
             &proof,
             &canonical_bytes,
-            &actor_id,
+            &actor,
             &public_key,
         )
         .unwrap();

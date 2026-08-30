@@ -1,6 +1,5 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_canonical as canonical;
-use arkret_identifiers::DidCoreId;
 use arkret_signatures::proof::{PublicKeyMaterial, verify_ed25519_detached_jws_proof};
 use arkret_wire::ProducerEventProof;
 use serde_json::{Value, json};
@@ -118,9 +117,9 @@ fn verify_event_proof_signature(
     proof: &ProducerEventProof,
     public_key: &PublicKeyMaterial,
 ) -> std::result::Result<(), &'static str> {
-    let actor_id = required_str(event, "actor_id")
-        .and_then(|value| DidCoreId::new(value).map_err(Into::into))
-        .map_err(|_| "signature_invalid")?;
+    let actor_id: arkret_wire::ActorId =
+        serde_json::from_value(event.get("actor_id").cloned().ok_or("signature_invalid")?)
+            .map_err(|_| "signature_invalid")?;
     let canonical_bytes = canonical_event_payload_bytes(event).map_err(|_| "signature_invalid")?;
     verify_ed25519_detached_jws_proof(proof, &canonical_bytes, &actor_id, public_key)
         .map_err(|_| "signature_invalid")
@@ -369,7 +368,13 @@ mod tests {
             "event_id": "ak:event:AaIU5-FloksbTF8lIRYIpxdzmtMlKw6ZQ46eU2SAH2-4",
             "kind": "ak.message.create",
             "realm_id": "ak:realm:01970e589d21-8000-8000-000000000001",
-            "actor_id": "ak:did_core:web:alice.example",
+            "actor_id": {
+                "kind": "account",
+                "account_id": {
+                    "principal_id": "ak:did_core:web:alice.example",
+                    "station_id": "ak:did_core:web:station.example"
+                }
+            },
             "actor_seq": 1,
             "created_at": "2026-05-02T00:00:00.000Z",
             "hlc": "01970e589d21-0001-a13f9c2e",
@@ -387,9 +392,10 @@ mod tests {
     /// object.
     fn signed_proof(event: &Value, signing_key: &SigningKey) -> ProducerEventProof {
         let canonical = canonical_event_payload_bytes(event).unwrap();
-        let actor_id = DidCoreId::new(event["actor_id"].as_str().unwrap()).unwrap();
+        let actor_id: arkret_wire::ActorId =
+            serde_json::from_value(event["actor_id"].clone()).unwrap();
         let (signer_evidence_ref, signer_evidence_digest) =
-            crate::fixture_signer_evidence_pair(actor_id.as_str());
+            crate::fixture_signer_evidence_pair(actor_id.signing_principal_id().as_str());
         let mut proof = ProducerEventProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
             verification_method: crate::fixture_did_url("did:web:alice.example#device"),

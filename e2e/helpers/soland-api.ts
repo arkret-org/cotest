@@ -757,48 +757,26 @@ export async function createRealmApi(
   }
   const creatorServiceId =
     data.creator_id ?? solandServiceId(opts.server);
-  const creatorDid =
-    eventSignerFor(ownerId)?.verificationMethod.split("#", 1)[0] ?? ownerId;
-  const didDocumentResponse = await request.get(
-    `${solandBaseUrl(opts.server)}/_soland/root/identity/${encodeURIComponent(creatorDid)}/did-document`,
-  );
-  const didDocument = await expectJsonOk<Record<string, unknown>>(
-    didDocumentResponse,
-    `resolve creator DID document ${ownerId}`,
-  );
-  const deliveryPolicy: Record<string, unknown> = {
-    realm_id: realmId,
-    allowed_binding_sources: ["did_document_default"],
-    did_document_default_allowed: true,
-    allowed_recipient_ids: [creatorServiceId],
-    required_endorser_ids: [],
-    unroutable_membership_allowed: true,
-    rebind_authorization: "member",
+  const creatorActorId = {
+    kind: "account",
+    account_id: {
+      principal_id: requireDidCoreId(ownerId),
+      station_id: creatorServiceId,
+    },
   };
-  const creatorDeliveryBinding: Record<string, unknown> = {
-    recipient_id: creatorServiceId,
-    recipient_kind: "station",
-    binding_scope: "realm",
-    binding_source: "did_document_default",
-    delivery_modes: ["events", "sync", "to_device", "push", "keypackages"],
-    service_resolution: canonicalServiceResolution(opts.server),
-    document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
-    resolved_at: createdAt,
-  };
-  pushBootstrapEvent(
-    "ak.realm.delivery_binding_policy",
-    "ak:cell:ak.component.realm.delivery_binding_policy.v1:null",
-    deliveryPolicy,
+  const creatorActorCanonical = canonicalJson(creatorActorId);
+  const memberCellSubject = base64url(
+    createHash("sha256")
+      .update(canonicalJson([creatorActorCanonical]))
+      .digest(),
   );
   pushBootstrapEvent(
     "ak.member.state",
-    `ak:cell:ak.component.member.state.v1:${ownerId}`,
+    `ak:cell:ak.component.member.state.v1:${memberCellSubject}`,
     {
       realm_id: realmId,
-      actor_id: requireDidCoreId(ownerId),
+      member_id: creatorActorId,
       membership: "join",
-      delivery_status: "routable",
-      delivery_binding: creatorDeliveryBinding,
     },
   );
 
@@ -1154,10 +1132,8 @@ export async function grantServiceCapabilityApi(
   },
 ): Promise<string> {
   const issuedAt = canonicalTimestamp();
-  // `ak.realm.delivery_binding_policy` is an Event kind, not a capability
-  // action. Use a core collaboration action advertised by both federation
-  // peers; the service-DID subject and Realm resource make this a service
-  // service grant, independently of which registered action is granted.
+  // Use a core collaboration action advertised by both federation peers; the
+  // service actor subject and Realm resource make this a peer-service grant.
   const action = args.action ?? "ak.message.create";
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error

@@ -58,8 +58,8 @@ export type DpopDeviceKey = {
 export type DpopBoundGrant = {
   grantId: string;
   grantJwt: string;
-  /// Coauth-owned service account whose durable session chain issued the grant.
-  serviceAccountId: string;
+  /// Exact Station account whose durable session chain issued the grant.
+  accountId: { principal_id: string; station_id: string };
   /// The `cnf.jkt` the grant was minted with — equals the device key thumbprint.
   dpopJkt: string;
   audience: string;
@@ -311,22 +311,22 @@ export async function mintDpopBoundGrant(
   const body = JSON.parse(text) as {
     grant_id: string;
     grant_jwt: string;
-    service_account_id?: string;
+    account_id?: { principal_id: string; station_id: string };
     dpop_jkt: string;
     audience_id: string;
     scopes: string[];
     expires_at: string;
     principal_id?: string;
   };
-  if (!body.principal_id || !body.service_account_id) {
+  if (!body.principal_id || !body.account_id) {
     throw new Error(
-      "debug issue-dpop-grant omitted verified principal_id or service_account_id",
+      "debug issue-dpop-grant omitted verified principal_id or account_id",
     );
   }
   return {
     grantId: body.grant_id,
     grantJwt: body.grant_jwt,
-    serviceAccountId: body.service_account_id,
+    accountId: body.account_id,
     dpopJkt: body.dpop_jkt,
     audience: body.audience_id,
     scopes: body.scopes,

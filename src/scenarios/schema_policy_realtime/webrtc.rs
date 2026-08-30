@@ -1,6 +1,6 @@
 use anyhow::Result;
 use arkret_models_collaboration::objects::media::{MediaIceConfigRequestBody, MediaIceMode};
-use arkret_wire::{DeviceId, DidCoreId, RealmId};
+use arkret_wire::{AccountId, ActorId, DeviceId, DidCoreId, RealmId};
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -36,7 +36,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             .json(&MediaIceConfigRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: call_id.to_owned(),
-                actor_id: DidCoreId::new(carol_core.clone())?,
+                actor_id: account_actor(&carol, &carol_core)?,
                 device_id: DeviceId::new(carol.device_id.clone())?,
                 mode: MediaIceMode::P2p,
             }),
@@ -66,7 +66,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             .json(&MediaIceConfigRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: call_id.to_owned(),
-                actor_id: DidCoreId::new(carol_core)?,
+                actor_id: account_actor(&carol, &carol_core)?,
                 device_id: DeviceId::new(alice.device_id.clone())?,
                 mode: MediaIceMode::P2p,
             }),
@@ -81,7 +81,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             .json(&MediaIceConfigRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: call_id.to_owned(),
-                actor_id: DidCoreId::new(alice_core.clone())?,
+                actor_id: account_actor(&alice, &alice_core)?,
                 device_id: DeviceId::new(alice.device_id.clone())?,
                 mode: MediaIceMode::P2p,
             }),
@@ -90,7 +90,10 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     .await?;
     assert_eq!(ice["realm_id"], realm_id);
     assert_eq!(ice["call_id"], call_id);
-    assert_eq!(ice["actor_id"], alice_core);
+    assert_eq!(
+        ice["actor_id"],
+        serde_json::to_value(account_actor(&alice, &alice_core)?)?
+    );
     assert_eq!(ice["device_id"], alice.device_id);
     assert_eq!(ice["ttl_seconds"], 300);
     assert_eq!(ice["refresh_lead_seconds"], 75);
@@ -143,7 +146,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             .json(&MediaIceConfigRequestBody {
                 realm_id: RealmId::new(realm_id.clone())?,
                 call_id: "ak:call:AYVFZWhohYwHaEnPNmKhgMBK35WYy2igGfoeZIIOtwAy".to_owned(),
-                actor_id: DidCoreId::new(alice_core)?,
+                actor_id: account_actor(&alice, &alice_core)?,
                 device_id: DeviceId::new(alice.device_id.clone())?,
                 mode: MediaIceMode::Turn,
             }),
@@ -163,4 +166,11 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
     );
 
     Ok(())
+}
+
+fn account_actor(client: &crate::harness::TestActorClient, principal_id: &str) -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        DidCoreId::new(principal_id)?,
+        DidCoreId::new(client.service_id().to_owned())?,
+    )))
 }

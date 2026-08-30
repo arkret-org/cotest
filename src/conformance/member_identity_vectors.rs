@@ -35,6 +35,7 @@ use arkret_models_identity::{
     MemberIdentitySignatureAlgorithm, MemberIdentityUpdatePayload, effective_identity_events,
     member_identity_effective_set_digest,
 };
+use arkret_wire::{AccountId, ActorId};
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::{Value, json};
 
@@ -74,17 +75,25 @@ pub const ALL_MEMBER_IDENTITY_VECTOR_IDS: &[&str] = &[
 const STABLE_REALM_ID: &str = "ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K";
 const ALICE_ACTOR_DID: &str = "ak:did_core:web:alice.acme.example";
 const ALICE_SUBJECT_DID: &str = "ak:did_core:web:alice.principal.example";
+const STATION_ID: &str = "ak:did_core:web:station.acme.example";
 
 fn fake_realm() -> Result<RealmId> {
     RealmId::new(STABLE_REALM_ID).map_err(|e| anyhow!("invalid stable realm id: {e}"))
 }
 
-fn fake_actor() -> Result<DidCoreId> {
-    DidCoreId::new(ALICE_ACTOR_DID).map_err(|e| anyhow!("invalid actor did: {e}"))
+fn account_actor(principal_id: &str) -> Result<ActorId> {
+    Ok(ActorId::account(AccountId::new(
+        DidCoreId::new(principal_id)?,
+        DidCoreId::new(STATION_ID)?,
+    )))
 }
 
-fn fake_subject() -> Result<DidCoreId> {
-    DidCoreId::new(ALICE_SUBJECT_DID).map_err(|e| anyhow!("invalid subject did: {e}"))
+fn fake_actor() -> Result<ActorId> {
+    account_actor(ALICE_ACTOR_DID)
+}
+
+fn fake_subject() -> Result<ActorId> {
+    account_actor(ALICE_SUBJECT_DID)
 }
 
 fn fake_event(suffix: u32) -> Result<EventId> {
@@ -521,7 +530,7 @@ pub fn run_member_identity_cross_subject_replacement_ignored_vector() -> Result<
             .map_err(|e| anyhow!("bogus digest as Hash: {e}"))?;
     let payload_b = MemberIdentityUpdatePayload {
         realm_id: fake_realm()?,
-        actor_id: DidCoreId::new("ak:did_core:web:bob.acme.example")?,
+        actor_id: account_actor("ak:did_core:web:bob.acme.example")?,
         segment: MemberIdentitySegment::MemberIdentity,
         replaces: vec![MemberIdentityReplacementRef {
             event_id: cross_subject_event,

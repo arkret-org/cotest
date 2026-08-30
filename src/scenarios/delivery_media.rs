@@ -200,6 +200,7 @@ pub async fn to_device_messages_are_idempotent_opaque_and_drained_once() -> Resu
         .with_timezone(&chrono::Utc);
     let request = device_message_send_request(
         &alice_did,
+        server.service_id().as_str(),
         alice_device,
         "ak:device_message:0196419b-0000-7000-8000-00000000d201",
         "ak.mls.application",

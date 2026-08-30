@@ -17,7 +17,7 @@ use arkret_models_collaboration::events_payloads::{
 use arkret_models_collaboration::governance::membership_invite::MembershipPayloadState;
 use arkret_models_collaboration::objects::profiles::StrandTrack;
 use arkret_models_collaboration::objects::strand::Strand;
-use arkret_wire::{AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
+use arkret_wire::{AccountId, ActorId, AuthContext, AuthorizationRef, Event, EventRef, ProfileRef};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use url::Url;
@@ -88,7 +88,10 @@ impl TestActorClient {
                 operation_id,
                 idempotency_key,
                 peer: ContactPeer::Human {
-                    principal_id: project_did_to_core_id(&Did::new(target.to_owned())?)?,
+                    account_id: AccountId::new(
+                        project_did_to_core_id(&Did::new(target.to_owned())?)?,
+                        DidCoreId::new(self.service_id.clone())?,
+                    ),
                 },
                 granted_to_peer_scopes: vec![ContactScope::DirectMessage],
                 introduction_evidence: ContactIntroductionEvidence::ExplicitAddress,
@@ -303,12 +306,14 @@ impl TestActorClient {
     ) -> Result<Value> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         loop {
-            let response = expect_response(
-                self.query("/_arkret/self/events/frontier")
-                    .json(&events_frontier_request_body(actor_did, realm_id)?),
-                StatusCode::OK,
-            )
-            .await;
+            let response =
+                expect_response(
+                    self.query("/_arkret/self/events/frontier").json(
+                        &events_frontier_request_body(actor_did, &self.service_id, realm_id)?,
+                    ),
+                    StatusCode::OK,
+                )
+                .await;
             match response {
                 Ok(response) => return response.json(),
                 Err(error) if std::time::Instant::now() < deadline => {
@@ -569,7 +574,10 @@ impl TestActorClient {
         )?;
         let event_response = bootstrap["event_response"].clone();
         let actor_did = arkret_identifiers::Did::new(self.actor.clone())?;
-        let actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)?;
+        let actor_id = ActorId::account(AccountId::new(
+            arkret_identifiers::project_did_to_core_id(&actor_did)?,
+            DidCoreId::new(self.service_id.clone())?,
+        ));
         let mut strand = Strand::new_create(realm_id.clone(), "Discussion", actor_id);
         strand.tracks.clear();
         strand
@@ -768,16 +776,17 @@ impl TestActorClient {
         let grant = arkret_models_collaboration::events_payloads::CapabilityGrantCreateBody {
             schema: "ak.schema.capability.v1".to_owned(),
             realm_id: Some(arkret_identifiers::RealmId::new(realm_id.to_owned())?),
-            issuer_id: project_did_to_core_id(&Did::new(
-                self.actor.clone(),
-            )?)?,
+            issuer_id: ActorId::account(AccountId::new(
+                project_did_to_core_id(&Did::new(self.actor.clone())?)?,
+                DidCoreId::new(self.service_id.clone())?,
+            )),
             subject:
-                arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::CoreDid(
-                    project_did_to_core_id(&Did::new(
-                        subject.to_owned(),
-                    )?)?,
+                arkret_models_collaboration::governance::grant_constraint::CapabilitySubject::Actor(
+                    ActorId::account(AccountId::new(
+                        project_did_to_core_id(&Did::new(subject.to_owned())?)?,
+                        DidCoreId::new(self.service_id.clone())?,
+                    )),
                 ),
-            subject_station_id: Some(DidCoreId::new(self.service_id.clone())?),
             actions: actions.iter().map(|action| (*action).to_owned()).collect(),
             resources: vec![serde_json::from_value(json!({
                 "kind": "realm",
@@ -1002,7 +1011,10 @@ impl TestActorClient {
             ));
         };
         frontier.validate()?;
-        let expected_actor_id = project_did_to_core_id(&Did::new(self.actor.clone())?)?;
+        let expected_actor_id = ActorId::account(AccountId::new(
+            project_did_to_core_id(&Did::new(self.actor.clone())?)?,
+            DidCoreId::new(self.service_id.clone())?,
+        ));
         if frontier.realm_id.as_str() != realm_id || frontier.actor_id != expected_actor_id {
             return Err(anyhow!("combined selector returned the wrong actor scope"));
         }

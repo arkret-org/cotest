@@ -73,7 +73,6 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       "ak.realm.history_access",
       "ak.realm.discovery",
       "ak.realm.plaintext_visible_services",
-      "ak.realm.delivery_binding_policy",
       "ak.member.state",
     ];
     expect(events.map((event) => event.kind)).toEqual(expectedKinds);
