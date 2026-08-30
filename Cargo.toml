@@ -182,6 +182,7 @@ unicode-normalization = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+soland-storage-postgres = { path = "../soland/crates/storage-postgres" }
 # T8.2 — property tests for canonical-JSON / proof vectors and handle
 # claim validators across the SDK contract surface.
 proptest = { workspace = true, default-features = false, features = ["std"] }
