@@ -99,6 +99,7 @@ export default defineConfig({
         "encryption/key-backup.spec.ts",
         "events/batch-realm-bootstrap.spec.ts",
         "identity/account-handoff.spec.ts",
+        "identity/contact-graph.spec.ts",
         "identity/direct-conversation-founding.spec.ts",
         "identity/device-key-lifecycle.spec.ts",
         "identity/multi-device.spec.ts",

@@ -376,7 +376,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
   // inkson route + testids (routes.rs RealmMembersPage, realm_admin/
   // members_panel.rs) match the helper, so the cursor-poisoning regression this
   // test guards runs end-to-end.
-  test("admin invite remains visible to invitee without poisoning account subscribe cursor", async ({
+  test("admin invite preserves since-join history and a writable current baseline without poisoning the account cursor", async ({
     browser,
     request,
   }) => {
@@ -430,6 +430,8 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         historyAccess: "since_join",
         encryptionProfile: "none",
       });
+      const beforeJoin = `before Bob joined ${stamp}`;
+      await alicePage.sendTimelineMessage(realmId, beforeJoin);
       await alicePage.inviteFromAdmin(realmId, bob.id);
 
       await expect
@@ -474,6 +476,24 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         `joint invite ${stamp}`,
         { timeout: 30_000 },
       );
+
+      // `since_join` is an authorization boundary, not a presentation hint:
+      // the joiner receives the current baseline needed to author successors,
+      // but no pre-join timeline contents.
+      await bobPage.gotoTimelineRealm(realmId);
+      await expect(bobPage.timelineEvent(beforeJoin)).toHaveCount(0);
+
+      const bobAfterJoin = `Bob writes after joining ${stamp}`;
+      await bobPage.sendTimelineMessage(realmId, bobAfterJoin);
+      await expect(bobPage.timelineEvent(beforeJoin)).toHaveCount(0);
+      await alicePage.gotoTimelineRealm(realmId);
+      await alicePage.expectTimelineEventVisible(bobAfterJoin, 30_000);
+
+      const aliceAfterJoin = `Alice replies after Bob joined ${stamp}`;
+      await alicePage.sendTimelineMessage(realmId, aliceAfterJoin);
+      await bobPage.expectTimelineEventVisible(aliceAfterJoin, 30_000);
+      await expect(bobPage.timelineEvent(beforeJoin)).toHaveCount(0);
+
       // Force alice's page to re-establish its account-subscribe stream after
       // the invite/join settled, then wait (bounded) for that fresh re-poll to
       // land. If the write path poisoned the cursor, this is the request that

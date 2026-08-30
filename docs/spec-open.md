@@ -168,10 +168,6 @@ Test-side, not spec-side. Listed so they are not mistaken for product bugs:
   `federation_policy` and both encryption floors. `writeJoinPolicyApi`'s own doc
   comment states every `cas_register` revision is a complete replacement. This
   is what triggers finding 2 in practice.
-- `identity/multi-device.spec.ts` submits a bare `ak.device.authorize` event for
-  the accepted-device branch; soland requires the registered
-  `ak.gate.account.command.pair_device.v1` gate and answers `412`. The operation
-  is in `operation-registry.json` — the test needs rewriting onto it.
 - `governance/moderation-appeal.spec.ts` submits `ak.moderation.appeal.review`
   before the preceding submit has projected, yielding
   `moderation_appeal_invalid_transition:none->under_review`. Needs a wait on the

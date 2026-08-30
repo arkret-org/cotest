@@ -983,6 +983,7 @@
         "session_injection"
       ],
       "protocol_object_producers": [
+        "cotest_wire_oracle",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
@@ -1052,26 +1053,30 @@
     {
       "scenario_key": "identity/multi-device",
       "suite_kind": "joint-e2e",
-      "realism_level": "server-contract",
-      "evidence_class": "server-contract",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
       "real_services": [
+        "coauth",
+        "inkson",
         "soland"
       ],
       "mocks": [],
       "identity_establishment": [
+        "oauth_authorization_ui",
         "session_injection"
       ],
       "protocol_object_producers": [
         "cotest_wire_oracle",
+        "inkson_product_client",
         "raw_http_fixture"
       ],
       "declared_test_bypasses": [
+        "prepare_mls_device_false",
         "raw_http_fixture_or_oracle",
-        "session_injection",
-        "test_only_signer_or_wire_builder"
+        "session_injection"
       ],
       "claims_excluded": [
-        "product_protocol_object_generation",
+        "mls_device_and_keypackage_readiness",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]

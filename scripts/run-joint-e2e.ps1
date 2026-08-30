@@ -4732,6 +4732,8 @@ if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
     $requiredScenarios = @(
         $requiredScenarios
         "encryption/key-backup"
+        "identity/contact-graph"
+        "identity/multi-device"
         "identity/recovery-key-to-encrypted-realm"
     ) | Sort-Object -Unique
 }

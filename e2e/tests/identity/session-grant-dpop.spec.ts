@@ -46,7 +46,9 @@ test.describe("Standard session grant DPoP boundary @fully-implemented", () => {
     expect([401, 403]).toContain(rejected.status());
   });
 
-  test("wrong htu and missing DPoP fail closed", async ({ request }) => {
+  test("malformed, stale, and replayed DPoP proofs fail closed", async ({
+    request,
+  }) => {
     const coauth = coauthBaseUrl();
     test.skip(!coauth, "joint Coauth endpoint is unavailable");
     const account = await registerCoauthPasswordAccount(request, coauth!);
@@ -66,6 +68,34 @@ test.describe("Standard session grant DPoP boundary @fully-implemented", () => {
     });
     expect([401, 403]).toContain(wrongHtu.status());
 
+    const wrongAth = await request.get(url, {
+      headers: {
+        authorization: `DPoP ${grant.grantJwt}`,
+        dpop: mintDpopProof({
+          deviceKey: account.initialHolderKey,
+          method: "GET",
+          url,
+          grantJwt: grant.grantJwt,
+          athOverride: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        }),
+      },
+    });
+    expect([401, 403]).toContain(wrongAth.status());
+
+    const stale = await request.get(url, {
+      headers: {
+        authorization: `DPoP ${grant.grantJwt}`,
+        dpop: mintDpopProof({
+          deviceKey: account.initialHolderKey,
+          method: "GET",
+          url,
+          grantJwt: grant.grantJwt,
+          iatSkewSeconds: -3_600,
+        }),
+      },
+    });
+    expect([401, 403]).toContain(stale.status());
+
     const missing = await request.get(url, {
       headers: { authorization: `DPoP ${grant.grantJwt}` },
     });
@@ -83,5 +113,27 @@ test.describe("Standard session grant DPoP boundary @fully-implemented", () => {
       },
     });
     expect([401, 403]).toContain(wrongScheme.status());
+
+    const replayedProof = mintDpopProof({
+      deviceKey: account.initialHolderKey,
+      method: "GET",
+      url,
+      grantJwt: grant.grantJwt,
+    });
+    const firstUse = await request.get(url, {
+      headers: {
+        authorization: `DPoP ${grant.grantJwt}`,
+        dpop: replayedProof,
+      },
+    });
+    expect(firstUse.status(), await firstUse.text()).toBe(200);
+
+    const replay = await request.get(url, {
+      headers: {
+        authorization: `DPoP ${grant.grantJwt}`,
+        dpop: replayedProof,
+      },
+    });
+    expect([401, 403]).toContain(replay.status());
   });
 });

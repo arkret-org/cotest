@@ -14,7 +14,12 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 import { solandBaseUrl } from "../../helpers/env";
 import { expectStructurallyIdentical } from "../../helpers/secret-safe";
 import { createDpopUserSession } from "../../helpers/users";
-import { authHeaders, createRealmApi } from "../../helpers/soland-api";
+import {
+  authHeaders,
+  canonicalJson,
+  createRealmApi,
+  uuidV7,
+} from "../../helpers/soland-api";
 import {
   acceptInviteArkret,
   contactRow,
@@ -31,6 +36,7 @@ import {
   revokeInviteConsentArkret,
   seedDirectConversationIdentityArkret,
   setInviteReceivePolicyArkret,
+  scopeUpdateContactArkret,
   tombstoneContactArkret,
 } from "../../helpers/contact-api";
 
@@ -486,11 +492,89 @@ test.describe("contact graph (same principal server)", () => {
     ).toBe(0);
   });
 
-  // S8: realm member pulled into a Circle without consent. Now implemented and
+  test("S8 scope narrowing is reversible on one lineage while stale cursors and terminal successors fail closed @fully-implemented", async ({
+    request,
+  }) => {
+    const [aliceSession, bobSession] = await Promise.all([
+      activeContactUser(request, "cg-s8-alice"),
+      activeContactUser(request, "cg-s8-bob"),
+    ]);
+    const { user: alice, token: aliceToken } = aliceSession;
+    const { user: bob, token: bobToken } = bobSession;
+
+    const { outcome } = await requestContactArkret(
+      request,
+      aliceToken,
+      bob.id,
+      { requestedScopes: ["direct_message"] },
+    );
+    await respondContactArkret(request, bobToken, {
+      requestId: outcome.request_event_ref,
+      requesterId: alice.id,
+      action: "accept",
+      grantedScopes: ["direct_message"],
+    });
+
+    const initial = await contactRow(request, aliceToken, bob.id);
+    expect(initial?.state).toBe("accepted");
+    const staleCursor = initial?.next_prepare_input;
+    expect(staleCursor).toBeTruthy();
+
+    const narrowed = await scopeUpdateContactArkret(
+      request,
+      aliceToken,
+      bob.id,
+      [],
+    );
+    const narrowedRow = await contactRow(request, aliceToken, bob.id);
+    expect(narrowedRow?.state).toBe("accepted");
+    expect(narrowedRow?.granted_by_me).toEqual([]);
+    expect(narrowedRow?.bidirectional_scopes).not.toContain("direct_message");
+    expect(narrowedRow?.next_prepare_input).toMatchObject({
+      contact_round_id: staleCursor!.contact_round_id,
+      version: staleCursor!.version + 1,
+      predecessor_event_ref: narrowed.scope_update_event_ref,
+    });
+
+    const staleNonce = uuidV7();
+    const scopeUpdateUrl = `${solandBaseUrl()}/_arkret/self/contacts/scope-update`;
+    const stalePrepare = await request.post(scopeUpdateUrl, {
+      headers: {
+        ...authHeaders(aliceToken, "POST", scopeUpdateUrl),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
+        phase: "prepare",
+        operation_id: `ak:operation:contact.scope_update.${staleNonce}`,
+        idempotency_key: staleNonce,
+        peer: { kind: "human", principal_id: bob.id },
+        ...staleCursor,
+        granted_to_peer_scopes: ["direct_message"],
+      }),
+    });
+    expect(stalePrepare.status(), await stalePrepare.text()).toBe(409);
+
+    await scopeUpdateContactArkret(request, aliceToken, bob.id, [
+      "direct_message",
+    ]);
+    const restored = await contactRow(request, aliceToken, bob.id);
+    expect(restored?.state).toBe("accepted");
+    expect(restored?.bidirectional_scopes).toContain("direct_message");
+    expect(restored?.next_prepare_input?.contact_round_id).toBe(
+      staleCursor!.contact_round_id,
+    );
+
+    await tombstoneContactArkret(request, aliceToken, bob.id);
+    const terminal = await contactRow(request, aliceToken, bob.id);
+    expect(terminal?.state).toBe("tombstoned");
+    expect(terminal?.next_prepare_input).toBeUndefined();
+  });
+
+  // S9: realm member pulled into a Circle without consent. Now implemented and
   // run for real in `identity/circle-member.spec.ts` (soland ships the
   // `/_arkret/self/circles/*` admin surface — AKP-0007). Kept here as a
   // pointer so the contact-graph table stays self-documenting.
-  test("S8 circle member manage without consent", async ({ request }) => {
+  test("S9 circle member manage without consent", async ({ request }) => {
     test.skip(
       true,
       "moved to identity/circle-member.spec.ts (real run): admin one-way pull into a Circle, pulled actor does zero operations",

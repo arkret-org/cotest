@@ -115,6 +115,11 @@ export type ContactTombstoneOutcome = {
   partial_revoke?: boolean;
 };
 
+export type ContactScopeUpdateOutcome = {
+  scope_update_event_ref?: string;
+  state?: ContactState;
+};
+
 export type DirectConversationResolveOutcome = {
   state:
     | "creation_required"
@@ -586,6 +591,83 @@ export async function tombstoneContactArkret(
     `tombstone contact ${contact}`,
   );
   return { ...accepted, state: "tombstoned" };
+}
+
+export async function scopeUpdateContactArkret(
+  request: APIRequestContext,
+  token: string,
+  contact: string,
+  grantedScopes: string[],
+  opts: { server?: SolandKey } = {},
+): Promise<ContactScopeUpdateOutcome> {
+  const row = await contactRow(request, token, contact, {
+    server: opts.server,
+  });
+  const next = row?.next_prepare_input;
+  if (!next) {
+    throw new Error(`contact ${contact} omits its scope-update lineage`);
+  }
+
+  const url = `${solandBaseUrl(opts.server)}/_arkret/self/contacts/scope-update`;
+  const nonce = uuidV7();
+  const operationId = `ak:operation:contact.scope_update.${nonce}`;
+  const prepared = await expectJsonOk<{
+    reservation_handle: string;
+    event_draft: { unsigned_event_bytes: string };
+  }>(
+    await request.post(url, {
+      headers: {
+        ...authHeaders(token, "POST", url),
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
+        phase: "prepare",
+        operation_id: operationId,
+        idempotency_key: nonce,
+        peer: { kind: "human", principal_id: contact },
+        ...next,
+        granted_to_peer_scopes: grantedScopes,
+      }),
+    }),
+    `prepare contact scope update ${contact}`,
+  );
+  const signedEvent = JSON.parse(
+    Buffer.from(
+      prepared.event_draft.unsigned_event_bytes,
+      "base64url",
+    ).toString("utf8"),
+  ) as Record<string, unknown>;
+  refreshEventEnvelopeProof(signedEvent);
+  const response = await request.post(url, {
+    headers: {
+      ...authHeaders(token, "POST", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({
+      phase: "commit",
+      operation_id: operationId,
+      idempotency_key: nonce,
+      reservation_handle: prepared.reservation_handle,
+      signed_event: signedEvent,
+    }),
+  });
+  const accepted = await expectJsonOk<ContactScopeUpdateOutcome>(
+    response,
+    `commit contact scope update ${contact}`,
+  );
+  await submitPrincipalSuccessorSealApi(
+    request,
+    token,
+    String(signedEvent.actor_id),
+    signedEvent,
+    { server: opts.server },
+  );
+  return {
+    ...accepted,
+    scope_update_event_ref:
+      accepted.scope_update_event_ref ?? String(signedEvent.event_id),
+    state: "accepted",
+  };
 }
 
 export async function resolveDirectConversationArkret(

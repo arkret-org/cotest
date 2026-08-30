@@ -8,6 +8,8 @@ $playwrightConfig = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\playwrigh
 $oidc = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\oidc-login-flow.spec.ts") -Raw
 $lifecycle = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\device-key-lifecycle.spec.ts") -Raw
 $keyBackup = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\encryption\key-backup.spec.ts") -Raw
+$contactGraph = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\contact-graph.spec.ts") -Raw
+$multiDevice = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\multi-device.spec.ts") -Raw
 $realmMatrix = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\recovery-key-to-encrypted-realm.spec.ts") -Raw
 
 function Assert-Contains {
@@ -25,6 +27,8 @@ Assert-Contains $oidc "@onboarding-recovery-gate" "Recovery Key onboarding test 
 Assert-Contains $oidc "@onboarding-resume-gate" "accepted onboarding resume test has no stable CI tag"
 Assert-Contains $lifecycle "@returning-device-key-gate" "device-key returning test has no stable CI tag"
 Assert-Contains $keyBackup "A3 real password/OIDC login restores MLS on a fresh browser with session-grant holder proof @fully-implemented" "fresh-browser Recovery Key restore is not in the default smoke selection"
+Assert-Contains $multiDevice "a second-device login stays unauthorized until the first device explicitly approves it" "accepted-device pairing is not in the default smoke selection"
+Assert-Contains $multiDevice "a fresh browser can use the 24-word Recovery Key instead of first-device approval" "direct 24-word device recovery is not in the default smoke selection"
 Assert-Contains $realmMatrix "fresh browser registration creates, writes, and reloads plaintext and encrypted Realms" "canonical Realm encryption matrix is missing"
 Assert-NotContains $oidc 'test.describe.configure({ mode: "serial" })' "independent OIDC cases must not cascade-skip after an earlier failure"
 
@@ -42,9 +46,14 @@ Assert-Contains $runner '[switch]$ForbidSkippedTests' "joint runner has no non-s
 Assert-Contains $runner '[string]$RequireScenario' "joint runner has no required-scenario enforcement"
 Assert-Contains $runner 'Playwright selected zero tests' "joint runner has no zero-selection enforcement"
 Assert-Contains $runner '"encryption/key-backup"' "joint-smoke does not require fresh-browser Recovery Key restore evidence"
+Assert-Contains $runner '"identity/contact-graph"' "joint-smoke does not require the Contact lineage lifecycle"
+Assert-Contains $runner '"identity/multi-device"' "joint-smoke does not require both fresh-device entry paths"
 Assert-Contains $runner '"identity/recovery-key-to-encrypted-realm"' "joint-smoke does not require the canonical Realm encryption matrix"
 Assert-Contains $playwrightConfig '"encryption/key-backup.spec.ts"' "joint-inkson does not discover fresh-browser Recovery Key restore"
+Assert-Contains $playwrightConfig '"identity/contact-graph.spec.ts"' "joint-inkson does not discover Contact lineage coverage"
 Assert-Contains $playwrightConfig '"identity/recovery-key-to-encrypted-realm.spec.ts"' "joint-inkson does not discover the canonical Realm encryption matrix"
+Assert-Contains $contactGraph 'scope narrowing is reversible on one lineage' "Contact lineage lifecycle coverage is missing"
+Assert-Contains $contactGraph '@fully-implemented' "Contact lineage lifecycle is not selected by joint-smoke"
 
 $e2eRoot = Join-Path $repoRoot "e2e"
 $playwrightCli = Join-Path $e2eRoot "node_modules\playwright\cli.js"
@@ -79,5 +88,18 @@ $matrixSelection = ($matrixListed -join "`n") -replace '\\', '/'
 Assert-Contains $matrixSelection "encryption/key-backup.spec.ts" "joint-inkson did not discover fresh-browser Recovery Key restore"
 Assert-Contains $matrixSelection "identity/recovery-key-to-encrypted-realm.spec.ts" "joint-inkson did not discover the canonical Realm encryption matrix"
 Assert-Contains $matrixSelection "Total: 2 tests in 2 files" "Recovery Key/Realm matrix selection changed; review the required scenario matrix"
+
+Push-Location $e2eRoot
+try {
+    $deviceEntryListed = @(& node $playwrightCli test --config playwright.config.ts --project=joint-inkson --grep "second-device login stays unauthorized|24-word Recovery Key instead" --list 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright fresh-device entry selection failed:`n$($deviceEntryListed -join [Environment]::NewLine)"
+    }
+} finally {
+    Pop-Location
+}
+$deviceEntrySelection = ($deviceEntryListed -join "`n") -replace '\\', '/'
+Assert-Contains $deviceEntrySelection "identity/multi-device.spec.ts" "joint-inkson did not discover both fresh-device entry paths"
+Assert-Contains $deviceEntrySelection "Total: 2 tests in 1 file" "fresh-device entry selection changed; review the required scenario matrix"
 
 Write-Host "Identity CI selection regression tests passed."
