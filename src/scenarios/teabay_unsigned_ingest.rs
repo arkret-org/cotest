@@ -98,7 +98,6 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
         },
         source_refs: vec![discovery_event_id.into_string()],
         as_of: Utc::now(),
-        station_id,
         ttl_seconds: None,
         supersedes_announce_id: None,
     };
