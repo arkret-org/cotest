@@ -645,12 +645,12 @@ async fn create_invite_now(
 
 fn same_service_invite_payload(
     invitee: &str,
-    recipient_id: &str,
+    account_station_id: &str,
     expires_at: DateTime<Utc>,
 ) -> Result<(Value, IntroductionEvidence)> {
     let evidence = IntroductionEvidence::SameStation;
     let evidence_digest = arkret_canonical::canonical_sha256(&evidence)?;
-    let payload = invite_create_payload(invitee, recipient_id, &evidence_digest, expires_at)?;
+    let payload = invite_create_payload(invitee, account_station_id, &evidence_digest, expires_at)?;
     Ok((payload, evidence))
 }
 

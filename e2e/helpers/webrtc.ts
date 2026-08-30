@@ -11,6 +11,7 @@ import {
 } from "node:crypto";
 import { solandBaseUrl, solandServiceId } from "./env";
 import {
+  accountActorId,
   addRealmMemberApi,
   authHeaders,
   accountSubscribeFramesApi,
@@ -389,9 +390,8 @@ export async function grantCallCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: realmId,
-    issuer_id: ownerId,
-    subject: subjectId,
-    subject_station_id: solandServiceId(),
+    issuer_id: accountActorId(ownerId),
+    subject: accountActorId(subjectId),
     actions: [action],
     resources,
     constraints: [authorityConstraint],

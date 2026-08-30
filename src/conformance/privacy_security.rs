@@ -16,6 +16,7 @@ use arkret::mls::{
     AuthorGroupStateView, AuthorLeaf, AuthorLeafCredential, MinimalMetadataAuthorClaim,
     verify_minimal_metadata_author,
 };
+use arkret_wire::ActorId;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -153,7 +154,7 @@ struct VectorCase {
 
 #[derive(Clone, Debug, Deserialize)]
 struct BaseFixture {
-    actor_id: String,
+    actor_id: ActorId,
     transport_session_actor: String,
     realm_declares_minimal_metadata_profile: bool,
     pairwise_actor_current_member: bool,
@@ -271,13 +272,13 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
         .context("vector proof controller must be a Did")?;
     let projected_actor = arkret_identifiers::project_did_to_core_id(&proof_controller)
         .context("vector proof controller has no active adapter")?;
-    if projected_actor.as_str() != case.base.actor_id {
+    if &projected_actor != case.base.actor_id.signing_principal_id() {
         bail!("vector proof Did does not project to the pairwise Core DidCoreId");
     }
     if case.base.proof.resolved_public_key != case.base.leaf.signature_key {
         bail!("vector base proof key must equal the leaf signature_key byte for byte");
     }
-    if case.base.transport_session_actor == case.base.actor_id {
+    if case.base.transport_session_actor == case.base.actor_id.to_string() {
         bail!("transport session actor must differ from the pairwise Event actor");
     }
     if !case.base.realm_declares_minimal_metadata_profile
@@ -295,8 +296,7 @@ pub fn run_minimal_metadata_author_credential_vector() -> Result<()> {
         bail!("minimal-metadata author credential assertion catalogue drifted");
     }
 
-    let actor_id = arkret_identifiers::DidCoreId::new(case.base.actor_id.clone())
-        .context("vector base actor_id must be a valid Core DidCoreId")?;
+    let actor_id = case.base.actor_id.signing_principal_id().clone();
 
     for mutation_case in &case.cases {
         // Per-case rebuild from base: mutations never leak across cases.

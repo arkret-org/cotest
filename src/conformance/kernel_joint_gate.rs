@@ -17,9 +17,9 @@ use arkret_wire::offline_publication::{
     AuthorizationLease, LeaseBasisRef, RiskTier,
 };
 use arkret_wire::{
-    CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, Did, DidUrl, LatticeOp,
-    LatticeOpType, NotarySig, NotaryValue, OperationKind, ProducerEventProof, SchemaId, ScopeRef,
-    Seal, SealSignature,
+    ActorId, CapabilityActionId, CbaProofBundle, ControlProposalDecisionPolicy, Did, DidUrl,
+    LatticeOp, LatticeOpType, NotarySig, NotaryValue, OperationKind, ProducerEventProof, SchemaId,
+    ScopeRef, Seal, SealSignature,
 };
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
@@ -276,7 +276,7 @@ fn kernel_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
     };
     let mut ops = Vec::new();
     for write in writes {
-        let Some(actor) = write.get("actor_id").and_then(Value::as_str) else {
+        let Some(actor) = write.get("actor_id") else {
             return error("schema_violation", "actor_id_missing");
         };
         let Some(digest) = write.get("event_digest").and_then(Value::as_str) else {
@@ -285,15 +285,14 @@ fn kernel_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
         let Some(value) = write.get("value").cloned() else {
             return error("schema_violation", "data_value_missing");
         };
-        let (Ok(issuer), Ok(move_id)) = (DidCoreId::new(actor), Hash::new(digest)) else {
+        let (Ok(issuer), Ok(move_id)) = (
+            serde_json::from_value::<ActorId>(actor.clone()),
+            Hash::new(digest),
+        ) else {
             return error("schema_violation", "offline_write_identifier_invalid");
         };
         ops.push(IssuedOp {
-            issuer_id: arkret_wire::ActorId::hosted_principal(
-                issuer,
-                DidCoreId::new("ak:did_core:web:station.example")
-                    .expect("fixture Station is valid"),
-            ),
+            issuer_id: issuer,
             op: SealedOp::new(
                 move_id,
                 lattice_op(LatticeOpType::Append, None, Some(value), Some(0)),
@@ -676,28 +675,32 @@ fn notary_members(notary: &NotaryValue) -> BTreeSet<String> {
             recovery_signers,
             ..
         } => {
-            let mut members = BTreeSet::from([signer.actor_id.as_str().to_owned()]);
+            let mut members = BTreeSet::from([
+                signer.actor_id.signing_principal_id().as_str().to_owned(),
+            ]);
             members.extend(
                 recovery_signers
                     .iter()
-                    .map(|member| member.actor_id.as_str().to_owned()),
+                    .map(|member| member.actor_id.signing_principal_id().as_str().to_owned()),
             );
             members
         }
         NotaryValue::Threshold { signers, .. } | NotaryValue::OpenSet { signers } => signers
             .iter()
-            .map(|member| member.actor_id.as_str().to_owned())
+            .map(|member| member.actor_id.signing_principal_id().as_str().to_owned())
             .collect(),
         NotaryValue::Mixed {
             signer,
             recovery_signers,
             ..
         } => {
-            let mut members = BTreeSet::from([signer.actor_id.as_str().to_owned()]);
+            let mut members = BTreeSet::from([
+                signer.actor_id.signing_principal_id().as_str().to_owned(),
+            ]);
             members.extend(
                 recovery_signers
                     .iter()
-                    .map(|member| member.actor_id.as_str().to_owned()),
+                    .map(|member| member.actor_id.signing_principal_id().as_str().to_owned()),
             );
             members
         }
@@ -967,6 +970,7 @@ mod tests {
                 .map(DeviceId::as_str),
             Some("ak:device:0196419b-0000-7000-8000-000000000001")
         );
+        let expected_creator_actor_id = operation.context.sender.to_string();
 
         let effect = mls::apply_group_genesis(&mut state, &operation);
 
@@ -976,7 +980,7 @@ mod tests {
                 ref creator_actor_id,
                 ref creator_device_id,
                 ..
-            }) if creator_actor_id == "ak:did_core:web:fixture.example"
+            }) if creator_actor_id == &expected_creator_actor_id
                 && creator_device_id == "ak:device:0196419b-0000-7000-8000-000000000001"
         ));
     }

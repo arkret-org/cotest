@@ -852,7 +852,7 @@ fn validate_cache_expiry(fixture: &Fixture, case: &SemanticCase) -> Result<()> {
 
 fn validate_core_boundary(fixture: &Fixture, case: &SemanticCase) -> Result<()> {
     let entry = cache_fixture_entry(fixture)?;
-    let bound = text(&case.inputs, "/member_recipient_id")?;
+    let bound = text(&case.inputs, "/account_station_id")?;
     let same = text(&case.inputs, "/same_core_successor_service_id")?;
     let replacement = text(&case.inputs, "/new_core_candidate_service_id")?;
     let projected = project_did_to_core_id(&entry.did)?;
@@ -862,9 +862,12 @@ fn validate_core_boundary(fixture: &Fixture, case: &SemanticCase) -> Result<()> 
         || same != bound
         || replacement_projected.as_str() != replacement
         || replacement == bound
-        || flag(&case.expected_effects, "/same_core_member_rebind_written")?
+        || flag(&case.expected_effects, "/same_core_membership_write")?
         || flag(&case.expected_effects, "/new_core_route_cache_accepted")?
-        || !flag(&case.expected_effects, "/new_core_member_rebind_required")?
+        || !flag(
+            &case.expected_effects,
+            "/new_core_account_membership_required",
+        )?
     {
         bail!("{} blurred route refresh and service rebind", case.name);
     }

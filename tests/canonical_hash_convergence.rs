@@ -66,7 +66,7 @@ fn vectors() -> Vec<CanonicalVector> {
             // re-introduced a hand-rolled canonical encoder. To regenerate:
             // `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:be0d07256d6f5fb2a889cd88e87f6099792bb7e4fb0f6e518f6d00e2c2a6717a",
+            expected_digest: "sha256:7c87e0fa622e365440d5d79bf7bb1fdded09f017dfa7aedc65a0f0288b988e73",
         },
         CanonicalVector {
             vector_id: "ak.cotest_vector.canonical_hash.soland_event_envelope.v1",
@@ -141,7 +141,7 @@ fn vectors() -> Vec<CanonicalVector> {
             }),
             // Pinned via `cargo test -p cotest --test canonical_hash_convergence \
             //  dump_canonical_digests -- --ignored --nocapture`.
-            expected_digest: "sha256:8f880c851f355ced30f48526fa91c37813159d9263e10c30331ee551020ff2d7",
+            expected_digest: "sha256:ebee51b6ecbae11f207082a72557b911f8a7f93e2fc5643ea787a84efd7f336c",
         },
     ]
 }
@@ -349,7 +349,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     )
     .expect("effective-set digest");
     assert_eq!(
-        effective_set, "sha256:ae2a995158ba4c13a2230f708cf4eaea6dbeeb3834af30bceb534cf354d79dc8",
+        effective_set, "sha256:3bc181a943263724f6ec892fb01e624c2310b1bb54de1c79bbecef7a6dd6ac20",
         "member_identity_effective_set_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 
@@ -357,7 +357,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:969393d2016a3485391441f28e009c4ac529df6763791d9aab35ccddaea7fee0",
+        display_state, "sha256:bf8c654d813795bc1e9c0f5a7d387a1a0093d3eca69fd260dfc76db97a3b8e05",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

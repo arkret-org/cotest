@@ -26,6 +26,7 @@ import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import type { RealmObject } from "./generated/spec-wire-objects";
 import {
+  accountActorId,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
@@ -86,9 +87,8 @@ export async function grantCircleMemberManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer_id: args.ownerId,
-    subject: args.subjectId,
-    subject_station_id: solandServiceId(args.server),
+    issuer_id: accountActorId(args.ownerId, args.server),
+    subject: accountActorId(args.subjectId, args.server),
     actions: ["ak.circle.member.manage"],
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
@@ -145,9 +145,8 @@ export async function grantCircleManageCapability(
   const unsignedGrant: Record<string, unknown> = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
-    issuer_id: args.ownerId,
-    subject: args.subjectId,
-    subject_station_id: solandServiceId(args.server),
+    issuer_id: accountActorId(args.ownerId, args.server),
+    subject: accountActorId(args.subjectId, args.server),
     actions: ["ak.circle.manage"],
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },

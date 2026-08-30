@@ -12,7 +12,10 @@
             "notary": {
               "kind": "single_signer",
               "signer": {
-                "actor_id": "ak:did_core:web:notary.example",
+                "actor_id": {
+                  "kind": "service",
+                  "service_id": "ak:did_core:web:notary.example"
+                },
                 "verification_method": "did:web:notary.example#notary-key-1",
                 "key_kind": "ed25519_raw32",
                 "jose_algorithm": "Ed25519",
@@ -64,7 +67,10 @@
           "notary": {
             "kind": "single_signer",
             "signer": {
-              "actor_id": "ak:did_core:web:notary.example",
+              "actor_id": {
+                "kind": "service",
+                "service_id": "ak:did_core:web:notary.example"
+              },
               "verification_method": "did:web:notary.example#notary-key-1",
               "key_kind": "ed25519_raw32",
               "jose_algorithm": "Ed25519",
@@ -101,7 +107,10 @@
             "kind": "open_set",
             "signers": [
               {
-                "actor_id": "ak:did_core:web:notary-a.example",
+                "actor_id": {
+                  "kind": "service",
+                  "service_id": "ak:did_core:web:notary-a.example"
+                },
                 "verification_method": "did:web:notary-a.example#notary-key-1",
                 "key_kind": "ed25519_raw32",
                 "jose_algorithm": "Ed25519",
@@ -109,7 +118,10 @@
                 "frozen_public_key_digest": "sha256:a6022dfca46e307e79cf859f5c23fbc6487277471d0d5c21bbd5b92286c80c83"
               },
               {
-                "actor_id": "ak:did_core:web:notary-b.example",
+                "actor_id": {
+                  "kind": "service",
+                  "service_id": "ak:did_core:web:notary-b.example"
+                },
                 "verification_method": "did:web:notary-b.example#notary-key-1",
                 "key_kind": "ed25519_raw32",
                 "jose_algorithm": "Ed25519",
@@ -230,7 +242,13 @@
         "payload": {
           "offline_writes": [
             {
-              "actor_id": "ak:did_core:web:alice.example",
+              "actor_id": {
+                "kind": "account",
+                "account_id": {
+                  "principal_id": "ak:did_core:web:alice.example",
+                  "station_id": "ak:did_core:web:station.example"
+                }
+              },
               "device_id": "ak:device:0196419b-0000-7000-8000-000000000001",
               "event_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
               "value": {
@@ -238,7 +256,13 @@
               }
             },
             {
-              "actor_id": "ak:did_core:web:alice.example",
+              "actor_id": {
+                "kind": "account",
+                "account_id": {
+                  "principal_id": "ak:did_core:web:alice.example",
+                  "station_id": "ak:did_core:web:station.example"
+                }
+              },
               "device_id": "ak:device:0196419b-0000-7000-8000-000000000002",
               "event_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
               "value": {
@@ -257,7 +281,7 @@
         "value": {
           "entries": [
             {
-              "issuer_id": "ak:did_core:web:alice.example",
+              "issuer_id": "{\"account_id\":{\"principal_id\":\"ak:did_core:web:alice.example\",\"station_id\":\"ak:did_core:web:station.example\"},\"kind\":\"account\"}",
               "issuer_seq": 0,
               "event_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
               "value": {
@@ -265,7 +289,7 @@
               }
             },
             {
-              "issuer_id": "ak:did_core:web:alice.example",
+              "issuer_id": "{\"account_id\":{\"principal_id\":\"ak:did_core:web:alice.example\",\"station_id\":\"ak:did_core:web:station.example\"},\"kind\":\"account\"}",
               "issuer_seq": 0,
               "event_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
               "value": {

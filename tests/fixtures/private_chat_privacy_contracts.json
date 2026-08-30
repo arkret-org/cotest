@@ -18,7 +18,13 @@
     "expected_founding_unit_digest": "sha256:3cd20dd09f6c8bc93757a03640c1612a6b85599eeb702cc488e2cc083ebfa46e",
     "receipt": {
       "pair_key": "sha256:3d22d109393a4fea67b26165e9a766269af1cefe49520b84ed09132178e3df9b",
-      "founder_id": "ak:did_core:web:bob.example",
+      "founder_id": {
+        "kind": "account",
+        "account_id": {
+          "principal_id": "ak:did_core:web:bob.example",
+          "station_id": "ak:did_core:web:station.example"
+        }
+      },
       "realm_id": "ak:realm:AQJmSg1s9QyzppFeJL40dN92YVHZeLdBBt3UWHa9XNOD",
       "main_strand_id": "ak:strand:AT0qp3NTTWtVZNVOgsvsAncs9xRV-c5HXCz7uzXd7NQS",
       "founding_unit_digest": "sha256:3cd20dd09f6c8bc93757a03640c1612a6b85599eeb702cc488e2cc083ebfa46e",
@@ -36,7 +42,7 @@
         "jws": "eyJhbGciOiJFZERTQSJ9"
       }
     },
-    "expected_receipt_transcript_digest": "sha256:efe0415df7b7f53c50f5bec1ec7fe7e255888d883e0db7595498985c2bcf0c65",
+    "expected_receipt_transcript_digest": "sha256:74caaccdaed493e2e568d32bc67f41ee9788be30b028f46d8728a2e0cfba0e27",
     "expected_peer_verdict": "accept"
   },
   "account_data_cases": {
@@ -175,7 +181,10 @@
     "resolve_request": {
       "peer": {
         "kind": "human",
-        "principal_id": "ak:did_core:web:bob.example"
+        "account_id": {
+          "principal_id": "ak:did_core:web:bob.example",
+          "station_id": "ak:did_core:web:station.example"
+        }
       }
     },
     "resolve_unavailable_response": {
@@ -198,8 +207,20 @@
     "binding_payload": {
       "pair_key": "sha256:3d22d109393a4fea67b26165e9a766269af1cefe49520b84ed09132178e3df9b",
       "unordered_participant_ids": [
-        "ak:did_core:web:alice.example",
-        "ak:did_core:web:bob.example"
+        {
+          "kind": "account",
+          "account_id": {
+            "principal_id": "ak:did_core:web:alice.example",
+            "station_id": "ak:did_core:web:station.example"
+          }
+        },
+        {
+          "kind": "account",
+          "account_id": {
+            "principal_id": "ak:did_core:web:bob.example",
+            "station_id": "ak:did_core:web:station.example"
+          }
+        }
       ],
       "realm_id": "ak:realm:Af-BcSQlU1OLsK_s3qms1wnA0sSHd7tqhZUbndr27MIr",
       "main_strand_id": "ak:strand:AZ-m1WoJMcvcmuv8zYbD6W7EWy8CWdxsoD-QYgNkHZp3",
@@ -259,7 +280,10 @@
       "resolve_request": {
         "peer": {
           "kind": "human",
-          "principal_id": "ak:did_core:web:chrid.example"
+          "account_id": {
+            "principal_id": "ak:did_core:web:chrid.example",
+            "station_id": "ak:did_core:web:station.example"
+          }
         }
       },
       "expected_error": {

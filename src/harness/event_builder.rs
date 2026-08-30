@@ -1231,14 +1231,14 @@ pub(crate) fn member_transition_payload(
 
 pub(crate) fn invite_create_payload(
     invitee: &str,
-    recipient_id: &str,
+    account_station_id: &str,
     introduction_evidence_digest: impl Into<String>,
     expires_at: DateTime<Utc>,
 ) -> Result<Value> {
     let invitee_did =
         Did::new(invitee.to_owned()).map_err(|err| anyhow!("invalid invitee DID: {err}"))?;
-    let station_id = arkret_identifiers::DidCoreId::new(recipient_id.to_owned())
-        .map_err(|err| anyhow!("invalid recipient Station core id: {err}"))?;
+    let station_id = arkret_identifiers::DidCoreId::new(account_station_id.to_owned())
+        .map_err(|err| anyhow!("invalid account Station core id: {err}"))?;
     InviteCreatePayload::new(
         AccountId::new(
             arkret_identifiers::project_did_to_core_id(&invitee_did)?,

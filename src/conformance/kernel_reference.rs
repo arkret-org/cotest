@@ -175,10 +175,13 @@ fn reduce_offline_data(input: &KernelGateInput) -> KernelGateOutcome {
         let Some(value) = write.get("value") else {
             return KernelGateOutcome::error("schema_violation", "data_value_missing");
         };
-        let Some(actor_id) = write.get("actor_id").and_then(Value::as_str) else {
+        let Some(actor_id) = write.get("actor_id") else {
             return KernelGateOutcome::error("schema_violation", "actor_id_missing");
         };
-        by_digest.insert(digest.to_owned(), (actor_id.to_owned(), value.clone()));
+        let Ok(actor_id) = serde_json::from_value::<arkret_wire::ActorId>(actor_id.clone()) else {
+            return KernelGateOutcome::error("schema_violation", "actor_id_invalid");
+        };
+        by_digest.insert(digest.to_owned(), (actor_id.to_string(), value.clone()));
     }
     if by_digest.is_empty() {
         return KernelGateOutcome::error("schema_violation", "offline_writes_empty");

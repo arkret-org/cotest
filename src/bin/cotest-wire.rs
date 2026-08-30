@@ -643,7 +643,10 @@ fn build_pcr_genesis_unit(
         )?);
     let authorize_payload_value = serde_json::to_value(&authorize_payload)?;
     let founding_notary = arkret::NotaryValue::single_signer(arkret::NotarySignerDescriptor {
-        actor_id: principal_id.clone(),
+        actor_id: arkret::ActorId::account(arkret::AccountId::new(
+            principal_id.clone(),
+            station_id.clone(),
+        )),
         verification_method: arkret::DidUrl::new(format!("{principal}#{device_id}"))
             .map_err(anyhow::Error::msg)?,
         key_kind: arkret::NotaryKeyKind::Ed25519Raw32,

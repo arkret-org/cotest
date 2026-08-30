@@ -570,11 +570,15 @@ export async function registerCoauthPasswordAccount(
       })}`,
     );
   }
+  const completeAccountId = {
+    principal_id: accountId.principal_id,
+    station_id: accountId.station_id,
+  };
   const eventSigningKey = dpopDeviceKeyFromSeedB64url(deviceSigningSeed);
   const initialGrant: DpopBoundGrant = {
     grantId,
     grantJwt,
-    accountId,
+    accountId: completeAccountId,
     dpopJkt: handoff.deviceKey.thumbprint,
     audience: grantAudience,
     scopes: Array.isArray(sessionOutcome.granted_scope)

@@ -841,8 +841,8 @@ export type IntroductionEvidence =
 // invite-delivery consistency checks (src/routing/invites.rs
 // validate_invite_delivery_consistency + projection required fields):
 //   - kind == ak.invite.create
-//   - payload.invitee_id == invite_address.subject_id
-//   - payload.invite_delivery_target.recipient_id == recipient svc
+//   - payload.invitee_id == invite_address.account_id.principal_id
+//   - payload.invite_delivery_target.account_id.station_id == recipient svc
 //   - payload.introduction_evidence_digest == sha256(canonical_json(evidence))
 //   - the invite id is retyped from the create Event id and omitted from payload
 export function buildInviteCreateEvent(args: {
@@ -869,8 +869,10 @@ export function buildInviteCreateEvent(args: {
     payload: {
       invitee_id: args.inviteeId,
       invite_delivery_target: {
-        recipient_id: args.recipientServiceId,
-        recipient_kind: "station",
+        account_id: {
+          principal_id: args.inviteeId,
+          station_id: args.recipientServiceId,
+        },
         // invite-addressing.md §6: this carrier MUST later be byte-for-byte
         // equal to `invite_address.service_resolution`, so both sides read the
         // same normalizer.
@@ -947,10 +949,11 @@ async function deliverInvite(
   const acceptedEventId = String(event.event_id);
   const inviteId = retypeEventDerivedId(acceptedEventId, "invite");
   const inviteAddress = {
-    subject_id: args.inviteeId,
-    recipient_id: recipientServiceId,
+    account_id: {
+      principal_id: args.inviteeId,
+      station_id: recipientServiceId,
+    },
     service_resolution: canonicalServiceResolution(args.recipientServer),
-    recipient_kind: "station" as const,
   };
   const idempotencyKey =
     args.idempotencyKey ?? `${args.idempotencyKeyPrefix}:${inviteId}`;

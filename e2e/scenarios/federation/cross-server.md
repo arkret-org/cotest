@@ -79,7 +79,7 @@
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
    - `realm_id = realmId`
-   - `service_binding_ref` 含 `realm_policy_digest` / `membership_frontier` / `delivery_binding_frontier`
+   - `service_binding_ref` 含 `realm_policy_digest` / `membership_frontier`; 成员 ActorId 中的 Station 是路由真相
    - `events: [<完整签名的 ak.invite.create Envelope>]`
    - HTTP headers `Signature-Input`、`Signature`、`Content-Digest`
 7. β 校验:

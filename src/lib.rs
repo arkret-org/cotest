@@ -133,7 +133,7 @@ pub fn fixture_notary_signer_for_method(
     ))
     .unwrap_or_else(|error| panic!("fixture notary digest is invalid: {error}"));
     arkret_wire::NotarySignerDescriptor {
-        actor_id,
+        actor_id: arkret_wire::ActorId::service(actor_id),
         verification_method,
         key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
         jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,

@@ -2,7 +2,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_crypto::{BackupKind, KeyBackupKeybag, KeyBackupPlaintext, KeyBackupUnlockProof};
-use arkret_wire::ProfileId;
+use arkret_wire::{ActorId, ProfileId};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -145,7 +145,7 @@ struct RecoverySessionState {
 
 struct BackupEnvelopeState {
     backup_id: String,
-    actor_id: String,
+    actor_id: ActorId,
     backup_kind: String,
     series_id: String,
     series_seq: u64,
@@ -168,7 +168,12 @@ fn recovery_session_state(value: &Value) -> Result<RecoverySessionState> {
 fn backup_envelope_state(value: &Value) -> Result<BackupEnvelopeState> {
     Ok(BackupEnvelopeState {
         backup_id: required_str(value, "backup_id")?.to_owned(),
-        actor_id: required_str(value, "actor_id")?.to_owned(),
+        actor_id: serde_json::from_value(
+            value
+                .get("actor_id")
+                .cloned()
+                .ok_or_else(|| anyhow!("envelope missing actor_id"))?,
+        )?,
         backup_kind: required_str(value, "backup_kind")?.to_owned(),
         series_id: required_str(value, "series_id")?.to_owned(),
         series_seq: value
@@ -192,7 +197,7 @@ fn backup_class_str(backup_kind: BackupKind) -> &'static str {
 
 fn authorize_unlock(
     path_backup_id: &str,
-    caller: &str,
+    caller: &ActorId,
     proof: Option<&KeyBackupUnlockProof>,
     session: &RecoverySessionState,
     envelope: &BackupEnvelopeState,
@@ -200,7 +205,7 @@ fn authorize_unlock(
     if !session.fresh_device_proof {
         return Err(arkret_wire::ErrorCode::UNAUTHENTICATED);
     }
-    if caller != envelope.actor_id {
+    if caller != &envelope.actor_id {
         return Err(arkret_wire::ErrorCode::CAPABILITY_DENIED);
     }
     let Some(proof) = proof else {
@@ -346,7 +351,9 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
     bearer_session.fresh_device_proof = true;
     if authorize_unlock(
         &envelope.backup_id,
-        "did:web:bob.example",
+        &ActorId::service(arkret_identifiers::DidCoreId::new(
+            "ak:did_core:web:bob.example",
+        )?),
         Some(&proof),
         &bearer_session,
         &envelope,

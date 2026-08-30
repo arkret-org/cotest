@@ -76,6 +76,23 @@ test.beforeEach(() => {
   }
 });
 
+function accountActorRoutesThrough(
+  value: unknown,
+  stationId: string,
+  principalId?: string,
+): boolean {
+  if (!value || typeof value !== "object") return false;
+  const actor = value as Record<string, unknown>;
+  if (actor.kind !== "account" || !actor.account_id || typeof actor.account_id !== "object") {
+    return false;
+  }
+  const account = actor.account_id as Record<string, unknown>;
+  return (
+    account.station_id === stationId &&
+    (principalId === undefined || account.principal_id === principalId)
+  );
+}
+
 async function waitForInvite(
   request: APIRequestContext,
   token: string,
@@ -425,8 +442,10 @@ test.describe("cross-server federation", () => {
         invite_id: inviteId,
         invitee_id: bob.id,
         invite_delivery_target: {
-          recipient_id: solandServiceId("beta"),
-          recipient_kind: "station",
+          account_id: {
+            principal_id: bob.id,
+            station_id: solandServiceId("beta"),
+          },
         },
         introduction_evidence_digest: `sha256:${"ab".repeat(32)}`,
         expires_at: new Date(Date.now() + 86_400_000).toISOString(),
@@ -591,16 +610,10 @@ test.describe("cross-server federation", () => {
         if (event.kind !== "ak.member.state") {
           return false;
         }
-        const payload = event.payload as
-          | {
-              delivery_binding?: {
-                recipient_id?: string;
-              };
-            }
-          | undefined;
-        return (
-          payload?.delivery_binding?.recipient_id ===
-          solandServiceId("alpha")
+        const payload = event.payload as Record<string, unknown> | undefined;
+        return accountActorRoutesThrough(
+          payload?.actor_id,
+          solandServiceId("alpha"),
         );
       });
       expect(alphaBindingEvent?.event_id).toBeTruthy();
@@ -793,16 +806,10 @@ test.describe("cross-server federation", () => {
       if (event.kind !== "ak.member.state") {
         return false;
       }
-      const payload = event.payload as
-        | {
-            delivery_binding?: {
-              recipient_id?: string;
-            };
-          }
-        | undefined;
-      return (
-        payload?.delivery_binding?.recipient_id ===
-        solandServiceId("alpha")
+      const payload = event.payload as Record<string, unknown> | undefined;
+      return accountActorRoutesThrough(
+        payload?.actor_id,
+        solandServiceId("alpha"),
       );
     });
     expect(alphaBindingEvent?.event_id).toBeTruthy();
@@ -853,17 +860,11 @@ test.describe("cross-server federation", () => {
       if (event.kind !== "ak.invite.create") {
         return false;
       }
-      const payload = event.payload as
-        | {
-            invite_delivery_target?: {
-              recipient_id?: string;
-            };
-          }
+      const payload = event.payload as Record<string, unknown> | undefined;
+      const target = payload?.invite_delivery_target as
+        | { account_id?: { station_id?: string } }
         | undefined;
-      return (
-        payload?.invite_delivery_target?.recipient_id ===
-        solandServiceId("beta")
-      );
+      return target?.account_id?.station_id === solandServiceId("beta");
     });
     expect(betaBindingEvent?.event_id).toBeTruthy();
     const ingest = await pushFederationEvents(request, missingBackfillEvents, {

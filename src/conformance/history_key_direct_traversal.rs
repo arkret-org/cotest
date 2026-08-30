@@ -153,17 +153,18 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             .pointer("/since_join_lineage")
             .context("history-key fixture omits since_join_lineage")?,
     )?;
-    verify_direct_traversal_replay_kat(&fixture.direct_traversal_replay_kat)?;
-    verify_history_digest_and_sender_kats(&fixture)?;
-    verify_governance_dependency_kats(&fixture)?;
-    verify_rrk_method_evaluator(&fixture)?;
-    verify_rrk_production_projection_and_join(&fixture)?;
-    verify_rrk_durable_before_gc(&fixture)?;
-    verify_response_stream_fixture(&fixture)?;
-    verify_client_convergence_kat(&fixture)?;
-    verify_history_candidate_store_kat(&fixture)?;
-    verify_history_static_gates(&fixture)?;
-    verify_scope_and_endpoint_kats(&fixture)?;
+    verify_direct_traversal_replay_kat(&fixture.direct_traversal_replay_kat)
+        .context("direct traversal replay KAT")?;
+    verify_history_digest_and_sender_kats(&fixture).context("history digest and sender KATs")?;
+    verify_governance_dependency_kats(&fixture).context("governance dependency KATs")?;
+    verify_rrk_method_evaluator(&fixture).context("RRK method evaluator")?;
+    verify_rrk_production_projection_and_join(&fixture).context("RRK production projection")?;
+    verify_rrk_durable_before_gc(&fixture).context("RRK durable-before-GC")?;
+    verify_response_stream_fixture(&fixture).context("history response stream fixture")?;
+    verify_client_convergence_kat(&fixture).context("history client convergence KAT")?;
+    verify_history_candidate_store_kat(&fixture).context("history candidate store KAT")?;
+    verify_history_static_gates(&fixture).context("history static gates")?;
+    verify_scope_and_endpoint_kats(&fixture).context("history scope and endpoint KATs")?;
 
     HistoryAccessPayload::initialize(HistoryAccess::AllHistoryForCurrentMembers).validate()?;
     HistoryAccessPayload::tighten().validate()?;
@@ -914,7 +915,8 @@ fn verify_history_digest_and_sender_kats(fixture: &HistoryKeyRecoveryFixture) ->
 fn verify_governance_dependency_kats(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
     let signer_kat = &fixture.authenticated_signer_resolution_evidence_kat;
     let signer_evidence: AuthenticatedSignerResolutionEvidence =
-        serde_json::from_value(signer_kat["evidence"].clone())?;
+        serde_json::from_value(signer_kat["evidence"].clone())
+            .context("decode authenticated signer evidence")?;
     let signer_digest = signer_evidence.canonical_sha256_digest()?;
     let actual_ref = signer_evidence.evidence_ref()?;
     let actual_ref_str = actual_ref.as_ref();
@@ -940,7 +942,8 @@ fn verify_governance_dependency_kats(fixture: &HistoryKeyRecoveryFixture) -> Res
 
     let dependency_kat = &fixture.governance_dependency_resolve_kat;
     let receipt: AvailabilityReceipt =
-        serde_json::from_value(dependency_kat["availability_receipt"].clone())?;
+        serde_json::from_value(dependency_kat["availability_receipt"].clone())
+            .context("decode governance availability receipt")?;
     receipt.validate_structural()?;
     let expected_receipt_digest = Hash::new(
         dependency_kat["availability_receipt_digest"]
@@ -960,7 +963,8 @@ fn verify_governance_dependency_kats(fixture: &HistoryKeyRecoveryFixture) -> Res
     receipt.validate_signature_payload_digest(sha256_hash)?;
 
     let outcome: GovernanceDependencyResolveOutcome =
-        serde_json::from_value(dependency_kat["resolve_outcome"].clone())?;
+        serde_json::from_value(dependency_kat["resolve_outcome"].clone())
+            .context("decode governance dependency outcome")?;
     outcome.validate()?;
 
     let mut branch_mismatch = dependency_kat["resolve_outcome"].clone();

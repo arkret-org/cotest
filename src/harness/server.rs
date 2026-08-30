@@ -277,7 +277,7 @@ fn test_service_notary_signer(
         .verifying_key()
         .to_bytes();
     let descriptor = arkret_wire::NotarySignerDescriptor {
-        actor_id: service_id.clone(),
+        actor_id: arkret_wire::ActorId::service(service_id.clone()),
         verification_method: arkret_wire::DidUrl::new(format!("{service_did}#notary-key"))
             .map_err(anyhow::Error::msg)?,
         key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,

@@ -24,6 +24,7 @@ import {
   solandServiceId,
 } from "../../helpers/env";
 import {
+  accountActorId,
   addRealmMemberApi,
   advanceEnvelopeToActorFrontier,
   authHeaders,
@@ -52,6 +53,7 @@ import {
   submitSignedEventApi,
   rawPushFederationEvents,
   typedId,
+  serviceActorId,
   waitForRealmControlIdleApi,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -2075,9 +2077,8 @@ async function prepareAppletInstallAuthoringBasis(
     const unsignedGrant: Record<string, unknown> = {
       schema: "ak.schema.capability.v1",
       realm_id: realmId,
-      issuer_id: actorId,
-      subject: signed.applet_package.service_id,
-      subject_station_id: solandServiceId(),
+      issuer_id: accountActorId(actorId),
+      subject: serviceActorId(signed.applet_package.service_id),
       actions: [action],
       resources: [effectiveScope],
       constraints: [

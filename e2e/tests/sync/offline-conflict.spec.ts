@@ -331,21 +331,25 @@ test.describe("offline sync + conflict repair", () => {
         envelope.payload && typeof envelope.payload === "object"
           ? (envelope.payload as Record<string, unknown>)
           : undefined;
-      const binding =
-        payload?.delivery_binding &&
-        typeof payload.delivery_binding === "object"
-          ? (payload.delivery_binding as Record<string, unknown>)
+      const actor =
+        payload?.actor_id && typeof payload.actor_id === "object"
+          ? (payload.actor_id as Record<string, unknown>)
+          : undefined;
+      const account =
+        actor?.account_id && typeof actor.account_id === "object"
+          ? (actor.account_id as Record<string, unknown>)
           : undefined;
       return (
         envelope.kind === "ak.member.state" &&
-        payload?.actor_id === alice.id &&
-        payload.membership === "join" &&
-        binding?.recipient_id === solandServiceId("alpha")
+        actor?.kind === "account" &&
+        account?.principal_id === alice.id &&
+        account.station_id === solandServiceId("alpha") &&
+        payload?.membership === "join"
       );
     }) as Record<string, unknown> | undefined;
     expect(
       creatorBindingEvent?.event_id,
-      "creator routable delivery-binding frontier",
+      "creator Station-account membership frontier",
     ).toEqual(expect.any(String));
     await pushFederationEvents(request, [missingEvent], {
       // Relay through the configured peer profile. A service's own
@@ -408,12 +412,13 @@ test.describe("offline sync + conflict repair", () => {
       return (
         event.kind === "ak.invite.create" &&
         payload?.invitee_id === bob.id &&
-        target?.recipient_id === solandServiceId("beta")
+        (target?.account_id as Record<string, unknown> | undefined)
+          ?.station_id === solandServiceId("beta")
       );
     });
     expect(
       betaBindingEvent?.event_id,
-      "beta invite delivery-binding frontier",
+      "beta invite account-routing frontier",
     ).toEqual(expect.any(String));
     const ingest = await pushFederationEvents(request, eventsToIngest, {
       origin: solandServiceId("alpha"),

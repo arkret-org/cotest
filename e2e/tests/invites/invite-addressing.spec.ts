@@ -110,12 +110,13 @@ async function acceptedInviteFixture(
 
   const evidence = { kind: "explicit_address" } as const;
   const inviteAddress = {
-    subject_id: invitee.id,
-    recipient_id: solandServiceId(),
+    account_id: {
+      principal_id: invitee.id,
+      station_id: solandServiceId(),
+    },
     // §7 step 6: this carrier and the durable
     // `invite_delivery_target.service_resolution` MUST be byte-for-byte equal.
     service_resolution: canonicalServiceResolution(),
-    recipient_kind: "station" as const,
   };
   const event = signedEventEnvelope({
     actorId: inviter.id,
@@ -124,9 +125,8 @@ async function acceptedInviteFixture(
     payload: {
       invitee_id: invitee.id,
       invite_delivery_target: {
-        recipient_id: inviteAddress.recipient_id,
+        account_id: inviteAddress.account_id,
         service_resolution: inviteAddress.service_resolution,
-        recipient_kind: "station",
       },
       introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
       expires_at: canonicalTimestamp(
@@ -165,8 +165,10 @@ test.describe("invite addressing", () => {
     const invitee = "ak:did_core:web:cotest-invitee.example";
     const introductionEvidence = { kind: "explicit_address" } as const;
     const inviteDeliveryTarget = {
-      recipient_id: recipientServiceId,
-      recipient_kind: "station" as const,
+      account_id: {
+        principal_id: invitee,
+        station_id: recipientServiceId,
+      },
     };
     // This inviter is synthetic — it never registers through the client path,
     // so its Event proof has no signer unless one is registered here. The
@@ -200,9 +202,8 @@ test.describe("invite addressing", () => {
         invite_event:
           inviteEvent as InviteDeliveryRequestBodyBodyBody["invite_event"],
         invite_address: {
-          subject_id: invitee,
+          account_id: inviteDeliveryTarget.account_id,
           service_resolution: solandServiceResolution(),
-          ...inviteDeliveryTarget,
         },
         introduction_evidence: introductionEvidence,
         idempotency_key: `cotest-peer-invite-${Date.now()}`,
@@ -459,9 +460,8 @@ test.describe("invite addressing", () => {
       payload: {
         invitee_id: fixture.invitee.id,
         invite_delivery_target: {
-          recipient_id: fixture.inviteAddress.recipient_id,
+          account_id: fixture.inviteAddress.account_id,
           service_resolution: fixture.inviteAddress.service_resolution,
-          recipient_kind: "station",
         },
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(fixture.evidence)}`,
         expires_at: canonicalTimestamp(

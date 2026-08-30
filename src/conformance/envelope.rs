@@ -895,24 +895,14 @@ fn validate_event_payload(kind: &str, content: &Value) -> Option<String> {
         .and_then(|payload| payload.validate().map_err(|error| error.to_string()))
         .err(),
         "ak.member.state" => {
-            if let Some(err) = missing_payload_fields(content, &["membership"]) {
+            if let Some(err) = missing_payload_fields(content, &["member_id", "membership"]) {
                 return Some(err);
             }
-            // Spec 0a5ab85 (`membership_payload` conditional required):
-            // `membership=join` ⇒ `actor_id` + `delivery_status` required;
-            // `delivery_status=routable` ⇒ `delivery_binding` required.
+            // A joining member is an exact ActorId. Its AccountId or hosted
+            // Station component is the route truth; no delivery sidecar exists.
             if content.get("membership").and_then(Value::as_str) == Some("join") {
-                if let Some(err) = missing_payload_fields(content, &["actor_id", "delivery_status"])
-                {
+                if let Some(err) = missing_payload_fields(content, &["realm_id"]) {
                     return Some(err);
-                }
-                if content.get("delivery_status").and_then(Value::as_str) == Some("routable")
-                    && content.get("delivery_binding").is_none()
-                {
-                    return Some(
-                        "payload content missing delivery_binding (delivery_status=routable)"
-                            .to_owned(),
-                    );
                 }
             }
             None

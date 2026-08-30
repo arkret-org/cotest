@@ -1042,7 +1042,12 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     let capabilities_digest = required_str(vector, "capabilities_digest")?;
     let claim_id = required_str(vector, "claim_id")?;
     let intended_realm_id = required_str(vector, "intended_realm_id")?;
-    let requester_actor_id = required_str(vector, "requester_actor_id")?;
+    let requester_actor: arkret_wire::ActorId = serde_json::from_value(
+        vector
+            .get("requester_actor_id")
+            .cloned()
+            .ok_or_else(|| anyhow!("case missing requester_actor_id"))?,
+    )?;
     let requester_verification_method = required_str(vector, "requester_verification_method")?;
     let claim_request_id = required_str(vector, "claim_request_id")?;
     let welcome_digest = required_str(vector, "welcome_digest")?;
@@ -1062,15 +1067,11 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
     // and prove the two agree instead of carrying a second copy in the vector.
     let requester_did = did(requester_method_controller)?;
     let requester_core_id = arkret_identifiers::project_did_to_core_id(&requester_did)?;
-    if requester_core_id.as_str() != requester_actor_id
+    if &requester_core_id != requester_actor.signing_principal_id()
         || requester_method_fragment != requester_device_id
     {
         bail!("requester verification method does not bind requester actor id and device");
     }
-    let requester_actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
-        requester_core_id.clone(),
-        DidCoreId::new("ak:did_core:web:station.example")?,
-    ));
     let welcome_digest = Hash::new(welcome_digest.to_owned())?;
 
     let principal_id = core_did("ak:did_core:web:alice.example")?;

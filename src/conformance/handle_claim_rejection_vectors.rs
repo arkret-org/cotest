@@ -6,10 +6,9 @@
 //! Wire-breaking cleanup:
 //!   * `claim_kind` enum lost `service_handle` — only `handle_binding` / `organization_handle`
 //!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
-//!   * `subject` MUST be a holder/principal did_core_id. A DID, account id, or generic resource id
-//!     MUST reject (VECT-COT-7), enforced by
-//!     [`arkret_models_identity::validate_handle_claim_subject`] and by the schema `subject`
-//!     pattern.
+//!   * `subject_account_id.principal_id` MUST be a holder/principal did_core_id. A DID, account
+//!     id, or generic resource id MUST reject (VECT-COT-7), enforced by
+//!     [`arkret_models_identity::validate_handle_claim_subject`] and by the AccountId schema.
 //!
 //! VECT-COT-6 also pins that the SDK `HandleClaimKind` enum no longer carries a
 //! `ServiceHandle` variant, so any attempt to parse `service_handle` into
@@ -87,7 +86,10 @@ fn base_claim() -> Value {
     json!({
         "schema": "ak.schema.handle_claim.v1",
         "handle": "alice:acme.example",
-        "subject_id": "ak:did_core:web:alice.principal.example",
+        "subject_account_id": {
+            "principal_id": "ak:did_core:web:alice.principal.example",
+            "station_id": "ak:did_core:web:station.acme.example"
+        },
         "issuer_id": "ak:did_core:web:coauth.acme.example",
         "binding_state": "verified",
         "claim_kind": "handle_binding",
@@ -198,17 +200,17 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
         "resource-handle-7",
     ] {
         let mut claim = base_claim();
-        claim["subject_id"] = json!(bad_subject);
+        claim["subject_account_id"]["principal_id"] = json!(bad_subject);
         if validator.is_valid(&claim) {
             bail!(
-                "VECT-COT-7: handle claim with non-principal subject `{bad_subject}` MUST \
-                 schema-reject (subject pattern requires ak:did_core:<method>:...)"
+                "VECT-COT-7: handle claim with non-principal account component `{bad_subject}` \
+                 MUST schema-reject (principal_id requires ak:did_core:<method>:...)"
             );
         }
     }
 
     if !validator.is_valid(&base_claim()) {
-        bail!("VECT-COT-7 control: a principal core-id subject MUST validate");
+        bail!("VECT-COT-7 control: an exact Station account MUST validate");
     }
     Ok(())
 }
