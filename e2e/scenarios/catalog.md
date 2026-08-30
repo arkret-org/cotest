@@ -66,7 +66,7 @@ Static source definitions are implementation inventory, never runtime verificati
 | discovery/organization-verified-badge | 0 | 3 | 0.0% | 3 | 0 | fixme-only | yes |  |
 | encryption/audited-e2ee | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |
 | encryption/encrypted-attachments | 2 | 2 | 100.0% | 0 | 0 | live-only | yes |  |
-| encryption/key-backup | 5 | 5 | 100.0% | 0 | 10 | live-only | yes |  |
+| encryption/key-backup | 5 | 5 | 100.0% | 0 | 10 | live-only | yes | @fully-implemented |
 | encryption/mls-group | 1 | 1 | 100.0% | 0 | 0 | live-only | yes |  |
 | events/batch-realm-bootstrap | 1 | 1 | 100.0% | 0 | 0 | live-only | yes | @fully-implemented |
 | extensions/applet-bridge | 12 | 12 | 100.0% | 0 | 2 | live-only | yes |  |

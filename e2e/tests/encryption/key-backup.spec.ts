@@ -311,7 +311,7 @@ test.describe("key backup + restore", () => {
     }
   });
 
-  test("A3 real password/OIDC login restores MLS on a fresh browser with session-grant holder proof", async ({
+  test("A3 real password/OIDC login restores MLS on a fresh browser with session-grant holder proof @fully-implemented", async ({
     browser,
     request,
   }) => {

@@ -15,7 +15,7 @@ type ProtocolHit = {
 test.describe.configure({ mode: "serial" });
 
 test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () => {
-  test("fresh browser registration creates and reloads a real encrypted Realm", async ({
+  test("fresh browser registration creates, writes, and reloads plaintext and encrypted Realms", async ({
     browser,
   }) => {
     test.setTimeout(600_000);
@@ -213,21 +213,18 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           timeout: 120_000,
         });
 
-        const encryptedWrite = protocolHits.find((hit) => {
-          if (
-            hit.method !== "POST" ||
-            hit.path !== "/_arkret/self/events" ||
-            !hit.requestBody
-          ) {
-            return false;
-          }
-          const wire = JSON.stringify(hit.requestBody);
-          return wire.includes(realmId) && !wire.includes(message);
-        });
+        const encryptedWrite = await waitForEventIngress(
+          protocolHits,
+          (wire) =>
+            wire.includes(realmId) &&
+            wire.includes("ak.message.create") &&
+            wire.includes("encrypted_content"),
+          "encrypted Realm message ingress",
+        );
         expect(
-          encryptedWrite,
+          JSON.stringify(encryptedWrite.requestBody),
           "server ingress must contain ciphertext rather than the message plaintext",
-        ).toBeTruthy();
+        ).not.toContain(message);
 
         await page.reload({ waitUntil: "domcontentloaded" });
         await expect(page.getByTestId("client-shell")).toBeVisible({
@@ -253,6 +250,53 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           ),
           "healthy local KeyPackage inventory reload must perform zero uploads",
         ).toHaveLength(uploadCountBeforeReload);
+      });
+
+      const plaintextMessage = `canonical plaintext message ${Date.now()}`;
+      let plaintextRealmId = "";
+      await test.step("create, open, write and reload the non-encrypted Realm", async () => {
+        plaintextRealmId = await jointPage.createRealm({
+          title: `Canonical plaintext Realm ${Date.now()}`,
+          summary: "fresh-user real-stack non-encrypted Realm acceptance",
+          discoverability: "unlisted",
+          joinRule: "invite",
+          historyAccess: "all_history_for_current_members",
+          encryptionProfile: "none",
+          completeRecoveryKeySetup: false,
+          allowPassivePromptDismissal: false,
+        });
+        await jointPage.sendTimelineMessage(
+          plaintextRealmId,
+          plaintextMessage,
+        );
+        await expect(jointPage.timelineEvent(plaintextMessage)).toBeVisible({
+          timeout: 120_000,
+        });
+
+        const plaintextWrite = await waitForEventIngress(
+          protocolHits,
+          (wire) =>
+            wire.includes(plaintextRealmId) &&
+            wire.includes("ak.message.create") &&
+            wire.includes(plaintextMessage),
+          "non-encrypted Realm message ingress",
+        );
+        expect(JSON.stringify(plaintextWrite.requestBody)).not.toContain(
+          "encrypted_content",
+        );
+
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await expect(page.getByTestId("client-shell")).toBeVisible({
+          timeout: 120_000,
+        });
+        await jointPage.gotoTimelineRealm(plaintextRealmId);
+        await expect(jointPage.timelineEvent(plaintextMessage)).toBeVisible({
+          timeout: 120_000,
+        });
+        await expect(page.getByTestId("network-state-badge")).toHaveText(
+          "online",
+          { timeout: 120_000 },
+        );
       });
 
       await test.step("manual recovery performs one bounded batch-only refill", async () => {
@@ -447,4 +491,33 @@ async function readActiveIdentity(page: Page): Promise<{
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function waitForEventIngress(
+  hits: ProtocolHit[],
+  predicate: (wire: string) => boolean,
+  context: string,
+): Promise<ProtocolHit> {
+  await expect
+    .poll(
+      () =>
+        hits.find(
+          (hit) =>
+            hit.method === "POST" &&
+            hit.path === "/_arkret/self/events" &&
+            hit.status < 400 &&
+            hit.requestBody !== undefined &&
+            predicate(JSON.stringify(hit.requestBody)),
+        ),
+      { timeout: 120_000, message: `${context} was not observed` },
+    )
+    .toBeTruthy();
+  return hits.find(
+    (hit) =>
+      hit.method === "POST" &&
+      hit.path === "/_arkret/self/events" &&
+      hit.status < 400 &&
+      hit.requestBody !== undefined &&
+      predicate(JSON.stringify(hit.requestBody)),
+  )!;
 }

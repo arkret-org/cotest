@@ -96,6 +96,7 @@ export default defineConfig({
       testDir: "./tests",
       testMatch: [
         "joint/*.spec.ts",
+        "encryption/key-backup.spec.ts",
         "events/batch-realm-bootstrap.spec.ts",
         "identity/account-handoff.spec.ts",
         "identity/direct-conversation-founding.spec.ts",
@@ -104,6 +105,7 @@ export default defineConfig({
         "identity/onboarding.spec.ts",
         "identity/oidc-login-flow.spec.ts",
         "identity/passkey-login-flow.spec.ts",
+        "identity/recovery-key-to-encrypted-realm.spec.ts",
         "identity/session-grant-dpop.spec.ts",
       ],
       use: { ...devices["Desktop Chrome"], baseURL },

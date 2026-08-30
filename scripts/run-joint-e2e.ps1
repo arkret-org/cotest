@@ -4729,6 +4729,7 @@ $forbidRuntimeSkips = [bool]$ForbidSkippedTests -or $RunProfile -eq "joint-smoke
 if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
     $requiredScenarios = @(
         $requiredScenarios
+        "encryption/key-backup"
         "identity/recovery-key-to-encrypted-realm"
     ) | Sort-Object -Unique
 }

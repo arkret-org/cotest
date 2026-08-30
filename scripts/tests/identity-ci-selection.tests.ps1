@@ -4,8 +4,11 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $ci = Get-Content -LiteralPath (Join-Path $repoRoot ".github\workflows\ci.yml") -Raw
 $integration = Get-Content -LiteralPath (Join-Path $repoRoot ".github\workflows\integration.yml") -Raw
 $runner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-joint-e2e.ps1") -Raw
+$playwrightConfig = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\playwright.config.ts") -Raw
 $oidc = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\oidc-login-flow.spec.ts") -Raw
 $lifecycle = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\device-key-lifecycle.spec.ts") -Raw
+$keyBackup = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\encryption\key-backup.spec.ts") -Raw
+$realmMatrix = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\recovery-key-to-encrypted-realm.spec.ts") -Raw
 
 function Assert-Contains {
     param([string]$Text, [string]$Needle, [string]$Message)
@@ -21,6 +24,8 @@ Assert-Contains $oidc "@returning-login-gate" "returning-login test has no stabl
 Assert-Contains $oidc "@onboarding-recovery-gate" "Recovery Key onboarding test has no stable CI tag"
 Assert-Contains $oidc "@onboarding-resume-gate" "accepted onboarding resume test has no stable CI tag"
 Assert-Contains $lifecycle "@returning-device-key-gate" "device-key returning test has no stable CI tag"
+Assert-Contains $keyBackup "A3 real password/OIDC login restores MLS on a fresh browser with session-grant holder proof @fully-implemented" "fresh-browser Recovery Key restore is not in the default smoke selection"
+Assert-Contains $realmMatrix "fresh browser registration creates, writes, and reloads plaintext and encrypted Realms" "canonical Realm encryption matrix is missing"
 Assert-NotContains $oidc 'test.describe.configure({ mode: "serial" })' "independent OIDC cases must not cascade-skip after an earlier failure"
 
 Assert-Contains $ci "-PlaywrightProject joint-inkson" "merge CI does not select the joint-inkson project"
@@ -36,6 +41,10 @@ Assert-NotContains $integration "terminal auth loss|transient self-path failure"
 Assert-Contains $runner '[switch]$ForbidSkippedTests' "joint runner has no non-skip enforcement"
 Assert-Contains $runner '[string]$RequireScenario' "joint runner has no required-scenario enforcement"
 Assert-Contains $runner 'Playwright selected zero tests' "joint runner has no zero-selection enforcement"
+Assert-Contains $runner '"encryption/key-backup"' "joint-smoke does not require fresh-browser Recovery Key restore evidence"
+Assert-Contains $runner '"identity/recovery-key-to-encrypted-realm"' "joint-smoke does not require the canonical Realm encryption matrix"
+Assert-Contains $playwrightConfig '"encryption/key-backup.spec.ts"' "joint-inkson does not discover fresh-browser Recovery Key restore"
+Assert-Contains $playwrightConfig '"identity/recovery-key-to-encrypted-realm.spec.ts"' "joint-inkson does not discover the canonical Realm encryption matrix"
 
 $e2eRoot = Join-Path $repoRoot "e2e"
 $playwrightCli = Join-Path $e2eRoot "node_modules\playwright\cli.js"
@@ -56,5 +65,19 @@ Assert-Contains $selection "identity/device-key-lifecycle.spec.ts" "joint-inkson
 Assert-Contains $selection "identity/oidc-login-flow.spec.ts" "joint-inkson did not discover the OIDC returning-login test"
 Assert-Contains $selection "unbound account completes Recovery Key onboarding" "joint-inkson did not discover the Recovery Key onboarding test"
 Assert-Contains $selection "Total: 3 tests in 2 files" "identity gate selection changed; review the required scenario matrix"
+
+Push-Location $e2eRoot
+try {
+    $matrixListed = @(& node $playwrightCli test --config playwright.config.ts --project=joint-inkson --grep "A3 real password/OIDC login restores MLS|fresh browser registration creates, writes, and reloads plaintext and encrypted Realms" --list 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright Recovery Key/Realm matrix selection failed:`n$($matrixListed -join [Environment]::NewLine)"
+    }
+} finally {
+    Pop-Location
+}
+$matrixSelection = ($matrixListed -join "`n") -replace '\\', '/'
+Assert-Contains $matrixSelection "encryption/key-backup.spec.ts" "joint-inkson did not discover fresh-browser Recovery Key restore"
+Assert-Contains $matrixSelection "identity/recovery-key-to-encrypted-realm.spec.ts" "joint-inkson did not discover the canonical Realm encryption matrix"
+Assert-Contains $matrixSelection "Total: 2 tests in 2 files" "Recovery Key/Realm matrix selection changed; review the required scenario matrix"
 
 Write-Host "Identity CI selection regression tests passed."
