@@ -115,9 +115,9 @@ test.describe("personal blocklist", () => {
     );
     expect(list.status()).toBe(200);
     const listBody = (await list.json()) as {
-      entries?: Array<Record<string, unknown>>;
+      account_data_entries?: Array<Record<string, unknown>>;
     };
-    const listEntries = (listBody.entries ?? []).filter(
+    const listEntries = (listBody.account_data_entries ?? []).filter(
       (entry) => entry.account_data_key === dataType,
     );
     expect(listEntries).toHaveLength(1);

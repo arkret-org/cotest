@@ -6,7 +6,7 @@
 //   - §7 (key backup), §7.2 (envelope), §7.3 (restore), §7.7 (recovery UI
 //     MUST take the Recovery Key), §7.10 (automatic backup), §8 (threshold)
 
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
@@ -43,13 +43,17 @@ function uuidv7Like(): string {
 /**
  * Build a schema-conforming `secret_storage` key-backup envelope
  * (`ak.schema.key_backup.v1`) for `recipient_method=passphrase_kdf`. Every
- * cross-field constraint soland's decode path enforces (hkdf_info,
- * aead_aad mirroring, genesis series shape) is
+ * cross-field constraint soland's decode path enforces (ciphertext_digest over
+ * the ciphertext bytes, domain-separation subdomain, genesis series shape) is
  * satisfied so the test exercises the *profile* gate rather than tripping a
  * generic schema_violation first.
  */
 function secretStorageEnvelope(opts: {
   actorId: string;
+  // `auth_data.verification_method` is a DID URL, so it is built from the
+  // holder's DID — never from the projected `ak:did_core:` actor id, which is
+  // not a DID and fails the request-body schema before any KDF rule runs.
+  actorDid: string;
   deviceId: string;
   mixed: boolean;
   argon2: { memory_kib: number; iterations: number; parallelism: number };
@@ -60,6 +64,7 @@ function secretStorageEnvelope(opts: {
   const backupClass = "secret_storage";
   const subdomain = "account_keys";
   const itemTypes = ["mls_group_secrets_backup_key"];
+  const ciphertext = randomBytes(48);
   const envelope: Record<string, unknown> = {
     backup_id: backupId,
     actor_id: opts.actorId,
@@ -87,30 +92,25 @@ function secretStorageEnvelope(opts: {
       },
       key_commitment: "sha256:" + randomBytes(32).toString("hex"),
     },
+    // key-backup.schema.json: the HKDF info and the fixed AEAD AAD base are
+    // derived from the envelope by key-management.md §7.2, so only the
+    // subdomain (plus genuine `x_*` extensions) travels on the wire.
     domain_separation: {
-      hkdf_info: `arkret-key-backup/${backupClass}/${subdomain}/v1`,
       subdomain,
-      aead_aad: {
-        schema: "ak.schema.key_backup.v1",
-        actor_id: opts.actorId,
-        device_id: opts.deviceId,
-        backup_kind: backupClass,
-        backup_version: "kb_1",
-        created_at: createdAt,
-        item_kinds: itemTypes,
-      },
     },
     contents: itemTypes.map((item_kind) => ({
       item_kind,
       secret_id: item_kind,
     })),
-    ciphertext: randomBytes(48).toString("base64url"),
-    ciphertext_digest: "sha256:" + randomBytes(32).toString("hex"),
+    ciphertext: ciphertext.toString("base64url"),
+    // soland re-derives this from the ciphertext bytes, so a random digest is
+    // rejected before any KDF/domain rule is reached.
+    ciphertext_digest: `sha256:${createHash("sha256").update(ciphertext).digest("hex")}`,
     series_id: seriesId,
     series_seq: 0,
     auth_data: {
       device_id: opts.deviceId,
-      verification_method: `${opts.actorId}#device-test`,
+      verification_method: `${opts.actorDid}#device-test`,
       signature_algorithm: "Ed25519",
       signature: randomBytes(64).toString("base64url"),
       // The PCR accepted-device Event is the sole device trust anchor.
@@ -324,6 +324,7 @@ test.describe("account recovery", () => {
     // mixed_secret_storage=true with a weak Argon2id floor is rejected.
     const weakMixed = secretStorageEnvelope({
       actorId: alice.id,
+      actorDid: alice.did,
       deviceId: alice.deviceId,
       mixed: true,
       // Below the §7.1 mixed floor (262144 / 4): base secret_storage floor
@@ -346,6 +347,7 @@ test.describe("account recovery", () => {
     // specific, not a generic envelope-shape failure).
     const baseline = secretStorageEnvelope({
       actorId: alice.id,
+      actorDid: alice.did,
       deviceId: alice.deviceId,
       mixed: false,
       argon2: { memory_kib: 65_536, iterations: 3, parallelism: 1 },

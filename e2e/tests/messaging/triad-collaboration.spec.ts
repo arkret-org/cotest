@@ -60,7 +60,7 @@ function expectRedactedPayload(
 }
 
 function visibleMemberIds(realm: Record<string, unknown>): string[] {
-  const members = realm.members;
+  const members = realm.member_ids;
   if (!Array.isArray(members)) {
     return [];
   }

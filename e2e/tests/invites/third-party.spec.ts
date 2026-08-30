@@ -147,8 +147,11 @@ async function submitSelfEvent(
   const accepted = Array.isArray(body.accepted)
     ? (body.accepted as string[])
     : [];
-  const rawRejected = Array.isArray(body.rejected)
-    ? (body.rejected as Array<{ reason_code?: string; detail?: string }>)
+  const rawRejected = Array.isArray(body.rejections)
+    ? (body.rejections as Array<{
+        reason_code?: string;
+        detail?: string;
+      }>)
     : [];
   const topLevelReason = wireErrCode(body);
   const topLevelError =

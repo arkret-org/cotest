@@ -47,7 +47,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
     seal_current_principal_control_frontier(&bob, &bob_device_key).await?;
 
     let contacts = expect_json(bob.get("/_arkret/self/contacts"), StatusCode::OK).await?;
-    assert_eq!(contacts["contact_list_rows"].as_array().unwrap().len(), 1);
+    assert_eq!(contacts["contacts"].as_array().unwrap().len(), 1);
 
     let invite_realm = alice
         .create_realm_with(json!({

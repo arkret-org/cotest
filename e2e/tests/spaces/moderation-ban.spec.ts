@@ -219,7 +219,7 @@ test.describe("moderation and ban", () => {
     );
     expect(realmAfterBan.ok()).toBeTruthy();
     const realmAfterBanBody = await realmAfterBan.json();
-    expect(realmAfterBanBody.members ?? []).not.toContain(mallory.id);
+    expect(realmAfterBanBody.member_ids ?? []).not.toContain(mallory.id);
 
     const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const bannedWrite = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
@@ -317,7 +317,7 @@ test.describe("moderation and ban", () => {
     });
     expect(realm.ok()).toBeTruthy();
     const body = await realm.json();
-    expect(body.members ?? []).not.toContain(mallory.id);
+    expect(body.member_ids ?? []).not.toContain(mallory.id);
   });
 
   test("owner can ban a member from the inkson admin member row", async ({
@@ -368,7 +368,7 @@ test.describe("moderation and ban", () => {
       );
       expect(realm.ok()).toBeTruthy();
       const body = await realm.json();
-      expect(body.members ?? []).not.toContain(mallory.id);
+      expect(body.member_ids ?? []).not.toContain(mallory.id);
     } finally {
       await alicePage.close();
     }

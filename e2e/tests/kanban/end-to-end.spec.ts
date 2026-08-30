@@ -74,8 +74,9 @@ function recordFloorViolations(page: Page): string[] {
   return hits;
 }
 
+// `ak.relation.create` derives `ak:relation:` from the create Event, so the
+// object MUST NOT carry an `id` (`object_id_not_event_derived`).
 function relationObject(args: {
-  id: string;
   realmId: string;
   relationKind: string;
   fromRef: string;
@@ -83,7 +84,6 @@ function relationObject(args: {
   actorId: string;
 }): Record<string, unknown> {
   return {
-    id: args.id,
     schema: "ak.schema.relation.v1",
     realm_id: args.realmId,
     relation_kind: args.relationKind,
@@ -437,7 +437,7 @@ test.describe("kanban end-to-end", () => {
     );
     const loserBody = await loserResponse.json();
     const loserReason =
-      wireErrCode(loserBody) ?? loserBody.rejected?.[0]?.reason_code;
+      wireErrCode(loserBody) ?? loserBody.rejections?.[0]?.reason_code;
     expect(loserReason, JSON.stringify(loserBody)).toBe("cas_conflict");
   });
 
@@ -488,7 +488,6 @@ test.describe("kanban end-to-end", () => {
       kind: "ak.relation.create",
       payload: {
         relation: relationObject({
-          id: typedId("relation"),
           realmId: realmA,
           relationKind: "contains",
           fromRef: cardInA,

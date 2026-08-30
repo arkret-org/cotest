@@ -55,16 +55,25 @@ export function base64urlJsonRaw(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
 }
 
+// `cotest-wire event-envelope-proof` binds the proof to the core id it projects
+// out of the authoring DID, so this argument is a resolvable `did:` DID — never
+// an already-projected `ak:did_core:` core id. Callers that only hold a core id
+// take the DID from the signer's verification method (the DID URL prefix).
 export function sdkEventEnvelopeProof(args: {
-  actorId: string;
+  actorDid: string;
   event: Record<string, unknown>;
   verificationMethod: string;
   createdAt: string;
   signingSeedB64url?: string;
 }): Record<string, unknown> {
   assertJsonTransportable(args.event, "$.event");
+  if (!args.actorDid.startsWith("did:")) {
+    throw new Error(
+      `event proof requires an authoring DID, not a projected core id: ${args.actorDid}`,
+    );
+  }
   return cotestWire<Record<string, unknown>>("event-envelope-proof", {
-    actor_did: args.actorId,
+    actor_did: args.actorDid,
     event: args.event,
     verification_method: args.verificationMethod,
     created_at: args.createdAt,

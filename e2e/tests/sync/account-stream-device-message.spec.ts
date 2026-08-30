@@ -34,7 +34,7 @@ test.describe("account stream + device-message convergence", () => {
       title: `long-poll scope ${Date.now()}`,
       ownerId: user.id,
     });
-    const filter = { realms: [realmId] };
+    const filter = { realm_ids: [realmId] };
 
     const baseline = await accountSubscribeFramesApi(request, token, { filter });
     const baselineCursor = latestCursor(baseline);

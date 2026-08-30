@@ -54,7 +54,7 @@ export type CircleOutcome = {
   encryption_profile: string;
   mls_group_ref?: string;
   state: string;
-  members: string[];
+  member_ids: string[];
   member_count?: number;
   viewer_membership?: CircleMembership;
   created_by: string;

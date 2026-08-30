@@ -514,7 +514,7 @@ test.describe("contact graph federation (α/β)", () => {
           if (!resp.ok()) return false;
           const realm = await resp.json();
           return (
-            Array.isArray(realm.members) && realm.members.includes(bob.id)
+            Array.isArray(realm.member_ids) && realm.member_ids.includes(bob.id)
           );
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },

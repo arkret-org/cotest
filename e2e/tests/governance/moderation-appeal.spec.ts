@@ -48,7 +48,7 @@ test.describe("moderation appeal", () => {
     expect(history[0]).toMatchObject({
       appeal_id: appeal.appeal_id,
       appeal_state: "submitted",
-      appellant: fixture.appellant.id,
+      appellant_id: fixture.appellant.id,
       decision_ref: fixture.decisionId,
     });
   });
@@ -120,7 +120,7 @@ test.describe("moderation appeal", () => {
       );
       expect(realmAfterBan.ok()).toBeTruthy();
       const body = await realmAfterBan.json();
-      expect(body.members ?? []).not.toContain(appellant.id);
+      expect(body.member_ids ?? []).not.toContain(appellant.id);
 
       await expect(appellantPage.page.getByTestId("chat-panel")).toHaveAttribute(
         "data-moderation-appeal-count",
@@ -147,7 +147,7 @@ test.describe("moderation appeal", () => {
 
     await reviewAppeal(request, fixture, appeal.appeal_id);
     await decideAppeal(request, fixture, appeal.appeal_id, {
-      verdict: "uphold",
+      decision: "uphold",
       reason_text_ref: "appeal reviewed; decision upheld",
     });
     await closeAppeal(request, fixture, appeal.appeal_id);
@@ -180,7 +180,7 @@ test.describe("moderation appeal", () => {
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        reviewer: fixture.moderator.id,
+        reviewer_id: fixture.moderator.id,
         reviewed_at: canonicalTimestamp(),
         notes_ref: "self review attempt",
       },
@@ -218,8 +218,8 @@ test.describe("moderation appeal", () => {
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        reviewer: fixture.reviewer.id,
-        verdict: "uphold",
+        reviewer_id: fixture.reviewer.id,
+        decision: "uphold",
         reason_text_ref: "too early",
         decided_at: canonicalTimestamp(),
       },
@@ -242,7 +242,7 @@ test.describe("moderation appeal", () => {
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        closer: fixture.reviewer.id,
+        closer_id: fixture.reviewer.id,
         closed_at: canonicalTimestamp(),
         auto_closed: false,
         close_reason: "reviewer_closed",
@@ -266,8 +266,8 @@ test.describe("moderation appeal", () => {
       {
         appeal_id: appeal.appeal_id,
         realm_id: fixture.realmId,
-        reviewer: fixture.reviewer.id,
-        verdict: "overturn",
+        reviewer_id: fixture.reviewer.id,
+        decision: "overturn",
         reason_text_ref: "missing lift",
         decided_at: canonicalTimestamp(),
       },
@@ -283,7 +283,7 @@ test.describe("moderation appeal", () => {
     const lift = await liftDecision(request, fixture, appeal.appeal_id);
 
     await decideAppeal(request, fixture, appeal.appeal_id, {
-      verdict: "overturn",
+      decision: "overturn",
       reason_text_ref: "appeal accepted",
     });
     expect(lift.decision_id).toBe(fixture.decisionId);
@@ -292,7 +292,7 @@ test.describe("moderation appeal", () => {
     const history = await getAppealHistory(request, fixture.reviewerToken, appeal.appeal_id);
     expect(history.at(-2)).toMatchObject({
       appeal_state: "decided",
-      verdict: "overturn",
+      decision: "overturn",
     });
     expect(history.at(-1)).toMatchObject({ appeal_state: "closed" });
   });
@@ -448,7 +448,7 @@ function appealPayload(fixture: AppealFixture) {
     realm_id: fixture.realmId,
     decision_ref: fixture.decisionId,
     target_ref: fixture.targetRef,
-    appellant: fixture.appellant.id,
+    appellant_id: fixture.appellant.id,
     reason_text_ref: "appeal narrative",
     evidence_refs: [`ak:evidence:${fixture.decisionId}`],
     evidence_visibility: "reviewers_only",
@@ -490,7 +490,7 @@ async function reviewAppeal(
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
-      reviewer: fixture.reviewer.id,
+      reviewer_id: fixture.reviewer.id,
       reviewed_at: canonicalTimestamp(),
       notes_ref: "review notes",
     },
@@ -514,7 +514,7 @@ async function decideAppeal(
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
-      reviewer: fixture.reviewer.id,
+      reviewer_id: fixture.reviewer.id,
       ...data,
       decided_at: data.decided_at ?? canonicalTimestamp(),
     },
@@ -537,7 +537,7 @@ async function closeAppeal(
     {
       appeal_id: appealId,
       realm_id: fixture.realmId,
-      closer: fixture.reviewer.id,
+      closer_id: fixture.reviewer.id,
       closed_at: canonicalTimestamp(),
       auto_closed: false,
       close_reason: "reviewer_closed",

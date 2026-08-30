@@ -810,7 +810,7 @@ export async function configureMediaService(
       realmId,
       kind: "ak.realm.media_service",
       sealBasis,
-      preconditions: [{ cell, predicate: { op: "head_eq", value: null } }],
+      preconditions: [{ cell_id: cell, predicate: { op: "head_eq", value: null } }],
       payload,
     }),
     { context: `configure media_service for ${realmId}` },

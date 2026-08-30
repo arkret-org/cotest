@@ -631,7 +631,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
           method: "QUERY",
           headers: { ...authHeaders(token), "content-type": "application/json" },
           data: {
-            realms: [realmId],
+            realm_ids: [realmId],
             limit: 2,
             ...(after ? { after } : {}),
           },
@@ -642,7 +642,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
           next_cursor?: string;
           has_more?: boolean;
         };
-        expect(Array.isArray(body.events), "page events[] is array").toBe(true);
+        expect(
+          Array.isArray(body.events),
+          "page events[] is array",
+        ).toBe(true);
         expect(typeof body.has_more, "has_more boolean MUST be present").toBe("boolean");
         return body;
       };
@@ -713,7 +716,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const tamperResp = await request.fetch(tamperUrl.toString(), {
         method: "QUERY",
         headers: { ...authHeaders(token), "content-type": "application/json" },
-        data: { realms: [realmId], limit: 2, after: tampered },
+        data: { realm_ids: [realmId], limit: 2, after: tampered },
       });
       expect(tamperResp.status(), "tampered cursor is param_invalid (HTTP 400)").toBe(400);
       const tamperBody = (await tamperResp.json()) as { reason_code?: string };

@@ -67,7 +67,7 @@ test.describe("realm links", () => {
       const govPolicy = await submitSignedEventApi(request, aliceToken, govPolicyEnvelope, {
         context: "G declares its inheritable allow-list",
       });
-      expect(govPolicy.rejected ?? []).toEqual([]);
+      expect(govPolicy.rejections ?? []).toEqual([]);
 
       // Phase B — alice creates team Realm T, links T --governed_by--> G,
       // and explicitly opts into inheriting from G (spec §6.1).
@@ -91,7 +91,7 @@ test.describe("realm links", () => {
         }),
         { context: "T declares governed_by G" },
       );
-      expect(linkRes.rejected ?? []).toEqual([]);
+      expect(linkRes.rejections ?? []).toEqual([]);
 
       const teamPolicyEnvelope = signedEventEnvelope({
         actorId: alice.id,
@@ -107,7 +107,7 @@ test.describe("realm links", () => {
       const teamPolicy = await submitSignedEventApi(request, aliceToken, teamPolicyEnvelope, {
         context: "T opts into inheriting from G",
       });
-      expect(teamPolicy.rejected ?? []).toEqual([]);
+      expect(teamPolicy.rejections ?? []).toEqual([]);
 
       // Phase C — T's effective policy now derives G's allow-list via the
       // active governed_by link.
@@ -162,7 +162,7 @@ test.describe("realm links", () => {
         }),
         { context: "T rejects governed_by G" },
       );
-      expect(rejectRes.rejected ?? []).toEqual([]);
+      expect(rejectRes.rejections ?? []).toEqual([]);
 
       const eff3 = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(teamRealmId)}/effective-policy`,
@@ -213,9 +213,9 @@ test.describe("realm links", () => {
         );
 
       const ab = await link(A, B);
-      expect(ab.rejected ?? []).toEqual([]);
+      expect(ab.rejections ?? []).toEqual([]);
       const bc = await link(B, C);
-      expect(bc.rejected ?? []).toEqual([]);
+      expect(bc.rejections ?? []).toEqual([]);
 
       const outboundA = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(A)}/links?direction=outbound`,
@@ -231,7 +231,7 @@ test.describe("realm links", () => {
 
       // General graph cycles are valid; only a Realm linking to itself is rejected.
       const ca = await link(C, A);
-      expect(ca.rejected ?? []).toEqual([]);
+      expect(ca.rejections ?? []).toEqual([]);
 
       const outboundC = await request.get(
         `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(C)}/links?direction=outbound`,
@@ -397,7 +397,7 @@ test.describe("realm links", () => {
         }),
         { context: "G declares governed_by T" },
       );
-      expect(linkRes.rejected ?? []).toEqual([]);
+      expect(linkRes.rejections ?? []).toEqual([]);
 
       // alice (no membership / capability in T) tries to ban bob in T via the
       // canonical member-state event. MUST fail closed — the governed_by link

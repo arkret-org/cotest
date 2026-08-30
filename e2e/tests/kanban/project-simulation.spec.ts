@@ -19,6 +19,7 @@ import {
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
+  retypeEventDerivedId,
   sdkEventDerivedObjectId,
   sha256CanonicalJson,
   signedEventEnvelope,
@@ -98,8 +99,12 @@ async function readStrandRow(
     response.ok(),
     `list strands for ${realmId} returned ${response.status()}`,
   ).toBeTruthy();
-  const body = (await response.json()) as { strands?: StrandProjectionRow[] };
-  return (body.strands ?? []).find((row) => row.strand_id === strandId);
+  const body = (await response.json()) as {
+    strands?: StrandProjectionRow[];
+  };
+  return (body.strands ?? []).find(
+    (row) => row.strand_id === strandId,
+  );
 }
 
 async function readSpaceRow(
@@ -116,8 +121,12 @@ async function readSpaceRow(
     response.ok(),
     `list spaces for ${realmId} returned ${response.status()}`,
   ).toBeTruthy();
-  const body = (await response.json()) as { spaces?: SpaceProjectionRow[] };
-  return (body.spaces ?? []).find((row) => row.space_id === spaceId);
+  const body = (await response.json()) as {
+    spaces?: SpaceProjectionRow[];
+  };
+  return (body.spaces ?? []).find(
+    (row) => row.space_id === spaceId,
+  );
 }
 
 // Create a board Space, a list Space parented to it, and a Card Strand placed
@@ -395,21 +404,17 @@ test.describe("project simulation", () => {
       title: `S16 FSM ${Date.now()}`,
       ownerId: alice.id,
     });
-    const taskStrandId = typedId("strand");
-    const incidentStrandId = typedId("strand");
     const taskCreatedAt = canonicalTimestamp();
 
-    await submitSignedEventApi(
-      request,
-      aliceToken,
-      signedEventEnvelope({
+    // `ak.strand.create` derives `ak:strand:` from the create Event, so the
+    // object carries no `id` and the caller retypes the finished envelope.
+    const taskStrandEnvelope = signedEventEnvelope({
         actorId: alice.id,
         realmId: realmId,
         kind: "ak.strand.create",
         createdAt: taskCreatedAt,
         payload: {
           object: {
-            id: taskStrandId,
             schema: "ak.schema.strand.v1",
             realm_id: realmId,
             metadata: {
@@ -422,8 +427,13 @@ test.describe("project simulation", () => {
             created_at: taskCreatedAt,
           },
         },
-      }),
-      { context: "create todo card strand" },
+      });
+    await submitSignedEventApi(request, aliceToken, taskStrandEnvelope, {
+      context: "create todo card strand",
+    });
+    const taskStrandId = retypeEventDerivedId(
+      String(taskStrandEnvelope.event_id),
+      "strand",
     );
 
     const badDoneEvent = signedEventEnvelope({
@@ -480,17 +490,13 @@ test.describe("project simulation", () => {
     );
 
     const incidentCreatedAt = canonicalTimestamp();
-    await submitSignedEventApi(
-      request,
-      aliceToken,
-      signedEventEnvelope({
+    const incidentStrandEnvelope = signedEventEnvelope({
         actorId: alice.id,
         realmId: realmId,
         kind: "ak.strand.create",
         createdAt: incidentCreatedAt,
         payload: {
           object: {
-            id: incidentStrandId,
             schema: "ak.schema.strand.v1",
             realm_id: realmId,
             metadata: {
@@ -503,8 +509,13 @@ test.describe("project simulation", () => {
             created_at: incidentCreatedAt,
           },
         },
-      }),
-      { context: "create investigating incident strand" },
+      });
+    await submitSignedEventApi(request, aliceToken, incidentStrandEnvelope, {
+      context: "create investigating incident strand",
+    });
+    const incidentStrandId = retypeEventDerivedId(
+      String(incidentStrandEnvelope.event_id),
+      "strand",
     );
 
     const badResolvedEvent = signedEventEnvelope({

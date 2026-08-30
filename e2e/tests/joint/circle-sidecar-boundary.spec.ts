@@ -35,7 +35,7 @@ jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () =
       expect(created.display.short_name).toBeTruthy();
       expect(created.display.color_token).toBeTruthy();
       expect(created.display.symbol).toBeTruthy();
-      expect(created.members).toEqual([jointRealm.alice.id]);
+      expect(created.member_ids).toEqual([jointRealm.alice.id]);
       expect(created.member_count).toBe(1);
       expect(created.viewer_membership).toBe("join");
 

@@ -1257,8 +1257,8 @@ async function forcePaginatedRealmBackfill(
     if (
       outgoing.method() === "QUERY" &&
       url.pathname === "/_arkret/self/events" &&
-      Array.isArray(outgoing.postDataJSON().realms) &&
-      outgoing.postDataJSON().realms.includes(realmId)
+      Array.isArray(outgoing.postDataJSON().realm_ids) &&
+      outgoing.postDataJSON().realm_ids.includes(realmId)
     ) {
       requests += 1;
       const body = { ...outgoing.postDataJSON(), limit: 1 };

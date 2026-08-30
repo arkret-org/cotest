@@ -392,7 +392,7 @@ test.describe("consent grant", () => {
       kind: "ak.consent.grant",
       payload: {
         consent_id: openBody.consent_id,
-        peer: bob.id,
+        peer_id: bob.id,
         consent_scope: "direct_message",
       },
     });
@@ -410,7 +410,7 @@ test.describe("consent grant", () => {
     };
     const signature = sdkMimiConsentProof({
       request: unsignedUpdate,
-      verificationMethod: `${alice.id}#mimi-consent`,
+      verificationMethod: `${alice.did}#mimi-consent`,
       createdAt: canonicalTimestamp(),
       domain: describe.trust_domain,
       audience: describe.service_id,
@@ -448,7 +448,7 @@ test.describe("consent grant", () => {
       kind: "ak.consent.grant",
       payload: {
         consent_id: openBody.consent_id,
-        peer: bob.id,
+        peer_id: bob.id,
         consent_scope: "direct_message",
       },
     });
@@ -460,7 +460,7 @@ test.describe("consent grant", () => {
       ...conflictingUnsigned,
       signature: sdkMimiConsentProof({
         request: conflictingUnsigned,
-        verificationMethod: `${alice.id}#mimi-consent`,
+        verificationMethod: `${alice.did}#mimi-consent`,
         createdAt: canonicalTimestamp(),
         domain: describe.trust_domain,
         audience: describe.service_id,
@@ -491,7 +491,7 @@ test.describe("consent grant", () => {
       ...invisibleUnsigned,
       signature: sdkMimiConsentProof({
         request: invisibleUnsigned,
-        verificationMethod: `${charlie.id}#mimi-consent`,
+        verificationMethod: `${charlie.did}#mimi-consent`,
         createdAt: canonicalTimestamp(),
         domain: describe.trust_domain,
         audience: describe.service_id,
@@ -522,7 +522,7 @@ test.describe("consent grant", () => {
       ...unknownUnsigned,
       signature: sdkMimiConsentProof({
         request: unknownUnsigned,
-        verificationMethod: `${charlie.id}#mimi-consent`,
+        verificationMethod: `${charlie.did}#mimi-consent`,
         createdAt: canonicalTimestamp(),
         domain: describe.trust_domain,
         audience: describe.service_id,
@@ -579,7 +579,7 @@ test.describe("consent grant", () => {
       kind: "ak.consent.grant",
       payload: {
         consent_id: consentId,
-        peer: bob.id,
+        peer_id: bob.id,
         consent_scope: "direct_message",
         expires_at: canonicalTimestamp(
           new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -617,7 +617,7 @@ test.describe("consent grant", () => {
       kind: "ak.consent.revoke",
       payload: {
         consent_id: consentId,
-        observed_dots: [grantDot],
+        observed_dot_ids: [grantDot],
         revoked_at: canonicalTimestamp(new Date(Date.now() + 1000)),
       },
     });

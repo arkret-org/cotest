@@ -264,7 +264,7 @@ test.describe("tsp bootstrap", () => {
     // alive and the client is NOT fail-closed on the TSP outage.
     const eventsResp = await request.fetch(`${solandBaseUrl()}/_arkret/self/events`, {
       method: "QUERY",
-      data: { actors: [alice.id] },
+      data: { actor_ids: [alice.id] },
       headers: { authorization: `Bearer ${aliceToken}` },
     });
     expect(

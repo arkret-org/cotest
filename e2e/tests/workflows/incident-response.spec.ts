@@ -18,6 +18,7 @@ import {
   queryRealmEventsApi,
   signedEventEnvelope,
   submitSignedEventApi,
+  retypeEventDerivedId,
   typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
@@ -169,19 +170,16 @@ test.describe("workflow: incident response", () => {
       title: `SEV FSM ${stamp}`,
       ownerId: oncall.id,
     });
-    const incidentStrandId = typedId("strand");
     const createdAt = canonicalTimestamp();
-    await submitSignedEventApi(
-      request,
-      token,
-      signedEventEnvelope({
+    // `ak.strand.create` derives `ak:strand:` from the create Event, so the
+    // object carries no `id` and the caller retypes the finished envelope.
+    const incidentStrandEnvelope = signedEventEnvelope({
         actorId: oncall.id,
         realmId,
         kind: "ak.strand.create",
         createdAt,
         payload: {
           object: {
-            id: incidentStrandId,
             schema: "ak.schema.strand.v1",
             realm_id: realmId,
             metadata: {
@@ -194,8 +192,13 @@ test.describe("workflow: incident response", () => {
             created_at: createdAt,
           },
         },
-      }),
-      { context: "create investigating incident strand" },
+      });
+    await submitSignedEventApi(request, token, incidentStrandEnvelope, {
+      context: "create investigating incident strand",
+    });
+    const incidentStrandId = retypeEventDerivedId(
+      String(incidentStrandEnvelope.event_id),
+      "strand",
     );
 
     const badResolvedEvent = signedEventEnvelope({
@@ -353,7 +356,7 @@ async function queryRealmEventsWithDpop(
   const url = `${solandBaseUrl()}/_arkret/self/events`;
   const response = await request.fetch(url, {
     method: "QUERY",
-    data: { realms: [realmId], limit: 100 },
+    data: { realm_ids: [realmId], limit: 100 },
     headers: selfPathHeadersForDpopSession(session, "QUERY", url),
   });
   expect(response.status()).toBe(200);

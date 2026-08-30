@@ -316,7 +316,7 @@ function foundingEvents(args: {
     requirementsCriticalExtensions,
     preconditions: [
       {
-        cell: "ak:cell:ak.component.realm.create.v1:null",
+        cell_id: "ak:cell:ak.component.realm.create.v1:null",
         predicate: { op: "head_eq", value: null },
       },
     ],
@@ -388,7 +388,7 @@ function foundingEvents(args: {
     authorizationRef: REALM_AUTHORITY_ROOT_CELL,
     preconditions: [
       {
-        cell: `ak:cell:ak.component.member.state.v1:${args.founderId}`,
+        cell_id: `ak:cell:ak.component.member.state.v1:${args.founderId}`,
         predicate: { op: "head_eq", value: null },
       },
     ],
@@ -548,7 +548,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
           ...selfPathHeadersForDpopSession(bobSession, "QUERY", eventsUrl),
           "content-type": "application/json",
         },
-        data: canonicalJson({ realms: [accepted.realmId], limit: 100 }),
+        data: canonicalJson({ realm_ids: [accepted.realmId], limit: 100 }),
       }),
       `query events for accepted Direct Conversation ${accepted.realmId}`,
     );
@@ -562,7 +562,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
         ...selfPathHeadersForDpopSession(bobSession, "QUERY", eventsUrl),
         "content-type": "application/json",
       },
-      data: canonicalJson({ realms: [losing.realmId], limit: 100 }),
+      data: canonicalJson({ realm_ids: [losing.realmId], limit: 100 }),
     });
     const losingHistoryText = await losingHistory.text();
     expect(losingHistory.status(), losingHistoryText).toBe(404);

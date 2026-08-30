@@ -143,7 +143,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
       expect(creatorMembership.preconditions).toEqual([
         {
-          cell: `ak:cell:ak.component.member.state.v1:${creatorId}`,
+          cell_id: `ak:cell:ak.component.member.state.v1:${creatorId}`,
           predicate: { op: "head_eq", value: null },
         },
       ]);
@@ -316,7 +316,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         {
           strand_id: strandId,
           track_name: "discussion",
-          reply_to: retypeEventDerivedId(controllerMessageId, "message"),
+          reply_to_id: retypeEventDerivedId(controllerMessageId, "message"),
           content: {
             kind: "ak.content.text",
             body: replyBody,
@@ -679,13 +679,8 @@ async function resolveDefaultStrandId(
   ).toBeTruthy();
   const body = (await flowsResp.json()) as {
     strands?: Array<{ strand_id?: string; is_default?: boolean }>;
-    items?: Array<{ strand_id?: string; is_default?: boolean }>;
   };
-  const strands = Array.isArray(body.strands)
-    ? body.strands
-    : Array.isArray(body.items)
-      ? body.items
-      : [];
+  const strands = body.strands ?? [];
   const def = strands.find((strand) => strand.is_default === true);
   if (def?.strand_id) {
     return def.strand_id;

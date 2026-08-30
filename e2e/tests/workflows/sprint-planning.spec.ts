@@ -627,11 +627,7 @@ async function boardSpaceIdByTitle(
     return "";
   }
   const body = await resp.json();
-  const spaces = Array.isArray(body.spaces)
-    ? body.spaces
-    : Array.isArray(body.items)
-      ? body.items
-      : [];
+  const spaces = body.spaces ?? [];
   const board = spaces.find(
     (space: { kind?: string; space_id?: string; title?: string }) =>
       space.kind === "board" && space.title === title,
@@ -653,11 +649,7 @@ async function strandTitlesForBoard(
     return [];
   }
   const body = await resp.json();
-  const strands = Array.isArray(body.strands)
-    ? body.strands
-    : Array.isArray(body.items)
-      ? body.items
-      : [];
+  const strands = body.strands ?? [];
   return strands
     .filter(
       (strand: { board_space_id?: string }) =>

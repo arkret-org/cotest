@@ -212,7 +212,7 @@ export async function listRealmEventsViaApi(
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
   const response = await request.fetch(url, {
     method: "QUERY",
-    data: canonicalJson({ realms: [realmId], limit: opts.limit ?? 50 }),
+    data: canonicalJson({ realm_ids: [realmId], limit: opts.limit ?? 50 }),
     headers: {
       ...authHeaders(token, "QUERY", url),
       "content-type": "application/json",

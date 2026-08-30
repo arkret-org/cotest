@@ -42,7 +42,7 @@ test.describe("single device-authorization model @fully-implemented", () => {
       authorized_by: alice.deviceId,
       authorization_binding_kind: "accepted_device",
       device_id: targetDeviceId,
-      device_public_key: targetKey.didKey,
+      device_public_key_did: targetKey.didKey,
     });
     expect(payload).not.toHaveProperty("authority_did");
     expect(payload).not.toHaveProperty("delegation");
@@ -95,7 +95,7 @@ test.describe("single device-authorization model @fully-implemented", () => {
     });
     const forged = {
       ...payload,
-      device_public_key: generateDeviceAuthorizationKey().didKey,
+      device_public_key_did: generateDeviceAuthorizationKey().didKey,
     };
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,

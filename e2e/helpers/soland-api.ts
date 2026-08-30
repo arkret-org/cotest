@@ -620,7 +620,7 @@ export async function createRealmApi(
     data.plaintext_visible_services ??
     (data.encryption_profile === "mls_rfc9420"
       ? []
-      : [solandServiceId(opts.server), "did:web:soland.local"]);
+      : [solandServiceId(opts.server)]);
   const plaintextVisibleServices = plaintextVisibleServiceDeclarations(
     plaintextVisibleServiceIds,
   );
@@ -653,7 +653,7 @@ export async function createRealmApi(
     createdAt,
     preconditions: [
       {
-        cell: realmCreateCell,
+        cell_id: realmCreateCell,
         predicate: { op: "head_eq", value: null },
       },
     ],
@@ -688,7 +688,7 @@ export async function createRealmApi(
         authorizationRef: REALM_AUTHORITY_ROOT_CELL,
         preconditions: [
           {
-            cell,
+            cell_id: cell,
             predicate: { op: "head_eq", value: null },
           },
         ],
@@ -961,7 +961,7 @@ export async function writeJoinPolicyApi(
     },
     preconditions: [
       {
-        cell: policyCell,
+        cell_id: policyCell,
         predicate: { op: "head_eq", value: currentPolicy },
       },
     ],
@@ -1788,7 +1788,7 @@ export async function queryRealmEventsApi(
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
   const response = await request.fetch(url, {
     method: "QUERY",
-    data: canonicalJson({ realms: [realmId], limit: opts.limit ?? 100 }),
+    data: canonicalJson({ realm_ids: [realmId], limit: opts.limit ?? 100 }),
     headers: {
       ...authHeaders(token, "QUERY", url),
       "content-type": "application/json",
@@ -2115,9 +2115,12 @@ function eventEnvelopeProof(args: {
     };
   }
 
+  // The resolved verification method is always a DID URL (explicit argument,
+  // registered signer, or the `did:`-only fallback above), so its DID prefix is
+  // the authoring DID the SDK projects back to `args.actorId`. Falling back to
+  // `args.actorId` instead would hand the wire CLI a projected core id.
   return sdkEventEnvelopeProof({
-    actorId:
-      registeredSigner?.verificationMethod.split("#", 1)[0] ?? args.actorId,
+    actorDid: verificationMethod.split("#", 1)[0]!,
     event: args.event,
     verificationMethod,
     createdAt,
@@ -3476,13 +3479,8 @@ export async function resolveDefaultStrandId(
   ).toBeTruthy();
   const body = (await flowsResp.json()) as {
     strands?: Array<{ strand_id?: string; is_default?: boolean }>;
-    items?: Array<{ strand_id?: string; is_default?: boolean }>;
   };
-  const strands = Array.isArray(body.strands)
-    ? body.strands
-    : Array.isArray(body.items)
-      ? body.items
-      : [];
+  const strands = body.strands ?? [];
   const def = strands.find((strand) => strand.is_default === true);
   if (def?.strand_id) {
     return def.strand_id;
@@ -3538,9 +3536,8 @@ export async function resolveDefaultStrandId(
         if (!response.ok()) return false;
         const body = (await response.json()) as {
           strands?: Array<{ strand_id?: string }>;
-          items?: Array<{ strand_id?: string }>;
         };
-        return [...(body.strands ?? []), ...(body.items ?? [])].some(
+        return (body.strands ?? []).some(
           (strand) => strand.strand_id === strandId,
         );
       },
@@ -3569,10 +3566,12 @@ export async function resolveDefaultStrandId(
         });
         if (!response.ok()) return false;
         const body = (await response.json()) as {
-          strands?: Array<{ strand_id?: string; is_default?: boolean }>;
-          items?: Array<{ strand_id?: string; is_default?: boolean }>;
+          strands?: Array<{
+            strand_id?: string;
+            is_default?: boolean;
+          }>;
         };
-        return [...(body.strands ?? []), ...(body.items ?? [])].some(
+        return (body.strands ?? []).some(
           (strand) =>
             strand.strand_id === strandId && strand.is_default === true,
         );
@@ -3681,7 +3680,7 @@ export async function pushFederationEvents(
     status?: string;
     accepted?: string[];
     duplicate?: string[];
-    rejected?: Array<Record<string, unknown>>;
+    rejections?: Array<Record<string, unknown>>;
     quarantine?: unknown[];
   }>(response, "push federation events");
 }
@@ -3928,8 +3927,8 @@ export async function queryPeerEventsApi(
   },
 ) {
   const body = stripUndefined({
-    realms: opts.realmId ? [opts.realmId] : undefined,
-    actors: opts.actorId ? [opts.actorId] : undefined,
+    realm_ids: opts.realmId ? [opts.realmId] : undefined,
+    actor_ids: opts.actorId ? [opts.actorId] : undefined,
     limit: opts.limit ?? 100,
     after: opts.after,
   });

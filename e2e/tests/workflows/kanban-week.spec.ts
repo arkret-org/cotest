@@ -39,7 +39,7 @@ async function readRealmEvents(
       ...selfPathHeadersForDpopSession(session, "QUERY", url),
       "content-type": "application/json",
     },
-    data: canonicalJson({ limit: 256, realms: [realmId] }),
+    data: canonicalJson({ limit: 256, realm_ids: [realmId] }),
   });
   expect(response.status(), await response.text()).toBe(200);
   const body = (await response.json()) as {

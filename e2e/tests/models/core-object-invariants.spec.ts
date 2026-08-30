@@ -57,32 +57,31 @@ async function createStrandApi(
   title: string,
   fields: Record<string, unknown> = { status: "open" },
 ): Promise<string> {
-  const strandId = typedId("strand");
   const createdAt = canonicalTimestamp();
-  await submitSignedEventApi(
-    request,
-    token,
-    signedEventEnvelope({
-      actorId,
-      realmId,
-      kind: "ak.strand.create",
-      createdAt,
-      payload: {
-        object: {
-          id: strandId,
-          schema: "ak.schema.strand.v1",
-          realm_id: realmId,
-          metadata: { title, fields },
-          stage: "planned",
-          tracks: { discussion: { enabled: true, is_primary: true } },
-          created_by: actorId,
-          created_at: createdAt,
-        },
+  // `ak.strand.create` derives the object id from the create Event, so the
+  // payload MUST NOT carry `id` (`object_id_not_event_derived`). Retype the
+  // finished envelope's event id instead of minting one up front.
+  const envelope = signedEventEnvelope({
+    actorId,
+    realmId,
+    kind: "ak.strand.create",
+    createdAt,
+    payload: {
+      object: {
+        schema: "ak.schema.strand.v1",
+        realm_id: realmId,
+        metadata: { title, fields },
+        stage: "planned",
+        tracks: { discussion: { enabled: true, is_primary: true } },
+        created_by: actorId,
+        created_at: createdAt,
       },
-    }),
-    { context: `create strand ${title}` },
-  );
-  return strandId;
+    },
+  });
+  await submitSignedEventApi(request, token, envelope, {
+    context: `create strand ${title}`,
+  });
+  return retypeEventDerivedId(String(envelope.event_id), "strand");
 }
 
 type RealmSealBasis = {
@@ -130,8 +129,9 @@ async function fetchRealmSealBasis(
   };
 }
 
+// `ak.relation.create` derives `ak:relation:` from the create Event, so the
+// object MUST NOT carry an `id` (`object_id_not_event_derived`).
 function relationObject(args: {
-  id: string;
   realmId: string;
   relationKind: string;
   fromRef: string;
@@ -139,7 +139,6 @@ function relationObject(args: {
   actorId: string;
 }): Record<string, unknown> {
   return {
-    id: args.id,
     schema: "ak.schema.relation.v1",
     realm_id: args.realmId,
     relation_kind: args.relationKind,
@@ -203,7 +202,7 @@ test.describe("core object invariants", () => {
         ok?: boolean;
         realm_id?: string;
         owner_id?: string;
-        members?: string[];
+        member_ids?: string[];
         deleted?: boolean;
       };
       // Common-field 1: `id` (typed ak:realm: prefix).
@@ -212,8 +211,8 @@ test.describe("core object invariants", () => {
       // Common-field 2: actor reference through the canonical owner field.
       expect(realmBody.owner_id).toBe(alice.id);
       // Membership invariant: owner must always appear in members.
-      expect(Array.isArray(realmBody.members)).toBe(true);
-      expect(realmBody.members ?? []).toContain(alice.id);
+      expect(Array.isArray(realmBody.member_ids)).toBe(true);
+      expect(realmBody.member_ids ?? []).toContain(alice.id);
       // Common-field 3: `lifecycle_state` equivalent (deleted=false ⇒ active).
       expect(realmBody.deleted).toBe(false);
 
@@ -226,7 +225,7 @@ test.describe("core object invariants", () => {
       const eventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const eventsRes = await request.fetch(eventsUrl, {
         method: "QUERY",
-        data: canonicalJson({ realms: [realmId], limit: 20 }),
+        data: canonicalJson({ realm_ids: [realmId], limit: 20 }),
         headers: {
           ...authFor("QUERY", eventsUrl),
           "content-type": "application/json",
@@ -334,7 +333,7 @@ test.describe("core object invariants", () => {
       kind: "ak.strand.move",
       preconditions: [
         {
-          cell: positionCell,
+          cell_id: positionCell,
           predicate: { op: "head_eq", value: null },
         },
       ],
@@ -369,7 +368,7 @@ test.describe("core object invariants", () => {
       kind: "ak.strand.move",
       preconditions: [
         {
-          cell: positionCell,
+          cell_id: positionCell,
           predicate: {
             op: "head_eq",
             value: { list_space_id: staleExpectedListId, rank: "m" },
@@ -413,7 +412,7 @@ test.describe("core object invariants", () => {
       kind: "ak.strand.move",
       preconditions: [
         {
-          cell: positionCell,
+          cell_id: positionCell,
           predicate: { op: "head_eq", value: initialPosition },
         },
       ],
@@ -462,28 +461,30 @@ test.describe("core object invariants", () => {
       ownerId: alice.id,
     });
     const createdAt = canonicalTimestamp();
-    const parentSpaceId = typedId("space");
-    await submitSignedEventApi(
-      request,
-      aliceToken,
-      signedEventEnvelope({
-        actorId: alice.id,
-        realmId,
-        kind: "ak.space.create",
-        createdAt,
-        payload: {
-          object: {
-            id: parentSpaceId,
-            schema: "ak.schema.space.v1",
-            realm_id: realmId,
-            kind: "board",
-            metadata: { title: `core-invariants parent ${stamp}` },
-            created_by: alice.id,
-            created_at: createdAt,
-          },
+    // `ak.space.create` derives `ak:space:` from the create Event, so the
+    // object carries no `id` and the caller retypes the finished envelope.
+    const parentSpaceEnvelope = signedEventEnvelope({
+      actorId: alice.id,
+      realmId,
+      kind: "ak.space.create",
+      createdAt,
+      payload: {
+        object: {
+          schema: "ak.schema.space.v1",
+          realm_id: realmId,
+          kind: "board",
+          metadata: { title: `core-invariants parent ${stamp}` },
+          created_by: alice.id,
+          created_at: createdAt,
         },
-      }),
-      { context: "create parent board space" },
+      },
+    });
+    await submitSignedEventApi(request, aliceToken, parentSpaceEnvelope, {
+      context: "create parent board space",
+    });
+    const parentSpaceId = retypeEventDerivedId(
+      String(parentSpaceEnvelope.event_id),
+      "space",
     );
 
     // Archiving the parent MUST NOT cascade to the child per spec §3.4;
@@ -569,7 +570,6 @@ test.describe("core object invariants", () => {
           kind: "ak.relation.create",
           payload: {
             relation: relationObject({
-              id: relationId,
               realmId,
               relationKind: "has_default_view",
               fromRef: sourceRef,
@@ -612,7 +612,6 @@ test.describe("core object invariants", () => {
       kind: "ak.relation.create",
       payload: {
         relation: relationObject({
-          id: dupRelationId,
           realmId,
           relationKind: "has_default_view",
           fromRef: sourceRef,
@@ -659,7 +658,6 @@ test.describe("core object invariants", () => {
       kind: "ak.relation.create",
       payload: {
         relation: relationObject({
-          id: typedId("relation"),
           realmId,
           relationKind: "contains",
           fromRef: strandInA,

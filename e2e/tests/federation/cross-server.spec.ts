@@ -126,7 +126,7 @@ async function waitForMember(
           return false;
         }
         const body = await response.json();
-        return Array.isArray(body.members) && body.members.includes(memberId);
+        return Array.isArray(body.member_ids) && body.member_ids.includes(memberId);
       },
       { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
     )
@@ -198,7 +198,7 @@ test.describe("cross-server federation", () => {
 
     const pullProbe = await request.fetch(
       `${solandBaseUrl("beta")}/_arkret/peer/events`,
-      { method: "QUERY", data: { realms: ["ak:realm:probe"] } },
+      { method: "QUERY", data: { realm_ids: ["ak:realm:probe"] } },
     );
     expect(pullProbe.status()).not.toBe(404);
   });
@@ -375,7 +375,7 @@ test.describe("cross-server federation", () => {
       realmId,
       idempotencyKey: `${solandServiceId("alpha")}#cotest-cross-server-bootstrap`,
     });
-    expect(bootstrapPush.rejected ?? []).toEqual([]);
+    expect(bootstrapPush.rejections ?? []).toEqual([]);
     expect([
       ...(bootstrapPush.accepted ?? []),
       ...(bootstrapPush.duplicate ?? []),
@@ -467,7 +467,7 @@ test.describe("cross-server federation", () => {
     expect([...(replay.accepted ?? []), ...(replay.duplicate ?? [])]).toContain(
       inviteEvent.event_id,
     );
-    expect(replay.rejected ?? []).toEqual([]);
+    expect(replay.rejections ?? []).toEqual([]);
 
     const pullBody = await queryPeerEventsApi(request, {
       server: "beta",
@@ -503,7 +503,7 @@ test.describe("cross-server federation", () => {
       { headers: authHeaders(bobToken) },
     );
     expect(betaSpace.ok()).toBeTruthy();
-    expect((await betaSpace.json()).members ?? []).toContain(bob.id);
+    expect((await betaSpace.json()).member_ids ?? []).toContain(bob.id);
   });
 
   test("α invite UI event fans out to β and standard peer Events propagates β acceptance back to α", async ({
@@ -569,7 +569,7 @@ test.describe("cross-server federation", () => {
       const alphaEventsUrl = `${solandBaseUrl("alpha")}/_arkret/self/events`;
       const alphaEventsResponse = await request.fetch(alphaEventsUrl, {
         method: "QUERY",
-        data: { realms: [realmId], limit: 100 },
+        data: { realm_ids: [realmId], limit: 100 },
         headers: selfPathHeadersForDpopSession(
           aliceFlow.session,
           "QUERY",
@@ -616,7 +616,7 @@ test.describe("cross-server federation", () => {
           serviceBindingFrontier: [String(alphaBindingEvent!.event_id)],
         },
       );
-      expect(propagation.rejected ?? []).toEqual([]);
+      expect(propagation.rejections ?? []).toEqual([]);
       const alphaRealmUrl =
         `${solandBaseUrl("alpha")}/_arkret/self/realms/` +
         encodeURIComponent(realmId);
@@ -633,8 +633,8 @@ test.describe("cross-server federation", () => {
             if (!response.ok()) {
               return false;
             }
-            const body = (await response.json()) as { members?: string[] };
-            return body.members?.includes(bob.id) ?? false;
+            const body = (await response.json()) as { member_ids?: string[] };
+            return body.member_ids?.includes(bob.id) ?? false;
           },
           { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
         )
@@ -815,7 +815,7 @@ test.describe("cross-server federation", () => {
       idempotencyKey: `${solandServiceId("beta")}#cotest-partition-source`,
       serviceBindingFrontier: [String(alphaBindingEvent!.event_id)],
     });
-    expect(sourceWrite.rejected ?? []).toEqual([]);
+    expect(sourceWrite.rejections ?? []).toEqual([]);
     expect(sourceWrite.accepted ?? []).toContain(missingEvent.event_id);
     await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
 
@@ -874,7 +874,7 @@ test.describe("cross-server federation", () => {
       idempotencyKey: `${solandServiceId("beta")}#cotest-peer-query-recovery`,
       serviceBindingFrontier: [String(betaBindingEvent!.event_id)],
     });
-    expect(ingest.rejected ?? []).toEqual([]);
+    expect(ingest.rejections ?? []).toEqual([]);
     expect([...(ingest.accepted ?? []), ...(ingest.duplicate ?? [])]).toContain(
       String(missingEvent.event_id),
     );

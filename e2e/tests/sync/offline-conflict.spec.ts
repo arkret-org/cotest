@@ -423,7 +423,7 @@ test.describe("offline sync + conflict repair", () => {
       idempotencyKey: `${solandServiceId("beta")}#cotest-offline-backfill`,
       serviceBindingFrontier: [String(betaBindingEvent!.event_id)],
     });
-    expect(ingest.rejected ?? []).toEqual([]);
+    expect(ingest.rejections ?? []).toEqual([]);
     expect(ingest.accepted).toContain(String(missingEvent.event_id));
     await waitForEventBody(request, bobToken, realmId, missingBody, "beta");
 
@@ -616,7 +616,7 @@ async function submitRealmTitleUpdate(
       kind: "ak.realm.profile",
       preconditions: [
         {
-          cell: "ak:cell:ak.component.realm.profile.v1:null",
+          cell_id: "ak:cell:ak.component.realm.profile.v1:null",
           predicate: {
             op: "head_eq",
             value: {

@@ -84,7 +84,7 @@ test.describe("circle membership (same principal server)", () => {
       bobToken,
       circle.circle_id,
     );
-    expect(bobDirectoryView.members).toEqual([]);
+    expect(bobDirectoryView.member_ids).toEqual([]);
     expect(bobDirectoryView.member_count).toBeUndefined();
     expect(bobDirectoryView.viewer_membership).toBeUndefined();
 
@@ -118,7 +118,7 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.members).toContain(bob.id);
+    expect(fetched.member_ids).toContain(bob.id);
 
     // The DELETE is itself a caller-signed membership Move. Its payload binds
     // both path ids and carries the observed joined head as the CAS guard.
@@ -139,7 +139,7 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(afterRemoval.members).not.toContain(bob.id);
+    expect(afterRemoval.member_ids).not.toContain(bob.id);
   });
 
   test("S8 lifecycle archive then restore returns Circle to active", async ({
@@ -259,7 +259,7 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.members ?? []).not.toContain(mallory.id);
+    expect(fetched.member_ids ?? []).not.toContain(mallory.id);
   });
 
   // S8 capability: a realm member who is NOT the owner and holds no
@@ -332,6 +332,6 @@ test.describe("circle membership (same principal server)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.members ?? []).not.toContain(dave.id);
+    expect(fetched.member_ids ?? []).not.toContain(dave.id);
   });
 });

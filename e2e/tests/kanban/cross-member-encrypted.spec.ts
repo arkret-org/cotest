@@ -76,7 +76,7 @@ async function waitForMlsWelcome(
         const url = `${solandBaseUrl()}/_arkret/self/events`;
         const response = await request.fetch(url, {
           method: "QUERY",
-          data: { realms: [realmId], limit: 500 },
+          data: { realm_ids: [realmId], limit: 500 },
           headers: selfPathGrantHeaders({
             deviceKey: session.deviceKey,
             grantJwt: session.grantJwt,
@@ -681,7 +681,7 @@ test.describe("cross-member encrypted kanban", () => {
             const url = `${solandBaseUrl()}/_arkret/self/events`;
             const resp = await request.fetch(url, {
               method: "QUERY",
-              data: { realms: [realmId], limit: 500 },
+              data: { realm_ids: [realmId], limit: 500 },
               headers: selfPathGrantHeaders({
                 deviceKey: bobSession.deviceKey,
                 grantJwt: bobSession.grantJwt,
@@ -747,7 +747,7 @@ test.describe("cross-member encrypted kanban", () => {
       const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const rawEvents = await request.fetch(rawEventsUrl, {
         method: "QUERY",
-        data: { realms: [realmId], limit: 200 },
+        data: { realm_ids: [realmId], limit: 200 },
         headers: selfPathGrantHeaders({
           deviceKey: aliceSession.deviceKey,
           grantJwt: aliceSession.grantJwt,
@@ -866,7 +866,7 @@ test.describe("cross-member encrypted kanban", () => {
             const url = `${solandBaseUrl()}/_arkret/self/events`;
             const resp = await request.fetch(url, {
               method: "QUERY",
-              data: { realms: [realmId], limit: 500 },
+              data: { realm_ids: [realmId], limit: 500 },
               headers: selfPathGrantHeaders({
                 deviceKey: bobSession.deviceKey,
                 grantJwt: bobSession.grantJwt,
@@ -903,7 +903,7 @@ test.describe("cross-member encrypted kanban", () => {
       const rawEventsUrl = `${solandBaseUrl()}/_arkret/self/events`;
       const rawEvents = await request.fetch(rawEventsUrl, {
         method: "QUERY",
-        data: { realms: [realmId], limit: 200 },
+        data: { realm_ids: [realmId], limit: 200 },
         headers: selfPathGrantHeaders({
           deviceKey: aliceSession.deviceKey,
           grantJwt: aliceSession.grantJwt,

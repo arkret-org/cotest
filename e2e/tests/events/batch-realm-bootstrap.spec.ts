@@ -109,7 +109,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       "the creator member cell genesis write MUST carry head_eq null",
     ).toEqual([
       {
-        cell: `ak:cell:ak.component.member.state.v1:${alice.id}`,
+        cell_id: `ak:cell:ak.component.member.state.v1:${alice.id}`,
         predicate: { op: "head_eq", value: null },
       },
     ]);

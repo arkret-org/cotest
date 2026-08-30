@@ -175,7 +175,7 @@ test.describe("chat advanced", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        reply_to: rootMessageRef,
+        reply_to_id: rootMessageRef,
         content: { kind: "ak.content.text", body: replyBody },
       },
     });
@@ -196,7 +196,7 @@ test.describe("chat advanced", () => {
       reply.event_id,
     ]);
     expect(messageEvents.at(-1)?.payload).toMatchObject({
-      reply_to: rootMessageRef,
+      reply_to_id: rootMessageRef,
       track_name: "discussion",
     });
   });
@@ -295,7 +295,7 @@ test.describe("chat advanced", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        reply_to: rootMessageRef,
+        reply_to_id: rootMessageRef,
         content: { kind: "ak.content.text", body: `reply ${Date.now()}` },
       },
     });
@@ -385,7 +385,7 @@ test.describe("chat advanced", () => {
     );
     expect(replyProjection).toMatchObject({
       payload: {
-        reply_to: rootMessageRef,
+        reply_to_id: rootMessageRef,
       },
     });
   });

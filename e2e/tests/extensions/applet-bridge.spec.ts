@@ -146,7 +146,7 @@ async function configureAppletPlaintextServices(
     sealBasis: await readRealmSealBasis(request, token, realmId),
     preconditions: [
       {
-        cell,
+        cell_id: cell,
         predicate: {
           op: "head_eq",
           value:
@@ -312,7 +312,6 @@ test.describe("applet bridge", () => {
         realmId,
         [
           solandServiceId(),
-          "did:web:soland.local",
           signed.applet_package.service_id,
         ],
       );
@@ -1420,10 +1419,10 @@ test.describe("applet inbound transaction push — per-delivery source signature
     expect(resp.status(), responseText).toBe(200);
     const outcome = JSON.parse(responseText) as {
       ok?: boolean;
-      rejected?: unknown[];
+      rejections?: unknown[];
     };
     expect(outcome.ok).toBe(true);
-    expect(outcome.rejected ?? []).toEqual([]);
+    expect(outcome.rejections ?? []).toEqual([]);
   });
 
   test("missing Signature (bearer-only) inbound transaction push → 401 http_signature_required", async ({
@@ -2385,7 +2384,7 @@ function buildGhostManagedActorCreation(args: {
     requirementsSchema: ["ak.schema.realm_genesis.v1"],
     preconditions: [
       {
-        cell: "ak:cell:ak.component.realm.create.v1:null",
+        cell_id: "ak:cell:ak.component.realm.create.v1:null",
         predicate: { op: "head_eq", value: null },
       },
     ],
@@ -2635,10 +2634,11 @@ function appletEventProof(
   event: Record<string, unknown>,
   signingKey?: KeyObject,
 ): Record<string, unknown> {
-  const actorId = String(event.actor_id);
+  // `event.actor_id` is the projected core id; the proof binds to the authoring
+  // DID, which is the DID URL prefix of the bot's verification method.
   const signingSeedB64url = signingKey?.export({ format: "jwk" }).d;
   return sdkEventEnvelopeProof({
-    actorId,
+    actorDid: verificationMethod.split("#", 1)[0]!,
     event,
     verificationMethod,
     createdAt: canonicalEventTimestamp(),

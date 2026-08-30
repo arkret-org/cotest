@@ -36,11 +36,14 @@ export function generateDeviceAuthorizationKey(): DeviceAuthorizationKey {
 export function buildDevicePossessionSignature(args: {
   principalId: string;
   deviceId: string;
-  devicePublicKey: string;
+  devicePublicKeyDid: string;
   hpkeKey: string;
   algorithms: readonly string[];
   authorizedBy: string;
-  authorizationBindingKind: "root_anchored" | "accepted_device";
+  authorizationBindingKind:
+    | "registration_anchor"
+    | "pcr_recovery"
+    | "accepted_device";
   notBefore: string;
   privateKey: KeyObject;
   recoverySessionId?: string | null;
@@ -48,7 +51,7 @@ export function buildDevicePossessionSignature(args: {
   const body = {
     principal_id: args.principalId,
     device_id: args.deviceId,
-    device_public_key: args.devicePublicKey,
+    device_public_key_did: args.devicePublicKeyDid,
     hpke_key: args.hpkeKey,
     algorithms: [...args.algorithms],
     device_key_algorithm: "Ed25519",
@@ -78,7 +81,7 @@ export function acceptedDeviceAuthorizePayload(args: {
   const signature = buildDevicePossessionSignature({
     principalId: args.principalId,
     deviceId: args.targetDeviceId,
-    devicePublicKey: args.targetKey.didKey,
+    devicePublicKeyDid: args.targetKey.didKey,
     hpkeKey,
     algorithms: TEST_DEVICE_ALGORITHMS,
     authorizedBy: args.authorizerDeviceId,
@@ -89,7 +92,7 @@ export function acceptedDeviceAuthorizePayload(args: {
   return {
     principal_id: args.principalId,
     device_id: args.targetDeviceId,
-    device_public_key: args.targetKey.didKey,
+    device_public_key_did: args.targetKey.didKey,
     hpke_key: hpkeKey,
     algorithms: [...TEST_DEVICE_ALGORITHMS],
     device_key_algorithm: "Ed25519",

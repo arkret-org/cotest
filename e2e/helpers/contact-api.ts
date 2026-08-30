@@ -160,7 +160,7 @@ export async function grantInviteConsentArkret(
     kind: "ak.consent.grant",
     payload: {
       consent_id: consentId,
-      peer: peerId,
+      peer_id: peerId,
       consent_scope: "invite",
       expires_at: canonicalTimestamp(
         new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -215,7 +215,7 @@ export async function revokeInviteConsentArkret(
     kind: "ak.consent.revoke",
     payload: {
       consent_id: grant.consentId,
-      observed_dots: [grant.dot],
+      observed_dot_ids: [grant.dot],
       revoked_at: canonicalTimestamp(),
     },
   });
@@ -689,10 +689,10 @@ async function uploadDirectConversationKeyPackage(
   });
   const body = await expectJsonOk<{
     accepted: number;
-    rejected?: Array<Record<string, unknown>>;
+    rejections?: Array<Record<string, unknown>>;
   }>(response, `upload direct-conversation KeyPackage ${user.id}`);
   expect(body.accepted).toBe(1);
-  expect(body.rejected ?? []).toEqual([]);
+  expect(body.rejections ?? []).toEqual([]);
 }
 
 // ── Invite-receive policy (graded disclosure / blocked subjects). ──
