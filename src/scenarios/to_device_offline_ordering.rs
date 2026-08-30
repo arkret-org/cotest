@@ -172,7 +172,6 @@ pub async fn to_device_offline_ordering_run() -> Result<()> {
 
     let conflicting = device_message_send_request(
         &bob_did,
-        server.service_id().as_str(),
         bob_device,
         "ak:device_message:0196419b-0000-7000-8000-00000000c102",
         "ak.mls.application",
@@ -219,7 +218,6 @@ async fn send_to_device(
     } = request;
     let body = device_message_send_request(
         recipient,
-        server.service_id().as_str(),
         device_id,
         device_message_id,
         "ak.mls.application",

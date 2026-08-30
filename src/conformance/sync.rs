@@ -588,13 +588,13 @@ fn validate_snapshot_inclusion_challenge(value: &Value) -> Result<()> {
         "event_set_commitment.actor_seq_ranges",
     )?;
     for range in actor_ranges {
-        let actor_id = value_field_str(range, "actor_id")?;
+        let actor_id = super::value_field_actor(range, "actor_id")?;
         let from_seq = value_field_u64(range, "from_seq")?;
         let to_seq = value_field_u64(range, "to_seq")?;
         let actor_entries = entries
             .iter()
             .filter(|entry| {
-                entry.get("actor_id").and_then(Value::as_str) == Some(actor_id)
+                super::value_field_actor(entry, "actor_id").is_ok_and(|actor| actor == actor_id)
                     && entry
                         .get("actor_seq")
                         .and_then(Value::as_u64)
@@ -833,7 +833,7 @@ fn merkle_event_set_root(entries: &[Value]) -> Result<String> {
 fn range_key(value: &Value) -> Result<String> {
     Ok(format!(
         "{}:{}:{}",
-        value_field_str(value, "actor_id")?,
+        super::value_field_actor(value, "actor_id")?,
         value_field_u64(value, "from_seq")?,
         value_field_u64(value, "to_seq")?
     ))

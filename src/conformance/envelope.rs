@@ -280,7 +280,7 @@ fn validate_event_envelope_negative_case(
     }
     if let Some(frontier) = input.get("actor_frontier") {
         context.actor_frontier = Some(ActorFrontier {
-            actor_id: required_str(frontier, "actor_id")?.to_owned(),
+            actor_id: super::value_field_actor(frontier, "actor_id")?,
             actor_seq: value_field_u64(frontier, "actor_seq")?,
         });
     }
@@ -452,7 +452,10 @@ fn validate_synthetic_event_envelope_negatives(
 
     let mut revoked_context = EventEnvelopeContext::default_for_durable_history();
     revoked_context.revoked_at_by_actor.insert(
-        "ak:did_core:web:alice.example".to_owned(),
+        arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            arkret_wire::DidCoreId::new("ak:did_core:web:alice.example")?,
+            arkret_wire::DidCoreId::new("ak:did_core:web:principal.example")?,
+        )),
         "2026-05-02T00:05:00.000Z".to_owned(),
     );
     let backdated = sample_envelope_event(
@@ -535,7 +538,6 @@ fn validate_event_envelope(
         "realm_id",
         "scope_ref",
         "actor_id",
-        "station_id",
         "executed_by",
         "authorization_ref",
         "applet_id",
@@ -596,7 +598,7 @@ fn validate_event_envelope(
     }
 
     // Spec event-envelope.schema.json required fields:
-    //   event_id, kind, realm_id, actor_id, station_id, actor_seq, created_at,
+    //   event_id, kind, realm_id, actor_id, actor_seq, created_at,
     //   prev_refs, refs, payload, proofs
     // `refs` MUST be present per spec — negative fixture
     // `reject_missing_refs[role=authorized_by]` exercises this. `prev_refs`
@@ -605,7 +607,6 @@ fn validate_event_envelope(
         "event_id",
         "realm_id",
         "actor_id",
-        "station_id",
         "actor_seq",
         "created_at",
         "prev_refs",
@@ -632,18 +633,15 @@ fn validate_event_envelope(
             "invalid realm_id",
         ));
     }
-    if !value_field_str(event, "actor_id")?.starts_with("ak:did_core:") {
-        return Ok(EventEnvelopeDecision::reject(
-            "schema_violation",
-            "invalid actor_id",
-        ));
-    }
-    if arkret_identifiers::DidCoreId::new(value_field_str(event, "station_id")?).is_err() {
-        return Ok(EventEnvelopeDecision::reject(
-            "schema_violation",
-            "invalid station_id",
-        ));
-    }
+    let actor_id = match super::value_field_actor(event, "actor_id") {
+        Ok(actor) => actor,
+        Err(_) => {
+            return Ok(EventEnvelopeDecision::reject(
+                "schema_violation",
+                "invalid actor_id",
+            ));
+        }
+    };
     let actor_seq = value_field_u64(event, "actor_seq")?;
     let prev_refs = value_array(
         event
@@ -726,7 +724,7 @@ fn validate_event_envelope(
     }
 
     if let Some(frontier) = &context.actor_frontier
-        && frontier.actor_id == value_field_str(event, "actor_id")?
+        && frontier.actor_id == actor_id
         && actor_seq <= frontier.actor_seq
     {
         return Ok(EventEnvelopeDecision::reject(
@@ -745,9 +743,7 @@ fn validate_event_envelope(
         }
     }
 
-    if let Some(revoked_at) = context
-        .revoked_at_by_actor
-        .get(value_field_str(event, "actor_id")?)
+    if let Some(revoked_at) = context.revoked_at_by_actor.get(&actor_id)
         && value_field_str(event, "created_at")? <= revoked_at.as_str()
     {
         return Ok(EventEnvelopeDecision::reject(
@@ -996,7 +992,7 @@ struct EventEnvelopeContext {
     durable_history: bool,
     supported_features: BTreeSet<String>,
     actor_frontier: Option<ActorFrontier>,
-    revoked_at_by_actor: BTreeMap<String, String>,
+    revoked_at_by_actor: BTreeMap<arkret_wire::ActorId, String>,
     max_canonical_bytes: usize,
     max_prev_refs: usize,
     now_hlc_ms: Option<u64>,
@@ -1019,7 +1015,7 @@ impl EventEnvelopeContext {
 }
 
 struct ActorFrontier {
-    actor_id: String,
+    actor_id: arkret_wire::ActorId,
     actor_seq: u64,
 }
 
@@ -1068,8 +1064,7 @@ fn sample_envelope_event(
         "event_id": "ak:event:AbmZo_Q7CHRfJYVqari3NAaEZm6tfSbZppTL7IsJJ7Gl",
         "kind": kind,
         "realm_id": "ak:realm:AXvhSdy6b-PYcJNuFcYsp-gKHjg-PECuUtuV08YJYwhK",
-        "actor_id": "ak:did_core:web:alice.example",
-        "station_id": "ak:did_core:web:principal.example",
+        "actor_id": {"kind":"account", "account_id":{"principal_id":"ak:did_core:web:alice.example", "station_id":"ak:did_core:web:principal.example"}},
         "actor_seq": actor_seq,
         "created_at": created_at,
         "hlc": hlc,
@@ -1115,9 +1110,10 @@ fn assert_event_decision(
 ) -> Result<()> {
     if actual.decision != expected_decision {
         bail!(
-            "event envelope {context} expected decision {expected_decision}, got {} ({:?})",
+            "event envelope {context} expected decision {expected_decision}, got {} ({:?}): {}",
             actual.decision,
-            actual.error_code
+            actual.error_code,
+            actual.reason
         );
     }
     if let Some(expected_error_code) = expected_error_code

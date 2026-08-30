@@ -439,7 +439,7 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
                         "content": {"kind": "ak.content.text", "body": "Synthesis secret"}
                     }
                 },
-                "created_by": actor.as_str(),
+                "created_by": arkret_wire::ActorId::account(arkret_wire::AccountId::new(actor.clone(), actor.clone())),
                 "created_at": "2026-05-02T00:00:00.000Z"
             }
         }),

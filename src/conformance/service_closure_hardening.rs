@@ -380,7 +380,8 @@ fn evaluate_range_completeness_step(step: &Value) -> Result<Value> {
     if let Some(witnesses) = step.get("witnesses").and_then(Value::as_array)
         && witnesses.len() >= 2
         && required_str(&witnesses[0], "realm_id")? == required_str(&witnesses[1], "realm_id")?
-        && required_str(&witnesses[0], "actor_id")? == required_str(&witnesses[1], "actor_id")?
+        && super::value_field_actor(&witnesses[0], "actor_id")?
+            == super::value_field_actor(&witnesses[1], "actor_id")?
         && required_u64(&witnesses[0], "actor_seq")? == required_u64(&witnesses[1], "actor_seq")?
         && required_str(&witnesses[0], "event_digest")?
             != required_str(&witnesses[1], "event_digest")?

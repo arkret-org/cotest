@@ -29,7 +29,6 @@ async fn send_application_message(
                     .header("Idempotency-Key", "protocol-device-txn")
                     .json(&device_message_send_request(
                         actor_id,
-                        server.service_id().as_str(),
                         "ak:device:01904100-0000-7000-8000-0000000000a1",
                         "ak:device_message:0196419b-0000-7000-8000-00000000f201",
                         "ak.mls.application",
@@ -63,7 +62,6 @@ async fn duplicate_send_is_idempotent(
             .header("Idempotency-Key", "protocol-device-txn")
             .json(&device_message_send_request(
                 actor_id,
-                server.service_id().as_str(),
                 "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "ak:device_message:0196419b-0000-7000-8000-00000000f201",
                 "ak.mls.application",
@@ -111,7 +109,6 @@ async fn send_verification_message(
             .header("Idempotency-Key", "protocol-verification-txn")
             .json(&device_message_send_request(
                 actor_id,
-                server.service_id().as_str(),
                 "ak:device:01904100-0000-7000-8000-0000000000a1",
                 "ak:device_message:0196419b-0000-7000-8000-00000000f202",
                 "ak.key.verification.request",

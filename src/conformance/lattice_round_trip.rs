@@ -950,16 +950,16 @@ fn ordered_log_per_issuer_monotonic_append() -> Result<()> {
         bail!("exact Event replay is a duplicate, not a sibling: {report:?}");
     }
     let entries = &report.entries;
+    let alice = ops[1].issuer_id.to_string();
+    let bob = ops[0].issuer_id.to_string();
     if entries.len() != 3 {
         bail!("OrderedLog must dedupe byte-identical appends and keep 3 entries, got {entries:?}");
     }
-    if entries[0].get("issuer_id").and_then(Value::as_str) != Some("ak:did_core:web:alice.example")
+    if entries[0].get("issuer_id").and_then(Value::as_str) != Some(alice.as_str())
         || entries[0].get("issuer_seq").and_then(Value::as_u64) != Some(0)
-        || entries[1].get("issuer_id").and_then(Value::as_str)
-            != Some("ak:did_core:web:alice.example")
+        || entries[1].get("issuer_id").and_then(Value::as_str) != Some(alice.as_str())
         || entries[1].get("issuer_seq").and_then(Value::as_u64) != Some(1)
-        || entries[2].get("issuer_id").and_then(Value::as_str)
-            != Some("ak:did_core:web:bob.example")
+        || entries[2].get("issuer_id").and_then(Value::as_str) != Some(bob.as_str())
         || entries[2].get("issuer_seq").and_then(Value::as_u64) != Some(0)
     {
         bail!("OrderedLog entries are not sorted by issuer then seq: {entries:?}");

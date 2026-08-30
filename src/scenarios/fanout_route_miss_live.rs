@@ -34,6 +34,10 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             let source_ephemeral =
                 crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?;
             let Some(database) = source_ephemeral.as_ref() else {
+                ensure!(
+                    std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
+                    "required live federation: source PostgreSQL unavailable"
+                );
                 eprintln!(
                     "skipping fanout route-miss live E2E: set COTEST_FANOUT_SOURCE_DATABASE_URL or make Docker/Postgres available"
                 );
@@ -50,6 +54,10 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             let target_ephemeral =
                 crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?;
             let Some(database) = target_ephemeral.as_ref() else {
+                ensure!(
+                    std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
+                    "required live federation: target PostgreSQL unavailable"
+                );
                 eprintln!(
                     "skipping fanout route-miss live E2E: set COTEST_FANOUT_TARGET_DATABASE_URL or make a second Docker/Postgres available"
                 );
@@ -88,6 +96,10 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     let Some(mut group) =
         TestServerGroup::try_multi_external_with_node_envs("fanout-route-miss", &node_envs).await?
     else {
+        ensure!(
+            std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
+            "required live federation: prebuilt Soland unavailable"
+        );
         eprintln!("skipping fanout route-miss live E2E: prebuilt Soland is unavailable");
         return Ok(());
     };
@@ -95,7 +107,8 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     group.server(1).assert_tls_trust_boundaries().await?;
 
     let alice_did = actor_did_for_service_did(group.server(0).service_did(), "fanout-alice")?;
-    let bob_did = actor_did_for_service_did(group.server(1).service_did(), "fanout-bob")?;
+    // Deliberately reuse one DID: Station-local account authority must not collapse it.
+    let bob_did = alice_did.clone();
     let alice = group
         .server(0)
         .register_client(&alice_did, "fanout-alice", ALICE_DEVICE)
@@ -104,6 +117,29 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         .server(1)
         .register_client(&bob_did, "fanout-bob", BOB_DEVICE)
         .await?;
+    let alice_principal = alice.principal.as_ref().context("source PCR bootstrap")?;
+    let bob_principal = bob.principal.as_ref().context("target PCR bootstrap")?;
+    ensure!(alice_principal.core_id == bob_principal.core_id);
+    ensure!(
+        alice_principal.pcr_realm_id != bob_principal.pcr_realm_id,
+        "same DID on distinct Stations inherited one PCR lineage"
+    );
+    let wrong_station_session =
+        group
+            .server(1)
+            .client_with_token(&alice_did, ALICE_DEVICE, alice.token.clone())?;
+    let cross_session = wrong_station_session
+        .get("/_arkret/self/account/viewer")
+        .send()
+        .await?;
+    ensure!(
+        matches!(
+            cross_session.status(),
+            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+        ),
+        "source Station session was not rejected by target Station: {}",
+        cross_session.status()
+    );
     let bootstrap = alice
         .create_realm_bootstrap_with(json!({
             "title": "Fanout route miss",

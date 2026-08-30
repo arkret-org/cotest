@@ -738,6 +738,12 @@ pub(crate) fn value_field_u64(value: &Value, field: &str) -> Result<u64> {
         .ok_or_else(|| anyhow!("object field {field} must be an unsigned integer"))
 }
 
+pub(crate) fn value_field_actor(value: &Value, field: &str) -> Result<arkret_wire::ActorId> {
+    Ok(serde_json::from_value(
+        required_field(value, field)?.clone(),
+    )?)
+}
+
 pub(crate) fn canonical_json(value: &Value) -> Result<String> {
     // Delegate to the SDK's canonical encoder so every Arkret implementation
     // sorts keys / encodes numbers identically. `canonical_json_bytes` is the

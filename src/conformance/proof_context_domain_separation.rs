@@ -405,7 +405,7 @@ fn signed_proof(
 
 fn directory_families() -> Result<Vec<FamilyUnderTest>> {
     let list_handles: DirectoryListHandlesForSubjectRequestBody = serde_json::from_value(json!({
-        "subject_id": "ak:did_core:web:bob.example",
+        "account_id": {"principal_id":"ak:did_core:web:bob.example", "station_id":"ak:did_core:web:station.example"},
         "requester_id": REQUESTER_ID,
     }))?;
     let agent_selector: DirectoryResolveAgentSelectorRequestBody = serde_json::from_value(json!({

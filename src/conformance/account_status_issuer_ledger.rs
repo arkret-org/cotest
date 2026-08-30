@@ -66,7 +66,6 @@ const AUTHORITY_METHOD: &str = "did:web:coauth.example#account-status-key";
 /// Successor service key after an Account Authority key rotation. Same
 /// controller, different key reference.
 const AUTHORITY_ROTATED_METHOD: &str = "did:web:coauth.example#account-status-key-2";
-const PRINCIPAL_ID: &str = "ak:did_core:web:alice.example";
 
 fn sign_account_status_record(
     unsigned: UnsignedAccountStatusRecord,
@@ -438,7 +437,7 @@ async fn assert_gap_recovery_through_bounded_resolve(
     // type is what proves it.
     let request = AccountStatusResolveRequestBody {
         account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: AccountId::new(DidCoreId::new(PRINCIPAL_ID)?, DidCoreId::new(STATION_ID)?),
+        account_id: genesis.account_id.clone(),
         from_status_seq: required_status_seq,
         limit: 128,
     };
@@ -1239,7 +1238,7 @@ fn at(second: u32) -> Result<DateTime<Utc>> {
 }
 
 fn unsigned(
-    _account_id: &str,
+    account_id: &str,
     status_seq: u64,
     previous_account_status_record_id: Option<AccountStatusRecordId>,
     binding_version: u64,
@@ -1250,7 +1249,10 @@ fn unsigned(
     Ok(UnsignedAccountStatusRecord {
         schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
         account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: AccountId::new(DidCoreId::new(PRINCIPAL_ID)?, DidCoreId::new(STATION_ID)?),
+        account_id: AccountId::new(
+            DidCoreId::new(format!("ak:did_core:web:{account_id}.example"))?,
+            DidCoreId::new(STATION_ID)?,
+        ),
         principal_control_realm_id: RealmId::new(PRINCIPAL_CONTROL_REALM)?,
         binding_version,
         status_seq,

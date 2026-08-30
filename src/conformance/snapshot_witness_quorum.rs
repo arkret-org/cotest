@@ -423,7 +423,7 @@ fn manifest_from_fixture(vector: &Value) -> Result<SnapshotManifest> {
             "verification_profile": security_class,
         },
         "chunks": [],
-        "created_by": value_field_str(fixture_manifest, "created_by")?,
+        "created_by": super::value_field_actor(fixture_manifest, "created_by")?,
         "created_at": created_at,
         "authority_binding": {
             "authority_kind": value_field_str(binding, "authority_kind")?,

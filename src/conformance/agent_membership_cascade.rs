@@ -99,7 +99,7 @@ fn validate_effective_membership_and_generation_fence(
                      provision_active: bool| {
         agent_join
             && controller_join
-            && authority == &binding.controller_authority
+            && authority == &binding.controller_account_id
             && generation == &binding.controller_membership_generation_ref
             && lifecycle_active
             && provision_active
@@ -107,7 +107,7 @@ fn validate_effective_membership_and_generation_fence(
     assert!(effective(
         true,
         true,
-        &binding.controller_authority,
+        &binding.controller_account_id,
         &binding.controller_membership_generation_ref,
         true,
         true,
@@ -116,12 +116,12 @@ fn validate_effective_membership_and_generation_fence(
     assert!(!effective(
         true,
         true,
-        &binding.controller_authority,
+        &binding.controller_account_id,
         &new_generation,
         true,
         true,
     ));
-    let mut wrong_server = binding.controller_authority.clone();
+    let mut wrong_server = binding.controller_account_id.clone();
     wrong_server.station_id = DidCoreId::new("ak:did_core:web:other-principal.example")?;
     assert!(!effective(
         true,
@@ -134,7 +134,7 @@ fn validate_effective_membership_and_generation_fence(
     assert!(!effective(
         true,
         false,
-        &binding.controller_authority,
+        &binding.controller_account_id,
         &binding.controller_membership_generation_ref,
         true,
         true,
@@ -159,12 +159,12 @@ fn validate_cleanup_intent_digest_and_states(
             arkret_canonical::DigestSuite::Sha256,
             [0x72; 32],
         )),
-        controller_authority: binding.controller_authority.clone(),
+        controller_account_id: binding.controller_account_id.clone(),
         controller_membership_generation_ref: binding.controller_membership_generation_ref.clone(),
-        initiator_authority: AccountId {
+        initiator_actor_id: arkret_wire::ActorId::account(AccountId {
             principal_id: DidCoreId::new("ak:did_core:web:moderator.example")?,
-            station_id: binding.controller_authority.station_id.clone(),
-        },
+            station_id: binding.controller_account_id.station_id.clone(),
+        }),
         controller_terminal_event_id: terminal_event_id,
         expected_agent_ids: vec![DidCoreId::new("ak:did_core:webvh:z6mkfixtureagentexample")?],
         cleanup_intent_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
@@ -181,8 +181,10 @@ fn validate_cleanup_intent_digest_and_states(
     );
 
     let mut changed = record.clone();
-    changed.initiator_authority.principal_id =
-        DidCoreId::new("ak:did_core:web:other-moderator.example")?;
+    changed.initiator_actor_id = arkret_wire::ActorId::account(AccountId::new(
+        DidCoreId::new("ak:did_core:web:other-moderator.example")?,
+        binding.controller_account_id.station_id.clone(),
+    ));
     assert_ne!(
         changed.expected_cleanup_intent_digest()?,
         record.cleanup_intent_digest,

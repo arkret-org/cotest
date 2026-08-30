@@ -134,7 +134,7 @@ fn parent_can_regrant(parent_actions: &[String], child_actions: &[String]) -> bo
 struct AuthorityGrant {
     grant_id: String,
     parent_authority_grant_id: String,
-    subject: String,
+    subject: arkret_wire::ActorId,
     actions: Vec<String>,
     resources: Vec<Value>,
     constraints: Vec<Value>,
@@ -144,7 +144,7 @@ struct AuthorityGrant {
 
 #[derive(Clone)]
 struct ActionQuery {
-    actor: String,
+    actor: arkret_wire::ActorId,
     action: String,
     resource: String,
     request_time: String,
@@ -208,11 +208,12 @@ fn parse_authority_chain(fixture: &CapabilityCase) -> Result<Vec<AuthorityGrant>
                 .unwrap_or_default()
                 .to_owned(),
             parent_authority_grant_id,
-            subject: grant
-                .pointer("/payload/subject")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
+            subject: serde_json::from_value(
+                grant
+                    .pointer("/payload/subject")
+                    .cloned()
+                    .ok_or_else(|| anyhow!("grant missing subject"))?,
+            )?,
             actions: str_vec(grant, "/payload/actions"),
             resources: grant
                 .pointer("/payload/resources")
@@ -274,10 +275,10 @@ fn request_resource_matches(grant_resource: &Value, request_resource: &Value) ->
 }
 
 fn grant_matches_request(grant: &Value, request: &Value) -> bool {
-    let Some(actor) = request.get("actor_id").and_then(Value::as_str) else {
+    let Ok(actor) = super::value_field_actor(request, "actor_id") else {
         return false;
     };
-    if grant.get("subject").and_then(Value::as_str) != Some(actor) {
+    if !super::value_field_actor(grant, "subject").is_ok_and(|subject| subject == actor) {
         return false;
     }
     let Some(action) = request.get("action").and_then(Value::as_str) else {
@@ -384,9 +385,9 @@ fn evaluate_membership_without_capability_fixture(fixture: &CapabilityCase) -> R
         .ok_or_else(|| anyhow!("capability fixture {name} missing requests[]"))?;
 
     for request in requests {
-        let actor = required_str(request, "actor_id")?;
+        let actor = super::value_field_actor(request, "actor_id")?;
         let member_joined = memberships.iter().any(|membership| {
-            membership.get("actor_id").and_then(Value::as_str) == Some(actor)
+            super::value_field_actor(membership, "actor_id").is_ok_and(|member| member == actor)
                 && membership.get("membership").and_then(Value::as_str) == Some("join")
         });
         if !member_joined {
@@ -562,7 +563,7 @@ fn evaluate_authority_chain_fixture(fixture: &CapabilityCase) -> Result<()> {
         .get("action_query")
         .ok_or_else(|| anyhow!("authority_chain fixture missing action_query"))?;
     let query = ActionQuery {
-        actor: required_str(query_value, "actor_id")?.to_owned(),
+        actor: super::value_field_actor(query_value, "actor_id")?,
         action: required_str(query_value, "action")?.to_owned(),
         resource: required_str(query_value, "resource")?.to_owned(),
         request_time: required_str(query_value, "request_time")?.to_owned(),
@@ -617,9 +618,14 @@ fn evaluate_authority_chain_fixture(fixture: &CapabilityCase) -> Result<()> {
     if evaluate_chain(base, &grants, &wrong_audience).authorized {
         bail!("authority_chain: out-of-scope audience still authorized");
     }
+    let middle_subject = grants
+        .first()
+        .ok_or_else(|| anyhow!("chain missing middle grant"))?
+        .subject
+        .clone();
     let without_middle: Vec<AuthorityGrant> = grants
         .into_iter()
-        .filter(|grant| grant.subject != "ak:did_core:webvh:z6mkfixtureopsexamplecom")
+        .filter(|grant| grant.subject != middle_subject)
         .collect();
     if evaluate_chain(base, &without_middle, &query).authorized {
         bail!("authority_chain: skipping the middle grant still authorized");
@@ -1317,8 +1323,8 @@ fn evaluate_relinquish_pending_fixture(fixture: &CapabilityCase) -> Result<()> {
         match required_str(case, "name")? {
             "subject_relinquishes_without_revoke_capability"
             | "non_subject_relinquish_rejected" => {
-                let accepted = case.get("actor").and_then(Value::as_str)
-                    == case.get("target_subject").and_then(Value::as_str);
+                let accepted = super::value_field_actor(case, "actor")?
+                    == super::value_field_actor(case, "target_subject")?;
                 if case.pointer("/expected/accepted").and_then(Value::as_bool) != Some(accepted) {
                     bail!("relinquish subject guard drifted");
                 }

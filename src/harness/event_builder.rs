@@ -230,7 +230,6 @@ pub async fn dev_login(server: &ArkretServer, actor: &str, device_id: &str) -> R
 
 pub fn device_message_send_request(
     recipient: &str,
-    recipient_station_id: &str,
     device_id: &str,
     device_message_id: &str,
     kind: &str,
@@ -253,10 +252,7 @@ pub fn device_message_send_request(
     devices.insert(DeviceId::new(device_id.to_owned())?, target);
     let mut messages = BTreeMap::new();
     messages.insert(
-        ActorId::account(AccountId::new(
-            project_did_to_core_id(&Did::new(recipient.to_owned())?)?,
-            DidCoreId::new(recipient_station_id.to_owned())?,
-        )),
+        project_did_to_core_id(&Did::new(recipient.to_owned())?)?,
         devices,
     );
     Ok(DeviceMessagesSendRequestBody { messages })

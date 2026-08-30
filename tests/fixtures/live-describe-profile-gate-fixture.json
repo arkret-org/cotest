@@ -3,7 +3,18 @@
   "profile": "ak.profile.live_describe_profile_gate_vectors.v1",
   "cases": [
     {
-      "name": "soland_principal_claim_with_scaffold_limitation_is_rejected",
+      "name": "soland_station_claim_with_unimplemented_operation_is_rejected",
+      "expect": "reject",
+      "source": {"mode":"fixture", "path":"/_arkret/describe"},
+      "describe": {
+        "service":"soland",
+        "service_kind":"station",
+        "supported_profiles":["ak.profile.station.v1"],
+        "limitations":[{"feature":"fixture.operation", "status":"501", "detail":"not implemented"}]
+      }
+    },
+    {
+      "name": "soland_station_claim_with_scaffold_limitation_is_rejected",
       "expect": "reject",
       "source": {
         "mode": "fixture",

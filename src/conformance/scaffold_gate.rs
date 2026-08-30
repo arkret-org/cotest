@@ -107,7 +107,8 @@ fn run_gate_fixture(
     }
 
     if require_live_coverage {
-        for service in ["soland", "floria", "teabay", "coauth"] {
+        // Coauth is deployment-private, not a public protocol service role.
+        for service in ["soland", "floria", "teabay"] {
             if !services.contains(service) {
                 bail!("{file_name} missing live describe sample for {service}");
             }
