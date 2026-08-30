@@ -13,13 +13,16 @@ use super::load_fixture_value;
 
 const FIXTURE: &str = "fanout-route-miss-fixture.json";
 const VECTOR: &str = "ak.vector.fanout.route_miss.v1";
-const REQUIRED_CASES: [&str; 8] = [
+const REQUIRED_CASES: [&str; 11] = [
     "missing_route_accepts_and_freezes_complete_target_set",
     "any_target_or_intent_write_failure_rolls_back_everything",
     "restart_preserves_pending_route_without_attempt_budget_expiry",
     "route_recovery_delivers_idempotently",
     "authority_loss_cancels_before_send_and_rejoin_does_not_revive",
     "one_shared_service_remains_authorized_while_any_frozen_witness_is_current",
+    "unchanged_route_projection_cannot_preserve_lost_membership_authority",
+    "partial_conditions_from_different_member_witnesses_cannot_be_combined",
+    "same_service_endpoint_update_preserves_frozen_authority_and_idempotency",
     "authorized_status_read_is_complete_and_topology_redacted",
     "offline_target_does_not_block_later_realm_authorship",
 ];
@@ -45,7 +48,7 @@ pub fn run_fanout_route_miss_suite() -> Result<()> {
         })
         .collect::<Result<BTreeSet<_>>>()?;
     if names != BTreeSet::from(REQUIRED_CASES) {
-        bail!("fanout route-miss fixture is not the closed eight-case set");
+        bail!("fanout route-miss fixture is not the closed eleven-case set");
     }
     if cases.iter().any(|case| {
         case["invariants"]
