@@ -12,7 +12,7 @@
 //!      + the docker postgres (`bootstrap_coauth_config`).
 //!   3. Run `coauth database migrate` against the generated config so the schema is applied before
 //!      the server boots (`run_coauth_migrations`).
-//!   4. Spawn `coauth server --config <generated>` directly (bypassing the
+//!   4. Spawn `coprivate authentication process --config <generated>` directly (bypassing the
 //!      `external_binary::try_spawn` helper because we have a pre-bound address from the patched
 //!      YAML rather than one allocated at spawn time) and bundle the postgres + config + server
 //!      handles into a single [`SpawnedCoauth`] value (`spawn_coauth_with_db`).
@@ -143,7 +143,7 @@ pub struct SpawnedCoauth {
     pub pg: EphemeralPg,
     restart_with_test_endpoints: bool,
     restart_chaos: Option<CoauthChaosConfig>,
-    principal_server_ca_path: Option<PathBuf>,
+    station_ca_path: Option<PathBuf>,
 }
 
 /// Debug-only post-commit pause injected into a spawned Coauth process.
@@ -182,13 +182,13 @@ impl SpawnedCoauth {
     /// same PostgreSQL ledger and listener ports.
     pub async fn restart_same_config(&mut self) -> Result<()> {
         self.server.kill_and_wait()?;
-        let mut command = coauth_server_command(
+        let mut command = coauth_process_command(
             &self.server.bin_path,
             self.config.path(),
             self.restart_with_test_endpoints,
             self.restart_chaos.as_ref(),
         );
-        if let Some(ca_path) = &self.principal_server_ca_path {
+        if let Some(ca_path) = &self.station_ca_path {
             command.env("SSL_CERT_FILE", ca_path);
         }
         if std::env::var_os("COTEST_COAUTH_BOOTSTRAP_DEBUG").is_some() {
@@ -213,7 +213,7 @@ impl SpawnedCoauth {
 
 /// Coauth resources reserved before Soland starts. This breaks the bootstrap
 /// cycle cleanly: Soland can be configured with [`Self::base_url`] first, then
-/// Coauth is rendered with that live Soland as its Principal Server.
+/// Coauth is rendered with that live Soland as its Station.
 pub struct PreparedCoauth {
     coauth_bin: PathBuf,
     pg: EphemeralPg,
@@ -226,13 +226,13 @@ impl PreparedCoauth {
         format!("http://{}", self.bind_addr)
     }
 
-    pub async fn spawn_for_principal_server(
+    pub async fn spawn_for_station(
         self,
-        principal_server_endpoint: &str,
-        principal_server_id: &str,
+        station_endpoint: &str,
+        station_id: &str,
         session_grant_introspection_bearer: &str,
         embedded_webvh_registration_bearer: &str,
-        principal_server_ca_path: Option<&Path>,
+        station_ca_path: Option<&Path>,
     ) -> Result<SpawnedCoauth> {
         let Self {
             coauth_bin,
@@ -241,17 +241,17 @@ impl PreparedCoauth {
             bind_addr,
         } = self;
         let mut bundle = bootstrap_coauth_config(&coauth_bin, &pg.connect_url, &bind_addr)?;
-        patch_principal_server_config(
+        patch_station_config(
             &mut bundle,
-            principal_server_endpoint,
-            principal_server_id,
+            station_endpoint,
+            station_id,
             session_grant_introspection_bearer,
             embedded_webvh_registration_bearer,
         )?;
         run_coauth_migrations(&coauth_bin, bundle.file.path())?;
 
-        let mut command = coauth_server_command(&coauth_bin, bundle.file.path(), true, None);
-        if let Some(ca_path) = principal_server_ca_path {
+        let mut command = coauth_process_command(&coauth_bin, bundle.file.path(), true, None);
+        if let Some(ca_path) = station_ca_path {
             command.env("SSL_CERT_FILE", ca_path);
         }
         if std::env::var_os("COTEST_COAUTH_BOOTSTRAP_DEBUG").is_some() {
@@ -261,7 +261,9 @@ impl PreparedCoauth {
         }
         bind_port.release();
         bundle.internal_port_reservation.release();
-        let child = command.spawn().context("spawn prepared coauth server")?;
+        let child = command
+            .spawn()
+            .context("spawn prepared coprivate authentication process")?;
         let base_url = format!("http://{bind_addr}");
         let server =
             SpawnedExternalProcess::from_child(base_url, coauth_bin, child, vec![bind_port]);
@@ -277,14 +279,14 @@ impl PreparedCoauth {
             pg,
             restart_with_test_endpoints: true,
             restart_chaos: None,
-            principal_server_ca_path: principal_server_ca_path.map(Path::to_path_buf),
+            station_ca_path: station_ca_path.map(Path::to_path_buf),
         })
     }
 }
 
 /// Reserve Coauth's public address and database without starting the process.
 /// Live cross-service tests use the address to configure Soland, then call
-/// [`PreparedCoauth::spawn_for_principal_server`] with that Soland endpoint.
+/// [`PreparedCoauth::spawn_for_station`] with that Soland endpoint.
 pub fn prepare_coauth_with_db_required() -> Result<PreparedCoauth> {
     let coauth_bin = locate_external_binary(&coauth_binary_probe_spec())
         .context("coauth binary is required for the live Agent MLS test")?;
@@ -300,7 +302,7 @@ pub fn prepare_coauth_with_db_required() -> Result<PreparedCoauth> {
     })
 }
 
-fn patch_principal_server_config(
+fn patch_station_config(
     bundle: &mut CoauthConfigBundle,
     endpoint: &str,
     service_id: &str,
@@ -310,7 +312,7 @@ fn patch_principal_server_config(
     let file = bundle.file.as_file_mut();
     file.seek(SeekFrom::Start(0))?;
     let mut config: serde_yaml_ng::Value = serde_yaml_ng::from_reader(&mut *file)
-        .context("decode generated coauth config for Principal Server wiring")?;
+        .context("decode generated coauth config for Station wiring")?;
     let root = config
         .as_mapping_mut()
         .context("generated coauth config root must be a mapping")?;
@@ -325,7 +327,7 @@ fn patch_principal_server_config(
         serde_yaml_ng::Value::String(JOINT_TRUST_DOMAIN.to_owned()),
     );
     arkret.insert(
-        serde_yaml_ng::Value::String("principal_servers".to_owned()),
+        serde_yaml_ng::Value::String("stations".to_owned()),
         serde_yaml_ng::to_value(vec![serde_json::json!({
             "name": "cotest-soland",
             "endpoint": endpoint,
@@ -336,8 +338,7 @@ fn patch_principal_server_config(
     );
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
-    serde_yaml_ng::to_writer(&mut *file, &config)
-        .context("write Principal Server-wired coauth config")?;
+    serde_yaml_ng::to_writer(&mut *file, &config).context("write Station-wired coauth config")?;
     file.flush()?;
     Ok(())
 }
@@ -478,7 +479,7 @@ pub struct CoauthConfigBundle {
 
 /// Generate a fresh coauth config YAML and patch it for the supplied
 /// `pg_url` / `bind_addr`. Returns a [`CoauthConfigBundle`] whose `file`
-/// path the caller can pass to `coauth server --config`. The caller MUST
+/// path the caller can pass to `coprivate authentication process --config`. The caller MUST
 /// keep the `NamedTempFile` alive for the lifetime of the spawned server
 /// (otherwise the file is unlinked on Windows and coauth will fail any
 /// future re-read).
@@ -518,7 +519,8 @@ pub fn bootstrap_coauth_config(
     //    - http.public_base_url / http.issuer → http://<bind_addr>/
     //    - listener bind address `[::]:7080` → bind_addr
     //    - internal listener `localhost:8091` → 127.0.0.1:<free port> (we don't use it but it must
-    //      be free so `coauth server` doesn't collide with another concurrent test instance)
+    //      be free so `coprivate authentication process` doesn't collide with another concurrent
+    //      test instance)
     let internal_port =
         reserve_port().context("failed to reserve coauth internal listener port")?;
     let public_base_url = format!("http://{bind_addr}/");
@@ -721,7 +723,7 @@ pub async fn spawn_coauth_with_db() -> Result<Option<SpawnedCoauth>> {
     spawn_coauth_with_db_options(None).await
 }
 
-/// Spawn the real Coauth server over PostgreSQL with one selected debug-only
+/// Spawn the real Coprivate authentication process over PostgreSQL with one selected debug-only
 /// post-commit response pause. Intended solely for owned-process fault tests.
 pub async fn spawn_coauth_with_db_chaos(chaos: CoauthChaosConfig) -> Result<Option<SpawnedCoauth>> {
     spawn_coauth_with_db_options(Some(chaos)).await
@@ -817,11 +819,11 @@ async fn spawn_coauth_with_db_options(
     }
     step!("migrations applied");
 
-    // 6. Spawn coauth server directly (we already have a pre-bound bind address baked into the
-    //    config YAML, so the standard try_spawn helper that allocates its own port is the wrong
-    //    tool here).
-    step!("spawning coauth server bound to {bind_addr}");
-    let mut command = coauth_server_command(
+    // 6. Spawn coprivate authentication process directly (we already have a pre-bound bind address
+    //    baked into the config YAML, so the standard try_spawn helper that allocates its own port
+    //    is the wrong tool here).
+    step!("spawning coprivate authentication process bound to {bind_addr}");
+    let mut command = coauth_process_command(
         &coauth_bin,
         bundle.file.path(),
         chaos.is_some(),
@@ -838,7 +840,7 @@ async fn spawn_coauth_with_db_options(
         Ok(c) => c,
         Err(e) => {
             step!("spawn failed: {e:?}");
-            fail_summary!("spawning coauth server");
+            fail_summary!("spawning coprivate authentication process");
             return Ok(None);
         }
     };
@@ -871,7 +873,7 @@ async fn spawn_coauth_with_db_options(
         pg,
         restart_with_test_endpoints: chaos.is_some(),
         restart_chaos: chaos,
-        principal_server_ca_path: None,
+        station_ca_path: None,
     }))
 }
 
@@ -892,7 +894,7 @@ fn coauth_binary_probe_spec() -> ExternalBinarySpec {
     }
 }
 
-fn coauth_server_command(
+fn coauth_process_command(
     bin_path: &Path,
     config_path: &Path,
     test_endpoints: bool,

@@ -16,8 +16,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — 承载 alice 的事件与 audit log;假设监听 `http://127.0.0.1:<soland_port>`
-- 1 × coauth (auth server) — 签 alice 的 session credential
+- 1 × soland (Station) — 承载 alice 的事件与 audit log;假设监听 `http://127.0.0.1:<soland_port>`
+- 1 × coauth (private authentication process) — 签 alice 的 session credential
 - 1 × WebVH host — 服务 alice 的 `did:webvh:<scid>:<host>` 解析(发布 `did.jsonl`,含 `ak.service.tsp` endpoint 声明)
 - 1 × DID:web host — 服务 bob_extern 的 `did:web:bob-extern.example` 解析(发布 `did.json`,同样含 `ak.service.tsp` endpoint 声明)
 - 1 × mock TSP endpoint(并行任务产出的 `mock-tsp-endpoint.mjs`) — 同时扮演 alice 与 bob_extern 的 TSP endpoint;harness 通过 `process.env.MOCK_TSP_ENDPOINT_PORT` 决定监听端口,`process.env.MOCK_TSP_ENDPOINT_VID` 决定其向外宣告的 VID;在 Phase D / E 自动 ACK 收到的 TSP envelope

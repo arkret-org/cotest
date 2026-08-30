@@ -7,7 +7,7 @@
       "expect": "reject",
       "describe": {
         "service": "coauth",
-        "supported_profiles": ["ak.profile.principal_server.v1"],
+        "supported_profiles": ["ak.profile.station.v1"],
         "admin_surfaces": [
           {
             "path": "/api/admin/v1/devices",
@@ -39,7 +39,7 @@
       "expect": "reject",
       "describe": {
         "service": "soland",
-        "supported_profiles": ["ak.profile.principal_server.v1"],
+        "supported_profiles": ["ak.profile.station.v1"],
         "limits": {
           "profile_status": {
             "limitations": [
@@ -61,7 +61,7 @@
         "supported_profiles": ["ak.profile.mimi_interop.v1"],
         "unsupported_profiles": [
           {
-            "profile": "ak.profile.principal_server.v1",
+            "profile": "ak.profile.station.v1",
             "status": "unsupported",
             "reason": "durable outbound fanout is not claimed"
           }

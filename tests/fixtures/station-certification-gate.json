@@ -1,18 +1,18 @@
 {
-  "suite": "principal_server_certification_gate",
-  "profile": "ak.profile.principal_server_certification_gate.v1",
+  "suite": "station_certification_gate",
+  "profile": "ak.profile.station_certification_gate.v1",
   "cases": [
     {
-      "name": "soland_reports_principal_server_not_certified_with_signed_retry_boundary",
+      "name": "soland_reports_station_not_certified_with_signed_retry_boundary",
       "expect": "not_certified",
       "describe": {
         "service": "soland",
-        "service_kind": "principal_server",
+        "service_kind": "station",
         "supported_profiles": [
-          "ak.profile.principal_server_events_api.v1"
+          "ak.profile.station_events_api.v1"
         ],
         "certification": {
-          "principal_server": {
+          "station": {
             "status": "not_certified",
             "reason": "full profile remains gated until every production surface is enabled"
           }
@@ -27,28 +27,28 @@
         },
         "limitations": [
           {
-            "feature": "principal_server_full_profile",
+            "feature": "station_full_profile",
             "status": "not_certified"
           }
         ]
       }
     },
     {
-      "name": "full_principal_server_claim_without_durable_federation_is_rejected",
+      "name": "full_station_claim_without_durable_federation_is_rejected",
       "expect": "reject",
       "describe": {
         "service": "candidate",
         "supported_profiles": [
-          "ak.profile.principal_server.v1"
+          "ak.profile.station.v1"
         ],
         "certification": {
-          "principal_server": {
+          "station": {
             "status": "certified"
           }
         },
         "supported_operation_bundles": [
-          "ak.operation_bundle.principal_server.describe.v1",
-          "ak.operation_bundle.principal_server.http_core.v1"
+          "ak.operation_bundle.station.describe.v1",
+          "ak.operation_bundle.station.http_core.v1"
         ],
         "supported_event_kinds": [
           "ak.space.create",
@@ -72,7 +72,7 @@
             "dead_letter_audit": false
           }
         },
-        "principal_server_minimum": {
+        "station_minimum": {
           "admin": {"status": "supported"},
           "agent": {"status": "supported"},
           "applet": {"status": "supported"},
@@ -81,23 +81,23 @@
       }
     },
     {
-      "name": "full_principal_server_claim_requires_all_minimum_surfaces",
+      "name": "full_station_claim_requires_all_minimum_surfaces",
       "expect": "certified",
       "describe": {
         "service": "certified-reference",
         "supported_profiles": [
-          "ak.profile.principal_server.v1"
+          "ak.profile.station.v1"
         ],
         "certification": {
-          "principal_server": {
+          "station": {
             "status": "certified"
           }
         },
         "supported_operation_bundles": [
-          "ak.operation_bundle.principal_server.describe.v1",
-          "ak.operation_bundle.principal_server.http_core.v1",
-          "ak.operation_bundle.principal_server.agent_runtime.v1",
-          "ak.operation_bundle.principal_server.applet_install.v1"
+          "ak.operation_bundle.station.describe.v1",
+          "ak.operation_bundle.station.http_core.v1",
+          "ak.operation_bundle.station.agent_runtime.v1",
+          "ak.operation_bundle.station.applet_install.v1"
         ],
         "supported_event_kinds": [
           "ak.space.create",
@@ -121,7 +121,7 @@
             "dead_letter_audit": true
           }
         },
-        "principal_server_minimum": {
+        "station_minimum": {
           "admin": {"status": "supported"},
           "agent": {"status": "supported"},
           "applet": {"status": "supported"},

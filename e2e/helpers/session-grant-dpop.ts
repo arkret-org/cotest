@@ -3,7 +3,7 @@
 // Contract: arkret-spec/spec/v1/zh/sync/api-conventions.md §3.3 and
 // arkret-work/tasks/_auth_todos.md "## ② 最终路线".
 //
-// Under ②, the Principal Server (soland) does not mint a second local
+// Under ②, the Station (soland) does not mint a second local
 // credential. A client accesses `/_arkret/self/*` by presenting
 // `Authorization: DPoP <ak.session.grant>` plus a per-request DPoP proof
 // bound to the request (`htm`/`htu`/`ath`). soland verifies the DPoP against

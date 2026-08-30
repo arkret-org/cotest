@@ -5,11 +5,11 @@ use std::collections::BTreeSet;
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_wire::{
     AcceptedDevicePossessionProof, AcceptedDevicePossessionProofContext,
-    AcceptedDeviceRefreshPossessionPurpose, Base64UrlString, DEVICE_REVOCATION_DENIED_ACTIONS,
-    DeviceId, DeviceRevocationGateActionClass, DeviceRevocationGateCheckOutcome,
-    DeviceRevocationGateCheckRequestBody, DeviceRevocationGateDecision,
-    DeviceRevocationGateDecisionReceipt, DidCoreId, DidUrl, EventId, Hash, PrincipalAuthorityKey,
-    SessionGrantId, UnsignedAcceptedDeviceRefreshPossessionProof,
+    AcceptedDeviceRefreshPossessionPurpose, AccountId, Base64UrlString,
+    DEVICE_REVOCATION_DENIED_ACTIONS, DeviceId, DeviceRevocationGateActionClass,
+    DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody,
+    DeviceRevocationGateDecision, DeviceRevocationGateDecisionReceipt, DidCoreId, DidUrl, EventId,
+    Hash, SessionGrantId, UnsignedAcceptedDeviceRefreshPossessionProof,
     UnsignedDeviceRevocationGateDecisionReceipt,
 };
 use chrono::{DateTime, Duration, TimeZone as _, Utc};
@@ -271,10 +271,7 @@ fn request(
             None
         };
     Ok(DeviceRevocationGateCheckRequestBody {
-        principal_authority: PrincipalAuthorityKey::new(
-            principal_id,
-            DidCoreId::new("ak:did_core:web:ps.example")?,
-        ),
+        account_id: AccountId::new(principal_id, DidCoreId::new("ak:did_core:web:ps.example")?),
         device_id,
         expected_device_authorize_event_id,
         expected_device_generation_ref,
@@ -304,7 +301,7 @@ fn signed_receipt(
         .map(AcceptedDevicePossessionProof::proof_digest)
         .transpose()?;
     let unsigned = UnsignedDeviceRevocationGateDecisionReceipt {
-        principal_authority: request.principal_authority.clone(),
+        account_id: request.account_id.clone(),
         device_id: request.device_id.clone(),
         target_device_authorize_event_id,
         target_device_generation_ref,

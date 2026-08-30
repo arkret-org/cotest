@@ -1,4 +1,4 @@
-// Contact graph (same principal server): add-friend / direct conversation /
+// Contact graph (same Station): add-friend / direct conversation /
 // realm-pull via consent_grant evidence / graded disclosure / block.
 //
 // Protocol face: `/_arkret/self/contacts/*`,
@@ -50,7 +50,7 @@ async function activeContactUser(request: APIRequestContext, prefix: string) {
   return { user: session.user, token: session.grantJwt };
 }
 
-test.describe("contact graph (same principal server)", () => {
+test.describe("contact graph (same Station)", () => {
   // S1: Contact facts and receipts establish the bidirectional projection.
   // Consent is a separate holder-private component and is not synthesized by
   // Contact admission.

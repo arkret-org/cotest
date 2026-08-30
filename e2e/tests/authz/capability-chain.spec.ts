@@ -93,7 +93,7 @@ async function effectiveGrantIds(
   subjectId: string,
   realmId: string,
 ): Promise<string[]> {
-  const url = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(requireDidCoreId(subjectId))}&subject_principal_server_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
+  const url = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(requireDidCoreId(subjectId))}&subject_station_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
   const response = await request.get(url, {
     headers: authHeaders(ownerToken, "GET", url),
   });
@@ -203,7 +203,7 @@ test.describe("capability chain (event wire)", () => {
 
     // GET /_arkret/self/authz/effective-grants — realm owner may query a
     // subject's direct grants (GrantList).
-    const grantsUrl = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(requireDidCoreId(bob.id))}&subject_principal_server_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
+    const grantsUrl = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(requireDidCoreId(bob.id))}&subject_station_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
     const grantsResp = await request.get(grantsUrl, {
       headers: authHeaders(aliceToken, "GET", grantsUrl),
     });

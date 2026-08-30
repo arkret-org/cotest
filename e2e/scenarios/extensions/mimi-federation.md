@@ -18,8 +18,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal server,声明支持 MIMI 互通) — 假设监听 `http://127.0.0.1:<soland_port>`
-- 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
+- 1 × soland (Station,声明支持 MIMI 互通) — 假设监听 `http://127.0.0.1:<soland_port>`
+- 1 × coauth (private authentication process) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 1 × mimi_facade (cotest mock,模拟 MIMI Provider Facade) — 由 `run-joint-e2e.ps1 -StartMockMimiFacade` 或 `-StartMocks` 启动,并通过 `COTEST_MOCK_MIMI_FACADE_BASE_URL` 注入
 
 (soland 与 coauth 都是 cotest 现有 harness 直接提供的;mimi_facade 是新的可选外部组件,在 v1 core 不必需。)

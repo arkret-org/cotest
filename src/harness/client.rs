@@ -777,7 +777,7 @@ impl TestActorClient {
                         subject.to_owned(),
                     )?)?,
                 ),
-            subject_principal_server_id: Some(DidCoreId::new(self.service_id.clone())?),
+            subject_station_id: Some(DidCoreId::new(self.service_id.clone())?),
             actions: actions.iter().map(|action| (*action).to_owned()).collect(),
             resources: vec![serde_json::from_value(json!({
                 "kind": "realm",

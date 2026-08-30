@@ -5,7 +5,7 @@
 //!
 //!   1. coauth (T3.2) issues a `handle_claim` whose `handle` is the canonical
 //!      `<localpart>:<domain>` form (R3.1 wire rename from `handle_uri`, arkret-spec @ 7157ee8) and
-//!      whose `member_delivery_binding` points at a recipient principal server.
+//!      whose `member_delivery_binding` points at a recipient Station.
 //!   2. teabay (T3.4) hosts `ak.find.directory.read.resolve_handle.v1(intent="member_add")` and
 //!      filters candidates against the target Realm's `allowed_recipient_ids`.
 //!   3. soland (T3.3) projects `ak.realm.delivery_binding_policy` and the `ak.member.state{join}`
@@ -43,7 +43,7 @@ use arkret_models_collaboration::governance::member_delivery_binding_candidate::
 use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
 use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
 use arkret_models_identity::handle_claim::DeliveryBindingHint;
-use arkret_wire::PrincipalAuthorityKey;
+use arkret_wire::AccountId;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -58,11 +58,11 @@ use crate::scenarios::_helpers::protocol_values::candidate_payload_proof;
 /// so the assertions read as a Realm identifier and not as a free-form string.
 const TARGET_REALM_ID: &str = "ak:realm:0196419b-0000-8000-8000-handle2joinaa";
 
-/// Stable principal-server DID that appears as both the issuer and the
+/// Stable station DID that appears as both the issuer and the
 /// recipient on the candidate. T3.4's allow-list test uses the same shape.
 const PRINCIPAL_ID: &str = "ak:did_core:web:principal.acme.example";
 
-/// Alternate principal-server DID — used by the `service_not_allowed`
+/// Alternate station DID — used by the `service_not_allowed`
 /// negative to model a Realm whose policy only lists `PRINCIPAL_ID`.
 const OTHER_PRINCIPAL_ID: &str = "ak:did_core:web:rogue.example";
 
@@ -312,16 +312,16 @@ fn negative_case_service_not_allowed() -> Result<()> {
     Ok(())
 }
 
-/// A stable principal id at another Principal Server is a different authority.
+/// A stable principal id at another Station is a different authority.
 fn negative_case_same_principal_different_server() -> Result<()> {
     let accepted = sample_candidate()?;
     let mut substituted = accepted.clone();
-    substituted.principal_authority = PrincipalAuthorityKey::new(
+    substituted.account_id = AccountId::new(
         accepted.subject_id.clone(),
         DidCoreId::new("ak:did_core:web:other-principal.example")?,
     );
     if substituted == accepted {
-        bail!("different Principal Server was erased by candidate equality");
+        bail!("different Station was erased by candidate equality");
     }
     Ok(())
 }
@@ -506,7 +506,7 @@ async fn live_stack_probe() -> Result<()> {
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = DidCoreId::new(ALICE_ID)?;
     let principal = DidCoreId::new(PRINCIPAL_ID)?;
-    let principal_authority = PrincipalAuthorityKey::new(subject.clone(), principal.clone());
+    let account_id = AccountId::new(subject.clone(), principal.clone());
     let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
@@ -514,12 +514,12 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
-        principal_authority,
+        account_id,
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
             recipient_id: principal.clone(),
-            recipient_kind: RecipientServiceKind::PrincipalServer,
+            recipient_kind: RecipientServiceKind::Station,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(

@@ -103,7 +103,7 @@ fn open_value_spaces_round_trip_without_changing_registry_facts() {
 
 #[test]
 fn generated_metadata_keeps_product_and_security_domains_separate() {
-    assert!(ServiceKind::PrincipalServer.valid_in("service_describe"));
+    assert!(ServiceKind::Station.valid_in("service_describe"));
     assert!(!ServiceKind::MimiProviderFacade.valid_in("service_describe"));
     assert_generated_set(
         "service types",

@@ -90,7 +90,7 @@
 ## 后续补测优先级
 
 1. 把已新增的明文 `since_join` 联合测试扩展到 MLS：验证 Commit/Welcome、current security baseline、availability receipt 与进程重启后仍能写，同时不泄露 pre-join 内容。
-2. Soland G3–G7 生产编排落地后，增加双 Principal Server `plan → publish → ACK → cutover → old endpoint down → mirror repair` 的 live 场景。
+2. Soland G3–G7 生产编排落地后，增加双 Station `plan → publish → ACK → cutover → old endpoint down → mirror repair` 的 live 场景。
 3. 增加无测试后门的两账号 MLS Invite 场景，覆盖 Commit/Welcome finality、两种 history policy 与进程重启。
 4. 在现有旧 generation grant 失败断言上继续补旧 Event、KeyPackage 和 key-share 重放，并补撤销后的 MLS/backup 安全收口。
 5. native Agent/Sidecar 入口可达后，把当前条件化/分层证据升级为无条件 joint lane。

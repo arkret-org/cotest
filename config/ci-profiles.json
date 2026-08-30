@@ -9,8 +9,8 @@
         "ak.profile.core_event_store.v1",
         "ak.profile.chat_mvp.v1",
         "ak.profile.kanban_mvp.v1",
-        "ak.profile.principal_server_events_api.v1",
-        "ak.profile.principal_server.v1",
+        "ak.profile.station_events_api.v1",
+        "ak.profile.station.v1",
         "ak.profile.directory_service.v1",
         "ak.profile.identity_registry.v1",
         "ak.profile.blob_node.v1",
@@ -59,7 +59,7 @@
       "required_coverage_profiles": [
         "ak.profile.core_event_store.v1",
         "ak.profile.chat_mvp.v1",
-        "ak.profile.principal_server_events_api.v1"
+        "ak.profile.station_events_api.v1"
       ]
     },
     {
@@ -90,7 +90,7 @@
       ],
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": [
-        "ak.profile.principal_server.v1",
+        "ak.profile.station.v1",
         "ak.profile.directory_service.v1",
         "ak.profile.push_gateway.v1"
       ]
@@ -216,8 +216,8 @@
       "excluded_quarantine_labels": [],
       "required_coverage_profiles": [
         "ak.profile.core_event_store.v1",
-        "ak.profile.principal_server_events_api.v1",
-        "ak.profile.principal_server.v1",
+        "ak.profile.station_events_api.v1",
+        "ak.profile.station.v1",
         "ak.profile.directory_service.v1",
         "ak.profile.push_gateway.v1",
         "ak.profile.federation_minimal.v1"
@@ -232,8 +232,8 @@
         "ak.profile.core_event_store.v1",
         "ak.profile.chat_mvp.v1",
         "ak.profile.kanban_mvp.v1",
-        "ak.profile.principal_server_events_api.v1",
-        "ak.profile.principal_server.v1",
+        "ak.profile.station_events_api.v1",
+        "ak.profile.station.v1",
         "ak.profile.directory_service.v1",
         "ak.profile.identity_registry.v1",
         "ak.profile.blob_node.v1",

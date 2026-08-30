@@ -43,8 +43,8 @@ Schema/operation/event 注册表 drift 由 `scenarios/conformance/registry-drift
 
 ## 拓扑
 
-- 1 × soland (principal server) — `COTEST_SOLAND_BASE_URL`,暴露 `/_arkret/describe`
-- 1 × coauth (auth server,可选) — `COTEST_COAUTH_BASE_URL`,缺省时 coauth-specific 子
+- 1 × soland (Station) — `COTEST_SOLAND_BASE_URL`,暴露 `/_arkret/describe`
+- 1 × coauth (private authentication process,可选) — `COTEST_COAUTH_BASE_URL`,缺省时 coauth-specific 子
   测试 skip
 - 1 × profile-gates harness (Playwright `request` fixture) — 纯 HTTP,无 browser context;
   另读本地 catalog JSON 做 set 运算
@@ -125,7 +125,7 @@ Phase B / Phase C 依赖 soland 尚未落地的 event-submit reject 路径,先 f
     profile_sets.extension_profile_implementation`(并集 — `mimi_interop` 属 extension
     tier,不在 stable catalog 但在 `implementation_profiles` 中)
 19. 断言 `claimed_profiles[].profile_id` ⊆ `catalog_known`(零容忍 typo,例如
-    `ak.profile.principal-server.v1`)
+    `ak.profile.station.v1`)
 20. **不**把 `unsupported_profiles[]`(如 `ak.profile.soland_limited_server.v1`)纳入
     检查 — 这类是 limitation descriptor,不是 conformance claim,也不必出现在 catalog
 
@@ -156,8 +156,8 @@ E1 单独写成 coauth-specific fixme 子测试(coauth 上线后 live 化)。E2 
 ## Implementation notes
 
 - **soland 现状**:`apply_claim_level_partition` 已经实现 T6.1 partition;
-  `claimed_profiles` 4 条 `ak.profile.{core_event_store, principal_server,
-  principal_server_events_api, mimi_interop}.v1`(最后一条带 `notes`),
+  `claimed_profiles` 4 条 `ak.profile.{core_event_store, station,
+  station_events_api, mimi_interop}.v1`(最后一条带 `notes`),
   `verified_profiles` dev mode 下 `Vec::new()` 由 `validate` 硬性约束 — Phase A /
   D / E 可立即 live
 - **soland 缺口**:event submit handler 对超出声明 profile 范围的 kind 还没有

@@ -600,7 +600,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
                 "rfc9421_covers_method_path_digest_source_destination_operation_request",
                 "verification_key_from_active_service_resolution",
                 "authenticated_source_matches_agent_authority_id",
-                "current_principal_server_matches_source",
+                "current_station_matches_source",
             ];
             let all_required = required_true.iter().try_fold(true, |all, field| {
                 Ok::<_, anyhow::Error>(all && bool_field(field)?)
@@ -649,7 +649,7 @@ fn execute_controller_gate_case(name: &str, case: &Value) -> Result<OutcomeClass
                 .filter_map(Value::as_str)
                 .collect::<std::collections::BTreeSet<_>>();
             let expected = [
-                "missing_current_principal_server",
+                "missing_current_station",
                 "source_service_mismatch",
                 "unauthorized_service",
                 "unknown_principal",

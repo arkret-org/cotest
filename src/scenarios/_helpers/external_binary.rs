@@ -331,7 +331,7 @@ fn workspace_root() -> Option<PathBuf> {
 // own — they encode the bind-flag / env-var / dependency-gate conventions of
 // each service in one place and keep the cross-project conventions auditable.
 
-/// `soland` (principal server) spec — `--bind` CLI flag + a few env vars.
+/// `soland` (Station) spec — `--bind` CLI flag + a few env vars.
 /// No external deps in its development-mode default (in-memory persistence).
 pub const SOLAND_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     service: "soland",

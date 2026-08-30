@@ -23,7 +23,7 @@ test.describe("identity-scope boot safety", () => {
         "inkson.config.v1",
         JSON.stringify({
           server_url: "https://local.host",
-          principal_servers: ["https://local.host"],
+          stations: ["https://local.host"],
           account_did: "anonymous",
           device_id: deviceId,
           session_credential: "legacy-incomplete-session",

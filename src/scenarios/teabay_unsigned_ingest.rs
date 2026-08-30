@@ -54,7 +54,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
     let discovery_actor_id = arkret_wire::DidCoreId::new(
         "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
     )?;
-    let principal_server_id = arkret_wire::DidCoreId::new("ak:did_core:web:soland.cotest.local")?;
+    let station_id = arkret_wire::DidCoreId::new("ak:did_core:web:soland.cotest.local")?;
     let body = arkret_models_discovery::DirectoryAnnounceRequestBody {
         discovery_event: arkret_wire::Event {
             event_id: discovery_event_id.clone(),
@@ -65,7 +65,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             },
             actor_id: discovery_actor_id.clone(),
             executed_by: None,
-            principal_server_id: principal_server_id.clone(),
+            station_id: station_id.clone(),
             authorization_ref: None,
             applet_id: None,
             external_ref: None,
@@ -96,7 +96,7 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
         },
         source_refs: vec![discovery_event_id.into_string()],
         as_of: Utc::now(),
-        principal_server_id,
+        station_id,
         ttl_seconds: None,
         supersedes_announce_id: None,
     };

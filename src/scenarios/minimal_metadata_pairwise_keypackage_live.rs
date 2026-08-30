@@ -694,7 +694,7 @@ fn pairwise_member_binding(
 ) -> Result<MemberDeliveryBinding> {
     let binding = MemberDeliveryBinding {
         recipient_id,
-        recipient_kind: RecipientServiceKind::PrincipalServer,
+        recipient_kind: RecipientServiceKind::Station,
         binding_scope: BindingScope::Realm,
         binding_source: BindingSource::RealmPolicy,
         delivery_modes: BTreeSet::from([DeliveryMode::Events, DeliveryMode::KeyPackages]),

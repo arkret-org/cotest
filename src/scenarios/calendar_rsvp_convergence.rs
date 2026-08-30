@@ -213,7 +213,7 @@ async fn wait_for_projected_grant(
             let effective = expect_json(
                 client.get("/_arkret/self/authz/effective-grants").query(&[
                     ("subject", subject),
-                    ("subject_principal_server_id", client.service_id()),
+                    ("subject_station_id", client.service_id()),
                     ("realm_id", realm_id),
                 ]),
                 StatusCode::OK,

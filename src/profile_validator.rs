@@ -151,7 +151,7 @@ pub fn permitted_roles_for(role: ServiceRole) -> Vec<ServiceRole> {
     let mut roles = vec![role, ServiceRole::Admin, ServiceRole::Interop];
     // Server-style services often also expose directory-shaped profiles
     // (identity registry, public network identity). Allow that pairing so
-    // principal_server + directory_service consumers don't have to be
+    // station + directory_service consumers don't have to be
     // separately modelled.
     if matches!(role, ServiceRole::Server) {
         roles.push(ServiceRole::Directory);

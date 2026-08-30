@@ -241,13 +241,13 @@ export type CapabilityGrantObject = {
   "schema": "ak.schema.capability.v1";
   "realm_id"?: string;
   "issuer_id": string;
-  "issuer_principal_server_id": string;
+  "issuer_station_id": string;
   "subject": string | {
     "kind": "condition";
     "required_claims": unknown[];
     [key: string]: unknown;
   };
-  "subject_principal_server_id"?: string;
+  "subject_station_id"?: string;
   "actions": string[];
   "resources": Array<{
     "kind": "realm" | "space" | "circle" | "strand" | "message" | "morph" | "object" | "relation" | "view" | "event" | "actor" | "schema" | "policy" | "invite" | "notification" | "read_cursor" | "blob" | "*";
@@ -428,7 +428,7 @@ export type InviteDeliveryRequestBody = {
       "kind": "realm_genesis";
     };
     "actor_id": string;
-    "principal_server_id": string;
+    "station_id": string;
     "executed_by"?: string;
     "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
@@ -501,7 +501,7 @@ export type InviteDeliveryRequestBody = {
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
       "jws": string;
     } | {
-      "kind": "principal_server_admission";
+      "kind": "station_admission";
       "verification_method": string;
       "event_digest": string;
       "producer_proof_digest": string;
@@ -561,7 +561,7 @@ export type InviteDeliveryRequestBody = {
       "pinned_record_digest"?: string;
     };
     "route_assistance"?: unknown;
-    "recipient_kind"?: "principal_server";
+    "recipient_kind"?: "station";
   };
   "introduction_evidence": {
     "kind": "locator_ref";
@@ -598,7 +598,7 @@ export type InviteDeliveryRequestBody = {
         "pinned_record_digest"?: string;
       };
       "route_assistance"?: unknown;
-      "recipient_kind"?: "principal_server";
+      "recipient_kind"?: "station";
       "issued_at": string;
       "expires_at": string;
       "locator_ref_digest": string;
@@ -676,8 +676,8 @@ export type InviteDeliveryRequestBody = {
           "current_record_url": string;
           "pinned_record_digest"?: string;
         };
-        "recipient_kind"?: "principal_server";
-        "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
+        "recipient_kind"?: "station";
+        "binding_source": "explicit" | "join_policy" | "organization_policy" | "realm_policy";
         "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "keypackages">;
         "service_acceptance_ref"?: string;
         "policy_event_ref"?: string;
@@ -733,8 +733,8 @@ export type InviteDeliveryRequestBody = {
           "current_record_url": string;
           "pinned_record_digest"?: string;
         };
-        "recipient_kind"?: "principal_server";
-        "binding_source": "explicit" | "invite" | "join_policy" | "organization_policy" | "realm_policy";
+        "recipient_kind"?: "station";
+        "binding_source": "explicit" | "join_policy" | "organization_policy" | "realm_policy";
         "delivery_modes"?: Array<"events" | "sync" | "to_device" | "push" | "keypackages">;
         "service_acceptance_ref"?: string;
         "policy_event_ref"?: string;
@@ -760,7 +760,7 @@ export type InviteDeliveryRequestBody = {
     "resolved_by"?: string;
     "resolved_at"?: string;
   } | {
-    "kind": "same_principal_server";
+    "kind": "same_station";
   } | {
     "kind": "explicit_address";
   };
@@ -827,9 +827,9 @@ export type RealmSealFrontierView = {
       "fault_reason"?: "control_proposal_decision_overdue";
       "device_revocation_state"?: {
         "schema": "ak.schema.device_revocation_state.v1";
-        "principal_authority": {
+        "account_id": {
           "principal_id": string;
-          "principal_server_id": string;
+          "station_id": string;
         };
         "device_id": string;
         "target_device_authorize_event_id": string;
@@ -964,7 +964,7 @@ export type EventFederationSubmission = {
       "kind": "realm_genesis";
     };
     "actor_id": string;
-    "principal_server_id": string;
+    "station_id": string;
     "executed_by"?: string;
     "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
     "applet_id"?: string;
@@ -1037,7 +1037,7 @@ export type EventFederationSubmission = {
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
       "jws": string;
     } | {
-      "kind": "principal_server_admission";
+      "kind": "station_admission";
       "verification_method": string;
       "event_digest": string;
       "producer_proof_digest": string;
@@ -1186,5 +1186,74 @@ export type EventFederationSubmission = {
         "jws": string;
       };
     }>;
+  };
+  "membership_compensation_evidence"?: {
+    "delegation": {
+      "delegation_id": string;
+      "core": {
+        "authority": "ak.authority.membership_compensation.v1";
+        "admission_id": string;
+        "join_event_id": string;
+        "join_event_digest": string;
+        "membership_cell_id": string;
+        "subject_id": string;
+        "join_actor_id": string;
+        "executed_by"?: string;
+        "authorization_ref"?: string | "ak:cell:ak.component.realm.authority_root.v1:null" | "ak.authority.direct_conversation_participant.v1" | "ak.authority.direct_conversation_bootstrap_participant.v1";
+        "verification_method": string;
+        "executor_id": string;
+        "executor_proof_key_kid": string;
+        "resource_id": string;
+        "action": "ak.member.compensate.leave" | "ak.member.compensate.remove";
+        "deadline": string;
+      };
+      "delegation_digest": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "join_accepted_proof": {
+      "admission_id": string;
+      "join_event_id": string;
+      "join_event_digest": string;
+      "accepted_at": string;
+      "issuer_id": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "terminal_certificate": {
+      "domain": "ak.membership_compensation.terminal_certificate.v1";
+      "admission_id": string;
+      "delegation_digest": string;
+      "operation_id": string;
+      "terminal_state": "failed_after_membership_acceptance" | "failed_after_mls_add";
+      "certified_at": string;
+      "issuer_id": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
+    "single_use_cas_token": {
+      "domain": "ak.membership_compensation.single_use_cas.v1";
+      "admission_id": string;
+      "delegation_digest": string;
+      "expected_state": "unused";
+      "destination_id": string;
+      "issued_at": string;
+      "expires_at": string;
+      "issuer_id": string;
+      "signature": {
+        "verification_method": string;
+        "created_at": string;
+        "jws": string;
+      };
+    };
   };
 };

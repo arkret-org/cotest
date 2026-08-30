@@ -74,7 +74,7 @@ const HARNESS_ACCOUNT_AUTHORITY_KEY_FRAGMENT: &str = "federation-fanout-key";
 fn harness_account_authority_registration_key()
 -> arkret_models_identity::service_identity::ServiceRegistrationKey {
     arkret_models_identity::service_identity::ServiceRegistrationKey::new(
-        ServiceKind::AuthServer,
+        ServiceKind::Station,
         arkret_models_identity::service_identity::CanonicalServiceUrl::canonicalize(
             HARNESS_ACCOUNT_AUTHORITY_ORIGIN,
         )
@@ -710,7 +710,7 @@ pub async fn seal_current_principal_control_frontier(
             outcome.seal_id == seal.id
                 && outcome.accepted_event_digests == seal.delta
                 && outcome.post_state_root == seal.state_root,
-            "principal server returned a mismatched PCR successor Seal outcome"
+            "Station returned a mismatched PCR successor Seal outcome"
         );
         predecessor = seal;
     }
@@ -883,7 +883,7 @@ async fn bootstrap_test_device_authorization(
     let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal_actor_id.clone(),
-            principal_server_id: server.service_id().clone(),
+            station_id: server.service_id().clone(),
             principal_did: principal.clone(),
             notary: arkret_wire::NotaryValue::single_signer(
                 crate::fixture_notary_signer_for_method(
@@ -1051,7 +1051,7 @@ async fn bootstrap_test_device_authorization(
         seal_outcome.seal_id == bootstrap_seal.id
             && seal_outcome.accepted_event_digests == bootstrap_seal.delta
             && seal_outcome.post_state_root == bootstrap_seal.state_root,
-        "principal server returned a mismatched PCR bootstrap Seal outcome"
+        "Station returned a mismatched PCR bootstrap Seal outcome"
     );
     crate::harness::register_event_signing_identity(
         actor,

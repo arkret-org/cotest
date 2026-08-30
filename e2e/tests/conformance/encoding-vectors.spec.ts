@@ -602,7 +602,7 @@ test.describe("conformance encoding vectors", () => {
           signature: "signature-base64url-placeholder",
         },
       ],
-      principal_server_id: "ak:did_core:web:principal-server.example",
+      station_id: "ak:did_core:web:station.example",
     };
     const redaction = {
       target_event_id: event.event_id,

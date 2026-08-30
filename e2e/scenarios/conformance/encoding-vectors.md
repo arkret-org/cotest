@@ -30,8 +30,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`,暴露 `/_arkret/_conformance/*` 端点
-- 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session,使签名向量阶段可以拿到一个真实的 actor signing key
+- 1 × soland (Station) — 假设监听 `http://127.0.0.1:<soland_port>`,暴露 `/_arkret/_conformance/*` 端点
+- 1 × coauth (private authentication process) — 仅用来给 alice 颁发 dev session,使签名向量阶段可以拿到一个真实的 actor signing key
 - 1 × conformance harness (Playwright `request` fixture) — 加载 `arkret-spec/spec/v1/artifacts/fixtures/*.json` vector,逐项 POST 到 soland,断言响应字段与 `expected_*` 字段相等
 
 (都是 cotest 现有 harness 直接提供的,不需要改 scripts/run-joint-e2e.ps1;但 §1 的 endpoint 目前未实现,见 Implementation notes。)

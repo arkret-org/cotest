@@ -1380,7 +1380,7 @@ export function uniqueUser(prefix: string, server?: SolandKey): JointUser {
     if (web?.[1]) {
       return `did:web:${web[1]}:webvh:${slug}`;
     }
-    throw new Error(`unsupported Principal Server DID method: ${serviceDid}`);
+    throw new Error(`unsupported Station DID method: ${serviceDid}`);
   })();
   return {
     name: slug,
@@ -1460,7 +1460,7 @@ async function ensureRegisteredRaw(
   user: JointUser,
   opts: { server?: SolandKey } = {},
 ) {
-  // Most protocol tests need a pre-existing Principal Server projection but
+  // Most protocol tests need a pre-existing Station projection but
   // are not account-onboarding tests. Provision that deployment-private state
   // directly; canonical `ak.gate.account.command.register.v1` remains owned by
   // the Account Authority and is exercised through coauth-register.ts.
@@ -1896,14 +1896,14 @@ export async function openUser(
     {
       name: "inkson.config.v1",
       value: JSON.stringify({
-        principal_servers: [serverUrl],
+        stations: [serverUrl],
         active_account: opts.neutralLoginConfig
           ? null
           : {
               profile_id: `ak:profile:${randomUUID()}`,
               authority: {
                 principal_id: user.id,
-                principal_server_id: solandServiceId(opts.server),
+                station_id: solandServiceId(opts.server),
               },
               resolution: {
                 did: user.did,

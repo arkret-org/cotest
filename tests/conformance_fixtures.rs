@@ -342,13 +342,13 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// C43.4 — principal-server full-profile certification gate. Soland must
+    /// C43.4 — station full-profile certification gate. Soland must
     /// remain explicitly not_certified while full claims require operations,
     /// schemas, event kinds, durable signed federation, and minimum
     /// admin/agent/applet/media surfaces.
-    principal_server_certification_gate_suite_matches_reference_semantics,
-    "principal_server_certification_gate",
-    cotest::conformance::run_principal_server_certification_gate_suite,
+    station_certification_gate_suite_matches_reference_semantics,
+    "station_certification_gate",
+    cotest::conformance::run_station_certification_gate_suite,
 );
 
 conformance_test!(

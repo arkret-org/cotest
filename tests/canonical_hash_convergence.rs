@@ -54,7 +54,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "audience": "https://soland.example/_arkret",
                 "member_delivery_binding": {
                     "recipient_id": "ak:did_core:web:soland.example",
-                    "recipient_kind": "principal_server",
+                    "recipient_kind": "station",
                     "binding_source": "organization_policy",
                     "delivery_modes": ["events"],
                 },
@@ -138,7 +138,7 @@ fn vectors() -> Vec<CanonicalVector> {
                 "audience": "https://soland.example/_arkret",
                 "member_delivery_binding": {
                     "recipient_id": "ak:did_core:webvh:zcotestsolandscid0000000000000000",
-                    "recipient_kind": "principal_server",
+                    "recipient_kind": "station",
                     "binding_source": "organization_policy",
                     "delivery_modes": ["events"],
                 },

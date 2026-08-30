@@ -15,7 +15,7 @@ const MANAGED_ACTOR_CASES: [&str; 26] = [
     "ghost_external_tuple_is_single_closed_carrier",
     "ghost_external_tuple_rejects_legacy_or_extra_mirrors",
     "ghost_provision_requires_registration_service_signature",
-    "remote_principal_server_claim",
+    "remote_station_claim",
     "actor_reuses_service_or_controller",
     "bot_does_not_equal_registration_bot",
     "ghost_core_used_for_did_namespace",
@@ -162,7 +162,7 @@ fn consume_managed_actor_case(
                 bail!("bearer session bypassed the registration service signature");
             }
         }
-        "remote_principal_server_claim" | "rotation_wrong_authority_pair" => {
+        "remote_station_claim" | "rotation_wrong_authority_pair" => {
             let receiving = "ak:did_core:web:principal.example";
             let claimed = "ak:did_core:web:other.example";
             if receiving == claimed {

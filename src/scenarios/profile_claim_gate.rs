@@ -48,7 +48,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let unknown = serde_json::json!({
         "supported_profiles": ["ak.profile.not_registered.v1"],
         "supported_operation_bundles": operation_bundles(&[
-            "ak.operation_bundle.principal_server.describe.v1"
+            "ak.operation_bundle.station.describe.v1"
         ]),
     });
     expect_profile_rejected(&unknown, "unknown claimed profile")?;
@@ -56,8 +56,8 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let failed = serde_json::json!({
         "supported_profiles": ["ak.profile.core_event_store.v1"],
         "supported_operation_bundles": operation_bundles(&[
-            "ak.operation_bundle.principal_server.describe.v1",
-            "ak.operation_bundle.principal_server.http_core.v1"
+            "ak.operation_bundle.station.describe.v1",
+            "ak.operation_bundle.station.http_core.v1"
         ]),
         "supported_event_kinds": [
             "ak.space.create",
@@ -82,7 +82,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let limited = serde_json::json!({
         "supported_profiles": ["org.arkret.soland.profile.limited_server.v1"],
         "supported_operation_bundles": operation_bundles(&[
-            "ak.operation_bundle.principal_server.describe.v1"
+            "ak.operation_bundle.station.describe.v1"
         ]),
     });
     expect_profile_rejected(&limited, "limited profile")?;
@@ -90,7 +90,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let missing_dependency = serde_json::json!({
         "supported_profiles": ["ak.profile.push_gateway.v1"],
         "supported_operation_bundles": operation_bundles(&[
-            "ak.operation_bundle.principal_server.describe.v1"
+            "ak.operation_bundle.station.describe.v1"
         ]),
     });
     expect_profile_rejected(&missing_dependency, "missing profile dependency")?;
@@ -102,7 +102,7 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
             "ak.profile.mls_governance_binding.full.v1",
         ],
         "supported_operation_bundles": operation_bundles(&[
-            "ak.operation_bundle.principal_server.describe.v1"
+            "ak.operation_bundle.station.describe.v1"
         ]),
     });
     expect_profile_rejected(&mutually_exclusive, "mutually exclusive profiles")?;
@@ -110,8 +110,8 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let missing_required_cells = serde_json::json!({
         "supported_profiles": ["ak.profile.mls_governance_binding.full.v1"],
         "supported_operation_bundles": operation_bundles(&[
-            "ak.operation_bundle.principal_server.describe.v1",
-            "ak.operation_bundle.principal_server.http_core.v1",
+            "ak.operation_bundle.station.describe.v1",
+            "ak.operation_bundle.station.http_core.v1",
         ]),
         "supported_cells": [],
     });
@@ -120,8 +120,8 @@ pub fn profile_claim_gate_negative_claims_fail_closed() -> Result<()> {
     let missing_required_fixture = serde_json::json!({
         "supported_profiles": ["ak.vector_group.capability.v1"],
         "supported_operation_bundles": operation_bundles(&[
-            "ak.operation_bundle.principal_server.describe.v1",
-            "ak.operation_bundle.principal_server.http_core.v1"
+            "ak.operation_bundle.station.describe.v1",
+            "ak.operation_bundle.station.http_core.v1"
         ]),
         "verified_fixtures": [],
     });

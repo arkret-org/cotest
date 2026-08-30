@@ -25,8 +25,8 @@ durable Event;见 `models/private-objects.md` §2);notification 的 push fan-out
 
 ## 拓扑
 
-- 1 × soland (principal server) — 监听 `http://127.0.0.1:<soland_port>`
-- 1 × coauth (auth server) — 监听 `http://127.0.0.1:<coauth_port>`
+- 1 × soland (Station) — 监听 `http://127.0.0.1:<soland_port>`
+- 1 × coauth (private authentication process) — 监听 `http://127.0.0.1:<coauth_port>`
 - 共享同一个 coauth;alice 两台 device 都从这个 coauth 取 session credential
 
 (cotest 现有 harness 已经提供这套拓扑,不需要改 `scripts/run-joint-e2e.ps1`。)

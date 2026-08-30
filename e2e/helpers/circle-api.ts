@@ -88,7 +88,7 @@ export async function grantCircleMemberManageCapability(
     realm_id: args.realmId,
     issuer_id: args.ownerId,
     subject: args.subjectId,
-    subject_principal_server_id: solandServiceId(args.server),
+    subject_station_id: solandServiceId(args.server),
     actions: ["ak.circle.member.manage"],
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },
@@ -147,7 +147,7 @@ export async function grantCircleManageCapability(
     realm_id: args.realmId,
     issuer_id: args.ownerId,
     subject: args.subjectId,
-    subject_principal_server_id: solandServiceId(args.server),
+    subject_station_id: solandServiceId(args.server),
     actions: ["ak.circle.manage"],
     resources: [
       { kind: "circle", realm_id: args.realmId, circle_id: args.circleId },

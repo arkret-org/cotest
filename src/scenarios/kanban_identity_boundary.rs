@@ -34,10 +34,10 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         .demo_client(&alice_did, "ak:device:01904100-0000-7000-8000-00000000ab01")
         .await?;
     let realm_id = create_test_realm(&alice, "Kanban Identity Boundary").await?;
-    // The typed builders resolve the envelope `principal_server_id` from the
-    // client's selected Principal Server, exactly as the real app does at
+    // The typed builders resolve the envelope `station_id` from the
+    // client's selected Station, exactly as the real app does at
     // sign-in.
-    inkson::operation::set_authoring_principal_server_id(Some(
+    inkson::operation::set_authoring_station_id(Some(
         arkret::DidCoreId::new(alice.service_id().to_owned())
             .map_err(|error| anyhow!("service DID core id: {error}"))?,
     ));

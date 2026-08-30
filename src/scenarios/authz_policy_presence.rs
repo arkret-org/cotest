@@ -71,7 +71,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     let effective_grants = expect_json(
         alice.get("/_arkret/self/authz/effective-grants").query(&[
             ("subject", bob_core_id.as_str()),
-            ("subject_principal_server_id", alice.service_id()),
+            ("subject_station_id", alice.service_id()),
             ("realm_id", realm_id.as_str()),
         ]),
         StatusCode::OK,
@@ -104,7 +104,7 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         alice.get("/_arkret/self/authz/effective-grants").query(&[
             ("subject", bob_core_id.as_str()),
             (
-                "subject_principal_server_id",
+                "subject_station_id",
                 "ak:did_core:web:other-principal.example",
             ),
             ("realm_id", realm_id.as_str()),

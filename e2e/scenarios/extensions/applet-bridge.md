@@ -14,8 +14,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`
-- 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
+- 1 × soland (Station) — 假设监听 `http://127.0.0.1:<soland_port>`
+- 1 × coauth (private authentication process) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 1 × mock-applet-registry — 由 cotest runner 的 `-StartMockAppletRegistry` / `-StartMocks` 启动,通过 `COTEST_MOCK_APPLET_REGISTRY_BASE_URL` 注入;由它代表"applet developer"完成 manifest 签名与外部 webhook 转发
 - 共享同一 coauth；principal actor 与 applet service 都使用可验证 session，ghost event 则由 applet registration epoch 捕获的 service signing key 签名
 
@@ -31,7 +31,7 @@
 > `bot_actor_id` / `ghost_actor_id` 都是不可直接解析的 `did_core_id`，不能靠字符串模板反拼 bare
 > `did`。测试必须为每个主体构造并发布独立 did:webvh inception，提交完整 method-history evidence，
 > 并验证 `project(initial_resolution.did)==actor_id`。durable record 保存 provision/PCR creation anchors，
-> current resolution 只从 `(actor_id, actor_principal_server_id)` PCR cell 取得。
+> current resolution 只从 `(actor_id, actor_station_id)` PCR cell 取得。
 
 ## Pre-conditions
 
@@ -88,7 +88,7 @@
 11. mock 内部:
     - 正向 provision 前，把同一 `applet_managed_control` PCR genesis 分别投递到普通 `/_arkret/self/events` 与 peer federation 单 Event 入口；两者都必须以 `applet_managed_pcr_genesis_requires_closed_aggregate` 拒绝，证明只能由固定四事件 formal aggregate 注入
     - 用 active registration service key 对 exact body/path/Idempotency-Key 生成 RFC 9421 `service_signature`，调 `POST /_arkret/self/applets/{applet_id}/ghosts/provision`；不得用 bearer session 替代
-    - 请求携带完整 `actor_principal_server_id`、service-signed managed provision、Ghost PCR genesis、accountability grant 与 profile 四事件；Principal Server 独立验证 DID method evidence 和 DID namespace 后原子提交，不代签、不重建
+    - 请求携带完整 `actor_station_id`、service-signed managed provision、Ghost PCR genesis、accountability grant 与 profile 四事件；Station 独立验证 DID method evidence 和 DID namespace 后原子提交，不代签、不重建
     - ghost 消息通过 `POST /_arkret/edge/applet/transactions` 提交，`actor_id=ghost_actor_id`、`executed_by=applet_service.id`，并引用安装时颁发的 message capability
     - Realm 为私有明文时，必须在 `plaintext_visible_services` 中显式授权 applet service 的 `message_content`
     - 返回 `{ ghost_actor_id, message_id }`
@@ -153,7 +153,7 @@
 
   通过证据：`artifacts/runs/20260726-033554/joint-e2e/playwright-report`。
 
-- canonical surface 包含 `/_arkret/self/applets/install/preview`、Applet service 的 `/_arkret/edge/applet/managed-actors/author`、`/_arkret/self/applets/install`、revoke preview/commit、Ghost preview/commit 与 `/_arkret/edge/applet/transactions`；不得以私有路由或 Principal Server 代签替代标准 co-sign relay。
+- canonical surface 包含 `/_arkret/self/applets/install/preview`、Applet service 的 `/_arkret/edge/applet/managed-actors/author`、`/_arkret/self/applets/install`、revoke preview/commit、Ghost preview/commit 与 `/_arkret/edge/applet/transactions`；不得以私有路由或 Station 代签替代标准 co-sign relay。
 - mock-applet-registry 提供这些 endpoint:
   - `GET /healthz`
   - `POST /sign-package` → `{ applet_package, package_digest }`

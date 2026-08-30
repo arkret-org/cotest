@@ -12,11 +12,8 @@
 //   (critical extension fail-closed at submit time) now run live against soland's
 //   submit reject path.
 //
-// coauth note: `coauth/crates/backend/src/handlers/arkret.rs` now self-claims
-//   `ak.profile.auth_server.v1` and intentionally does NOT claim
-//   `ak.profile.identity_registry.v1` / `ak.profile.principal_server.v1`. The
-//   coauth-specific partition test runs live when COTEST_COAUTH_BASE_URL is
-//   configured and skips cleanly in single-server topologies.
+// coauth is a private authentication process. It has no public Arkret service
+// role, profile claim, or `/_arkret/describe` document.
 //
 // The describe block is tagged @fully-implemented so these live tests run under
 // the default `joint-smoke` profile.
@@ -80,7 +77,7 @@ type ConformanceCatalog = {
   // (conformance-profiles.md §2.1: the json is the full matrix; the markdown
   // is a non-exhaustive view). They are independently advertisable in
   // /_arkret/describe.claimed_profiles — e.g. crypto-media/encryption-and-audit.md
-  // §2.5 requires a principal server federating MLS-backed Realms to advertise
+  // §2.5 requires a Station federating MLS-backed Realms to advertise
   // ak.profile.mls_governance_binding.full.v1.
   hardening_profiles?: string[];
   candidate_profiles?: string[];
@@ -115,7 +112,7 @@ test.describe("conformance profile gates @fully-implemented", () => {
     const claimed = body.claimed_profiles ?? [];
     const verified = body.verified_profiles ?? [];
 
-    expect(claimed.length, "soland claims at least the v1 floor + principal server").toBeGreaterThan(
+    expect(claimed.length, "soland claims at least the v1 floor + Station").toBeGreaterThan(
       0,
     );
 
@@ -320,25 +317,12 @@ test.describe("conformance profile gates @fully-implemented", () => {
     expect(JSON.stringify(body)).not.toContain('"status":"accepted"');
   });
 
-  test("Phase A coauth — coauth self-claims auth_server only, not identity_registry/principal_server", async ({
+  test("Phase A coauth — private authentication process exposes no public describe", async ({
     request,
   }) => {
     const baseUrl = coauthBaseUrl();
     test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
     const resp = await request.get(`${baseUrl}/_arkret/describe`);
-    expect(resp.status()).toBe(200);
-    const body = (await resp.json()) as DescribeResponse;
-    const claimed = body.claimed_profiles ?? [];
-    const claimedIds = new Set(claimed.map((entry) => entry.profile_id).filter(Boolean));
-    expect(claimedIds.has("ak.profile.auth_server.v1")).toBe(true);
-    expect(claimedIds.has("ak.profile.identity_registry.v1")).toBe(false);
-    expect(claimedIds.has("ak.profile.principal_server.v1")).toBe(false);
-    for (const entry of claimed) {
-      expect(entry.claim_kind).toBe("self_claimed");
-    }
-    for (const entry of body.verified_profiles ?? []) {
-      expect(entry.claim_kind).toBe("conformance_verified");
-      expect(claimedIds.has(entry.profile_id)).toBe(false);
-    }
+    expect(resp.status()).toBeGreaterThanOrEqual(400);
   });
 });

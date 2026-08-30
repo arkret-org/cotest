@@ -82,7 +82,7 @@ pub struct JointServiceStack {
     /// coauth (auth/account) — `Some` if docker + sibling binary were
     /// available; `None` if the bootstrap couldn't bring it up.
     pub coauth: Option<SpawnedCoauth>,
-    /// soland (principal server) — always present (or the bootstrap returns
+    /// soland (Station) — always present (or the bootstrap returns
     /// `Err`). This is the "main" service the rest of the stack talks to.
     pub soland: ArkretServer,
 }
@@ -246,7 +246,7 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
     let coauth = match prepared_coauth {
         Some(prepared) => Some(
             prepared
-                .spawn_for_principal_server(
+                .spawn_for_station(
                     soland.base_url().as_str(),
                     soland.service_id().as_str(),
                     &config.session_grant_introspection_bearer,

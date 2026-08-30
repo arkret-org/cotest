@@ -12,8 +12,8 @@ const LIVE_DESCRIBE_FIXTURE: &str = "live-describe-profile-gate-fixture.json";
 const LIVE_DESCRIBE_FIXTURE_PROFILE: &str = "ak.profile.live_describe_profile_gate_vectors.v1";
 
 const FULL_PROFILE_CLAIMS: &[&str] = &[
-    "ak.profile.principal_server_events_api.v1",
-    "ak.profile.principal_server.v1",
+    "ak.profile.station_events_api.v1",
+    "ak.profile.station.v1",
     "ak.profile.full_client.v1",
     "ak.profile.e2ee_client.v1",
 ];

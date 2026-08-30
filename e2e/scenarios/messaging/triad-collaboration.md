@@ -2,7 +2,7 @@
 
 ## 目标
 
-验证在同一个 principal server 上,三个 actor 完成「建 Realm → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_access` 看到正确历史」的完整协作链路;过程中 anchor frontier 在所有成员之间收敛一致。
+验证在同一个 Station 上,三个 actor 完成「建 Realm → 邀请 → 接受 → 双向消息 → 编辑 / 撤回 / 反应 / 回复 → 晚到成员按 `history_access` 看到正确历史」的完整协作链路;过程中 anchor frontier 在所有成员之间收敛一致。
 
 不验证:跨服务器联邦 (见 federation/cross-server)、审核封禁 (见 spaces/moderation-ban)、第三方邮件邀请 (后续 invites/third-party)、设备授权 (后续 identity/account-device-auth)。
 
@@ -17,8 +17,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`
-- 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
+- 1 × soland (Station) — 假设监听 `http://127.0.0.1:<soland_port>`
+- 1 × coauth (private authentication process) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 共享同一个 coauth;所有 actor 的 session credential 都来自这个 coauth
 
 (都是 cotest 现有 harness 直接提供的,不需要改 scripts/run-joint-e2e.ps1。)

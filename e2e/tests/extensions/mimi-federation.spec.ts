@@ -225,7 +225,7 @@ async function createBoundMimiRoom(
     history_access: "since_join",
     encryption_profile: "mls_rfc9420",
   });
-  // MIMI ingress is translated by the local Principal Server, so its service
+  // MIMI ingress is translated by the local Station, so its service
   // DID needs a real sealed Realm capability. Membership and the room binding
   // are not authorization sources, and a canonical Realm must never be
   // modified through the conformance fixture endpoint.

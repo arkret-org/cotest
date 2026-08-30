@@ -50,7 +50,7 @@ pub fn register_event_signing_identity(
     actor: &str,
     signing_seed: [u8; 32],
     verification_method: impl Into<String>,
-    principal_server_id: DidCoreId,
+    station_id: DidCoreId,
 ) {
     let verification_method = DidUrl::new(verification_method)
         .expect("registered Event signer verification method is a DID URL");
@@ -59,7 +59,7 @@ pub fn register_event_signing_identity(
         .expect("registered Event signer lock");
     let actor_signers = signers.entry(actor.to_owned()).or_default();
     actor_signers.retain(|(_, registered_method, _)| registered_method != &verification_method);
-    actor_signers.push((signing_seed, verification_method, principal_server_id));
+    actor_signers.push((signing_seed, verification_method, station_id));
 }
 
 pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
@@ -78,16 +78,15 @@ pub(crate) fn event_signing_identity(actor: &str) -> ([u8; 32], DidUrl) {
         })
 }
 
-fn event_principal_server_id(actor: &str) -> DidCoreId {
+fn event_station_id(actor: &str) -> DidCoreId {
     REGISTERED_EVENT_SIGNERS
         .lock()
         .expect("registered Event signer lock")
         .get(actor)
         .and_then(|signers| signers.last())
-        .map(|(_, _, principal_server_id)| principal_server_id.clone())
+        .map(|(_, _, station_id)| station_id.clone())
         .unwrap_or_else(|| {
-            DidCoreId::new("ak:did_core:web:principal.example")
-                .expect("cotest default Principal Server id")
+            DidCoreId::new("ak:did_core:web:principal.example").expect("cotest default Station id")
         })
 }
 
@@ -397,7 +396,7 @@ pub fn realm_bootstrap_event_batch(
 pub(crate) fn realm_bootstrap_event_batch_for_device(
     actor: &str,
     device_id: &str,
-    principal_server_id: &DidCoreId,
+    station_id: &DidCoreId,
     draft: RealmBootstrapDraft,
 ) -> Result<(String, Vec<arkret_wire::Event>)> {
     let (signing_seed, verification_method) = event_signing_identity_for_device(actor, device_id);
@@ -406,7 +405,7 @@ pub(crate) fn realm_bootstrap_event_batch_for_device(
         draft,
         signing_seed,
         &verification_method,
-        Some(principal_server_id),
+        Some(station_id),
     )
 }
 
@@ -437,7 +436,7 @@ fn realm_bootstrap_followup_event(
     cell: &str,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-    principal_server_id: Option<&DidCoreId>,
+    station_id: Option<&DidCoreId>,
 ) -> Result<Event> {
     let mut event = event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
         actor,
@@ -448,7 +447,7 @@ fn realm_bootstrap_followup_event(
         vec![predecessor],
         signing_seed,
         verification_method,
-        principal_server_id,
+        station_id,
         Vec::new(),
         vec![head_eq_null_precondition(cell)?],
     );
@@ -491,7 +490,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
     draft: RealmBootstrapDraft,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-    principal_server_id: Option<&DidCoreId>,
+    station_id: Option<&DidCoreId>,
 ) -> Result<(String, Vec<arkret_wire::Event>)> {
     let RealmBootstrapDraft {
         create,
@@ -504,7 +503,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         plaintext_visible_services,
         mut delivery_binding_policy,
     } = draft;
-    if let Some(principal_server_id) = principal_server_id {
+    if let Some(station_id) = station_id {
         use arkret_models_collaboration::events_payloads::realm::AllowedRecipientServices;
 
         match &delivery_binding_policy.allowed_binding_sources {
@@ -523,15 +522,15 @@ fn realm_bootstrap_event_batch_with_signing_identity(
             None => {
                 delivery_binding_policy.allowed_recipient_ids =
                     Some(AllowedRecipientServices::Allowlist(vec![
-                        principal_server_id.clone(),
+                        station_id.clone(),
                     ]));
             }
             Some(AllowedRecipientServices::Unrestricted) => {}
             Some(AllowedRecipientServices::Allowlist(services))
-                if services.contains(principal_server_id) => {}
+                if services.contains(station_id) => {}
             Some(AllowedRecipientServices::Allowlist(_)) => {
                 return Err(anyhow!(
-                    "device/account Realm bootstrap policy does not allow the creator Principal Server"
+                    "device/account Realm bootstrap policy does not allow the creator Station"
                 ));
             }
         }
@@ -547,7 +546,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         Vec::new(),
         signing_seed,
         verification_method,
-        principal_server_id,
+        station_id,
         Vec::new(),
         vec![head_eq_null_precondition(
             "ak:cell:ak.component.realm.create.v1:null",
@@ -571,7 +570,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
             &cell,
             signing_seed,
             verification_method,
-            principal_server_id,
+            station_id,
         )?;
         let event_id = event.event_id.clone();
         events.push(event);
@@ -629,7 +628,7 @@ fn realm_bootstrap_event_batch_with_signing_identity(
         creator_member_join_payload_value(
             &derived_realm_id,
             actor,
-            principal_server_id,
+            station_id,
             Some(&delivery_binding_policy_event_id),
         )?,
         format!("ak:cell:ak.component.member.state.v1:{creator_core_id}"),
@@ -957,7 +956,7 @@ fn event_envelope_with_chain_and_signing_identity(
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-    principal_server_id: Option<&DidCoreId>,
+    station_id: Option<&DidCoreId>,
 ) -> Event {
     event_envelope_with_chain_and_signing_identity_and_causal_refs(
         actor,
@@ -968,7 +967,7 @@ fn event_envelope_with_chain_and_signing_identity(
         prev_event_ids,
         signing_seed,
         verification_method,
-        principal_server_id,
+        station_id,
         Vec::new(),
     )
 }
@@ -983,7 +982,7 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-    principal_server_id: Option<&DidCoreId>,
+    station_id: Option<&DidCoreId>,
     causal_refs: Vec<String>,
 ) -> Event {
     event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
@@ -995,7 +994,7 @@ fn event_envelope_with_chain_and_signing_identity_and_causal_refs(
         prev_event_ids,
         signing_seed,
         verification_method,
-        principal_server_id,
+        station_id,
         causal_refs,
         Vec::new(),
     )
@@ -1041,7 +1040,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     prev_event_ids: Vec<EventId>,
     signing_seed: [u8; 32],
     verification_method: &DidUrl,
-    principal_server_id: Option<&DidCoreId>,
+    station_id: Option<&DidCoreId>,
     causal_refs: Vec<String>,
     preconditions: Vec<arkret_wire::cba::Precondition>,
 ) -> Event {
@@ -1059,9 +1058,9 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
     let actor_did = Did::new(actor.to_owned()).expect("cotest actor DID");
     let actor_id = arkret_identifiers::project_did_to_core_id(&actor_did)
         .expect("cotest actor DID projects to a core id");
-    let principal_server_id = principal_server_id
+    let station_id = station_id
         .cloned()
-        .unwrap_or_else(|| event_principal_server_id(actor));
+        .unwrap_or_else(|| event_station_id(actor));
     // The `suffix` is no longer an id: spec encoding.md section 4.0 derives
     // `event_id` from the Event's own content, so the harness builds with the
     // derived constructor and callers read the id back off the built Event.
@@ -1079,7 +1078,7 @@ fn event_envelope_with_chain_signing_identity_causal_refs_and_preconditions(
             }
         },
         actor_id.clone(),
-        principal_server_id,
+        station_id,
         actor_seq,
         arkret_identifiers::Hlc::new(format!("01970e589d21-{hlc_logical:04x}-a13f9c2e"))
             .expect("cotest HLC"),
@@ -1150,7 +1149,7 @@ pub(crate) fn event_envelope_with_chain(
 pub(crate) fn event_envelope_with_chain_for_device(
     actor: &str,
     device_id: &str,
-    principal_server_id: &DidCoreId,
+    station_id: &DidCoreId,
     realm_id: &str,
     kind: &str,
     payload: Value,
@@ -1166,7 +1165,7 @@ pub(crate) fn event_envelope_with_chain_for_device(
         Vec::new(),
         signing_seed,
         &verification_method,
-        Some(principal_server_id),
+        Some(station_id),
     )
 }
 
@@ -1232,25 +1231,25 @@ pub(crate) fn member_join_payload_value(realm_id: &str, actor_id: &str) -> Resul
 fn creator_member_join_payload_value(
     realm_id: &str,
     actor_id: &str,
-    principal_server_id: Option<&DidCoreId>,
+    station_id: Option<&DidCoreId>,
     policy_event_ref: Option<&EventId>,
 ) -> Result<Value> {
-    let Some(principal_server_id) = principal_server_id else {
+    let Some(station_id) = station_id else {
         return member_join_payload_value(realm_id, actor_id);
     };
     let policy_event_ref = policy_event_ref
         .cloned()
         .ok_or_else(|| anyhow!("routable creator binding requires the bootstrap policy Event"))?;
     let binding = MemberDeliveryBinding {
-        recipient_id: principal_server_id.clone(),
-        recipient_kind: RecipientServiceKind::PrincipalServer,
+        recipient_id: station_id.clone(),
+        recipient_kind: RecipientServiceKind::Station,
         binding_scope: BindingScope::Realm,
         binding_source: BindingSource::RealmPolicy,
         delivery_modes: BTreeSet::from([DeliveryMode::Events]),
         service_resolution: ServiceResolutionCarrier::CurrentRecordUrl {
             current_record_url: format!(
                 "https://cotest.invalid{}",
-                canonical_service_current_record_path(principal_server_id)
+                canonical_service_current_record_path(station_id)
             ),
             pinned_record_digest: None,
         },
@@ -1306,7 +1305,7 @@ pub(crate) fn invite_create_payload(
     );
     InviteCreatePayload::new(
         arkret_identifiers::project_did_to_core_id(&invitee_did)?,
-        InviteDeliveryTarget::principal_server(
+        InviteDeliveryTarget::station(
             recipient_id,
             arkret_models_identity::ServiceResolutionCarrier::CurrentRecordUrl {
                 current_record_url,
@@ -1389,7 +1388,7 @@ pub fn encrypted_envelope(content_type: &str, ciphertext: &str) -> Value {
 pub(crate) fn event_envelope_with_causal_refs_for_device(
     actor: &str,
     device_id: &str,
-    principal_server_id: &DidCoreId,
+    station_id: &DidCoreId,
     realm_id: &str,
     kind: &str,
     payload: Value,
@@ -1407,7 +1406,7 @@ pub(crate) fn event_envelope_with_causal_refs_for_device(
         prev_event_ids,
         signing_seed,
         &verification_method,
-        Some(principal_server_id),
+        Some(station_id),
         causal_refs,
     )
 }
@@ -1447,13 +1446,13 @@ mod realm_bootstrap_tests {
     }
 
     fn build_for_device(draft: RealmBootstrapDraft) -> (String, Vec<Event>) {
-        let principal_server_id = DidCoreId::new(SERVICE.to_owned()).expect("valid service id");
+        let station_id = DidCoreId::new(SERVICE.to_owned()).expect("valid service id");
         realm_bootstrap_event_batch_with_signing_identity(
             ACTOR,
             draft,
             [7; 32],
             &DidUrl::new(format!("{ACTOR}#device-1")).expect("valid verification method"),
-            Some(&principal_server_id),
+            Some(&station_id),
         )
         .expect("valid device/account Realm bootstrap unit")
     }
@@ -1555,12 +1554,12 @@ mod realm_bootstrap_tests {
         assert_eq!(
             membership.payload.get("delivery_status"),
             Some(&json!("unroutable")),
-            "a bootstrap without a known Principal Server cannot claim routability"
+            "a bootstrap without a known Station cannot claim routability"
         );
     }
 
     #[test]
-    fn device_bootstrap_binds_the_creator_to_its_principal_server() {
+    fn device_bootstrap_binds_the_creator_to_its_station() {
         let (_, events) = build_for_device(draft(json!({})));
         let policy = events
             .iter()

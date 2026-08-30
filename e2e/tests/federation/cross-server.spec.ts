@@ -426,7 +426,7 @@ test.describe("cross-server federation", () => {
         invitee_id: bob.id,
         invite_delivery_target: {
           recipient_id: solandServiceId("beta"),
-          recipient_kind: "principal_server",
+          recipient_kind: "station",
         },
         introduction_evidence_digest: `sha256:${"ab".repeat(32)}`,
         expires_at: new Date(Date.now() + 86_400_000).toISOString(),
@@ -899,7 +899,7 @@ test.describe("cross-server federation", () => {
     request,
   }) => {
     // spec: sync/federation.md §4.4 — once a service delegation grant whose
-    // subject is a peer service DID is revoked, the source Principal Server
+    // subject is a peer service DID is revoked, the source Station
     // MUST stop pushing future events for that Realm to the revoked peer.
     // soland: `ProjectionState::federation_delivery_revoked_peers` derives the
     // revoked-peer set from the durable capability grant cells and

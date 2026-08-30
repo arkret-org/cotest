@@ -25,8 +25,8 @@ pub async fn two_sut_instances_are_isolated_and_federation_ready() -> Result<()>
     )
     .await?;
     assert_ne!(server_a.service_id(), server_b.service_id());
-    assert_eq!(describe_a["service_kind"], "principal_server");
-    assert_eq!(describe_b["service_kind"], "principal_server");
+    assert_eq!(describe_a["service_kind"], "station");
+    assert_eq!(describe_b["service_kind"], "station");
 
     let resolve = expect_json(
         server_a

@@ -141,7 +141,7 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
             .expect("fixture idempotency key"),
         did: Did::new("did:webvh:z6mkfixtureagent:agent.example")
             .expect("fixture managed Agent DID"),
-        controller_principal_server_id: arkret::DidCoreId::new(alice.service_id().to_owned())?,
+        controller_station_id: arkret::DidCoreId::new(alice.service_id().to_owned())?,
         slug: "planner".to_owned(),
         requested_scope: AgentKeyScope {
             actions: vec![

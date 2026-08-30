@@ -141,7 +141,7 @@ fn corrupt_detached_jws(event: &mut arkret_wire::Event) -> Result<()> {
         .iter_mut()
         .find_map(|proof| match proof {
             arkret_wire::EventProof::Producer(proof) => Some(proof),
-            arkret_wire::EventProof::PrincipalServerAdmission(_) => None,
+            arkret_wire::EventProof::StationAdmission(_) => None,
         })
         .context("authored Event carries no proofs[0]")?
         .jws = format!("{header}.{corrupted}");

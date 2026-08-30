@@ -250,7 +250,7 @@ export async function requestContactArkret(
     server?: SolandKey;
     recipientServiceId?: string;
     /**
-     * Introduction evidence is required for a cross-Principal-Server
+     * Introduction evidence is required for a cross-Station
      * request.  The recipient's default policy quarantines
      * `explicit_address`, so callers exercising a real federation delivery
      * should pass a locator (or another allow-listed evidence kind).
@@ -269,7 +269,7 @@ export async function requestContactArkret(
     peer: { kind: "human", principal_id: target },
     granted_to_peer_scopes: opts.requestedScopes,
     introduction_evidence: opts.introductionEvidence ?? {
-      kind: "same_principal_server",
+      kind: "same_station",
     },
     ...(opts.message !== undefined ? { message: opts.message } : {}),
   };
@@ -511,7 +511,7 @@ export async function tombstoneContactArkret(
     blockPeer?: boolean;
     // Cross-PS addressing (spec contact-and-direct-conversation.md §4.1): the
     // peer's home service DID so soland federates the `ak.contact.tombstone`
-    // fact to the peer's Principal Server via `ak.peer.contacts.command.submit.v1`.
+    // fact to the peer's Station via `ak.peer.contacts.command.submit.v1`.
     peerServiceId?: string;
     server?: SolandKey;
   } = {},
@@ -835,7 +835,7 @@ export async function setInviteReceivePolicyArkret(
 export type IntroductionEvidence =
   | { kind: "consent_grant"; consent_grant_ref: string; consent_id?: string }
   | { kind: "explicit_address" }
-  | { kind: "same_principal_server" };
+  | { kind: "same_station" };
 
 // Build a `ak.invite.create` invite event whose payload satisfies soland's
 // invite-delivery consistency checks (src/routing/invites.rs
@@ -870,7 +870,7 @@ export function buildInviteCreateEvent(args: {
       invitee_id: args.inviteeId,
       invite_delivery_target: {
         recipient_id: args.recipientServiceId,
-        recipient_kind: "principal_server",
+        recipient_kind: "station",
         // invite-addressing.md §6: this carrier MUST later be byte-for-byte
         // equal to `invite_address.service_resolution`, so both sides read the
         // same normalizer.
@@ -889,18 +889,18 @@ export function buildInviteCreateEvent(args: {
   return { event, inviteId };
 }
 
-// Persist the durable `ak.invite.create` fact on the inviter's Principal Server
+// Persist the durable `ak.invite.create` fact on the inviter's Station
 // and then start private delivery for it.
 //
 // invite-addressing.md §7 splits the two hops by actor: an authenticated CLIENT
 // only ever calls `ak.self.invites.command.dispatch.v1` on its own Principal
-// Server, and only a Principal Server may speak `ak.peer.invites.command.submit.v1`
+// Server, and only a Station may speak `ak.peer.invites.command.submit.v1`
 // (§7 step 1 binds that surface to verified service-to-service authentication).
 // Same-service delivery therefore goes through dispatch, whose local branch
 // reruns the very same §7 verification from step 4 and yields the same graded
 // disclosure. The cross-server variant still posts to the peer surface: those
 // scenarios deliberately exercise the RECEIVING server, standing in for an
-// inviter Principal Server whose durable outbox is out of this helper's scope.
+// inviter Station whose durable outbox is out of this helper's scope.
 async function deliverInvite(
   request: APIRequestContext,
   args: {
@@ -950,7 +950,7 @@ async function deliverInvite(
     subject_id: args.inviteeId,
     recipient_id: recipientServiceId,
     service_resolution: canonicalServiceResolution(args.recipientServer),
-    recipient_kind: "principal_server" as const,
+    recipient_kind: "station" as const,
   };
   const idempotencyKey =
     args.idempotencyKey ?? `${args.idempotencyKeyPrefix}:${inviteId}`;

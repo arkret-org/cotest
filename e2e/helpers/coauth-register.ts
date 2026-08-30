@@ -442,7 +442,7 @@ export async function registerCoauthPasswordAccount(
   const audience =
     stringValue(principalDescribe.service_id) ?? solandServiceId(opts.server);
   if (!trustDomain) {
-    throw new Error("Principal Server description omitted trust_domain");
+    throw new Error("Station description omitted trust_domain");
   }
   const handoff = await createCanonicalAccountHandoff(request, coauthBase, {
     audience,
@@ -462,7 +462,7 @@ export async function registerCoauthPasswordAccount(
   const fixture = cotestWire<PrincipalRegistrationFixture>(
     "principal-registration-fixture",
     {
-      principal_server_url: solandBaseUrl(opts.server),
+      station_url: solandBaseUrl(opts.server),
       gate_account_base_url: `${coauthBase.replace(/\/$/, "")}/_arkret/gate/account`,
       handoff_request_id: handoff.requestId,
       identity_creation_lease: lease,

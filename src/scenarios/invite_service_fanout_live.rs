@@ -1,4 +1,4 @@
-//! Live acceptance for Principal Server actor-private invite fanout.
+//! Live acceptance for Station actor-private invite fanout.
 //!
 //! The durable source of truth for invite delivery and quarantine is the
 //! holder's account-data CAS register. `ak.account_data.update` is only a
@@ -91,7 +91,7 @@ async fn set_explicit_address_behavior(
         .context("updated invite-receive-policy is not an InviteReceivePolicy")?;
     ensure!(
         updated.explicit_address_behavior == policy.explicit_address_behavior,
-        "Principal Server changed explicit_address_behavior"
+        "Station changed explicit_address_behavior"
     );
     Ok(())
 }
@@ -124,7 +124,7 @@ async fn prepare_explicit_invite(
     let request = SelfInviteDispatchRequestBody {
         schema: arkret_wire::SchemaId::INVITE_DELIVERY_REQUEST_V1.to_owned(),
         invite_event_id: event_id.clone(),
-        invite_address: InviteAddress::principal_server(
+        invite_address: InviteAddress::station(
             DidCoreId::new(actor_core_id(&holder.actor)?)?,
             service_id,
             service_resolution,
@@ -508,7 +508,7 @@ pub async fn invite_notification_wakeup_live_run() -> Result<()> {
     Ok(())
 }
 
-/// Execute all three Principal Server CAS materializer fanout branches against
+/// Execute all three Station CAS materializer fanout branches against
 /// a live Soland process.
 pub async fn invite_service_fanout_live_run() -> Result<()> {
     let group = TestServerGroup::single("invite-service-fanout-live").await?;

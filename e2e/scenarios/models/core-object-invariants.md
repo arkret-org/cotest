@@ -26,8 +26,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — 假设监听 `http://127.0.0.1:<soland_port>`
-- 1 × coauth (auth server) — 假设监听 `http://127.0.0.1:<coauth_port>`
+- 1 × soland (Station) — 假设监听 `http://127.0.0.1:<soland_port>`
+- 1 × coauth (private authentication process) — 假设监听 `http://127.0.0.1:<coauth_port>`
 - 共享同一个 coauth；alice 与 bob 的 session credential 都来自这个 coauth
 
 (都是 cotest 现有 harness 直接提供的，不需要改 `scripts/run-joint-e2e.ps1`。本 scenario 主要走 soland HTTP API，少量 inkson UI 用于 Phase A 的 Realm + Space 创建。)

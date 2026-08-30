@@ -1,4 +1,4 @@
-// Contact graph across principal servers (α/β federation).
+// Contact graph across Stations (α/β federation).
 //
 // Gated on hasDualSoland(): pass -DualSoland to scripts/run-joint-e2e.ps1.
 //
@@ -416,7 +416,7 @@ test.describe("contact graph federation (α/β)", () => {
     await ensureRegistered(request, alice, { server: "beta" });
     await ensureRegistered(request, bob, { server: "beta" });
     // A join candidate authenticates the signing principal independently of
-    // Bob's home Principal Server. The harness obtains a candidate-scoped
+    // Bob's home Station. The harness obtains a candidate-scoped
     // session on α, while Bob's account-private inbox and delivery binding
     // remain on β.
     await ensureRegistered(request, bob, { server: "alpha" });
@@ -523,7 +523,7 @@ test.describe("contact graph federation (α/β)", () => {
   });
 
   // Tombstone-fed: cross-PS contact tombstone federates an `ak.contact.tombstone`
-  // fact to the peer's home Principal Server.
+  // fact to the peer's home Station.
   //
   // alice@α and bob@β first become accepted contacts (same federated handshake
   // as S1-fed). Then alice@α tombstones bob with block_peer=true and addresses

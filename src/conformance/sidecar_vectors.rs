@@ -286,8 +286,8 @@ pub fn run_sidecar_mls_effective_access_vector() -> Result<()> {
     let desired_after_removal = false;
     let delivery_allowed = desired_after_removal && principal_effective(&[complete]);
     let removal_obligation_created = !desired_after_removal;
-    let principal_server_authored_commit = false;
-    if delivery_allowed || !removal_obligation_created || principal_server_authored_commit {
+    let station_authored_commit = false;
+    if delivery_allowed || !removal_obligation_created || station_authored_commit {
         bail!(
             "Sidecar removal must stop delivery and create only a client-authored MLS obligation"
         );
@@ -949,7 +949,7 @@ fn fixed_unsigned_sidecar_event(
         realm_id,
         scope_ref,
         actor_id,
-        principal_server_id: DidCoreId::new("ak:did_core:web:principal.example")
+        station_id: DidCoreId::new("ak:did_core:web:principal.example")
             .map_err(|_| SidecarModelError::ModelInvariant)?,
         executed_by: None,
         authorization_ref: None,

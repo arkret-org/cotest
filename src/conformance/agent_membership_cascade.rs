@@ -8,7 +8,7 @@ use arkret_models_collaboration::governance::agent_membership_cascade::{
     AgentMembershipCascadeSchema,
 };
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
-use arkret_wire::{DidCoreId, EventId, Hash, PrincipalAuthorityKey, RealmId};
+use arkret_wire::{AccountId, DidCoreId, EventId, Hash, RealmId};
 use chrono::{Duration, TimeZone as _, Utc};
 
 use super::load_fixture_value;
@@ -93,7 +93,7 @@ fn validate_effective_membership_and_generation_fence(
 ) -> Result<()> {
     let effective = |agent_join: bool,
                      controller_join: bool,
-                     authority: &PrincipalAuthorityKey,
+                     authority: &AccountId,
                      generation: &EventId,
                      lifecycle_active: bool,
                      provision_active: bool| {
@@ -122,7 +122,7 @@ fn validate_effective_membership_and_generation_fence(
         true,
     ));
     let mut wrong_server = binding.controller_authority.clone();
-    wrong_server.principal_server_id = DidCoreId::new("ak:did_core:web:other-principal.example")?;
+    wrong_server.station_id = DidCoreId::new("ak:did_core:web:other-principal.example")?;
     assert!(!effective(
         true,
         true,
@@ -161,9 +161,9 @@ fn validate_cleanup_intent_digest_and_states(
         )),
         controller_authority: binding.controller_authority.clone(),
         controller_membership_generation_ref: binding.controller_membership_generation_ref.clone(),
-        initiator_authority: PrincipalAuthorityKey {
+        initiator_authority: AccountId {
             principal_id: DidCoreId::new("ak:did_core:web:moderator.example")?,
-            principal_server_id: binding.controller_authority.principal_server_id.clone(),
+            station_id: binding.controller_authority.station_id.clone(),
         },
         controller_terminal_event_id: terminal_event_id,
         expected_agent_ids: vec![DidCoreId::new("ak:did_core:webvh:z6mkfixtureagentexample")?],

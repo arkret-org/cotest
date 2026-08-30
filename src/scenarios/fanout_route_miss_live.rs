@@ -340,7 +340,7 @@ fn member_payload(
     if membership == MembershipPayloadState::Join {
         let binding = MemberDeliveryBinding {
             recipient_id: member_service.clone(),
-            recipient_kind: RecipientServiceKind::PrincipalServer,
+            recipient_kind: RecipientServiceKind::Station,
             binding_scope: BindingScope::Realm,
             binding_source: BindingSource::DidDocumentDefault,
             delivery_modes: BTreeSet::from([DeliveryMode::Events]),

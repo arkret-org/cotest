@@ -77,7 +77,7 @@
 - **E21.2 scope rebind forbidden**:已存在的 `F_public` 不允许把 `scope_circle_id` 从 null 改成 `C_discussion`;必须创建新 Strand
 - **E21.3 relation 缺失**:存在 `F_discussion` 但没有 `confidential_discussion_of` relation 时，UI 不应把它展示为原 Strand 的 promoted discussion
 - **E21.4 E2EE Circle key 独立**:Realm 默认明文、Circle E2EE 时，`F_discussion` 消息必须加密；Realm 默认 E2EE、Circle E2EE 时，也必须使用 Circle scope 的 key material
-- **E21.5 跨服务器 Circle member**:carol 的 principal server 在 β，`C_discussion` membership / key delivery 走 federation peer API
+- **E21.5 跨服务器 Circle member**:carol 的 Station 在 β，`C_discussion` membership / key delivery 走 federation peer API
 
 ## Implementation notes
 

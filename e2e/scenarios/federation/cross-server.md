@@ -2,14 +2,14 @@
 
 ## 目标
 
-验证两个独立 principal server 之间的联邦推送能完成完整的协作链路:跨服务器邀请、被邀方接受、双向消息推送、anchor frontier 收敛、撤销服务委托后停止推送。证明协议是 federated 的 — 单一服务器不是全局权威,信任根是签名 Event + RFC 9421 HTTP Message Signature + 服务绑定快照。
+验证两个独立 Station 之间的联邦推送能完成完整的协作链路:跨服务器邀请、被邀方接受、双向消息推送、anchor frontier 收敛、撤销服务委托后停止推送。证明协议是 federated 的 — 单一服务器不是全局权威,信任根是签名 Event + RFC 9421 HTTP Message Signature + 服务绑定快照。
 
 不验证:第三方邮件邀请 (后续 invites/third-party,本 scenario 用 DID-to-DID 直接邀请)、moderation (spaces/moderation-ban)。
 
 ## Spec 锚点
 
 - `arkret-spec/spec/v1/zh/sync/federation.md` §2.1 — Event Chain 是信任锚点
-- `arkret-spec/spec/v1/zh/sync/federation.md` §2.2 — Principal Server 是受控同步边界,不是全局权威
+- `arkret-spec/spec/v1/zh/sync/federation.md` §2.2 — Station 是受控同步边界,不是全局权威
 - `arkret-spec/spec/v1/zh/sync/federation.md` §3.1-§3.2 — 基于 DID 的服务器身份 + RFC 9421 请求签名
 - `arkret-spec/spec/v1/zh/sync/federation.md` §4.1 — Push 协议、`POST /_arkret/peer/peer/events` 请求字段
 - `arkret-spec/spec/v1/zh/sync/federation.md` §4.1.0 — Push 时序图(信任根说明)
@@ -23,7 +23,7 @@
 
 ```
                     +-------+
-                    | coauth|  (shared auth server)
+                    | coauth|  (shared private authentication process)
                     +---+---+
                         |
         +---------------+---------------+
@@ -55,7 +55,7 @@
 - α 和 β 两个 soland 都启动并 ready
 - coauth 启动并 ready
 - alice 在 α 上注册;bob 在 β 上注册;两端都通过同一 coauth 拿到 session credential
-- DID Document(或等效的服务发现源)能让 α 通过 bob 的 DID 解析出 `did:web:soland-beta.joint-e2e.local` 是 bob 的 Principal Server (`sync/federation.md` §6.2 Actor Event Source 发现)
+- DID Document(或等效的服务发现源)能让 α 通过 bob 的 DID 解析出 `did:web:soland-beta.joint-e2e.local` 是 bob 的 Station (`sync/federation.md` §6.2 Actor Event Source 发现)
 - α 和 β 互信对方的 service DID (HTTP Message Signature 校验能过)
 
 ## Steps
@@ -74,7 +74,7 @@
 
 ### Phase B — 联邦 push 把 invite 送到 β
 
-5. α 检测到 bob 不在本地,通过服务发现拿到 `did:web:soland-beta.joint-e2e.local` 是 bob 的 Principal Server
+5. α 检测到 bob 不在本地,通过服务发现拿到 `did:web:soland-beta.joint-e2e.local` 是 bob 的 Station
 6. α `POST http://<port_β>/_arkret/peer/events`,body 含:
    - `origin = did:web:soland-alpha.joint-e2e.local`
    - `destination = did:web:soland-beta.joint-e2e.local`
@@ -152,11 +152,11 @@
 1. **双 soland 启动**:
    - 当前 script 只起一个 soland。需要参数化:`-SolandInstances 2` 或新加参数 `-Soland2Manifest`、`-Soland2BaseUrl`
    - 每个 soland 自己的 service DID、自己的 service_id 配置、自己的 objects root 目录
-   - coauth 的 `arkret.principal_servers[]` 配置要包含两个 soland 的 entry
+   - coauth 的 `arkret.stations[]` 配置要包含两个 soland 的 entry
 2. **soland 之间的联邦发现**:
    - 需要 soland 支持 "已知 federation peers" 配置(看 soland 实现是 env var 还是 config)
    - 或者 soland 通过 DID Document 中 `type="ArkretService"` 且
-     `serviceKind="principal_server"` 的 service entry 自动发现
+     `serviceKind="station"` 的 service entry 自动发现
    - **依赖 soland**:这条 scenario 在 soland 不能联邦的情况下无法跑
 3. **环境变量**给测试用:
    - `COTEST_SOLAND_ALPHA_BASE_URL` / `COTEST_SOLAND_ALPHA_SERVICE_ID`

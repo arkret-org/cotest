@@ -212,7 +212,7 @@ def main() -> int:
     )
     src = replace_top_level_section(src, "clients", clients)
 
-    principal_servers = (
+    stations = (
         "  - name: soland\n"
         f"    endpoint: {yaml_string(soland_base)}\n"
         "    session_grant_introspection_bearer: "
@@ -221,7 +221,7 @@ def main() -> int:
         f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
     )
     if soland_beta_base:
-        principal_servers += (
+        stations += (
             "  - name: soland-beta\n"
             f"    endpoint: {yaml_string(soland_beta_base)}\n"
             "    session_grant_introspection_bearer: "
@@ -231,8 +231,8 @@ def main() -> int:
         )
     arkret = (
         "arkret:\n"
-        "  principal_servers:\n"
-        f"{principal_servers}"
+        "  stations:\n"
+        f"{stations}"
         "  identity_provider: soland\n"
         "  deployment_profile: organization\n"
         "  principal_method: \"did:webvh\"\n"

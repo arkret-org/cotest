@@ -200,7 +200,7 @@ const packagesByApplet = new Map(
 const managedActorAuthoringOutcomes = new Map(
   durableState.managedActorAuthoringOutcomes ?? [],
 );
-let currentPrincipalServerVerificationMethod = `${principalServerDid()}#notary-key`;
+let currentStationVerificationMethod = `${stationDid()}#notary-key`;
 const provisionedGhosts = new Map();
 const actorSequences = new Map();
 
@@ -366,21 +366,21 @@ function rfc3339Now() {
   return new Date().toISOString();
 }
 
-function principalServerId() {
+function stationId() {
   return (
     process.env.COTEST_SOLAND_SERVICE_ID ??
     "ak:did_core:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
   );
 }
 
-function principalServerDid() {
+function stationDid() {
   return (
     process.env.COTEST_SOLAND_SERVICE_DID ??
     "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
   );
 }
 
-function configuredPrincipalServerSeed() {
+function configuredStationSeed() {
   const encoded = process.env.COTEST_SOLAND_SERVICE_SIGNING_KEY?.trim();
   if (!encoded) return undefined;
   const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
@@ -396,12 +396,12 @@ function configuredPrincipalServerSeed() {
   return seed;
 }
 
-function principalServerNotaryPrivateKey() {
+function stationNotaryPrivateKey() {
   const seed =
-    configuredPrincipalServerSeed() ??
+    configuredStationSeed() ??
     createHash("sha256")
       .update("soland:notary-ephemeral:")
-      .update(principalServerId())
+      .update(stationId())
       .digest();
   const pkcs8Prefix = Buffer.from("302e020100300506032b657004220420", "hex");
   return createPrivateKey({
@@ -411,9 +411,9 @@ function principalServerNotaryPrivateKey() {
   });
 }
 
-function principalServerNotaryDescriptor() {
+function stationNotaryDescriptor() {
   const publicKeyDer = createPublicKey(
-    principalServerNotaryPrivateKey(),
+    stationNotaryPrivateKey(),
   ).export({
     format: "der",
     type: "spki",
@@ -424,8 +424,8 @@ function principalServerNotaryDescriptor() {
   return {
     kind: "single_signer",
     signer: {
-      actor_id: principalServerId(),
-      verification_method: `${principalServerDid()}#notary-key`,
+      actor_id: stationId(),
+      verification_method: `${stationDid()}#notary-key`,
       key_kind: "ed25519_raw32",
       jose_algorithm: "Ed25519",
       frozen_public_key_b64u: publicKeyBytes.toString("base64url"),
@@ -605,7 +605,7 @@ async function readRealmFrontier(solandBase, authorization, realmId) {
 function signedGhostMessageEvent({
   packageInfo,
   provision,
-  principalServerId,
+  stationId,
   authorizationRef,
   realmId,
   strandId,
@@ -621,7 +621,7 @@ function signedGhostMessageEvent({
     realm_id: realmId,
     scope_ref: { kind: "realm", realm_id: realmId },
     actor_id: provision.ghost_actor_id,
-    principal_server_id: principalServerId,
+    station_id: stationId,
     actor_seq: nextActorSequence(provision.ghost_actor_id),
     created_at: createdAt,
     hlc: currentHlc(),
@@ -1008,17 +1008,17 @@ const server = createServer(async (req, res) => {
   }
 
   if (
-    url.pathname === "/inspect/principal-server-key-current" &&
+    url.pathname === "/inspect/station-key-current" &&
     req.method === "POST"
   ) {
     const body = await readJson(req);
-    currentPrincipalServerVerificationMethod = body?.rotated
-      ? `${principalServerDid()}#notary-key-rotated`
-      : `${principalServerDid()}#notary-key`;
+    currentStationVerificationMethod = body?.rotated
+      ? `${stationDid()}#notary-key-rotated`
+      : `${stationDid()}#notary-key`;
     res.end(
       JSON.stringify({
         ok: true,
-        verification_method: currentPrincipalServerVerificationMethod,
+        verification_method: currentStationVerificationMethod,
       }),
     );
     return;
@@ -1085,7 +1085,7 @@ const server = createServer(async (req, res) => {
     const subject = [
       authoringRequest?.purpose,
       authoringRequest?.basis?.applet_id,
-      authoringRequest?.basis?.target_principal_server_id,
+      authoringRequest?.basis?.target_station_id,
     ].join("\n");
     const existing = managedActorAuthoringOutcomes.get(subject);
     if (existing) {
@@ -1120,11 +1120,11 @@ const server = createServer(async (req, res) => {
       bot_method_history_evidence: packageInfo.botMethodHistoryEvidence,
       service_signing_seed_b64url: servicePrivateJwk.d,
       service_verification_method: packageInfo.verificationMethod,
-      principal_server_id: principalServerId(),
-      principal_server_verification_method:
-        currentPrincipalServerVerificationMethod,
-      principal_server_public_jwk: createPublicKey(
-        principalServerNotaryPrivateKey(),
+      station_id: stationId(),
+      station_verification_method:
+        currentStationVerificationMethod,
+      station_public_jwk: createPublicKey(
+        stationNotaryPrivateKey(),
       ).export({ format: "jwk" }),
       trust_domain: "ak:trust_domain:soland.local",
     });
@@ -1191,7 +1191,7 @@ const server = createServer(async (req, res) => {
         typeof ghostActorId !== "string" ||
         typeof ghostCreation?.ghost_actor_did !== "string" ||
         !ghostCreation.ghost_actor_did.startsWith("did:") ||
-        typeof ghostCreation?.actor_principal_server_id !== "string" ||
+        typeof ghostCreation?.actor_station_id !== "string" ||
         !ghostCreation?.managed_actor_provision_event ||
         !ghostCreation?.pcr_genesis_event ||
         !ghostCreation?.accountability_grant_event ||
@@ -1224,7 +1224,7 @@ const server = createServer(async (req, res) => {
             applet_id: body.applet_id,
             service_id: packageInfo.serviceId,
             ghost_actor_id: ghostActorId,
-            actor_principal_server_id: ghostCreation.actor_principal_server_id,
+            actor_station_id: ghostCreation.actor_station_id,
             ...(displayName ? { display_name: displayName } : {}),
             realm_id: body.realm_id,
             external_ref: ghostCreation.external_ref,
@@ -1302,7 +1302,7 @@ const server = createServer(async (req, res) => {
     const signed = signedGhostMessageEvent({
       packageInfo,
       provision,
-      principalServerId: destinationServiceId,
+      stationId: destinationServiceId,
       authorizationRef: body.authorization_ref ?? provision.authorization_ref,
       realmId: body.realm_id,
       strandId: body.strand_id,

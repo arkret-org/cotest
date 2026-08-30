@@ -2,7 +2,7 @@
 
 ## Intent
 
-Prove the live Principal Server publishes a self-contained signed current route
+Prove the live Station publishes a self-contained signed current route
 record and that the record is reverse-bound to the role-scoped
 `ServiceDescribe` selected at its advertised HTTPS base URL.
 
@@ -13,7 +13,7 @@ recovery coverage.
 
 ## Strand
 
-1. Read `/_arkret/describe?service_kind=principal_server`.
+1. Read `/_arkret/describe?service_kind=station`.
 2. Fetch the exact advertised service core from
    `/_arkret/open/services/{service_id}/resolution` without redirects.
 3. Cross-check service core, DID, method-history head, version, role,

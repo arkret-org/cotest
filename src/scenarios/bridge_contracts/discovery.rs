@@ -14,7 +14,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
     let oidc = describe["auth_metadata"]["methods"]
         .as_array()
         .and_then(|methods| methods.iter().find(|method| method["method"] == "oidc"))
-        .expect("configured principal server must advertise OIDC");
+        .expect("configured Station must advertise OIDC");
     assert_eq!(
         oidc["grant_exchange"],
         serde_json::json!({
@@ -35,7 +35,7 @@ pub async fn principal_bridge_contracts_are_discoverable() -> Result<()> {
         "arkret.rest.integration_manifest.v1"
     );
     assert_eq!(integration["service"], "soland");
-    assert_eq!(integration["service_kind"], "principal_server");
+    assert_eq!(integration["service_kind"], "station");
     assert_eq!(
         integration["dependencies"][0]["required_contract"],
         // This is soland's private integration manifest (`/_soland/*`), not a

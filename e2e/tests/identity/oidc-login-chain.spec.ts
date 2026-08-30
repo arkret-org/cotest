@@ -10,7 +10,7 @@
 // Coverage:
 //   1. Discovery — `/_arkret/describe` advertises a usable OIDC method:
 //      a non-empty `client_id` (else coauth answers "could not find client")
-//      and an Account Authority pinned to the Auth Server origin (so the
+//      and an Account Authority pinned to the private authentication process origin (so the
 //      session-grant POST + its DPoP `htu` line up with coauth, not soland).
 //   2. Self-path auth — a session grant only authenticates a `/_arkret/root/*`
 //      authenticated read when accompanied by a bound DPoP proof; a bare grant
@@ -56,7 +56,7 @@ function recoveryPolicyUrl(): string {
 test.describe.configure({ mode: "serial" });
 
 test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
-  test("1. /_arkret/describe advertises the OIDC client_id and Auth-Server Account Authority", async ({
+  test("1. Station describe advertises the OIDC client_id and Account Authority", async ({
     request,
   }) => {
     const coauth = coauthBaseUrl();
@@ -83,7 +83,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     const oidc = methods.find((m) => m.method === "oidc");
     expect(
       oidc,
-      `auth_metadata.methods has no oidc entry (an Auth Server is configured, so it must): ${JSON.stringify(methods)}`,
+      `auth_metadata.methods has no oidc entry (an private authentication process is configured, so it must): ${JSON.stringify(methods)}`,
     ).toBeTruthy();
     // The web client sends this verbatim to coauth's /authorize; absent it,
     // coauth answers "could not find client" and login dead-ends.
@@ -97,7 +97,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     }
     expect(oidc!.grant_exchange).toEqual({ kind: "account_handoff" });
 
-    // ── Account Authority pinned to the Auth Server origin ─────────────────
+    // ── Account Authority pinned to the private authentication process origin ─────────────────
     // The client POSTs session-grants to the Account Authority and DPoP-binds
     // the proof to its origin; that origin MUST be coauth, not soland, or the
     // grant POST 404s / the DPoP htu mismatches.
@@ -107,7 +107,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     expect(new URL(accountAuthority.origin).origin).toBe(coauthOrigin);
     expect(accountAuthority.gate_account_base_url).toBe(`${coauthOrigin}/_arkret/gate/account`);
 
-    // The advertised OIDC issuer is the Auth Server too (OIDC discovery target).
+    // The advertised OIDC issuer is the private authentication process too (OIDC discovery target).
     // service-describe.schema.json makes both required once method is `oidc`.
     expect(new URL(oidc!.issuer_uri!).origin).toBe(coauthOrigin);
     expect(new URL(oidc!.openid_configuration_url!).origin).toBe(coauthOrigin);

@@ -57,7 +57,6 @@ mod pcr_outward_exposure;
 mod poll_reducer;
 mod presence_signal;
 mod primary_handle_vectors;
-mod principal_server_certification;
 mod privacy;
 mod privacy_security;
 mod private_chat_privacy;
@@ -90,6 +89,7 @@ mod snapshot_witness_quorum;
 mod spec_business_flow;
 mod state_reducer_hardening;
 mod state_resolution;
+mod station_certification;
 mod sync;
 mod vector_registry_gate;
 mod visibility_policy;
@@ -330,10 +330,6 @@ pub use primary_handle_vectors::{
     run_single_candidate_passthrough_vector, run_tie_break_by_accepted_issuer_ids_position_vector,
     run_tie_break_by_claim_digest_vector, run_tie_break_by_created_at_vector,
 };
-pub use principal_server_certification::{
-    PrincipalCertificationStatus, run_principal_server_certification_gate_suite,
-    validate_principal_server_certification,
-};
 pub use privacy::run_privacy_security_fixture_suite;
 pub use privacy_security::run_minimal_metadata_author_credential_vector;
 pub use private_chat_privacy::run_private_chat_privacy_contract_suite;
@@ -417,6 +413,10 @@ pub use state_reducer_hardening::{
     run_state_root_incremental_vector, run_strand_tracks_update_atomic_vector,
 };
 pub use state_resolution::{run_cba_lattice_fixture_suite, run_state_resolution_fixture_suite};
+pub use station_certification::{
+    StationCertificationStatus, run_station_certification_gate_suite,
+    validate_station_certification,
+};
 pub use sync::{run_stream_frame_sequence_vector, run_sync_fixture_suite};
 pub use vector_registry_gate::{
     VectorRegistryGateEntry, VectorRegistryGateMode, VectorRegistryGateReport,

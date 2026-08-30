@@ -391,7 +391,7 @@ export async function grantCallCapability(
     realm_id: realmId,
     issuer_id: ownerId,
     subject: subjectId,
-    subject_principal_server_id: solandServiceId(),
+    subject_station_id: solandServiceId(),
     actions: [action],
     resources,
     constraints: [authorityConstraint],

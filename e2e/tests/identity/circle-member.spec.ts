@@ -1,4 +1,4 @@
-// Circle membership (same principal server): a Realm member is pulled into a
+// Circle membership (same Station): a Realm member is pulled into a
 // Circle by an admin with NO consent / accept from the pulled actor.
 //
 // This is the real-run replacement for the old `S8 circle member manage`
@@ -38,7 +38,7 @@ import {
 
 // Each test provisions fresh DIDs, so parallel execution is safe.
 
-test.describe("circle membership (same principal server)", () => {
+test.describe("circle membership (same Station)", () => {
   // S8 core: realm member pulled into a Circle with the pulled actor doing
   // nothing. alice (realm owner) builds a realm, makes bob a `join` realm
   // member, creates a Circle, and pulls bob in. bob never calls anything ->

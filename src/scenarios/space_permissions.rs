@@ -223,7 +223,7 @@ fn rebind_authored_event(event: &mut arkret_wire::Event, actor: &str) -> Result<
         .iter_mut()
         .find_map(|proof| match proof {
             arkret_wire::EventProof::Producer(proof) => Some(proof),
-            arkret_wire::EventProof::PrincipalServerAdmission(_) => None,
+            arkret_wire::EventProof::StationAdmission(_) => None,
         })
         .ok_or_else(|| anyhow!("authored Event has no proof"))?
         .verification_method =

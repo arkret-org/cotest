@@ -281,7 +281,7 @@ fn run_accountability_scope_set_subject_vector(fixture: &EncodingArtifactFixture
         .find(|vector| vector.get("vector_id").and_then(Value::as_str) == Some(VECTOR_ID))
         .ok_or_else(|| anyhow!("encoding fixture missing {VECTOR_ID}"))?;
     let issuer = value_field_str(vector, "issuer_id")?;
-    let principal_server_id = value_field_str(vector, "principal_server_id")?;
+    let station_id = value_field_str(vector, "station_id")?;
     let subject = value_field_str(vector, "subject_id")?;
     let descriptor = arkret_wire::EventKind::from("ak.identity.accountability_grant")
         .descriptor()
@@ -372,7 +372,7 @@ fn run_accountability_scope_set_subject_vector(fixture: &EncodingArtifactFixture
             "realm_id": "ak:realm:AUhhceSJLo6_BscKp90reATdtKd6Wu5jC9lZdYyfXDjN",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AUhhceSJLo6_BscKp90reATdtKd6Wu5jC9lZdYyfXDjN"},
             "actor_id": issuer,
-            "principal_server_id": principal_server_id,
+            "station_id": station_id,
             "actor_seq": 7,
             "created_at": "2026-07-26T01:00:00.000Z",
             "hlc": "019f9e500000-0000-aabbccdd",

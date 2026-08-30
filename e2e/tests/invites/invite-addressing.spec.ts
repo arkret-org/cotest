@@ -91,7 +91,7 @@ type AcceptedInviteFixture = {
   inviteAddress: InviteDeliveryRequestBodyBodyBody["invite_address"];
 };
 
-// A durable `ak.invite.create` that this Principal Server has already accepted
+// A durable `ak.invite.create` that this Station has already accepted
 // — §7's precondition for starting private delivery at all.
 async function acceptedInviteFixture(
   request: APIRequestContext,
@@ -115,7 +115,7 @@ async function acceptedInviteFixture(
     // §7 step 6: this carrier and the durable
     // `invite_delivery_target.service_resolution` MUST be byte-for-byte equal.
     service_resolution: canonicalServiceResolution(),
-    recipient_kind: "principal_server" as const,
+    recipient_kind: "station" as const,
   };
   const event = signedEventEnvelope({
     actorId: inviter.id,
@@ -126,7 +126,7 @@ async function acceptedInviteFixture(
       invite_delivery_target: {
         recipient_id: inviteAddress.recipient_id,
         service_resolution: inviteAddress.service_resolution,
-        recipient_kind: "principal_server",
+        recipient_kind: "station",
       },
       introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
       expires_at: canonicalTimestamp(
@@ -155,8 +155,8 @@ async function acceptedInviteFixture(
 
 test.describe("invite addressing", () => {
   // Peer-layer direct coverage. `ak.peer.invites.command.submit.v1` is a
-  // Principal-Server-to-Principal-Server operation, so this test exercises the
-  // authenticated loopback peer path on the managed Principal Server; it is
+  // Station-to-Station operation, so this test exercises the
+  // authenticated loopback peer path on the managed Station; it is
   // NOT the client path. A client
   // reaches the same receive pipeline through
   // `ak.self.invites.command.dispatch.v1` (§7), covered below.
@@ -166,7 +166,7 @@ test.describe("invite addressing", () => {
     const introductionEvidence = { kind: "explicit_address" } as const;
     const inviteDeliveryTarget = {
       recipient_id: recipientServiceId,
-      recipient_kind: "principal_server" as const,
+      recipient_kind: "station" as const,
     };
     // This inviter is synthetic — it never registers through the client path,
     // so its Event proof has no signer unless one is registered here. The
@@ -385,7 +385,7 @@ test.describe("invite addressing", () => {
   // invite-addressing.md §7 — `ak.self.invites.command.dispatch.v1`. This is the
   // only conforming client entry point into private invite delivery: the client
   // hands raw `introduction_evidence` plus the accepted Event id to its own
-  // Principal Server and never synthesizes federation trust material.
+  // Station and never synthesizes federation trust material.
   test("self invite dispatch delivers a same-service invite and is retry-idempotent", async ({
     request,
   }) => {
@@ -461,7 +461,7 @@ test.describe("invite addressing", () => {
         invite_delivery_target: {
           recipient_id: fixture.inviteAddress.recipient_id,
           service_resolution: fixture.inviteAddress.service_resolution,
-          recipient_kind: "principal_server",
+          recipient_kind: "station",
         },
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(fixture.evidence)}`,
         expires_at: canonicalTimestamp(

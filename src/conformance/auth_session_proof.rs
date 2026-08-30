@@ -61,7 +61,7 @@ fn auth_session_proof_fixture() -> Result<AuthSessionProofFixture> {
 }
 
 fn validate_auth_session_proof_fixture_metadata(fixture: &AuthSessionProofFixture) -> Result<()> {
-    if fixture.profile != ProfileId::AUTH_SERVER_V1
+    if fixture.profile != ProfileId::STATION_V1
         || fixture.suite != "auth_session_proof"
         || fixture.version.trim().is_empty()
         || fixture.runner.is_null()
@@ -249,7 +249,7 @@ fn issue_session_grant(
 fn development_mode_verified_profiles(attempted: &[String]) -> Vec<String> {
     attempted
         .iter()
-        .filter(|profile| profile.as_str() != ProfileId::AUTH_SERVER_V1)
+        .filter(|profile| profile.as_str() != ProfileId::STATION_V1)
         .cloned()
         .collect()
 }
@@ -572,7 +572,7 @@ pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
 
     let attempted = required_string_array(vector, "attempted_verified_profiles")?;
     if !development_mode_verified_profiles(&attempted).is_empty() {
-        bail!("development mode advertised a verified auth server profile");
+        bail!("development mode advertised a verified private authentication process profile");
     }
     Ok(())
 }

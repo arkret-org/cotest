@@ -54,7 +54,7 @@ use arkret_models_identity::handle_claim::DeliveryBindingHint;
 use arkret_push_policy::blind_payload_sanitizer::{
     sanitize_blind_payload, sanitize_blind_payload_strict,
 };
-use arkret_wire::PrincipalAuthorityKey;
+use arkret_wire::AccountId;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde_json::{Value, json};
 
@@ -384,7 +384,7 @@ fn step_8_rebind_handover(original: &MemberDeliveryBindingCandidate) -> Result<(
         .validate(&CandidateValidationContext::new(TARGET_REALM_ID.to_owned()))
         .is_ok()
     {
-        bail!("T8.1 step 8: recipient substitution escaped exact principal authority pair");
+        bail!("T8.1 step 8: recipient substitution escaped exact AccountId");
     }
 
     let allowed = [PRINCIPAL_ID];
@@ -634,7 +634,7 @@ async fn live_stack_probe() -> Result<()> {
 fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
     let subject = DidCoreId::new(ALICE_ID)?;
     let principal = DidCoreId::new(PRINCIPAL_ID)?;
-    let principal_authority = PrincipalAuthorityKey::new(subject.clone(), principal.clone());
+    let account_id = AccountId::new(subject.clone(), principal.clone());
     let handle = Handle::parse(ALICE_HANDLE)?;
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
@@ -642,12 +642,12 @@ fn sample_candidate() -> Result<MemberDeliveryBindingCandidate> {
 
     Ok(MemberDeliveryBindingCandidate {
         subject_id: subject,
-        principal_authority,
+        account_id,
         handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
             recipient_id: principal.clone(),
-            recipient_kind: RecipientServiceKind::PrincipalServer,
+            recipient_kind: RecipientServiceKind::Station,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: Some(

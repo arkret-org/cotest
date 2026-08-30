@@ -1258,9 +1258,9 @@ test.describe("applet inbound transaction push — per-delivery source signature
       },
       actor_id: actorId,
       // The Applet service authenticates the producer proof and transport;
-      // the receiving Arkret node is still the Event's Principal Server and
+      // the receiving Arkret node is still the Event's Station and
       // adds the admission proof before accepting the durable Event.
-      principal_server_id: solandServiceId(),
+      station_id: solandServiceId(),
       actor_seq: 0,
       created_at: canonicalEventTimestamp(),
       hlc: hlcForStamp(args.stamp),
@@ -1789,11 +1789,11 @@ async function rawInstallApplet(
       data: canonicalJson({ authoring_request: authoringRequest }),
     };
     if (options.exerciseAuthoringKats !== false) {
-      const rotatePrincipalServerTrust = await request.post(
-        `${authorBaseUrl}/inspect/principal-server-key-current`,
+      const rotateStationTrust = await request.post(
+        `${authorBaseUrl}/inspect/station-key-current`,
         { data: { rotated: true } },
       );
-      expect(rotatePrincipalServerTrust.status()).toBe(200);
+      expect(rotateStationTrust.status()).toBe(200);
       const staleButCryptographicallyValid = await request.post(
         `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         authorRequestOptions,
@@ -1802,11 +1802,11 @@ async function rawInstallApplet(
       expect((await staleButCryptographicallyValid.json()).error).toBe(
         "authoring_request_proof_invalid",
       );
-      const restorePrincipalServerTrust = await request.post(
-        `${authorBaseUrl}/inspect/principal-server-key-current`,
+      const restoreStationTrust = await request.post(
+        `${authorBaseUrl}/inspect/station-key-current`,
         { data: { rotated: false } },
       );
-      expect(restorePrincipalServerTrust.status()).toBe(200);
+      expect(restoreStationTrust.status()).toBe(200);
       const wrongTarget = structuredClone(authoringRequest) as Record<
         string,
         unknown
@@ -1815,7 +1815,7 @@ async function rawInstallApplet(
       const alternatePrincipalDid = "did:web:wrong-principal.example";
       (
         wrongTarget.basis as Record<string, unknown>
-      ).target_principal_server_id = projectDidToCoreId(alternatePrincipalDid);
+      ).target_station_id = projectDidToCoreId(alternatePrincipalDid);
       const wrongTargetProof = wrongTarget.proof as Record<string, unknown>;
       wrongTargetProof.verification_method = `${alternatePrincipalDid}#notary-key`;
       wrongTargetProof.payload_digest = canonicalHash(
@@ -1887,20 +1887,20 @@ async function rawInstallApplet(
         "authoring_request_expired",
       );
 
-      const untrustedPrincipalServer = structuredClone(
+      const untrustedStation = structuredClone(
         authoringRequest,
       ) as Record<string, unknown>;
-      (untrustedPrincipalServer.proof as Record<string, unknown>).jws =
+      (untrustedStation.proof as Record<string, unknown>).jws =
         "eyJhbGciOiJFZDI1NTE5In0..dGFtcGVyZWQ";
-      const untrustedPrincipalServerResponse = await request.post(
+      const untrustedStationResponse = await request.post(
         `${authorBaseUrl}/_arkret/edge/applet/managed-actors/author`,
         {
           headers: { "content-type": "application/json" },
-          data: canonicalJson({ authoring_request: untrustedPrincipalServer }),
+          data: canonicalJson({ authoring_request: untrustedStation }),
         },
       );
-      expect(untrustedPrincipalServerResponse.status()).toBe(400);
-      expect((await untrustedPrincipalServerResponse.json()).error).toBe(
+      expect(untrustedStationResponse.status()).toBe(400);
+      expect((await untrustedStationResponse.json()).error).toBe(
         "authoring_request_proof_invalid",
       );
     }
@@ -2077,7 +2077,7 @@ async function prepareAppletInstallAuthoringBasis(
       realm_id: realmId,
       issuer_id: actorId,
       subject: signed.applet_package.service_id,
-      subject_principal_server_id: solandServiceId(),
+      subject_station_id: solandServiceId(),
       actions: [action],
       resources: [effectiveScope],
       constraints: [
@@ -2130,7 +2130,7 @@ async function prepareAppletInstallAuthoringBasis(
   const basis: Record<string, unknown> = {
     schema: "ak.schema.applet_install_authoring_request_basis.v1",
     purpose: "install_bot",
-    target_principal_server_id: solandServiceId(),
+    target_station_id: solandServiceId(),
     install_actor_id: actorId,
     applet_id: signed.applet_package.applet_id,
     service_id: signed.applet_package.service_id,
@@ -2352,7 +2352,7 @@ function buildGhostManagedActorCreation(args: {
       applet_id: args.signed.applet_package.applet_id,
       service_id: serviceId,
       actor_id: ghostId,
-      actor_principal_server_id: solandServiceId(),
+      actor_station_id: solandServiceId(),
       actor_role: "ghost",
       initial_resolution: evidence.initialResolution,
       method_history_evidence: evidence.methodHistoryEvidence,
@@ -2371,7 +2371,7 @@ function buildGhostManagedActorCreation(args: {
     actorSeq: 0,
     createdAt: args.createdAt,
     executedBy: serviceId,
-    principalServerId: solandServiceId(),
+    stationId: solandServiceId(),
     appletId: args.signed.applet_package.applet_id,
     authorizationRef: args.appletAuthorityRef,
     refs: [
@@ -2495,7 +2495,7 @@ function buildGhostManagedActorCreation(args: {
   return {
     ghost_actor_id: ghostId,
     ghost_actor_did: args.ghostBuilt.did,
-    actor_principal_server_id: solandServiceId(),
+    actor_station_id: solandServiceId(),
     external_ref: externalRef,
     managed_actor_provision_event: provisionEvent,
     pcr_genesis_event: pcrGenesisEvent,

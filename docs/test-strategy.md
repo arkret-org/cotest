@@ -135,7 +135,7 @@ CI profile selection lives in `config/ci-profiles.json`. `fast-smoke` runs a
 small local feedback set, `release-gate` is the local milestone gate, and
 `full-nightly` runs all tests. Coverage is grouped by conformance profiles such
 as `ak.profile.core_event_store.v1`, `ak.profile.chat_mvp.v1`, and
-`ak.profile.principal_server_events_api.v1`. The runner emits `ci-profile.*`,
+`ak.profile.station_events_api.v1`. The runner emits `ci-profile.*`,
 `coverage-gate.*`, `release-gate.*`, `spec-sync-gate.*`, and
 `secret-scan.*` artifacts and can fail on coverage regressions with
 `-FailOnCoverageRegression`.
@@ -251,7 +251,7 @@ The coauth/soland test mapping is fixed by the runner:
 
 - soland audience/service DID: `did:webvh:z6mkfixture:soland.joint-e2e.local`
 - coauth service/issuer DID: `did:webvh:z6mkfixture:coauth.joint-e2e.local`
-- coauth publishes soland under `arkret.principal_servers`
+- coauth publishes soland under `arkret.stations`
 - soland introspects OAuth bearer tokens at `<coauth>/oauth/introspect`
 - soland introspects session grants at
   `<coauth>/_arkret/gate/account/session-grants/introspect`

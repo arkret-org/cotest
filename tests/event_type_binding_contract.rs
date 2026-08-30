@@ -29,7 +29,7 @@ fn actor() -> DidCoreId {
     projected
 }
 
-fn principal_server() -> DidCoreId {
+fn station() -> DidCoreId {
     DidCoreId::new("ak:did_core:web:principal.example").unwrap()
 }
 
@@ -43,7 +43,7 @@ fn message_event() -> Event {
         "main",
         ContentBlock::text("typed authoring KAT"),
     );
-    TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), principal_server(), payload)
+    TypedEventDraft::<event_spec::MessageCreate>::new(scope(), actor(), station(), payload)
         .unwrap()
         .author_with_digest_suite(7, Hlc::new(HLC).unwrap(), created_at(), DigestSuite::Sha256)
         .unwrap()
@@ -56,7 +56,7 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
     let policy = TypedEventDraft::<event_spec::RealmPolicy>::new(
         scope(),
         actor(),
-        principal_server(),
+        station(),
         RealmPolicyPayload {
             value: RealmPolicyValue {
                 policy_id: arkret_wire::PolicyId::new(
@@ -76,11 +76,11 @@ fn typed_event_cross_family_canonical_kats_are_fixed() {
     let policy_bytes = canonical_json_bytes(&policy.digest_payload().unwrap()).unwrap();
     assert_eq!(
         message_bytes,
-        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","format":"plain","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"prev_refs":[],"principal_server_id":"ak:did_core:web:principal.example","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.message.create","payload":{"content":{"body":"typed authoring KAT","format":"plain","kind":"ak.content.text"},"strand_id":"ak:strand:AT3ARBdH1FM6GjXK9ulTx-YMvQOXys39dlUzZV6KyID9","track_name":"main"},"prev_refs":[],"station_id":"ak:did_core:web:principal.example","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         policy_bytes,
-        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.realm.policy","payload":{"state":"active","value":{"policy_id":"ak:policy:01964137-0000-7000-8000-000000000001"}},"prev_refs":[],"principal_server_id":"ak:did_core:web:principal.example","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
+        br#"{"actor_id":"ak:did_core:webvh:z6mkfixture","actor_seq":7,"created_at":"2026-08-09T01:02:03.000Z","hlc":"01970e589d21-0001-a13f9c2e","kind":"ak.realm.policy","payload":{"state":"active","value":{"policy_id":"ak:policy:01964137-0000-7000-8000-000000000001"}},"prev_refs":[],"station_id":"ak:did_core:web:principal.example","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir","refs":[],"scope_ref":{"kind":"realm","realm_id":"ak:realm:ARQRpvtCGBgQfVQzTK4_Hgbg0D0HSnc3gPCvXOQUICir"}}"#
     );
     assert_eq!(
         message.event_id.as_str(),
@@ -167,7 +167,7 @@ fn extension_authoring_keeps_unknown_kinds_open_but_manifest_bound() {
         .author(arkret_event_draft::EventAuthoringContext {
             scope_ref: scope(),
             actor_id: actor(),
-            principal_server_id: principal_server(),
+            station_id: station(),
             actor_seq: 7,
             hlc: Hlc::new(HLC).unwrap(),
             created_at: created_at(),

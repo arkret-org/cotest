@@ -21,7 +21,7 @@
 
 - 1 × soland_a (server A,通过 `solandBaseUrl("alpha")` / `SOLAND_A_PUBLIC_URL` 访问)
 - 1 × soland_b (server B,通过 `solandBaseUrl("beta")` / `SOLAND_B_PUBLIC_URL` 访问)
-- 1 × coauth (共享 auth server)
+- 1 × coauth (共享 private authentication process)
 
 两个 soland 实例通过 `SOLAND_FEDERATION_PEERS` 互相宣告;DID 文档(`did:web:soland-alpha.joint-e2e.local`、`did:web:soland-beta.joint-e2e.local`)在各自 `/.well-known/did.json` 暴露 service endpoint。
 

@@ -43,11 +43,11 @@ test.describe("service resolution bootstrap @fully-implemented", () => {
     request,
   }) => {
     const baseUrl = solandBaseUrl();
-    const describeUrl = `${baseUrl}/_arkret/describe?service_kind=principal_server`;
+    const describeUrl = `${baseUrl}/_arkret/describe?service_kind=station`;
     const describeResponse = await request.get(describeUrl);
     expect(describeResponse.status(), await describeResponse.text()).toBe(200);
     const describe = (await describeResponse.json()) as ServiceDescribe;
-    expect(describe.service_kind).toBe("principal_server");
+    expect(describe.service_kind).toBe("station");
 
     const httpBinding = describe.transport_bindings.find(
       (binding) => binding.kind === "http_json",

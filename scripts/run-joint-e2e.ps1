@@ -1716,7 +1716,7 @@ function Invoke-CoauthConfigSync {
     }
 }
 
-function Set-CoauthPrincipalServerServiceIds {
+function Set-CoauthStationServiceIds {
     param(
         [Parameter(Mandatory = $true)][string]$ConfigPath,
         [Parameter(Mandatory = $true)][string]$SolandServiceId,
@@ -1730,14 +1730,14 @@ function Set-CoauthPrincipalServerServiceIds {
     }
     foreach ($entry in $pins.GetEnumerator()) {
         if (-not $entry.Value.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
-            throw "Coauth principal server '$($entry.Key)' received an invalid service_id pin"
+            throw "Coauth Station '$($entry.Key)' received an invalid service_id pin"
         }
         $name = [regex]::Escape([string]$entry.Key)
         $pattern = "(?m)(^  - name: $name\r?`n)"
         $replacement = "`${1}    service_id: $($entry.Value)`n"
         $patched = [regex]::Replace($config, $pattern, $replacement, 1)
         if ($patched -eq $config) {
-            throw "Could not locate Coauth principal server '$($entry.Key)' in $ConfigPath"
+            throw "Could not locate Coauth Station '$($entry.Key)' in $ConfigPath"
         }
         $config = $patched
     }
@@ -3755,12 +3755,12 @@ try {
     }
 
     if ($StartCoauth) {
-        Set-CoauthPrincipalServerServiceIds `
+        Set-CoauthStationServiceIds `
             -ConfigPath $coauthConfigPath `
             -SolandServiceId $SolandServiceId `
             -SolandBetaServiceId $SolandBetaServiceId
         if ($DualCoauth) {
-            Set-CoauthPrincipalServerServiceIds `
+            Set-CoauthStationServiceIds `
                 -ConfigPath $coauthSecondaryConfigPath `
                 -SolandServiceId $SolandServiceId `
                 -SolandBetaServiceId $SolandBetaServiceId

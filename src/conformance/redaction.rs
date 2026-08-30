@@ -397,7 +397,7 @@ fn assert_event_target_does_not_drive_object_state() -> Result<()> {
                     realm_id: realm_id.clone(),
                 },
                 actor_id: actor.clone(),
-                principal_server_id: actor.clone(),
+                station_id: actor.clone(),
                 actor_seq: seq,
                 created_at: chrono::Utc::now(),
                 hlc: Some(

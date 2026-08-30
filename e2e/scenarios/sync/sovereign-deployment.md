@@ -18,7 +18,7 @@
 
 - 1 × `soland_main` (主权主节点) — 假设监听 `http://127.0.0.1:<soland_main_port>`
 - 1 × `soland_enclave` (隔离 enclave 节点) — 假设监听 `http://127.0.0.1:<soland_enclave_port>`,只承载 enclave Realm,不承载主域 Realm / directory
-- 1 × `coauth` (auth server) — 主域和 enclave 都信任同一个 coauth,但 DID resolver policy 分别配置
+- 1 × `coauth` (private authentication process) — 主域和 enclave 都信任同一个 coauth,但 DID resolver policy 分别配置
 - `soland_main` ↔ `soland_enclave` 之间通过 federation pull/push 同步 enclave Realm 的事件流
 
 (目前 cotest harness 只起单 soland;本 scenario 需要扩 `scripts/run-joint-e2e.ps1` 支持双 soland,或挂 TODO 由现有 harness 用同一 soland 的两个 Realm 模拟边界 — 见 Implementation notes。)

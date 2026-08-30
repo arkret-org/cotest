@@ -18,7 +18,7 @@ use crate::transcripts::record_vector_event;
 
 const FIXTURE_PATH: &str = "fixtures/service-route-handover-mirror-fixture.json";
 const EXPECTED_SUITE: &str = "service_route_handover_mirror";
-const EXPECTED_PROFILE: &str = "ak.profile.principal_server.v1";
+const EXPECTED_PROFILE: &str = "ak.profile.station.v1";
 const EXPECTED_VERSION: &str = "2026-08-10";
 
 const SEMANTIC_CASES: &[&str] = &[

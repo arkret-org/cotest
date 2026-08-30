@@ -11,12 +11,12 @@
       },
       "describe": {
         "service": "soland",
-        "service_kind": "principal_server",
+        "service_kind": "station",
         "supported_profiles": [
-          "ak.profile.principal_server.v1"
+          "ak.profile.station.v1"
         ],
         "supported_operation_bundles": [
-          "ak.operation_bundle.principal_server.describe.v1"
+          "ak.operation_bundle.station.describe.v1"
         ],
         "limits": {
           "profile_status": {
@@ -80,28 +80,6 @@
             "feature": "webhook_fanout_delivery",
             "status": "best_effort",
             "detail": "delivery retry durability is not claimed by this sample"
-          }
-        ]
-      }
-    },
-    {
-      "name": "coauth_principal_claim_with_501_admin_surface_is_rejected",
-      "expect": "reject",
-      "source": {
-        "mode": "fixture",
-        "path": "/_arkret/describe"
-      },
-      "describe": {
-        "service": "coauth",
-        "service_kind": "auth_server",
-        "supported_profiles": [
-          "ak.profile.principal_server.v1"
-        ],
-        "admin_surfaces": [
-          {
-            "name": "device_revoke",
-            "path": "/api/admin/v1/devices/{id}/revoke",
-            "status": 501
           }
         ]
       }

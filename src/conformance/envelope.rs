@@ -535,7 +535,7 @@ fn validate_event_envelope(
         "realm_id",
         "scope_ref",
         "actor_id",
-        "principal_server_id",
+        "station_id",
         "executed_by",
         "authorization_ref",
         "applet_id",
@@ -596,7 +596,7 @@ fn validate_event_envelope(
     }
 
     // Spec event-envelope.schema.json required fields:
-    //   event_id, kind, realm_id, actor_id, principal_server_id, actor_seq, created_at,
+    //   event_id, kind, realm_id, actor_id, station_id, actor_seq, created_at,
     //   prev_refs, refs, payload, proofs
     // `refs` MUST be present per spec — negative fixture
     // `reject_missing_refs[role=authorized_by]` exercises this. `prev_refs`
@@ -605,7 +605,7 @@ fn validate_event_envelope(
         "event_id",
         "realm_id",
         "actor_id",
-        "principal_server_id",
+        "station_id",
         "actor_seq",
         "created_at",
         "prev_refs",
@@ -638,10 +638,10 @@ fn validate_event_envelope(
             "invalid actor_id",
         ));
     }
-    if arkret_identifiers::DidCoreId::new(value_field_str(event, "principal_server_id")?).is_err() {
+    if arkret_identifiers::DidCoreId::new(value_field_str(event, "station_id")?).is_err() {
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
-            "invalid principal_server_id",
+            "invalid station_id",
         ));
     }
     let actor_seq = value_field_u64(event, "actor_seq")?;
@@ -1079,7 +1079,7 @@ fn sample_envelope_event(
         "kind": kind,
         "realm_id": "ak:realm:AXvhSdy6b-PYcJNuFcYsp-gKHjg-PECuUtuV08YJYwhK",
         "actor_id": "ak:did_core:web:alice.example",
-        "principal_server_id": "ak:did_core:web:principal.example",
+        "station_id": "ak:did_core:web:principal.example",
         "actor_seq": actor_seq,
         "created_at": created_at,
         "hlc": hlc,

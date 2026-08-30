@@ -2,16 +2,16 @@
 //!
 //! Spec:
 //!   - `arkret-spec/spec/v1/zh/discovery/discovery-directory.md` §2 — Directory Service ingest
-//!     contract; principal servers push actor / space announces, directory indexes them, search
-//!     queries return fresh fields within the ingest latency budget.
+//!     contract; Stations push actor / space announces, directory indexes them, search queries
+//!     return fresh fields within the ingest latency budget.
 //!   - `arkret-spec/spec/v1/zh/discovery/profiles-presence.md` §2 — `ak.profile.update`
 //!     (display_name / bio / avatar_url) writes actor projection on the principal; the directory
 //!     MUST observe the new fields within the publish-to-search latency budget (target ≤ 30s for
 //!     the canonical "edit profile, then friend finds you" UX strand).
 //!
 //! Scenario walk-through (when fully wired):
-//!   1. Boot soland (principal server) and teabay (directory) with teabay's discovery ingest
-//!      subscribed to soland's announce stream (push mode per directory describe).
+//!   1. Boot soland (Station) and teabay (directory) with teabay's discovery ingest subscribed to
+//!      soland's announce stream (push mode per directory describe).
 //!   2. Register alice on soland; alice updates her profile via `POST
 //!      /_soland/self/account/profile` with new `display_name` and `bio` (the soland endpoint
 //!      exists today — `soland/src/routing/identity/account.rs::update_profile`).

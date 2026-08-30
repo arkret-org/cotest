@@ -187,7 +187,7 @@ mod tests {
             "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AR321Vop7tDLHqivAB0TKKtPZj9DccBtl1inhW0gLJNA"},
             "actor_id": "ak:did_core:web:alice.example",
-            "principal_server_id": "ak:did_core:web:principal.example",
+            "station_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T00:00:00.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",

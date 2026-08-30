@@ -32,7 +32,7 @@ use soland_storage_memory::MemoryServiceRouteStore;
 
 use crate::transcripts::record_vector_event;
 
-const SERVICE_KIND: &str = "principal_server";
+const SERVICE_KIND: &str = "station";
 
 fn digest(value: &impl serde::Serialize) -> Result<Hash> {
     Ok(Hash::new(arkret_canonical::canonical_sha256(value)?)?)

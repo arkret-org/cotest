@@ -36,8 +36,8 @@
 
 ## 拓扑
 
-- 1 × soland (principal server) — `solandBaseUrl()`,暴露(将暴露)`/_arkret/_conformance/snapshot`、`/_arkret/_conformance/query` 端点
-- 1 × coauth (auth server) — 仅用来给 alice 颁发 dev session,使 Phase B 验证 snapshot signature 的签名者 DID 时可以拉到真实 actor signing key
+- 1 × soland (Station) — `solandBaseUrl()`,暴露(将暴露)`/_arkret/_conformance/snapshot`、`/_arkret/_conformance/query` 端点
+- 1 × coauth (private authentication process) — 仅用来给 alice 颁发 dev session,使 Phase B 验证 snapshot signature 的签名者 DID 时可以拉到真实 actor signing key
 - 1 × conformance harness (Playwright `request` fixture + node `fs`) — 在测试 setup 阶段从 `arkret-spec/spec/v1/artifacts/fixtures/` glob `ak.vector.{snapshot,query,scalability}.*.json`,逐项 POST 到 soland,断言响应与 `expected_*` 字段一致
 
 (都是 cotest 现有 harness 直接提供的,不需要改 `scripts/run-joint-e2e.ps1`;但 `/_arkret/_conformance/{snapshot,query}` 端点目前未实现,见 Implementation notes。)

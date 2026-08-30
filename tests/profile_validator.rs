@@ -132,17 +132,17 @@ fn describe_payload_validates_via_supported_profiles() {
 }
 
 #[test]
-fn describe_with_directory_role_rejects_principal_server_profile() {
+fn describe_with_directory_role_rejects_station_profile() {
     let describe = json!({
         "supported_profiles": [
             "ak.profile.directory_service.v1",
-            "ak.profile.principal_server.v1",
+            "ak.profile.station.v1",
         ],
     });
     let outcome =
         validate_describe_profile_claims(&describe, ServiceRole::Directory, ClaimKind::SelfClaimed)
             .expect("validator loads artifact");
-    // directory_service is the canonical Directory role, principal_server is
+    // directory_service is the canonical Directory role, station is
     // Server — but our directory consumer allows Server-shaped profiles too
     // (identity registries straddle that boundary). This regression-locks
     // that pairing.

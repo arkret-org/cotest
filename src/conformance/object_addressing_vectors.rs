@@ -519,8 +519,8 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "service_resolution": {
                     "current_record_url": "https://relay.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Arelay.example/resolution"
                 },
-                "service_kind": "principal_server",
-                "role": "joined_member_principal_server",
+                "service_kind": "station",
+                "role": "joined_member_station",
                 "operations": ["ak.peer.events.command.submit.v1"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "encryption_profile": "mls_rfc9420",
@@ -540,8 +540,8 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 "service_resolution": {
                     "current_record_url": "https://teabay.example/_arkret/open/services/ak%3Adid_core%3Aweb%3Ateabay.example/resolution"
                 },
-                "service_kind": "principal_server",
-                "role": "joined_member_principal_server",
+                "service_kind": "station",
+                "role": "joined_member_station",
                 "operations": ["ak.peer.events.command.submit.v1"],
                 "join_methods": ["invite_accept", "member_join", "knock"],
                 "encryption_profile": "mls_rfc9420",

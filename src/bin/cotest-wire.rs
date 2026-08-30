@@ -73,7 +73,7 @@ struct WebvhGenesisInput {
 
 #[derive(Debug, Deserialize)]
 struct PrincipalRegistrationFixtureInput {
-    principal_server_url: String,
+    station_url: String,
     gate_account_base_url: String,
     handoff_request_id: String,
     identity_creation_lease: Value,
@@ -145,9 +145,9 @@ struct InstallManagedActorAuthorInput {
     bot_method_history_evidence: arkret::ResolutionMethodHistoryEvidence,
     service_signing_seed_b64url: String,
     service_verification_method: DidUrl,
-    principal_server_id: DidCoreId,
-    principal_server_verification_method: DidUrl,
-    principal_server_public_jwk: Value,
+    station_id: DidCoreId,
+    station_verification_method: DidUrl,
+    station_public_jwk: Value,
     trust_domain: arkret::TrustDomainId,
 }
 
@@ -188,7 +188,7 @@ fn install_managed_actor_author(input: Value) -> Result<Value> {
     let basis = raw.get("basis").and_then(Value::as_object);
     let purpose = raw.get("purpose").and_then(Value::as_str);
     let target = basis
-        .and_then(|value| value.get("target_principal_server_id"))
+        .and_then(|value| value.get("target_station_id"))
         .and_then(Value::as_str);
     let applet_id = basis
         .and_then(|value| value.get("applet_id"))
@@ -200,7 +200,7 @@ fn install_managed_actor_author(input: Value) -> Result<Value> {
         .and_then(|value| value.get("package_digest"))
         .and_then(Value::as_str);
     if purpose != Some("install_bot")
-        || target != Some(input.principal_server_id.as_str())
+        || target != Some(input.station_id.as_str())
         || applet_id != Some(input.applet_package.applet_id.as_str())
         || service_id != Some(input.applet_package.service_id.as_str())
         || package_digest
@@ -263,17 +263,17 @@ fn install_managed_actor_author(input: Value) -> Result<Value> {
             "authoring request proof creation time is in the future",
         ));
     }
-    if request.proof.verification_method != input.principal_server_verification_method
+    if request.proof.verification_method != input.station_verification_method
         || request.proof.verification_method != request.hosting_notary.verification_method
     {
         return Ok(author_rejection(
             "authoring_request_proof_invalid",
             400,
-            "authoring request was not signed by the current Principal Server key",
+            "authoring request was not signed by the current Station key",
         ));
     }
     let principal_key = arkret_signatures::PublicKeyMaterial::Jwk {
-        value: input.principal_server_public_jwk,
+        value: input.station_public_jwk,
     };
     if arkret_signatures::Ed25519DetachedJwsVerifier::new()
         .verify_detached_jws(
@@ -425,8 +425,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         audience_id: input.initial_session.audience_id,
     };
     initial_session.validate()?;
-    let endpoint =
-        url::Url::parse(&input.principal_server_url).context("parse principal server URL")?;
+    let endpoint = url::Url::parse(&input.station_url).context("parse Station URL")?;
     let created_at = Utc::now().with_nanosecond(0).unwrap_or_else(Utc::now);
 
     // Cotest fixture entropy is unique to this registration and never leaves
@@ -526,7 +525,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
     )
     .context("build identity-binding challenge request")?;
     let checkpoint = json!({
-        "principal_server_url": input.principal_server_url,
+        "station_url": input.station_url,
         "gate_account_base_url": input.gate_account_base_url,
         "handoff_request_id": input.handoff_request_id,
         "lease_id": lease.identity_creation_lease_id,
@@ -583,7 +582,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
 #[allow(clippy::too_many_arguments)]
 fn build_pcr_genesis_unit(
     principal: &Did,
-    principal_server_id: DidCoreId,
+    station_id: DidCoreId,
     genesis_salt: arkret::GenesisSalt,
     trust_domain: &str,
     version_id: &str,
@@ -682,7 +681,7 @@ fn build_pcr_genesis_unit(
     let mut create = arkret_bootstrap::build_self_principal_pcr_create(
         arkret_bootstrap::SelfPrincipalPcrCreateInput {
             principal_id: principal_id.clone(),
-            principal_server_id,
+            station_id,
             principal_did: principal.clone(),
             notary: founding_notary,
             initial_resolution: arkret_models_identity::ResolutionCommitment {
@@ -736,7 +735,7 @@ fn build_pcr_genesis_unit(
         },
         project_did_to_core_id(principal)
             .context("project principal DID for founding DeviceAuthorize")?,
-        create.principal_server_id.clone(),
+        create.station_id.clone(),
         authorize_payload,
     )?
     .with_prev_refs(vec![create.event_id.clone()])
@@ -1315,7 +1314,7 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
-            "principal_server_id": "ak:did_core:web:principal.example",
+            "station_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -1362,7 +1361,7 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
-            "principal_server_id": "ak:did_core:web:principal.example",
+            "station_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -1420,7 +1419,7 @@ mod tests {
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
-            "principal_server_id": "ak:did_core:web:principal.example",
+            "station_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",

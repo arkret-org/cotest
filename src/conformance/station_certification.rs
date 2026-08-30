@@ -8,8 +8,8 @@ use super::helpers::profile_claims;
 use super::{load_local_fixture_value, required_str, validate_profile, value_array};
 use crate::transcripts::record_vector_event;
 
-const FIXTURE: &str = "principal-server-certification-gate.json";
-const FIXTURE_PROFILE: &str = "ak.profile.principal_server_certification_gate.v1";
+const FIXTURE: &str = "station-certification-gate.json";
+const FIXTURE_PROFILE: &str = "ak.profile.station_certification_gate.v1";
 
 const REQUIRED_OPERATIONS: &[&str] = &[
     "ak.server.read.describe.v1",
@@ -40,19 +40,19 @@ const REQUIRED_SCHEMAS: &[&str] = &[
 const REQUIRED_MINIMUM_SURFACES: &[&str] = &["admin", "agent", "applet", "media"];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PrincipalCertificationStatus {
+pub enum StationCertificationStatus {
     Certified,
     NotCertified,
 }
 
-pub fn run_principal_server_certification_gate_suite() -> Result<()> {
+pub fn run_station_certification_gate_suite() -> Result<()> {
     let fixture = load_local_fixture_value(FIXTURE)?;
     validate_profile(&fixture, FIXTURE_PROFILE)?;
     let cases = value_array(
         fixture
             .get("cases")
             .ok_or_else(|| anyhow!("{FIXTURE} missing cases[]"))?,
-        "principal server certification cases",
+        "Station certification cases",
     )?;
 
     let mut saw_soland_not_certified = false;
@@ -64,12 +64,12 @@ pub fn run_principal_server_certification_gate_suite() -> Result<()> {
         let describe = case
             .get("describe")
             .ok_or_else(|| anyhow!("{name} missing describe object"))?;
-        let result = validate_principal_server_certification(describe);
+        let result = validate_station_certification(describe);
         match (expected, result) {
-            ("certified", Ok(PrincipalCertificationStatus::Certified)) => {
+            ("certified", Ok(StationCertificationStatus::Certified)) => {
                 saw_full_pass = true;
             }
-            ("not_certified", Ok(PrincipalCertificationStatus::NotCertified)) => {
+            ("not_certified", Ok(StationCertificationStatus::NotCertified)) => {
                 if describe.get("service").and_then(Value::as_str) == Some("soland") {
                     saw_soland_not_certified = true;
                 }
@@ -85,7 +85,7 @@ pub fn run_principal_server_certification_gate_suite() -> Result<()> {
         }
 
         record_vector_event(
-            "principal_server_certification.case",
+            "station_certification.case",
             &json!({
                 "name": name,
                 "service": describe.get("service").and_then(Value::as_str),
@@ -105,25 +105,21 @@ pub fn run_principal_server_certification_gate_suite() -> Result<()> {
     Ok(())
 }
 
-pub fn validate_principal_server_certification(
-    describe: &Value,
-) -> Result<PrincipalCertificationStatus> {
-    let claims_full = profile_claims(describe).contains(ProfileId::PRINCIPAL_SERVER_V1);
+pub fn validate_station_certification(describe: &Value) -> Result<StationCertificationStatus> {
+    let claims_full = profile_claims(describe).contains(ProfileId::STATION_V1);
     let certification_status = certification_status(describe);
     if !claims_full {
         if certification_status == Some("certified") {
-            bail!(
-                "principal_server certification cannot be certified without claiming the profile"
-            );
+            bail!("station certification cannot be certified without claiming the profile");
         }
-        return Ok(PrincipalCertificationStatus::NotCertified);
+        return Ok(StationCertificationStatus::NotCertified);
     }
 
     if certification_status != Some("certified") {
-        bail!("full principal_server claim requires certification.status=certified");
+        bail!("full station claim requires certification.status=certified");
     }
     if contains_non_empty_limitation(describe) {
-        bail!("full principal_server claim cannot carry non-empty limitations");
+        bail!("full station claim cannot carry non-empty limitations");
     }
 
     require_all_operation_bundles(describe, REQUIRED_OPERATIONS)?;
@@ -132,14 +128,14 @@ pub fn validate_principal_server_certification(
     require_federation_durability(describe)?;
     require_minimum_surfaces(describe)?;
 
-    Ok(PrincipalCertificationStatus::Certified)
+    Ok(StationCertificationStatus::Certified)
 }
 
 fn certification_status(describe: &Value) -> Option<&str> {
     [
-        "/certification/principal_server/status",
-        "/profile_status/principal_server/status",
-        "/limits/profile_status/principal_server/status",
+        "/certification/station/status",
+        "/profile_status/station/status",
+        "/limits/profile_status/station/status",
     ]
     .into_iter()
     .find_map(|pointer| describe.pointer(pointer).and_then(Value::as_str))
@@ -149,13 +145,13 @@ fn require_all(field: &str, describe: &Value, required: &[&str]) -> Result<()> {
     let present = describe
         .get(field)
         .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("principal_server certification missing {field}[]"))?
+        .ok_or_else(|| anyhow!("station certification missing {field}[]"))?
         .iter()
         .filter_map(Value::as_str)
         .collect::<BTreeSet<_>>();
     for item in required {
         if !present.contains(item) {
-            bail!("principal_server certification missing {field} entry {item}");
+            bail!("station certification missing {field} entry {item}");
         }
     }
     Ok(())
@@ -165,9 +161,7 @@ fn require_all_operation_bundles(describe: &Value, required: &[&str]) -> Result<
     let present = describe
         .get("supported_operation_bundles")
         .and_then(Value::as_array)
-        .ok_or_else(|| {
-            anyhow!("principal_server certification missing supported_operation_bundles[]")
-        })?
+        .ok_or_else(|| anyhow!("station certification missing supported_operation_bundles[]"))?
         .iter()
         .filter_map(Value::as_str)
         .filter_map(arkret_wire::operation_bundle_descriptor)
@@ -176,7 +170,7 @@ fn require_all_operation_bundles(describe: &Value, required: &[&str]) -> Result<
         .collect::<BTreeSet<_>>();
     for item in required {
         if !present.contains(item) {
-            bail!("principal_server certification bundles do not cover {item}");
+            bail!("station certification bundles do not cover {item}");
         }
     }
     Ok(())
@@ -199,7 +193,7 @@ fn require_federation_durability(describe: &Value) -> Result<()> {
         ),
     ] {
         if describe.pointer(pointer).and_then(Value::as_bool) != Some(true) {
-            bail!("principal_server certification missing federation {label}");
+            bail!("station certification missing federation {label}");
         }
     }
     Ok(())
@@ -207,9 +201,9 @@ fn require_federation_durability(describe: &Value) -> Result<()> {
 
 fn require_minimum_surfaces(describe: &Value) -> Result<()> {
     for surface in REQUIRED_MINIMUM_SURFACES {
-        let pointer = format!("/principal_server_minimum/{surface}/status");
+        let pointer = format!("/station_minimum/{surface}/status");
         if describe.pointer(&pointer).and_then(Value::as_str) != Some("supported") {
-            bail!("principal_server certification missing supported {surface} minimum surface");
+            bail!("station certification missing supported {surface} minimum surface");
         }
     }
     Ok(())

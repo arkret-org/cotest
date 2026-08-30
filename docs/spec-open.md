@@ -104,7 +104,7 @@ harness has been sending `ak:trust_domain:soland.local` against a server running
 rejection.
 
 **Question:** is a genesis `trust_domain` that does not match the admitting
-Principal Server's trust domain valid? If not, the check is missing. (The stale
+Station's trust domain valid? If not, the check is missing. (The stale
 harness literal is tracked separately below; it is only visible because nothing
 enforces the field.)
 
@@ -113,7 +113,7 @@ enforces the field.)
 `GET /_arkret/describe?service_kind=directory_service` returns
 `400 param_invalid` ("service_kind ... is not available on this binding"):
 `soland/crates/http/src/routing/system/describe.rs` accepts only
-`ServiceKind::PrincipalServer`. `ak.profile.directory_service.v1` is a required
+`ServiceKind::Station`. `ak.profile.directory_service.v1` is a required
 profile in the conformance coverage gate.
 
 **Question:** is `directory_service` expected to be co-hosted on the principal

@@ -306,7 +306,7 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let create = build_self_principal_pcr_create(
         SelfPrincipalPcrCreateInput {
             principal_id: principal.clone(),
-            principal_server_id: DidCoreId::new("ak:did_core:web:principal.example")?,
+            station_id: DidCoreId::new("ak:did_core:web:principal.example")?,
             principal_did: principal_did.clone(),
             notary: crate::fixture_single_signer_notary(principal.clone()),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
@@ -376,10 +376,10 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
 
 fn validate_reanchor_helpers() -> Result<()> {
     let principal = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
-    let principal_server_id = DidCoreId::new("ak:did_core:web:principal.example")?;
+    let station_id = DidCoreId::new("ak:did_core:web:principal.example")?;
     let value = json!({
         "principal_id": principal,
-        "principal_server_id": principal_server_id,
+        "station_id": station_id,
         "recovery_authority_kind": "pcr_policy",
         "recovery_policy_id": "ak:policy:01904100-0000-7000-8000-000000000001",
         "recovery_policy_version": 1,

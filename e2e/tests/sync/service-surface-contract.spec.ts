@@ -201,7 +201,7 @@ test.describe("describes soland surface @fully-implemented", () => {
     // §17 — canonical ServiceDescribe required fields
     expect(body.service_id, "service_id").toBeTruthy();
     expect(body.trust_domain, "trust_domain").toMatch(/^ak:trust_domain:/);
-    expect(body.service_kind, "service_kind").toBe("principal_server");
+    expect(body.service_kind, "service_kind").toBe("station");
     expect(body.protocol_version, "protocol_version").toBe("1.0");
     expect(Array.isArray(body.supported_profiles), "supported_profiles is array").toBe(true);
     expect(Array.isArray(body.supported_operation_bundles), "supported_operation_bundles is array").toBe(true);
@@ -231,10 +231,10 @@ test.describe("describes soland surface @fully-implemented", () => {
     }
 
     expect(body.supported_operation_bundles, "exposes principal describe bundle").toContain(
-      "ak.operation_bundle.principal_server.describe.v1",
+      "ak.operation_bundle.station.describe.v1",
     );
     expect(body.supported_operation_bundles, "exposes principal HTTP core bundle").toContain(
-      "ak.operation_bundle.principal_server.http_core.v1",
+      "ak.operation_bundle.station.http_core.v1",
     );
 
     await testInfo.attach("soland-describe", {
@@ -247,126 +247,40 @@ test.describe("describes soland surface @fully-implemented", () => {
     request,
   }) => {
     const selected = await request.get(
-      `${solandBaseUrl()}/_arkret/describe?service_kind=principal_server`,
+      `${solandBaseUrl()}/_arkret/describe?service_kind=station`,
     );
     expect(selected.status()).toBe(200);
-    expect((await selected.json()).service_kind).toBe("principal_server");
+    expect((await selected.json()).service_kind).toBe("station");
 
     const rejected = await request.get(
-      `${solandBaseUrl()}/_arkret/describe?service_kind=auth_server`,
+      `${solandBaseUrl()}/_arkret/describe?service_kind=private_auth_process`,
     );
     expect(rejected.status()).toBe(400);
     expect(wireErrCode(await rejected.json())).toBe("param_invalid");
   });
 });
 
-test.describe("describes coauth surface @fully-implemented", () => {
-  test("coauth /_arkret/describe returns auth_server shape and does not claim identity_registry", async ({
-    request,
-  }, testInfo) => {
-    // spec: service-surface.md §3 (service_kind naming — auth_server),
-    //       G3.C3 (coauth MUST NOT claim canonical identity_registry profile).
-    //
-    // coauthBaseUrl() returns undefined when COTEST_COAUTH_BASE_URL is not configured
-    // (single-server / soland-only profiles). Skip rather than fail in that case.
+test.describe("private authentication process surface @fully-implemented", () => {
+  test("coauth exposes no public Arkret service description", async ({ request }) => {
     const baseUrl = coauthBaseUrl();
     test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
-
-    const resp = await request.get(`${baseUrl}/_arkret/describe`);
-    expect(resp.status()).toBe(200);
-    expect(resp.headers()["content-type"] ?? "").toContain("application/json");
-    const body = await resp.json();
-
-    // §3 — service_kind registered values
-    expect(body.service_kind, "service_kind").toBe("auth_server");
-    expect(body.protocol_version, "protocol_version").toBe("1.0");
-
-    // Canonical conformance claim fields remain separate from runtime features.
-    expect(Array.isArray(body.supported_operation_bundles)).toBe(true);
-    expect(Array.isArray(body.transport_bindings)).toBe(true);
-    expect(Array.isArray(body.supported_features)).toBe(true);
-    expect(Array.isArray(body.claimed_profiles)).toBe(true);
-    expect(Array.isArray(body.verified_profiles)).toBe(true);
-    expect(Array.isArray(body.interop_surfaces)).toBe(true);
-    expect(typeof body.development_mode).toBe("boolean");
-
-    // G3.C3 — coauth MUST NOT claim canonical identity registry profile.
-    const claimed = (body.claimed_profiles ?? []) as Array<{ profile_id?: string }>;
-    const claimedIds = claimed.map((c) => c.profile_id).filter(Boolean);
-    expect(claimedIds, "coauth does not self-claim identity_registry").not.toContain(
-      "ak.profile.identity_registry.v1",
-    );
-    expect(claimedIds, "coauth does not self-claim principal_server").not.toContain(
-      "ak.profile.principal_server.v1",
-    );
-
-    // auth_metadata routes account flows through Account Authority; methods only
-    // describe login proof providers.
-    expect(body.auth_metadata, "auth_metadata present").toBeTruthy();
-    expect(
-      body.auth_metadata?.account_authority?.gate_account_base_url,
-      "auth metadata advertises account authority",
-    ).toMatch(/^https?:\/\//);
-    expect(Array.isArray(body.auth_metadata?.methods), "auth metadata advertises methods[]").toBe(
-      true,
-    );
-    expect(body.auth_metadata.methods.length, "auth metadata methods[] is non-empty").toBeGreaterThan(0);
-
-    // §3.0 dev-mode invariant also applies to coauth.
-    if (body.development_mode === true) {
-      expect(body.verified_profiles, "dev-mode verified_profiles is empty").toEqual([]);
-    }
-
-    await testInfo.attach("coauth-describe", {
-      body: JSON.stringify(body, null, 2),
-      contentType: "application/json",
-    });
-  });
-
-  test("coauth describe accepts only its registered role selector", async ({
-    request,
-  }) => {
-    const baseUrl = coauthBaseUrl();
-    test.skip(!baseUrl, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
-
-    const selected = await request.get(
-      `${baseUrl}/_arkret/describe?service_kind=auth_server`,
-    );
-    expect(selected.status()).toBe(200);
-    expect((await selected.json()).service_kind).toBe("auth_server");
-
-    const rejected = await request.get(
-      `${baseUrl}/_arkret/describe?service_kind=principal_server`,
-    );
-    expect(rejected.status()).toBe(400);
-    expect(wireErrCode(await rejected.json())).toBe("param_invalid");
+    const response = await request.get(`${baseUrl}/_arkret/describe`);
+    expect(response.status()).toBeGreaterThanOrEqual(400);
   });
 });
 
 test.describe("shared public describe binding @fully-implemented", () => {
-  test("requires a registered role and returns the selected role's closed describe", async ({
+  test("selects the Station role and rejects private process selectors", async ({
     request,
   }) => {
-    const coauth = coauthBaseUrl();
-    test.skip(!coauth, "coauth not configured (COTEST_COAUTH_BASE_URL unset)");
-    if (!coauth) {
-      return;
-    }
-
-    const [principalResponse, authResponse] = await Promise.all([
-      request.get(
-        `${solandBaseUrl()}/_arkret/describe?service_kind=principal_server`,
-      ),
-      request.get(`${coauth}/_arkret/describe?service_kind=auth_server`),
-    ]);
-    expect(principalResponse.status()).toBe(200);
-    expect(authResponse.status()).toBe(200);
-    const principal = (await principalResponse.json()) as Record<string, unknown>;
-    const auth = (await authResponse.json()) as Record<string, unknown>;
+    const stationResponse = await request.get(
+      `${solandBaseUrl()}/_arkret/describe?service_kind=station`,
+    );
+    expect(stationResponse.status()).toBe(200);
+    const station = (await stationResponse.json()) as Record<string, unknown>;
 
     const shared = await startSharedDescribeBinding({
-      principal_server: principal,
-      auth_server: auth,
+      station,
     });
     try {
       const missing = await request.get(`${shared.baseUrl}/_arkret/describe`);
@@ -379,36 +293,18 @@ test.describe("shared public describe binding @fully-implemented", () => {
       expect(invalid.status()).toBe(400);
       expect(wireErrCode(await invalid.json())).toBe("param_invalid");
 
-      const selectedPrincipal = await request.get(
-        `${shared.baseUrl}/_arkret/describe?service_kind=principal_server`,
+      const selectedStation = await request.get(
+        `${shared.baseUrl}/_arkret/describe?service_kind=station`,
       );
-      const selectedAuth = await request.get(
-        `${shared.baseUrl}/_arkret/describe?service_kind=auth_server`,
+      const selectedPrivateProcess = await request.get(
+        `${shared.baseUrl}/_arkret/describe?service_kind=private_auth_process`,
       );
-      expect(selectedPrincipal.status()).toBe(200);
-      expect(selectedAuth.status()).toBe(200);
-      const selectedPrincipalBody =
-        (await selectedPrincipal.json()) as Record<string, unknown>;
-      const selectedAuthBody =
-        (await selectedAuth.json()) as Record<string, unknown>;
-
-      // The shared discovery binding selects complete role descriptions; it
-      // does not aggregate operation/profile/plaintext boundaries or rewrite
-      // either role's DID and advertised service bindings.
-      expect(selectedPrincipalBody).toEqual(principal);
-      expect(selectedAuthBody).toEqual(auth);
-      expect(selectedPrincipalBody.service_kind).toBe("principal_server");
-      expect(selectedAuthBody.service_kind).toBe("auth_server");
-      expect(selectedPrincipalBody.service_id).not.toBe(selectedAuthBody.service_id);
-      expect(selectedPrincipalBody.supported_operation_bundles).not.toEqual(
-        selectedAuthBody.supported_operation_bundles,
-      );
-      expect(selectedPrincipalBody.claimed_profiles).not.toEqual(
-        selectedAuthBody.claimed_profiles,
-      );
-      expect(selectedPrincipalBody.plaintext_visibility).not.toEqual(
-        selectedAuthBody.plaintext_visibility,
-      );
+      expect(selectedStation.status()).toBe(200);
+      expect(selectedPrivateProcess.status()).toBe(400);
+      const selectedStationBody =
+        (await selectedStation.json()) as Record<string, unknown>;
+      expect(selectedStationBody).toEqual(station);
+      expect(selectedStationBody.service_kind).toBe("station");
     } finally {
       await shared.close();
     }

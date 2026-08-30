@@ -98,11 +98,11 @@ export type SignedEventEnvelopeArgs = {
   authorizationRef?: string;
   executedBy?: string;
   appletId?: string;
-  /// The Principal Server this actor is anchored to. `event-envelope.schema.json`
+  /// The Station this actor is anchored to. `event-envelope.schema.json`
   /// makes it a required envelope member, so it is part of the digest preimage
   /// every id derivation and proof covers. Defaults to the server the harness
   /// is driving.
-  principalServerId?: string;
+  stationId?: string;
   server?: SolandKey;
 };
 
@@ -495,7 +495,7 @@ function serviceCoreIdToDid(serviceId: string): string {
 
 // `realm.schema.json` notary: `kind` is the sole discriminator and every signer
 // is a frozen descriptor (exact verification method, key kind, JOSE alg and key
-// digest). The Realm names the Principal Server's own notary key, so the
+// digest). The Realm names the Station's own notary key, so the
 // descriptor is derived from the same development seed soland freezes into
 // `service_notary_signer_descriptor()`. No controlling organization is derived
 // for the development deployment, so the org-diversity members stay absent.
@@ -534,7 +534,7 @@ export function plaintextVisibleServiceDeclarations(serviceIds: string[]) {
     new Set(serviceIds.map((service) => service.trim()).filter(Boolean)),
   ).map((serviceId) => ({
     service_id: requireDidCoreId(serviceId),
-    service_kind: "principal_server",
+    service_kind: "station",
     data_classes: [
       "message_content",
       "attachment_plaintext",
@@ -587,16 +587,16 @@ export async function createRealmApi(
     encryption_profile?: RealmObject["encryption_profile"];
     invitees?: string[];
     /**
-     * Optional home Principal Server DID for directed invite-create events.
+     * Optional home Station DID for directed invite-create events.
      * Seed-member (`ak.member.state{membership=invite}`) events intentionally
      * have no delivery target; callers exercising cross-server invite fanout
      * opt in here so the helper emits the canonical `ak.invite.create` event.
      */
     invitee_ids?: Record<string, string>;
     /**
-     * Override the creator's home Principal Server. The helper defaults this
+     * Override the creator's home Station. The helper defaults this
      * to the selected Soland because the standard availability policy needs a
-     * joined-member Principal Server before any post-genesis Control Move can
+     * joined-member Station before any post-genesis Control Move can
      * be sealed.
      */
     creator_id?: string;
@@ -634,7 +634,7 @@ export async function createRealmApi(
     encryption_profile: data.encryption_profile ?? "none",
     security_class: "standard",
     digest_algorithm: "sha256",
-    // This helper creates Principal-Server-hosted collaboration Realms. The
+    // This helper creates Station-hosted collaboration Realms. The
     // service owns the notary key and materializes Event Seals; the principal
     // remains the Realm creator and root authority-cell controller.
     notary: singleSignerNotaryFromDid(solandServiceDid(opts.server)),
@@ -777,7 +777,7 @@ export async function createRealmApi(
   };
   const creatorDeliveryBinding: Record<string, unknown> = {
     recipient_id: creatorServiceId,
-    recipient_kind: "principal_server",
+    recipient_kind: "station",
     binding_scope: "realm",
     binding_source: "did_document_default",
     delivery_modes: ["events", "sync", "to_device", "push", "keypackages"],
@@ -850,7 +850,7 @@ export async function createRealmApi(
           // durable Event that could never satisfy invite-addressing.md §7
           // step 6.
           service_resolution: canonicalServiceResolution(opts.server),
-          recipient_kind: "principal_server",
+          recipient_kind: "station",
         },
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
         expires_at: canonicalTimestamp(
@@ -1057,19 +1057,19 @@ export async function grantRealmAdminCapabilityApi(
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing, and
-  // `issuer_principal_server_id` is reducer-derived from the carrier Event —
+  // `issuer_station_id` is reducer-derived from the carrier Event —
   // producers MUST NOT author it.
   const unsignedGrant: Omit<
     CapabilityGrantObject,
-    "id" | "proofs" | "issuer_principal_server_id"
+    "id" | "proofs" | "issuer_station_id"
   > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: requireDidCoreId(args.ownerId),
     subject: requireDidCoreId(args.subjectId),
-    // `capability_grant_payload` requires the subject's Principal Server
+    // `capability_grant_payload` requires the subject's Station
     // whenever `subject` is a plain principal id.
-    subject_principal_server_id: requireDidCoreId(
+    subject_station_id: requireDidCoreId(
       solandServiceId(args.server),
     ),
     actions: ["ak.realm.admin"],
@@ -1141,7 +1141,7 @@ export async function grantRealmAdminCapabilityApi(
 
 // Grant a Realm-scoped capability to a peer service DID.
 // sync/federation.md §4.4: the grant subject is a service DID; revoking it
-// makes the source Principal Server stop pushing future events to that peer.
+// makes the source Station stop pushing future events to that peer.
 export async function grantServiceCapabilityApi(
   request: APIRequestContext,
   ownerToken: string,
@@ -1162,19 +1162,19 @@ export async function grantServiceCapabilityApi(
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing, and
-  // `issuer_principal_server_id` is reducer-derived from the carrier Event —
+  // `issuer_station_id` is reducer-derived from the carrier Event —
   // producers MUST NOT author it.
   const unsignedGrant: Omit<
     CapabilityGrantObject,
-    "id" | "proofs" | "issuer_principal_server_id"
+    "id" | "proofs" | "issuer_station_id"
   > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: requireDidCoreId(args.ownerId),
     subject: requireDidCoreId(args.subjectServiceId),
-    // `capability_grant_payload` requires the subject's Principal Server
+    // `capability_grant_payload` requires the subject's Station
     // whenever `subject` is a plain principal id.
-    subject_principal_server_id: requireDidCoreId(
+    subject_station_id: requireDidCoreId(
       solandServiceId(args.server),
     ),
     actions: [action],
@@ -1262,20 +1262,20 @@ export function buildCapabilityGrantEnvelope(args: CapabilityGrantEventArgs): {
   // `capability-grant.schema.json` is a closed object; annotating the literal
   // makes an unregistered member or a misspelled resource kind a `tsc` error
   // instead of a reducer rejection. `proofs` is attached after signing, and
-  // `issuer_principal_server_id` is reducer-derived from the carrier Event —
+  // `issuer_station_id` is reducer-derived from the carrier Event —
   // producers MUST NOT author it.
   const unsignedGrant: Omit<
     CapabilityGrantObject,
-    "id" | "proofs" | "issuer_principal_server_id"
+    "id" | "proofs" | "issuer_station_id"
   > = {
     schema: "ak.schema.capability.v1",
     realm_id: args.realmId,
     issuer_id: requireDidCoreId(args.ownerId),
     subject: requireDidCoreId(args.subjectId),
-    // `capability_grant_payload` makes `subject_principal_server_id` required
+    // `capability_grant_payload` makes `subject_station_id` required
     // whenever `subject` is a plain principal id: the authority pair is
-    // (subject, subject Principal Server), not the subject alone.
-    subject_principal_server_id: requireDidCoreId(
+    // (subject, subject Station), not the subject alone.
+    subject_station_id: requireDidCoreId(
       solandServiceId(args.server),
     ),
     actions: args.actions,
@@ -1544,7 +1544,7 @@ export async function submitInviteCreateApi(
       invite_delivery_target: {
         recipient_id: solandServiceId(opts.server),
         service_resolution: canonicalServiceResolution(opts.server),
-        recipient_kind: "principal_server",
+        recipient_kind: "station",
       },
       introduction_evidence_digest: `sha256:${sha256CanonicalJson({ kind: "explicit_address" })}`,
       expires_at: expiresAt,
@@ -1984,8 +1984,8 @@ export function signedEventEnvelope(
         ? { kind: "realm_genesis" }
         : { kind: "realm", realm_id: args.realmId }),
     actor_id: requireDidCoreId(args.actorId),
-    principal_server_id: requireDidCoreId(
-      args.principalServerId ?? solandServiceId(args.server),
+    station_id: requireDidCoreId(
+      args.stationId ?? solandServiceId(args.server),
     ),
     authorization_ref: args.authorizationRef,
     applet_id: args.appletId,
@@ -3760,7 +3760,7 @@ export type InviteDeliveryOutcomeView = {
 // `ak.self.invites.command.dispatch.v1` is the ONLY legal way for a client to
 // start private invite delivery. The client hands the raw
 // `introduction_evidence` plus the accepted `ak.invite.create` Event id to its
-// own Principal Server; that server resolves the canonical Event and owns every service-to-service hop from
+// own Station; that server resolves the canonical Event and owns every service-to-service hop from
 // there. Local targets rerun the §7 receive verification from step 4, remote
 // targets enter the exact-body S2S outbox.
 
@@ -3806,7 +3806,7 @@ export async function resolveAcceptedEventApi(
   return event!;
 }
 
-// Build the §7 dispatch body from the accepted Event id. The Principal Server
+// Build the §7 dispatch body from the accepted Event id. The Station
 // resolves its own stored canonical Event bytes; clients never echo them.
 // `idempotency_key` defaults to the accepted `event_id` so an uncertain
 // transport outcome is retried with the same body and the same key, exactly as
@@ -3857,10 +3857,10 @@ export async function rawDispatchSelfInviteApi(
 
 // ── Peer-layer direct submission. NOT a client path. ──
 //
-// `ak.peer.invites.command.submit.v1` is a Principal-Server-to-Principal-Server
+// `ak.peer.invites.command.submit.v1` is a Station-to-Station
 // operation: invite-addressing.md §7 step 1 binds it to verified S2S
 // authentication. This helper self-signs those federation headers, so calling
-// it makes the test process impersonate an inviter Principal Server. That is
+// it makes the test process impersonate an inviter Station. That is
 // legitimate ONLY for exercising the receiving side directly — peer-layer
 // negative cases and cross-server receive-policy coverage. A test that models
 // what a conforming CLIENT does MUST use `dispatchSelfInviteApi` instead; §7
@@ -4180,7 +4180,7 @@ function peerEventsSubmitBody(
       })}`,
       membership_frontier: frontier,
       delivery_binding_frontier: frontier,
-      destination_kind: "principal_server",
+      destination_kind: "station",
     },
     events,
   }) as Record<string, unknown>;

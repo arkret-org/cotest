@@ -18,7 +18,7 @@
 
 ## 拓扑
 
-- Phase A–F:1 × soland (principal server) + 1 × coauth(单服务器即可覆盖个人 blocklist 主流程)
+- Phase A–F:1 × soland (Station) + 1 × coauth(单服务器即可覆盖个人 blocklist 主流程)
 - Phase G:2 × soland (`server1`、`server2`) + 共享 coauth — 用于 federation 跨服务器 block hint
 
 ## Actors

@@ -46,7 +46,7 @@
       ]
     },
     {
-      "profile_id": "ak.profile.principal_server_events_api.v1",
+      "profile_id": "ak.profile.station_events_api.v1",
       "spec_ref": "../arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [
@@ -60,7 +60,7 @@
       ]
     },
     {
-      "profile_id": "ak.profile.principal_server.v1",
+      "profile_id": "ak.profile.station.v1",
       "spec_ref": "../arkret-spec/spec/v1/artifacts/profiles/conformance-profiles.json",
       "summary_status": "partial",
       "requirements": [

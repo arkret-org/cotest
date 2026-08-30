@@ -64,7 +64,7 @@ fn run_case(case: &Value) -> Result<()> {
         // SDK validators are transport-agnostic and do not return Soland wire
         // error codes. Require the formal fixture to declare one, but count
         // only the accept/reject decision here; HTTP error mapping belongs to
-        // the live Principal Server tests.
+        // the live Station tests.
         case.pointer("/expected/error_code")
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("{name} rejection missing expected error_code"))?;

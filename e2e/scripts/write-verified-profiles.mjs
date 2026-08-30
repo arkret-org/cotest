@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // write-verified-profiles.mjs
 //
-// Links Conformance Verifier profile-suite results back to soland/coauth's
+// Links Conformance Verifier profile-suite results back to the Station's
 // `/server/describe.verified_profiles` slot.
 //
 // MANUAL OPERATOR TOOL — deliberately NOT wired into scripts/run-joint-e2e.ps1.
 // Two properties of the contract make an in-run hook impossible:
-//   1. joint-e2e starts soland/coauth with `*_DEVELOPMENT_MODE=true`
+//   1. joint-e2e starts soland with `SOLAND_DEVELOPMENT_MODE=true`
 //      (run-joint-e2e.ps1), and `sync/service-surface.md` §3.0 requires
 //      `verified_profiles=[]` for `development_mode=true`. A dev-mode run can
 //      never legitimately advertise a verified profile.
@@ -22,9 +22,8 @@
 // the test entries, and — for the small allow-list of strict profile-contract
 // suites in PROFILE_SUITE_MAP — emits `<artifacts_dir>/verified-profiles.json`
 // describing which canonical Arkret v1 profile IDs the run actually
-// verified end-to-end. The Rust side of the pipeline (soland + coauth) loads
-// this file at startup behind a per-service env var
-// (SOLAND_VERIFIED_PROFILES_ARTIFACT / COAUTH_VERIFIED_PROFILES_ARTIFACT) and
+// verified end-to-end. The Station loads this file at startup behind
+// `SOLAND_VERIFIED_PROFILES_ARTIFACT` and
 // populates the wire `verified_profiles[]` from it; absent / unset env vars
 // keep the dev-mode `verified_profiles=[]` invariant in service-surface.md
 // §3.0.
@@ -64,10 +63,8 @@ import { canonicalJson } from '../mocks/_shared/http.mjs';
 //
 // Value: { profile_id, service_role } per profile-id this suite verifies.
 //   - `service_role` MUST match the role string the target service advertises
-//     in its `service_roles[]` describe field. Today:
-//       - soland → "principal_server"
-//       - coauth → "auth_server"
-//     The Rust loaders use this to filter their respective subset.
+//     in its `service_roles[]` describe field. The public role is "station";
+//     private authentication processes never consume conformance role claims.
 //   - Empty array → suite is recognised but does not promote any profile
 //     (e.g. registry-drift.spec.ts is a producer-side artifact check that
 //     does not bind a service surface).
@@ -75,22 +72,22 @@ import { canonicalJson } from '../mocks/_shared/http.mjs';
 const PROFILE_SUITE_MAP = {
   'cotest/e2e/tests/sync/service-surface-contract.spec.ts': [
     {
-      profile_id: 'ak.profile.auth_server.v1',
-      service_role: 'auth_server',
+      profile_id: 'ak.profile.station.v1',
+      service_role: 'station',
     },
   ],
   'cotest/e2e/tests/conformance/profile-gates.spec.ts': [
     {
-      profile_id: 'ak.profile.principal_server.v1',
-      service_role: 'principal_server',
+      profile_id: 'ak.profile.station.v1',
+      service_role: 'station',
     },
     {
-      profile_id: 'ak.profile.principal_server_events_api.v1',
-      service_role: 'principal_server',
+      profile_id: 'ak.profile.station_events_api.v1',
+      service_role: 'station',
     },
     {
       profile_id: 'ak.profile.core_event_store.v1',
-      service_role: 'principal_server',
+      service_role: 'station',
     },
   ],
   // Producer-side catalog drift check — does not bind a service surface.
@@ -121,8 +118,8 @@ function printUsage() {
       '    "run_id": "<basename(artifacts_dir)>",',
       '    "verified": [',
       '      {',
-      '        "profile_id": "ak.profile.principal_server.v1",',
-      '        "service_role": "principal_server",',
+      '        "profile_id": "ak.profile.station.v1",',
+      '        "service_role": "station",',
       '        "test_count": 3,',
       '        "spec_file": "cotest/e2e/tests/conformance/profile-gates.spec.ts",',
       '        "artifact_digest": "sha256:<hex>",',
@@ -151,9 +148,7 @@ function printUsage() {
       '',
       'ENV CONSUMERS:',
       '  - soland reads SOLAND_VERIFIED_PROFILES_ARTIFACT=<path-to-this-json>',
-      '    and filters to entries with service_role == "principal_server".',
-      '  - coauth reads COAUTH_VERIFIED_PROFILES_ARTIFACT=<path-to-this-json>',
-      '    and filters to entries with service_role == "auth_server".',
+      '    and filters to entries with service_role == "station".',
       '',
     ].join('\n'),
   );

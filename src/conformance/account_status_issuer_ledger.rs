@@ -7,7 +7,7 @@
 //! actor frontier, a Seal, a CBA, a Control Proposal or a lattice reducer, and
 //! neither a holder device nor a PCR notary can veto an Account Authority deny
 //! transition. Everything in this module drives the shared SDK types and the
-//! Principal Server replica store, so a divergence here is a real divergence
+//! Station replica store, so a divergence here is a real divergence
 //! and not a test-local reimplementation.
 //!
 //! Closure driven here:
@@ -32,9 +32,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::account_lifecycle::{
-    AccountStatusPrincipalAuthority, AccountStatusReceipt, AccountStatusRecord,
-    AccountStatusResolveOutcome, AccountStatusResolveRequestBody, UnsignedAccountStatusReceipt,
-    UnsignedAccountStatusRecord,
+    AccountStatusReceipt, AccountStatusRecord, AccountStatusResolveOutcome,
+    AccountStatusResolveRequestBody, UnsignedAccountStatusReceipt, UnsignedAccountStatusRecord,
 };
 use arkret_models_collaboration::events_payloads::event_wire::ErasureTrigger;
 use arkret_models_collaboration::objects::account_status::AccountStatus;
@@ -44,8 +43,8 @@ use arkret_signatures::account_status::{
     verify_account_status_receipt, verify_account_status_record,
 };
 use arkret_wire::{
-    AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, RealmId, ReasonCode, ReceiptId, SchemaId,
-    ServiceAccountId, ServiceOperationId,
+    AccountId, AccountStatusRecordId, DidCoreId, DidUrl, ErrorCode, RealmId, ReasonCode, ReceiptId,
+    SchemaId, ServiceAccountId, ServiceOperationId,
 };
 use chrono::{DateTime, Utc};
 use ed25519_dalek::SigningKey;
@@ -79,7 +78,7 @@ fn sign_account_status_record(
         signing_key,
     )
 }
-const PRINCIPAL_SERVER_ID: &str = "ak:did_core:web:soland.example";
+const STATION_ID: &str = "ak:did_core:web:soland.example";
 const RECEIVER_METHOD: &str = "did:web:soland.example#notary-key";
 const PRINCIPAL_CONTROL_REALM: &str = "ak:realm:AfTcej7ZFNg8uTbkOiUJT0KN1F_c9l1fmtil65CUwncm";
 const REBOUND_PRINCIPAL_CONTROL_REALM: &str =
@@ -1259,11 +1258,8 @@ fn unsigned(
     Ok(UnsignedAccountStatusRecord {
         schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
         account_authority_id: DidCoreId::new(AUTHORITY_ID)?,
-        account_id: ServiceAccountId::new(account_id).map_err(anyhow::Error::msg)?,
-        principal_authority: AccountStatusPrincipalAuthority {
-            principal_id: DidCoreId::new(PRINCIPAL_ID)?,
-            principal_server_id: DidCoreId::new(PRINCIPAL_SERVER_ID)?,
-        },
+        service_account_id: ServiceAccountId::new(account_id).map_err(anyhow::Error::msg)?,
+        account_id: AccountId::new(DidCoreId::new(PRINCIPAL_ID)?, DidCoreId::new(STATION_ID)?),
         principal_control_realm_id: RealmId::new(PRINCIPAL_CONTROL_REALM)?,
         binding_version,
         status_seq,
@@ -1290,7 +1286,7 @@ fn receipt_for(
             account_authority_id: record.account_authority_id.clone(),
             account_id: record.account_id.clone(),
             status_seq: record.status_seq,
-            receiver_id: record.principal_authority.principal_server_id.clone(),
+            receiver_id: record.account_id.station_id.clone(),
             accepted_at: at(1000 + index)?,
             verification_method: DidUrl::new(RECEIVER_METHOD).map_err(anyhow::Error::msg)?,
         },

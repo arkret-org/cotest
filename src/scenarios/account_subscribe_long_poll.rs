@@ -648,7 +648,7 @@ fn same_service_invite_payload(
     recipient_id: &str,
     expires_at: DateTime<Utc>,
 ) -> Result<(Value, IntroductionEvidence)> {
-    let evidence = IntroductionEvidence::SamePrincipalServer;
+    let evidence = IntroductionEvidence::SameStation;
     let evidence_digest = arkret_canonical::canonical_sha256(&evidence)?;
     let payload = invite_create_payload(invitee, recipient_id, &evidence_digest, expires_at)?;
     Ok((payload, evidence))
@@ -808,7 +808,7 @@ mod tests {
             expires_at,
         )
         .unwrap();
-        assert_eq!(evidence, IntroductionEvidence::SamePrincipalServer);
+        assert_eq!(evidence, IntroductionEvidence::SameStation);
         assert_eq!(
             payload["introduction_evidence_digest"],
             arkret_canonical::canonical_sha256(&evidence).unwrap()

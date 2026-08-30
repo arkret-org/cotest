@@ -31,7 +31,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
                 "realm_id": "ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa"
             },
             "actor_id": "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
-            "principal_server_id": "ak:did_core:web:soland.cotest.local",
+            "station_id": "ak:did_core:web:soland.cotest.local",
             "actor_seq": 1,
             "created_at": "2026-05-18T00:00:00.000Z",
             "prev_refs": [],
@@ -48,7 +48,7 @@ pub async fn teabay_signed_ingest_negative_run() -> Result<()> {
         },
         "source_refs": ["ak:event:ASWGTju1AH5ri82iFC0b-lZTclyFRuOI8TagaYiq5ZD2"],
         "as_of": arkret_canonical::format_timestamp_canonical(Utc::now()),
-        "principal_server_id": "ak:did_core:web:soland.cotest.local"
+        "station_id": "ak:did_core:web:soland.cotest.local"
     }))?;
 
     let now = Utc::now().timestamp();

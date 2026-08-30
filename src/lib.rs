@@ -148,7 +148,7 @@ pub fn fixture_single_signer_notary(actor_id: arkret_wire::DidCoreId) -> arkret_
 }
 
 /// Build a deterministic content-addressed signer-evidence reference pair for
-/// Event fixtures that do not carry a Principal Server admission proof.
+/// Event fixtures that do not carry a Station admission proof.
 #[track_caller]
 pub fn fixture_signer_evidence_pair(
     label: impl AsRef<[u8]>,

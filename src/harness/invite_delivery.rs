@@ -101,11 +101,7 @@ async fn dispatch_invite(
     let delivery = SelfInviteDispatchRequestBody {
         schema: arkret_wire::SchemaId::INVITE_DELIVERY_REQUEST_V1.to_owned(),
         invite_event_id: arkret_identifiers::EventId::new(invite_event_id.to_owned())?,
-        invite_address: InviteAddress::principal_server(
-            invitee_core,
-            service_id,
-            service_resolution,
-        ),
+        invite_address: InviteAddress::station(invitee_core, service_id, service_resolution),
         introduction_evidence,
         idempotency_key: idempotency_key.to_owned(),
     };

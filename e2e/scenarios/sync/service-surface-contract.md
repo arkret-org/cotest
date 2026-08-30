@@ -2,7 +2,7 @@
 
 ## 目标
 
-通过 HTTP/JSON binding 直接打 soland 和 coauth 暴露的 `/_arkret/describe` 与相关写/读 endpoint,验证 spec `sync/service-surface.md` §3 与 §3.0 所要求的 **canonical `ServiceDescribe` shape + claim-level partition**,以及 `sync/api-conventions.md` §5 / §6 / §7 / §11 中的 **standard error envelope、幂等键、opaque cursor 分页、unsupported feature fail-closed**。本 scenario 是 v1 core service surface 的 wire-level conformance 闭环:它不验证业务语义(Realm/Event/Capability 在别处),只验证“服务面把自己说清楚、把错误说清楚、把分页/幂等/不支持说清楚”。
+通过 HTTP/JSON binding 直接验证 soland Station 暴露的 `/_arkret/describe` 与相关写/读 endpoint，并验证 coauth 作为私有认证进程不暴露公共 Arkret service describe。其余断言覆盖 canonical `ServiceDescribe`、claim-level partition、standard error envelope、幂等键、opaque cursor 分页与 unsupported feature fail-closed。
 
 不验证:profile claim 的真实性(见 `conformance/profile-gates`)、encoding/redaction vector(见 `conformance/encoding-vectors`)、federation transport(见 `sync/transport-negotiation`)、registry drift(见 `conformance/registry-drift`)。
 
@@ -25,12 +25,12 @@
 - `arkret-spec/spec/v1/zh/sync/service-api-schema.mdx` §2.1 — `operation_id` 分组(`ak.server.*` / `ak.events.*` / `ak.sync.*` 等)
 - `arkret-spec/spec/v1/artifacts/schemas/service-describe.schema.json` — `ak.schema.service_describe.v1` wire schema
 - `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` — `unrecognized_endpoint` / `method_not_allowed` / `unsupported_feature` / `duplicate_conflict` / `param_invalid` / `cursor_expired` canonical 定义
-- 相关实现:`soland/src/routing/system/describe.rs`(soland describe handler)、`coauth/crates/backend/src/handlers/arkret.rs`(coauth `server_describe`)、`soland/src/wire.rs`(claim-level partition)
+- 相关实现:`soland/src/routing/system/describe.rs`(Station describe handler)、`soland/src/wire.rs`(claim-level partition)
 
 ## 拓扑
 
-- 1 × soland (principal server) — `solandBaseUrl()`;暴露 `/_arkret/describe`、`/_arkret/self/account/*`、`/_arkret/self/snapshot/*` 与 `/_arkret/self/events/*` namespace
-- 1 × coauth (auth server) — `coauthBaseUrl()`;同样暴露 canonical `/_arkret/describe`,但 `service_kind=auth_server`,不 claim `principal_server` profile
+- 1 × soland (Station) — `solandBaseUrl()`;暴露 `/_arkret/describe`、`/_arkret/self/account/*`、`/_arkret/self/snapshot/*` 与 `/_arkret/self/events/*` namespace
+- 1 × coauth (私有认证进程) — `coauthBaseUrl()`；不得暴露 canonical `/_arkret/describe`、service kind 或 profile claim
 - 1 × harness — Playwright `request` fixture,纯 HTTP;无 browser context
 
 `coauthBaseUrl()` 在某些 run profile 下返回 `undefined`(即未配置 `COTEST_COAUTH_BASE_URL`)。本 scenario 中所有 coauth 子断言 MUST 在该值缺失时通过 `test.skip(!coauthBaseUrl(), ...)` 跳过,不得让 suite 在单服务器 profile 上 fail。
@@ -49,18 +49,18 @@
 - `alice` 已通过 `ensureRegistered` 在 soland 注册
 - `alice` 通过 `issueDevSession` 拿到 soland dev session token(coauth bearer 通常不必,因为 describe 是无认证 GET;但写路径需要 alice 的 soland token)
 - soland 的 `claimed_profiles` 至少含 `ak.profile.core_event_store.v1`(由 `soland/src/wire.rs` 默认写入)
-- coauth 的 `claimed_profiles` 至少含 `ak.profile.auth_server.v1` 或等价 auth-server profile;**MUST NOT** claim canonical identity registry / principal server profile(见 G3.C3)
-- `development_mode=true` 时,两个服务的 `verified_profiles` MUST 为空数组(spec §3.0 第 2 条)
+- coauth 的认证方法与 Account Authority 元数据由 Station describe 公布；coauth 本身没有公共 profile
+- `development_mode=true` 时，Station 的 `verified_profiles` MUST 为空数组(spec §3.0 第 2 条)
 
 ## Steps
 
-### Phase A — `server/describe` happy path on soland + coauth(§3 / §3.0 / §17)
+### Phase A — Station describe 与私有认证进程边界(§3 / §3.0 / §17)
 
 1. `GET ${solandBaseUrl()}/_arkret/describe`(无认证)
 2. 断言:
    - HTTP 200,`Content-Type: application/json`
    - body 含 spec §3 必填字段：`service_id`、`trust_domain`、`service_kind`、`protocol_version`、`supported_profiles`、`supported_operation_bundles`、`transport_bindings`、`supported_features`、`auth_metadata`、`limits`、`plaintext_visibility`、`development_mode`
-   - `service_kind === "principal_server"`(soland 是 principal server,见 `service-surface.md` §2.5)
+   - `service_kind === "station"`(soland 是 Station,见 `service-surface.md` §2.5)
    - `protocol_version === "1.0"`
    - `transport_bindings[0].kind === "http_json"`、`transport_bindings[0].base_url` 是 `${solandBaseUrl()}/_arkret` 或等价
    - **§3.0 claim-level partition**:`supported_features` / `claimed_profiles` / `verified_profiles` / `interop_surfaces` 全部存在且是数组
@@ -68,13 +68,8 @@
    - 若 `development_mode === true`,则 `verified_profiles.length === 0`(spec §3.0 第 2 条 dev fail-closed)
    - `supported_operation_bundles` 至少含 principal `describe.v1` 与 `http_core.v1` bundle，本地注册表展开后覆盖 Describe 与 events submit
 3. `GET ${coauthBaseUrl()}/_arkret/describe`(仅当 `coauthBaseUrl()` 已配置)
-4. 断言:
-   - HTTP 200,JSON
-   - `service_kind === "auth_server"`(spec §3 服务类型命名规则)
-   - `claimed_profiles` 是数组,且没有任何 entry 的 `profile_id` 等于 `ak.profile.identity_registry.v1`(coauth MUST NOT 假 claim identity registry — G3.C3)
-   - `auth_metadata.account_authority.gate_account_base_url` 是绝对 URI,且 `auth_metadata.methods[]` 非空(coauth 是 Account Authority)
-   - 同样 §3.0 六个 claim-level 字段都存在
-5. **Cross-server invariant**:两边的 `protocol_version` 必须一致(`"1.0"`)且 `trust_domain` 命名空间满足 `ak:trust_domain:` 前缀
+4. 断言请求失败（4xx）：私有认证进程不得拥有公共 `service_kind`、profile、registration 或 federation identity。
+5. 断言 Station describe 中 `auth_metadata.account_authority.gate_account_base_url` 是绝对 URI，且 `auth_metadata.methods[]` 非空。
 
 ### Phase B — Standard error envelope(§5 / §5.2)
 
@@ -90,8 +85,8 @@
    - HTTP 405
    - `error.code === "method_not_allowed"`
    - response header **SHOULD** 含 `Allow: GET` 或类似
-10. 同样对 coauth 重复 step 6–9(`test.skip(!coauthBaseUrl(), ...)` 守门)
-11. **Cross-cutting invariant**:两个错误响应都符合 `api-conventions.md` §5 的 envelope schema —— `ok=false`、`error.code` 是已注册标准 code、不泄露内部栈/路径细节
+10. coauth 只验证公共 describe 缺席；其私有 HTTP 错误格式不属于 Arkret service-surface conformance。
+11. **Cross-cutting invariant**:Station 错误响应符合 `api-conventions.md` §5 的 envelope schema，且不泄露内部栈/路径细节。
 
 ### Phase C — Opaque pagination cursor(§7 / §7.1)
 

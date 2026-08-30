@@ -192,7 +192,7 @@ fn normalize_plaintext_visible_service(entry: &Value) -> Value {
     match entry.as_str() {
         Some(service_id) => json!({
             "service_id": service_id,
-            "service_kind": "principal_server",
+            "service_kind": "station",
             "data_classes": [
                 "message_content",
                 "strand_content",

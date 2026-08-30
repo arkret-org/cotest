@@ -139,7 +139,7 @@ async fn upload_and_inspect_keys(
     let queried_device = serde_json::to_value(queried_record)?;
     for retired_mirror in [
         "principal_id",
-        "principal_server_id",
+        "station_id",
         "device_id",
         "device_status",
         "device_signing_key_did",

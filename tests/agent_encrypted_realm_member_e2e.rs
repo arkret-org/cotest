@@ -6,7 +6,7 @@
 //! and stream access after ordinary Realm membership. This file pins the
 //! local crypto/store bridge between those two surfaces, including canonical
 //! KeyPackage writes, Welcome handling, and restart recovery. It intentionally
-//! does not claim live Principal Server, Account Authority, device-message, or
+//! does not claim live Station, Account Authority, device-message, or
 //! HTTP conformance; those require a separately managed Agent runtime harness.
 
 use anyhow::{Context, Result, bail};

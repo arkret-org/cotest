@@ -12,7 +12,7 @@
 
 ## 拓扑
 
-- 1 × soland principal server
+- 1 × soland Station
 - actors:
   - appellant:被 moderation decision 影响并提交 appeal
   - moderator:签发原始 moderation decision

@@ -76,7 +76,7 @@ fn domain_wire_constraint_vectors_reject_drift() {
 
 #[test]
 fn account_stream_and_device_message_replay_vectors_converge() {
-    let describe_roles = ["principal_server", "authorization_server"];
+    let describe_roles = ["station", "authorization_server"];
     let select_role = |requested: Option<&str>| -> Result<String, &'static str> {
         match requested {
             Some(role) if describe_roles.contains(&role) => Ok(role.to_owned()),
@@ -85,10 +85,7 @@ fn account_stream_and_device_message_replay_vectors_converge() {
             None => Err("param_invalid"),
         }
     };
-    assert_eq!(
-        select_role(Some("principal_server")),
-        Ok("principal_server".to_owned())
-    );
+    assert_eq!(select_role(Some("station")), Ok("station".to_owned()));
     assert_eq!(select_role(None), Err("param_invalid"));
     assert_eq!(select_role(Some("unknown")), Err("param_invalid"));
 
@@ -674,7 +671,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     use arkret_models_identity::delivery_binding::{DeliveryMode, RecipientServiceKind};
     use arkret_models_identity::handle::{Handle, HandleHintBindingSource};
     use arkret_models_identity::handle_claim::DeliveryBindingHint;
-    use arkret_wire::{Audience, PrincipalAuthorityKey, ProducerEventProof};
+    use arkret_wire::{AccountId, Audience, ProducerEventProof};
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     if invite_handle.canonical() != "alice:acme.example" {
@@ -686,17 +683,17 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
 
     let principal = DidCoreId::new("ak:did_core:web:principal.acme.example")?;
     let subject = DidCoreId::new("ak:did_core:web:alice.acme.example")?;
-    let principal_authority = PrincipalAuthorityKey::new(subject.clone(), principal.clone());
+    let account_id = AccountId::new(subject.clone(), principal.clone());
     let mut modes = BTreeSet::new();
     modes.insert(DeliveryMode::Events);
     let candidate = MemberDeliveryBindingCandidate {
         subject_id: subject,
-        principal_authority,
+        account_id,
         handle: invite_handle,
         handle_aliases: vec!["acct:alice@acme.example".to_owned()],
         member_delivery_binding: DeliveryBindingHint {
             recipient_id: principal.clone(),
-            recipient_kind: RecipientServiceKind::PrincipalServer,
+            recipient_kind: RecipientServiceKind::Station,
             binding_source: HandleHintBindingSource::OrganizationPolicy,
             delivery_modes: modes,
             service_acceptance_ref: None,
