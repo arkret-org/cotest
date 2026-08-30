@@ -86,7 +86,19 @@ test.describe("account states", () => {
       }),
     });
     expect(logout.status()).toBe(200);
-    expect((await logout.json()).revoked).toBe(true);
+    const logoutBody = await logout.json();
+    expect(logoutBody.revoked).toBe(true);
+
+    const repeatedLogout = await request.post(logoutUrl, {
+      headers: selfPathGrantHeaders({
+        deviceKey,
+        grantJwt: grant!.grantJwt,
+        method: "POST",
+        url: logoutUrl,
+      }),
+    });
+    expect(repeatedLogout.status()).toBe(200);
+    expect(await repeatedLogout.json()).toEqual(logoutBody);
 
     const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
     const oldMe = await request.get(viewerUrl, {

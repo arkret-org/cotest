@@ -192,6 +192,10 @@ pub async fn try_bootstrap(config: JointServiceConfig) -> Result<JointServiceSta
             format!("{base}/_arkret/gate/account/session-grants/introspect"),
         ));
         soland_env.push((
+            "SOLAND_AUTH_SESSION_LOGOUT_URL".to_owned(),
+            format!("{base}/_arkret/gate/account/auth-sessions/logout"),
+        ));
+        soland_env.push((
             "SOLAND_SESSION_GRANT_INTROSPECTION_BEARER".to_owned(),
             config.session_grant_introspection_bearer.clone(),
         ));

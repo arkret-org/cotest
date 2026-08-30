@@ -3545,6 +3545,7 @@ try {
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
             $map.SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID = $CoauthEnrollmentAuthorityDid
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
+            $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_arkret/gate/account/auth-sessions/logout"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $map.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }
@@ -3608,6 +3609,7 @@ try {
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
             $values.SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID = $CoauthEnrollmentAuthorityDid
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
+            $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_arkret/gate/account/auth-sessions/logout"
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
             $values.SOLAND_OAUTH_CLIENT_ID = $CoauthOAuthClientId
         }

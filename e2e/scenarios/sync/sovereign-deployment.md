@@ -42,8 +42,8 @@
 
 ### Phase A — 主权部署启动 + DID resolver policy
 
-1. 测试 harness 启动 `soland_main`,在 config 注入 `did_resolver.trust_roots = ["did:web:*.example"]`、`did_resolver.allow_external_via_enclave = true`
-2. 启动 `soland_enclave`,config 注入 `deployment_profile = "enclave"`、`upstream_main = "<soland_main_url>"`、`did_resolver.trust_roots = ["did:web:*.example", "did:web:*.example.org"]`(enclave 的信任根更宽)
+1. 测试 harness 启动 `soland_main`，把 Alice 的 bare DID 经已登记 method adapter 投影为稳定 `did_core_id`，并以 `trust_roots = [alice_id]`、`allow_external_via_enclave = true` 配置精确 allowlist；旧字段 `trust_root_ids` 必须返回 4xx，不能被静默忽略。
+2. 启动 `soland_enclave`，配置 `deployment_profile = "enclave"`、`upstream_main = "<soland_main_url>"`、`trust_roots = [alice_id, bob_id]`（enclave 的精确信任根集合更宽）。`trust_roots[]` 不接受 bare DID、resolver locator 或 wildcard pattern。
 3. 断言:`GET <soland_main>/_soland/admin/deployment/info` 返回 `profile = "sovereign_main"`、`trusted_enclaves` 包含 `soland_enclave` 的 server_id
 4. 断言:`GET <soland_enclave>/_soland/admin/deployment/info` 返回 `profile = "enclave"`、`upstream_main` 字段正确
 5. 测试 harness 尝试用一个 `did:web:rogue-<uuid>.evil` DID 直接 register 到 `soland_main` → 拒绝,reason `did_method_not_trusted`
@@ -133,7 +133,7 @@
 - **soland 已落地**:
   - `/_soland/admin/deployment/configure`、`/_soland/admin/deployment/info`、`/_soland/admin/deployment/register-enclave` 提供本地 sovereign main / enclave profile 与 trust chain handshake。
   - `/_soland/admin/deployment/realm.create`、`/_soland/self/realm/:id` 记录 enclave Realm 的 `deployment_profile`、`hosted_on`、`external_invite_policy`。
-  - `/_soland/admin/deployment/external-invite` + `/_soland/self/account/accept-external-invite` 验证 enclave trust roots;main 侧直接注册外部 DID 返回 `did_method_not_trusted`;enclave 侧 rogue DID 返回 `enclave_did_method_not_trusted`。
+  - `/_soland/admin/deployment/external-invite` + `/_soland/self/account/accept-external-invite` 验证 enclave trust roots;main 侧直接注册外部 DID 返回 `did_method_not_trusted`;enclave 侧 rogue DID 返回 `enclave_did_method_not_trusted`。trust roots 与 `trust_chain` 存精确 Core ID，但邀请和接受携带 bare DID，使接收端能验证 `project(did) == trust_root`，不得从 Core ID 反造 DID。
   - `/_arkret/self/realms/:id`、`/_arkret/find/directory/search-realms`、`/_soland/self/deployment/enclave-proxy` 覆盖 external user 的 main-domain escape rejection 与边界审计。
   - `/_soland/admin/deployment/store-and-forward/*` 覆盖 enclave upstream outage 下本地 accepted、非客户端 pending、恢复后 drain/ingest 收敛。
 - **harness 已落地**:`scripts/run-joint-e2e.ps1 -DualSoland` 提供 `soland_main` / `soland_enclave` 两节点;本 scenario 的 4 条 contract test 已全部 live。

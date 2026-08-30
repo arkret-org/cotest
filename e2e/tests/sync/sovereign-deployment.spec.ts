@@ -52,14 +52,14 @@ test.describe("sovereign deployment", () => {
         request,
         "alpha",
         "/_soland/admin/deployment/configure",
-        { trust_root_ids: [], allow_external_via_enclave: false },
+        { trust_roots: [], allow_external_via_enclave: false },
         tokens.alpha,
       ),
       postJson(
         request,
         "beta",
         "/_soland/admin/deployment/configure",
-        { trust_root_ids: [], upstream_available: true },
+        { trust_roots: [], upstream_available: true },
         tokens.beta,
       ),
     ]);
@@ -91,15 +91,17 @@ test.describe("sovereign deployment", () => {
     expect(enclaveInfo.upstream_main).toBe(solandBaseUrl("alpha"));
 
     const rogue = await request.post(`${solandBaseUrl("alpha")}/_soland/self/account/register`, {
-      data: {
-        did: `did:web:rogue-${fixture.stamp}.evil`,
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
+        did: `did:webvh:z8rCaf8NFL1av8pHxRpz8APYa:rogue-${fixture.stamp}.example.net`,
         handle: `@rogue${fixture.short}`,
         display_name: "Rogue",
-        device_id: `ak:device:01904100-0000-7000-8000-${fixture.short}00000001`,
-      },
+        device_id: "ak:device:01904100-0000-7000-8000-000000000001",
+      }),
     });
-    expect(rogue.status()).toBe(403);
-    await expectErrorCode(rogue, "did_method_not_trusted");
+    const rogueBody = await rogue.text();
+    expect(rogue.status(), rogueBody).toBe(403);
+    expect(JSON.parse(rogueBody).detail).toBe("did_method_not_trusted");
 
     // Deployment/enclave introspection is a soland product-private surface
     // (`/_soland/self/...`), not part of the `/_arkret/` protocol catalog.
@@ -115,7 +117,7 @@ test.describe("sovereign deployment", () => {
     const bobStatus = await getJson(
       request,
       "alpha",
-      `/_soland/self/account/${encodeURIComponent(fixture.bobId)}`,
+      `/_soland/self/account/${encodeURIComponent(fixture.bobDid)}`,
       fixture.adminTokens.alpha,
     );
     expect(bobStatus.external_via_enclave).toBe(true);
@@ -124,7 +126,7 @@ test.describe("sovereign deployment", () => {
     const audit = await getJson(
       request,
       "beta",
-      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobId)}`,
+      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
       fixture.adminTokens.beta,
     );
     expect(audit.entries.map((entry: any) => entry.action)).toContain("external_invite.accept");
@@ -136,7 +138,7 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "escape");
 
     const direct = await request.get(
-      `${solandBaseUrl("alpha")}/_soland/self/realm/${encodeURIComponent(fixture.internalRealmId)}/access?actor=${encodeURIComponent(fixture.bobId)}`,
+      `${solandBaseUrl("alpha")}/_soland/self/realm/${encodeURIComponent(fixture.internalRealmId)}/access?actor=${encodeURIComponent(fixture.bobDid)}`,
       { headers: { authorization: `Bearer ${fixture.adminTokens.alpha}` } },
     );
     expect(direct.status()).toBe(403);
@@ -162,12 +164,15 @@ test.describe("sovereign deployment", () => {
     expect(directory.has_more).toBe(false);
 
     const proxy = await request.post(`${solandBaseUrl("beta")}/_soland/self/deployment/enclave-proxy`, {
-      headers: { authorization: `Bearer ${fixture.adminTokens.beta}` },
-      data: {
-        actor: fixture.bobId,
+      headers: {
+        authorization: `Bearer ${fixture.adminTokens.beta}`,
+        "content-type": "application/json",
+      },
+      data: canonicalJson({
+        actor: fixture.bobDid,
         target: solandBaseUrl("alpha"),
         path: `/_arkret/self/realms/${fixture.internalRealmId}`,
-      },
+      }),
     });
     expect(proxy.status()).toBe(403);
     await expectErrorCode(proxy, "enclave_no_upstream_proxy_for_external");
@@ -175,7 +180,7 @@ test.describe("sovereign deployment", () => {
     const audit = await getJson(
       request,
       "beta",
-      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobId)}`,
+      `/_soland/admin/deployment/audit?subject=${encodeURIComponent(fixture.bobDid)}`,
       fixture.adminTokens.beta,
     );
     expect(audit.entries.map((entry: any) => entry.action)).toContain("boundary.enclave_proxy");
@@ -190,7 +195,7 @@ test.describe("sovereign deployment", () => {
       upstream_available: false,
     }, fixture.adminTokens.beta);
     const accepted = await postJson(request, "beta", "/_soland/admin/deployment/store-and-forward/messages", {
-      actor: fixture.bobId,
+      actor: fixture.bobDid,
       realm_id: fixture.enclaveRealmId,
       content: { body: `store forward ${fixture.stamp}` },
     }, fixture.adminTokens.beta);
@@ -240,30 +245,34 @@ test.describe("sovereign deployment", () => {
     const fixture = await setupSovereignFixture(request, "trust");
 
     const mainReject = await request.post(`${solandBaseUrl("alpha")}/_soland/self/account/register`, {
-      data: {
+      headers: { "content-type": "application/json" },
+      data: canonicalJson({
         did: fixture.bobDid,
         handle: `@direct${fixture.short}`,
         display_name: "Direct Bob",
-        device_id: `ak:device:01904100-0000-7000-8000-${fixture.short}00000002`,
-      },
+        device_id: "ak:device:01904100-0000-7000-8000-000000000002",
+      }),
     });
     expect(mainReject.status()).toBe(403);
     await expectErrorCode(mainReject, "did_method_not_trusted");
 
     const accepted = fixture.acceptBody;
     expect(accepted.session_metadata.trust_chain_profile).toBe("enclave");
-    expect(accepted.session_metadata.actor).toBe(fixture.bobId);
+    expect(accepted.session_metadata.actor).toBe(fixture.bobDid);
 
     const enclaveReject = await request.post(
       `${solandBaseUrl("beta")}/_soland/self/account/accept-external-invite`,
       {
-        headers: { authorization: `Bearer ${fixture.adminTokens.beta}` },
-        data: {
+        headers: {
+          authorization: `Bearer ${fixture.adminTokens.beta}`,
+          "content-type": "application/json",
+        },
+        data: canonicalJson({
           invite_token: `ak:external_invite:${fixture.short}-rogue`,
-          actor_id: `ak:did_core:web:rogue-${fixture.stamp}.evil`,
+          actor_id: `did:webvh:z8rCaf8NFL1av8pHxRpz8APYa:rogue-${fixture.stamp}.example.net`,
           target_realm: fixture.enclaveRealmId,
           target_host: solandBaseUrl("beta"),
-        },
+        }),
       },
     );
     expect(enclaveReject.status()).toBe(403);
@@ -274,10 +283,10 @@ test.describe("sovereign deployment", () => {
 async function setupSovereignFixture(request: APIRequestContext, label: string) {
   const stamp = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
   const short = stamp.slice(-12);
-  const aliceDid = `did:web:alice-int-${label}-${stamp}.example`;
-  const bobDid = `did:web:bob-ext-${label}-${stamp}.example.org`;
+  const aliceDid = `did:webvh:zE2ucm2oH9PCib4kBzLEAkFqa:alice-int-${label}-${stamp}.example`;
+  const bobDid = `did:webvh:z2TiX7ug9JmCNeioq6D2V4VjK:bob-ext-${label}-${stamp}.example.org`;
   const aliceId = projectDidToCoreId(aliceDid);
-  const bobId = projectDidToCoreId(bobDid);
+  const bobCoreId = projectDidToCoreId(bobDid);
   const fixtureRealmIds = SOVEREIGN_REALM_FIXTURES[
     label as keyof typeof SOVEREIGN_REALM_FIXTURES
   ];
@@ -293,21 +302,34 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
   const adminTokens = { alpha: alphaAdminToken, beta: betaAdminToken };
   cleanupAdminTokens = adminTokens;
 
+  const obsoleteTrustRootField = await request.post(
+    `${solandBaseUrl("alpha")}/_soland/admin/deployment/configure`,
+    {
+      headers: {
+        authorization: `Bearer ${adminTokens.alpha}`,
+        "content-type": "application/json",
+      },
+      data: canonicalJson({ trust_root_ids: [aliceId] }),
+    },
+  );
+  expect(obsoleteTrustRootField.status()).toBeGreaterThanOrEqual(400);
+  expect(obsoleteTrustRootField.status()).toBeLessThan(500);
+
   await postJson(request, "alpha", "/_soland/admin/deployment/configure", {
     profile: "sovereign_main",
-    trust_root_ids: ["did:web:*.example"],
+    trust_roots: [aliceId],
     allow_external_via_enclave: true,
   }, adminTokens.alpha);
   await postJson(request, "beta", "/_soland/admin/deployment/configure", {
     profile: "enclave",
     upstream_main: solandBaseUrl("alpha"),
-    trust_root_ids: ["did:web:*.example", "did:web:*.example.org"],
+    trust_roots: [aliceId, bobCoreId].sort(),
     upstream_available: true,
   }, adminTokens.beta);
   await postJson(request, "alpha", "/_soland/admin/deployment/register-enclave", {
     server_id: solandServiceId("beta"),
     base_url: solandBaseUrl("beta"),
-    trust_chain: ["did:web:*.example.org"],
+    trust_chain: [bobCoreId],
   }, adminTokens.alpha);
   await postJson(request, "alpha", "/_soland/admin/deployment/realm.create", {
     realm_id: enclaveRealmId,
@@ -324,12 +346,12 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
 
   const invite = await postJson(request, "alpha", "/_soland/admin/deployment/external-invite", {
     target_realm: enclaveRealmId,
-    invitee_id: bobId,
+    invitee_id: bobDid,
     inviter_id: aliceId,
   }, adminTokens.alpha);
   const acceptBody = await postJson(request, "beta", "/_soland/self/account/accept-external-invite", {
     invite_token: invite.invite_token,
-    actor_id: bobId,
+    actor_id: bobDid,
     target_realm: invite.target_realm,
     target_host: invite.target_host,
   }, adminTokens.beta);
@@ -340,7 +362,7 @@ async function setupSovereignFixture(request: APIRequestContext, label: string) 
     aliceDid,
     aliceId,
     bobDid,
-    bobId,
+    bobId: bobCoreId,
     enclaveRealmId,
     internalRealmId,
     acceptBody,
@@ -383,5 +405,5 @@ async function getJson(
 
 async function expectErrorCode(response: { json(): Promise<any> }, code: string) {
   const body = await response.json();
-  expect(body.error?.code ?? body.code).toBe(code);
+  expect(body.error?.code ?? body.code ?? body.detail).toBe(code);
 }
