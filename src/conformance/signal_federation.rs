@@ -185,6 +185,13 @@ pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
     ) {
         bail!("an independently accepted actor at another Station was rejected");
     }
+    let foreign_account = ActorId::account(AccountId::new(
+        signal.sender_actor_id.signing_principal_id().clone(),
+        DidCoreId::new("ak:did_core:web:other-station.example")?,
+    ));
+    if device_authorization_gate(&signal, &foreign_account, true, true, true, true, true) {
+        bail!("a directory assertion for another Station account was accepted");
+    }
     if signal.expires_at >= signal.expires_at + Duration::milliseconds(1) {
         bail!("internal expiry-vector instant construction failed");
     }

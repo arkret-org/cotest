@@ -39,6 +39,11 @@ pub fn run_signal_sequence_high_water_suite() -> Result<()> {
 }
 
 fn validate_allocator_cases(allocator: &Value) -> Result<()> {
+    if allocator["domain"]
+        != serde_json::json!(["sender_actor_id", "sender_device_id", "canonical_scope_ref"])
+    {
+        bail!("Signal allocator must bind the complete actor, device, and scope");
+    }
     if allocator["value_type"].as_str() != Some("u64")
         || allocator["block_size"].as_u64() != Some(256)
         || allocator["initial_next_unreserved"].as_u64() != Some(1)
@@ -82,6 +87,20 @@ fn validate_allocator_cases(allocator: &Value) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signal_sequence_domain_requires_the_complete_actor() {
+        let fixture = load_fixture_value(FIXTURE).unwrap();
+        validate_allocator_cases(&fixture["allocator"]).unwrap();
+        let mut old = fixture["allocator"].clone();
+        old["domain"] = serde_json::json!(["sender_device_id", "canonical_scope_ref"]);
+        assert!(validate_allocator_cases(&old).is_err());
+    }
 }
 
 fn validate_receiver_cases(cases: &Value) -> Result<()> {
