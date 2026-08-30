@@ -502,7 +502,10 @@ impl MemoryCasRegister {
 #[test]
 fn scheduled_send_cas_conflict_retry_decrypts_merges_and_reseals() {
     let secret = [7u8; 32];
-    let actor = scheduled_send_core_id("did:web:alice.example");
+    let actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        scheduled_send_core_id("did:web:alice.example"),
+        scheduled_send_core_id("did:web:station.example"),
+    ));
     let key = scheduled_send_account_data_key(&ScheduledSendId::new(SCHEDULED_SEND_ID).unwrap());
 
     // Device A writes the plan first (revision 1).

@@ -336,7 +336,10 @@ fn signed_call_signal_envelope(
     signing_key: &SigningKey,
 ) -> Result<SignalEnvelope> {
     let realm_id = RealmId::new("ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1")?;
-    let actor_id = DidCoreId::new("ak:did_core:web:alice.example.com")?;
+    let actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        DidCoreId::new("ak:did_core:web:alice.example.com")?,
+        DidCoreId::new("ak:did_core:web:station.example.com")?,
+    ));
     let device_id = DeviceId::new("ak:device:01964137-0000-7000-8000-000000000000")?;
     let mut envelope = SignalEnvelope {
         realm_id: realm_id.clone(),

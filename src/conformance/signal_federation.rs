@@ -1,8 +1,9 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_wire::{
-    DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES, MAX_SIGNAL_RELAY_ITEMS,
-    ProfileId, RealmId, ScopeRef, SealId, SignalClass, SignalEncryptedPayload, SignalEnvelope,
-    SignalKeyRef, SignalProof, SignalRelayOutcome, SignalRelayRequest, project_did_to_core_id,
+    AccountId, ActorId, DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
+    MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmId, ScopeRef, SealId, SignalClass,
+    SignalEncryptedPayload, SignalEnvelope, SignalKeyRef, SignalProof, SignalRelayOutcome,
+    SignalRelayRequest, project_did_to_core_id,
 };
 use chrono::{Duration, TimeZone, Utc};
 use serde_json::Value;
@@ -24,7 +25,10 @@ fn envelope() -> Result<SignalEnvelope> {
         scope_ref: ScopeRef::Realm {
             realm_id: realm_id.clone(),
         },
-        sender_actor_id: DidCoreId::new("ak:did_core:web:alice.example")?,
+        sender_actor_id: ActorId::account(AccountId::new(
+            DidCoreId::new("ak:did_core:web:alice.example")?,
+            DidCoreId::new("ak:did_core:web:station.example")?,
+        )),
         sender_device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb")?,
         seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
         signal_class: SignalClass::Session,
@@ -44,7 +48,7 @@ fn envelope() -> Result<SignalEnvelope> {
             aad_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         },
         proof: SignalProof {
-            kind: "DataIntegrityProof".to_owned(),
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: crate::fixture_did_url(format!(
                 "{}#{}",
                 "did:web:alice.example", "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb"
@@ -63,6 +67,7 @@ fn envelope() -> Result<SignalEnvelope> {
 
 fn device_authorization_gate(
     signal: &SignalEnvelope,
+    directory_actor: &ActorId,
     current_active: bool,
     directory_key_present: bool,
     trust_anchor_present: bool,
@@ -78,8 +83,9 @@ fn device_authorization_gate(
     let controller_matches = Did::new(controller.to_owned())
         .ok()
         .and_then(|did| project_did_to_core_id(&did).ok())
-        .is_some_and(|core_id| core_id == signal.sender_actor_id);
-    controller_matches
+        .is_some_and(|core_id| &core_id == signal.sender_actor_id.signing_principal_id());
+    directory_actor == &signal.sender_actor_id
+        && controller_matches
         && fragment == signal.sender_device_id.as_str()
         && current_active
         && directory_key_present
@@ -116,7 +122,15 @@ pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
     }
     let signal = envelope()?;
     signal.validate_structural()?;
-    if !device_authorization_gate(&signal, true, true, true, true, true) {
+    if !device_authorization_gate(
+        &signal,
+        &signal.sender_actor_id,
+        true,
+        true,
+        true,
+        true,
+        true,
+    ) {
         bail!("a current active, fully anchored and scope-authorized device was rejected");
     }
     for denied in [
@@ -126,17 +140,39 @@ pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
         (true, true, true, false, true),
         (true, true, true, true, false),
     ] {
-        if device_authorization_gate(&signal, denied.0, denied.1, denied.2, denied.3, denied.4) {
+        if device_authorization_gate(
+            &signal,
+            &signal.sender_actor_id,
+            denied.0,
+            denied.1,
+            denied.2,
+            denied.3,
+            denied.4,
+        ) {
             bail!("a missing current-device, trust, scope, or action gate was accepted");
         }
     }
     let mut wrong_method = signal.clone();
     wrong_method.proof.verification_method =
         crate::fixture_did_url("did:web:alice.example#device-looking-fragment");
-    if device_authorization_gate(&wrong_method, true, true, true, true, true)
-        || wrong_method.validate_structural().is_ok()
+    if device_authorization_gate(
+        &wrong_method,
+        &signal.sender_actor_id,
+        true,
+        true,
+        true,
+        true,
+        true,
+    ) || wrong_method.validate_structural().is_ok()
     {
         bail!("a non-literal sender device verification method was accepted");
+    }
+    let foreign_account = ActorId::account(AccountId::new(
+        signal.sender_actor_id.signing_principal_id().clone(),
+        DidCoreId::new("ak:did_core:web:other-station.example")?,
+    ));
+    if device_authorization_gate(&signal, &foreign_account, true, true, true, true, true) {
+        bail!("a directory assertion for another Station account was accepted");
     }
     if signal.expires_at >= signal.expires_at + Duration::milliseconds(1) {
         bail!("internal expiry-vector instant construction failed");
