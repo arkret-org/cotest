@@ -12,7 +12,11 @@
 //! state and their own live queue. Every envelope is deserialized through the
 //! SDK's closed `DeviceMessageEnvelope` XOR and must carry the local Principal
 //! Server as sender, the holder as both sender and recipient principal, and the
-//! exact revision/content returned by account-data CAS.
+//! exact revision/content returned by account-data CAS. The notify branch also
+//! keeps an account-subscribe long poll open before dispatch and proves that the
+//! durable fanout wakes it with the invite-delivery update.
+
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_identifiers::{ConsentId, DidCoreId, InviteId};
@@ -36,8 +40,8 @@ use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
-    TestActorClient, TestServerGroup, actor_core_id, expect_json, invite_create_payload,
-    next_typed_id,
+    TestActorClient, TestServerGroup, actor_core_id, expect_account_subscribe_delta, expect_json,
+    invite_create_payload, next_typed_id,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, seal_current_principal_control_frontier,
@@ -46,6 +50,12 @@ use crate::scenarios::identity_test_support::{
 #[derive(Debug)]
 struct DispatchedInvite {
     outcome: Value,
+    invite_id: InviteId,
+}
+
+#[derive(Debug)]
+struct PreparedInvite {
+    request: SelfInviteDispatchRequestBody,
     invite_id: InviteId,
 }
 
@@ -86,11 +96,11 @@ async fn set_explicit_address_behavior(
     Ok(())
 }
 
-async fn create_and_dispatch_explicit_invite(
+async fn prepare_explicit_invite(
     inviter: &TestActorClient,
     holder: &TestActorClient,
     label: &str,
-) -> Result<DispatchedInvite> {
+) -> Result<PreparedInvite> {
     let evidence = IntroductionEvidence::ExplicitAddress;
     let realm_id = inviter.create_realm(label).await?;
     let payload = invite_create_payload(
@@ -122,17 +132,39 @@ async fn create_and_dispatch_explicit_invite(
         introduction_evidence: evidence,
         idempotency_key: event_id.to_string(),
     };
+    Ok(PreparedInvite {
+        request,
+        invite_id: InviteId::from_event_id(&event_id),
+    })
+}
+
+async fn dispatch_explicit_invite(
+    inviter: &TestActorClient,
+    prepared: PreparedInvite,
+) -> Result<DispatchedInvite> {
     let outcome = expect_json(
         inviter
             .post("/_arkret/self/invites/dispatch")
-            .json(&request),
+            .json(&prepared.request),
         StatusCode::OK,
     )
     .await?;
     Ok(DispatchedInvite {
         outcome,
-        invite_id: InviteId::from_event_id(&event_id),
+        invite_id: prepared.invite_id,
     })
+}
+
+async fn create_and_dispatch_explicit_invite(
+    inviter: &TestActorClient,
+    holder: &TestActorClient,
+    label: &str,
+) -> Result<DispatchedInvite> {
+    dispatch_explicit_invite(
+        inviter,
+        prepare_explicit_invite(inviter, holder, label).await?,
+    )
+    .await
 }
 
 async fn account_data_row(holder: &TestActorClient, key: &str) -> Result<AccountDataRow> {
@@ -358,6 +390,124 @@ async fn grant_then_revoke_invite_consent(
     serde_json::from_value(revoked).context("consent revoke response is not a ConsentCellView")
 }
 
+async fn assert_notify_invite_wakes_account_subscribe(
+    inviter: &TestActorClient,
+    holder: &TestActorClient,
+    expected_service_id: &str,
+    label: &str,
+) -> Result<AccountDataRow> {
+    set_explicit_address_behavior(holder, InviteReceiveAction::Notify)
+        .await
+        .context("set notify receive policy")?;
+    let prepared = prepare_explicit_invite(inviter, holder, label)
+        .await
+        .context("prepare notify invite before opening account subscribe")?;
+    let baseline = expect_account_subscribe_delta(
+        holder.get("/_arkret/self/account/subscribe?catchup=true"),
+        StatusCode::OK,
+    )
+    .await
+    .context("establish holder account-subscribe baseline")?;
+    let cursor = baseline["cursor"]
+        .as_str()
+        .ok_or_else(|| anyhow!("holder account-subscribe baseline omitted cursor: {baseline}"))?
+        .to_owned();
+    let inviter_for_dispatch = inviter.clone();
+    let dispatch = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        dispatch_explicit_invite(&inviter_for_dispatch, prepared).await
+    });
+    let wake_started = Instant::now();
+    let invite_delta = expect_account_subscribe_delta(
+        holder.get(&format!(
+            "/_arkret/self/account/subscribe?catchup=true&after={cursor}"
+        )),
+        StatusCode::OK,
+    )
+    .await
+    .context("wait for invite-delivery account-subscribe wakeup")?;
+    let wake_elapsed = wake_started.elapsed();
+    let delivered = dispatch
+        .await
+        .context("invite dispatch task panicked")?
+        .context("create and dispatch notify invite")?;
+    ensure!(
+        wake_elapsed < Duration::from_secs(3),
+        "invite delivery did not wake the holder account subscribe promptly: {wake_elapsed:?}"
+    );
+    ensure!(
+        delivered.outcome["status"] == "accepted",
+        "notify dispatch was not accepted: {}",
+        delivered.outcome
+    );
+    let delivery_row = account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_DELIVERY)
+        .await
+        .context("read invite delivery CAS row")?;
+    let subscribe_messages: DeviceMessagesGetOutcome = serde_json::from_value(
+        invite_delta
+            .get("to_device")
+            .cloned()
+            .ok_or_else(|| anyhow!("invite wake delta omitted to_device: {invite_delta}"))?,
+    )
+    .with_context(|| format!("invite wake delta has invalid to_device data: {invite_delta}"))?;
+    ensure!(
+        subscribe_messages.messages.iter().any(|envelope| {
+            matches!(
+                &envelope.content,
+                DeviceMessageContent::AccountDataUpdate(update)
+                    if envelope.kind.as_str() == "ak.account_data.update"
+                        && update.account_data_key == AccountDataKey::ACCOUNT_INVITE_DELIVERY
+                        && update.revision == delivery_row.revision
+                        && update.content.as_ref() == Some(&delivery_row.content)
+            )
+        }),
+        "account subscribe woke without the durable invite-delivery update: {invite_delta}"
+    );
+    ensure!(
+        delivery_row.content["delivery_entries"]
+            .as_array()
+            .is_some_and(|entries| entries.iter().any(|entry| {
+                entry["invite_id"].as_str() == Some(delivered.invite_id.as_str())
+            })),
+        "invite_delivery cell omitted the dispatched invite from delivery_entries: {}",
+        delivery_row.content
+    );
+    assert_service_account_data_fanout(holder, expected_service_id, &delivery_row).await?;
+    Ok(delivery_row)
+}
+
+/// Prove the user-visible notify path with one registered holder device. This
+/// scenario deliberately needs no secondary-device pairing handoff bundle.
+pub async fn invite_notification_wakeup_live_run() -> Result<()> {
+    let group = TestServerGroup::single("invite-notification-wakeup-live").await?;
+    let server = group.server(0);
+    let inviter = server
+        .demo_client(
+            &actor_did_for_service_did(server.service_did(), "alice-invite-notification-wakeup")?,
+            "ak:device:01904100-0000-7000-8000-0000000000c1",
+        )
+        .await
+        .context("bootstrap inviter client")?;
+    let holder_did =
+        actor_did_for_service_did(server.service_did(), "bob-invite-notification-wakeup")?;
+    let holder = server
+        .register_client(
+            &holder_did,
+            "bob-invite-notification-wakeup",
+            "ak:device:01904100-0000-7000-8000-0000000000d1",
+        )
+        .await
+        .context("bootstrap holder client")?;
+    assert_notify_invite_wakes_account_subscribe(
+        &inviter,
+        &holder,
+        server.service_id().as_str(),
+        "Invite Notification Wakeup",
+    )
+    .await?;
+    Ok(())
+}
+
 /// Execute all three Principal Server CAS materializer fanout branches against
 /// a live Soland process.
 pub async fn invite_service_fanout_live_run() -> Result<()> {
@@ -387,40 +537,27 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         .await
         .context("bootstrap secondary active holder device")?;
 
-    set_explicit_address_behavior(&holder, InviteReceiveAction::Notify)
-        .await
-        .context("set notify receive policy")?;
-    let delivered =
-        create_and_dispatch_explicit_invite(&inviter, &holder, "Invite Service Fanout Notify")
-            .await
-            .context("create and dispatch notify invite")?;
-    ensure!(
-        delivered.outcome["status"] == "accepted",
-        "notify dispatch was not accepted: {}",
-        delivered.outcome
-    );
-    let delivery_row = account_data_row_on_both_devices(
+    let delivery_row = assert_notify_invite_wakes_account_subscribe(
+        &inviter,
         &holder,
-        &holder_secondary,
-        AccountDataKey::ACCOUNT_INVITE_DELIVERY,
+        server.service_id().as_str(),
+        "Invite Service Fanout Notify",
     )
-    .await
-    .context("read invite delivery CAS row on both active devices")?;
+    .await?;
+    let secondary_delivery_row =
+        account_data_row(&holder_secondary, AccountDataKey::ACCOUNT_INVITE_DELIVERY)
+            .await
+            .context("read invite delivery CAS row on secondary active device")?;
     ensure!(
-        delivery_row.content["entries"]
-            .as_array()
-            .is_some_and(|entries| entries.iter().any(|entry| {
-                entry["invite_id"].as_str() == Some(delivered.invite_id.as_str())
-            })),
-        "invite_delivery cell omitted the dispatched invite: {}",
-        delivery_row.content
+        secondary_delivery_row.revision == delivery_row.revision
+            && secondary_delivery_row.content == delivery_row.content
+            && secondary_delivery_row.updated_at == delivery_row.updated_at,
+        "secondary holder device disagrees on invite delivery CAS row"
     );
-    assert_service_account_data_fanout(&holder, server.service_id().as_str(), &delivery_row)
-        .await?;
     assert_service_account_data_fanout(
         &holder_secondary,
         server.service_id().as_str(),
-        &delivery_row,
+        &secondary_delivery_row,
     )
     .await?;
 
