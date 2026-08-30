@@ -29,6 +29,14 @@ use crate::scenarios::identity_test_support::{
 
 const QUIET_LONG_POLL_TEST_DEADLINE: Duration = Duration::from_secs(45);
 
+fn client_account_id(client: &crate::harness::TestActorClient) -> Result<arkret_wire::AccountId> {
+    // This client was provisioned at this pinned Station; no peer route is inferred.
+    Ok(arkret_wire::AccountId::new(
+        arkret_wire::DidCoreId::new(actor_core_id(&client.actor)?)?,
+        arkret_wire::DidCoreId::new(client.service_id().to_owned())?,
+    ))
+}
+
 pub async fn account_subscribe_wait_for_barrier_contract() -> Result<()> {
     let server_owner =
         spawn_with_harness_account_authority("account-subscribe-wait-for", &[]).await?;
@@ -306,7 +314,7 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             async move {
                 let invites = bob_client
                     .sdk()
-                    .authz_invites(&actor_core_id(&bob_client.actor)?, Some(&realm_id), None)
+                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
                     .await?;
                 if invites
                     .invites
@@ -361,11 +369,11 @@ pub async fn invited_members_exchange_post_join_messages_over_account_subscribe(
             async move {
                 let bob_invites = bob_client
                     .sdk()
-                    .authz_invites(&actor_core_id(&bob_client.actor)?, Some(&realm_id), None)
+                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
                     .await?;
                 let alice_view = alice
                     .sdk()
-                    .authz_invites(&actor_core_id(&bob_client.actor)?, Some(&realm_id), None)
+                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
                     .await?;
                 if bob_invites.invites.is_empty() && alice_view.invites.is_empty() {
                     Ok(())
@@ -490,7 +498,7 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
             async move {
                 let invites = bob_client
                     .sdk()
-                    .authz_invites(&actor_core_id(&bob_client.actor)?, Some(&realm_id), None)
+                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
                     .await?;
                 if invites
                     .invites
@@ -519,11 +527,11 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
             async move {
                 let bob_invites = bob_client
                     .sdk()
-                    .authz_invites(&actor_core_id(&bob_client.actor)?, Some(&realm_id), None)
+                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
                     .await?;
                 let alice_view = alice
                     .sdk()
-                    .authz_invites(&actor_core_id(&bob_client.actor)?, Some(&realm_id), None)
+                    .authz_invites(&client_account_id(bob_client)?, Some(&realm_id), None)
                     .await?;
                 if bob_invites.invites.is_empty() && alice_view.invites.is_empty() {
                     Ok(())
