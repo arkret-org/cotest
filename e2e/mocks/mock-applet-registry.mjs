@@ -337,7 +337,7 @@ function registrationEpochHash(packageBase, evidence) {
     },
     service_did_document: {
       did: evidence.did,
-      document_digest: evidence.did_document_digest,
+      document_digest: evidence.document_digest,
       method_version: evidence.method_version_evidence,
     },
     accepted_signing_keys: [...evidence.accepted_signing_keys].sort(
@@ -833,7 +833,7 @@ function signedPackage(body) {
   };
   const registrationEpochEvidence = {
     did: serviceIdDocument.id,
-    did_document_digest: canonicalHash(serviceIdDocument),
+    document_digest: canonicalHash(serviceIdDocument),
     method_version_evidence:
       body.service_id_method_version_evidence ??
       (serviceDid.startsWith("did:webvh:")

@@ -705,7 +705,7 @@ fn pairwise_member_binding(
             current_record_url,
             pinned_record_digest: None,
         },
-        did_document_digest: None,
+        document_digest: None,
         resolved_at: Utc::now(),
         service_acceptance_ref: None,
         holder_proof_ref: None,
@@ -1477,7 +1477,7 @@ mod tests {
             binding.delivery_modes,
             BTreeSet::from([DeliveryMode::Events, DeliveryMode::KeyPackages])
         );
-        assert!(binding.did_document_digest.is_none());
+        assert!(binding.document_digest.is_none());
         assert!(binding.policy_event_ref.is_some());
         binding.validate().unwrap();
     }

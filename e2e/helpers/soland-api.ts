@@ -782,7 +782,7 @@ export async function createRealmApi(
     binding_source: "did_document_default",
     delivery_modes: ["events", "sync", "to_device", "push", "keypackages"],
     service_resolution: canonicalServiceResolution(opts.server),
-    did_document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
+    document_digest: `sha256:${sha256CanonicalJson(didDocument)}`,
     resolved_at: createdAt,
   };
   pushBootstrapEvent(

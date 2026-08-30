@@ -1069,7 +1069,7 @@ test.describe("applet bridge", () => {
     await expectNestedEvidenceRejected("swapped service DID", swappedService);
 
     const rotatedSnapshot = structuredClone(registrationEvidence);
-    rotatedSnapshot.did_document_digest = `sha256:${"44".repeat(32)}`;
+    rotatedSnapshot.document_digest = `sha256:${"44".repeat(32)}`;
     const rotatedKeys = rotatedSnapshot.accepted_signing_keys;
     if (!Array.isArray(rotatedKeys) || rotatedKeys.length === 0) {
       throw new Error(
@@ -2184,7 +2184,7 @@ function appletRegistrationPayload(
     e2ee_policy: pkg.e2ee_policy,
     registration_epoch_evidence: {
       did: operation.did,
-      did_document_digest: canonicalHash(operation.didDocument),
+      document_digest: canonicalHash(operation.didDocument),
       method_version_evidence: {
         method: "did:webvh",
         version_id: operation.versionId,

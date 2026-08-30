@@ -348,7 +348,7 @@ fn member_payload(
                 current_record_url: target_record.record.current_record_url.clone(),
                 pinned_record_digest: None,
             },
-            did_document_digest: Some(Hash::new(format!("sha256:{}", "2".repeat(64)))?),
+            document_digest: Some(Hash::new(format!("sha256:{}", "2".repeat(64)))?),
             resolved_at: Utc::now(),
             service_acceptance_ref: None,
             holder_proof_ref: None,

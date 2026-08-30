@@ -1254,7 +1254,7 @@ fn creator_member_join_payload_value(
             ),
             pinned_record_digest: None,
         },
-        did_document_digest: None,
+        document_digest: None,
         resolved_at: Utc::now(),
         service_acceptance_ref: None,
         holder_proof_ref: None,
@@ -1607,7 +1607,7 @@ mod realm_bootstrap_tests {
                 pinned_record_digest: None,
             }
         );
-        assert_eq!(binding.did_document_digest, None);
+        assert_eq!(binding.document_digest, None);
         assert_eq!(binding.policy_event_ref.as_ref(), Some(&policy.event_id));
     }
 
