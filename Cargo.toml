@@ -5,8 +5,82 @@ edition = "2024"
 rust-version = "1.98"
 publish = false
 
-[lints]
-workspace = true
+[workspace]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+mem_forget = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[workspace.dependencies]
+aes-gcm = "0.10.3"
+anyhow = "1.0.102"
+arbitrary = "1.4"
+argon2 = { version = "0.5.3", default-features = false, features = ["alloc", "password-hash"] }
+arkret = { path = "../arkret-rust-sdk/crates/sdk", features = ["mls"] }
+arkret-bootstrap = { path = "../arkret-rust-sdk/crates/bootstrap" }
+arkret-canonical = { path = "../arkret-rust-sdk/crates/canonical" }
+arkret-crypto = { path = "../arkret-rust-sdk/crates/crypto" }
+arkret-event-draft = { path = "../arkret-rust-sdk/crates/event-draft" }
+arkret-hlc = { path = "../arkret-rust-sdk/crates/hlc" }
+arkret-http-client = { path = "../arkret-rust-sdk/crates/http-client" }
+arkret-identifiers = { path = "../arkret-rust-sdk/crates/identifiers" }
+arkret-identity = { path = "../arkret-rust-sdk/crates/identity" }
+arkret-lattice-registry = { path = "../arkret-rust-sdk/crates/lattice-registry" }
+arkret-models-collaboration = { path = "../arkret-rust-sdk/crates/models-collaboration" }
+arkret-models-crypto = { path = "../arkret-rust-sdk/crates/models-crypto" }
+arkret-models-discovery = { path = "../arkret-rust-sdk/crates/models-discovery" }
+arkret-models-identity = { path = "../arkret-rust-sdk/crates/models-identity" }
+arkret-models-integration = { path = "../arkret-rust-sdk/crates/models-integration" }
+arkret-policy = { path = "../arkret-rust-sdk/crates/policy" }
+arkret-push-policy = { path = "../arkret-rust-sdk/crates/push-policy" }
+arkret-schema = { path = "../arkret-rust-sdk/crates/schema", default-features = false }
+arkret-signatures = { path = "../arkret-rust-sdk/crates/signatures", default-features = false, features = ["collaboration", "keypackages", "signer", "webvh"] }
+arkret-state = { path = "../arkret-rust-sdk/crates/state" }
+arkret-wire = { path = "../arkret-rust-sdk/crates/wire" }
+async-trait = "0.1.89"
+base64 = "0.22.1"
+bip39 = { version = "2.2.2", default-features = false, features = ["std"] }
+chacha20poly1305 = { version = "0.10.1", default-features = false }
+chrono = "0.4.45"
+ed25519-dalek = { version = "2.2.0", default-features = false }
+fs2 = "0.4.3"
+garth = { path = "../garth" }
+hex = "0.4.3"
+hkdf = "0.13.0"
+hmac = "0.13.0"
+hpke-rs = "0.6"
+hpke-rs-crypto = "0.6"
+hpke-rs-rust-crypto = "0.6"
+inkson = { path = "../inkson" }
+jsonschema = { version = "0.46.5", default-features = false }
+postgres = "0.19.12"
+proptest = { version = "1", default-features = false }
+rand_chacha = { version = "0.3.1", default-features = false }
+rcgen = "0.14.9"
+reqwest = { version = "0.13.4", default-features = false }
+salvo = { version = "=0.96.0", default-features = false }
+serde = "1.0.228"
+serde_json = "1.0.150"
+serde_yaml_ng = "0.10.0"
+serial_test = "3.5.0"
+sha2 = "0.11.0"
+soland-domain = { path = "../soland/crates/domain" }
+soland-services = { path = "../soland/crates/services" }
+soland-storage = { path = "../soland/crates/storage" }
+soland-storage-memory = { path = "../soland/crates/storage-memory" }
+tempfile = "3.27.0"
+testcontainers = "0.27"
+tokio = "1.52.3"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+unicode-normalization = "0.1.25"
+url = "2.5.8"
 
 [features]
 # C.8 — opt-in testcontainers-backed Postgres bring-up for Linux CI.
@@ -45,148 +119,74 @@ test-with-containers = ["dep:testcontainers"]
 # feature). Pinned conservatively; the cotest harness only uses the
 # stable `Container` / `RunnableImage` surface so a minor bump in
 # testcontainers itself shouldn't affect us.
-aes-gcm = {workspace = true}
-anyhow = {workspace = true}
-async-trait = {workspace = true}
-argon2 = {workspace = true,default-features = false,features = ["alloc", "password-hash"]}
-arbitrary = {workspace = true,features = ["derive"]}
-base64 = {workspace = true}
-bip39 = {workspace = true}
-chacha20poly1305 = {workspace = true,default-features = false,features = ["alloc"]}
-chrono = {workspace = true}
-fs2 = {workspace = true}
-arkret = {workspace = true}
-arkret-bootstrap = {workspace = true}
-arkret-canonical = {workspace = true}
-garth = {workspace = true}
-arkret-hlc = {workspace = true}
-arkret-identifiers = {workspace = true}
-arkret-identity = {workspace = true}
-arkret-lattice-registry = {workspace = true}
-arkret-state = {workspace = true}
-arkret-crypto = {workspace = true,features = ["blob-aead", "secret-share"]}
-arkret-event-draft = {workspace = true,features = ["test-support"]}
-arkret-http-client = {workspace = true}
-inkson = {workspace = true}
-arkret-models-collaboration = {workspace = true}
-arkret-models-crypto = {workspace = true}
-arkret-models-discovery = {workspace = true}
-arkret-models-identity = {workspace = true}
-arkret-models-integration = {workspace = true}
-arkret-policy = {workspace = true}
+aes-gcm = { workspace = true }
+anyhow = { workspace = true }
+arbitrary = { workspace = true, features = ["derive"] }
+argon2 = { workspace = true, default-features = false, features = ["alloc", "password-hash"] }
+arkret = { workspace = true }
+arkret-bootstrap = { workspace = true }
+arkret-canonical = { workspace = true }
+arkret-crypto = { workspace = true, features = ["blob-aead", "secret-share"] }
+arkret-event-draft = { workspace = true, features = ["test-support"] }
+arkret-hlc = { workspace = true }
+arkret-http-client = { workspace = true }
+arkret-identifiers = { workspace = true }
+arkret-identity = { workspace = true }
+arkret-lattice-registry = { workspace = true }
+arkret-models-collaboration = { workspace = true }
+arkret-models-crypto = { workspace = true }
+arkret-models-discovery = { workspace = true }
+arkret-models-identity = { workspace = true }
+arkret-models-integration = { workspace = true }
+arkret-policy = { workspace = true }
 arkret-push-policy.workspace = true
-arkret-schema = {workspace = true,features = ["embedded-artifacts"]}
-arkret-signatures = {workspace = true}
-arkret-wire = {workspace = true,features = ["test-support"]}
-soland-domain = {workspace = true}
-soland-services = {workspace = true}
-soland-storage = {workspace = true}
-soland-storage-memory = {workspace = true}
-ed25519-dalek = {workspace = true,default-features = false,features = ["std"]}
-hkdf = {workspace = true}
-hmac = {workspace = true}
-hex = {workspace = true}
-hpke-rs = {workspace = true}
-hpke-rs-crypto = {workspace = true}
-hpke-rs-rust-crypto = {workspace = true}
-jsonschema = {workspace = true,default-features = false,features = ["resolve-file"]}
-postgres = {workspace = true}
-reqwest = {workspace = true,features = ["json", "multipart", "rustls"]}
-rand_chacha = {workspace = true}
-rcgen = {workspace = true}
-salvo = {workspace = true,features = ["fix-http1-request-uri", "server", "server-handle", "http1", "rfc9457", "affix-state"]}
-serde = {workspace = true,features = ["derive"]}
-serde_json = {workspace = true}
-serde_yaml_ng = {workspace = true}
-sha2 = {workspace = true}
-tempfile = {workspace = true}
-unicode-normalization = {workspace = true}
-testcontainers = {workspace = true,optional = true}
-tokio = {workspace = true,features = ["macros", "process", "rt-multi-thread", "time"]}
-tracing = {workspace = true}
-tracing-subscriber = {workspace = true,features = ["env-filter", "json"]}
-url = {workspace = true}
+arkret-schema = { workspace = true, features = ["embedded-artifacts"] }
+arkret-signatures = { workspace = true }
+arkret-state = { workspace = true }
+arkret-wire = { workspace = true, features = ["test-support"] }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+bip39 = { workspace = true }
+chacha20poly1305 = { workspace = true, default-features = false, features = ["alloc"] }
+chrono = { workspace = true }
+ed25519-dalek = { workspace = true, default-features = false, features = ["std"] }
+fs2 = { workspace = true }
+garth = { workspace = true }
+hex = { workspace = true }
+hkdf = { workspace = true }
+hmac = { workspace = true }
+hpke-rs = { workspace = true }
+hpke-rs-crypto = { workspace = true }
+hpke-rs-rust-crypto = { workspace = true }
+inkson = { workspace = true }
+jsonschema = { workspace = true, default-features = false, features = ["resolve-file"] }
+postgres = { workspace = true }
+rand_chacha = { workspace = true }
+rcgen = { workspace = true }
+reqwest = { workspace = true, features = ["json", "multipart", "rustls"] }
+salvo = { workspace = true, features = ["fix-http1-request-uri", "server", "server-handle", "http1", "rfc9457", "affix-state"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+sha2 = { workspace = true }
+soland-domain = { workspace = true }
+soland-services = { workspace = true }
+soland-storage = { workspace = true }
+soland-storage-memory = { workspace = true }
+tempfile = { workspace = true }
+testcontainers = { workspace = true, optional = true }
+tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread", "time"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
+unicode-normalization = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 # T8.2 — property tests for canonical-JSON / proof vectors and handle
 # claim validators across the SDK contract surface.
-proptest = {workspace = true,default-features = false,features = ["std"]}
-salvo = {workspace = true,features = ["test"]}
-serial_test = {workspace = true}
+proptest = { workspace = true, default-features = false, features = ["std"] }
+salvo = { workspace = true, features = ["test"] }
+serial_test = { workspace = true }
 
-[workspace]
-resolver = "3"
-
-[workspace.lints.rust]
-unsafe_code = "deny"
-
-[workspace.lints.clippy]
-dbg_macro = "deny"
-mem_forget = "deny"
-todo = "deny"
-unimplemented = "deny"
-
-[workspace.dependencies]
-aes-gcm = "0.10.3"
-anyhow = "1.0.102"
-async-trait = "0.1.89"
-argon2 = {version = "0.5.3",default-features = false,features = ["alloc", "password-hash"]}
-arbitrary = "1.4"
-base64 = "0.22.1"
-bip39 = {version = "2.2.2",default-features = false,features = ["std"]}
-chacha20poly1305 = {version = "0.10.1",default-features = false}
-chrono = "0.4.45"
-arkret = {path = "../arkret-rust-sdk/crates/sdk",features = ["mls"]}
-arkret-bootstrap = {path = "../arkret-rust-sdk/crates/bootstrap"}
-arkret-canonical = {path = "../arkret-rust-sdk/crates/canonical"}
-arkret-crypto = {path = "../arkret-rust-sdk/crates/crypto"}
-arkret-event-draft = {path = "../arkret-rust-sdk/crates/event-draft"}
-garth = {path = "../garth"}
-arkret-hlc = {path = "../arkret-rust-sdk/crates/hlc"}
-arkret-http-client = {path = "../arkret-rust-sdk/crates/http-client"}
-inkson = {path = "../inkson"}
-arkret-identifiers = {path = "../arkret-rust-sdk/crates/identifiers"}
-arkret-identity = {path = "../arkret-rust-sdk/crates/identity"}
-arkret-lattice-registry = {path = "../arkret-rust-sdk/crates/lattice-registry"}
-arkret-models-collaboration = {path = "../arkret-rust-sdk/crates/models-collaboration"}
-arkret-models-crypto = {path = "../arkret-rust-sdk/crates/models-crypto"}
-arkret-models-discovery = {path = "../arkret-rust-sdk/crates/models-discovery"}
-arkret-models-identity = {path = "../arkret-rust-sdk/crates/models-identity"}
-arkret-models-integration = {path = "../arkret-rust-sdk/crates/models-integration"}
-arkret-policy = {path = "../arkret-rust-sdk/crates/policy"}
-arkret-push-policy = {path = "../arkret-rust-sdk/crates/push-policy"}
-arkret-schema = {path = "../arkret-rust-sdk/crates/schema",default-features = false}
-arkret-signatures = {path = "../arkret-rust-sdk/crates/signatures",default-features = false,features = ["collaboration", "keypackages", "signer", "webvh"]}
-arkret-state = {path = "../arkret-rust-sdk/crates/state"}
-arkret-wire = {path = "../arkret-rust-sdk/crates/wire"}
-soland-domain = {path = "../soland/crates/domain"}
-soland-services = {path = "../soland/crates/services"}
-soland-storage = {path = "../soland/crates/storage"}
-soland-storage-memory = {path = "../soland/crates/storage-memory"}
-ed25519-dalek = {version = "2.2.0",default-features = false}
-fs2 = "0.4.3"
-hkdf = "0.13.0"
-hmac = "0.13.0"
-hex = "0.4.3"
-hpke-rs = "0.6"
-hpke-rs-crypto = "0.6"
-hpke-rs-rust-crypto = "0.6"
-jsonschema = {version = "0.46.5",default-features = false}
-postgres = "0.19.12"
-proptest = {version = "1",default-features = false}
-reqwest = {version = "0.13.4",default-features = false}
-rand_chacha = {version = "0.3.1",default-features = false}
-rcgen = "0.14.9"
-salvo = {version = "=0.96.0",default-features = false}
-serde = "1.0.228"
-serde_json = "1.0.150"
-serde_yaml_ng = "0.10.0"
-serial_test = "3.5.0"
-sha2 = "0.11.0"
-tempfile = "3.27.0"
-unicode-normalization = "0.1.25"
-testcontainers = "0.27"
-tokio = "1.52.3"
-tracing = "0.1.44"
-tracing-subscriber = "0.3.23"
-url = "2.5.8"
+[lints]
+workspace = true

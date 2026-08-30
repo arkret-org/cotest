@@ -393,8 +393,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         &target,
         &realm_id,
         requester_group.group_id(),
-        server.service_id().clone(),
-        server.service_id().clone(),
+        server.service_id(),
         "ordinary",
         true,
     )?;
@@ -431,8 +430,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         &target,
         &realm_id,
         requester_group.group_id(),
-        server.service_id().clone(),
-        server.service_id().clone(),
+        server.service_id(),
         "last-resort-first",
         true,
     )?;
@@ -457,8 +455,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         &target,
         &realm_id,
         requester_group.group_id(),
-        server.service_id().clone(),
-        server.service_id().clone(),
+        server.service_id(),
         "last-resort-reuse",
         true,
     )?;
@@ -830,8 +827,7 @@ fn signed_device_claim(
     target: &PairwiseKey,
     realm_id: &str,
     mls_group_id: String,
-    source_id: DidCoreId,
-    destination_id: DidCoreId,
+    service_id: &DidCoreId,
     request_label: &str,
     last_resort_allowed: bool,
 ) -> Result<KeyPackagesClaimRequestBody> {
@@ -840,7 +836,7 @@ fn signed_device_claim(
             requester.core_id.as_str().as_bytes(),
             target.actor_id.as_str().as_bytes(),
             realm_id.as_bytes(),
-            destination_id.as_str().as_bytes(),
+            service_id.as_str().as_bytes(),
             request_label.as_bytes(),
         ])
         .as_bytes(),
@@ -871,8 +867,8 @@ fn signed_device_claim(
         last_resort_allowed: Some(last_resort_allowed),
     };
     let service_binding = KeyPackagesClaimServiceBinding {
-        source_id,
-        destination_id,
+        source_id: service_id.clone(),
+        destination_id: service_id.clone(),
     };
     let verification_method = wire_value(DidUrl::new(format!(
         "{}#{}",

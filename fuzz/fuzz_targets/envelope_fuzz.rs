@@ -7,7 +7,7 @@
 #![no_main]
 
 use cotest::fuzz::envelope_fuzz::{
-    fuzz_event_envelope, fuzz_signal_envelope, fuzz_seal_envelope, fuzz_snapshot_chunk,
+    fuzz_event_envelope, fuzz_seal_envelope, fuzz_signal_envelope, fuzz_snapshot_chunk,
 };
 use libfuzzer_sys::fuzz_target;
 
