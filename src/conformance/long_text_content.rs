@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use arkret_models_collaboration::events_payloads::message::{
     CONTENT_TEXT_INLINE_MAX_BYTES, ContentBlock, LONG_TEXT_FALLBACK_MAX_BYTES, LongTextBodyKind,
-    LongTextFormat, long_text_line_count, long_text_prefix, normalize_long_text,
+    LongTextMediaType, long_text_line_count, long_text_prefix, normalize_long_text,
 };
 use arkret_wire::ProfileId;
 use serde_json::Value;
@@ -79,12 +79,17 @@ pub fn run_long_text_content_fixture_suite() -> Result<()> {
                 let source = format!("{}\nend", "x".repeat(CONTENT_TEXT_INLINE_MAX_BYTES + 1));
                 let block = ContentBlock::plaintext_long_text(
                     &source,
-                    LongTextFormat::Markdown,
+                    LongTextMediaType::Markdown,
                     format!("ak:blob:sha256:{}", "a".repeat(64)),
                     LongTextBodyKind::Prefix,
                     None,
                 )?;
                 block.validate_long_text()?;
+                if block.to_value()?.get("format").is_some()
+                    || block.long_text_media_type() != Some(LongTextMediaType::Markdown)
+                {
+                    bail!("long-text builder must declare only its media type");
+                }
                 if block.body != long_text_prefix(&source) {
                     bail!("long-text builder prefix drifted");
                 }
