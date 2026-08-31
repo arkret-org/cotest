@@ -65,7 +65,7 @@ pub fn run_applet_managed_actor_authority_suite() -> Result<()> {
     let registration_epoch = arkret_wire::Hash::new(format!("sha256:{}", "7".repeat(64)))?;
     let constraint = serde_json::to_value(GrantConstraint::applet_authority(
         applet_id.clone(),
-        service_id.clone(),
+        arkret_wire::ActorId::service(service_id.clone()),
         registration_epoch.clone(),
     ))?;
     let resource = json!({
@@ -305,7 +305,7 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
     let registration_epoch = arkret_wire::Hash::new(format!("sha256:{}", "7".repeat(64)))?;
     let constraint = GrantConstraint::applet_authority(
         applet_id.clone(),
-        service_id.clone(),
+        arkret_wire::ActorId::service(service_id.clone()),
         registration_epoch.clone(),
     );
     let canonical = serde_json::to_value(&constraint)?;
@@ -314,12 +314,15 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
         ("constraint_subkind", "applet_authority"),
         ("evaluation_class", "grant_local"),
         ("applet_id", applet_id.as_str()),
-        ("executed_by", service_id.as_str()),
         ("registration_epoch", registration_epoch.as_str()),
     ] {
         if canonical.get(field).and_then(Value::as_str) != Some(expected) {
             bail!("canonical Applet delegation constraint lost {field}={expected}");
         }
+    }
+    let executor = serde_json::to_value(arkret_wire::ActorId::service(service_id.clone()))?;
+    if canonical.get("executed_by") != Some(&executor) {
+        bail!("canonical Applet delegation constraint lost the Service actor executor");
     }
     // Unregistered `constraint_kind` spellings MUST fail closed: only
     // `authority_control` is a registered GrantConstraint kind.
@@ -346,6 +349,27 @@ pub fn run_applet_install_authoring_suite() -> Result<()> {
         bail!("canonical Applet delegation grant binding was rejected");
     }
     for (name, mutated_constraint, mutated_resource, expected_service, expected_epoch) in [
+        (
+            "legacy_scalar_executor",
+            mutate(&canonical, "executed_by", json!(service_id)),
+            expected_resource.clone(),
+            service_id.as_str(),
+            registration_epoch.as_str(),
+        ),
+        (
+            "account_executor_with_same_principal",
+            mutate(
+                &canonical,
+                "executed_by",
+                serde_json::to_value(arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+                    service_id.clone(),
+                    arkret_wire::DidCoreId::new("ak:did_core:web:station.example")?,
+                )))?,
+            ),
+            expected_resource.clone(),
+            service_id.as_str(),
+            registration_epoch.as_str(),
+        ),
         (
             "wrong_applet",
             mutate(&canonical, "applet_id", json!("ak:applet:wrong")),
@@ -558,11 +582,17 @@ fn applet_grant_binding_matches(
     service_id: &str,
     registration_epoch: &str,
 ) -> bool {
+    let Ok(service_id) = arkret_wire::DidCoreId::new(service_id) else {
+        return false;
+    };
+    let Ok(executor) = serde_json::to_value(arkret_wire::ActorId::service(service_id)) else {
+        return false;
+    };
     constraint.get("constraint_kind").and_then(Value::as_str) == Some("authority_control")
         && constraint.get("constraint_subkind").and_then(Value::as_str) == Some("applet_authority")
         && constraint.get("evaluation_class").and_then(Value::as_str) == Some("grant_local")
         && constraint.get("applet_id").and_then(Value::as_str) == Some(applet_id)
-        && constraint.get("executed_by").and_then(Value::as_str) == Some(service_id)
+        && constraint.get("executed_by") == Some(&executor)
         && constraint.get("registration_epoch").and_then(Value::as_str) == Some(registration_epoch)
         && resource == expected_resource
 }

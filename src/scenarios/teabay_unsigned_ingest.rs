@@ -63,10 +63,10 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             scope_ref: arkret_wire::event_envelope::ScopeRef::Realm {
                 realm_id: discovery_realm_id,
             },
-            actor_id: arkret_wire::ActorId::hosted_principal(
+            actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
                 discovery_actor_id.clone(),
                 station_id.clone(),
-            ),
+            )),
             executed_by: None,
             authorization_ref: None,
             applet_id: None,
