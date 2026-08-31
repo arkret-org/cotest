@@ -366,26 +366,3 @@ pub const TEABAY_SPEC: ExternalBinarySpec = ExternalBinarySpec {
     health_path: "/health",
     health_timeout: Duration::from_secs(30),
 };
-
-/// `floria` (push gateway) spec — config-file driven (KDL/YAML); we treat a
-/// `FLORIA_CONFIG` env var as a hard prerequisite. Without it the binary
-/// cannot pick a listen port from `--bind` alone, so we gate on the env.
-pub const FLORIA_SPEC: ExternalBinarySpec = ExternalBinarySpec {
-    service: "floria",
-    bin_env: "FLORIA_BIN",
-    sibling_path: &["floria", "target", "debug"],
-    // floria reads its bind from the config file, not an env var; we leave
-    // bind_env empty so the helper does not export a stray FLORIA_BIND.
-    bind_env: "",
-    // floria's CLI doesn't take a positional `--bind`; the helper still
-    // pins a free port for the health check below, but the actual listen
-    // address is whatever the operator wired into FLORIA_CONFIG. Tests that
-    // want to exercise the live gateway must align FLORIA_CONFIG with the
-    // port the helper expects (e.g. via a templated config).
-    bind_arg: None,
-    extra_env: &[],
-    extra_args: &[],
-    required_env_vars: &["FLORIA_CONFIG"],
-    health_path: "/health",
-    health_timeout: Duration::from_secs(30),
-};

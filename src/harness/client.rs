@@ -744,15 +744,6 @@ impl TestActorClient {
         })
     }
 
-    pub async fn grant_self_realm_actions(
-        &self,
-        realm_id: &str,
-        actions: &[&str],
-    ) -> Result<(String, Value)> {
-        self.grant_realm_actions_to(realm_id, &self.actor, actions)
-            .await
-    }
-
     pub async fn grant_realm_actions_to(
         &self,
         realm_id: &str,

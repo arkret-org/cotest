@@ -100,8 +100,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow, bail};
-use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde::Deserialize;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 const ARTIFACT_REGISTRY_DIR: &str = "registry";
@@ -458,76 +458,6 @@ pub use wire::{
 // ── Shared fixture types ────────────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct EncodingFixture {
-    pub(crate) suite: String,
-    pub(crate) cases: EncodingCases,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct EncodingCases {
-    pub(crate) canonical_json: Vec<CanonicalJsonCase>,
-    pub(crate) hash_digest: Vec<HashDigestCase>,
-    pub(crate) proof_payload: Vec<ProofPayloadCase>,
-    pub(crate) hlc: Vec<HlcCase>,
-    pub(crate) cursor: Vec<CursorCase>,
-    pub(crate) fractional_rank: Vec<FractionalRankCase>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct CanonicalJsonCase {
-    pub(crate) name: String,
-    pub(crate) input: Value,
-    pub(crate) canonical: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct HashDigestCase {
-    pub(crate) name: String,
-    pub(crate) input_ref: String,
-    pub(crate) expected_pattern: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ProofPayloadCase {
-    pub(crate) name: String,
-    pub(crate) covered_fields: Vec<String>,
-    pub(crate) excluded_fields: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct HlcCase {
-    pub(crate) name: String,
-    pub(crate) values: Vec<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct CursorShape {
-    pub(crate) v: String,
-    pub(crate) x: u64,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct CursorCase {
-    pub(crate) name: String,
-    pub(crate) shape: CursorShape,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct FractionalRankCase {
-    pub(crate) name: String,
-    pub(crate) left: Option<String>,
-    pub(crate) right: Option<String>,
-    pub(crate) expected: Option<String>,
-    pub(crate) input: Option<String>,
-    pub(crate) max_length: Option<usize>,
-    pub(crate) active_edge_count: Option<usize>,
-    pub(crate) assignment_count: Option<usize>,
-    pub(crate) ordered_edges: Option<Vec<RankEdge>>,
-    pub(crate) expected_assignments: Option<Vec<RankAssignment>>,
-}
-
-#[derive(Debug, Deserialize)]
 pub(crate) struct RedactionFixture {
     pub(crate) suite: String,
     pub(crate) cases: Vec<RedactionCase>,
@@ -563,19 +493,6 @@ pub(crate) struct NamedCase {
     pub(crate) expected: Option<Value>,
     pub(crate) request_contract: Option<Value>,
     pub(crate) cases: Option<Vec<Value>>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub(crate) struct RankEdge {
-    pub(crate) relation_id: String,
-    pub(crate) object_ref: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-pub(crate) struct RankAssignment {
-    pub(crate) relation_id: String,
-    pub(crate) object_ref: String,
-    pub(crate) rank: String,
 }
 
 // ── Shared utility functions ────────────────────────────────────────────────
@@ -773,109 +690,9 @@ pub(crate) fn looks_like_sha256_digest(value: &str) -> bool {
             .all(|ch| ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase())
 }
 
-pub(crate) fn canonical_proof_payload(event: &Value) -> Result<Map<String, Value>> {
-    let object = event
-        .as_object()
-        .ok_or_else(|| anyhow!("proof payload source must be an object"))?;
-    let mut payload = Map::new();
-    for (key, value) in object {
-        if key != "unsigned" {
-            payload.insert(key.clone(), value.clone());
-        }
-    }
-    Ok(payload)
-}
-
-// Deliberately independent reference codecs: cotest is the conformance oracle
-// for the SDK cursor/rank implementations. Reusing `arkret-wire` or
-// `arkret-event-draft` here would only prove that an implementation agrees
-// with itself. Canonical JSON below is shared because RFC 8785 byte production
-// is covered by its own cross-language KAT.
-pub(crate) fn encode_cursor_shape(shape: &CursorShape) -> Result<String> {
-    let canonical = canonical_json(&serde_json::to_value(shape)?)?;
-    Ok(format!(
-        "ak:cursor:{}",
-        base64::Engine::encode(
-            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-            canonical.as_bytes()
-        )
-    ))
-}
-
-pub(crate) fn decode_cursor_shape(encoded: &str) -> Result<CursorShape> {
-    use base64::Engine as _;
-    let payload = encoded
-        .strip_prefix("ak:cursor:")
-        .ok_or_else(|| anyhow!("cursor must start with ak:cursor:"))?;
-    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(payload)?;
-    serde_json::from_slice(&bytes).map_err(Into::into)
-}
-
 pub(crate) const RANK_ALPHABET: &str =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 pub(crate) const RANK_MAX_LENGTH: usize = 128;
-
-/// Reference fractional-rank implementation used to check SDK output.
-/// Keep this algorithm structurally independent from `arkret-event-draft`.
-pub(crate) fn rank_between(left: Option<&str>, right: Option<&str>) -> Result<String> {
-    let left = left.unwrap_or("");
-    let right = right.unwrap_or("");
-    validate_rank_boundary(left)?;
-    validate_rank_boundary(right)?;
-    if !left.is_empty() && !right.is_empty() && left >= right {
-        bail!("left rank must be lower than right rank");
-    }
-
-    let alphabet = RANK_ALPHABET.as_bytes();
-    let left_bytes = left.as_bytes();
-    let right_bytes = right.as_bytes();
-    let mut prefix: Vec<u8> = Vec::with_capacity(8);
-    let mut index = 0usize;
-    while prefix.len() < RANK_MAX_LENGTH {
-        let lower = left_bytes
-            .get(index)
-            .map(|byte| rank_byte_index(*byte).expect("validated rank boundary"))
-            .unwrap_or(-1);
-        let upper = if right_bytes.is_empty() {
-            alphabet.len() as i32
-        } else {
-            right_bytes
-                .get(index)
-                .map(|byte| rank_byte_index(*byte).expect("validated rank boundary"))
-                .unwrap_or(alphabet.len() as i32)
-        };
-        if upper - lower > 1 {
-            prefix.push(alphabet[((lower + upper) / 2) as usize]);
-            return String::from_utf8(prefix).map_err(Into::into);
-        }
-        if let Some(byte) = left_bytes.get(index) {
-            prefix.push(*byte);
-        } else {
-            prefix.push(alphabet[0]);
-            if !right_bytes.is_empty() && prefix.as_slice() == right_bytes {
-                bail!("no rank available between boundaries");
-            }
-            return String::from_utf8(prefix).map_err(Into::into);
-        }
-        index += 1;
-    }
-    bail!("no rank available between boundaries");
-}
-
-fn validate_rank_boundary(rank: &str) -> Result<()> {
-    if rank.len() > RANK_MAX_LENGTH || !rank.bytes().all(|byte| rank_byte_index(byte).is_some()) {
-        bail!("invalid_rank");
-    }
-    Ok(())
-}
-
-fn rank_byte_index(byte: u8) -> Option<i32> {
-    RANK_ALPHABET
-        .as_bytes()
-        .iter()
-        .position(|candidate| *candidate == byte)
-        .map(|index| index as i32)
-}
 
 pub(crate) fn validate_rank(rank: &str, max_length: usize) -> Result<()> {
     if rank.is_empty() || rank.len() > max_length {
@@ -883,64 +700,6 @@ pub(crate) fn validate_rank(rank: &str, max_length: usize) -> Result<()> {
     }
     if !rank.chars().all(|ch| RANK_ALPHABET.contains(ch)) {
         bail!("invalid_rank");
-    }
-    Ok(())
-}
-
-pub(crate) fn rebalance_assignments(edges: &[RankEdge]) -> Result<Vec<RankAssignment>> {
-    let count = edges.len();
-    validate_rebalance_assignment_count(count, count)?;
-    if count == 0 {
-        return Ok(Vec::new());
-    }
-    let denominator = count as u128 + 1;
-    let required_capacity = denominator
-        .checked_mul(2)
-        .ok_or_else(|| anyhow!("too many rank rebalance assignments"))?;
-    let mut width = 0usize;
-    let mut capacity = 1u128;
-    while capacity < required_capacity {
-        width += 1;
-        if width > RANK_MAX_LENGTH {
-            bail!("too many rank rebalance assignments");
-        }
-        capacity = capacity
-            .checked_mul(RANK_ALPHABET.len() as u128)
-            .ok_or_else(|| anyhow!("too many rank rebalance assignments"))?;
-    }
-    edges
-        .iter()
-        .enumerate()
-        .map(|(index, edge)| {
-            let rank_number = (index as u128 + 1)
-                .checked_mul(capacity)
-                .map(|product| product / denominator)
-                .ok_or_else(|| anyhow!("too many rank rebalance assignments"))?;
-            Ok(RankAssignment {
-                relation_id: edge.relation_id.clone(),
-                object_ref: edge.object_ref.clone(),
-                rank: format_rank_number(rank_number, width),
-            })
-        })
-        .collect()
-}
-
-fn format_rank_number(mut value: u128, width: usize) -> String {
-    let alphabet = RANK_ALPHABET.as_bytes();
-    let mut output = vec![alphabet[0]; width];
-    for byte in output.iter_mut().rev() {
-        *byte = alphabet[(value % alphabet.len() as u128) as usize];
-        value /= alphabet.len() as u128;
-    }
-    String::from_utf8(output).expect("rank alphabet is valid UTF-8")
-}
-
-pub(crate) fn validate_rebalance_assignment_count(
-    active_edge_count: usize,
-    assignment_count: usize,
-) -> Result<()> {
-    if active_edge_count != assignment_count {
-        bail!("invalid_rebalance_assignment");
     }
     Ok(())
 }
