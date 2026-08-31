@@ -122,7 +122,12 @@ export function inksonBaseUrl(key: SolandKey = "default"): string {
   return requiredEnv("COTEST_INKSON_BASE_URL").replace(/\/$/, "");
 }
 
-export function coauthBaseUrl(): string | undefined {
+export function coauthBaseUrl(key: SolandKey = "default"): string | undefined {
+  if (key === "beta") {
+    // The runner provisions a distinct Account Authority for Beta. A replica
+    // of Alpha cannot issue Beta accounts merely because it trusts that peer.
+    return optionalEnv("COTEST_COAUTH_BETA_BASE_URL")?.replace(/\/$/, "");
+  }
   return optionalEnv("COTEST_COAUTH_BASE_URL")?.replace(/\/$/, "");
 }
 

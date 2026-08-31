@@ -24,7 +24,7 @@
 
 import type { APIRequestContext, APIResponse } from "@playwright/test";
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
-import type { RealmObject } from "./generated/spec-wire-objects";
+import type { RealmObject, CircleView, CircleMembershipOutcome } from "./generated/spec-wire-objects";
 import {
   accountActorId,
   authHeaders,
@@ -38,39 +38,9 @@ import {
   wireErrCode,
 } from "./soland-api";
 
-export type CircleOutcome = {
-  circle_id: string;
-  realm_id: string;
-  profile_ref?: string;
-  title: string;
-  summary?: string;
-  display: {
-    short_name: string;
-    color_token: string;
-    symbol: { glyph: string } | { emoji: string };
-  };
-  directory_visibility: string;
-  join_rule: string;
-  history_access: RealmObject["history_access"];
-  encryption_profile: string;
-  mls_group_ref?: string;
-  state: string;
-  member_ids: string[];
-  member_count?: number;
-  viewer_membership?: CircleMembership;
-  created_by: string;
-  created_at: string;
-  updated_by?: string;
-  updated_at?: string;
-};
-
-export type CircleMembershipOutcome = {
-  circle_id: string;
-  actor_id: string;
-  membership: CircleMembership;
-};
-
-export type CircleMembership = "join" | "invite" | "knock" | "leave" | "ban";
+export type CircleOutcome = CircleView;
+export type { CircleMembershipOutcome } from "./generated/spec-wire-objects";
+export type CircleMembership = CircleMembershipOutcome["membership"];
 
 export async function grantCircleMemberManageCapability(
   request: APIRequestContext,
@@ -223,6 +193,7 @@ export function circleDisplayFromTitle(
 // whole object lives inside the signed Event rather than in REST fields.
 function circleCreateObject(args: {
   actorId: string;
+  server?: SolandKey;
   realmId: string;
   title: string;
   summary?: string;
@@ -247,7 +218,7 @@ function circleCreateObject(args: {
       ? { content_scheme: "mls_rfc9420" }
       : {}),
     state: "active",
-    created_by: args.actorId,
+    created_by: accountActorId(args.actorId, args.server),
     created_at: args.createdAt,
   };
 }
@@ -279,6 +250,7 @@ export async function createCircleArkret(
       actorId: args.actorId,
       realmId: args.realmId,
       kind: "ak.circle.create",
+      server: args.server,
       payload: { object: circleCreateObject({ ...args, createdAt }) },
       createdAt,
     }),
@@ -340,9 +312,10 @@ export async function addCircleMemberRaw(
       actorId: args.signerId,
       realmId: args.realmId,
       kind: "ak.circle.member.state",
+      server: args.server,
       payload: {
         circle_id: circleId,
-        actor_id: args.actorId,
+        member_id: accountActorId(args.actorId, args.server),
         membership: args.membership ?? "join",
       },
     }),
@@ -399,9 +372,10 @@ export async function removeCircleMemberArkret(
       actorId: args.actorId,
       realmId: args.realmId,
       kind: "ak.circle.member.state",
+      server: args.server,
       payload: {
         circle_id: circleId,
-        actor_id: actorId,
+        member_id: accountActorId(actorId, args.server),
         membership: "leave",
         expected_membership: "join",
       },
@@ -409,7 +383,7 @@ export async function removeCircleMemberArkret(
     { server: args.server, context: `prepare remove circle member ${actorId}` },
   );
   const response = await request.delete(
-    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(actorId)}`,
+    `${solandBaseUrl(args.server)}/_arkret/self/circles/${encodeURIComponent(circleId)}/members/${encodeURIComponent(canonicalJson(accountActorId(actorId, args.server)))}`,
     {
       headers: { ...authHeaders(token), "content-type": "application/json" },
       data: canonicalJson({

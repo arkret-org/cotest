@@ -18,6 +18,7 @@ import {
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  accountActorId,
   accountSubscribeFramesApi,
   createRealmApi,
   grantCapabilityEventApi,
@@ -187,6 +188,7 @@ test.describe("chat advanced", () => {
       request,
       fixture.aliceToken,
       fixture.realmId,
+      { order: "ascending" },
     );
     const messageEvents = events.filter(
       (event) => event.kind === "ak.message.create",
@@ -360,20 +362,26 @@ test.describe("chat advanced", () => {
           event.kind === "ak.reaction.remove") &&
         (event.payload as { target_ref?: string })?.target_ref === rootMessageRef,
     );
-    expect(reactionEvents).toEqual(
+    // Keep authorization evidence out of failure output while comparing the
+    // same public reaction fields as the protocol assertion below.
+    expect(reactionEvents.map((event) => ({
+      actor_id: event.actor_id,
+      kind: event.kind,
+      payload: { key: (event.payload as { key?: string }).key },
+    }))).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          actor_id: fixture.alice.id,
+          actor_id: accountActorId(fixture.alice.id),
           kind: "ak.reaction.add",
           payload: expect.objectContaining({ key: "+1" }),
         }),
         expect.objectContaining({
-          actor_id: fixture.bob.id,
+          actor_id: accountActorId(fixture.bob.id),
           kind: "ak.reaction.add",
           payload: expect.objectContaining({ key: "+1" }),
         }),
         expect.objectContaining({
-          actor_id: fixture.bob.id,
+          actor_id: accountActorId(fixture.bob.id),
           kind: "ak.reaction.remove",
           payload: expect.objectContaining({ key: "+1" }),
         }),

@@ -24,6 +24,7 @@ import {
   prepareSignalEnvelope,
 } from "../../helpers/webrtc";
 import {
+  accountActorId,
   canonicalJson,
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
@@ -111,7 +112,7 @@ test.describe("discovery", () => {
       });
       await bobPage.fillWithPassivePromptRetry(
         bobContact.getByTestId("contact-requester-did-input"),
-        alice.id,
+        canonicalJson(accountActorId(alice.id)),
       );
       await bobPage.clickWithPassivePromptRetry(
         bobContact.getByTestId("accept-contact-button"),

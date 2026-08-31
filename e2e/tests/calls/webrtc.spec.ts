@@ -1,3 +1,4 @@
+import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 // Calls — canonical wire surfaces (1:1 signaling + ICE config + TURN pseudonym).
 // Contract: e2e/scenarios/calls/webrtc.md
 // Spec refs:
@@ -163,11 +164,11 @@ test.describe("calls — canonical wire", () => {
     }
     // Alice's lane is seq-monotonic (invite=1, hangup=2).
     const aliceSeqs = bobView
-      .filter((e) => e.sender_actor_id === alice.id)
+      .filter((e) => canonicalJson(e.sender_actor_id) === canonicalJson(accountActorId(alice.id)))
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(aliceSeqs).toEqual([1, 2]);
     const bobSeqs = aliceView
-      .filter((e) => e.sender_actor_id === bob.id)
+      .filter((e) => canonicalJson(e.sender_actor_id) === canonicalJson(accountActorId(bob.id)))
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(bobSeqs).toEqual([1]);
   });

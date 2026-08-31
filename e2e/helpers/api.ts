@@ -1,6 +1,7 @@
 import { expect, type APIRequestContext } from "@playwright/test";
-import { solandBaseUrl, type SolandKey } from "./env";
+import { solandBaseUrl, solandServiceId, type SolandKey } from "./env";
 import {
+  accountActorId,
   authHeaders,
   acceptInviteApi,
   canonicalJson,
@@ -10,7 +11,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
 } from "./soland-api";
-import type { RealmObject } from "./generated/spec-wire-objects";
+import type { InviteObject, RealmObject } from "./generated/spec-wire-objects";
 import type { JointUser } from "./users";
 
 export { authHeaders };
@@ -90,6 +91,7 @@ export async function acceptInviteViaApi(
   const base = solandBaseUrl(opts.server);
   const listUrl = new URL("/_arkret/self/authz/invites", base);
   listUrl.searchParams.set("subject", actorId);
+  listUrl.searchParams.set("subject_station_id", solandServiceId(opts.server));
   listUrl.searchParams.set("realm_id", realmId);
   const list = await request.get(listUrl.toString(), {
     headers: {
@@ -99,11 +101,12 @@ export async function acceptInviteViaApi(
   });
   expect(list.status()).toBe(200);
   const body = (await list.json()) as {
-    invites?: Array<{ id: string; realm_id: string; invitee_id?: string }>;
+    invites?: InviteObject[];
   };
   const invite = (body.invites ?? []).find(
     (candidate) =>
-      candidate.realm_id === realmId && candidate.invitee_id === actorId,
+      candidate.realm_id === realmId &&
+      canonicalJson(candidate.invitee_account_id ?? null) === canonicalJson(accountActorId(actorId, opts.server).account_id),
   );
   expect(invite, `pending invite for ${actorId} in ${realmId}`).toBeTruthy();
 
@@ -130,13 +133,13 @@ export async function createSharedRealmViaApi(
     ownerToken,
     signedEventEnvelope({
       actorId: owner.id,
+      server: opts.server,
       realmId,
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: member.id,
+        member_id: accountActorId(member.id, opts.server),
         membership: "join",
-        delivery_status: "unroutable",
       },
     }),
     { server: opts.server, context: `join ${member.id}` },
@@ -207,12 +210,12 @@ export async function listRealmEventsViaApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  opts: { limit?: number; server?: SolandKey } = {},
+  opts: { limit?: number; server?: SolandKey; order?: "ascending" | "descending" } = {},
 ): Promise<Array<Record<string, unknown>>> {
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
   const response = await request.fetch(url, {
     method: "QUERY",
-    data: canonicalJson({ realm_ids: [realmId], limit: opts.limit ?? 50 }),
+    data: canonicalJson({ realm_ids: [realmId], limit: opts.limit ?? 50, ...(opts.order ? { order: opts.order } : {}) }),
     headers: {
       ...authHeaders(token, "QUERY", url),
       "content-type": "application/json",

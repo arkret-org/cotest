@@ -15,6 +15,7 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  accountActorId,
   alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
@@ -89,7 +90,7 @@ function relationObject(args: {
     relation_kind: args.relationKind,
     from_ref: args.fromRef,
     to_ref: args.toRef,
-    created_by: args.actorId,
+    created_by: accountActorId(args.actorId),
     created_at: canonicalTimestamp(),
   };
 }
@@ -180,7 +181,7 @@ async function createCardStrandApi(
         },
         stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
-        created_by: actorId,
+        created_by: accountActorId(actorId),
         created_at: createdAt,
       },
     },
@@ -219,7 +220,7 @@ async function createSpaceApi(
         ...(parentSpaceId
           ? { parent_space_id: parentSpaceId, rank: "m" }
           : {}),
-        created_by: actorId,
+        created_by: accountActorId(actorId),
         created_at: createdAt,
       },
     },

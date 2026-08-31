@@ -18,6 +18,7 @@ import {
 } from "../../helpers/env";
 import {
   advanceEnvelopeToActorFrontier,
+  accountActorId,
   requireDidCoreId,
   canonicalJson,
   createRealmApi,
@@ -279,7 +280,7 @@ async function createBoundMimiRoom(
       ),
     },
     epoch: 1,
-    sender_actor_id: requireDidCoreId(alice.id),
+    sender_actor_id: accountActorId(alice.id),
     room_binding_event: { event: bindingEvent },
   };
   const invalidBodies: JsonObject[] = [
@@ -364,7 +365,7 @@ async function postSignedMimiMessage(
 ) {
   const url = mimiMessagesUrl(roomId);
   const body = {
-    sender_actor_id: projectDidToCoreId(MIMI_SOURCE_SERVICE_DID),
+    sender_actor_id: { kind: "service", service_id: projectDidToCoreId(MIMI_SOURCE_SERVICE_DID) },
     device_id: MIMI_DEVICE_ID,
     mls_group_id: mimiMlsGroupId(roomId),
     epoch: 1,

@@ -8,6 +8,7 @@ import {
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import {
   hardLogoutViaAccountMenu,
+  openAcceptedDeviceForOidcLogin,
   serverLoginViaCoauth,
   type RealOidcAccount,
 } from "../../helpers/real-oidc-login";
@@ -69,7 +70,9 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
     if (registeredAccount) {
       returningUser.deviceId = registeredAccount.genesisDeviceId;
     }
-    const jointPage = await openUserPage(browser, returningUser);
+    const jointPage = registeredAccount
+      ? await openAcceptedDeviceForOidcLogin(browser, request, registeredAccount, "oidc-key-life")
+      : await openUserPage(browser, returningUser);
     const page = jointPage.page;
     const grants = observeSessionGrants(page);
     const refreshes = observeSessionGrantRefreshes(page);
@@ -459,7 +462,7 @@ async function addEncryptedDescription(
     timeout: 45_000,
   });
   await page.getByTestId("card-detail-tab-description").click();
-  await page.getByTestId("card-detail-add-description-button").click();
+  await page.getByTestId("card-detail-edit-description-button").click();
 
   const editor = page.getByTestId("card-detail-description-input");
   await expect(editor).toBeAttached({ timeout: 45_000 });

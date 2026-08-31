@@ -18,6 +18,7 @@ import {
   accountSubscribeDeltaApi,
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  accountActorId,
   canonicalJson,
   createRealmApi,
   resolveDefaultStrandId,
@@ -73,7 +74,7 @@ test.describe("private read marker", () => {
     expect(mark.status()).toBe(200);
     const markBody = await mark.json();
     expect(markBody.realm_id).toBe(realmId);
-    expect(markBody.actor_id).toBe(alice.id);
+    expect(markBody.actor_id).toEqual(accountActorId(alice.id));
     expect(markBody.position).toEqual(position);
     expect(typeof markBody.updated_at).toBe("string");
     expect(markBody.updated_at).toMatch(
@@ -89,7 +90,7 @@ test.describe("private read marker", () => {
     expect(afterBody.markers).toContainEqual(
       expect.objectContaining({
         realm_id: realmId,
-        actor_id: alice.id,
+        actor_id: accountActorId(alice.id),
         read_scope: { kind: "realm" },
         position,
       }),
@@ -130,7 +131,7 @@ test.describe("private read marker", () => {
     );
     expect(markAlice.status()).toBe(200);
     const markAliceBody = await markAlice.json();
-    expect(markAliceBody.actor_id).toBe(alice.id);
+    expect(markAliceBody.actor_id).toEqual(accountActorId(alice.id));
 
     const aliceAfter = await request.get(
       `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
@@ -140,7 +141,7 @@ test.describe("private read marker", () => {
     const aliceAfterBody = await aliceAfter.json();
     expect(aliceAfterBody.markers).toContainEqual(
       expect.objectContaining({
-        actor_id: alice.id,
+        actor_id: accountActorId(alice.id),
         position,
       }),
     );
@@ -198,7 +199,7 @@ test.describe("private read marker", () => {
     const device2Marker = await pollToDeviceReadMarker(request, token2, realmId);
     expect(device2Marker.content.position).toEqual(m2);
     expect(device2Marker.content.read_scope).toEqual({ kind: "realm" });
-    expect(device2Marker.content.actor_id).toBe(alice.id);
+    expect(device2Marker.content.actor_id).toEqual(accountActorId(alice.id));
     // The update originates from device-1 (fan-out skips the writer's device).
     expect(device2Marker.content.device_id).toBe(device1);
 
@@ -469,7 +470,7 @@ async function postReadCursor(
     payload: {
       id: typedId("read_cursor"),
       schema: "ak.schema.read_cursor.v1",
-      actor_id: actorId,
+      actor_id: accountActorId(actorId),
       device_id: deviceId,
       realm_id: realmId,
       read_scope: readScope,

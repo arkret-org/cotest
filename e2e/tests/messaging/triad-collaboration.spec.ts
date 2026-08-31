@@ -11,9 +11,10 @@ import {
   listRealmEventsViaApi,
   sendPlaintextMessageViaApi,
 } from "../../helpers/api";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  accountActorId,
   authHeaders,
   canonicalTimestamp,
   listInvitesApi,
@@ -147,7 +148,9 @@ test.describe("single-server triad collaboration", () => {
     const eventKinds = events.map(eventKind);
     expect(eventKinds).toContain("ak.message.revise");
     expect(eventKinds).toContain("ak.message.create");
-    expect(eventKinds).not.toContain("ak.message.redact");
+    // The canonical Event log retains the redaction fact; only the target's
+    // visible content is removed (strand-and-message sections 9.1/9.2).
+    expect(eventKinds).toContain("ak.message.redact");
     expectRedactedPayload(
       events.find((event) => eventKind(event) === "ak.message.create"),
       createBody,
@@ -205,9 +208,8 @@ test.describe("single-server triad collaboration", () => {
         createdAt: canonicalTimestamp(new Date(baseMs + 60_000)),
         payload: {
           realm_id: realmId,
-          actor_id: carol.id,
+          member_id: accountActorId(carol.id),
           membership: "join",
-          delivery_status: "unroutable",
         },
       }),
       { context: "join carol" },
@@ -425,8 +427,8 @@ test.describe("single-server triad collaboration", () => {
           const visible = await listInvitesApi(request, bobToken);
           return visible.filter((invite) =>
             invite.realm_id === realmId &&
-            invite.invitee_id === bob.id &&
-            (invite.state ?? invite.status ?? "pending") === "pending"
+            invite.invitee_account_id?.principal_id === bob.id && invite.invitee_account_id.station_id === solandServiceId() &&
+            invite.state === "pending"
           ).length;
         }, { timeout: 30_000 }).toBe(1);
       } finally {
@@ -474,9 +476,8 @@ test.describe("single-server triad collaboration", () => {
           kind: "ak.member.state",
           payload: {
             realm_id: realmId,
-            actor_id: carol.id,
+            member_id: accountActorId(carol.id),
             membership: "join",
-            delivery_status: "unroutable",
           },
         }),
         { context: "join carol shared history" },
@@ -520,7 +521,7 @@ test.describe("single-server triad collaboration", () => {
           kind: "ak.member.state",
           payload: {
             realm_id: realmId,
-            actor_id: bob.id,
+            member_id: accountActorId(bob.id),
             membership: "leave",
             reason: "self_leave",
           },
@@ -574,9 +575,8 @@ test.describe("single-server triad collaboration", () => {
           kind: "ak.member.state",
           payload: {
             realm_id: realmId,
-            actor_id: bob.id,
+            member_id: accountActorId(bob.id),
             membership: "join",
-            delivery_status: "unroutable",
             reason: "owner_readd",
           },
         }),

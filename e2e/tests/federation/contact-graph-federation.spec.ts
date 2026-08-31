@@ -29,6 +29,8 @@ import {
 import {
   authHeaders,
   createRealmApi,
+  readRealmSealBasis,
+  accountActorId,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -397,11 +399,7 @@ test.describe("contact graph federation (α/β)", () => {
     }
   });
 
-  // S4-fed (core cross-PS closed loop): alice@α pulls bob@β into a realm using
-  // a consent_grant whose grant the RECIPIENT server (β) can verify against its
-  // own consent cells. The consent setup is done locally on β (alice + bob both
-  // registered on β so bob can grant alice an invite consent there); the cross
-  // boundary is the private `POST /_arkret/peer/invites` delivery from α to β.
+  // S4-fed: Alice's Alpha Account invites Bob's Beta Account with Bob's private consent.
   test("S4-fed consent_grant evidence delivers cross-PS to β and bob joins", async ({
     request,
   }) => {
@@ -409,49 +407,22 @@ test.describe("contact graph federation (α/β)", () => {
     const alice = uniqueUser(`cgf-s4-alice-${stamp}`, "alpha");
     const bob = uniqueUser(`cgf-s4-bob-${stamp}`, "beta");
 
-    // Bob has a β account. Alice has independent accounts on BOTH α (where
-    // she signs the Realm events) AND β (where the bob->alice invite consent
-    // cell and the evidence β verifies are created).
     await ensureRegistered(request, alice, { server: "alpha" });
-    await ensureRegistered(request, alice, { server: "beta" });
     await ensureRegistered(request, bob, { server: "beta" });
-    // The harness creates an independent α account for Bob and obtains its
-    // candidate-scoped session. Bob's β account keeps its own account-private
-    // inbox and Station-bound data; neither account takes over the other.
-    await ensureRegistered(request, bob, { server: "alpha" });
-    const aliceTokenAlpha = await issueDevSession(request, alice, {
-      server: "alpha",
-    });
-    const aliceTokenBeta = await issueDevSession(request, alice, {
-      server: "beta",
-    });
+    const aliceTokenAlpha = await issueDevSession(request, alice, { server: "alpha" });
     const bobTokenBeta = await issueDevSession(request, bob, { server: "beta" });
-    const bobTokenAlpha = await issueDevSession(request, bob, {
-      server: "alpha",
+    const locator = await resolvePrincipalLocator(request, bob.id, "beta", bobTokenBeta);
+    const { outcome } = await requestContactArkret(request, aliceTokenAlpha, bob.id, {
+      requestedScopes: ["invite"], server: "alpha", recipientServiceId: solandServiceId("beta"),
+      introductionEvidence: { kind: "locator_ref", principal_locator: locator },
     });
-
-    // On β the Contact is established first. Bob then authors a separate
-    // holder-private Consent grant for Alice.
-    const { outcome } = await requestContactArkret(
-      request,
-      aliceTokenBeta,
-      bob.id,
-      { requestedScopes: ["invite"], server: "beta" },
-    );
+    await expect.poll(async () => (await contactRow(request, bobTokenBeta, alice.id, { server: "beta" }))?.state,
+      { timeout: 30_000 }).toBe("pending_incoming");
     await respondContactArkret(request, bobTokenBeta, {
-      requestId: outcome.request_event_ref,
-      requesterId: alice.id,
-      action: "accept",
-      grantedScopes: ["invite"],
-      server: "beta",
+      requestId: outcome.request_event_ref, requesterId: alice.id, action: "accept",
+      grantedScopes: ["invite"], server: "beta", requesterServiceId: solandServiceId("alpha"),
     });
-    const consent = await grantInviteConsentArkret(
-      request,
-      bobTokenBeta,
-      bob,
-      alice.id,
-      { server: "beta" },
-    );
+    const consent = await grantInviteConsentArkret(request, bobTokenBeta, bob, alice.id, { server: "beta" });
     const grantRef = consent.eventRef;
 
     // On α: alice creates the realm she wants to pull bob into.
@@ -491,7 +462,7 @@ test.describe("contact graph federation (α/β)", () => {
       server: "beta",
     });
     const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee_id === bob.id,
+      (i) => i.realm_id === realmId && i.invitee_account_id?.principal_id === bob.id && i.invitee_account_id.station_id === solandServiceId("beta"),
     );
     expect(invite, "bob@β pending invite for the α realm").toBeTruthy();
     expect(invite!.id).toBe(inviteId);
@@ -501,7 +472,7 @@ test.describe("contact graph federation (α/β)", () => {
       realmId,
       inviteId: invite!.id,
       server: "beta",
-      candidateTokens: { alpha: bobTokenAlpha },
+      sealBasis: await readRealmSealBasis(request, aliceTokenAlpha, realmId, "alpha"),
     });
     await expect
       .poll(
@@ -513,7 +484,7 @@ test.describe("contact graph federation (α/β)", () => {
           if (!resp.ok()) return false;
           const realm = await resp.json();
           return (
-            Array.isArray(realm.member_ids) && realm.member_ids.includes(bob.id)
+            Array.isArray(realm.member_ids) && realm.member_ids.some((member: unknown) => JSON.stringify(member) === JSON.stringify(accountActorId(bob.id, "beta")))
           );
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },

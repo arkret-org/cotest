@@ -14,7 +14,6 @@ import {
   canonicalTimestamp,
   createRealmApi,
   expectJsonOk,
-  nextJoinPolicyRevision,
   prepareSignedEventCbaApi,
   projectDidToCoreId,
   registerEventSigner,
@@ -196,6 +195,16 @@ async function allowlistVerificationService(
   realmId: string,
   serviceId: string,
 ) {
+  const policyCell = "ak:cell:ak.component.realm.policy_bundle.v1:null";
+  const currentResponse = await request.get(
+    `${solandBaseUrl()}/_soland/admin/cells/${encodeURIComponent(policyCell)}?realm_id=${encodeURIComponent(realmId)}`,
+    { headers: authHeaders(token) },
+  );
+  const currentCell = await expectJsonOk<{state: string; value: Record<string, unknown>}>(
+    currentResponse, "read current policy before verification allowlist replacement",
+  );
+  expect(currentCell.state).toBe("value");
+  expect(typeof currentCell.value.policy_revision).toBe("number");
   await submitSignedEventApi(
     request,
     token,
@@ -203,8 +212,10 @@ async function allowlistVerificationService(
       actorId: ownerId,
       realmId,
       kind: "ak.realm.policy_bundle",
+      preconditions: [{cell_id: policyCell, predicate: {op: "head_eq", value: currentCell.value}}],
       payload: {
-        policy_revision: nextJoinPolicyRevision(undefined, realmId),
+        ...currentCell.value,
+        policy_revision: Number(currentCell.value.policy_revision) + 1,
         allowed_third_party_invite_verification_ids: [
           projectDidToCoreId(serviceId),
         ],

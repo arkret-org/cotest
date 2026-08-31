@@ -52,6 +52,17 @@ class PatchCoauthConfigTests(unittest.TestCase):
                 self.assertNotIn(retired, arkret)
             self.assertIn('endpoint: "https://station.test/"', arkret)
             self.assertIn("password_login_session_grants_enabled: true", arkret)
+            with patch("sys.argv", arguments + [
+                "--soland-beta-base-url", "https://station-beta.test",
+                "--owning-station", "soland-beta",
+                "--inkson-beta-base-url", "https://inkson-beta.test",
+            ]):
+                self.assertEqual(MODULE.main(), 0)
+            beta = output.read_text(encoding="utf-8")
+            self.assertIn("owning_station: soland-beta", beta)
+            self.assertIn('endpoint: "https://station-beta.test/"', beta)
+            self.assertIn('"https://inkson-beta.test/auth/callback"', beta)
+            self.assertIn('"https://inkson.test/auth/callback"', beta)
 
     def test_missing_current_key_fails_closed_without_legacy_fallback(self):
         with self.assertRaises(SystemExit):

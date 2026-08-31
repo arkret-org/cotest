@@ -13,11 +13,14 @@ import {
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  accountActorId,
   alignSignedEventToActorFrontierApi,
   canonicalTimestamp,
+  canonicalJson,
   prepareSignedEventCbaApi,
   signedEventEnvelope,
   submitSignedEventApi,
+  submitSignedEventBatchApi,
   uuidV7,
 } from "../../helpers/soland-api";
 import {
@@ -31,7 +34,8 @@ import {
 } from "../../helpers/users";
 import { grantCallCapability } from "../../helpers/webrtc";
 
-test.describe.configure({ mode: "serial" });
+// Each case creates an independent fixture; a UI failure must not suppress API coverage.
+test.describe.configure({ mode: "default" });
 
 test.describe("moderation appeal", () => {
   test("appellant submits ak.moderation.appeal.submit against an admin decision", async ({
@@ -282,10 +286,6 @@ test.describe("moderation appeal", () => {
     await reviewAppeal(request, fixture, appeal.appeal_id);
     const lift = await liftDecision(request, fixture, appeal.appeal_id);
 
-    await decideAppeal(request, fixture, appeal.appeal_id, {
-      decision: "overturn",
-      reason_text_ref: "appeal accepted",
-    });
     expect(lift.decision_id).toBe(fixture.decisionId);
     await closeAppeal(request, fixture, appeal.appeal_id);
 
@@ -344,9 +344,8 @@ async function createAppealFixture(
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: reviewer.id,
+        member_id: accountActorId(reviewer.id),
         membership: "join",
-        delivery_status: "unroutable",
       },
     }),
     { context: `join ${reviewer.id}` },
@@ -434,7 +433,7 @@ async function banMemberViaApi(
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: memberId,
+        member_id: accountActorId(memberId),
         membership: "ban",
         reason: "moderation_decision",
       },
@@ -552,6 +551,18 @@ async function liftDecision(
   fixture: AppealFixture,
   appealId: string,
 ) {
+  const cellId = `ak:cell:ak.component.moderation_state.v1:${fixture.targetRef}`;
+  const cellResponse = await request.get(
+    `${solandBaseUrl()}/_soland/admin/cells/${encodeURIComponent(cellId)}?realm_id=${encodeURIComponent(fixture.realmId)}`,
+    { headers: authHeaders(fixture.reviewerToken) },
+  );
+  expect(cellResponse.status()).toBe(200);
+  const cell = await cellResponse.json() as { state: string; value: Array<{tag: string}> };
+  expect(cell.state).toBe("value");
+  const observedDots = cell.value.map((item) => item.tag).filter((dot) =>
+    dot.slice(0, dot.lastIndexOf(":")) === fixture.decisionId,
+  );
+  expect(observedDots.length, "accepted decision must have observable add dots").toBeGreaterThan(0);
   const envelope = signedModerationEvent(
     fixture.reviewer.id,
     fixture.realmId,
@@ -559,14 +570,23 @@ async function liftDecision(
     {
       target_ref: fixture.targetRef,
       decision_ref: fixture.decisionId,
+      observed_dot_ids: observedDots,
       reason_code: "policy_recall",
       reason: `appeal accepted ${appealId}`,
       effective_at: canonicalTimestamp(),
     },
   );
-  await submitSignedEventApi(request, fixture.reviewerToken, envelope, {
-    context: `lift moderation decision ${fixture.decisionId}`,
+  const verdict = signedModerationEvent(fixture.reviewer.id, fixture.realmId,
+    "ak.moderation.appeal.decision", {
+      appeal_id: appealId, realm_id: fixture.realmId,
+      reviewer_id: fixture.reviewer.id, decision: "overturn",
+      decided_at: canonicalTimestamp(), reason_text_ref: "appeal accepted",
+    });
+  // The accepted lift and overturn must be in the same ordered submit batch.
+  await submitSignedEventBatchApi(request, fixture.reviewerToken, [envelope, verdict], {
+    context: `lift and overturn moderation decision ${fixture.decisionId}`,
   });
+  await waitForAppealState(request, fixture.reviewerToken, appealId, "decided");
   const events = await listRealmEventsViaApi(
     request,
     fixture.reviewerToken,
@@ -582,7 +602,7 @@ async function liftDecision(
   expect(projected, `projected decision lift ${String(envelope.event_id)}`).toBeTruthy();
   const payload = isRecord(projected?.payload) ? projected.payload : {};
   const decisionRef = payload.decision_ref;
-  expect(decisionRef, `decision lift payload in ${JSON.stringify(projected)}`).toBe(
+  expect(decisionRef, `decision lift must name ${fixture.decisionId}`).toBe(
     fixture.decisionId,
   );
   return { decision_id: String(decisionRef), event_id: String(envelope.event_id) };
@@ -635,9 +655,10 @@ async function postModerationEvent(
   const envelope = signedModerationEvent(actorId, realmId, kind, payload);
   await prepareSignedEventCbaApi(request, token, envelope);
   await alignSignedEventToActorFrontierApi(request, token, envelope);
-  return await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-    headers: authHeaders(token),
-    data: envelope,
+  const url = `${solandBaseUrl()}/_arkret/self/events`;
+  return await request.post(url, {
+    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    data: canonicalJson({ event: envelope }),
   });
 }
 

@@ -22,7 +22,7 @@ import {
   issueDevSession,
   uniqueUser,
 } from "../../helpers/users";
-import { addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
+import { accountActorId, addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
 import {
   addCircleMemberArkret,
   addCircleMemberRaw,
@@ -110,7 +110,7 @@ test.describe("circle membership (same Station)", () => {
       { signerId: alice.id, realmId, actorId: bob.id, membership: "join" },
     );
     expect(membership.membership).toBe("join");
-    expect(membership.actor_id).toBe(bob.id);
+    expect(membership.actor_id).toEqual(accountActorId(bob.id));
 
     // CORE ASSERTION: bob did zero operations yet is a Circle member.
     const fetched = await getCircleArkret(
@@ -118,7 +118,7 @@ test.describe("circle membership (same Station)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.member_ids).toContain(bob.id);
+    expect(fetched.member_ids).toContainEqual(accountActorId(bob.id));
 
     // The DELETE is itself a caller-signed membership Move. Its payload binds
     // both path ids and carries the observed joined head as the CAS guard.
@@ -131,7 +131,7 @@ test.describe("circle membership (same Station)", () => {
     );
     expect(removed).toEqual({
       circle_id: circle.circle_id,
-      actor_id: bob.id,
+      actor_id: accountActorId(bob.id),
       membership: "leave",
     });
     const afterRemoval = await getCircleArkret(
@@ -139,7 +139,7 @@ test.describe("circle membership (same Station)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(afterRemoval.member_ids).not.toContain(bob.id);
+    expect(afterRemoval.member_ids).not.toContainEqual(accountActorId(bob.id));
   });
 
   test("S8 lifecycle archive then restore returns Circle to active", async ({
@@ -259,7 +259,7 @@ test.describe("circle membership (same Station)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.member_ids ?? []).not.toContain(mallory.id);
+    expect(fetched.member_ids ?? []).not.toContainEqual(accountActorId(mallory.id));
   });
 
   // S8 capability: a realm member who is NOT the owner and holds no
@@ -332,6 +332,6 @@ test.describe("circle membership (same Station)", () => {
       aliceToken,
       circle.circle_id,
     );
-    expect(fetched.member_ids ?? []).not.toContain(dave.id);
+    expect(fetched.member_ids ?? []).not.toContainEqual(accountActorId(dave.id));
   });
 });

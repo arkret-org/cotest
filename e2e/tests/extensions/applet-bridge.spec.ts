@@ -345,9 +345,8 @@ test.describe("applet bridge", () => {
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
-          actor_id: signed.applet_package.bot_actor_id,
+          member_id: accountActorId(signed.applet_package.bot_actor_id),
           membership: "join",
-          delivery_status: "unroutable",
         },
       });
       const preInstallLease = await issueAuthorizationLeasesApi(
@@ -391,9 +390,8 @@ test.describe("applet bridge", () => {
         proofVerificationMethod: botVerificationMethod,
         payload: {
           realm_id: realmId,
-          actor_id: registration.bot_actor_id,
+          member_id: accountActorId(registration.bot_actor_id),
           membership: "join",
-          delivery_status: "unroutable",
         },
       });
       await submitSignedEventApi(request, botToken, botMembershipEvent, {
@@ -2339,7 +2337,7 @@ function buildGhostManagedActorCreation(args: {
     external_id: args.externalUser.id,
   };
   let provisionEvent = signedEventEnvelope({
-    actorId: serviceId,
+    actorId: serviceActorId(serviceId),
     realmId: args.realmId,
     kind: "ak.applet.managed_actor.provision",
     actorSeq: args.serviceActorSeq,
@@ -2371,7 +2369,7 @@ function buildGhostManagedActorCreation(args: {
     kind: "ak.realm.create",
     actorSeq: 0,
     createdAt: args.createdAt,
-    executedBy: serviceId,
+    executedBy: serviceActorId(serviceId),
     stationId: solandServiceId(),
     appletId: args.signed.applet_package.applet_id,
     authorizationRef: args.appletAuthorityRef,
@@ -2427,7 +2425,7 @@ function buildGhostManagedActorCreation(args: {
     .digest("hex")}`;
   const verificationMethod = `${requiredAppletServiceDid(args.signed)}#applet-service-key`;
   let accountabilityEvent = signedEventEnvelope({
-    actorId: serviceId,
+    actorId: serviceActorId(serviceId),
     realmId: args.realmId,
     kind: "ak.identity.accountability_grant",
     actorSeq: args.serviceActorSeq + 1,
@@ -2466,7 +2464,7 @@ function buildGhostManagedActorCreation(args: {
     kind: "ak.profile.create",
     actorSeq: 0,
     createdAt: args.createdAt,
-    executedBy: serviceId,
+    executedBy: serviceActorId(serviceId),
     authorizationRef: args.appletAuthorityRef,
     appletId: args.signed.applet_package.applet_id,
     refs: [

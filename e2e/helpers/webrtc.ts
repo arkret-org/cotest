@@ -12,6 +12,7 @@ import {
 import { solandBaseUrl, solandServiceId } from "./env";
 import {
   accountActorId,
+  eventPrincipalId,
   addRealmMemberApi,
   authHeaders,
   accountSubscribeFramesApi,
@@ -205,7 +206,7 @@ export function buildSignalEnvelope(args: {
   const envelope: Record<string, unknown> = {
     realm_id: args.realmId,
     scope_ref: args.scopeRef ?? { kind: "realm", realm_id: args.realmId },
-    sender_actor_id: args.actorId,
+    sender_actor_id: accountActorId(args.actorId),
     sender_device_id: args.deviceId,
     seal_ref: `ak:seal:sha256:${"0".repeat(64)}`,
     signal_class: signalClass,
@@ -319,7 +320,7 @@ function finalizeSignalEnvelopeProof(envelope: Record<string, unknown>): void {
   const protectedHeader = base64urlJsonCanonical({ alg: "Ed25519" });
   const bindingPayload = base64urlJsonCanonical(bindingObject);
   const signingInput = `${protectedHeader}.${bindingPayload}`;
-  const actorId = String(envelope.sender_actor_id);
+  const actorId = eventPrincipalId({ actor_id: envelope.sender_actor_id });
   const deviceId = String(envelope.sender_device_id);
   const signature =
     signWithRegisteredEventSigner(
@@ -504,12 +505,12 @@ export async function seedCallState(
   }
   const participant = opts.participants?.[0];
   if (participant) {
-    payload.roster_delta = { op: "join", participant };
+    payload.roster_delta = { op: "join", participant: { ...participant, actor_id: typeof participant.actor_id === "string" ? accountActorId(participant.actor_id) : participant.actor_id } };
   }
   const removedParticipant = opts.removedParticipants?.[0];
   if (removedParticipant) {
     const removal = {
-      actor_id: removedParticipant.actor_id,
+      actor_id: accountActorId(removedParticipant.actor_id),
       ...(removedParticipant.device_id
         ? { device_id: removedParticipant.device_id }
         : {}),
@@ -580,7 +581,7 @@ export async function prepareSignalEnvelope(
   envelope: Record<string, unknown>,
 ): Promise<void> {
   const realmId = String(envelope.realm_id);
-  const actorId = String(envelope.sender_actor_id);
+  const actorId = eventPrincipalId({ actor_id: envelope.sender_actor_id });
   const deviceId = String(envelope.sender_device_id);
   if (!registeredEventVerificationMethod(actorId, deviceId)) {
     const keyResponse = await request.post(
@@ -835,7 +836,7 @@ export async function exchangeMediaToken(
 ): Promise<APIResponse> {
   return await request.post(`${solandBaseUrl()}/_arkret/self/rtc/token`, {
     headers: { ...authHeaders(token), "content-type": "application/json" },
-    data: canonicalJson(body),
+    data: canonicalJson({ ...body, actor_id: accountActorId(body.actor_id) }),
   });
 }
 
@@ -925,7 +926,7 @@ export async function fetchIceConfig(
 ): Promise<APIResponse> {
   return await request.post(`${solandBaseUrl()}/_arkret/self/rtc/ice-config`, {
     headers: { ...authHeaders(token), "content-type": "application/json" },
-    data: canonicalJson({ mode: "p2p", ...body }),
+    data: canonicalJson({ mode: "p2p", ...body, actor_id: accountActorId(body.actor_id) }),
   });
 }
 

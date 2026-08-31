@@ -10,6 +10,7 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  accountActorId,
   addRealmMemberApi,
   advanceEnvelopeToActorFrontier,
   alignSignedEventToActorFrontierApi,
@@ -164,7 +165,7 @@ test.describe("moderation and ban", () => {
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: mallory.id,
+        member_id: accountActorId(mallory.id),
         membership: "ban",
         reason: "non_moderator_attempt",
       },
@@ -204,7 +205,7 @@ test.describe("moderation and ban", () => {
       kind: "ak.member.state",
       payload: {
         realm_id: realmId,
-        actor_id: mallory.id,
+        member_id: accountActorId(mallory.id),
         membership: "ban",
         reason: "moderation_report_upheld",
       },
@@ -296,13 +297,13 @@ test.describe("moderation and ban", () => {
       actorId: alice.id,
       realmId,
       kind: "ak.member.state",
-      payload: { realm_id: realmId, actor_id: mallory.id, membership: "ban" },
+      payload: { realm_id: realmId, member_id: accountActorId(mallory.id), membership: "ban" },
     });
     const secondBan = signedEventEnvelope({
       actorId: alice.id,
       realmId,
       kind: "ak.member.state",
-      payload: { realm_id: realmId, actor_id: mallory.id, membership: "ban" },
+      payload: { realm_id: realmId, member_id: accountActorId(mallory.id), membership: "ban" },
     });
 
     await submitSignedEventApi(request, aliceToken, firstBan, {

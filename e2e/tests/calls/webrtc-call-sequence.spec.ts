@@ -1,3 +1,4 @@
+import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 // 1:1 signaling sequence + multi-party focus_join over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-call-sequence.md
 // Spec refs:
@@ -136,16 +137,16 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     expect(byType(bobView, "candidate").length).toBe(1);
     expect(byType(bobView, "hangup").length).toBe(1);
     // Sender attribution survives the relay.
-    expect(byType(bobView, "invite")[0].sender_actor_id).toBe(alice.id);
-    expect(byType(aliceView, "answer")[0].sender_actor_id).toBe(bob.id);
+    expect(byType(bobView, "invite")[0].sender_actor_id).toEqual(accountActorId(alice.id));
+    expect(byType(aliceView, "answer")[0].sender_actor_id).toEqual(accountActorId(bob.id));
     // Alice's own frames are seq-monotonic per sender (1=invite, 2=candidate,
     // 3=hangup); bob's answer is seq 1 in his own (actor,device) lane.
     const aliceSeqs = bobView
-      .filter((e) => e.sender_actor_id === alice.id)
+      .filter((e) => canonicalJson(e.sender_actor_id) === canonicalJson(accountActorId(alice.id)))
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(aliceSeqs).toEqual([1, 2, 3]);
     const bobSeqs = aliceView
-      .filter((e) => e.sender_actor_id === bob.id)
+      .filter((e) => canonicalJson(e.sender_actor_id) === canonicalJson(accountActorId(bob.id)))
       .map((e) => callSignalPlaintext(e).seq as number);
     expect(bobSeqs).toEqual([1]);
 
@@ -241,9 +242,9 @@ test.describe("1:1 + multi-party signaling sequence (spec wire)", () => {
     // focus.
     const joiners = aliceView.map((e) => e.sender_actor_id);
     expect(joiners).toEqual(
-      expect.arrayContaining([bob.id, carol.id]),
+      expect.arrayContaining([accountActorId(bob.id), accountActorId(carol.id)]),
     );
-    expect(joiners).not.toContain(alice.id);
+    expect(joiners).not.toContainEqual(accountActorId(alice.id));
     for (const env of aliceView) {
       expect(callSignalPlaintext(env).signal_kind).toBe("focus_join");
       expect(

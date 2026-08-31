@@ -1,3 +1,4 @@
+import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 // WebRTC signal-type coverage over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-signals.md
 // Spec refs:
@@ -81,7 +82,7 @@ test.describe("ak.call.signal canonical signal catalog", () => {
       );
       expect(mine.length, `bob receives the ${signalType} signal`).toBe(1);
       const env = mine[0];
-      expect(env.sender_actor_id).toBe(alice.id);
+      expect(env.sender_actor_id).toEqual(accountActorId(alice.id));
       const payload = callSignalPlaintext(env);
       expect(payload.kind).toBe("ak.call.signal");
       // Canonical signal_kind + monotonic seq survive the relay verbatim.

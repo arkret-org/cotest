@@ -22,7 +22,7 @@ import {
   solandServiceId,
 } from "./env";
 import { selectDxcOption } from "./dxc-select";
-import type { RealmObject } from "./generated/spec-wire-objects";
+import type { PublicPrincipalResolution, RealmObject } from "./generated/spec-wire-objects";
 import {
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
@@ -35,6 +35,7 @@ import {
 } from "./session-grant-dpop";
 import {
   authHeaders,
+  accountActorId,
   canonicalJson,
   cotestWire,
   projectDidToCoreId,
@@ -520,7 +521,10 @@ export class JointUserPage {
     const grantsUrl = new URL(
       `${this.serverUrl}/_arkret/self/authz/effective-grants`,
     );
-    grantsUrl.searchParams.set("subject", subjectId);
+    grantsUrl.searchParams.set(
+      "subject_actor_id",
+      canonicalJson(accountActorId(subjectId, undefined, this.session.grant?.accountId.station_id)),
+    );
     grantsUrl.searchParams.set("realm_id", realmId);
     await expect
       .poll(
@@ -1135,7 +1139,6 @@ export class JointUserPage {
       "/_arkret/self/authz/invites",
       `${this.serverUrl.replace(/\/$/, "")}/`,
     );
-    invitesUrl.searchParams.set("subject", this.user.id);
     invitesUrl.searchParams.set("realm_id", realmId);
     await expect
       .poll(
@@ -1409,7 +1412,7 @@ export async function ensureRegistered(
   // of the bare gate register, so the principal exists with its real DID
   // document, founding device authorization, and bootstrap Seal. The caller's
   // `user` is rebound to the account-bound identity the ceremony returns.
-  const coauth = coauthBaseUrl();
+  const coauth = coauthBaseUrl(opts.server);
   if (coauth) {
     const key = `${opts.server ?? "default"}${user.name}`;
     let provisioning = provisionedPrincipals.get(key);
@@ -1554,7 +1557,7 @@ export async function createDpopUserSession(
     coauthBase?: string;
   } = {},
 ): Promise<DpopUserSession | undefined> {
-  const coauth = opts.coauthBase ?? coauthBaseUrl();
+  const coauth = opts.coauthBase ?? coauthBaseUrl(opts.server);
   if (!coauth) {
     return undefined;
   }
@@ -1596,7 +1599,7 @@ export async function createDpopUserSessionForAccount(
     coauthBase?: string;
   } = {},
 ): Promise<DpopUserSession | undefined> {
-  if (!(opts.coauthBase ?? coauthBaseUrl())) {
+  if (!(opts.coauthBase ?? coauthBaseUrl(opts.server))) {
     return undefined;
   }
   const seed = uniqueUser(prefix);
@@ -1894,6 +1897,28 @@ export async function openUser(
           audience: opts.grantAudience ?? "",
         }
       : undefined;
+  // The accepted-device seam must retain the real projection coordinates.
+  // Invented history and a local wall-clock timestamp poison anti-rollback checks.
+  let resolution: PublicPrincipalResolution["resolution_projection"] | undefined;
+  if (!opts.neutralLoginConfig) {
+    const lookup = withOperationSelectors(await playwrightRequest.newContext({
+      ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+    }));
+    try {
+      const url = new URL(`${serverUrl}/_arkret/open/principals/${encodeURIComponent(user.id)}/resolution`);
+      url.searchParams.set("station_id", solandServiceId(opts.server));
+      const response = await lookup.get(url.toString());
+      expect(response.status(), "accepted-device principal resolution lookup").toBe(200);
+      const publicResolution = await response.json() as PublicPrincipalResolution;
+      expect(publicResolution.principal_id).toBe(user.id);
+      expect(publicResolution.station_id).toBe(solandServiceId(opts.server));
+      expect(publicResolution.projection_attestation.attestation.resolution_projection)
+        .toEqual(publicResolution.resolution_projection);
+      resolution = publicResolution.resolution_projection;
+    } finally {
+      await lookup.dispose();
+    }
+  }
   const localStorage = [
     {
       name: "inkson.config.v1",
@@ -1907,13 +1932,7 @@ export async function openUser(
                 principal_id: user.id,
                 station_id: solandServiceId(opts.server),
               },
-              resolution: {
-                did: user.did,
-                method_history_head: "sha256:cotest-accepted-history-head",
-                version_id: "cotest-accepted-version",
-                resolution_event_ref: "ak:event:cotest-accepted-resolution",
-                updated_at: new Date().toISOString(),
-              },
+              resolution,
               device_id: user.deviceId,
               server_url: serverUrl,
             },

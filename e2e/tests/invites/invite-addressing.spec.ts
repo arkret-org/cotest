@@ -114,8 +114,7 @@ async function acceptedInviteFixture(
       principal_id: invitee.id,
       station_id: solandServiceId(),
     },
-    // §7 step 6: this carrier and the durable
-    // `invite_delivery_target.service_resolution` MUST be byte-for-byte equal.
+    // The delivery address carries routing evidence outside the durable Event.
     service_resolution: canonicalServiceResolution(),
   };
   const event = signedEventEnvelope({
@@ -123,11 +122,7 @@ async function acceptedInviteFixture(
     realmId,
     kind: "ak.invite.create",
     payload: {
-      invitee_id: invitee.id,
-      invite_delivery_target: {
-        account_id: inviteAddress.account_id,
-        service_resolution: inviteAddress.service_resolution,
-      },
+      invitee_account_id: inviteAddress.account_id,
       introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
       expires_at: canonicalTimestamp(
         new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -186,8 +181,7 @@ test.describe("invite addressing", () => {
       realmId: typedId("realm"),
       kind: "ak.invite.create",
       payload: {
-        invitee_id: invitee,
-        invite_delivery_target: inviteDeliveryTarget,
+        invitee_account_id: inviteDeliveryTarget.account_id,
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(introductionEvidence)}`,
         expires_at: canonicalTimestamp(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
       },
@@ -273,8 +267,9 @@ test.describe("invite addressing", () => {
     expect(resolvedResponse.status(), await resolvedResponse.text()).toBe(200);
     const locator = await resolvedResponse.json();
     expect(locator.schema).toBe("ak.schema.principal_locator.v1");
-    expect(locator.subject_id).toBe(user.id);
-    expect(locator.recipient_id).toBe(solandServiceId());
+    expect(locator.account_id).toEqual({ principal_id: user.id, station_id: solandServiceId() });
+    expect(locator).not.toHaveProperty("recipient_id");
+    expect(locator.service_resolution.current_record_url).toBe(`${solandBaseUrl()}/_arkret/open/services/${encodeURIComponent(solandServiceId())}/resolution`);
     expect(locator.issued_at).toMatch(
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
@@ -458,11 +453,7 @@ test.describe("invite addressing", () => {
       realmId: fixture.realmId,
       kind: "ak.invite.create",
       payload: {
-        invitee_id: fixture.invitee.id,
-        invite_delivery_target: {
-          account_id: fixture.inviteAddress.account_id,
-          service_resolution: fixture.inviteAddress.service_resolution,
-        },
+        invitee_account_id: fixture.inviteAddress.account_id,
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(fixture.evidence)}`,
         expires_at: canonicalTimestamp(
           new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

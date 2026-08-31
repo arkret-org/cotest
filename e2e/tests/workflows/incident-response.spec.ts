@@ -10,6 +10,7 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  accountActorId,
   alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
@@ -188,7 +189,7 @@ test.describe("workflow: incident response", () => {
             },
             stage: "in_progress",
             tracks: { discussion: { enabled: true, is_primary: true } },
-            created_by: oncall.id,
+            created_by: accountActorId(oncall.id),
             created_at: createdAt,
           },
         },

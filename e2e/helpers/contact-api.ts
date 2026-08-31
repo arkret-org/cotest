@@ -21,6 +21,8 @@ import {
 import { type SolandKey, solandBaseUrl, solandServiceId } from "./env";
 import {
   alignSignedEventToActorFrontierApi,
+  accountActorId,
+  eventPrincipalId,
   acceptInviteApi,
   authHeaders,
   canonicalJson,
@@ -47,6 +49,7 @@ import {
   uuidV7,
 } from "./soland-api";
 import type { JointUser } from "./users";
+import type { ContactPeer, InviteObject } from "./generated/spec-wire-objects";
 
 export type PreparedDirectConversationIdentity = {
   user: JointUser;
@@ -78,6 +81,7 @@ export type ContactAgentProjection = {
 
 export type ContactListRow = {
   peer: string;
+  peerIdentity: ContactPeer;
   state: ContactState;
   request_event_ref?: string;
   response_event_ref?: string;
@@ -162,6 +166,7 @@ export async function grantInviteConsentArkret(
     actorId: holder.id,
     realmId: principalControlRealmForId(holder.id),
     kind: "ak.consent.grant",
+    server: opts.server,
     payload: {
       consent_id: consentId,
       peer_id: peerId,
@@ -217,6 +222,7 @@ export async function revokeInviteConsentArkret(
     actorId: holder.id,
     realmId: principalControlRealmForId(holder.id),
     kind: "ak.consent.revoke",
+    server: opts.server,
     payload: {
       consent_id: grant.consentId,
       observed_dot_ids: [grant.dot],
@@ -265,7 +271,7 @@ export async function requestContactArkret(
     phase: "prepare",
     operation_id: operationId,
     idempotency_key: idempotencyKey,
-    peer: { kind: "human", principal_id: target },
+    peer: { kind: "human", account_id: accountActorId(target, opts.server, opts.recipientServiceId).account_id },
     granted_to_peer_scopes: opts.requestedScopes,
     introduction_evidence: opts.introductionEvidence ?? {
       kind: "same_station",
@@ -312,7 +318,7 @@ export async function requestContactArkret(
   await submitPrincipalSuccessorSealApi(
     request,
     token,
-    String(signedEvent.actor_id),
+    eventPrincipalId(signedEvent),
     signedEvent,
     { server: opts.server },
   );
@@ -360,7 +366,7 @@ export async function resolvePrincipalLocator(
     response,
     `resolve principal locator for ${subjectId}`,
   );
-  expect(locator.subject_id).toBe(subjectId);
+  expect(locator.account_id).toEqual(accountActorId(subjectId, server).account_id);
   return locator;
 }
 
@@ -379,7 +385,11 @@ export async function respondContactArkret(
   const rows = await listContactsArkret(request, token, {
     server: opts.server,
   });
-  const row = rows.find((candidate) => candidate.peer === opts.requesterId);
+  const matches = rows.filter(candidate => candidate.peer === opts.requesterId &&
+    (!opts.requesterServiceId || (candidate.peerIdentity.kind === "human" &&
+      candidate.peerIdentity.account_id.station_id === opts.requesterServiceId)));
+  if (matches.length > 1) throw new Error("Contact response requires an exact AccountId");
+  const row = matches[0];
   if (!row?.request_receipt) {
     throw new Error(`contact ${opts.requesterId} exposes no request_receipt`);
   }
@@ -434,7 +444,7 @@ export async function respondContactArkret(
   await submitPrincipalSuccessorSealApi(
     request,
     token,
-    String(signedEvent.actor_id),
+    eventPrincipalId(signedEvent),
     signedEvent,
     { server: opts.server },
   );
@@ -469,12 +479,12 @@ export async function listContactsArkret(
   );
   return (body.contacts ?? []).map((row) => {
     const wire = row as unknown as Record<string, unknown>;
-    const peer = wire.peer as Record<string, unknown>;
+    const peer = wire.peer as ContactPeer;
     const peerId =
-      peer?.kind === "human" && typeof peer.principal_id === "string"
-        ? peer.principal_id
-        : peer?.kind === "agent" && typeof peer.agent_id === "string"
-          ? peer.agent_id
+      peer?.kind === "human" && typeof peer.account_id?.principal_id === "string"
+        ? peer.account_id.principal_id
+        : peer?.kind === "agent" && peer.actor_id
+          ? eventPrincipalId({ actor_id: peer.actor_id })
           : undefined;
     if (!peerId) {
       throw new Error(`contact row has an invalid canonical peer: ${JSON.stringify(wire.peer)}`);
@@ -482,6 +492,7 @@ export async function listContactsArkret(
     return {
       ...row,
       peer: peerId,
+      peerIdentity: peer,
       granted_by_me:
         (wire.granted_to_peer_scopes as string[] | undefined) ?? [],
       granted_to_me:
@@ -497,7 +508,9 @@ export async function contactRow(
   opts: { server?: SolandKey } = {},
 ): Promise<ContactListRow | undefined> {
   const rows = await listContactsArkret(request, token, opts);
-  return rows.find((row) => row.peer === peer);
+  const matches = rows.filter((row) => row.peer === peer);
+  if (matches.length > 1) throw new Error("contact principal maps to multiple Station accounts; select a complete peer identity");
+  return matches[0];
 }
 
 export async function tombstoneContactArkret(
@@ -548,7 +561,7 @@ export async function tombstoneContactArkret(
         phase: "prepare",
         operation_id: operationId,
         idempotency_key: nonce,
-        peer: { kind: "human", principal_id: contact },
+        peer: row.peerIdentity,
         contact_round_id: contactRoundId,
         version,
         predecessor_event_ref: predecessorEventRef,
@@ -580,7 +593,7 @@ export async function tombstoneContactArkret(
     await submitPrincipalSuccessorSealApi(
       request,
       token,
-      String(signedEvent.actor_id),
+      eventPrincipalId(signedEvent),
       signedEvent,
       { server: opts.server },
     );
@@ -623,7 +636,7 @@ export async function scopeUpdateContactArkret(
         phase: "prepare",
         operation_id: operationId,
         idempotency_key: nonce,
-        peer: { kind: "human", principal_id: contact },
+        peer: row!.peerIdentity,
         ...next,
         granted_to_peer_scopes: grantedScopes,
       }),
@@ -657,7 +670,7 @@ export async function scopeUpdateContactArkret(
   await submitPrincipalSuccessorSealApi(
     request,
     token,
-    String(signedEvent.actor_id),
+    eventPrincipalId(signedEvent),
     signedEvent,
     { server: opts.server },
   );
@@ -675,6 +688,7 @@ export async function resolveDirectConversationArkret(
   peer: string,
   opts: { server?: SolandKey } = {},
 ): Promise<DirectConversationResolveOutcome> {
+  const row = await contactRow(request, token, peer, opts);
   const url = `${solandBaseUrl(opts.server)}/_arkret/self/direct-conversations/resolve`;
   const response = await request.post(url, {
     headers: {
@@ -682,7 +696,7 @@ export async function resolveDirectConversationArkret(
       "content-type": "application/json",
     },
     data: canonicalJson({
-      peer: { kind: "human", principal_id: peer },
+      peer: row?.peerIdentity ?? { kind: "human", account_id: accountActorId(peer, opts.server).account_id },
     }),
   });
   return await expectJsonOk<DirectConversationResolveOutcome>(
@@ -866,16 +880,9 @@ export function buildInviteCreateEvent(args: {
     kind: "ak.invite.create",
     schemaId: "ak.schema.invite.v1",
     payload: {
-      invitee_id: args.inviteeId,
-      invite_delivery_target: {
-        account_id: {
+      invitee_account_id: {
           principal_id: args.inviteeId,
           station_id: args.recipientServiceId,
-        },
-        // invite-addressing.md §6: this carrier MUST later be byte-for-byte
-        // equal to `invite_address.service_resolution`, so both sides read the
-        // same normalizer.
-        service_resolution: canonicalServiceResolution(args.recipientServer),
       },
       introduction_evidence_digest: evidenceDigest,
       expires_at: expiresAt,
@@ -1052,24 +1059,17 @@ export async function deliverInviteExplicitAddress(
 // List the authenticated actor's pending invites with the canonical wire
 // shape. The authz endpoint serializes the SDK `Invite` whose id field is
 // `id` (NOT `invite_id`).
-export type AuthzInvite = {
-  id: string;
-  realm_id: string;
-  invitee_id?: string;
-  state?: string;
-};
+export type AuthzInvite = InviteObject;
 
 export async function listAuthzInvitesArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
 ): Promise<AuthzInvite[]> {
-  const actorId = await currentActorIdApi(request, token, opts);
   const url = new URL(
     "/_arkret/self/authz/invites",
     solandBaseUrl(opts.server),
   );
-  url.searchParams.set("subject", actorId);
   const response = await request.get(url.toString(), {
     headers: {
       ...authHeaders(token, "GET", url.toString()),
@@ -1099,7 +1099,7 @@ export function countInvitesFor(
   inviteeId: string,
 ): number {
   return invites.filter(
-    (invite) => invite.realm_id === realmId && invite.invitee_id === inviteeId,
+    (invite) => invite.realm_id === realmId && invite.invitee_account_id?.principal_id === inviteeId,
   ).length;
 }
 
@@ -1112,7 +1112,6 @@ export async function acceptInviteArkret(
     realmId: string;
     inviteId: string;
     server?: SolandKey;
-    candidateTokens?: Partial<Record<SolandKey, string>>;
     sealBasis?: Record<string, unknown>;
   },
 ) {
@@ -1124,7 +1123,6 @@ export async function acceptInviteArkret(
     args.inviteId,
     {
       server: args.server,
-      candidateTokens: args.candidateTokens,
       sealBasis: args.sealBasis,
     },
   );

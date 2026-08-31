@@ -28,6 +28,9 @@ $testDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("cotest-authority-
 [void](New-Item -ItemType Directory -Path $testDirectory)
 $configPath = Join-Path $testDirectory "soland.env"
 $CoauthBaseUrl = "https://coauth.joint.example"
+$StartCoauth = $true
+$CoauthCommand = $null
+$script:UseManagedCoauthAssertionKey = $true
 $CoauthServiceId = $null
 $CoauthEmbeddedWebvhRegistrationBearer = "test-registration-bearer"
 $CoauthSessionGrantIntrospectionBearer = "test-introspection-bearer"
@@ -54,9 +57,25 @@ $dockerArguments = @{
 try {
     Build-SolandCommand @processArguments | Out-Null
     $bootstrapConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($bootstrapConfig -match "SOLAND_ACCOUNT_AUTHORITY_") {
+    if ($bootstrapConfig -match "SOLAND_ACCOUNT_AUTHORITY_(URL|SERVICE_ID)=") {
         throw "Identity bootstrap must not guess an Account Authority identity"
     }
+    if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+        throw "Station inception must preauthorize the deployment Account Authority public key"
+    }
+    # The runner fills CoauthCommand after generating its managed config.
+    # That mutation must not erase the previously selected signing delegation.
+    $CoauthCommand = "generated-managed-coauth-command"
+    Build-SolandCommand @processArguments | Out-Null
+    if ((Get-Content -LiteralPath $configPath -Raw) -notmatch 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+        throw "Generated CoauthCommand must preserve the managed authority delegation"
+    }
+    $script:UseManagedCoauthAssertionKey = $false
+    Build-SolandCommand @processArguments | Out-Null
+    if ((Get-Content -LiteralPath $configPath -Raw) -match 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
+        throw "Caller-owned Coauth must not receive a fixture signing delegation"
+    }
+    $script:UseManagedCoauthAssertionKey = $true
     $bootstrapDocker = Build-SolandDockerEnvironment @dockerArguments
     if ($bootstrapDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_URL")) {
         throw "Docker identity bootstrap must not publish an unbound Account Authority"
@@ -77,6 +96,18 @@ try {
     }
     if ($boundConfig -match "ENROLLMENT_DID" -or $boundDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID")) {
         throw "Retired independent enrollment identity must not be emitted"
+    }
+    $betaAuthorityUrl = "https://coauth-beta.joint.example"
+    $betaStationId = "ak:did_core:web:station-beta.joint.example"
+    Build-SolandCommand @processArguments -AccountAuthorityBaseUrl $betaAuthorityUrl -AccountAuthorityServiceId $betaStationId | Out-Null
+    $betaConfig = Get-Content -LiteralPath $configPath -Raw
+    if ($betaConfig -notmatch [regex]::Escape("SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=`"$betaStationId`"") -or
+        $betaConfig -notmatch [regex]::Escape("SOLAND_ACCOUNT_AUTHORITY_URL=`"$betaAuthorityUrl`"")) {
+        throw "Beta must use its own Station identity and Account Authority endpoint"
+    }
+    $betaDocker = Build-SolandDockerEnvironment @dockerArguments -AccountAuthorityBaseUrl $betaAuthorityUrl -AccountAuthorityServiceId $betaStationId
+    if ($betaDocker.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID -ne $betaStationId -or $betaDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $betaAuthorityUrl) {
+        throw "Docker Beta authority must remain independent from Alpha"
     }
 
     $clock = [System.Diagnostics.Stopwatch]::StartNew()

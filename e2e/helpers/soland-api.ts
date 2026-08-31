@@ -22,9 +22,12 @@ import {
   solandServiceDid,
   solandServiceId,
   solandServiceResolution,
+  teabayBaseUrl,
 } from "./env";
 import { base64url } from "./encoding";
 import type {
+  ActorId,
+  InviteObject,
   CapabilityGrantObject,
   EventFederationSubmission,
   InviteDeliveryRequestBody,
@@ -75,7 +78,7 @@ export {
 };
 
 export type SignedEventEnvelopeArgs = {
-  actorId: string;
+  actorId: string | ActorId;
   realmId: string;
   kind: string;
   payload: Record<string, unknown>;
@@ -96,12 +99,10 @@ export type SignedEventEnvelopeArgs = {
   prevRefs?: string[];
   scopeRef?: Record<string, unknown>;
   authorizationRef?: string;
-  executedBy?: string;
+  executedBy?: ActorId;
   appletId?: string;
-  /// The Station this actor is anchored to. `event-envelope.schema.json`
-  /// makes it a required envelope member, so it is part of the digest preimage
-  /// every id derivation and proof covers. Defaults to the server the harness
-  /// is driving.
+  /// The Station coordinate of the Event's account Actor. It is nested in
+  /// actor_id.account_id, never an independent Event envelope member.
   stationId?: string;
   server?: SolandKey;
 };
@@ -114,7 +115,7 @@ type RegisteredEventSigner = {
 };
 
 const registeredEventSigners = new Map<string, RegisteredEventSigner>();
-const realmAuthorityControllers = new Map<string, string>();
+const realmAuthorityControllers = new Map<string, ActorId>();
 const principalControlEvents = new Map<
   string,
   Array<Record<string, unknown>>
@@ -467,18 +468,45 @@ export function requireDidCoreId(id: string): string {
 export function accountActorId(
   principalId: string,
   server?: SolandKey,
-): CapabilityGrantObject["issuer_id"] {
+  stationId?: string,
+): Extract<ActorId, { kind: "account" }> {
   return {
     kind: "account",
     account_id: {
       principal_id: requireDidCoreId(principalId),
-      station_id: requireDidCoreId(solandServiceId(server)),
+      station_id: requireDidCoreId(stationId ?? solandServiceId(server)),
     },
   };
 }
 
-export function serviceActorId(serviceId: string): CapabilityGrantObject["issuer_id"] {
+export function serviceActorId(serviceId: string): ActorId {
   return { kind: "service", service_id: requireDidCoreId(serviceId) };
+}
+
+/** Read the canonical Actor without accepting the retired scalar envelope. */
+export function eventActorId(
+  event: Record<string, unknown>,
+): ActorId {
+  const actor = event.actor_id as ActorId | undefined;
+  if (actor?.kind === "account" && actor.account_id) {
+    requireDidCoreId(actor.account_id.principal_id);
+    requireDidCoreId(actor.account_id.station_id);
+    return actor;
+  }
+  if (actor?.kind === "service") {
+    requireDidCoreId(actor.service_id);
+    return actor;
+  }
+  throw new Error("Event envelope requires a complete account or service actor_id");
+}
+
+export function eventPrincipalId(event: Record<string, unknown>): string {
+  const actor = eventActorId(event);
+  return actor.kind === "account" ? actor.account_id.principal_id : actor.service_id;
+}
+
+export function eventSigningPrincipalId(event: Record<string, unknown>): string {
+  return eventPrincipalId({ actor_id: event.executed_by ?? event.actor_id });
 }
 
 // Default stand-in federation source for helpers that do not impersonate one
@@ -812,7 +840,7 @@ export async function createRealmApi(
   });
   realmAuthorityControllers.set(
     realmAuthorityControllerKey(opts.server, realmId),
-    ownerId,
+    accountActorId(ownerId, opts.server),
   );
   // The founding unit is accepted before the durable coordinator publishes
   // its first Seal. Do not let the next helper call mistake that short window
@@ -823,6 +851,11 @@ export async function createRealmApi(
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
       data.invitee_ids?.[invitee] ?? solandServiceId(opts.server);
+    const recipientServer = (["default", "alpha", "beta"] as const).find(
+      (server) => solandServiceId(server) === recipientServiceId,
+    );
+    if (!recipientServer) throw new Error("directed invite recipient Station is not configured");
+    const inviteeAccountId = accountActorId(invitee, recipientServer, recipientServiceId).account_id;
     const evidence = { kind: "explicit_address" };
     const sealBasis = await readRealmSealBasis(
       request,
@@ -836,19 +869,7 @@ export async function createRealmApi(
       kind: "ak.invite.create",
       sealBasis,
       payload: {
-        invitee_id: invitee,
-        invite_delivery_target: {
-          account_id: {
-            principal_id: invitee,
-            station_id: recipientServiceId,
-          },
-          // `invite_create_payload.invite_delivery_target` is the closed
-          // `invite-delivery-request.schema.json#/$defs/invite_delivery_target`,
-          // whose `service_resolution` is required — omitting it produced a
-          // durable Event that could never satisfy invite-addressing.md §7
-          // step 6.
-          service_resolution: canonicalServiceResolution(opts.server),
-        },
+        invitee_account_id: inviteeAccountId,
         introduction_evidence_digest: `sha256:${sha256CanonicalJson(evidence)}`,
         expires_at: canonicalTimestamp(
           new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -874,7 +895,7 @@ export async function addRealmMemberApi(
   request: APIRequestContext,
   token: string,
   realmId: string,
-  memberId: string,
+  memberId: string | ActorId,
   opts: { server?: SolandKey } = {},
 ) {
   const actorId = await currentActorIdApi(request, token, opts);
@@ -883,6 +904,7 @@ export async function addRealmMemberApi(
     token,
     signedEventEnvelope({
       actorId,
+      server: opts.server,
       realmId,
       kind: "ak.member.state",
       payload: {
@@ -892,9 +914,8 @@ export async function addRealmMemberApi(
         // mode; include it so the membership op validates regardless of the
         // active proof profile.
         realm_id: realmId,
-        actor_id: requireDidCoreId(memberId),
+        member_id: typeof memberId === "string" ? accountActorId(memberId, opts.server) : memberId,
         membership: "join",
-        delivery_status: "unroutable",
       },
     }),
     { server: opts.server, context: `add member ${memberId}` },
@@ -1374,6 +1395,7 @@ export async function submitKnockApi(
 ) {
   const envelope = signedEventEnvelope({
     actorId,
+    server: opts.server,
     realmId,
     kind: "ak.member.state",
     actorSeq: 0,
@@ -1381,7 +1403,7 @@ export async function submitKnockApi(
     createdAt: opts.createdAt,
     payload: {
       realm_id: realmId,
-      actor_id: requireDidCoreId(actorId),
+      member_id: accountActorId(actorId, opts.server),
       membership: "knock",
     },
   });
@@ -1419,15 +1441,15 @@ export async function submitJoinWithProofsApi(
 ) {
   const envelope = signedEventEnvelope({
     actorId,
+    server: opts.server,
     realmId,
     kind: "ak.member.state",
     createdAt: opts.createdAt,
     sealBasis: opts.sealBasis,
     payload: {
       realm_id: realmId,
-      actor_id: requireDidCoreId(actorId),
+      member_id: accountActorId(actorId, opts.server),
       membership: "join",
-      delivery_status: "unroutable",
       gate_proofs: gateProofs,
     },
   });
@@ -1454,12 +1476,13 @@ export async function submitLeaveApi(
 ) {
   const envelope = signedEventEnvelope({
     actorId,
+    server: opts.server,
     realmId,
     kind: "ak.member.state",
     createdAt: opts.createdAt,
     payload: {
       realm_id: realmId,
-      actor_id: requireDidCoreId(actorId),
+      member_id: accountActorId(actorId, opts.server),
       membership: "leave",
     },
   });
@@ -1474,58 +1497,6 @@ export async function submitLeaveApi(
   };
 }
 
-// join-policy.md §7.5 — `ak.invite.create` whose
-// `refs[role="join_authorised_by"]` binds to the review accept receipt.
-export async function submitInviteCreateApi(
-  request: APIRequestContext,
-  token: string,
-  inviterId: string,
-  realmId: string,
-  subjectId: string,
-  joinAuthorisedByRef: string,
-  opts: { server?: SolandKey } = {},
-) {
-  const expiresAt = canonicalTimestamp(new Date(Date.now() + 86_400_000));
-  const sealBasis = await readRealmSealBasis(
-    request,
-    token,
-    realmId,
-    opts.server,
-  );
-  const envelope = signedEventEnvelope({
-    actorId: inviterId,
-    realmId,
-    kind: "ak.invite.create",
-    sealBasis,
-    refs: [{ role: "join_authorised_by", id: joinAuthorisedByRef }],
-    // Directed invite-create payload shape per event-payload.schema.json
-    // `invite_payload` (variant: invitee_id + invite_delivery_target +
-    // introduction_evidence_digest + expires_at). The subject is carried by
-    // `invitee_id` (a stable principal id); the forbidden `subject_did` wire field and the
-    // non-schema `realm_id` / `inviter` keys are intentionally absent.
-    payload: {
-      invitee_id: subjectId,
-      invite_delivery_target: {
-        account_id: {
-          principal_id: subjectId,
-          station_id: solandServiceId(opts.server),
-        },
-        service_resolution: canonicalServiceResolution(opts.server),
-      },
-      introduction_evidence_digest: `sha256:${sha256CanonicalJson({ kind: "explicit_address" })}`,
-      expires_at: expiresAt,
-    },
-  });
-  await advanceEnvelopeToActorFrontier(request, token, envelope, opts.server);
-  return await request.post(
-    `${solandBaseUrl(opts.server)}/_arkret/self/events`,
-    {
-      headers: authHeaders(token),
-      data: envelope,
-    },
-  );
-}
-
 export async function acceptInviteApi(
   request: APIRequestContext,
   token: string,
@@ -1534,104 +1505,40 @@ export async function acceptInviteApi(
   inviteId: string,
   opts: {
     server?: SolandKey;
-    candidateTokens?: Partial<Record<SolandKey, string>>;
     sealBasis?: Record<string, unknown>;
   } = {},
 ) {
-  let sealBasis: Record<string, unknown> | undefined = opts.sealBasis;
-  let candidateServiceId: string | undefined;
+  let sealBasis = opts.sealBasis;
   if (!sealBasis) {
-    await expect
-      .poll(
-        async () => {
-          const resolveUrl = `${solandBaseUrl(opts.server)}/_arkret/find/directory/resolve-realm`;
-          const resolutionResponse = await request.post(resolveUrl, {
-            headers: {
-              ...authHeaders(token, "POST", resolveUrl),
-              "content-type": "application/json",
-            },
-            data: canonicalJson({ realm_id: realmId, requester_id: actorId }),
-          });
-          const resolution = await expectJsonOk<{
-            join_candidates?: Array<{
-              service_id?: string;
-              join_methods?: string[];
-              seal_basis?: Record<string, unknown>;
-            }>;
-          }>(
-            resolutionResponse,
-            `resolve invite join candidate for ${realmId}`,
-          );
-          const candidate = resolution.join_candidates?.find((candidate) =>
-            candidate.join_methods?.includes("invite_accept"),
-          );
-          sealBasis = candidate?.seal_basis;
-          candidateServiceId = candidate?.service_id;
-          return sealBasis;
-        },
-        {
-          message: "invite-accept join candidate Seal basis",
-          timeout: 30_000,
-          intervals: [250, 500, 1_000, 2_000],
-        },
-      )
-      .toBeTruthy();
-  } else {
-    // The signed invite Event already carries the exact Realm Seal basis.
-    // Same-service acceptance needs no Directory disclosure round-trip.
-    candidateServiceId = solandServiceId(opts.server);
+    if (!teabayBaseUrl()) {
+      throw new Error("invite acceptance needs an authenticated invite Seal basis or an independently configured Directory");
+    }
+    await expect.poll(async () => {
+      sealBasis = await readDirectoryJoinCandidateSealBasis(request, realmId, actorId, "invite_accept");
+      return Boolean(sealBasis);
+    }, { message: "invite-accept join candidate Seal basis", timeout: 30_000 }).toBe(true);
   }
-  const candidateServer = opts.sealBasis
-    ? opts.server
-    : (["alpha", "beta"] as const).find(
-        (server) => solandServiceId(server) === candidateServiceId,
-      );
-  if (!opts.sealBasis && !candidateServer) {
-    throw new Error(
-      `invite-accept candidate ${candidateServiceId ?? "<missing>"} is not a managed Soland service`,
-    );
-  }
-  const candidateToken = candidateServer
-    ? (opts.candidateTokens?.[candidateServer] ?? token)
-    : token;
-
-  return await submitSignedEventApi(
-    request,
-    candidateToken,
-    signedEventEnvelope({
-      actorId,
-      realmId,
-      kind: "ak.invite.accept",
-      actorSeq: 0,
-      sealBasis,
-      payload: {
-        invite_id: inviteId,
-        delivery_status: "unroutable",
-      },
-    }),
-    { server: candidateServer, context: `accept invite ${inviteId}` },
-  );
+  // join-policy section 6: candidates are hints; the invitee submits at its own Station.
+  return await submitSignedEventApi(request, token, signedEventEnvelope({
+    actorId,
+    server: opts.server,
+    realmId,
+    kind: "ak.invite.accept",
+    actorSeq: 0,
+    sealBasis,
+    payload: { invite_id: inviteId },
+  }), { server: opts.server, context: `accept invite ${inviteId}` });
 }
 
 export async function listInvitesApi(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
-): Promise<
-  Array<{
-    id: string;
-    realm_id: string;
-    invitee_id?: string;
-    state?: string;
-    status?: string;
-  }>
-> {
-  const actorId = await currentActorIdApi(request, token, opts);
+): Promise<InviteObject[]> {
   const url = new URL(
     "/_arkret/self/authz/invites",
     solandBaseUrl(opts.server),
   );
-  url.searchParams.set("subject", actorId);
   const response = await request.get(url.toString(), {
     headers: {
       ...authHeaders(token, "GET", url.toString()),
@@ -1639,7 +1546,7 @@ export async function listInvitesApi(
     },
   });
   const body = await expectJsonOk<{
-    invites?: Array<{ id: string; realm_id: string; invitee_id?: string }>;
+    invites?: InviteObject[];
   }>(response, "list invites");
   return body.invites ?? [];
 }
@@ -1827,7 +1734,7 @@ export async function replaceAccountDataApi(
   opts: { server?: SolandKey; context?: string } = {},
 ) {
   const content = privateAccountDataKeys.has(key)
-    ? encryptedAccountDataValue(actorId, key, body)
+    ? encryptedAccountDataValue(accountActorId(actorId, opts.server), key, body)
     : body;
   const setEvent = await prepareAccountDataSetSubmissionApi(
     request,
@@ -1867,7 +1774,7 @@ const privateAccountDataKeys = new Set([
 ]);
 
 function encryptedAccountDataValue(
-  actorId: string,
+  actorId: ActorId,
   dataType: string,
   content: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -1936,6 +1843,9 @@ export function signedEventEnvelope(
   );
   const hlc = args.hlc ?? nextEnvelopeHlc(args.realmId, createdAt);
   const payload = stripUndefined(args.payload) as Record<string, unknown>;
+  const actor = typeof args.actorId === "string"
+    ? accountActorId(args.actorId, args.server, args.stationId)
+    : args.actorId;
   // A Realm genesis is the one Event that names no Realm: `realm_id` is
   // `retype(event_id)` of the genesis itself, and `scope_ref` carries the
   // closed `realm_genesis` form. Sending either would be
@@ -1949,10 +1859,8 @@ export function signedEventEnvelope(
       (isRealmGenesis
         ? { kind: "realm_genesis" }
         : { kind: "realm", realm_id: args.realmId }),
-    actor_id: requireDidCoreId(args.actorId),
-    station_id: requireDidCoreId(
-      args.stationId ?? solandServiceId(args.server),
-    ),
+    actor_id: actor,
+    executed_by: args.executedBy,
     authorization_ref: args.authorizationRef,
     applet_id: args.appletId,
     actor_seq: args.actorSeq ?? nextActorSeq(),
@@ -1987,7 +1895,7 @@ export function signedEventEnvelope(
     ...event,
     proofs: [
       eventEnvelopeProof({
-        actorId: args.actorId,
+        actorId: eventSigningPrincipalId(event),
         event,
         verificationMethod: args.proofVerificationMethod,
       }),
@@ -2019,11 +1927,7 @@ export function refreshEventEnvelopeProof(
   envelope: Record<string, unknown>,
   proofVerificationMethod?: string,
 ): void {
-  const actorId =
-    typeof envelope.actor_id === "string" ? envelope.actor_id : undefined;
-  if (!actorId) {
-    throw new Error("Event envelope actor_id is required to refresh proofs");
-  }
+  const actorId = eventSigningPrincipalId(envelope);
   const event = { ...envelope };
   delete event.proofs;
   // Callers reach this after rewriting `actor_seq` / `prev_refs` to a fresh
@@ -2145,7 +2049,7 @@ export async function submitSignedEventApi(
       context,
     );
     const realmId = stringValue(envelope.realm_id);
-    const actorId = stringValue(envelope.actor_id);
+    const actorId = eventPrincipalId(envelope);
     const actorControlRealm = actorId
       ? principalControlRealmForIdIfKnown(actorId)
       : undefined;
@@ -2372,6 +2276,11 @@ export async function submitSignedEventBatchApi(
     for (const event of events) {
       await applyRegisteredCbaPlane(request, token, event, opts.server);
     }
+    // Leases authorize a candidate but do not repair its causal sequence.
+    // Bind the first Event to the accepted frontier, then author each sibling
+    // against its exact predecessor before obtaining any publication evidence.
+    await advanceEnvelopeToActorFrontier(request, token, events[0], opts.server);
+    refreshBatchActorChain(events);
   }
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const leaseResponse = await issueAuthorizationLeasesApi(
@@ -2635,7 +2544,7 @@ async function issueControlProposalAckApi(
 function isAuthorityAuthoredSelfPrincipalMove(
   event: Record<string, unknown>,
 ): boolean {
-  const actorId = stringValue(event.actor_id);
+  const actorId = eventPrincipalId(event);
   const scopeRef = event.scope_ref as Record<string, unknown> | undefined;
   const realmId =
     stringValue(event.realm_id) ?? stringValue(scopeRef?.realm_id);
@@ -2720,7 +2629,19 @@ function rememberPublicationEvidence(
     : [];
   if (receipts.length !== events.length) {
     throw new Error(
-      `publication returned ${receipts.length} ingress receipts for ${events.length} Events`,
+      `publication returned ${receipts.length} ingress receipts for ${events.length} Events: ${JSON.stringify({
+        status: outcome.status,
+        rejection_codes: Array.isArray(outcome.rejections)
+          ? outcome.rejections.map((item: Record<string, unknown>) => item.reason_code ?? item.code)
+          : [],
+        rejection_topics: Array.isArray(outcome.rejections)
+          ? outcome.rejections.map((item: Record<string, unknown>) => [
+              "actor_seq", "prev_refs", "digest", "proof", "seal_basis", "authorization_lease",
+              "control_proposal_ack", "unknown field", "canonical", "dot", "frontier", "signature",
+              "payload", "binding", "causal", "lease", "sequence", "schema", "metadata",
+            ].filter((topic) => String(item.detail ?? item.message ?? "").includes(topic)))
+          : [],
+      })}`,
     );
   }
   events.forEach((event, index) => {
@@ -2794,12 +2715,7 @@ export async function advanceEnvelopeToActorFrontier(
     frontierEventIds: string[];
   },
 ): Promise<void> {
-  const actorId = stringValue(envelope.actor_id);
-  if (!actorId) {
-    throw new Error(
-      "Event envelope actor_id is required to refresh its frontier",
-    );
-  }
+  const actorId = eventActorId(envelope);
   const realmId = stringValue(envelope.realm_id);
   if (!realmId) {
     throw new Error(
@@ -2839,7 +2755,7 @@ export async function advanceEnvelopeToActorFrontier(
   if (
     body.frontier?.kind !== "realm_actor" ||
     body.frontier.realm_id !== realmId ||
-    body.frontier.actor_id !== actorId
+    canonicalJson(body.frontier.actor_id) !== canonicalJson(actorId)
   ) {
     throw new Error(
       "combined Event frontier response does not match its selector",
@@ -3097,7 +3013,7 @@ export async function waitForRealmControlIdleApi(
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
   }
   throw new Error(
-    `Realm ${realmId} control frontier did not become idle after ${opts.afterControlEventSetRoot ?? "its current root"} within ${opts.timeoutMs ?? 30_000}ms; last frontier=${JSON.stringify(lastFrontier)}`,
+    `Realm ${realmId} control frontier did not become idle after ${opts.afterControlEventSetRoot ?? "its current root"} within ${opts.timeoutMs ?? 30_000}ms; last frontier=${JSON.stringify(lastFrontier)}; last error=${String(lastError instanceof Error ? lastError.message : lastError).replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]").slice(0, 600)}`,
     { cause: lastError },
   );
 }
@@ -3110,7 +3026,7 @@ async function applyRegisteredCbaPlane(
 ): Promise<void> {
   const kind = stringValue(envelope.kind);
   const realmId = stringValue(envelope.realm_id);
-  const actorId = stringValue(envelope.actor_id);
+  const actorId = eventPrincipalId(envelope);
   if (!kind || !realmId || !actorId) {
     throw new Error("CBA preparation requires kind, realm_id, and actor_id");
   }
@@ -3129,9 +3045,9 @@ async function applyRegisteredCbaPlane(
   );
   const actorControlRealm = principalControlRealmForIdIfKnown(actorId);
   const actorControlsRealm =
-    realmAuthorityControllers.get(
+    canonicalJson(realmAuthorityControllers.get(
       realmAuthorityControllerKey(server, realmId),
-    ) === actorId || actorControlRealm === realmId;
+    ) ?? null) === canonicalJson(eventActorId(envelope)) || actorControlRealm === realmId;
   if (
     envelope.authorization_ref === undefined &&
     actorControlsRealm &&
@@ -3170,10 +3086,8 @@ async function applyRegisteredCbaPlane(
         } else {
           const directoryBasis = await readDirectoryJoinCandidateSealBasis(
             request,
-            token,
             realmId,
             actorId,
-            server,
           );
           if (directoryBasis) {
             envelope.seal_basis = directoryBasis;
@@ -3255,37 +3169,25 @@ async function applyRegisteredCbaPlane(
 
 async function readDirectoryJoinCandidateSealBasis(
   request: APIRequestContext,
-  token: string,
   realmId: string,
   actorId: string,
-  server?: SolandKey,
+  joinMethod?: string,
 ): Promise<Record<string, unknown> | undefined> {
-  const response = await request.post(
-    `${solandBaseUrl(server)}/_arkret/find/directory/resolve-realm`,
-    {
-      headers: authHeaders(token),
-      data: { realm_id: realmId, requester_id: actorId },
-    },
-  );
-  if (!response.ok()) {
-    return undefined;
-  }
-  const body = (await response.json()) as {
-    join_candidates?: Array<{
-      seal_basis?: Record<string, unknown>;
-    }>;
+  const directory = teabayBaseUrl();
+  if (!directory) return undefined;
+  // A Station session grant must never be disclosed to a Directory service.
+  const response = await request.post(`${directory}/_arkret/find/directory/resolve-realm`, {
+    data: { realm_id: realmId, requester_id: actorId },
+  });
+  if (!response.ok()) return undefined;
+  const body = await response.json() as {
+    join_candidates?: Array<{join_methods?: string[]; seal_basis?: Record<string, unknown>}>;
   };
-  const basis = body.join_candidates?.find((candidate) => {
-    const value = candidate.seal_basis;
-    return (
-      value &&
-      Array.isArray(value.leaves) &&
-      value.leaves.length > 0 &&
-      typeof value.control_event_set_root === "string" &&
-      typeof value.state_root === "string"
-    );
+  return body.join_candidates?.find(candidate => {
+    const basis = candidate.seal_basis;
+    return (!joinMethod || candidate.join_methods?.includes(joinMethod)) &&
+      basis && Array.isArray(basis.leaves) && basis.leaves.length > 0;
   })?.seal_basis;
-  return basis;
 }
 
 async function forceConformanceCbaBasis(
@@ -3295,7 +3197,7 @@ async function forceConformanceCbaBasis(
 ): Promise<void> {
   const kind = stringValue(envelope.kind);
   const realmId = stringValue(envelope.realm_id);
-  const actorId = stringValue(envelope.actor_id);
+  const actorId = eventPrincipalId(envelope);
   if (!kind || !realmId || !actorId) {
     throw new Error("CBA fixture basis requires kind, realm_id, and actor_id");
   }
@@ -3319,7 +3221,7 @@ async function forceConformanceCbaBasis(
       headers: { "content-type": "application/json" },
       data: canonicalJson({
         realm_id: realmId,
-        subject: projectDidToCoreId(signerDid),
+        subject: signerDid,
         data_plane_actions: [fixtureCapabilityAction(kind)],
       }),
     },
@@ -3463,7 +3365,7 @@ export async function resolveDefaultStrandId(
     // Soland still validates that claim against the accepted Seal state.
     realmAuthorityControllers.set(
       realmAuthorityControllerKey(opts.server, realmId),
-      requireDidCoreId(actorId),
+      accountActorId(actorId, opts.server),
     );
   }
   const createdAt = canonicalTimestamp();
@@ -3471,6 +3373,7 @@ export async function resolveDefaultStrandId(
     actorId,
     realmId,
     kind: "ak.strand.create",
+    server: opts.server,
     createdAt,
     payload: {
       object: {
@@ -3483,7 +3386,7 @@ export async function resolveDefaultStrandId(
             profile: "discussion",
           },
         },
-        created_by: actorId,
+        created_by: accountActorId(actorId, opts.server),
         created_at: createdAt,
       },
     },
@@ -3518,6 +3421,7 @@ export async function resolveDefaultStrandId(
     actorId,
     realmId,
     kind: "ak.realm.set_default_strand",
+    server: opts.server,
     payload: { realm_id: realmId, strand_id: strandId },
   });
   await submitSignedEventApi(request, token, setDefault, {
@@ -3894,7 +3798,7 @@ export async function queryPeerEventsApi(
 ) {
   const body = stripUndefined({
     realm_ids: opts.realmId ? [opts.realmId] : undefined,
-    actor_ids: opts.actorId ? [opts.actorId] : undefined,
+    actor_ids: opts.actorId ? [accountActorId(opts.actorId, opts.server)] : undefined,
     limit: opts.limit ?? 100,
     after: opts.after,
   });

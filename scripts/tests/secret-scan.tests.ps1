@@ -262,6 +262,11 @@ try {
     Assert-True ($canaryAfter.Count -eq 0) "a re-scan of the redacted artifact must be clean; got: $(@($canaryAfter | ForEach-Object { $_.pattern }) -join ', ')"
 
     # Wordlist sanity: exactly the standard 2048-entry BIP-39 English list.
+    $dpopPattern = Get-SecretLeakPatterns | Where-Object name -eq "dpop_header"
+    Assert-True (-not (& $dpopPattern.validate '  265 |     dpop: mintDpopProof({')) "numbered source invocation must not be mistaken for a DPoP credential"
+    Assert-True (& $dpopPattern.validate '  265 |     dpop: "synthetic-private-credential",') "literal credentials in source excerpts must still fail"
+    Assert-True (& $dpopPattern.validate 'DPoP: synthetic-private-credential') "ordinary DPoP headers must still fail"
+
     $wordSet = Get-Bip39WordSet
     Assert-True ($wordSet.Count -eq 2048) "BIP-39 wordlist must contain 2048 words, found $($wordSet.Count)"
     Assert-True ($wordSet.Contains("abandon") -and $wordSet.Contains("zoo")) "BIP-39 wordlist must span abandon..zoo"

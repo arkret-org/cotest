@@ -128,7 +128,7 @@ export async function latestMockEmailCode(
   return undefined;
 }
 
-async function registrationEmailCode(
+export async function registrationEmailCode(
   request: APIRequestContext,
   email: string,
 ): Promise<string> {
@@ -162,7 +162,7 @@ export async function registerUnboundCoauthPasswordAccount(
   displayName: string;
 }> {
   const email = args.email ?? `${args.handle}@example.test`;
-  const password = args.password ?? "ArkretE2E!2026";
+  const password = args.password ?? "1amTester!";
   const displayName = args.displayName ?? `E2E ${args.handle}`;
   const base = `${coauthBase}/_coauth/account/auth/register`;
   const startResponse = await request.post(base, {
@@ -422,7 +422,7 @@ export async function registerCoauthPasswordAccount(
   if (!/^[a-z0-9_-]+$/.test(slug)) {
     throw new Error(`coauth test handle must be a bare localpart: ${slug}`);
   }
-  const password = opts.password ?? "ArkretE2E!2026";
+  const password = opts.password ?? "1amTester!";
   const email = `${slug}@example.test`;
   const displayName = `E2E ${slug}`;
   await registerUnboundCoauthPasswordAccount(request, coauthBase, {

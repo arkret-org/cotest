@@ -11,6 +11,7 @@ import {
 } from "../../helpers/arkret-test";
 import { solandBaseUrl, solandServiceDid } from "../../helpers/env";
 import {
+  accountActorId,
   base64url,
   requireDidCoreId,
   canonicalJson,
@@ -197,7 +198,7 @@ async function acceptedDirectMessageEvidence(
       idempotency_key: typedId("contact-request"),
       peer: {
         kind: "human",
-        principal_id: requireDidCoreId(bob.user.id),
+        account_id: accountActorId(bob.user.id).account_id,
       },
       granted_to_peer_scopes: ["direct_message"],
       introduction_evidence: { kind: "explicit_address" },
@@ -237,7 +238,7 @@ async function acceptedDirectMessageEvidence(
       idempotency_key: typedId("contact-scope"),
       peer: {
         kind: "human",
-        principal_id: requireDidCoreId(bob.user.id),
+        account_id: accountActorId(bob.user.id).account_id,
       },
       contact_round_id: responseReceipt.contact_round_id,
       version: 2,
@@ -247,9 +248,11 @@ async function acceptedDirectMessageEvidence(
   );
   const aliceCurrentProof = aliceScopeOutcome.current_proof as JsonObject;
   const pair = [
-    requireDidCoreId(alice.user.id),
-    requireDidCoreId(bob.user.id),
-  ].sort();
+    accountActorId(alice.user.id),
+    accountActorId(bob.user.id),
+  ].sort((left, right) => Buffer.compare(
+    Buffer.from(canonicalJson(left)), Buffer.from(canonicalJson(right)),
+  ));
   const contact_round = {
     kind: "normal",
     sorted_pair_member_ids: pair,
@@ -272,10 +275,10 @@ async function acceptedDirectMessageEvidence(
       request_receipts: [requestReceipt],
       normal_response_receipt: responseReceipt,
       current_proofs: [aliceCurrentProof, bobCurrentProof].sort((left, right) =>
-        String(left.issuer_id).localeCompare(String(right.issuer_id)),
+        Buffer.compare(Buffer.from(canonicalJson(left.issuer_id)), Buffer.from(canonicalJson(right.issuer_id))),
       ),
     },
-    contact_round_continuity_chain: [],
+    contact_round_continuity_chains: [],
   };
 }
 
@@ -347,9 +350,8 @@ function foundingEvents(args: {
     authorizationRef: REALM_AUTHORITY_ROOT_CELL,
     payload: {
       realm_id: realmId,
-      actor_id: args.peerId,
+      member_id: accountActorId(args.peerId),
       membership: "join",
-      delivery_status: "unroutable",
       reason: "direct_conversation_bootstrap",
     },
   });
@@ -371,7 +373,7 @@ function foundingEvents(args: {
         stage: "in_progress",
         state: "active",
         tracks: { discussion: { enabled: true, is_primary: true } },
-        created_by: args.founderId,
+        created_by: accountActorId(args.founderId),
         created_at: args.createdAt,
       },
     },
@@ -388,15 +390,14 @@ function foundingEvents(args: {
     authorizationRef: REALM_AUTHORITY_ROOT_CELL,
     preconditions: [
       {
-        cell_id: `ak:cell:ak.component.member.state.v1:${args.founderId}`,
+        cell_id: `ak:cell:ak.component.member.state.v1:${base64url(createHash("sha256").update(canonicalJson([canonicalJson(accountActorId(args.founderId))])).digest())}`,
         predicate: { op: "head_eq", value: null },
       },
     ],
     payload: {
       realm_id: realmId,
-      actor_id: args.founderId,
+      member_id: accountActorId(args.founderId),
       membership: "join",
-      delivery_status: "unroutable",
       reason: "direct_conversation_bootstrap",
     },
   });
@@ -502,7 +503,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
       status: "accepted",
       event_ids: accepted.events.map((event) => event.event_id),
       receipt: {
-        founder_id: bobCoreId,
+        founder_id: accountActorId(bob.id),
         realm_id: accepted.realmId,
         main_strand_id: accepted.mainStrandId,
       },
@@ -548,7 +549,7 @@ test.describe("Direct Conversation immutable founding slot @fully-implemented", 
           ...selfPathHeadersForDpopSession(bobSession, "QUERY", eventsUrl),
           "content-type": "application/json",
         },
-        data: canonicalJson({ realm_ids: [accepted.realmId], limit: 100 }),
+        data: canonicalJson({ realm_ids: [accepted.realmId], order: "ascending", limit: 100 }),
       }),
       `query events for accepted Direct Conversation ${accepted.realmId}`,
     );

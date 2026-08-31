@@ -14,6 +14,8 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
+  accountActorId,
+  alignSignedEventToActorFrontierApi,
   canonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -99,13 +101,13 @@ test.describe("read receipts + privacy", () => {
       (payload) => payload.event_id === message.event_id,
     );
     expect(received).toMatchObject({
-      actor_id: alice.id,
+      actor_id: accountActorId(alice.id),
       event_id: message.event_id,
       read_scope: { kind: "realm" },
     });
     const receivedEnvelope = envelopes.find(
       (candidate) =>
-        candidate.sender_actor_id === alice.id &&
+        canonicalJson(candidate.sender_actor_id) === canonicalJson(accountActorId(alice.id)) &&
         signalPlaintext(candidate).kind === "ak.receipt.read",
     );
     expect(receivedEnvelope).toBeTruthy();
@@ -432,9 +434,9 @@ test.describe("read receipts + privacy", () => {
       read_scope: { kind: "realm" },
       position: { event_id: fixture.message.event_id, hlc },
     });
-    expect(advance.status()).toBe(200);
+    expect(advance.status(), await advance.text()).toBe(200);
     const advanceBody = await advance.json();
-    expect(advanceBody.actor_id).toBe(fixture.alice.id);
+    expect(advanceBody.actor_id).toEqual(accountActorId(fixture.alice.id));
     expect(advanceBody.position.event_id).toBe(fixture.message.event_id);
 
     // Alice's first device reads back its own cursor.
@@ -444,7 +446,7 @@ test.describe("read receipts + privacy", () => {
       fixture.realmId,
     );
     expect(aliceMarkers).toHaveLength(1);
-    expect(aliceMarkers[0].actor_id).toBe(fixture.alice.id);
+    expect(aliceMarkers[0].actor_id).toEqual(accountActorId(fixture.alice.id));
     expect(aliceMarkers[0].position.event_id).toBe(fixture.message.event_id);
 
     // Alice's second device synchronizes the same account-private cursor.
@@ -454,7 +456,7 @@ test.describe("read receipts + privacy", () => {
       fixture.realmId,
     );
     expect(aliceSecondMarkers).toHaveLength(1);
-    expect(aliceSecondMarkers[0].actor_id).toBe(fixture.alice.id);
+    expect(aliceSecondMarkers[0].actor_id).toEqual(accountActorId(fixture.alice.id));
     expect(aliceSecondMarkers[0].position.event_id).toBe(
       fixture.message.event_id,
     );
@@ -677,7 +679,7 @@ function buildReceiptSignal(args: {
       receipt_kind: "read",
       schema: "ak.schema.read_receipt.v1",
       realm_id: args.realmId,
-      actor_id: args.actor.id,
+      actor_id: accountActorId(args.actor.id),
       event_id: args.eventId,
       read_scope: args.readScope ?? { kind: "realm" },
       created_at: sentAt.toISOString(),
@@ -714,6 +716,8 @@ function receiverVisibleReceiptPayloads(
   );
 }
 
+const acceptedReceiptPolicies = new WeakMap<ReceiptFixture, Record<string, unknown>>();
+
 async function setReadReceiptPolicy(
   request: APIRequestContext,
   token: string,
@@ -729,9 +733,14 @@ async function setReadReceiptPolicy(
       kind: "ak.realm.read_receipt_policy",
       schemaId: "ak.schema.event_payload.v1",
       payload,
+      preconditions: [{
+        cell_id: "ak:cell:ak.component.realm.read_receipt_policy.v1:null",
+        predicate: { op: "head_eq", value: acceptedReceiptPolicies.get(fixture) ?? null },
+      }],
     }),
     { context: `read receipt policy ${fixture.realmId}` },
   );
+  acceptedReceiptPolicies.set(fixture, payload);
 }
 
 async function postReceipt(
@@ -750,7 +759,7 @@ type ReadCursorAdvanceBody = {
 
 type ReadCursorMarker = {
   realm_id: string;
-  actor_id: string;
+  actor_id: import("../../helpers/generated/spec-wire-objects").ActorId;
   device_id: string;
   read_scope: { kind: string; object_ref?: string; track_name?: string };
   position: { event_id: string; hlc: string };
@@ -758,8 +767,8 @@ type ReadCursorMarker = {
 };
 
 // POST /_arkret/self/read-cursors — durable actor-private ak.read_cursor.advance
-// (spec read-receipts.md §6.6). The body is exactly {realm_id, read_scope,
-// position}; the actor/device are bound from the bearer session.
+// (spec read-receipts.md §6.6). Submit the caller-signed Event with its exact
+// accepted Actor frontier; the server must not reconstruct or sign it.
 async function advanceReadCursor(
   request: APIRequestContext,
   token: string,
@@ -775,7 +784,7 @@ async function advanceReadCursor(
     payload: {
       id: typedId("read_cursor"),
       schema: "ak.schema.read_cursor.v1",
-      actor_id: actor.id,
+      actor_id: accountActorId(actor.id),
       device_id: actor.deviceId,
       realm_id: body.realm_id,
       read_scope: body.read_scope,
@@ -783,9 +792,11 @@ async function advanceReadCursor(
       updated_at: updatedAt,
     },
   });
-  return await request.post(`${solandBaseUrl()}/_arkret/self/read-cursors`, {
-    headers: authHeaders(token),
-    data: { advance_event: { event } },
+  await alignSignedEventToActorFrontierApi(request, token, event);
+  const url = `${solandBaseUrl()}/_arkret/self/read-cursors`;
+  return await request.post(url, {
+    headers: { ...authHeaders(token, "POST", url), "content-type": "application/json" },
+    data: canonicalJson({ advance_event: { event } }),
   });
 }
 
@@ -796,11 +807,9 @@ async function listReadCursors(
   token: string,
   realmId: string,
 ): Promise<ReadCursorMarker[]> {
-  const response = await request.get(
-    `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`,
-    { headers: authHeaders(token) },
-  );
-  expect(response.status()).toBe(200);
+  const url = `${solandBaseUrl()}/_arkret/self/read-cursors?realm_id=${encodeURIComponent(realmId)}`;
+  const response = await request.get(url, { headers: authHeaders(token, "GET", url) });
+  expect(response.status(), await response.text()).toBe(200);
   const body = await response.json();
   return Array.isArray(body.markers) ? (body.markers as ReadCursorMarker[]) : [];
 }

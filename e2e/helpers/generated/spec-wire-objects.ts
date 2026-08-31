@@ -8,6 +8,301 @@
 // literals with these types so an unregistered member is a `tsc` error rather
 // than a live-server rejection.
 
+/** `identity-resolution.schema.json#/$defs/public_principal_resolution` — closed object schema. */
+export type PublicPrincipalResolution = {
+  "principal_id": string;
+  "station_id": string;
+  "resolution_projection": {
+    "did": string;
+    "method_history_head": string;
+    "version_id": string;
+    "resolution_event_ref": string;
+    "updated_at": string;
+  };
+  "method_history_evidence": {
+    "adapter_version": "did:webvh:1.0";
+    "evidence_kind": "webvh_log";
+    "boundary": {
+      "from_method_history_head": string;
+      "from_version_id": string;
+      "to_method_history_head": string;
+      "to_version_id": string;
+    };
+    "evidence": {
+      "kind": "ak.did.binding_evidence.v1";
+      "method": string;
+      "document_digest": string;
+      "method_proofs": Array<{
+        "kind": "webvh_log";
+        "history_head": string;
+        "witnesses": Array<{
+          "witness_did": string;
+          "controlling_organization_did": string;
+        }>;
+        "witness_proofs_digest": string;
+      }>;
+    };
+    "log_entries": Array<Record<string, unknown>>;
+    "witness_records": Array<Record<string, unknown>>;
+  } | {
+    "adapter_version": "did:web:1";
+    "evidence_kind": "did_web_document";
+    "boundary": {
+      "from_method_history_head": string;
+      "from_version_id": string;
+      "to_method_history_head": string;
+      "to_version_id": string;
+    };
+    "evidence": {
+      "kind": "ak.did.binding_evidence.v1";
+      "method": string;
+      "document_digest": string;
+      "method_proofs": Array<{
+        "kind": "webvh_log";
+        "history_head": string;
+        "witnesses": Array<{
+          "witness_did": string;
+          "controlling_organization_did": string;
+        }>;
+        "witness_proofs_digest": string;
+      }>;
+    };
+  } | {
+    "adapter_version": "did:key:1";
+    "evidence_kind": "did_key_expansion";
+    "boundary": {
+      "from_method_history_head": string;
+      "from_version_id": string;
+      "to_method_history_head": string;
+      "to_version_id": string;
+    };
+    "evidence": {
+      "kind": "ak.did.binding_evidence.v1";
+      "method": string;
+      "document_digest": string;
+      "method_proofs": Array<{
+        "kind": "webvh_log";
+        "history_head": string;
+        "witnesses": Array<{
+          "witness_did": string;
+          "controlling_organization_did": string;
+        }>;
+        "witness_proofs_digest": string;
+      }>;
+    };
+  };
+  "projection_attestation": {
+    "attestation": {
+      "principal_id": string;
+      "station_id": string;
+      "resolution_projection": {
+        "did": string;
+        "method_history_head": string;
+        "version_id": string;
+        "resolution_event_ref": string;
+        "updated_at": string;
+      };
+      "method_history_evidence_digest": string;
+      "issued_at": string;
+      "expires_at": string;
+    };
+    "proof": {
+      "verification_method": string;
+      "created_at": string;
+      "jws": string;
+    };
+  };
+};
+
+/** `circle-operations.schema.json#/$defs/circle_view` — closed object schema. */
+export type CircleView = {
+  "circle_id": string;
+  "realm_id": string;
+  "profile_ref"?: string;
+  "title": string;
+  "summary"?: string;
+  "display": {
+    "short_name": string;
+    "color_token": "slate" | "red" | "orange" | "amber" | "yellow" | "lime" | "green" | "emerald" | "teal" | "cyan" | "sky" | "blue" | "indigo" | "violet" | "fuchsia" | "pink" | "gray_high_contrast";
+    "symbol": unknown;
+  };
+  "directory_visibility": "member_ids" | "realm_members";
+  "join_rule": "invite" | "knock" | "public";
+  "history_access": "since_join" | "all_history_for_current_members";
+  "content_encryption_floor"?: "allow_plaintext" | "e2ee_required";
+  "metadata_encryption_floor"?: "allow_plaintext" | "e2ee_required";
+  "encryption_profile": "none" | "mls_rfc9420";
+  "content_scheme"?: "mls_rfc9420" | "mls_exporter_aead_v1";
+  "mls_group_id"?: string;
+  "durability_policy"?: "none" | "organization_recovery_key";
+  "state": "active" | "archived" | "tombstoned";
+  "member_count"?: number;
+  "viewer_membership"?: "join" | "knock" | "leave" | "ban";
+  "member_ids": Array<{
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  }>;
+  "created_by": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  };
+  "created_at": string;
+  "updated_by"?: {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  };
+  "updated_at"?: string;
+};
+
+/** `circle-operations.schema.json#/$defs/circle_membership_outcome` — closed object schema. */
+export type CircleMembershipOutcome = {
+  "circle_id": string;
+  "actor_id": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  };
+  "membership": "join" | "knock" | "leave" | "ban";
+};
+
+/** `contact-operations.schema.json#/$defs/contact_peer` — closed object schema. */
+export type ContactPeer = {
+  "kind": "human";
+  "account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+} | {
+  "kind": "agent";
+  "actor_id": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  };
+  "controller_account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+};
+
+/** `common-ids.schema.json#/$defs/actor_id` — closed object schema. */
+export type ActorId = {
+  "kind": "account";
+  "account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+} | {
+  "kind": "service";
+  "service_id": string;
+};
+
+/** `common-ids.schema.json#/$defs/account_id` — closed object schema. */
+export type AccountId = {
+  "principal_id": string;
+  "station_id": string;
+};
+
+/** `invite.schema.json` — closed object schema. */
+export type InviteObject = {
+  "id": string;
+  "schema": "ak.schema.invite.v1";
+  "realm_id": string;
+  "inviter_account_id": {
+    "principal_id": string;
+    "station_id": string;
+  };
+  "invitee_account_id"?: {
+    "principal_id": string;
+    "station_id": string;
+  };
+  "introduction_evidence_digest"?: string;
+  "third_party_invite"?: {
+    "display_name_hint"?: string;
+    "token_commitment"?: string;
+    "token_salt_id"?: string;
+    "lookup_table_ref"?: string;
+    "pepper_id"?: string;
+    "oob_code_kind": "offline_token" | "lookup";
+    "token_entropy_bits"?: number;
+    "verification_id": string;
+    "verification_public_key": string;
+    "max_claims"?: number;
+  };
+  "capability_grant_refs"?: string[];
+  "state": "pending" | "accepted" | "rejected" | "revoked" | "expired" | "claimed" | "send_failed" | "revoked_by_capability_loss" | "revoked_by_inviter_left" | "invalidated_by_rate_limit";
+  "expires_at": string;
+  "created_at": string;
+  "updated_by"?: {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  };
+  "updated_at"?: string;
+};
+
+/** `event-payload.schema.json#/$defs/membership_payload` — closed object schema. */
+export type MembershipPayload = {
+  "strand_id"?: string;
+  "realm_id"?: string;
+  "member_id": {
+    "kind": "account";
+    "account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+  } | {
+    "kind": "service";
+    "service_id": string;
+  };
+  "membership": "join" | "knock" | "leave" | "ban";
+  "gate_proofs"?: Array<Record<string, unknown>>;
+  "reason"?: string;
+  "membership_cause"?: "controller_membership_ended";
+  "agent_controller_binding"?: {
+    "controller_account_id": {
+      "principal_id": string;
+      "station_id": string;
+    };
+    "controller_membership_generation_ref": string;
+    "controller_terminal_event_ref"?: string;
+  };
+  "invite_ref"?: string;
+};
+
 /** `realm.schema.json` — closed object schema. */
 export type RealmObject = {
   "id"?: string;
@@ -657,7 +952,7 @@ export type InviteDeliveryRequestBody = {
       "uri"?: string;
       [key: string]: unknown;
     };
-    "actor_kind"?: "user" | "organization" | "team" | "agent" | "service" | "integration";
+    "actor_kind"?: "user" | "organization" | "team" | "agent" | "bot" | "service" | "integration";
     "actor_seq": number;
     "created_at": string;
     "hlc"?: string;
@@ -904,6 +1199,7 @@ export type RealmSealFrontierView = {
       "control_proposal_ack": {
         "kind": "signed_ack";
         "realm_id": string;
+        "proposal_digest": string;
         "received_at": string;
         "decision_due_at": string;
         "absolute_due_at": string;
@@ -957,7 +1253,6 @@ export type RealmSealFrontierView = {
         "target_device_authorize_event_id": string;
         "target_device_generation_ref": number;
         "proposal_event_id": string;
-        "proposal_digest": string;
         "accepted_at": string;
         "acceptance_seq": number;
         "control_proposal_ack": {
@@ -1119,7 +1414,7 @@ export type EventFederationSubmission = {
       "uri"?: string;
       [key: string]: unknown;
     };
-    "actor_kind"?: "user" | "organization" | "team" | "agent" | "service" | "integration";
+    "actor_kind"?: "user" | "organization" | "team" | "agent" | "bot" | "service" | "integration";
     "actor_seq": number;
     "created_at": string;
     "hlc"?: string;
@@ -1334,6 +1629,12 @@ export type EventFederationSubmission = {
         "jws": string;
       };
     }>;
+  };
+  "ackless_self_principal_admission_evidence"?: {
+    "device_id": string;
+    "device_authorize_event_id": string;
+    "device_generation_ref": number;
+    "seal_basis_digest": string;
   };
   "membership_compensation_evidence"?: {
     "delegation": {

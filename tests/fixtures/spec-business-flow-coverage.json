@@ -228,8 +228,15 @@
           "kind": "ordinary",
           "path": "../coauth/crates/backend/src/handlers/arkret/tests.rs",
           "markers": [
-            "ak.gate.account.command.logout_auth_session.v1",
             "/_arkret/gate/account/session-grants/introspect"
+          ]
+        },
+        {
+          "kind": "ordinary",
+          "path": "../coauth/crates/backend/src/handlers/arkret/session_grant/session_logout.rs",
+          "markers": [
+            "require_auth_session_logout_service_caller(req, depot)?",
+            "terminate_auth_side_session_by_grant_jwt(depot, &body.grant_jwt).await?"
           ]
         },
         {
@@ -585,8 +592,8 @@
           "kind": "joint_e2e",
           "path": "e2e/tests/identity/multi-device.spec.ts",
           "markers": [
-            "acceptedDeviceAuthorizePayload",
-            "ak.device.authorize"
+            "a second-device login stays unauthorized until the first device explicitly approves it",
+            "expect(acceptedDeviceId).not.toBe(account.genesisDeviceId)"
           ]
         },
         {
@@ -702,10 +709,12 @@
           ]
         },
         {
-          "kind": "joint_e2e",
+          "kind": "ordinary",
           "path": "src/scenarios/handle_to_join_e2e.rs",
           "markers": [
-            "ak.find.directory.read.resolve_handle.v1"
+            ".validate_remote_resolution(Some(TARGET_REALM_ID), Some(&account_a), now)",
+            ".validate_remote_resolution(Some(TARGET_REALM_ID), Some(&account_b), now)",
+            "MembershipPayload::join"
           ]
         },
         {

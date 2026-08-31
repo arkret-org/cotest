@@ -11,39 +11,83 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
             .join("contract-registry.json"),
     );
     let contracts = &catalog["event_kind_registry"]["cell_contracts"];
-    for (kind, expected_families) in [
-        (
-            "ak.invite.create",
-            &["ak.component.invite.lifecycle.v1"][..],
-        ),
-        (
-            "ak.invite.accept",
-            &[
-                "ak.component.invite.lifecycle.v1",
-                "ak.component.member.state.v1",
-            ][..],
-        ),
-        (
-            "ak.invite.cancel",
-            &["ak.component.invite.lifecycle.v1"][..],
-        ),
-        (
-            "ak.invite.revoke",
-            &["ak.component.invite.lifecycle.v1"][..],
-        ),
+    let fixture =
+        read_json(&spec_artifacts_root().join("fixtures/protocol-edge-cases-fixture.json"));
+    let vector = find_vector(
+        &fixture,
+        "ak.vector.invite.membership_transition_atomicity.v1",
+    );
+    assert_eq!(
+        vector["expected"]["accepted_member_state_path"],
+        serde_json::json!(["leave", "join"])
+    );
+    assert_eq!(
+        catalog["event_kind_registry"]["fsm_templates"]["ak.fsm.membership.v1"]["states"],
+        serde_json::json!(["join", "knock", "leave", "ban"])
+    );
+    for kind in [
+        "ak.invite.create",
+        "ak.invite.accept",
+        "ak.invite.cancel",
+        "ak.invite.revoke",
     ] {
         let writes = contracts[kind]["cell_writes"]
             .as_array()
             .unwrap_or_else(|| panic!("{kind} must declare cell_writes"));
-        let families = writes
+        let expected_families: &[&str] = if kind == "ak.invite.accept" {
+            &[
+                "ak.component.invite.lifecycle.v1",
+                "ak.component.member.state.v1",
+            ]
+        } else {
+            &["ak.component.invite.lifecycle.v1"]
+        };
+        let actual_families: Vec<_> = writes
             .iter()
             .map(|write| {
                 write["cell_family"]
                     .as_str()
-                    .unwrap_or_else(|| panic!("{kind} write must name cell_family"))
+                    .expect("registered cell family")
             })
-            .collect::<Vec<_>>();
-        assert_eq!(families, expected_families, "{kind} write set drifted");
+            .collect();
+        assert_eq!(
+            actual_families, expected_families,
+            "{kind} exact registered write set"
+        );
+        assert_eq!(
+            vector["expected"]["registered_write_counts"][kind],
+            serde_json::json!(writes.len())
+        );
+        assert_eq!(contracts[kind]["plane"], "control");
+        assert_eq!(contracts[kind]["sealed"], true);
+        if kind != "ak.invite.accept" {
+            continue;
+        }
+        assert_eq!(
+            writes[0]
+                .pointer("/effect_projection/to/const")
+                .and_then(Value::as_str),
+            Some("accepted")
+        );
+        let member = &writes[1];
+        assert_eq!(
+            member
+                .pointer("/cell_subject/components/0/field")
+                .and_then(Value::as_str),
+            Some("envelope.actor_id")
+        );
+        assert_eq!(
+            member
+                .pointer("/effect_projection/kind")
+                .and_then(Value::as_str),
+            Some("transition_to")
+        );
+        assert_eq!(
+            member
+                .pointer("/effect_projection/to/const")
+                .and_then(Value::as_str),
+            Some("join")
+        );
     }
 
     let accept_member = contracts["ak.invite.accept"]["cell_writes"]
@@ -86,8 +130,14 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
             "create_keeps_member_leave_then_accept_joins",
             "accept_without_pending_or_claimed_invite_prestate_is_rejected",
             "cancel_rejected_leaves_member_cell_unchanged",
-            "direct_inviter_cancel_missing_or_mismatched_invitee_is_reducer_projection_failed",
+            "revoke_with_expired_reason_leaves_member_cell_unchanged",
+            "third_party_create_and_revoke_write_no_member_state",
             "bare_member_state_ban_from_leave_uses_membership_fsm",
+            "direct_inviter_cancel_revoked_is_accepted",
+            "direct_inviter_cancel_missing_or_mismatched_invitee_is_reducer_projection_failed",
+            "token_invite_cancel_revoked_is_invite_kind_requires_revoke",
+            "token_invite_revoke_revoked_is_accepted",
+            "claimed_invite_accept_is_accepted",
         ],
     );
 }

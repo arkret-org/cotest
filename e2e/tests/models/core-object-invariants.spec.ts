@@ -20,8 +20,10 @@
 
 import { type APIRequestContext, expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
+import type { ActorId } from "../../helpers/generated/spec-wire-objects";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  accountActorId,
   alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalJson,
@@ -73,7 +75,7 @@ async function createStrandApi(
         metadata: { title, fields },
         stage: "planned",
         tracks: { discussion: { enabled: true, is_primary: true } },
-        created_by: actorId,
+        created_by: accountActorId(actorId),
         created_at: createdAt,
       },
     },
@@ -144,7 +146,7 @@ function relationObject(args: {
     relation_kind: args.relationKind,
     from_ref: args.fromRef,
     to_ref: args.toRef,
-    created_by: args.actorId,
+    created_by: accountActorId(args.actorId),
     created_at: canonicalTimestamp(),
   };
 }
@@ -212,7 +214,7 @@ test.describe("core object invariants", () => {
       expect(realmBody.owner_id).toBe(alice.id);
       // Membership invariant: owner must always appear in members.
       expect(Array.isArray(realmBody.member_ids)).toBe(true);
-      expect(realmBody.member_ids ?? []).toContain(alice.id);
+      expect(realmBody.member_ids).toContainEqual(accountActorId(alice.id));
       // Common-field 3: `lifecycle_state` equivalent (deleted=false ⇒ active).
       expect(realmBody.deleted).toBe(false);
 
@@ -236,7 +238,7 @@ test.describe("core object invariants", () => {
         events?: Array<{
           event_id?: string;
           kind?: string;
-          actor_id?: string;
+          actor_id?: ActorId;
           created_at?: string;
           scope_ref?: { kind?: string; realm_id?: string };
         }>;
@@ -259,7 +261,7 @@ test.describe("core object invariants", () => {
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/,
       );
       // Common-field (§2.2): actor_id.
-      expect(lifecycleEvent.actor_id).toBe(alice.id);
+      expect(lifecycleEvent.actor_id).toEqual(accountActorId(alice.id));
       // Common-field: kind (§2.2 — Event Envelope `kind`).
       expect(typeof lifecycleEvent.kind).toBe("string");
       expect(lifecycleEvent.kind?.length ?? 0).toBeGreaterThan(0);
@@ -474,7 +476,7 @@ test.describe("core object invariants", () => {
           realm_id: realmId,
           kind: "board",
           metadata: { title: `core-invariants parent ${stamp}` },
-          created_by: alice.id,
+          created_by: accountActorId(alice.id),
           created_at: createdAt,
         },
       },
@@ -626,11 +628,11 @@ test.describe("core object invariants", () => {
     const dupAgain = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(aliceToken),
-        data: duplicateEnvelope,
+        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`), "content-type": "application/json" },
+        data: canonicalJson({ event: duplicateEnvelope }),
       },
     );
-    expect([200, 201, 409]).toContain(dupAgain.status());
+    expect(dupAgain.status(), "exact accepted Event replay must remain successful").toBe(200);
 
     // Cross-Realm structural `contains` MUST fail (relation.md §4.4). Create a
     // strand in another Realm and try to `contains` it from this Realm.
@@ -675,8 +677,8 @@ test.describe("core object invariants", () => {
     const crossRealm = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
-        headers: authHeaders(aliceToken),
-        data: crossRealmEnvelope,
+        headers: { ...authHeaders(aliceToken, "POST", `${solandBaseUrl()}/_arkret/self/events`), "content-type": "application/json" },
+        data: canonicalJson({ event: crossRealmEnvelope }),
       },
     );
     expect(crossRealm.status()).toBe(412);

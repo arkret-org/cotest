@@ -687,6 +687,9 @@ async function openDpopDeviceForAccount(
   const page = await openUserPage(browser, session.user, {
     grantJwt: session.grantJwt,
     dpopSeedB64url: session.dpopSeedB64url,
+    eventSigningSeedB64url: session.eventSigningSeedB64url,
+    recoveryKey: session.recoveryKey,
+    recoveryMaterialEvidence: session.recoveryMaterialEvidence,
     grantId: session.grantId,
     accountId: session.accountId,
     grantAudience: session.grantAudience,

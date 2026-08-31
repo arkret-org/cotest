@@ -5,6 +5,7 @@
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  accountActorId,
   addRealmMemberApi,
   advanceEnvelopeToActorFrontier,
   authHeaders,
@@ -125,7 +126,7 @@ async function setupEncryptedMessage(
             profile: "discussion",
           },
         },
-        created_by: alice.id,
+        created_by: accountActorId(alice.id),
         created_at: strandCreatedAt,
       },
     },

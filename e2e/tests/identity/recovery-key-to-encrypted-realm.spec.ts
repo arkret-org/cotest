@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Response } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
-import { COAUTH_DEV_EMAIL_CODE } from "../../helpers/coauth-register";
+import { registrationEmailCode } from "../../helpers/coauth-register";
 import { openUserPage, uniqueUser } from "../../helpers/users";
 
 type ProtocolHit = {
@@ -17,6 +17,7 @@ test.describe.configure({ mode: "serial" });
 test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () => {
   test("fresh browser registration creates, writes, and reloads plaintext and encrypted Realms", async ({
     browser,
+    request,
   }) => {
     test.setTimeout(600_000);
     const coauth = coauthBaseUrl();
@@ -58,6 +59,10 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           'input[autocomplete="one-time-code"]',
         );
         await expect(verificationCode).toBeVisible({ timeout: 120_000 });
+        const deliveredCode = await registrationEmailCode(
+          request,
+          `${user.name}@example.test`,
+        );
         const verify = page.getByRole("button", { name: /^verify$/i });
         await expect
           .poll(
@@ -65,7 +70,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
               if (!(await verificationCode.isVisible().catch(() => false))) {
                 return true;
               }
-              await verificationCode.fill(COAUTH_DEV_EMAIL_CODE);
+              await verificationCode.fill(deliveredCode);
               await verify.click();
               return !(await verificationCode.isVisible().catch(() => false));
             },
@@ -73,7 +78,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
               timeout: 30_000,
               intervals: [500],
               message:
-                "Coauth asynchronous email-verification job must accept the dev code",
+                "Coauth must accept the delivered email verification code",
             },
           )
           .toBe(true);
@@ -184,7 +189,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         backupPut,
         "Recovery Key onboarding must persist encrypted recovery metadata",
       ).toBeTruthy();
-      expect(backupPut?.requestBody?.actor_id).toBe(identity.coreId);
+      expect(backupPut?.requestBody?.actor_id).toEqual({ kind: "account", account_id: identity.accountId });
 
       const message = `canonical encrypted message ${Date.now()}`;
       let realmId = "";
@@ -460,6 +465,7 @@ function errorCode(
 
 async function readActiveIdentity(page: Page): Promise<{
   coreId: string;
+  accountId: { principal_id: string; station_id: string };
   did: string;
   deviceId: string;
 }> {
@@ -468,16 +474,18 @@ async function readActiveIdentity(page: Page): Promise<{
       localStorage.getItem("inkson.config.v1") ?? "{}",
     ) as {
       active_account?: {
-        authority?: { principal_id?: string };
+        authority?: { principal_id?: string; station_id?: string };
         resolution?: { did?: string };
         device_id?: string;
       };
     };
     const coreId = config.active_account?.authority?.principal_id;
+    const stationId = config.active_account?.authority?.station_id;
     const did = config.active_account?.resolution?.did;
     const deviceId = config.active_account?.device_id;
     if (
       typeof coreId !== "string" ||
+      typeof stationId !== "string" ||
       typeof did !== "string" ||
       typeof deviceId !== "string"
     ) {
@@ -485,7 +493,7 @@ async function readActiveIdentity(page: Page): Promise<{
         "Inkson active account omitted its typed identity coordinates",
       );
     }
-    return { coreId, did, deviceId };
+    return { coreId, accountId: { principal_id: coreId, station_id: stationId }, did, deviceId };
   });
 }
 

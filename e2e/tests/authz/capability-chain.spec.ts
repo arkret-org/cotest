@@ -16,6 +16,7 @@
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import {
+  accountActorId,
   authHeaders,
   addRealmMemberApi,
   buildCapabilityGrantEnvelope,
@@ -76,7 +77,7 @@ async function authzCheck(
     // bytes, so the request has to be canonicalised rather than handed to
     // Playwright's own JSON serialiser.
     data: canonicalJson({
-      actor_id: requireDidCoreId(args.actorId),
+      actor_id: accountActorId(args.actorId),
       action: args.action,
       resource: { kind: "realm", realm_id: args.realmId },
     }),
@@ -93,7 +94,7 @@ async function effectiveGrantIds(
   subjectId: string,
   realmId: string,
 ): Promise<string[]> {
-  const url = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(requireDidCoreId(subjectId))}&subject_station_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
+  const url = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject_actor_id=${encodeURIComponent(canonicalJson(accountActorId(subjectId)))}&realm_id=${encodeURIComponent(realmId)}`;
   const response = await request.get(url, {
     headers: authHeaders(ownerToken, "GET", url),
   });
@@ -203,7 +204,7 @@ test.describe("capability chain (event wire)", () => {
 
     // GET /_arkret/self/authz/effective-grants — realm owner may query a
     // subject's direct grants (GrantList).
-    const grantsUrl = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject=${encodeURIComponent(requireDidCoreId(bob.id))}&subject_station_id=${encodeURIComponent(solandServiceId())}&realm_id=${encodeURIComponent(realmId)}`;
+    const grantsUrl = `${solandBaseUrl()}/_arkret/self/authz/effective-grants?subject_actor_id=${encodeURIComponent(canonicalJson(accountActorId(bob.id)))}&realm_id=${encodeURIComponent(realmId)}`;
     const grantsResp = await request.get(grantsUrl, {
       headers: authHeaders(aliceToken, "GET", grantsUrl),
     });

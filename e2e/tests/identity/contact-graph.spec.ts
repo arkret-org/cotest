@@ -11,10 +11,11 @@
 // surface that consent-grant.spec.ts exercises).
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { expectStructurallyIdentical } from "../../helpers/secret-safe";
 import { createDpopUserSession } from "../../helpers/users";
 import {
+  accountActorId,
   authHeaders,
   canonicalJson,
   createRealmApi,
@@ -276,7 +277,7 @@ test.describe("contact graph (same Station)", () => {
     // bob lists the pending invite.
     const invites = await listAuthzInvitesArkret(request, bobToken);
     const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee_id === bob.id,
+      (i) => i.realm_id === realmId && i.invitee_account_id?.principal_id === bob.id && i.invitee_account_id.station_id === solandServiceId(),
     );
     expect(invite, "bob pending invite for the new realm").toBeTruthy();
     expect(invite!.id).toBe(inviteId);
@@ -547,12 +548,14 @@ test.describe("contact graph (same Station)", () => {
         phase: "prepare",
         operation_id: `ak:operation:contact.scope_update.${staleNonce}`,
         idempotency_key: staleNonce,
-        peer: { kind: "human", principal_id: bob.id },
+        peer: { kind: "human", account_id: accountActorId(bob.id).account_id },
         ...staleCursor,
         granted_to_peer_scopes: ["direct_message"],
       }),
     });
-    expect(stalePrepare.status(), await stalePrepare.text()).toBe(409);
+    // A broken server can return a prepared reservation here. Do not print
+    // the response body (reservation handles / unsigned Event material).
+    expect(stalePrepare.status(), "stale Contact prepare must reject before reservation").toBe(409);
 
     await scopeUpdateContactArkret(request, aliceToken, bob.id, [
       "direct_message",

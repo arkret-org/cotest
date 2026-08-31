@@ -1139,8 +1139,20 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
             .context("Event proof input requires actor_id")?,
     )
     .context("parse Event actor_id")?;
-    if actor.signing_principal_id() != &actor_core {
-        bail!("Event actor_id does not match actor_did");
+    let signer_actor: arkret_wire::ActorId = input
+        .event
+        .get("executed_by")
+        .map(|value| serde_json::from_value(value.clone()))
+        .transpose()
+        .context("parse Event executed_by")?
+        .unwrap_or_else(|| actor.clone());
+    if signer_actor.signing_principal_id() != &actor_core {
+        bail!("Event signer does not match actor_did");
+    }
+    let method_did = arkret_identity::verification_method_did(input.verification_method.as_str())
+        .context("parse Event proof verification method")?;
+    if project_did_to_core_id(&method_did)? != actor_core {
+        bail!("Event verification method does not match actor_did");
     }
     let created_at = canonical::parse_timestamp_canonical(&input.created_at)
         .with_context(|| format!("parse proof created_at {:?}", input.created_at))?;
@@ -1354,7 +1366,7 @@ mod tests {
                 "reason": "invite_accept"
             },
             "unsigned": {"trace": "local"},
-            "actor_kind": arkret_wire::EnvelopeActorKind::Native,
+            "actor_kind": arkret_wire::EnvelopeActorKind::User,
             "proofs": []
         });
 

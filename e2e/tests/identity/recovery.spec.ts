@@ -10,7 +10,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { coauthBaseUrl, solandBaseUrl } from "../../helpers/env";
-import { canonicalJson } from "../../helpers/soland-api";
+import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 import {
   ensureRegistered,
   issueDevSession,
@@ -67,7 +67,7 @@ function secretStorageEnvelope(opts: {
   const ciphertext = randomBytes(48);
   const envelope: Record<string, unknown> = {
     backup_id: backupId,
-    actor_id: opts.actorId,
+    actor_id: accountActorId(opts.actorId),
     device_id: opts.deviceId,
     backup_kind: backupClass,
     mixed_secret_storage: opts.mixed,

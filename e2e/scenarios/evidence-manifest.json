@@ -825,6 +825,18 @@
       ]
     },
     {
+      "scenario_key": "harness/event-actor",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [],
+      "mocks": [],
+      "identity_establishment": ["fixture_or_not_applicable"],
+      "protocol_object_producers": ["cotest_wire_oracle"],
+      "declared_test_bypasses": ["raw_http_fixture_or_oracle", "test_only_signer_or_wire_builder"],
+      "claims_excluded": ["registration_login_authorization", "ui_driven_business_flow_for_raw_http_steps"]
+    },
+    {
       "scenario_key": "harness/mocks-selftest",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",

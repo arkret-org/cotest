@@ -49,6 +49,14 @@ export const OUTPUT_PATH = resolve(
  * CLI-command DTOs, the local signer bookkeeping) stay hand-written.
  */
 const TARGETS = [
+  { file: "identity-resolution.schema.json", pointer: "#/$defs/public_principal_resolution", typeName: "PublicPrincipalResolution" },
+  { file: "circle-operations.schema.json", pointer: "#/$defs/circle_view", typeName: "CircleView" },
+  { file: "circle-operations.schema.json", pointer: "#/$defs/circle_membership_outcome", typeName: "CircleMembershipOutcome" },
+  { file: "contact-operations.schema.json", pointer: "#/$defs/contact_peer", typeName: "ContactPeer" },
+  { file: "common-ids.schema.json", pointer: "#/$defs/actor_id", typeName: "ActorId" },
+  { file: "common-ids.schema.json", pointer: "#/$defs/account_id", typeName: "AccountId" },
+  { file: "invite.schema.json", typeName: "InviteObject" },
+  { file: "event-payload.schema.json", pointer: "#/$defs/membership_payload", typeName: "MembershipPayload" },
   { file: "realm.schema.json", typeName: "RealmObject" },
   { file: "space.schema.json", typeName: "SpaceObject" },
   { file: "capability-grant.schema.json", typeName: "CapabilityGrantObject" },

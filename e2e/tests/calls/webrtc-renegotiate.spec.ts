@@ -1,3 +1,4 @@
+import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 // WebRTC renegotiation + ICE restart over the spec wire.
 // Contract: e2e/scenarios/calls/webrtc-renegotiate.md
 // Spec refs:
@@ -48,7 +49,7 @@ test.describe("ak.call.signal renegotiation + ICE restart", () => {
     // signed by the media service with the distinct ICE-config domain label.
     expect(body.realm_id).toBe(realmId);
     expect(body.call_id).toBe(callId);
-    expect(body.actor_id).toBe(alice.id);
+    expect(body.actor_id).toEqual(accountActorId(alice.id));
     expect(body.device_id).toBe(alice.deviceId);
     expect(Array.isArray(body.ice_servers)).toBe(true);
     expect(body.ice_servers.length).toBeGreaterThan(0);

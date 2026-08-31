@@ -7,8 +7,12 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  accountActorId,
+  alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalJson,
   createRealmApi,
+  prepareSignedEventCbaApi,
   signedEventEnvelope,
   submitSignedEventApi,
   wireErrCode,
@@ -118,7 +122,7 @@ test.describe("realm links", () => {
       expect(eff1.ok()).toBeTruthy();
       const eff1Body = await eff1.json();
       expect(eff1Body.inheritance_mode).toBe("explicit");
-      expect(eff1Body.inheritance_chain).toContain(govRealmId);
+      expect(eff1Body.inheritance_chain_ids).toContain(govRealmId);
       expect(eff1Body.effective_policy.allowed_policies).toContain(inheritedPolicyId);
 
       // Phase D — a realm WITHOUT the inheritance opt-in does NOT inherit
@@ -170,7 +174,7 @@ test.describe("realm links", () => {
       );
       const eff3Body = await eff3.json();
       expect(eff3Body.effective_policy.allowed_policies ?? []).not.toContain(inheritedPolicyId);
-      expect(eff3Body.inheritance_chain ?? []).not.toContain(govRealmId);
+      expect(eff3Body.inheritance_chain_ids).not.toContain(govRealmId);
     },
   );
 
@@ -402,18 +406,25 @@ test.describe("realm links", () => {
       // alice (no membership / capability in T) tries to ban bob in T via the
       // canonical member-state event. MUST fail closed — the governed_by link
       // does not carry alice's G-admin into T.
-      const attempt = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: aliceAuth,
-        data: signedEventEnvelope({
+      const deniedEvent = signedEventEnvelope({
           actorId: alice.id,
           realmId: T,
           kind: "ak.member.state",
           payload: {
             realm_id: T,
-            actor_id: bob.id,
+            member_id: accountActorId(bob.id),
             membership: "ban",
           },
-        }),
+        });
+      // Use T's public-to-its-member governance basis without granting Alice
+      // any authority. The server must reach authorization, not wrapper parsing.
+      await prepareSignedEventCbaApi(request, bobToken, deniedEvent);
+      // Bob reads Alice's selected frontier in T; Alice remains the signer and submitter.
+      await alignSignedEventToActorFrontierApi(request, bobToken, deniedEvent);
+      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const attempt = await request.post(submitUrl, {
+        headers: { ...authHeaders(aliceToken, "POST", submitUrl), "content-type": "application/json" },
+        data: canonicalJson({ event: deniedEvent }),
       });
       expect(attempt.status()).toBeGreaterThanOrEqual(400);
       // fail-closed reason is one of soland's capability gates; any of them

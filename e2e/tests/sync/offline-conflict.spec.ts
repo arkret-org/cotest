@@ -139,7 +139,7 @@ test.describe("offline sync + conflict repair", () => {
     );
     expect(
       orderedMessageBodies(
-        await listRealmEventsViaApi(request, bobToken, realmId),
+        await listRealmEventsViaApi(request, bobToken, realmId, { order: "ascending" }),
         messages,
       ),
     ).toEqual([]);
@@ -154,7 +154,7 @@ test.describe("offline sync + conflict repair", () => {
       .poll(
         async () =>
           orderedMessageBodies(
-            await listRealmEventsViaApi(request, bobToken, realmId),
+            await listRealmEventsViaApi(request, bobToken, realmId, { order: "ascending" }),
             messages,
           ),
         { timeout: 30_000 },
@@ -404,16 +404,15 @@ test.describe("offline sync + conflict repair", () => {
         event.payload && typeof event.payload === "object"
           ? (event.payload as Record<string, unknown>)
           : undefined;
-      const target =
-        payload?.invite_delivery_target &&
-        typeof payload.invite_delivery_target === "object"
-          ? (payload.invite_delivery_target as Record<string, unknown>)
+      const invitee =
+        payload?.invitee_account_id &&
+        typeof payload.invitee_account_id === "object"
+          ? (payload.invitee_account_id as Record<string, unknown>)
           : undefined;
       return (
         event.kind === "ak.invite.create" &&
-        payload?.invitee_id === bob.id &&
-        (target?.account_id as Record<string, unknown> | undefined)
-          ?.station_id === solandServiceId("beta")
+        invitee?.principal_id === bob.id &&
+        invitee.station_id === solandServiceId("beta")
       );
     });
     expect(
@@ -474,7 +473,7 @@ async function waitForInvite(
         const invites = await listInvitesApi(request, token, { server });
         found = invites.find(
           (invite) =>
-            invite.invitee_id === inviteeId && invite.realm_id === realmId,
+            invite.invitee_account_id?.principal_id === inviteeId && invite.invitee_account_id.station_id === solandServiceId(server) && invite.realm_id === realmId,
         );
         return Boolean(found);
       },

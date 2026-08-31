@@ -200,6 +200,7 @@ $SolandServiceId = $null
 $SolandServiceDid = $null
 $SolandBetaServiceId = $null
 $SolandBetaServiceDid = $null
+$script:UseManagedCoauthAssertionKey = [bool]($StartCoauth -and -not $CoauthCommand)
 
 if ($PreflightOnly -and $SkipPreflight) {
     throw "-PreflightOnly cannot be combined with -SkipPreflight"
@@ -1616,15 +1617,18 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$CoauthBind,
         [Parameter(Mandatory = $true)][string]$CedarPolicyFile,
         [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
+        [string]$InksonBetaBaseUrl,
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
         [string]$SolandBetaBaseUrl,
+        [string]$OwningStation = "soland",
         [Parameter(Mandatory = $true)][string]$SessionGrantIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
         [string]$MockEmailBaseUrl
     )
 
     $rawConfig = Join-Path $JointDir "coauth.raw.yaml"
+    [void](New-Item -ItemType Directory -Force -Path $JointDir)
     $configPath = Join-Path $JointDir "coauth.yaml"
     $generateLog = Join-Path $JointDir "coauth-config-generate.log"
     $generateOutput = & $CoauthBinary config generate --dev 2>"$generateLog"
@@ -1646,6 +1650,7 @@ function New-CoauthJointConfig {
         "--inkson-base-url", $InksonBaseUrl,
         "--oauth-client-id", $OAuthClientId,
         "--soland-base-url", $SolandBaseUrl,
+        "--owning-station", $OwningStation,
         "--session-grant-introspection-bearer", $SessionGrantIntrospectionBearer,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer
     )
@@ -1654,6 +1659,9 @@ function New-CoauthJointConfig {
     }
     if ($SolandBetaBaseUrl) {
         $patchArgs += @("--soland-beta-base-url", $SolandBetaBaseUrl)
+    }
+    if ($InksonBetaBaseUrl) {
+        $patchArgs += @("--inkson-beta-base-url", $InksonBetaBaseUrl)
     }
     if ((Split-Path -Leaf $python) -ieq "py.exe") {
         $patchArgs = @("-3") + $patchArgs
@@ -2553,6 +2561,7 @@ $jointTlsPort = $null
 $solandPublicHost = $null
 $solandBetaPublicHost = $null
 $coauthPublicHost = $null
+$coauthBetaPublicHost = $null
 $jointTlsAssets = $null
 $jointTlsHostNames = @()
 $jointTlsHostsMarker = "cotest-joint-e2e $timestamp"
@@ -2567,6 +2576,7 @@ if ($jointTlsEnabled) {
     }
     if ($jointTlsCoauth) {
         $coauthPublicHost = "coauth.local.host"
+        if ($DualSoland) { $coauthBetaPublicHost = "coauth-beta.local.host" }
     }
 }
 
@@ -2684,6 +2694,14 @@ if ($StartCoauth -and -not $CoauthBaseUrl) {
     $coauthPort = $null
 }
 $coauthSecondaryPort = $null
+$coauthBetaPort = $null
+$coauthBetaBaseUrl = $null
+$coauthBetaConfigPath = $null
+$CoauthBetaCommand = $null
+if ($StartCoauth -and $DualSoland) {
+    $coauthBetaPort = Get-FreeTcpPort
+    $coauthBetaBaseUrl = if ($coauthBetaPublicHost) { "https://${coauthBetaPublicHost}:$jointTlsPort" } else { "http://localhost:$coauthBetaPort" }
+}
 $coauthSecondaryBaseUrl = $null
 $CoauthSecondaryCommand = $null
 if ($DualCoauth) {
@@ -2834,6 +2852,7 @@ $managedServices = New-Object System.Collections.Generic.List[object]
 $managedServiceFailures = @()
 $mockAppletRegistryStateKeyFile = $null
 $ephemeralPostgres = $null
+$ephemeralCoauthBetaPostgres = $null
 $ephemeralSolandPostgres = $null
 $ephemeralSolandBetaPostgres = $null
 $solandDatabaseDsn = $SolandDatabaseUrl
@@ -3176,7 +3195,7 @@ try {
     $jointTlsDir = $null
     if ($jointTlsEnabled) {
         $jointTlsDir = Join-Path $jointDir "tls"
-        $jointTlsHostNames = @($solandPublicHost, $solandBetaPublicHost, $coauthPublicHost) | Where-Object { $_ }
+        $jointTlsHostNames = @($solandPublicHost, $solandBetaPublicHost, $coauthPublicHost, $coauthBetaPublicHost) | Where-Object { $_ }
         $jointTlsAssets = New-JointTlsAssets `
             -Directory $jointTlsDir `
             -DnsNames $jointTlsHostNames `
@@ -3197,6 +3216,9 @@ try {
         }
         if ($coauthPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{ Host = $coauthPublicHost; BackendPort = $coauthPort }
+        }
+        if ($coauthBetaPublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $coauthBetaPublicHost; BackendPort = $coauthBetaPort }
         }
         $caddyfilePath = Join-Path $jointTlsDir "Caddyfile"
         Write-JointCaddyConfig `
@@ -3383,12 +3405,29 @@ try {
             -CoauthBind "127.0.0.1:$coauthPort" `
             -CedarPolicyFile $coauthPolicyFile `
             -InksonBaseUrl $InksonBaseUrl `
+            -InksonBetaBaseUrl $inksonBetaBaseUrl `
             -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `
             -SolandBetaBaseUrl $solandBetaBaseUrl `
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
+        if ($DualSoland) {
+            # Each Station owns a separate Account Authority and durable account
+            # store. DualCoauth remains a replica of Alpha, not Beta's authority.
+            $ephemeralCoauthBetaPostgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-beta-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
+            $coauthBetaDir = Join-Path $jointDir "coauth-beta"
+            $coauthBetaConfigPath = New-CoauthJointConfig `
+                -CoauthBinary $coauthBinary -RepoRoot $repoRoot -JointDir $coauthBetaDir `
+                -PostgresUrl $ephemeralCoauthBetaPostgres.Url `
+                -CoauthBaseUrl $coauthBetaBaseUrl -CoauthBind "127.0.0.1:$coauthBetaPort" `
+                -CedarPolicyFile $coauthPolicyFile -InksonBaseUrl $InksonBaseUrl -InksonBetaBaseUrl $inksonBetaBaseUrl `
+                -OAuthClientId $CoauthOAuthClientId -SolandBaseUrl $SolandBaseUrl -SolandBetaBaseUrl $solandBetaBaseUrl `
+                -OwningStation "soland-beta" `
+                -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
+                -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer -MockEmailBaseUrl $mockEmailBaseUrl
+            Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthBetaConfigPath -LogDirectory $coauthBetaDir -TimeoutSeconds $StartupTimeoutSeconds
+        }
         if ($DualCoauth) {
             $coauthSecondaryConfigPath = Join-Path $jointDir "coauth-secondary.yaml"
             $primaryBind = "address: `"127.0.0.1:$coauthPort`""
@@ -3429,6 +3468,9 @@ try {
         }
         $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
+        if ($coauthBetaConfigPath) {
+            $CoauthBetaCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthBetaConfigPath)
+        }
         if ($DualCoauth) {
             $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
         }
@@ -3505,6 +3547,8 @@ try {
 
     function Build-SolandDockerEnvironment {
         param(
+            [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
+            [string]$AccountAuthorityServiceId = $CoauthServiceId,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
             [Parameter(Mandatory = $true)][string]$DatabaseUrl,
             [Parameter(Mandatory = $true)][int]$MetricsPort,
@@ -3544,11 +3588,16 @@ try {
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        if ($CoauthBaseUrl -and $CoauthServiceId) {
-            $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
+        if ($script:UseManagedCoauthAssertionKey) {
+            # Public half of patch-coauth-config.py's managed authority key;
+            # the Station commits it before deriving its signed DID inception.
+            $map.SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE = "z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
+        }
+        if ($AccountAuthorityBaseUrl -and $AccountAuthorityServiceId) {
+            $coauthPublic = $AccountAuthorityBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
-            $map.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $CoauthServiceId
+            $map.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $AccountAuthorityServiceId
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_arkret/gate/account/auth-sessions/logout"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
@@ -3570,6 +3619,8 @@ try {
 
     function Build-SolandCommand {
         param(
+            [string]$AccountAuthorityBaseUrl = $CoauthBaseUrl,
+            [string]$AccountAuthorityServiceId = $CoauthServiceId,
             [Parameter(Mandatory = $true)][string]$BinaryPath,
             [Parameter(Mandatory = $true)][string]$ConfigPath,
             [Parameter(Mandatory = $true)][string]$BaseUrl,
@@ -3609,10 +3660,13 @@ try {
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        if ($CoauthBaseUrl -and $CoauthServiceId) {
-            $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
+        if ($script:UseManagedCoauthAssertionKey) {
+            $values.SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE = "z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
+        }
+        if ($AccountAuthorityBaseUrl -and $AccountAuthorityServiceId) {
+            $coauthTrimmed = $AccountAuthorityBaseUrl.TrimEnd("/")
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
-            $values.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $CoauthServiceId
+            $values.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $AccountAuthorityServiceId
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_arkret/gate/account/auth-sessions/logout"
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
@@ -3823,6 +3877,10 @@ try {
             Stop-ManagedCommand -Service $plan.Service
             [void]$managedServices.Remove($plan.Service)
             $configArguments = $plan.ConfigArguments
+            if ($StartCoauth) {
+                $configArguments.AccountAuthorityServiceId = $expectedStationId
+                $configArguments.AccountAuthorityBaseUrl = if ($plan.BaseUrl -eq $solandBetaBaseUrl) { $coauthBetaBaseUrl } else { $CoauthBaseUrl }
+            }
             if ($plan.Service.Kind -eq "docker") {
                 $startArguments = $plan.DockerArguments
                 $startArguments.Name = $plan.Name
@@ -3854,6 +3912,10 @@ try {
                 -SolandBetaServiceId $SolandBetaServiceId
         }
         Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
+        if ($coauthBetaConfigPath) {
+            Set-CoauthStationServiceIds -ConfigPath $coauthBetaConfigPath -SolandServiceId $SolandServiceId -SolandBetaServiceId $SolandBetaServiceId
+            Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthBetaConfigPath -LogDirectory (Split-Path -Parent $coauthBetaConfigPath)
+        }
     }
 
     if ($CoauthCommand) {
@@ -3868,6 +3930,10 @@ try {
     if ($CoauthSecondaryCommand) {
         $managedServices.Add((Start-ManagedCommand -Name "coauth-secondary" -Command $CoauthSecondaryCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$coauthSecondaryBaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
+    }
+    if ($CoauthBetaCommand) {
+        $managedServices.Add((Start-ManagedCommand -Name "coauth-beta" -Command $CoauthBetaCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
+        Wait-HttpReady -Url "$coauthBetaBaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
 
     $inksonService = $null
@@ -4054,6 +4120,12 @@ try {
     if ($CoauthBaseUrl) {
         Assert-CoauthDpopGrantSeamReady -BaseUrl $CoauthBaseUrl
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
+        if ($coauthBetaBaseUrl) {
+            Assert-CoauthDpopGrantSeamReady -BaseUrl $coauthBetaBaseUrl
+            $env:COTEST_COAUTH_BETA_BASE_URL = $coauthBetaBaseUrl
+        } else {
+            Remove-Item Env:COTEST_COAUTH_BETA_BASE_URL -ErrorAction SilentlyContinue
+        }
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
         $env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
         # The OAuth client_id soland is configured to advertise (see
@@ -4079,6 +4151,7 @@ try {
         }
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
+        Remove-Item Env:COTEST_COAUTH_BETA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
@@ -4307,6 +4380,13 @@ finally {
                 Write-Host "postgres dump: $postgresDump"
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralPostgres.ContainerName
+        }
+        if ($ephemeralCoauthBetaPostgres) {
+            $postgresDump = Export-EphemeralPostgresDump `
+                -ContainerName $ephemeralCoauthBetaPostgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir "coauth-beta-postgres.sql")
+            if ($postgresDump) { Write-Host "postgres dump: $postgresDump" }
+            Stop-EphemeralPostgres -ContainerName $ephemeralCoauthBetaPostgres.ContainerName
         }
         if ($ephemeralSolandPostgres) {
             $postgresDump = Export-EphemeralPostgresDump `
@@ -5132,6 +5212,9 @@ $summary = [pscustomobject]@{
     inkson_base_url = $InksonBaseUrl
     coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
     coauth_secondary_base_url = $coauthSecondaryBaseUrl
+    coauth_beta_base_url = $coauthBetaBaseUrl
+    coauth_beta_config = $coauthBetaConfigPath
+    coauth_beta_postgres_container = if ($ephemeralCoauthBetaPostgres) { $ephemeralCoauthBetaPostgres.ContainerName } else { $null }
     dual_coauth = [bool]$DualCoauth
     coauth_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
     coauth_config = $coauthConfigPath

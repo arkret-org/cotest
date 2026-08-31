@@ -104,9 +104,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--coauth-bind", required=True)
     parser.add_argument("--cedar-policy-file", required=True, type=pathlib.Path)
     parser.add_argument("--inkson-base-url", required=True)
+    parser.add_argument("--inkson-beta-base-url")
     parser.add_argument("--oauth-client-id", required=True)
     parser.add_argument("--soland-base-url", required=True)
     parser.add_argument("--soland-beta-base-url")
+    parser.add_argument("--owning-station", choices=("soland", "soland-beta"), default="soland")
     parser.add_argument("--admin-audience")
     parser.add_argument("--session-grant-introspection-bearer", required=True)
     parser.add_argument("--embedded-webvh-registration-bearer", required=True)
@@ -130,6 +132,10 @@ def main() -> int:
         else None
     )
     inkson_callback = trailing_slash(args.inkson_base_url) + "auth/callback"
+    inkson_beta_callback = (
+        trailing_slash(args.inkson_beta_base_url) + "auth/callback"
+        if args.inkson_beta_base_url else None
+    )
     admin_audience = args.admin_audience or coauth_base.rstrip("/") + "/api/v1"
 
     src = replace_first_line(
@@ -210,6 +216,8 @@ def main() -> int:
         "  - http://127.0.0.1/auth/callback\n"
         "  - http://localhost/auth/callback\n"
     )
+    if inkson_beta_callback and inkson_beta_callback != inkson_callback:
+        clients += f"  - {yaml_string(inkson_beta_callback)}\n"
     src = replace_top_level_section(src, "clients", clients)
 
     stations = (
@@ -231,7 +239,7 @@ def main() -> int:
         )
     arkret = (
         "arkret:\n"
-        "  owning_station: soland\n"
+        f"  owning_station: {args.owning_station}\n"
         "  stations:\n"
         f"{stations}"
         "  deployment_profile: organization\n"

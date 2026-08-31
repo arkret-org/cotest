@@ -32,8 +32,6 @@ import {
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 import {
-  generateDpopDeviceKey,
-  mintDpopBoundGrant,
   mintDpopProof,
   type DpopBoundGrant,
   type DpopDeviceKey,
@@ -115,9 +113,8 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
 
   // ── Session-grant + DPoP on a root path ──────────────────────────────────
   //
-  // Shared setup: register a user and mint a real DPoP-bound grant from coauth's
-  // cotest debug seam. Dependent tests skip cleanly when the seam (debug build +
-  // COAUTH_ENABLE_TEST_ENDPOINTS) is unavailable.
+  // Use the canonical registration receipt and its exact accepted device
+  // binding. A synthetic debug grant cannot prove live device authorization.
   async function setupGrant(
     request: APIRequestContext,
   ): Promise<{ deviceKey: DpopDeviceKey; grant: DpopBoundGrant; actorId: string } | undefined> {
@@ -126,19 +123,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
       return undefined;
     }
     const account = await registerCoauthPasswordAccount(request, coauth);
-    const deviceKey = generateDpopDeviceKey();
-    const grant = await mintDpopBoundGrant(
-      request,
-      coauth,
-      account.id,
-      account.genesisDeviceId,
-      deviceKey,
-      { audience: solandServiceId() },
-    );
-    if (!grant) {
-      return undefined;
-    }
-    return { deviceKey, grant, actorId: account.id };
+    return { deviceKey: account.initialHolderKey, grant: account.initialGrant, actorId: account.id };
   }
 
   test("2. a session grant authenticates a /_arkret/root/* read only WITH a bound DPoP proof", async ({
@@ -149,7 +134,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     const ctx = await setupGrant(request);
     test.skip(
       !ctx,
-      "coauth debug grant-mint seam unavailable (release build or COAUTH_ENABLE_TEST_ENDPOINTS unset)",
+      "canonical Account Authority registration is unavailable",
     );
     const { deviceKey, grant } = ctx!;
     const url = recoveryPolicyUrl();
@@ -179,11 +164,11 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
     );
   });
 
-  test("3. a dev-login bearer still authenticates the /_arkret/root/* read (no regression)", async ({
+  test("3. a dev-login bearer cannot replace SessionGrant plus DPoP on a recovery read", async ({
     request,
   }) => {
-    // The dev bearer (no DPoP) must keep working on root paths so the
-    // tri-modal inbound contract did not regress the dev path.
+    // service-http-binding section 2: recovery reads require a SessionGrant
+    // and matching DPoP even when the deployment enables ordinary dev login.
     const alice = uniqueUser("oidc-chain-devbearer");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
@@ -192,9 +177,7 @@ test.describe("OIDC login chain (server-side discovery + DPoP)", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     const body = await response.text();
-    expect(response.status(), `dev-bearer recovery-policy returned ${response.status()}: ${body}`).toBe(
-      200,
-    );
-    expect(JSON.parse(body)).toHaveProperty("active_policy");
+    expect(response.status(), `dev-bearer recovery-policy returned ${response.status()}: ${body}`).toBe(401);
+    expect(JSON.parse(body).type).toBe("https://arkret.org/problems/unauthenticated");
   });
 });

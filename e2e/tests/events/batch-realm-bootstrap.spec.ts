@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // Contract: e2e/scenarios/events/batch-realm-bootstrap.md
 // Regression guard for the registered Realm genesis transaction and its
 // `(realm_id, actor_id)` authoring frontier.
@@ -5,6 +6,7 @@
 import { expect, test } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
 import {
+  accountActorId,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
@@ -27,6 +29,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const alice = uniqueUser("events-batch-alice");
     await ensureRegistered(request, alice);
     const aliceToken = await issueDevSession(request, alice);
+    const actor = accountActorId(alice.id);
     const missingRealmId =
       "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19";
 
@@ -40,7 +43,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
         ...authHeaders(aliceToken, "QUERY", frontierUrl),
         "content-type": "application/json",
       },
-      data: canonicalJson({ actor_id: alice.id, realm_id: missingRealmId }),
+      data: canonicalJson({ actor_id: actor, realm_id: missingRealmId }),
     });
     expect(
       missingFrontier.status(),
@@ -63,7 +66,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
 
     const timeline = await queryRealmEventsApi(request, aliceToken, realmId);
     const events = ((timeline.events ?? []) as Array<Record<string, unknown>>)
-      .filter((event) => event.actor_id === alice.id)
+      .filter((event) => canonicalJson(event.actor_id) === canonicalJson(actor))
       .sort((left, right) => Number(left.actor_seq) - Number(right.actor_seq));
     const expectedKinds = [
       "ak.realm.create",
@@ -97,10 +100,10 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     expect(
       creatorMembership.actor_id,
       "the creator membership slot is authored by the creator",
-    ).toBe(alice.id);
+    ).toEqual(actor);
     expect(creatorMembership.payload).toMatchObject({
       realm_id: realmId,
-      actor_id: alice.id,
+      member_id: actor,
       membership: "join",
     });
     expect(
@@ -108,7 +111,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       "the creator member cell genesis write MUST carry head_eq null",
     ).toEqual([
       {
-        cell_id: `ak:cell:ak.component.member.state.v1:${alice.id}`,
+        cell_id: `ak:cell:ak.component.member.state.v1:${createHash("sha256").update(canonicalJson([canonicalJson(actor)])).digest("base64url")}`,
         predicate: { op: "head_eq", value: null },
       },
     ]);
@@ -166,7 +169,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
         ...authHeaders(aliceToken, "QUERY", frontierUrl),
         "content-type": "application/json",
       },
-      data: canonicalJson({ actor_id: alice.id, realm_id: realmId }),
+      data: canonicalJson({ actor_id: actor, realm_id: realmId }),
     });
     const frontierText = await frontierResponse.text();
     expect(
@@ -177,7 +180,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
       frontier?: {
         kind?: string;
         realm_id?: string;
-        actor_id?: string;
+        actor_id?: typeof actor;
         next_actor_seq?: number;
         frontier_event_ids?: string[];
       };
@@ -185,7 +188,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     expect(frontierBody.frontier).toMatchObject({
       kind: "realm_actor",
       realm_id: realmId,
-      actor_id: alice.id,
+      actor_id: actor,
       next_actor_seq: events.length,
       frontier_event_ids: [events.at(-1)!.event_id],
     });
@@ -204,7 +207,7 @@ test.describe("events submit batch Realm bootstrap @fully-implemented", () => {
     const continuedEvents = (
       (afterMessage.events ?? []) as Array<Record<string, unknown>>
     )
-      .filter((event) => event.actor_id === alice.id)
+      .filter((event) => canonicalJson(event.actor_id) === canonicalJson(actor))
       .sort((left, right) => Number(left.actor_seq) - Number(right.actor_seq));
     expect(continuedEvents.slice(events.length).map((event) => event.kind)).toEqual([
       "ak.strand.create",

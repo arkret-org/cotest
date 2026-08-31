@@ -396,14 +396,15 @@ test.describe("service surface contract — error envelope, pagination, idempote
   );
 
   test(
-    "Phase D0: Event ID replay is idempotent and body drift returns duplicate_conflict",
+    "Phase D0: Event ID replay is idempotent and body drift fails identity validation",
     async ({ request }) => {
       // spec: api-conventions.md §6 (`event_id` idempotency path) and
       //       §4.2 (`ak.self.events.command.submit.v1` write surface).
       //
       // Matrix Complement's transaction replay coverage maps most directly to
       // Arkret's canonical Event ID replay: exact same Event is duplicate/no-op;
-      // same event_id with a different canonical body is a conflict.
+      // A changed preimage under an old id fails models/event-and-patch.md
+      // section 2 proof verification before that id may enter duplicate lookup.
       const stamp = Date.now();
       const alice = uniqueUser(`ssc-event-id-alice-${stamp}`);
       await ensureRegistered(request, alice);
@@ -425,13 +426,14 @@ test.describe("service surface contract — error envelope, pagination, idempote
           content: { kind: "ak.content.text", body },
         },
       });
-      const eventId = String(envelope.event_id);
       await prepareSignedEventCbaApi(request, token, envelope);
       await alignSignedEventToActorFrontierApi(request, token, envelope);
+      const eventId = String(envelope.event_id);
+      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
 
       const first = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(token),
-        data: canonicalJson(envelope),
+        headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+        data: canonicalJson({ event: envelope }),
       });
       expect([200, 201], `first submit returned ${first.status()}`).toContain(first.status());
       const firstBody = await first.json();
@@ -439,8 +441,8 @@ test.describe("service surface contract — error envelope, pagination, idempote
       expect(submittedEventOutcome(firstBody, eventId)).toBe("accepted");
 
       const duplicate = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(token),
-        data: canonicalJson(envelope),
+        headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+        data: canonicalJson({ event: envelope }),
       });
       expect(duplicate.status(), `duplicate submit status`).toBe(200);
       const duplicateBody = await duplicate.json();
@@ -464,12 +466,15 @@ test.describe("service surface contract — error envelope, pagination, idempote
       drift.seal_ref = envelope.seal_ref;
       drift.auth_context = envelope.auth_context;
       refreshEventEnvelopeProof(drift);
+      // Deliberately reuse the accepted request identity with different content.
+      // Ordinary signing helpers derive a new id; this negative request must not.
+      drift.event_id = eventId;
       const conflict = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: authHeaders(token),
-        data: canonicalJson(drift),
+        headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+        data: canonicalJson({ event: drift }),
       });
-      expect(conflict.status(), "same event_id with different body").toBe(409);
-      expect(wireErrCode(await conflict.json())).toBe("duplicate_conflict");
+      expect(conflict.status(), "changed Event preimage must fail before duplicate lookup").toBe(400);
+      expect(wireErrCode(await conflict.json())).toBe("schema_violation");
 
       const eventsAfterConflict = await listRealmEventsViaApi(request, token, realmId);
       expect(eventsAfterConflict.filter((event) => event.event_id === eventId)).toHaveLength(1);
@@ -521,21 +526,23 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const seededSet = new Set(seededEventIds);
 
       const cursorRe = /^ak:cursor:[A-Za-z0-9_-]+$/;
-      const fetchPage = async (after?: string) => {
+      // api-conventions §7.1: Event scan has_more means older history only.
+      const fetchPage = async (before?: string) => {
         const url = new URL(`${solandBaseUrl()}/_arkret/self/events`);
         const resp = await request.fetch(url.toString(), {
           method: "QUERY",
-          headers: { ...authHeaders(token), "content-type": "application/json" },
-          data: {
+          headers: { ...authHeaders(token, "QUERY", url.toString()), "content-type": "application/json" },
+          data: canonicalJson({
             realm_ids: [realmId],
+            order: "descending",
             limit: 2,
-            ...(after ? { after } : {}),
-          },
+            ...(before ? { before } : {}),
+          }),
         });
         expect(resp.status(), "list page status").toBe(200);
         const body = (await resp.json()) as {
           events?: Array<{ event_id?: string }>;
-          next_cursor?: string;
+          prev_cursor?: string;
           has_more?: boolean;
         };
         expect(
@@ -546,7 +553,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         return body;
       };
 
-      // Walk pages strictly by has_more / next_cursor, collecting only the
+      // Walk pages strictly by has_more / prev_cursor, collecting only the
       // seeded ids so unrelated bootstrap events do not perturb the assertions.
       const pageSeededIds: string[][] = [];
       let cursor: string | undefined;
@@ -557,11 +564,11 @@ test.describe("service surface contract — error envelope, pagination, idempote
           .map((event) => event.event_id)
           .filter((id): id is string => typeof id === "string");
         pageSeededIds.push(ids.filter((id) => seededSet.has(id)));
-        if (page.next_cursor !== undefined) {
+        if (page.prev_cursor !== undefined) {
           // §7 — opaque ak:cursor token; decoding it MUST NOT reveal any seeded id.
-          expect(page.next_cursor, "next_cursor wire form").toMatch(cursorRe);
+          expect(page.prev_cursor, "prev_cursor wire form").toMatch(cursorRe);
           const decoded = Buffer.from(
-            page.next_cursor.slice("ak:cursor:".length),
+            page.prev_cursor.slice("ak:cursor:".length),
             "base64url",
           ).toString("utf8");
           for (const id of seededEventIds) {
@@ -570,12 +577,12 @@ test.describe("service surface contract — error envelope, pagination, idempote
         }
         if (page.has_more === true) {
           sawHasMoreTrue = true;
-          expect(page.next_cursor, "has_more=true MUST carry next_cursor").toMatch(cursorRe);
+          expect(page.prev_cursor, "has_more=true MUST carry prev_cursor").toMatch(cursorRe);
         }
-        if (page.has_more !== true || !page.next_cursor) {
+        if (page.has_more !== true || !page.prev_cursor) {
           break;
         }
-        cursor = page.next_cursor;
+        cursor = page.prev_cursor;
       }
 
       // At least one page was bounded (proves the limit=2 cap paginated).
@@ -604,15 +611,15 @@ test.describe("service surface contract — error envelope, pagination, idempote
       // expiry and `cursor_integrity_invalid` for handle lookup / binding
       // failures; a bare `invalid_cursor` error code is outside the closed set.
       const firstPage = await fetchPage();
-      const validCursor = firstPage.next_cursor;
-      expect(validCursor, "first page must carry a next_cursor to tamper").toMatch(cursorRe);
+      const validCursor = firstPage.prev_cursor;
+      expect(validCursor, "first page must carry a prev_cursor to tamper").toMatch(cursorRe);
       const flippedChar = validCursor![validCursor!.length - 1] === "A" ? "B" : "A";
       const tampered = validCursor!.slice(0, -1) + flippedChar;
       const tamperUrl = new URL(`${solandBaseUrl()}/_arkret/self/events`);
       const tamperResp = await request.fetch(tamperUrl.toString(), {
         method: "QUERY",
-        headers: { ...authHeaders(token), "content-type": "application/json" },
-        data: { realm_ids: [realmId], limit: 2, after: tampered },
+        headers: { ...authHeaders(token, "QUERY", tamperUrl.toString()), "content-type": "application/json" },
+        data: canonicalJson({ realm_ids: [realmId], order: "descending", limit: 2, before: tampered }),
       });
       expect(tamperResp.status(), "tampered cursor is param_invalid (HTTP 400)").toBe(400);
       const tamperBody = (await tamperResp.json()) as { reason_code?: string };
@@ -675,13 +682,14 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       const before = await countSeededEvents();
 
+      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
       // R1 — first request under the key executes and is cached.
       const b1 = messageEnvelope(`idem body ${stamp} v1`);
       await prepareSignedEventCbaApi(request, token, b1);
       await alignSignedEventToActorFrontierApi(request, token, b1);
       const r1 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
-        data: b1,
+        headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
+        data: canonicalJson({ event: b1 }),
       });
       expect([200, 201], `R1 returned ${r1.status()}`).toContain(r1.status());
       const r1Body = await r1.json();
@@ -692,23 +700,24 @@ test.describe("service surface contract — error envelope, pagination, idempote
 
       // R2 — same key + SAME canonical body replays the cached first response.
       const r2 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
-        data: b1,
+        headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
+        data: canonicalJson({ event: b1 }),
       });
       expect([200, 201], `R2 returned ${r2.status()}`).toContain(r2.status());
       const r2Body = await r2.json();
       expect(submittedEventId(r2Body), "R2 mirrors R1 event_id (no new event)").toBe(
         String(b1.event_id),
       );
-      expect(JSON.stringify(r2Body), "R2 is the cached first response").toBe(
-        JSON.stringify(r1Body),
-      );
+      expect(canonicalJson(r2Body) === canonicalJson(r1Body),
+        "R2 is the exact cached first response (body omitted from diagnostics)").toBe(true);
 
       // R3 — same key + DIFFERENT canonical body (fresh event_id) → duplicate_conflict.
       const b2 = messageEnvelope(`idem body ${stamp} v2-divergent`);
+      await prepareSignedEventCbaApi(request, token, b2);
+      await alignSignedEventToActorFrontierApi(request, token, b2);
       const r3 = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { ...authHeaders(token), "idempotency-key": idempotencyKey },
-        data: b2,
+        headers: { ...authHeaders(token, "POST", submitUrl), "idempotency-key": idempotencyKey, "content-type": "application/json" },
+        data: canonicalJson({ event: b2 }),
       });
       expect(r3.status(), "same key + different body is 409").toBe(409);
       expect(wireErrCode(await r3.json()), "duplicate_conflict on key reuse").toBe(
@@ -740,23 +749,32 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
+      const realmId = await createRealmViaApi(request, token, {
+        title: `unsupported feature ${Date.now()}`,
+        historyAccess: "all_history_for_current_members",
+        ownerId: alice.id,
+      });
+      const strandId = await resolveDefaultStrandId(request, token, realmId);
       const envelope = signedEventEnvelope({
         actorId: alice.id,
-        realmId: "ak:realm:Abf_EFzG0z16A5W8192VSnWPMSNVFmuS4X2gQVKgT4ml",
+        realmId,
         kind: "ak.message.create",
         payload: {
-          strand_id: "ak:strand:AT1HF1YvomUEeLiFM_RlAKpElTAO-fucR-mcH9QGgZpR",
+          strand_id: strandId,
           track_name: "discussion",
           content: { kind: "ak.content.text", body: "must not accept unknown feature" },
         },
       });
+      await prepareSignedEventCbaApi(request, token, envelope);
+      await alignSignedEventToActorFrontierApi(request, token, envelope);
       (envelope.requirements as { features: string[] }).features = [undeclaredFeature];
       refreshEventEnvelopeProof(envelope);
       const eventId = String(envelope.event_id);
 
-      const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { authorization: `Bearer ${token}` },
-        data: envelope,
+      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const resp = await request.post(submitUrl, {
+        headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+        data: canonicalJson({ event: envelope }),
       });
       expect(resp.status()).toBeGreaterThanOrEqual(400);
       const body = await resp.json();
@@ -776,12 +794,18 @@ test.describe("service surface contract — error envelope, pagination, idempote
       const alice = uniqueUser("ssc-phase-e2");
       await ensureRegistered(request, alice);
       const token = await issueDevSession(request, alice);
+      const realmId = await createRealmViaApi(request, token, {
+        title: `unsupported critical extension ${Date.now()}`,
+        historyAccess: "all_history_for_current_members",
+        ownerId: alice.id,
+      });
+      const strandId = await resolveDefaultStrandId(request, token, realmId);
       const envelope = signedEventEnvelope({
         actorId: alice.id,
-        realmId: "ak:realm:AZi2ri6b3n9gy8t4vZ4PaHWctnb2kQBJ7o-ajv9MjXsg",
+        realmId,
         kind: "ak.message.create",
         payload: {
-          strand_id: "ak:strand:AT2MvgWCCOiDFC2VdKu_HdL7RSppsE30BTn8iodC2Zof",
+          strand_id: strandId,
           track_name: "discussion",
           content: {
             kind: "ak.content.text",
@@ -789,6 +813,8 @@ test.describe("service surface contract — error envelope, pagination, idempote
           },
         },
       });
+      await prepareSignedEventCbaApi(request, token, envelope);
+      await alignSignedEventToActorFrontierApi(request, token, envelope);
       (
         envelope.requirements as {
           critical_extensions: Array<{
@@ -807,9 +833,10 @@ test.describe("service surface contract — error envelope, pagination, idempote
       refreshEventEnvelopeProof(envelope);
       const eventId = String(envelope.event_id);
 
-      const resp = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-        headers: { authorization: `Bearer ${token}` },
-        data: envelope,
+      const submitUrl = `${solandBaseUrl()}/_arkret/self/events`;
+      const resp = await request.post(submitUrl, {
+        headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
+        data: canonicalJson({ event: envelope }),
       });
       expect(resp.status()).toBeGreaterThanOrEqual(400);
       expect(resp.status()).toBeLessThan(600);

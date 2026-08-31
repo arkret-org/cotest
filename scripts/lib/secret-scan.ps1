@@ -178,7 +178,13 @@ function ConvertTo-SecretPreview {
 function Get-SecretLeakPatterns {
     @(
         [pscustomobject]@{ name = "authorization_header"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|\s)authorization\s*:\s*(?:bearer|dpop)\s+(?!$($script:RedactedValuePattern)(?:\s|$))\S+"; validate = $null },
-        [pscustomobject]@{ name = "dpop_header"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|\s)dpop\s*:\s*(?!$($script:RedactedValuePattern)(?:\s|$))\S+"; validate = $null },
+        [pscustomobject]@{ name = "dpop_header"; category = $script:SecretCategoryCredential; pattern = "(?i)(?:^|\s)dpop\s*:\s*(?!$($script:RedactedValuePattern)(?:\s|$))\S+"; validate = {
+            param($line)
+            # Playwright appends numbered TypeScript source excerpts. A bare
+            # function invocation opening has no header value; quoted values,
+            # JWTs, trailing arguments and ordinary log headers remain scanned.
+            $line -notmatch '^\s*(?:>\s*)?\d+\s*\|\s*dpop:\s*[A-Za-z_$][A-Za-z0-9_$]*\(\{\s*$'
+        } },
         [pscustomobject]@{ name = "recovery_private_material_field"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)`"($script:RecoveryPrivateMaterialFieldNames)`"\s*:\s*`"(?!$($script:RedactedValuePattern)`")[^`"]+`""; validate = $null },
         [pscustomobject]@{ name = "recovery_private_material_assignment"; category = $script:SecretCategoryPrivateMaterial; pattern = "(?i)\b($script:RecoveryPrivateMaterialFieldNames)\b\s*(?:=|:)\s*(?!$($script:RedactedValuePattern)(?:\s|;|$))(?:'[^']+'|`"[^`"]+`"|[A-Za-z0-9_-]{16,})"; validate = $null },
         [pscustomobject]@{ name = "jwk_private_member"; category = $script:SecretCategoryPrivateMaterial; pattern = $script:JwkPrivateMemberPattern; validate = $null },

@@ -563,6 +563,7 @@ function Invoke-CargoTestInvocation {
         $process = Start-Process `
             -FilePath $cargo `
             -ArgumentList $nativeArguments `
+            -WorkingDirectory (Join-Path $PSScriptRoot "..") `
             -NoNewWindow `
             -PassThru `
             -RedirectStandardOutput $stdoutPath `

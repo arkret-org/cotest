@@ -15,10 +15,9 @@
 //   4. logout                 → returns to the login panel, session cleared
 //   5. returning-user login   → the same account signs back in
 //
-// The account is created self-contained via registerCoauthPasswordAccount,
-// which relies on the dev email-delivery bypass minting the deterministic code
-// "123456" — so no pre-seeded account, mock-email scraping, or external
-// credentials are required.
+// The account is created by canonical registration and its delivered email
+// verification code. Returning-device fixtures retain that accepted signer;
+// unbound-account onboarding is tested separately through the real browser UI.
 //
 // ── CI gate ──────────────────────────────────────────────────────────────────
 // It drives coauth's interactive login + consent pages, which only carry the
@@ -43,6 +42,7 @@ import {
 } from "../../helpers/coauth-register";
 import {
   hardLogoutViaAccountMenu,
+  openAcceptedDeviceForOidcLogin,
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
 } from "../../helpers/real-oidc-login";
@@ -119,7 +119,11 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         await approve.click();
       }
 
-      await page.getByTestId("choose-new-identity").click();
+      await page.getByTestId("choose-new-identity").click().catch(async (error) => {
+        const status = await page.getByTestId("auth-status").textContent().catch(() => null);
+        const stage = status?.match(/(?:Account handoff outcome failed validation|Persist account handoff credential failed|Persist account handoff checkpoint failed|Account Authority handoff failed|Account handoff request failed):[^\n]*/)?.[0];
+        throw new Error(`Onboarding was not reached: ${stage?.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]") ?? "no recognized authentication failure"}`, { cause: error });
+      });
       const displayedWords = page
         .getByTestId("onboarding-recovery-key-display")
         .locator("li");
@@ -238,14 +242,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
     // infer a principal DID from the OAuth subject.
     const account = await registerCoauthPasswordAccount(request, coauth!);
 
-    // A session-grant request is explicitly principal-bound. Registration
-    // gives the client that verified DID, so persist it as the returning-account
-    // selection before opening OIDC; the callback must never infer a principal
-    // from an unbound OAuth subject.
-    const returningUser = uniqueUser("oidc-login");
-    returningUser.id = account.id;
-    returningUser.did = account.did;
-    const jointPage = await openUserPage(browser, returningUser);
+    // The returning browser must possess the accepted registration device key.
+    const jointPage = await openAcceptedDeviceForOidcLogin(browser, request, account, "oidc-login");
     const page = jointPage.page;
     let firstDeviceId = "";
     try {
@@ -256,8 +254,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         firstDeviceId = await page.evaluate(() => {
           const config = JSON.parse(
             window.localStorage.getItem("inkson.config.v1") ?? "{}",
-          ) as { device_id?: string };
-          return config.device_id ?? "";
+          ) as { active_account?: { device_id?: string } };
+          return config.active_account?.device_id ?? "";
         });
         expect(firstDeviceId, "first login must persist its device id").not.toBe("");
       });
@@ -287,8 +285,8 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
         const returningDeviceId = await page.evaluate(() => {
           const config = JSON.parse(
             window.localStorage.getItem("inkson.config.v1") ?? "{}",
-          ) as { device_id?: string };
-          return config.device_id ?? "";
+          ) as { active_account?: { device_id?: string } };
+          return config.active_account?.device_id ?? "";
         });
         expect(
           returningDeviceId,
@@ -360,10 +358,7 @@ test.describe("real OIDC browser login lifecycle @fully-implemented", () => {
 
     // A fully bound account: client-signed entry 0 with a verified binding.
     const account = await registerCoauthPasswordAccount(request, coauth!);
-    const returningUser = uniqueUser("forged-unknown");
-    returningUser.id = account.id;
-    returningUser.did = account.did;
-    const jointPage = await openUserPage(browser, returningUser);
+    const jointPage = await openAcceptedDeviceForOidcLogin(browser, request, account, "forged-unknown");
     const page = jointPage.page;
     try {
       // Establish the bound client state with one real login, then log out so

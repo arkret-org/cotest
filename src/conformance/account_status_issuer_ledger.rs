@@ -445,7 +445,7 @@ async fn assert_gap_recovery_through_bounded_resolve(
     let resolved = ledger
         .resolve(
             request.account_authority_id.as_str(),
-            &request.account_id.canonical_key()?,
+            &request.account_id,
             request.from_status_seq,
             request.limit,
         )
@@ -764,7 +764,7 @@ async fn assert_below_head_is_stale_against_the_durable_head(
     assert_head_is(replicas, &third).await?;
     // The receiver still holds the row for the submitted sequence, so a
     // history-row baseline would have something to match against.
-    let second_account_key = second.account_id.canonical_key()?;
+    let second_account_key = second.account_id.clone();
     if replicas
         .receipt(second.account_authority_id.as_str(), &second_account_key, 2)
         .await?
@@ -822,7 +822,7 @@ async fn assert_below_head_is_stale_against_the_durable_head(
     assert_head_is(replicas, &third).await?;
     // Zero write: the retained row keeps its original receipt, and the replay
     // receipt was never made durable.
-    let second_account_key = second.account_id.canonical_key()?;
+    let second_account_key = second.account_id.clone();
     let stored = replicas
         .receipt(second.account_authority_id.as_str(), &second_account_key, 2)
         .await?
@@ -1201,7 +1201,7 @@ async fn assert_head_is(
     replicas: &dyn AccountStatusReplicaStore,
     expected: &AccountStatusRecord,
 ) -> Result<()> {
-    let account_key = expected.account_id.canonical_key()?;
+    let account_key = expected.account_id.clone();
     let head = replicas
         .current(expected.account_authority_id.as_str(), &account_key)
         .await?

@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 // T-P0-05 joint harness smoke.
 // Contract: true inkson UI + true soland process create a realm and render messages.
 
 import type { APIRequestContext } from "../../helpers/arkret-test";
 import { test, expect } from "../../helpers/joint-fixture";
 import {
+  accountActorId,
   canonicalJson,
   grantCapabilityEventApi,
   prepareSignedEventCbaApi,
@@ -135,15 +137,15 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       const creatorMembership = bootstrap!.at(-1)!;
       const creatorId = bootstrap![0].actor_id;
       expect(creatorMembership.kind).toBe("ak.member.state");
-      expect(creatorMembership.actor_id).toBe(creatorId);
+      expect(creatorMembership.actor_id).toEqual(creatorId);
       expect(creatorMembership.payload).toMatchObject({
         realm_id: realmId,
-        actor_id: creatorId,
+        member_id: creatorId,
         membership: "join",
       });
       expect(creatorMembership.preconditions).toEqual([
         {
-          cell_id: `ak:cell:ak.component.member.state.v1:${creatorId}`,
+          cell_id: `ak:cell:ak.component.member.state.v1:${createHash("sha256").update(canonicalJson([canonicalJson(creatorId)])).digest("base64url")}`,
           predicate: { op: "head_eq", value: null },
         },
       ]);
@@ -156,7 +158,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         (observed) =>
           observed.ordinal < bootstrapBatch!.ordinal &&
           observed.body.realm_id === realmId &&
-          typeof observed.body.actor_id === "string",
+          observed.body.actor_id !== undefined,
       );
       expect(
         preflightForNewRealm,
@@ -273,11 +275,17 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         "ak.member.state",
         {
           realm_id: jointRealm.realmId,
-          actor_id: participantId,
+          member_id: accountActorId(participantId),
           membership: "join",
-          delivery_status: "unroutable",
         },
       );
+      // Membership does not confer the action capability needed by the reply.
+      await grantCapabilityEventApi(request, jointRealm.aliceToken, {
+        ownerId: jointRealm.alice.id,
+        realmId: jointRealm.realmId,
+        subjectId: participantId,
+        actions: ["ak.message.create"],
+      });
       const controllerMessageId = await submitSignedEvent(
         request,
         jointRealm.aliceSession,
@@ -445,7 +453,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
             );
             return invites.some(
               (invite) =>
-                invite.realm_id === realmId && invite.invitee_id === bob.id,
+                invite.realm_id === realmId && canonicalJson(invite.invitee_account_id) === canonicalJson(accountActorId(bob.id).account_id),
             );
           },
           { timeout: 30_000 },
@@ -578,6 +586,7 @@ async function readRealmActorFrontier(
   serverUrl: string,
   realmId: string,
 ): Promise<{ nextActorSeq: number; frontierEventIds: string[] }> {
+  const actor = accountActorId(actorId, undefined, session.accountId.station_id);
   const href = new URL("/_arkret/self/events/frontier", serverUrl).toString();
   const response = await request.fetch(href, {
     method: "QUERY",
@@ -585,7 +594,7 @@ async function readRealmActorFrontier(
       ...selfPathHeadersForDpopSession(session, "QUERY", href),
       "content-type": "application/json",
     },
-    data: canonicalJson({ actor_id: actorId, realm_id: realmId }),
+    data: canonicalJson({ actor_id: actor, realm_id: realmId }),
   });
   const text = await response.text();
   expect(
@@ -600,7 +609,7 @@ async function readRealmActorFrontier(
     };
   };
   const frontier = body.frontier;
-  expect(frontier?.actor_id, "actor frontier identity").toBe(actorId);
+  expect(frontier?.actor_id, "actor frontier identity").toEqual(actor);
   const nextActorSeq = frontier?.next_actor_seq;
   expect(
     typeof nextActorSeq === "number" &&
@@ -644,9 +653,10 @@ async function listInvitesForDpop(
   session: DpopUserSession,
   serverUrl: string,
   subjectId: string,
-): Promise<Array<{ id: string; realm_id: string; invitee_id?: string }>> {
+): Promise<Array<{ id: string; realm_id: string; invitee_account_id?: import("../../helpers/generated/spec-wire-objects").AccountId }>> {
   const url = new URL("/_arkret/self/authz/invites", serverUrl);
   url.searchParams.set("subject", subjectId);
+  url.searchParams.set("subject_station_id", session.accountId.station_id);
   const href = url.toString();
   const response = await request.get(href, {
     headers: {
@@ -660,7 +670,7 @@ async function listInvitesForDpop(
     `list invites returned ${response.status()}: ${text}`,
   ).toBeTruthy();
   const body = JSON.parse(text) as {
-    invites?: Array<{ id: string; realm_id: string; invitee_id?: string }>;
+    invites?: Array<{ id: string; realm_id: string; invitee_account_id?: import("../../helpers/generated/spec-wire-objects").AccountId }>;
   };
   return body.invites ?? [];
 }

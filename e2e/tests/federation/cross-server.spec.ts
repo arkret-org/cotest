@@ -115,7 +115,7 @@ async function waitForInvite(
         const invites = await listInvitesApi(request, token, { server });
         found = invites.find(
           (invite) =>
-            invite.invitee_id === inviteeId && invite.realm_id === realmId,
+            invite.invitee_account_id?.principal_id === inviteeId && invite.invitee_account_id.station_id === solandServiceId(server) && invite.realm_id === realmId,
         );
         return Boolean(found);
       },
@@ -469,7 +469,7 @@ test.describe("cross-server federation", () => {
             server: "beta",
           });
           return invites.some(
-            (item) => item.realm_id === realmId && item.invitee_id === bob.id,
+            (item) => item.realm_id === realmId && item.invitee_account_id?.principal_id === bob.id && item.invitee_account_id.station_id === solandServiceId("beta"),
           );
         },
         { timeout: 20_000 },
@@ -505,7 +505,7 @@ test.describe("cross-server federation", () => {
 
     const invites = await listInvitesApi(request, bobToken, { server: "beta" });
     const invite = invites.find(
-      (item) => item.realm_id === realmId && item.invitee_id === bob.id,
+      (item) => item.realm_id === realmId && item.invitee_account_id?.principal_id === bob.id && item.invitee_account_id.station_id === solandServiceId("beta"),
     );
     expect(invite).toBeTruthy();
     await acceptInviteApi(

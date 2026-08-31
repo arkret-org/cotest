@@ -307,8 +307,14 @@ test.describe("GDPR / audit / retention", () => {
     const retained = events.find((event) => event.event_id === sent.event_id);
     expect(retained, "expired event_id must remain in the timeline").toBeTruthy();
     const retainedJson = JSON.stringify(retained);
-    expect(retainedJson).toContain("[expired]");
-    expect(retainedJson).toContain("retention_policy.ttl");
+    // service-operation-dtos.schema.json#/ $defs/RedactedEventView.
+    expect(retained).toMatchObject({
+      view_kind: "redacted_event_view",
+      event_id: sent.event_id,
+      redaction_reason: "retention_pruned",
+      hidden_fields: expect.arrayContaining(["payload"]),
+      reducer_input: false,
+    });
     expect(retainedJson).not.toContain(oldBody);
 
     const direct = await request.get(
@@ -316,8 +322,15 @@ test.describe("GDPR / audit / retention", () => {
       { headers: authHeaders(aliceToken) },
     );
     expect(direct.status()).toBe(200);
-    const directJson = JSON.stringify(await direct.json());
-    expect(directJson).toContain("[expired]");
+    const directBody = await direct.json();
+    const directJson = JSON.stringify(directBody);
+    expect(directBody.event).toMatchObject({
+      view_kind: "redacted_event_view",
+      event_id: sent.event_id,
+      redaction_reason: "retention_pruned",
+      hidden_fields: expect.arrayContaining(["payload"]),
+      reducer_input: false,
+    });
     expect(directJson).not.toContain(oldBody);
   });
 
@@ -376,7 +389,7 @@ test.describe("GDPR / audit / retention", () => {
             });
             betaInvite = invites.find(
               (invite) =>
-                invite.invitee_id === bob.id &&
+                invite.invitee_account_id?.principal_id === bob.id && invite.invitee_account_id.station_id === solandServiceId("beta") &&
                 invite.realm_id === realmId,
             );
             return Boolean(betaInvite);

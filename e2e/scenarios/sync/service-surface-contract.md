@@ -147,7 +147,7 @@
 - Phase A:两个 service 的 `/server/describe` 返回 spec §3 + §3.0 全部必填字段;`service_kind` 正确;`claim_kind === "self_claimed"`;dev mode `verified_profiles` 为空;coauth 不 claim identity registry
 - Phase B:未知路径 → 404 `unrecognized_endpoint`;错误 method → 405 `method_not_allowed`;两者都符合 §5 错误 envelope,不返回 HTML/栈信息
 - Phase C:list 响应符合 §7.1 形状;`cursor` 是 `ak:cursor:<base64url>`;多页无 overlap / 无 gap;cursor 不可解析出明文 ID;篡改 cursor → `param_invalid` / `cursor_expired`
-- Phase D0:`event_id` 同 envelope 重放 → duplicate/no-op;同 `event_id` 不同 body → `duplicate_conflict` / 409;事件只投影一次
+- Phase D0:`event_id` 同 envelope 重放 → duplicate/no-op；改变 producer-signed preimage 却保留旧 `event_id` → identity 校验失败（`schema_violation` / 400），在去重查询前拒绝，事件只投影一次。依据 `models/event-and-patch.md` 的 Event ID 校验顺序；请求级同键异体冲突由 Phase D 单独覆盖。
 - Phase D:同键同 body → 与首次等价;同键不同 body → `duplicate_conflict` / 409;副作用只发生一次
 - Phase E:`requirements.features[]` 引用未实现 feature → `unsupported_feature` / 4xx;event 未落库;不被泛 code 替代
 

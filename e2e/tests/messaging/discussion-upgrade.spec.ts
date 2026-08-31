@@ -16,6 +16,7 @@ import {
 import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import {
+  accountActorId,
   alignSignedEventToActorFrontierApi,
   canonicalJson,
   canonicalTimestamp,
@@ -247,7 +248,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
         receipt_kind: "read",
         schema: "ak.schema.read_receipt.v1",
         realm_id: fixture.realmId,
-        actor_id: fixture.bob.id,
+        actor_id: accountActorId(fixture.bob.id),
         read_scope: {
           kind: "strand",
           object_ref: promoted.privateStrandId,
@@ -269,7 +270,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     const received = envelopes.find((candidate) => {
       const plaintext = signalPlaintext(candidate);
       return (
-        candidate.sender_actor_id === fixture.bob.id &&
+        canonicalJson(candidate.sender_actor_id) === canonicalJson(accountActorId(fixture.bob.id)) &&
         plaintext.kind === "ak.receipt.read"
       );
     });
@@ -284,7 +285,7 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     });
     expect(signalPlaintext(received)).toMatchObject({
       kind: "ak.receipt.read",
-      actor_id: fixture.bob.id,
+      actor_id: accountActorId(fixture.bob.id),
       read_scope: {
         kind: "strand",
         object_ref: promoted.privateStrandId,
@@ -602,7 +603,7 @@ function strandObject(
       },
     },
     ...(opts.scopeCircleId ? { scope_circle_id: opts.scopeCircleId } : {}),
-    created_by: actor.id,
+    created_by: accountActorId(actor.id),
     created_at: createdAt,
   };
 }
@@ -670,7 +671,7 @@ async function createDiscussionCircleViaApi(
           ? { content_scheme: "mls_rfc9420" }
           : {}),
         state: "active",
-        created_by: fixture.alice.id,
+        created_by: accountActorId(fixture.alice.id),
         created_at: createdAt,
       },
     },
@@ -720,7 +721,7 @@ async function submitCircleMemberStateViaApi(
       kind: "ak.circle.member.state",
       payload: {
         circle_id: circleId,
-        actor_id: memberId,
+        member_id: accountActorId(memberId),
         membership,
       },
     }),
@@ -753,7 +754,7 @@ async function createConfidentialDiscussionRelationViaApi(
         scope_circle_id: circleId,
         fields: { role: "promoted_discussion" },
         state: "active",
-        created_by: actor.id,
+        created_by: accountActorId(actor.id),
         created_at: createdAt,
       },
     },
