@@ -73,6 +73,10 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             ("DATABASE_URL".to_owned(), source_database_url.clone()),
             ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
             (
+                "SOLAND_FEDERATION_FRONTIER_INTERVAL_SECONDS".to_owned(),
+                "60".to_owned(),
+            ),
+            (
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
             ),
@@ -84,6 +88,10 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         vec![
             ("DATABASE_URL".to_owned(), target_database_url),
             ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
+            (
+                "SOLAND_FEDERATION_FRONTIER_INTERVAL_SECONDS".to_owned(),
+                "60".to_owned(),
+            ),
             (
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
@@ -351,6 +359,24 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
                 .any(|event| event.event_id == second_event_id),
         "new authorized rejoin batch did not materialize its Control Event history"
     );
+    // This Realm deliberately grants plaintext visibility only to the source
+    // service while retaining a routed member on the target Station. Restart
+    // the source so the proactive worker takes a fresh two-Station snapshot;
+    // the peer-relative visibility difference must finish as success/reset,
+    // never as a raw-root mismatch failure or peer_stale.
+    group.server_mut(0).restart_external_process().await?;
+    let frontier_exchange = wait_for_frontier_exchange_success(
+        &source_database_url,
+        &realm_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    ensure!(
+        frontier_exchange["status"] == "healthy"
+            && frontier_exchange["consecutive_failures"] == 0
+            && frontier_exchange["last_success_at"].is_number(),
+        "peer-relative frontier exchange did not settle as success/reset: {frontier_exchange}"
+    );
     eprintln!(
         "fanout cancellation verified: old intent {} stayed cancelled with attempts={}, \
          semantic_attempts={}, completed_at={} and byte-identical frozen payload; \
@@ -365,6 +391,52 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     );
 
     Ok(())
+}
+
+async fn wait_for_frontier_exchange_success(
+    database_url: &str,
+    realm_id: &str,
+    peer_id: &DidCoreId,
+) -> Result<serde_json::Value> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let peer_id = peer_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(90);
+        loop {
+            if let Some(row) = client.query_opt(
+                "SELECT status, consecutive_failures, last_success_at, last_frontier_root, last_error \
+                 FROM federation_frontier_exchange WHERE realm_id = $1 AND peer_id = $2",
+                &[&realm_id, &peer_id],
+            )? {
+                let status: String = row.get(0);
+                let consecutive_failures: i32 = row.get(1);
+                let last_success_at: Option<i64> = row.get(2);
+                let last_frontier_root: Option<String> = row.get(3);
+                let last_error: Option<String> = row.get(4);
+                let snapshot = json!({
+                    "status": status,
+                    "consecutive_failures": consecutive_failures,
+                    "last_success_at": last_success_at,
+                    "last_frontier_root": last_frontier_root,
+                    "last_error": last_error,
+                });
+                if status == "healthy" && consecutive_failures == 0 && last_success_at.is_some() {
+                    return Ok(snapshot);
+                }
+                if std::time::Instant::now() >= deadline {
+                    bail!("frontier exchange did not recover before deadline: {snapshot}");
+                }
+            } else if std::time::Instant::now() >= deadline {
+                bail!(
+                    "frontier exchange row was not created for Realm {realm_id} and peer {peer_id}"
+                );
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    })
+    .await?
 }
 
 /// Diagnostic read of this live scenario's source database, not a protocol

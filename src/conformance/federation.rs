@@ -148,6 +148,9 @@ pub fn run_federation_fixture_suite() -> Result<()> {
             "agent_event_admission_receipt_handoff" => {
                 validate_agent_event_admission_receipt_handoff_case(&case)?
             }
+            "frontier_mismatch_reduction_terminal_states" => {
+                validate_frontier_mismatch_reduction_terminal_states(&case)?
+            }
             "ordinary_event_uses_cba_reducer_profile_cell"
             | "settled_reducer_profile_not_implemented"
             | "upgrade_target_not_registered" => validate_reducer_profile_resolution_case(&case)?,
@@ -253,6 +256,74 @@ pub fn run_federation_fixture_suite() -> Result<()> {
     Ok(())
 }
 
+fn validate_frontier_mismatch_reduction_terminal_states(case: &super::NamedCase) -> Result<()> {
+    let input = case
+        .input
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} lacks input", case.name))?;
+    if input["comparison_key"] != json!(["realm_id", "actor_id", "actor_seq"])
+        || input["sibling_tuple"] != json!(["event_id", "event_digest", "prev_frontier_digest"])
+        || input["actor_intersection_uses_complete_actor_id"] != true
+        || input["validate_before_side_effects"] != true
+    {
+        bail!("{} reduction input contract drifted", case.name);
+    }
+    const EXPECTED: &[(&str, &str)] = &[
+        (
+            "equal_frontier_roots",
+            "success_and_reset_consecutive_failures_without_challenge",
+        ),
+        (
+            "different_roots_with_policy_legitimate_empty_actor_intersection",
+            "success_and_reset_consecutive_failures_without_global_root_convergence",
+        ),
+        (
+            "peer_omits_actor_required_by_current_verified_disclosure_policy",
+            "ordinary_required_disclosure_failure_not_fork_evidence",
+        ),
+        (
+            "different_roots_from_permanent_legal_replication_scope_difference",
+            "success_after_intersection_reduction_without_global_root_convergence",
+        ),
+        (
+            "peers_hold_different_legal_sibling_subsets_within_limits",
+            "validated_union_via_existing_scan_resolve_submit_surfaces_then_success_and_reset",
+        ),
+        (
+            "challenge_or_backfill_network_failure",
+            "ordinary_failure_counts_toward_three_consecutive_failures",
+        ),
+        (
+            "carried_event_id_does_not_match_recomputed_complete_event_id",
+            "event_id_digest_mismatch_rejected_before_dedup_index_route_auth_or_quarantine",
+        ),
+        (
+            "two_distinct_canonical_preimages_artificially_recompute_to_the_same_complete_event_id",
+            "first_confirmation_quarantines_affected_scope_and_sets_peer_stale",
+        ),
+        (
+            "validated_sibling_bucket_exceeds_registered_limit",
+            "first_confirmation_quarantines_affected_scope_and_sets_peer_stale",
+        ),
+        (
+            "local_or_remote_snapshot_changes_during_reduction",
+            "bounded_retry_without_cross_snapshot_conflict_decision",
+        ),
+    ];
+    validate_named_expectations(case, EXPECTED)?;
+    record_vector_event(
+        "federation.frontier_mismatch_reduction_terminal_states",
+        input,
+        &json!({"cases": EXPECTED}),
+        &json!({
+            "validated_case_count": EXPECTED.len(),
+            "complete_actor_id_intersection": true,
+            "validate_before_side_effects": true,
+        }),
+    );
+    Ok(())
+}
+
 fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) -> Result<()> {
     if case.vector_id.as_deref() != Some(VECTOR_ID_AGENT_ADMISSION_RECEIPT_HANDOFF) {
         bail!("{} has the wrong vector_id", case.name);
@@ -314,8 +385,12 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
             "nonconformant_receipt_replay",
         ),
         (
-            "same_event_id_with_different_canonical_bytes",
-            "duplicate_conflict_with_zero_receipt_and_zero_overwrite",
+            "carried_event_id_does_not_match_current_canonical_bytes",
+            "event_id_digest_mismatch_with_zero_receipt_and_zero_side_effect",
+        ),
+        (
+            "two_distinct_canonical_preimages_artificially_injected_with_the_same_recomputed_complete_event_id",
+            "witness_disagreement_quarantines_affected_scope_with_zero_receipt",
         ),
         (
             "receipt_set_matches_producer_evidence_pair_events_one_to_one",
