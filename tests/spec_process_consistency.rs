@@ -4,48 +4,90 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 #[test]
-fn invite_membership_target_transitions_are_exact_and_atomic() {
+fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
     let catalog = read_json(
         &spec_artifacts_root()
             .join("registry")
             .join("contract-registry.json"),
     );
     let contracts = &catalog["event_kind_registry"]["cell_contracts"];
-    for (kind, to) in [
-        ("ak.invite.create", "invite"),
-        ("ak.invite.accept", "join"),
-        ("ak.invite.cancel", "leave"),
-        ("ak.invite.revoke", "leave"),
+    for (kind, expected_families) in [
+        (
+            "ak.invite.create",
+            &["ak.component.invite.lifecycle.v1"][..],
+        ),
+        (
+            "ak.invite.accept",
+            &[
+                "ak.component.invite.lifecycle.v1",
+                "ak.component.member.state.v1",
+            ][..],
+        ),
+        (
+            "ak.invite.cancel",
+            &["ak.component.invite.lifecycle.v1"][..],
+        ),
+        (
+            "ak.invite.revoke",
+            &["ak.component.invite.lifecycle.v1"][..],
+        ),
     ] {
         let writes = contracts[kind]["cell_writes"]
             .as_array()
             .unwrap_or_else(|| panic!("{kind} must declare cell_writes"));
-        assert_eq!(writes.len(), 2, "{kind} must atomically write two cells");
-        let member = writes
+        let families = writes
             .iter()
-            .find(|write| write["cell_family"].as_str() == Some("ak.component.member.state.v1"))
-            .unwrap_or_else(|| panic!("{kind} must write member.state"));
-        assert_eq!(
-            member
-                .pointer("/effect_projection/kind")
-                .and_then(Value::as_str),
-            Some("transition_to")
-        );
-        assert_eq!(
-            member
-                .pointer("/effect_projection/to/const")
-                .and_then(Value::as_str),
-            Some(to)
-        );
+            .map(|write| {
+                write["cell_family"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{kind} write must name cell_family"))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(families, expected_families, "{kind} write set drifted");
     }
+
+    let accept_member = contracts["ak.invite.accept"]["cell_writes"]
+        .as_array()
+        .expect("ak.invite.accept cell_writes must be an array")
+        .iter()
+        .find(|write| write["cell_family"].as_str() == Some("ak.component.member.state.v1"))
+        .expect("ak.invite.accept must write member.state");
+    assert_eq!(
+        accept_member
+            .pointer("/effect_projection/to/const")
+            .and_then(Value::as_str),
+        Some("join")
+    );
+
+    let membership_fsm = &catalog["event_kind_registry"]["fsm_templates"]["ak.fsm.membership.v1"];
+    let states = membership_fsm["states"]
+        .as_array()
+        .expect("membership states must be an array");
+    assert!(
+        states.iter().all(|state| state.as_str() != Some("invite")),
+        "Realm membership FSM must not invent an invite state"
+    );
+    let transitions = membership_fsm["allowed_transitions"]
+        .as_array()
+        .expect("membership transitions must be an array");
+    assert!(
+        transitions.iter().any(|transition| {
+            transition.as_array().is_some_and(|edge| {
+                edge.first().and_then(Value::as_str) == Some("leave")
+                    && edge.get(1).and_then(Value::as_str) == Some("join")
+            })
+        }),
+        "exact invite acceptance requires the registered leave-to-join edge"
+    );
     assert_vector_variants(
         "protocol-edge-cases-fixture.json",
         "ak.vector.invite.membership_transition_atomicity.v1",
         &[
-            "create_then_accept_walks_leave_invite_join",
-            "accept_without_invite_prestate_is_invalid_membership_transition",
-            "directed_terminal_move_missing_invitee_is_reducer_projection_failed",
-            "bare_member_state_ban_from_invite_prestate_is_rejected",
+            "create_keeps_member_leave_then_accept_joins",
+            "accept_without_pending_or_claimed_invite_prestate_is_rejected",
+            "cancel_rejected_leaves_member_cell_unchanged",
+            "direct_inviter_cancel_missing_or_mismatched_invitee_is_reducer_projection_failed",
+            "bare_member_state_ban_from_leave_uses_membership_fsm",
         ],
     );
 }
