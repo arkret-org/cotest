@@ -28,7 +28,10 @@ pub fn run_private_view_account_data_vector() -> Result<()> {
         "title": "Quarterly plan",
         "query": {"realm_ids": []},
         "collection": {},
-        "created_by": "ak:did_core:web:holder.example",
+        "created_by": arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            arkret_wire::DidCoreId::new("ak:did_core:web:holder.example")?,
+            arkret_wire::DidCoreId::new("ak:did_core:web:station.example")?,
+        )),
         "created_at": "2026-08-01T00:00:00.000Z"
     });
     let view: View = serde_json::from_value(value.clone())?;
@@ -65,13 +68,6 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
         1,
         &realm,
         json!({
-            // A decision's add dot is derived from the Event that carries it,
-            // and a decision's `decision_id` is that Event's own id. Building
-            // the Operation by hand skips the submit path, so the `event_id`
-            // `projection_operation_from_event` injects has to be supplied
-            // here or the dot is unresolvable and the decision is rejected.
-            "event_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
-            "decision_id": "ak:event:ASPgDxjNWk8NeYMYjsMrdQqizmu16D6809n9S9L0eBj0",
             "issuer_id": "ak:did_core:web:moderator.example",
             "target_ref": "ak:event:AeT7kJ7nzcZNqlGtEPM_6ii47B_Y8P7N087AORix-7uC",
             "decision": "dismiss",
@@ -89,13 +85,10 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
 
     let target = "ak:message:AezGbwu72cSXxrMK4QxMKyWVgI6i_yoX0AnYt4iKz49P";
     for (index, decision) in [(2, "quarantine"), (3, "hard_deny")] {
-        let decision_event_id = crate::fixture_event_id(format!("moderation-decision:{index}"));
         let event = operation(
             index,
             &realm,
             json!({
-                "event_id": decision_event_id,
-                "decision_id": decision_event_id,
                 "issuer_id": format!("ak:did_core:web:moderator-{index}.example"),
                 "target_ref": target,
                 "decision": decision,
@@ -104,7 +97,8 @@ pub fn run_moderation_dismiss_and_concurrent_fold_vector() -> Result<()> {
         )?;
         assert!(matches!(
             state.apply(&event, &hlc),
-            ProjectionEffect::ModerationDecisionProjected { .. }
+            ProjectionEffect::ModerationDecisionProjected { ref decision_id, .. }
+                if decision_id == event.context.event_id.as_str()
         ));
     }
     assert_eq!(state.effective_moderation_verdict(target), "hard_deny");
