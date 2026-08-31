@@ -80,10 +80,6 @@ export type RealmObject = {
           "station_id": string;
         };
       } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
-      } | {
         "kind": "service";
         "service_id": string;
       };
@@ -99,10 +95,6 @@ export type RealmObject = {
           "principal_id": string;
           "station_id": string;
         };
-      } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
       } | {
         "kind": "service";
         "service_id": string;
@@ -121,10 +113,6 @@ export type RealmObject = {
           "station_id": string;
         };
       } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
-      } | {
         "kind": "service";
         "service_id": string;
       };
@@ -140,10 +128,6 @@ export type RealmObject = {
           "principal_id": string;
           "station_id": string;
         };
-      } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
       } | {
         "kind": "service";
         "service_id": string;
@@ -166,10 +150,6 @@ export type RealmObject = {
           "station_id": string;
         };
       } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
-      } | {
         "kind": "service";
         "service_id": string;
       };
@@ -185,10 +165,6 @@ export type RealmObject = {
           "principal_id": string;
           "station_id": string;
         };
-      } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
       } | {
         "kind": "service";
         "service_id": string;
@@ -211,10 +187,6 @@ export type RealmObject = {
           "station_id": string;
         };
       } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
-      } | {
         "kind": "service";
         "service_id": string;
       };
@@ -230,10 +202,6 @@ export type RealmObject = {
           "principal_id": string;
           "station_id": string;
         };
-      } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
       } | {
         "kind": "service";
         "service_id": string;
@@ -254,10 +222,6 @@ export type RealmObject = {
           "station_id": string;
         };
       } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
-      } | {
         "kind": "service";
         "service_id": string;
       };
@@ -273,10 +237,6 @@ export type RealmObject = {
           "principal_id": string;
           "station_id": string;
         };
-      } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
       } | {
         "kind": "service";
         "service_id": string;
@@ -295,10 +255,6 @@ export type RealmObject = {
           "station_id": string;
         };
       } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
-      } | {
         "kind": "service";
         "service_id": string;
       };
@@ -314,10 +270,6 @@ export type RealmObject = {
           "principal_id": string;
           "station_id": string;
         };
-      } | {
-        "kind": "hosted_principal";
-        "principal_id": string;
-        "station_id": string;
       } | {
         "kind": "service";
         "service_id": string;
@@ -360,10 +312,6 @@ export type RealmObject = {
       "station_id": string;
     };
   } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
-  } | {
     "kind": "service";
     "service_id": string;
   };
@@ -374,10 +322,6 @@ export type RealmObject = {
       "principal_id": string;
       "station_id": string;
     };
-  } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
   } | {
     "kind": "service";
     "service_id": string;
@@ -418,10 +362,6 @@ export type SpaceObject = {
       "station_id": string;
     };
   } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
-  } | {
     "kind": "service";
     "service_id": string;
   };
@@ -432,10 +372,6 @@ export type SpaceObject = {
       "principal_id": string;
       "station_id": string;
     };
-  } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
   } | {
     "kind": "service";
     "service_id": string;
@@ -455,10 +391,6 @@ export type CapabilityGrantObject = {
       "station_id": string;
     };
   } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
-  } | {
     "kind": "service";
     "service_id": string;
   };
@@ -468,10 +400,6 @@ export type CapabilityGrantObject = {
       "principal_id": string;
       "station_id": string;
     };
-  } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
   } | {
     "kind": "service";
     "service_id": string;
@@ -502,10 +430,6 @@ export type CapabilityGrantObject = {
         "principal_id": string;
         "station_id": string;
       };
-    } | {
-      "kind": "hosted_principal";
-      "principal_id": string;
-      "station_id": string;
     } | {
       "kind": "service";
       "service_id": string;
@@ -594,10 +518,6 @@ export type CapabilityGrantObject = {
         "station_id": string;
       };
     } | {
-      "kind": "hosted_principal";
-      "principal_id": string;
-      "station_id": string;
-    } | {
       "kind": "service";
       "service_id": string;
     };
@@ -648,10 +568,6 @@ export type CapabilityGrantObject = {
       "station_id": string;
     };
   } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
-  } | {
     "kind": "service";
     "service_id": string;
   };
@@ -662,10 +578,6 @@ export type CapabilityGrantObject = {
       "principal_id": string;
       "station_id": string;
     };
-  } | {
-    "kind": "hosted_principal";
-    "principal_id": string;
-    "station_id": string;
   } | {
     "kind": "service";
     "service_id": string;
@@ -718,10 +630,6 @@ export type InviteDeliveryRequestBody = {
         "station_id": string;
       };
     } | {
-      "kind": "hosted_principal";
-      "principal_id": string;
-      "station_id": string;
-    } | {
       "kind": "service";
       "service_id": string;
     };
@@ -731,10 +639,6 @@ export type InviteDeliveryRequestBody = {
         "principal_id": string;
         "station_id": string;
       };
-    } | {
-      "kind": "hosted_principal";
-      "principal_id": string;
-      "station_id": string;
     } | {
       "kind": "service";
       "service_id": string;
@@ -1000,7 +904,6 @@ export type RealmSealFrontierView = {
       "control_proposal_ack": {
         "kind": "signed_ack";
         "realm_id": string;
-        "proposal_digest": string;
         "received_at": string;
         "decision_due_at": string;
         "absolute_due_at": string;
@@ -1054,6 +957,7 @@ export type RealmSealFrontierView = {
         "target_device_authorize_event_id": string;
         "target_device_generation_ref": number;
         "proposal_event_id": string;
+        "proposal_digest": string;
         "accepted_at": string;
         "acceptance_seq": number;
         "control_proposal_ack": {
@@ -1188,10 +1092,6 @@ export type EventFederationSubmission = {
         "station_id": string;
       };
     } | {
-      "kind": "hosted_principal";
-      "principal_id": string;
-      "station_id": string;
-    } | {
       "kind": "service";
       "service_id": string;
     };
@@ -1201,10 +1101,6 @@ export type EventFederationSubmission = {
         "principal_id": string;
         "station_id": string;
       };
-    } | {
-      "kind": "hosted_principal";
-      "principal_id": string;
-      "station_id": string;
     } | {
       "kind": "service";
       "service_id": string;
@@ -1325,10 +1221,6 @@ export type EventFederationSubmission = {
         "principal_id": string;
         "station_id": string;
       };
-    } | {
-      "kind": "hosted_principal";
-      "principal_id": string;
-      "station_id": string;
     } | {
       "kind": "service";
       "service_id": string;
@@ -1458,10 +1350,6 @@ export type EventFederationSubmission = {
             "station_id": string;
           };
         } | {
-          "kind": "hosted_principal";
-          "principal_id": string;
-          "station_id": string;
-        } | {
           "kind": "service";
           "service_id": string;
         };
@@ -1472,10 +1360,6 @@ export type EventFederationSubmission = {
             "station_id": string;
           };
         } | {
-          "kind": "hosted_principal";
-          "principal_id": string;
-          "station_id": string;
-        } | {
           "kind": "service";
           "service_id": string;
         };
@@ -1485,10 +1369,6 @@ export type EventFederationSubmission = {
             "principal_id": string;
             "station_id": string;
           };
-        } | {
-          "kind": "hosted_principal";
-          "principal_id": string;
-          "station_id": string;
         } | {
           "kind": "service";
           "service_id": string;
@@ -1501,10 +1381,6 @@ export type EventFederationSubmission = {
             "principal_id": string;
             "station_id": string;
           };
-        } | {
-          "kind": "hosted_principal";
-          "principal_id": string;
-          "station_id": string;
         } | {
           "kind": "service";
           "service_id": string;

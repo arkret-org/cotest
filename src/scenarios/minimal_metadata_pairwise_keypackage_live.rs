@@ -574,10 +574,10 @@ async fn install_pairwise_membership(
 ) -> Result<()> {
     let payload = MembershipPayload::join(
         RealmId::new(realm_id.to_owned())?,
-        ActorId::hosted_principal(
+        ActorId::account(arkret_wire::AccountId::new(
             pairwise.actor_id.clone(),
             DidCoreId::new(client.service_id().to_owned())?,
-        ),
+        )),
         "minimal-metadata pairwise KeyPackage live fixture",
     )
     .to_value()?;
@@ -592,10 +592,10 @@ async fn leave_pairwise_member(
 ) -> Result<()> {
     let payload = MembershipPayload::transition(
         MembershipPayloadState::Leave,
-        ActorId::hosted_principal(
+        ActorId::account(arkret_wire::AccountId::new(
             pairwise.actor_id.clone(),
             DidCoreId::new(client.service_id().to_owned())?,
-        ),
+        )),
         "pairwise authority revoked",
     )
     .with_realm_id(RealmId::new(realm_id.to_owned())?)
@@ -1333,7 +1333,10 @@ mod tests {
     fn pairwise_actor_routes_through_its_host_station() {
         let principal_id = DidCoreId::new("ak:did_core:key:z6Mkfixture").unwrap();
         let station_id = DidCoreId::new("ak:did_core:web:station.example").unwrap();
-        let actor = ActorId::hosted_principal(principal_id.clone(), station_id.clone());
+        let actor = ActorId::account(arkret_wire::AccountId::new(
+            principal_id.clone(),
+            station_id.clone(),
+        ));
         assert_eq!(actor.signing_principal_id(), &principal_id);
         assert_eq!(actor.route_service_id(), &station_id);
     }

@@ -976,11 +976,11 @@ fn fixed_unsigned_sidecar_event(
 }
 
 fn sidecar_actor_id(actor_id: &DidCoreId) -> SidecarModelResult<arkret_wire::ActorId> {
-    Ok(arkret_wire::ActorId::hosted_principal(
+    Ok(arkret_wire::ActorId::account(arkret_wire::AccountId::new(
         actor_id.clone(),
         DidCoreId::new("ak:did_core:web:principal.example")
             .map_err(|_| SidecarModelError::ModelInvariant)?,
-    ))
+    )))
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<PreparedEventDraft> {
