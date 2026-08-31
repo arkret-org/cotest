@@ -84,6 +84,8 @@ mod service_route_handover_mirror_production;
 mod session_grant_issuer_ledger;
 mod sidecar_vectors;
 mod signal_federation;
+#[cfg(test)]
+mod signal_recipient;
 mod signal_sequence_high_water;
 mod snapshot_witness_quorum;
 mod spec_business_flow;

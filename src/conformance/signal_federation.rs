@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow, bail};
+use arkret_signatures::{PublicKeyMaterial, verify_ed25519_signal_proof};
 use arkret_wire::{
     AccountId, ActorId, DeviceId, Did, DidCoreId, Hash, MAX_SIGNAL_RELAY_CANONICAL_BODY_BYTES,
     MAX_SIGNAL_RELAY_ITEMS, ProfileId, RealmId, ScopeRef, SealId, SignalClass,
@@ -6,15 +7,17 @@ use arkret_wire::{
     SignalRelayRequest, project_did_to_core_id,
 };
 use chrono::{Duration, TimeZone, Utc};
+use ed25519_dalek::SigningKey;
 use serde_json::Value;
 
 use super::{load_fixture_value, required_str, validate_profile};
 
 const FIXTURE: &str = "signal-federation-fixture.json";
+const SIGNING_SEED: [u8; 32] = [0x37; 32];
 pub const VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN: &str =
     "ak.vector.signal.device_authorization_domain.v1";
 
-fn envelope() -> Result<SignalEnvelope> {
+pub(super) fn envelope() -> Result<SignalEnvelope> {
     let realm_id = RealmId::new("ak:realm:AYcmQBZ6x7FCwln_vbdWIyV2tJ4pOJ4rmbd6v_0Y7N9_")?;
     let sent_at = Utc
         .with_ymd_and_hms(2026, 7, 28, 12, 0, 0)
@@ -60,9 +63,17 @@ fn envelope() -> Result<SignalEnvelope> {
             jws: "a..b".to_owned(),
         },
     };
-    envelope.encrypted_payload.aad_digest = envelope.expected_aad_digest()?;
-    envelope.proof.envelope_digest = envelope.envelope_digest()?;
+    crate::harness::attach_signal_proof(&mut envelope, &SigningKey::from_bytes(&SIGNING_SEED));
     Ok(envelope)
+}
+
+fn signing_public_key() -> PublicKeyMaterial {
+    PublicKeyMaterial::Ed25519Raw {
+        bytes: SigningKey::from_bytes(&SIGNING_SEED)
+            .verifying_key()
+            .to_bytes()
+            .to_vec(),
+    }
 }
 
 fn device_authorization_gate(
@@ -92,6 +103,7 @@ fn device_authorization_gate(
         && trust_anchor_present
         && scope_authorized_at_seal
         && signal_class_action_authorized
+        && verify_ed25519_signal_proof(signal, &signing_public_key()).is_ok()
 }
 
 /// Exact runner for `ak.vector.signal.device_authorization_domain.v1`.
@@ -160,8 +172,7 @@ pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
         accepted_actor.signing_principal_id().clone(),
         DidCoreId::new("ak:did_core:web:station-b.example")?,
     ));
-    other_account.encrypted_payload.aad_digest = other_account.expected_aad_digest()?;
-    other_account.proof.envelope_digest = other_account.envelope_digest()?;
+    crate::harness::attach_signal_proof(&mut other_account, &SigningKey::from_bytes(&SIGNING_SEED));
     other_account.validate_structural()?;
     if device_authorization_gate(
         &other_account,
@@ -236,9 +247,7 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("Signal federation fixture missing cases[]"))?;
     for case in cases {
-        if case.get("vector_id").and_then(Value::as_str)
-            == Some(VECTOR_ID_SIGNAL_DEVICE_AUTHORIZATION_DOMAIN)
-        {
+        if case.get("name").and_then(Value::as_str) == Some("device_authorization_domain") {
             continue;
         }
         let generator = case
@@ -273,6 +282,32 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                 if oversized.validate().is_ok() {
                     bail!("Signal relay accepted an oversized batch");
                 }
+                for count in [MAX_SIGNAL_RELAY_ITEMS - 1, MAX_SIGNAL_RELAY_ITEMS] {
+                    SignalRelayRequest {
+                        realm_id: signal.realm_id.clone(),
+                        signals: vec![signal.clone(); count],
+                    }
+                    .validate()?;
+                }
+                let mut large_item = signal.clone();
+                large_item.encrypted_payload.ciphertext = "A".repeat(60_000);
+                crate::harness::attach_signal_proof(
+                    &mut large_item,
+                    &SigningKey::from_bytes(&SIGNING_SEED),
+                );
+                large_item.validate_wire_shape()?;
+                let oversized_body = SignalRelayRequest {
+                    realm_id: signal.realm_id.clone(),
+                    signals: vec![large_item; 20],
+                };
+                if oversized_body
+                    .validate()
+                    .err()
+                    .and_then(|error| error.error_code())
+                    != Some(arkret_wire::ErrorCode::PayloadTooLarge)
+                {
+                    bail!("Signal batch byte overflow did not preserve payload_too_large");
+                }
             }
             "signal_peer_relay_request" => {
                 if generator["same_realm"].as_bool() == Some(false) {
@@ -285,14 +320,131 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
                     if cross_realm.validate().is_ok() {
                         bail!("Signal relay accepted a cross-Realm request");
                     }
+                } else if generator["hop_count"] == 2 {
+                    if case["expected"]["decision"] != "silently_drop_item"
+                        || case["expected"]["response"]
+                            != serde_json::to_value(SignalRelayOutcome::ACCEPTED)?
+                    {
+                        bail!("second-hop failure must not reveal a per-item response");
+                    }
+                } else {
+                    request.validate()?;
+                    verify_ed25519_signal_proof(&signal, &signing_public_key())
+                        .map_err(|error| anyhow!(error.to_string()))?;
                 }
             }
-            "signal_peer_relay_equivalence_pair"
-            | "signal_peer_relay_uncertain_outcome"
-            | "signal_peer_relay_mutations" => {}
+            "signal_peer_relay_equivalence_pair" => {
+                let expected = &case["expected"];
+                let opaque = serde_json::to_value(SignalRelayOutcome::ACCEPTED)?;
+                if expected["response"] != opaque || expected["responses_byte_identical"] != true {
+                    bail!("peer outcome equivalence contract drifted");
+                }
+                for forbidden in expected["forbidden_response_fields"]
+                    .as_array()
+                    .ok_or_else(|| anyhow!("missing forbidden response fields"))?
+                {
+                    let field = forbidden
+                        .as_str()
+                        .ok_or_else(|| anyhow!("invalid forbidden field"))?;
+                    let mut disclosed = opaque.clone();
+                    disclosed[field] = serde_json::json!(1);
+                    if serde_json::from_value::<SignalRelayOutcome>(disclosed).is_ok() {
+                        bail!("peer response schema admits {field}");
+                    }
+                }
+            }
+            "signal_peer_relay_uncertain_outcome" => {
+                // This is a fixture-contract check, not evidence of live HTTP retry behavior.
+                if case["expected"]["automatic_request_retry"] != false
+                    || case["expected"]["durable_retry_queue_created"] != false
+                    || case["expected"]["strategy"] != "drop_unconfirmed"
+                {
+                    bail!("uncertain Signal outcome must not become a durable retry");
+                }
+            }
+            "signal_peer_relay_mutations" => {
+                let mut altered = signal.clone();
+                altered.expires_at -= Duration::seconds(1);
+                if verify_ed25519_signal_proof(&altered, &signing_public_key()).is_ok() {
+                    bail!("rewritten expiry retained a valid producer proof");
+                }
+                let mut resigned = signal.clone();
+                crate::harness::attach_signal_proof(
+                    &mut resigned,
+                    &SigningKey::from_bytes(&[0x38; 32]),
+                );
+                if verify_ed25519_signal_proof(&resigned, &signing_public_key()).is_ok() {
+                    bail!("destination signature replaced the producer proof");
+                }
+            }
+            "signal_role_admission" | "signal_role_admission_mutations" => {
+                validate_role_case_contract(case)?;
+            }
             other => bail!("unknown Signal federation generator {other}"),
         }
     }
-    run_signal_device_authorization_domain_vector()?;
+    Ok(())
+}
+
+/// Validate normative fixture expectations without mistaking them for live
+/// Station admission evidence. HTTP behavior is exercised in Soland's Signal
+/// federation tests; real MLS/client composition is exercised in the sibling
+/// `signal_recipient` tests.
+fn validate_role_case_contract(case: &Value) -> Result<()> {
+    let expected = &case["expected"];
+    match required_str(case, "name")? {
+        "destination_without_remote_directory_relays" => {
+            if expected["remote_directory_queries"] != 0
+                || expected["producer_signature_verifications"] != 0
+                || expected["response"] != serde_json::to_value(SignalRelayOutcome::ACCEPTED)?
+            {
+                bail!("destination must not authenticate remote device authority");
+            }
+        }
+        "forged_signature_requires_recipient_authentication" => {
+            let mut forged = envelope()?;
+            crate::harness::attach_signal_proof(&mut forged, &SigningKey::from_bytes(&[0x38; 32]));
+            forged.validate_structural()?;
+            if verify_ed25519_signal_proof(&forged, &signing_public_key()).is_ok()
+                || expected["recipient_high_water_advanced"] != false
+            {
+                bail!("well-formed forged proof must not authenticate a sender");
+            }
+        }
+        "revoked_device_with_unremoved_leaf" | "recipient_exact_account_and_mls_binding" => {
+            if expected["recipient_high_water_advanced"] != false {
+                bail!("failed recipient admission must not advance high-water");
+            }
+        }
+        "source_revalidates_queued_authority" => {
+            if expected["decision"] != "drop_before_outbound_dispatch"
+                || expected["signals_dispatched"] != 0
+            {
+                bail!("source queue must not retain stale authority");
+            }
+        }
+        "peer_schema_and_item_failure_boundary" => {
+            for field in ["proof", "encrypted_payload"] {
+                let mut malformed = serde_json::to_value(envelope()?)?;
+                malformed.as_object_mut().unwrap().remove(field);
+                if serde_json::from_value::<SignalEnvelope>(malformed).is_ok() {
+                    bail!("missing {field} accepted as a Signal envelope");
+                }
+            }
+            let mut mismatch = envelope()?;
+            mismatch.proof.envelope_digest = Hash::new(format!("sha256:{}", "0".repeat(64)))?;
+            SignalRelayRequest {
+                realm_id: mismatch.realm_id.clone(),
+                signals: vec![mismatch.clone()],
+            }
+            .validate()?;
+            if mismatch.validate_structural().is_ok()
+                || expected["per_item_results_exposed"] != false
+            {
+                bail!("peer request and per-item rejection boundary drifted");
+            }
+        }
+        other => bail!("unknown Signal role fixture {other}"),
+    }
     Ok(())
 }
