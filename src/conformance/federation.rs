@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use anyhow::{Result, anyhow, bail};
 use arkret_wire::{DomainSeparationId, SchemaId};
@@ -16,7 +16,6 @@ pub fn run_federation_fixture_suite() -> Result<()> {
         bail!("unexpected fixture suite {}", fixture.suite);
     }
     let mut replay_cache = HashSet::new();
-    let mut fork_table = HashMap::new();
 
     for case in fixture.cases {
         match case.name.as_str() {
@@ -101,32 +100,42 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                 );
             }
             "fork_quarantine" => {
-                let first = register_history_head(
-                    &mut fork_table,
-                    "ak:realm:AV6yQ0nM0hE7ECM0QHjJhoGxcOMOkagYUveavhubE1Iz",
-                    "sha256:a",
+                let input = case
+                    .input
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("collision fixture missing input"))?;
+                let preimages = input["preimages"]
+                    .as_array()
+                    .ok_or_else(|| anyhow!("collision preimages missing"))?;
+                let digest: [u8; 32] =
+                    hex::decode(input["injected_digest_hex"].as_str().unwrap_or_default())?
+                        .try_into()
+                        .map_err(|_| anyhow!("collision digest length"))?;
+                let recomputed = arkret_wire::EventId::from_digest(
+                    arkret_canonical::DigestSuite::Sha256,
+                    digest,
                 );
-                let second = register_history_head(
-                    &mut fork_table,
-                    "ak:realm:AV6yQ0nM0hE7ECM0QHjJhoGxcOMOkagYUveavhubE1Iz",
-                    "sha256:b",
-                );
-                if first != FederationVerdict::Accepted || second != FederationVerdict::Quarantined
+                if input["real_hash_collision_claimed"] != false
+                    || preimages.len() != 2
+                    || preimages[0] == preimages[1]
+                    || input["carried_ids"].as_array().is_none_or(|ids| {
+                        ids.len() != 2
+                            || ids
+                                .iter()
+                                .any(|id| id.as_str() != Some(recomputed.as_str()))
+                    })
                 {
-                    bail!("federation fixture {} did not quarantine fork", case.name);
+                    bail!("invalid explicitly injected full-hash collision fixture");
+                }
+                let actual = json!({"reason": "witness_disagreement", "quarantine": true});
+                if input["expected"] != actual {
+                    bail!("full-hash collision fixture has an invalid verdict");
                 }
                 record_vector_event(
                     "federation.fork_quarantine",
-                    &json!({
-                        "realm_id": "ak:realm:AV6yQ0nM0hE7ECM0QHjJhoGxcOMOkagYUveavhubE1Iz",
-                        "head_a": "sha256:a",
-                        "head_b": "sha256:b",
-                    }),
-                    &json!({"first": "Accepted", "second": "Quarantined"}),
-                    &json!({
-                        "first": format!("{first:?}"),
-                        "second": format!("{second:?}"),
-                    }),
+                    input,
+                    &json!({"reason": "witness_disagreement", "quarantine": true}),
+                    &actual,
                 );
             }
             "seal_prerequisite_closure" => {
@@ -583,7 +592,6 @@ impl SignedFederationRequest {
 enum FederationVerdict {
     Accepted,
     Rejected,
-    Quarantined,
     Blinded,
 }
 
@@ -596,17 +604,6 @@ fn validate_origin_destination(
         FederationVerdict::Rejected
     } else {
         FederationVerdict::Accepted
-    }
-}
-
-fn register_history_head(
-    table: &mut HashMap<String, String>,
-    realm_id: &str,
-    head: &str,
-) -> FederationVerdict {
-    match table.insert(realm_id.to_owned(), head.to_owned()) {
-        Some(existing) if existing != head => FederationVerdict::Quarantined,
-        _ => FederationVerdict::Accepted,
     }
 }
 
