@@ -9,7 +9,7 @@
 //! - `ak.vector.media_binding.participant_binding_required.v1`
 //! - `ak.vector.media_binding.unknown_type_fail_closed.v1`
 //! - `ak.vector.media_binding.e2ee_key_source.v1`
-//! - `ak.vector.media_binding.participant_identity_unrecognised.v1`
+//! - `ak.vector.media_binding.participant_id_unrecognised.v1`
 //! - `ak.vector.media_binding.recording_artifact_via_arkret_blob.v1`
 //! - `ak.vector.media_binding.recording_exporter_label.v1`
 //!
@@ -46,8 +46,8 @@ pub const VECTOR_ID_PARTICIPANT_BINDING_REQUIRED: &str =
 pub const VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED: &str =
     "ak.vector.media_binding.unknown_type_fail_closed.v1";
 pub const VECTOR_ID_E2EE_KEY_SOURCE: &str = "ak.vector.media_binding.e2ee_key_source.v1";
-pub const VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED: &str =
-    "ak.vector.media_binding.participant_identity_unrecognised.v1";
+pub const VECTOR_ID_PARTICIPANT_ID_UNRECOGNISED: &str =
+    "ak.vector.media_binding.participant_id_unrecognised.v1";
 pub const VECTOR_ID_RECORDING_ARTIFACT_VIA_ARKRET_BLOB: &str =
     "ak.vector.media_binding.recording_artifact_via_arkret_blob.v1";
 pub const VECTOR_ID_RECORDING_EXPORTER_LABEL: &str =
@@ -63,7 +63,7 @@ pub const ALL_MEDIA_BINDING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_PARTICIPANT_BINDING_REQUIRED,
     VECTOR_ID_UNKNOWN_TYPE_FAIL_CLOSED,
     VECTOR_ID_E2EE_KEY_SOURCE,
-    VECTOR_ID_PARTICIPANT_IDENTITY_UNRECOGNISED,
+    VECTOR_ID_PARTICIPANT_ID_UNRECOGNISED,
     VECTOR_ID_RECORDING_ARTIFACT_VIA_ARKRET_BLOB,
     VECTOR_ID_RECORDING_EXPORTER_LABEL,
 ];
@@ -320,7 +320,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
         }
     }
     // The bound tuple fields (sig + issuer_kid + realm_id + call_id +
-    // focus_id + actor_id + device_id + participant_identity +
+    // focus_id + actor_id + device_id + participant_id +
     // expires_at) MUST all be present; missing any one is
     // `participant_binding_invalid`.
     let required = [
@@ -331,7 +331,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
         "focus_id",
         "actor_id",
         "device_id",
-        "participant_identity",
+        "participant_id",
         "expires_at",
     ];
     if required.len() != 9 {
@@ -349,7 +349,7 @@ pub fn run_participant_binding_required_vector() -> Result<()> {
 /// ```text
 /// signing_input = "ak.media.participant_binding.v1" || 0x00 ||
 ///   canonical_json({ actor_id, call_id, device_id, expires_at,
-///                    focus_id, participant_identity, realm_id })
+///                    focus_id, participant_id, realm_id })
 /// ```
 ///
 /// The label is the literal `scheme` value; the JCS object covers EXACTLY the
@@ -361,7 +361,7 @@ fn participant_binding_signing_input(
     device_id: &str,
     expires_at: &str,
     focus_id: &str,
-    participant_identity: &str,
+    participant_id: &str,
     realm_id: &str,
 ) -> Result<Vec<u8>> {
     let seven_tuple = json!({
@@ -370,7 +370,7 @@ fn participant_binding_signing_input(
         "device_id": device_id,
         "expires_at": expires_at,
         "focus_id": focus_id,
-        "participant_identity": participant_identity,
+        "participant_id": participant_id,
         "realm_id": realm_id,
     });
     let jcs = arkret_canonical::canonical_json_bytes(&seven_tuple)
@@ -404,7 +404,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
     let expires_at = "2026-05-27T12:34:56.000Z";
     let focus_id = "fra-1";
-    let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
+    let participant_id = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
     let realm_id = "ak:realm:AZAySZA7XRDeJ9cO4MqaDWrJD-rqPk6Cudk7CCzsDQz1";
 
     let signing_input = participant_binding_signing_input(
@@ -413,7 +413,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         device_id,
         expires_at,
         focus_id,
-        participant_identity,
+        participant_id,
         realm_id,
     )?;
 
@@ -424,7 +424,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
     // Golden signature pin: the deterministic ed25519 signature over the fixed
     // input MUST reproduce this byte string. A drift in canonical JSON, the
     // label, the 0x00 separator, or the field set changes these bytes.
-    const EXPECTED_SIG_HEX: &str = "e7e0182f6caa264b72b078a5d7092be2195170e80e37598a2b541284cf5d15f0e5eedc72e57784fce9c735e0e9d75243d59258272c5659c5132cc67adfb99405";
+    const EXPECTED_SIG_HEX: &str = "f9dbc8ec2bce61aa2de541038afd266d3c35c35d6528b9100f3877aa02a4100152dbeefb2e5ab35d3090b7987a0bde6a18192da6771e4c2899ae648c7f8f0807";
     let actual_sig_hex = hex_lower(&sig.to_bytes());
     if actual_sig_hex != EXPECTED_SIG_HEX {
         bail!(
@@ -448,7 +448,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         (expires_at, "2099-01-01T00:00:00.000Z"),
         (focus_id, "fra-2"),
         (
-            participant_identity,
+            participant_id,
             "ak:rtc_participant:0198c2f4-0000-7000-8000-0000000000ff",
         ),
         (
@@ -466,7 +466,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
             if idx == 5 {
                 replacement
             } else {
-                participant_identity
+                participant_id
             },
             if idx == 6 { replacement } else { realm_id },
         )?;
@@ -487,7 +487,7 @@ fn run_participant_binding_ed25519_vector() -> Result<()> {
         &arkret_canonical::canonical_json_bytes(&json!({
             "actor_id": actor_id, "call_id": call_id, "device_id": device_id,
             "expires_at": expires_at, "focus_id": focus_id,
-            "participant_identity": participant_identity, "realm_id": realm_id,
+            "participant_id": participant_id, "realm_id": realm_id,
         }))
         .map_err(|err| anyhow!("cross-label JCS failed: {err}"))?,
     );
@@ -573,7 +573,7 @@ pub fn run_e2ee_key_source_vector() -> Result<()> {
 /// The spec derives the 32-byte SFrame frame key as
 /// `MLS-Exporter(label="ak.rtc-frame-key/v1", Context, 32)` where
 /// `Context = canonical_json({realm_id, call_id, focus_id, epoch_id,
-/// participant_identity, device_id})`. A live MLS group / RFC 9420 exporter is
+/// participant_id, device_id})`. A live MLS group / RFC 9420 exporter is
 /// NOT available under cotest's pure-vector slice, so this vector pins the two
 /// halves cotest CAN verify cryptographically:
 ///   1. the Context is the byte-correct canonical JSON of the EXACT 6-tuple (an empty / epoch-only
@@ -591,7 +591,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     let call_id = "ak:call:AYf05kF8z4cSo8r6qmqXgu4KPuv2YtKBlsE00FOmblaz";
     let focus_id = "fra-1";
     let epoch_id = "ak:mls_epoch:7";
-    let participant_identity = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
+    let participant_id = "ak:rtc_participant:0198c2f4-0000-7000-8000-000000000000";
     let device_id = "ak:device:01964137-0000-7000-8000-000000000000";
 
     let context = sframe_context(
@@ -599,7 +599,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
         call_id,
         focus_id,
         epoch_id,
-        participant_identity,
+        participant_id,
         device_id,
     )?;
 
@@ -613,7 +613,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
         "call_id",
         "focus_id",
         "epoch_id",
-        "participant_identity",
+        "participant_id",
         "device_id",
     ] {
         if context_value.get(field).and_then(|v| v.as_str()).is_none() {
@@ -642,7 +642,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
     // byte-correct label + canonical Context. A drift in label, separator, or
     // Context JCS changes these bytes.
     const EXPECTED_KEY_HEX: &str =
-        "d81538c8f5041c34646833655abeb9eb51aa90687914025069d83fc9c6e66e28";
+        "d07379ecad8758632937ebb8541418451bc5d31f5d7cd82ef49a866f9534e09d";
     let actual_key_hex = hex_lower(&frame_key);
     if actual_key_hex != EXPECTED_KEY_HEX {
         bail!(
@@ -657,7 +657,7 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
         call_id,
         focus_id,
         epoch_id,
-        participant_identity,
+        participant_id,
         "ak:device:01964137-0000-7000-8000-0000000000ff",
     )?;
     let mut other_info = Vec::new();
@@ -676,14 +676,14 @@ fn run_sframe_frame_key_derivation_vector() -> Result<()> {
 }
 
 /// Canonical SFrame `Context` bytes (media-service-binding.md §8.1): the JCS of
-/// exactly `{realm_id, call_id, focus_id, epoch_id, participant_identity,
+/// exactly `{realm_id, call_id, focus_id, epoch_id, participant_id,
 /// device_id}`.
 fn sframe_context(
     realm_id: &str,
     call_id: &str,
     focus_id: &str,
     epoch_id: &str,
-    participant_identity: &str,
+    participant_id: &str,
     device_id: &str,
 ) -> Result<Vec<u8>> {
     arkret_canonical::canonical_json_bytes(&json!({
@@ -691,20 +691,18 @@ fn sframe_context(
         "call_id": call_id,
         "focus_id": focus_id,
         "epoch_id": epoch_id,
-        "participant_identity": participant_identity,
+        "participant_id": participant_id,
         "device_id": device_id,
     }))
     .map_err(|err| anyhow!("SFrame Context JCS encoding failed: {err}"))
 }
 
-// ─── VECT-MB-8 — participant_identity_unrecognised ─────────────────────────
+// ─── VECT-MB-8 — participant_id_unrecognised ─────────────────────────
 
-pub fn run_participant_identity_unrecognised_vector() -> Result<()> {
-    if arkret_wire::ReasonCode::PARTICIPANT_IDENTITY_UNRECOGNISED
-        != "participant_identity_unrecognised"
-    {
+pub fn run_participant_id_unrecognised_vector() -> Result<()> {
+    if arkret_wire::ReasonCode::PARTICIPANT_ID_UNRECOGNISED != "participant_id_unrecognised" {
         bail!(
-            "arkret_wire::ReasonCode::PARTICIPANT_IDENTITY_UNRECOGNISED spelling drifted: participant_identity_unrecognised"
+            "arkret_wire::ReasonCode::PARTICIPANT_ID_UNRECOGNISED spelling drifted: participant_id_unrecognised"
         );
     }
     // The backend MUST signal only identities that match an entry in
@@ -908,7 +906,7 @@ pub fn run_media_binding_vector_suite() -> Result<()> {
     run_participant_binding_required_vector()?;
     run_unknown_type_fail_closed_vector()?;
     run_e2ee_key_source_vector()?;
-    run_participant_identity_unrecognised_vector()?;
+    run_participant_id_unrecognised_vector()?;
     run_recording_artifact_via_arkret_blob_vector()?;
     run_recording_exporter_label_vector()?;
     Ok(())

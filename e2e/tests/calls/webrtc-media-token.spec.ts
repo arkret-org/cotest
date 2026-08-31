@@ -92,8 +92,8 @@ test.describe("media token exchange", () => {
     expect(body.backend_kind).toBe("livekit");
     expect(body.connect_url).toBe(livekitFocus().connect_url);
     expect(typeof body.backend_token).toBe("string");
-    // participant_identity is a fresh `ak:rtc_participant:<uuidv7>` handle.
-    expect(body.participant_identity).toMatch(
+    // participant_id is a fresh `ak:rtc_participant:<uuidv7>` handle.
+    expect(body.participant_id).toMatch(
       /^ak:rtc_participant:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
     );
 
@@ -107,7 +107,7 @@ test.describe("media token exchange", () => {
     expect(binding.focus_id).toBe(livekitFocus().focus_id);
     expect(binding.actor_id).toBe(alice.id);
     expect(binding.device_id).toBe(alice.deviceId);
-    expect(binding.participant_identity).toBe(body.participant_identity);
+    expect(binding.participant_id).toBe(body.participant_id);
     expect(typeof binding.issued_at).toBe("string");
     expect(typeof binding.expires_at).toBe("string");
     expect(new Date(binding.expires_at as string).getTime()).toBeGreaterThan(
@@ -126,7 +126,7 @@ test.describe("media token exchange", () => {
     // deployment configuration, deliberately distinct from the Realm-anchored
     // issuerKid() that signs the participant_binding.
     expect(claims.iss).toBe(LIVEKIT_API_KEY);
-    expect(claims.sub).toBe(body.participant_identity);
+    expect(claims.sub).toBe(body.participant_id);
     // exp/iat are NumericDate (Unix epoch seconds); exp MUST be within 600s
     // of iat (media-service-binding.md §3 TTL ceiling).
     expect(typeof claims.exp).toBe("number");
@@ -177,7 +177,7 @@ test.describe("media token exchange", () => {
     expect(token.sig.length).toBeGreaterThan(0);
     expect(token.payload.call_id).toBe(callId);
     expect(token.payload.focus_id).toBe(arkretNativeFocus().focus_id);
-    expect(token.payload.participant_identity).toBe(body.participant_identity);
+    expect(token.payload.participant_id).toBe(body.participant_id);
     expect(token.payload.media).toEqual({
       audio: true,
       video: true,

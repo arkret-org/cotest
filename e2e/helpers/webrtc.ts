@@ -880,7 +880,7 @@ export interface ArkretNativeBackendToken {
   payload: {
     call_id: string;
     focus_id: string;
-    participant_identity: string;
+    participant_id: string;
     issued_at: string;
     expires_at: string;
     media: { audio: boolean; video: boolean; screen: boolean };

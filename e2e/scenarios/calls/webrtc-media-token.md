@@ -29,23 +29,23 @@ a live soland instance.
 - `POST /_arkret/self/rtc/token` for a configured `focus_id` returns a
   `CallMediaTokenExchangeOutcome`:
   - `backend_kind = livekit`, `connect_url` echoes the focus config.
-  - `participant_identity` is a fresh `ak:rtc_participant:<uuidv7>` handle.
+  - `participant_id` is a fresh `ak:rtc_participant:<uuidv7>` handle.
   - `participant_binding.scheme = ak.media.participant_binding.v1` with the full
     bound tuple (issuer_kid / realm_id / call_id / focus_id / actor_id /
-    device_id / participant_identity / issued_at / expires_at / sig).
+    device_id / participant_id / issued_at / expires_at / sig).
   - `participant_binding.sig` is the single Realm-anchored media service
     assertion; the closed outcome has no redundant `service_signature`.
   - `backend_token` decodes to a LiveKit JWT: `iss` = the runner-configured
     `SOLAND_LIVEKIT_API_KEY` (`did:web:media.example#media-token`, a backend
     credential distinct from the Realm-anchored issuer kid), `sub` =
-    `participant_identity`, `video.room` is the opaque backend room id derived
+    `participant_id`, `video.room` is the opaque backend room id derived
     from `(realm_id, call_id, focus_id)` (`ak_call_<sha256-prefix>`, never raw
     protocol ids), `canPublish`, `canPublishSources` = [microphone, camera]
     (no `screen_share` without `capability_refs`), `canSubscribe = true`, and
     `exp - iat` within the 600s TTL ceiling.
 - The `arkret_native` focus returns a closed signed token object
   (`kid` / `sig` / `payload`); the payload carries `call_id` / `focus_id` /
-  `participant_identity` / `media` / `issued_at` / `expires_at` and never
+  `participant_id` / `media` / `issued_at` / `expires_at` and never
   `actor_id` / `device_id` / `realm_id`.
 - An unknown `focus_id` fails closed with 409 `focus_mismatch`.
 - A Realm member lacking `ak.call.join` is refused with 403

@@ -1,141 +1,31 @@
 {
   "profile": "ak.profile.membership_fsm_vectors.v1",
-  "version": "2026-05-09",
-  "comment": "B5 Round 23 — membership transition FSM vectors per ak.component.member.state.v1 (lattice=fsm, bottom=reject). Spec authz/event-auth-state-resolution.md §6 + space-membership.md §3 defines legal transitions: invited→{join, leave, ban (admin)}; join→{leave, ban (admin), kick (admin)}; leave→{invited, ban (admin)}; ban→{leave (admin)}; kick→{invited, knock}; knock→{invited, leave}. Illegal transitions MUST fail closed at the FSM bottom mode (reject) — they DO NOT silently no-op. Vectors below cover ≥8 legal + ≥7 illegal transitions.",
+  "version": "2026-09-01",
+  "comment": "Canonical four-state ak.fsm.membership.v1 vectors. Invite lifecycle is independent and never appears as an ak.member.state value; authorization is evaluated outside the structural FSM.",
   "encoder": {
     "cell_family": "ak.component.member.state.v1",
     "lattice": "fsm",
     "bottom": "reject",
-    "states": ["invited", "join", "leave", "ban", "kick", "knock"]
+    "states": ["join", "knock", "leave", "ban"]
   },
   "legal_transitions": [
-    {
-      "name": "invited_to_join",
-      "from": "invited",
-      "to": "join",
-      "actor": "self",
-      "expected": { "outcome": "accept", "next_state": "join" }
-    },
-    {
-      "name": "join_to_leave",
-      "from": "join",
-      "to": "leave",
-      "actor": "self",
-      "expected": { "outcome": "accept", "next_state": "leave" }
-    },
-    {
-      "name": "join_to_ban_admin",
-      "from": "join",
-      "to": "ban",
-      "actor": "admin",
-      "expected": { "outcome": "accept", "next_state": "ban" }
-    },
-    {
-      "name": "leave_to_invited",
-      "from": "leave",
-      "to": "invited",
-      "actor": "admin_or_inviter",
-      "expected": { "outcome": "accept", "next_state": "invited" }
-    },
-    {
-      "name": "ban_to_leave_admin_unban",
-      "from": "ban",
-      "to": "leave",
-      "actor": "admin",
-      "expected": { "outcome": "accept", "next_state": "leave" }
-    },
-    {
-      "name": "kick_to_invited",
-      "from": "kick",
-      "to": "invited",
-      "actor": "admin_or_inviter",
-      "expected": { "outcome": "accept", "next_state": "invited" }
-    },
-    {
-      "name": "kick_to_knock",
-      "from": "kick",
-      "to": "knock",
-      "actor": "self",
-      "expected": { "outcome": "accept", "next_state": "knock" }
-    },
-    {
-      "name": "knock_to_invited",
-      "from": "knock",
-      "to": "invited",
-      "actor": "admin_or_inviter",
-      "expected": { "outcome": "accept", "next_state": "invited" }
-    },
-    {
-      "name": "join_to_kick_admin",
-      "from": "join",
-      "to": "kick",
-      "actor": "admin",
-      "expected": { "outcome": "accept", "next_state": "kick" }
-    },
-    {
-      "name": "invited_to_leave_decline",
-      "from": "invited",
-      "to": "leave",
-      "actor": "self",
-      "expected": { "outcome": "accept", "next_state": "leave" }
-    }
+    {"name":"leave_to_knock","from":"leave","to":"knock","actor":"self","expected":{"outcome":"accept","next_state":"knock"}},
+    {"name":"leave_to_join","from":"leave","to":"join","actor":"self","expected":{"outcome":"accept","next_state":"join"}},
+    {"name":"knock_to_join","from":"knock","to":"join","actor":"admin","expected":{"outcome":"accept","next_state":"join"}},
+    {"name":"knock_to_leave","from":"knock","to":"leave","actor":"self","expected":{"outcome":"accept","next_state":"leave"}},
+    {"name":"join_to_leave","from":"join","to":"leave","actor":"self","expected":{"outcome":"accept","next_state":"leave"}},
+    {"name":"leave_to_ban","from":"leave","to":"ban","actor":"admin","expected":{"outcome":"accept","next_state":"ban"}},
+    {"name":"knock_to_ban","from":"knock","to":"ban","actor":"admin","expected":{"outcome":"accept","next_state":"ban"}},
+    {"name":"join_to_ban","from":"join","to":"ban","actor":"admin","expected":{"outcome":"accept","next_state":"ban"}},
+    {"name":"ban_to_leave","from":"ban","to":"leave","actor":"admin","expected":{"outcome":"accept","next_state":"leave"}}
   ],
   "illegal_transitions": [
-    {
-      "name": "invited_to_ban_without_admin",
-      "from": "invited",
-      "to": "ban",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    },
-    {
-      "name": "leave_to_ban_without_admin",
-      "from": "leave",
-      "to": "ban",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    },
-    {
-      "name": "ban_to_join_self_attempt",
-      "from": "ban",
-      "to": "join",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    },
-    {
-      "name": "knock_to_ban_without_admin",
-      "from": "knock",
-      "to": "ban",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    },
-    {
-      "name": "kick_to_join_direct",
-      "from": "kick",
-      "to": "join",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    },
-    {
-      "name": "ban_to_invited_without_admin",
-      "from": "ban",
-      "to": "invited",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    },
-    {
-      "name": "leave_to_join_direct",
-      "from": "leave",
-      "to": "join",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    },
-    {
-      "name": "join_to_invited_self",
-      "from": "join",
-      "to": "invited",
-      "actor": "self",
-      "expected": { "outcome": "reject", "reason_code": "fsm_transition_forbidden" }
-    }
+    {"name":"join_to_join","from":"join","to":"join","actor":"self","expected":{"outcome":"reject","reason_code":"fsm_transition_forbidden"}},
+    {"name":"knock_to_knock","from":"knock","to":"knock","actor":"self","expected":{"outcome":"reject","reason_code":"fsm_transition_forbidden"}},
+    {"name":"leave_to_leave","from":"leave","to":"leave","actor":"self","expected":{"outcome":"reject","reason_code":"fsm_transition_forbidden"}},
+    {"name":"ban_to_ban","from":"ban","to":"ban","actor":"admin","expected":{"outcome":"reject","reason_code":"fsm_transition_forbidden"}},
+    {"name":"ban_to_join","from":"ban","to":"join","actor":"self","expected":{"outcome":"reject","reason_code":"fsm_transition_forbidden"}},
+    {"name":"ban_to_knock","from":"ban","to":"knock","actor":"self","expected":{"outcome":"reject","reason_code":"fsm_transition_forbidden"}},
+    {"name":"join_to_knock","from":"join","to":"knock","actor":"self","expected":{"outcome":"reject","reason_code":"fsm_transition_forbidden"}}
   ]
 }

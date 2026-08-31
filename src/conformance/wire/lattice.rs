@@ -751,25 +751,19 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("membership_fsm_fixture.json")?;
     validate_profile(&fixture, "ak.profile.membership_fsm_vectors.v1")?;
 
-    let valid_states: BTreeSet<&str> = ["invited", "join", "leave", "ban", "kick", "knock"]
-        .into_iter()
-        .collect();
-    let legal_table: &[(&str, &str, bool)] = &[
-        ("invited", "join", false),
-        ("invited", "leave", false),
-        ("invited", "ban", true),
-        ("join", "leave", false),
-        ("join", "ban", true),
-        ("join", "kick", true),
-        ("leave", "invited", false),
-        ("leave", "ban", true),
-        ("ban", "leave", true),
-        ("kick", "invited", false),
-        ("kick", "knock", false),
-        ("knock", "invited", false),
-        ("knock", "leave", false),
+    let valid_states: BTreeSet<&str> = ["join", "knock", "leave", "ban"].into_iter().collect();
+    let legal_table: &[(&str, &str)] = &[
+        ("leave", "knock"),
+        ("leave", "join"),
+        ("knock", "join"),
+        ("knock", "leave"),
+        ("join", "leave"),
+        ("leave", "ban"),
+        ("knock", "ban"),
+        ("join", "ban"),
+        ("ban", "leave"),
     ];
-    let legal_set: BTreeSet<(&str, &str)> = legal_table.iter().map(|(f, t, _)| (*f, *t)).collect();
+    let legal_set: BTreeSet<(&str, &str)> = legal_table.iter().copied().collect();
 
     let legal = fixture
         .get("legal_transitions")
@@ -836,13 +830,7 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
         if !valid_states.contains(to) {
             bail!("illegal {name}: to state {to} not in known set");
         }
-        let in_table = legal_set.contains(&(from, to));
-        let admin_required = legal_table
-            .iter()
-            .find(|(f, t, _)| *f == from && *t == to)
-            .map(|(_, _, a)| *a)
-            .unwrap_or(false);
-        let is_actually_illegal = !in_table || (admin_required && actor == "self");
+        let is_actually_illegal = !legal_set.contains(&(from, to));
         if !is_actually_illegal {
             bail!(
                 "illegal {name}: transition {from}→{to} (actor={actor}) is actually legal in canonical table"
