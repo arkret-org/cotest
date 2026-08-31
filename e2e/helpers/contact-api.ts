@@ -136,7 +136,6 @@ export type DirectConversationResolveOutcome = {
   blockers?: Array<Record<string, unknown>>;
   send_blockers?: Array<Record<string, unknown>>;
   group_state_ref?: string;
-  group_state_digest?: string;
   retry_after_ms?: number;
 };
 
