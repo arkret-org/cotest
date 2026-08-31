@@ -730,8 +730,8 @@ impl ArkretServer {
     }
 
     /// Build a request for Soland's deployment-local account projection fixture.
-    /// Canonical Account Authority registration is not owned by a Principal
-    /// Server; live Cotest setup materializes its result through `/_soland`.
+    /// Canonical Account Authority registration is not owned by a Station; live Cotest setup
+    /// materializes its result through `/_soland`.
     pub fn account_registration_request(&self) -> reqwest::RequestBuilder {
         self.http()
             .post(self.url("/_soland/self/account/register"))
