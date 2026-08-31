@@ -86,7 +86,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             ),
         ],
         vec![
-            ("DATABASE_URL".to_owned(), target_database_url),
+            ("DATABASE_URL".to_owned(), target_database_url.clone()),
             ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
             (
                 "SOLAND_FEDERATION_FRONTIER_INTERVAL_SECONDS".to_owned(),
@@ -359,6 +359,72 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
                 .any(|event| event.event_id == second_event_id),
         "new authorized rejoin batch did not materialize its Control Event history"
     );
+
+    // Fault injection for the frontier repair path: accept and Seal an
+    // Ack-required Control Event while the target is offline, then mark its
+    // frozen outbox intent delivered without performing transport. Once the
+    // target returns, the only protocol route left for the missing Event is
+    // peer frontier discovery followed by peer resolve and shared federation
+    // admission. The frozen push body proves this Event needs the original
+    // Control Proposal Ack; a bare Event or receiver-minted replacement would
+    // fail the admission contract.
+    group.server_mut(1).stop_external_process().await?;
+    let carol_leave = member_payload(
+        &realm_id,
+        "did:web:fanout-carol.example",
+        group.server(0).service_id().clone(),
+        MembershipPayloadState::Leave,
+    )?;
+    let frontier_backfill_id =
+        submit_and_settle_member_transition(&alice, &realm_id, carol_leave).await?;
+    let frontier_backfill_intent = durable_fanout_intent(
+        &source_database_url,
+        &realm_id,
+        &frontier_backfill_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    let frontier_backfill_body: EventsSubmitFederationBatchRequestBody = serde_json::from_str(
+        frontier_backfill_intent["payload_json"]
+            .as_str()
+            .context("frontier backfill intent payload")?,
+    )?;
+    let frontier_backfill_submission = frontier_backfill_body
+        .events
+        .iter()
+        .find(|submission| submission.event.event_id == frontier_backfill_id)
+        .context("frontier backfill intent omitted its source Control Event")?;
+    ensure!(
+        frontier_backfill_submission.event.kind.is_control_plane()
+            && frontier_backfill_submission.control_proposal_ack.is_some()
+            && frontier_backfill_submission
+                .ackless_self_principal_admission_evidence
+                .is_none(),
+        "frontier repair fixture did not produce an Ack-required Control carrier"
+    );
+    mark_fanout_intent_delivered_without_transport(
+        &source_database_url,
+        &realm_id,
+        &frontier_backfill_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    group.server_mut(1).start_external_process().await?;
+    let bob = group.server(1).demo_client(&bob_did, BOB_DEVICE).await?;
+    wait_for_resolved_event(&bob, &alice, &frontier_backfill_id).await?;
+    let target_frontier_exchange = wait_for_frontier_exchange_success(
+        &target_database_url,
+        &realm_id,
+        group.server(0).service_id(),
+    )
+    .await?;
+    ensure!(
+        target_frontier_exchange["status"] == "healthy"
+            && target_frontier_exchange["consecutive_failures"] == 0,
+        "target frontier repair did not settle after Control evidence replay: \
+         {target_frontier_exchange}"
+    );
+
     // This Realm deliberately grants plaintext visibility only to the source
     // service while retaining a routed member on the target Station. Restart
     // the source so the proactive worker takes a fresh two-Station snapshot;
@@ -473,6 +539,41 @@ async fn durable_fanout_intent(
     })
     .await
     .context("join durable fanout diagnostic read")?
+}
+
+/// Test-only transport fault injection. This changes only the source outbox
+/// bookkeeping while the target process is stopped; it never writes Event or
+/// admission state on the target. A subsequent target-side appearance of the
+/// Event therefore proves frontier repair rather than ordinary push delivery.
+async fn mark_fanout_intent_delivered_without_transport(
+    database_url: &str,
+    realm_id: &str,
+    source_event_id: &EventId,
+    peer_id: &DidCoreId,
+) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let source_event_id = source_event_id.to_string();
+    let peer_id = peer_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let completed_at = chrono::Utc::now().timestamp_millis();
+        let updated = client.execute(
+            "UPDATE federation_outbox SET state = 'delivered', leased_from_state = NULL, \
+             lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL, completed_at = $4 \
+             WHERE peer_id = $1 AND realm_fanout->>'realm_id' = $2 \
+             AND (realm_fanout->'source_event_ids') ? $3 \
+             AND state IN ('pending', 'pending_route', 'leased')",
+            &[&peer_id, &realm_id, &source_event_id, &completed_at],
+        )?;
+        ensure!(
+            updated == 1,
+            "expected one unfinished intent for frontier fault injection, updated {updated}"
+        );
+        Ok(())
+    })
+    .await
+    .context("join frontier outbox fault injection")?
 }
 
 fn assert_cancelled_intent_unchanged(

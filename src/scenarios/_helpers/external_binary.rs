@@ -359,7 +359,6 @@ pub const TEABAY_SPEC: ExternalBinarySpec = ExternalBinarySpec {
         ("TEABAY_PUBLIC_BASE_URL", "http://teabay.cotest.local"),
         ("TEABAY_SERVICE_ID", "did:web:teabay.cotest.local"),
         ("TEABAY_DEVELOPMENT_MODE", "true"),
-        ("TEABAY_PRIVATE_CONTACT_DISCOVERY_ENABLED", "true"),
     ],
     extra_args: &[],
     required_env_vars: &["DATABASE_URL"],

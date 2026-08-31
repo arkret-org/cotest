@@ -3456,7 +3456,6 @@ try {
                 TEABAY_PUBLIC_BASE_URL = $TeabayBaseUrl
                 TEABAY_SERVICE_ID = $TeabayServiceId
                 TEABAY_DEVELOPMENT_MODE = "true"
-                TEABAY_PRIVATE_CONTACT_DISCOVERY_ENABLED = "true"
                 TEABAY_METRICS_BIND = "127.0.0.1:$teabayMetricsPort"
             })
         $teabayCmd = "& {0} --config {1} --no-env-overrides --bind 127.0.0.1:{2}" -f `
