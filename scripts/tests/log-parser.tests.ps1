@@ -114,6 +114,17 @@ Assert-Equal "passed" $parsed.integrity "empty run integrity"
 Assert-Equal 0 $parsed.footer_totals.ignored "empty run ignored"
 Remove-Item -LiteralPath $log -Force
 
+# Compilation failures have no libtest footer at all. Report zero executed
+# cases while the runner preserves cargo's nonzero exit status separately.
+$log = New-TempLog @("error[E0433]: missing dependency API", "error: could not compile dependency")
+$parsed = Parse-CotestLog -LogPath $log
+Assert-Equal 0 $parsed.tests.Count "compile failure executed tests"
+Assert-Equal 0 $parsed.footers.Count "compile failure footers"
+Assert-Equal 0 $parsed.footer_totals.passed "compile failure passed"
+Assert-Equal 0 $parsed.footer_totals.failed "compile failure is not a failed test case"
+Assert-Equal "passed" $parsed.integrity "compile failure counts reconcile"
+Remove-Item -LiteralPath $log -Force
+
 [int]$failureCount = $failures.Count
 if ($failureCount -gt 0) {
     foreach ($failure in $failures) {

@@ -885,12 +885,20 @@ async fn bootstrap_test_device_authorization(
             principal_id: principal_actor_id.clone(),
             station_id: server.service_id().clone(),
             principal_did: principal.clone(),
-            notary: arkret_wire::NotaryValue::single_signer(
-                crate::fixture_notary_signer_for_method(
+            notary: arkret_wire::NotaryValue::single_signer(arkret_wire::NotarySignerDescriptor {
+                actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
                     principal_actor_id.clone(),
-                    crate::fixture_did_url(format!("{actor}#notary-key-1")),
-                ),
-            ),
+                    server.service_id().clone(),
+                )),
+                verification_method: crate::fixture_did_url(format!("{actor}#{device_id}")),
+                key_kind: arkret_wire::NotaryKeyKind::Ed25519Raw32,
+                jose_algorithm: arkret_wire::NotaryJoseAlgorithm::Ed25519,
+                frozen_public_key_b64u: URL_SAFE_NO_PAD
+                    .encode(device_signing_key.verifying_key().as_bytes()),
+                frozen_public_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
+                    device_signing_key.verifying_key().as_bytes(),
+                ))?,
+            }),
             initial_resolution: arkret_models_identity::ResolutionCommitment {
                 did: principal.clone(),
                 method_history_head: arkret_canonical::canonical_sha256(&prepared.log_entry)?,

@@ -119,13 +119,16 @@ fn bind_seal_ref(
 /// The object id is not authored: a Strand id is `retype(event_id)` of its own
 /// create, so `suffix` exists solely to keep concurrent siblings distinct in
 /// the digest preimage.
-fn strand_payload(actor: &str, realm_id: &str, suffix: &str) -> Result<Value> {
+fn strand_payload(actor: &str, station_id: &str, realm_id: &str, suffix: &str) -> Result<Value> {
     Ok(json!({
         "object": {
             "schema": "ak.schema.strand.v1",
             "realm_id": realm_id,
             "tracks": {"discussion": {"enabled": true, "is_primary": true}},
-            "created_by": actor_core_id(actor)?,
+            "created_by": arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+                arkret_wire::DidCoreId::new(actor_core_id(actor)?)?,
+                arkret_wire::DidCoreId::new(station_id)?,
+            )),
             "created_at": "2026-05-02T00:00:00.000Z",
             "metadata": {"title": format!("Frontier {suffix}")}
         }
@@ -208,7 +211,12 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         actor,
         &realm_a,
         "ak.strand.create",
-        strand_payload(actor, &realm_a, "00000000f111")?,
+        strand_payload(
+            actor,
+            server.service_id().as_str(),
+            &realm_a,
+            "00000000f111",
+        )?,
         basis_a.next_actor_seq,
         basis_a.frontier_event_ids.clone(),
         signing_seed(actor),
@@ -217,7 +225,12 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         actor,
         &realm_a,
         "ak.strand.create",
-        strand_payload(actor, &realm_a, "00000000f112")?,
+        strand_payload(
+            actor,
+            server.service_id().as_str(),
+            &realm_a,
+            "00000000f112",
+        )?,
         basis_a.next_actor_seq,
         basis_a.frontier_event_ids.clone(),
         signing_seed(actor),
@@ -245,7 +258,12 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         actor,
         &realm_a,
         "ak.strand.create",
-        strand_payload(actor, &realm_a, "00000000f113")?,
+        strand_payload(
+            actor,
+            server.service_id().as_str(),
+            &realm_a,
+            "00000000f113",
+        )?,
         siblings.next_actor_seq,
         siblings.frontier_event_ids.clone(),
         signing_seed(actor),
@@ -283,7 +301,12 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         actor,
         &realm_a,
         "ak.strand.create",
-        strand_payload(actor, &realm_a, "00000000f114")?,
+        strand_payload(
+            actor,
+            server.service_id().as_str(),
+            &realm_a,
+            "00000000f114",
+        )?,
         basis_a.next_actor_seq,
         basis_a.frontier_event_ids,
         signing_seed(actor),
@@ -312,7 +335,12 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
         actor,
         &realm_a,
         "ak.strand.create",
-        strand_payload(actor, &realm_a, "00000000f114")?,
+        strand_payload(
+            actor,
+            server.service_id().as_str(),
+            &realm_a,
+            "00000000f114",
+        )?,
         current.next_actor_seq,
         current.frontier_event_ids,
         signing_seed(actor),

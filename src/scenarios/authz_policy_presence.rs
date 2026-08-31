@@ -68,10 +68,10 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
         .await?;
     assert_eq!(manage_grant["status"], "accepted");
 
+    let subject_actor_id = account_actor(&bob, &bob_core_id)?.to_string();
     let effective_grants = expect_json(
         alice.get("/_arkret/self/authz/effective-grants").query(&[
-            ("subject", bob_core_id.as_str()),
-            ("subject_station_id", alice.service_id()),
+            ("subject_actor_id", subject_actor_id.as_str()),
             ("realm_id", realm_id.as_str()),
         ]),
         StatusCode::OK,
@@ -100,13 +100,14 @@ pub async fn authz_grant_lifecycle_and_audit_work() -> Result<()> {
     )
     .await?;
 
+    let wrong_subject = ActorId::account(AccountId::new(
+        DidCoreId::new(bob_core_id.clone())?,
+        DidCoreId::new("ak:did_core:web:other-principal.example")?,
+    ))
+    .to_string();
     let wrong_authority = expect_json(
         alice.get("/_arkret/self/authz/effective-grants").query(&[
-            ("subject", bob_core_id.as_str()),
-            (
-                "subject_station_id",
-                "ak:did_core:web:other-principal.example",
-            ),
+            ("subject_actor_id", wrong_subject.as_str()),
             ("realm_id", realm_id.as_str()),
         ]),
         StatusCode::OK,

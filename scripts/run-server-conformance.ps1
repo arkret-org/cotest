@@ -656,12 +656,14 @@ function Parse-CotestLog {
         ignored = @($tests | Where-Object { $_.status -eq "ignored" }).Count
     }
     $footerTotals = [pscustomobject]@{
-        passed  = ($footers | Measure-Object -Property passed -Sum).Sum
-        failed  = ($footers | Measure-Object -Property failed -Sum).Sum
-        ignored = ($footers | Measure-Object -Property ignored -Sum).Sum
+        passed  = 0
+        failed  = 0
+        ignored = 0
     }
-    foreach ($field in @("passed", "failed", "ignored")) {
-        if ($null -eq $footerTotals.$field) { $footerTotals.$field = 0 }
+    foreach ($footer in $footers) {
+        $footerTotals.passed += $footer.passed
+        $footerTotals.failed += $footer.failed
+        $footerTotals.ignored += $footer.ignored
     }
     $integrity = if (
         $perTest.passed -eq $footerTotals.passed -and

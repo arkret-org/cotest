@@ -1327,13 +1327,16 @@ mod tests {
         let (_, actor_id) = actor_ids(
             "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
         );
+        let actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            actor_id,
+            DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
+        ));
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.member.state",
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
-            "station_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",
@@ -1346,16 +1349,12 @@ mod tests {
             },
             "payload": {
                 "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
-                "actor_id": actor_id,
+                "member_id": actor_id,
                 "membership": "join",
                 "reason": "invite_accept"
             },
             "unsigned": {"trace": "local"},
-            "scope_ref": {
-                "kind": "realm",
-                "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"
-            },
-            "actor_kind": "native",
+            "actor_kind": "user",
             "proofs": []
         });
 
@@ -1374,13 +1373,16 @@ mod tests {
         let (_, actor_id) = actor_ids(
             "did:webvh:zQmV5MGgUvFGbi15ajBaMzdXR5KQzL3TVDxM7VFQCv5nCwH5C:01kwxhre7cexz894j3nmsvmqh5",
         );
+        let actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            actor_id,
+            DidCoreId::new("ak:did_core:web:principal.example").unwrap(),
+        ));
         let event = json!({
             "event_id": "ak:event:AU_Y0iurnoT0IOtu1_ZyZP3V36hCxZmUCbEVS2jcWjxe",
             "kind": "ak.morph.update",
             "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP",
             "scope_ref": {"kind": "realm", "realm_id": "ak:realm:AV0aa7N4-6SpEMTq2vRgjNbMjn0vCIqfM5PxnJ-qQpPP"},
             "actor_id": actor_id,
-            "station_id": "ak:did_core:web:principal.example",
             "actor_seq": 1,
             "created_at": "2026-07-07T05:45:49.000Z",
             "hlc": "019f3b1c76c8-0000-ac7eadec",

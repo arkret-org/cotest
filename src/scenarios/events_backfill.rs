@@ -52,7 +52,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
     for _ in 0..256 {
         let body = EventsQueryPostRequestBody {
             realm_ids: vec![arkret_identifiers::RealmId::new(realm_id.clone())?],
-            after: cursor.clone().map(arkret_wire::Cursor::new).transpose()?,
+            before: cursor.clone().map(arkret_wire::Cursor::new).transpose()?,
             limit: Some(1),
             ..Default::default()
         };
@@ -64,15 +64,14 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
         collected.extend(json_array(&page, "events")?.iter().cloned());
         if !page["has_more"]
             .as_bool()
-            .or_else(|| page["limited"].as_bool())
-            .unwrap_or(false)
+            .ok_or_else(|| anyhow!("events page is missing has_more: {page}"))?
         {
             reached_end = true;
             break;
         }
-        let next_cursor = page["next_cursor"]
+        let next_cursor = page["prev_cursor"]
             .as_str()
-            .ok_or_else(|| anyhow!("events page has_more=true without next_cursor: {page}"))?;
+            .ok_or_else(|| anyhow!("events page has_more=true without prev_cursor: {page}"))?;
         if cursor.as_deref() == Some(next_cursor) {
             bail!("events pagination cursor did not advance: {next_cursor}");
         }
@@ -82,6 +81,7 @@ pub async fn backfill_pages_recover_messages_missing_from_limited_client_page() 
         bail!("events backfill exceeded the 256-page safety bound");
     }
 
+    collected.reverse();
     let recovered_message_ids = collected
         .iter()
         .filter(|event| event_kind(event) == Some("ak.message.create"))

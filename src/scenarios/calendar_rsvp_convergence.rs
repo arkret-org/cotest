@@ -205,6 +205,11 @@ async fn wait_for_projected_grant(
     subject: &str,
     grant_id: &str,
 ) -> Result<()> {
+    let subject_actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_wire::DidCoreId::new(subject)?,
+        arkret_wire::DidCoreId::new(client.service_id())?,
+    ))
+    .to_string();
     eventually(
         "capability grant projection",
         Duration::from_secs(30),
@@ -212,8 +217,7 @@ async fn wait_for_projected_grant(
         || async {
             let effective = expect_json(
                 client.get("/_arkret/self/authz/effective-grants").query(&[
-                    ("subject", subject),
-                    ("subject_station_id", client.service_id()),
+                    ("subject_actor_id", subject_actor_id.as_str()),
                     ("realm_id", realm_id),
                 ]),
                 StatusCode::OK,

@@ -58,7 +58,24 @@ fn account_profile_registry_and_schema_require_one_signed_create_or_update_event
         .as_array()
         .expect("Event required fields");
     assert!(event_required.iter().any(|field| field == "actor_id"));
-    assert!(event_required.iter().any(|field| field == "station_id"));
+    assert!(!event_required.iter().any(|field| field == "station_id"));
+    assert!(event_schema["properties"].get("station_id").is_none());
+    assert_eq!(
+        event_schema["properties"]["actor_id"]["$ref"],
+        "./common-ids.schema.json#/$defs/actor_id"
+    );
+    let identities: Value = serde_json::from_str(&read(
+        "arkret-spec/spec/v1/artifacts/schemas/common-ids.schema.json",
+    ))
+    .expect("identity schema is JSON");
+    assert_eq!(
+        identities["$defs"]["account_id"]["required"],
+        json!(["principal_id", "station_id"])
+    );
+    assert_eq!(
+        identities["$defs"]["account_id"]["additionalProperties"],
+        false
+    );
 
     let schema: Value = serde_json::from_str(&read(
         "arkret-spec/spec/v1/artifacts/schemas/account-operations.schema.json",

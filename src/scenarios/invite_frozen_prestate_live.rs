@@ -64,9 +64,11 @@ async fn observe(
             .map_err(|error| anyhow!("invalid Realm frontier `{frontier}`: {error}"))?;
     let seal_frontier = state.frontier;
     let invites = expect_json(
-        client
-            .get("/_arkret/self/authz/invites")
-            .query(&[("subject", invite_subject), ("realm_id", realm_id)]),
+        client.get("/_arkret/self/authz/invites").query(&[
+            ("subject", invite_subject),
+            ("subject_station_id", client.service_id()),
+            ("realm_id", realm_id),
+        ]),
         StatusCode::OK,
     )
     .await?;
@@ -80,7 +82,7 @@ async fn observe(
                         "id": invite["id"].clone(),
                         "state": invite["state"].clone(),
                         "status": invite["status"].clone(),
-                        "invitee_id": invite["invitee_id"].clone(),
+                        "invitee_account_id": invite["invitee_account_id"].clone(),
                     })
                 })
                 .collect()

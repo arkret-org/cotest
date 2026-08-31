@@ -164,12 +164,16 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     )
     .await?;
     let demo_alice_core_id = actor_core_id("did:web:alice.example")?;
+    let demo_alice_actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_wire::DidCoreId::new(demo_alice_core_id)?,
+        server.service_id().clone(),
+    ));
     assert!(
         anonymous_alice["actors"]
             .as_array()
             .expect("search-actors response actors")
             .iter()
-            .any(|actor| actor["actor_id"].as_str() == Some(demo_alice_core_id.as_str())),
+            .any(|actor| actor["actor_id"] == json!(demo_alice_actor)),
         "public demo Alice identity was not anonymously discoverable: {anonymous_alice}"
     );
 
@@ -206,10 +210,11 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
         StatusCode::OK,
     )
     .await?;
-    assert_eq!(
-        bob_self["actors"][0]["actor_id"],
-        actor_core_id(&bob.actor)?
-    );
+    let bob_actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_wire::DidCoreId::new(actor_core_id(&bob.actor)?)?,
+        arkret_wire::DidCoreId::new(bob.service_id())?,
+    ));
+    assert_eq!(bob_self["actors"][0]["actor_id"], json!(bob_actor));
 
     let request_receipt = alice.request_contact(&bob.actor).await?;
     seal_current_principal_control_frontier(&alice, &alice_device_key).await?;
@@ -231,7 +236,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
     .await?;
     assert_eq!(
         alice_after_contact["actors"][0]["actor_id"],
-        actor_core_id(&bob.actor)?
+        json!(bob_actor)
     );
 
     let alice_user_after_contact = expect_json(

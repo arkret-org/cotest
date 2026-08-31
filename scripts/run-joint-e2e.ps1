@@ -2838,6 +2838,7 @@ $solandBetaDatabaseDsn = $null
 # evidence is expected here, recovery private material never is.
 $storeDumpDir = Join-Path $jointDir "stores"
 $exitCode = 1
+$runnerError = $null
 $startedAt = Get-Date
 $generatedSolandCommand = $false
 $generatedInksonCommand = $false
@@ -4185,6 +4186,17 @@ try {
             Pop-Location
         }
 }
+catch {
+    $exitCode = 1
+    # Capture a bounded diagnostic without config contents or command arguments.
+    # Continue through cleanup and report/secret-scan finalization on setup errors.
+    $runnerError = [pscustomobject]@{
+        type = $_.Exception.GetType().FullName
+        line = $_.InvocationInfo.ScriptLineNumber
+        phase = "runner"
+    }
+    Write-Warning "Joint runner failed at line $($runnerError.line) ($($runnerError.type)); see phase logs in $jointDir"
+}
 finally {
     $managedServiceFailures = @(Get-ManagedServiceFailures -Services $managedServices)
     Write-ManagedServiceFailureReport `
@@ -5001,6 +5013,8 @@ $summary = [pscustomobject]@{
     status = if ($exitCode -eq 0) { "success" } else { "failure" }
     run_profile = if ($RunProfile) { $RunProfile } else { "custom" }
     playwright_projects = $playwrightProjects -join ","
+    test_execution = if (($totals.passed + $totals.failed + $totals.skipped + $totals.fixme) -gt 0) { "executed" } else { "not_executed" }
+    test_totals = $totals
     required_scenarios = $requiredScenarios
     forbid_skipped_tests = $forbidRuntimeSkips
     selection_gate_failures = $selectionGateFailures.ToArray()
@@ -5010,6 +5024,7 @@ $summary = [pscustomobject]@{
     finished_at = $finishedAt.ToString("o")
     duration_seconds = [Math]::Round(($finishedAt - $startedAt).TotalSeconds, 2)
     exit_code = $exitCode
+    runner_error = $runnerError
     soland_runtime = $startedSolandRuntime
     soland_image = if ($startedSolandRuntime -eq "docker") { $SolandImage } else { $null }
     soland_base_url = $SolandBaseUrl

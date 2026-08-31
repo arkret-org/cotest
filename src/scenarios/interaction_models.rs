@@ -64,7 +64,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
 
     expect_status(
         server.http().get(server.url(&format!(
-            "/_arkret/self/events/subscribe?realms={realm_id}&limit=1"
+            "/_arkret/self/events/subscribe?realm_ids={realm_id}&limit=1"
         ))),
         StatusCode::NOT_FOUND,
     )
@@ -76,7 +76,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // then replay past that follow-up's own cursor with catchup=true.
     let live_subscribe = expect_response(
         alice.get(&format!(
-            "/_arkret/self/events/subscribe?realms={realm_id}&max_duration_ms=2500&heartbeat_ms=200"
+            "/_arkret/self/events/subscribe?realm_ids={realm_id}&max_duration_ms=2500&heartbeat_ms=200"
         )),
         StatusCode::OK,
     );
@@ -107,7 +107,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     let catchup_target_event_id = submitted_event_id(&catchup_target)?;
     let catchup_response = expect_response(
         alice.get(&format!(
-            "/_arkret/self/events/subscribe?realms={realm_id}&after={resume_cursor}&catchup=true&max_duration_ms=1500&heartbeat_ms=200"
+            "/_arkret/self/events/subscribe?realm_ids={realm_id}&after={resume_cursor}&catchup=true&max_duration_ms=1500&heartbeat_ms=200"
         )),
         StatusCode::OK,
     )

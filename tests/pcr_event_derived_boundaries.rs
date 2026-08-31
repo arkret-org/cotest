@@ -10,7 +10,10 @@ fn notary_value_uses_core_actor_id_and_rejects_did_spelling() {
 
     let single = serde_json::to_value(cotest::fixture_single_signer_notary(actor_id.clone()))
         .expect("single_signer notary serializes");
-    assert_eq!(single["signer"]["actor_id"], actor_id.as_str());
+    assert_eq!(
+        single["signer"]["actor_id"],
+        json!(arkret_wire::ActorId::service(actor_id.clone()))
+    );
     assert!(single["signer"].get("did").is_none());
 
     let mixed = serde_json::to_value(arkret_wire::NotaryValue::Mixed {
@@ -22,7 +25,9 @@ fn notary_value_uses_core_actor_id_and_rejects_did_spelling() {
     .expect("mixed notary serializes");
     assert_eq!(
         mixed["signer"]["actor_id"],
-        "ak:did_core:web:notary.example"
+        json!(arkret_wire::ActorId::service(
+            arkret_wire::DidCoreId::new("ak:did_core:web:notary.example").unwrap()
+        ))
     );
     assert!(mixed["signer"].get("did").is_none());
 

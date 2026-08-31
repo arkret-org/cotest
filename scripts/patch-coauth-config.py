@@ -119,7 +119,7 @@ def main() -> int:
     src = args.raw_config.read_text(encoding="utf-8-sig")
     src = replace_named_pem_key(
         src,
-        "coauth-service-identity-v1",
+        "coauth-account-authority-v1",
         "MC4CAQAwBQYDK2VwBCIEIAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
     )
     coauth_base = trailing_slash(args.coauth_base_url)
@@ -231,9 +231,9 @@ def main() -> int:
         )
     arkret = (
         "arkret:\n"
+        "  owning_station: soland\n"
         "  stations:\n"
         f"{stations}"
-        "  identity_provider: soland\n"
         "  deployment_profile: organization\n"
         "  principal_method: \"did:webvh\"\n"
         "  trust_domain: ak:trust_domain:local.host\n"

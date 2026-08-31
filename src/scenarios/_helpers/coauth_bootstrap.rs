@@ -415,10 +415,8 @@ pub fn spawn_ephemeral_postgres_for(database_url_env: &str) -> Result<Option<Eph
         _port_reservation: Some(host_port),
     };
 
-    // pg_isready loop, capped — the container needs a moment after `docker
-    // run -d` to actually accept connections. We poll the published port
-    // with a TCP probe + then a `docker exec ... pg_isready` to be sure
-    // the listener is past initdb.
+    // Wait for an authenticated SQL query over the host-published endpoint.
+    // The image's temporary initdb server only accepts local socket clients.
     if !wait_for_postgres_ready(&pg, Duration::from_secs(60)) {
         // pg never became ready — drop the container and bail.
         return Ok(None);
@@ -936,23 +934,29 @@ fn docker_available() -> bool {
 }
 
 fn wait_for_postgres_ready(pg: &EphemeralPg, deadline: Duration) -> bool {
+    // postgres::Client owns a Tokio runtime. Keep it off any async scenario's
+    // runtime thread, including its Drop path.
+    thread::scope(|scope| {
+        scope
+            .spawn(|| probe_postgres_ready(&pg.connect_url, deadline))
+            .join()
+            .unwrap_or(false)
+    })
+}
+
+fn probe_postgres_ready(connect_url: &str, deadline: Duration) -> bool {
     let cutoff = Instant::now() + deadline;
+    let Ok(mut config) = connect_url.parse::<postgres::Config>() else {
+        return false;
+    };
+    // Probe the same host TCP endpoint used by services, not the temporary
+    // Unix-socket server started by the image during database initialization.
+    config.connect_timeout(Duration::from_secs(2));
     while Instant::now() < cutoff {
-        let status = Command::new("docker")
-            .args([
-                "exec",
-                &pg.container_name,
-                "pg_isready",
-                "-U",
-                "arkret",
-                "-d",
-                "arkret",
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-        if matches!(status, Ok(s) if s.success()) {
-            return true;
+        if let Ok(mut client) = config.connect(postgres::NoTls) {
+            if client.simple_query("SELECT 1").is_ok() {
+                return true;
+            }
         }
         thread::sleep(Duration::from_millis(500));
     }
