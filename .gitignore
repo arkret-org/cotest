@@ -9,6 +9,11 @@
 # Dependency installs
 node_modules/
 
+# Python bytecode caches
+__pycache__/
+*.pyc
+*.pyo
+
 # Cotest / Playwright run artifacts
 /artifacts/
 artifacts/
