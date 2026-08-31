@@ -155,7 +155,10 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // `ak:thread:` string. Derive it from the root message's event id.
     let thread_root_ref = MessageId::from_event_id(&sent_event_id).to_string();
     let read_cursor_id = ReadCursorId::new(next_typed_id("read_cursor"))?;
-    let dave_core_id = actor_core_id(&dave.actor)?;
+    let dave_actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_wire::DidCoreId::new(actor_core_id(&dave.actor)?)?,
+        server.service_id().clone(),
+    ));
     let marker = dave
         .submit_event(
             &realm_id,
@@ -163,7 +166,7 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
             json!({
                 "id": read_cursor_id,
                 "schema": "ak.schema.read_cursor.v1",
-                "actor_id": dave_core_id,
+                "actor_id": dave_actor_id,
                 "device_id": dave.device_id,
                 "realm_id": realm_id,
                 "read_scope": {

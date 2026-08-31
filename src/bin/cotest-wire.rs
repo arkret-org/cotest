@@ -1354,7 +1354,7 @@ mod tests {
                 "reason": "invite_accept"
             },
             "unsigned": {"trace": "local"},
-            "actor_kind": "user",
+            "actor_kind": arkret_wire::EnvelopeActorKind::Native,
             "proofs": []
         });
 

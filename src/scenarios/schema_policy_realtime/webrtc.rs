@@ -51,7 +51,7 @@ pub async fn webrtc_session_signal_strand_and_guards_work() -> Result<()> {
             .json(&crate::harness::NonProtocolTestBody::new(json!({
                 "realm_id": realm_id,
                 "call_id": "not-a-call-id",
-                "actor_id": alice_core,
+                "actor_id": account_actor(&alice, &alice_core)?,
                 "device_id": alice.device_id.as_str(),
                 "mode": "p2p"
             }))),

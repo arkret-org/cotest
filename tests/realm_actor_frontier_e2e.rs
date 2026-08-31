@@ -291,7 +291,13 @@ async fn realm_scoped_siblings_lost_response_and_cas_reauthor_are_live() -> Resu
     )
     .await?;
     assert_eq!(stored_merge["event"]["realm_id"], realm_a);
-    assert_eq!(stored_merge["event"]["actor_id"], actor_core_id(actor)?);
+    assert_eq!(
+        stored_merge["event"]["actor_id"],
+        serde_json::to_value(arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            arkret_wire::DidCoreId::new(actor_core_id(actor)?)?,
+            server.service_id().clone(),
+        )))?
+    );
     assert_eq!(
         stored_merge["event"]["actor_seq"],
         current_sequence(&merge)?

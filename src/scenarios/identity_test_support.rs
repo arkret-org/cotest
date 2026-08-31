@@ -654,10 +654,12 @@ pub async fn seal_current_principal_control_frontier(
             pending_events.push(event);
         }
     }
-    anyhow::ensure!(
-        !pending_events.is_empty(),
-        "PCR frontier has no accepted Event awaiting Seal coverage"
-    );
+    // A caller may already have an up-to-date accepted Seal. The verified
+    // predecessor closure above is sufficient; never fabricate an empty
+    // successor just to make an idempotent ensure-sealed call do work.
+    if pending_events.is_empty() {
+        return Ok(());
+    }
     pending_events.sort_by_key(|event| event.actor_seq);
     let mut history = history_by_sequence.into_values().collect::<Vec<_>>();
     let device_method = crate::fixture_did_url(format!("{}#{}", client.actor, client.device_id));

@@ -773,7 +773,7 @@ test.describe("conformance encoding vectors", () => {
             fields: receipt.fields ?? ["payload.content"],
             reason: receipt.reason,
           },
-          viewer_id: projectDidToCoreId("did:web:guest.example"),
+          viewer_did: projectDidToCoreId("did:web:guest.example"),
         }),
       },
     );

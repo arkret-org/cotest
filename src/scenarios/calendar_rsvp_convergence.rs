@@ -38,7 +38,14 @@ fn created_strand_id(submitted: &Value) -> Result<String> {
     Ok(arkret_identifiers::StrandId::from_event_id(&event_id).to_string())
 }
 
-fn calendar_subtree(alice_did: &str, bob_did: &str) -> Result<Value> {
+fn actor_for_station(actor_did: &str, station_id: &str) -> Result<arkret_wire::ActorId> {
+    Ok(arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+        arkret_wire::DidCoreId::new(actor_core_id(actor_did)?)?,
+        arkret_wire::DidCoreId::new(station_id.to_owned())?,
+    )))
+}
+
+fn calendar_subtree(alice_did: &str, bob_did: &str, station_id: &str) -> Result<Value> {
     Ok(json!({
         "start": "2026-06-22T09:00:00",
         "end": "2026-06-22T10:00:00",
@@ -48,8 +55,8 @@ fn calendar_subtree(alice_did: &str, bob_did: &str) -> Result<Value> {
         "status": "confirmed",
         "recurrence": {"frequency": "weekly", "count": 10},
         "attendees": [
-            {"actor_id": actor_core_id(alice_did)?, "role": "organizer"},
-            {"actor_id": actor_core_id(bob_did)?, "role": "required"}
+            {"actor_id": actor_for_station(alice_did, station_id)?, "role": "organizer"},
+            {"actor_id": actor_for_station(bob_did, station_id)?, "role": "required"}
         ]
     }))
 }
@@ -60,9 +67,10 @@ fn inkson_rsvp_payload(
     actor_id: &str,
     status: &str,
     basis: &[String],
-    attendees: (&str, &str),
+    attendees: (&str, &str, &str),
 ) -> Result<Value> {
-    let calendar_fields = serde_json::from_value(calendar_subtree(attendees.0, attendees.1)?)?;
+    let calendar_fields =
+        serde_json::from_value(calendar_subtree(attendees.0, attendees.1, attendees.2)?)?;
     let basis = basis
         .iter()
         .cloned()
@@ -72,7 +80,7 @@ fn inkson_rsvp_payload(
     // submit path positions it on the actor chain.
     let operation = inkson::calendar::build_calendar_rsvp_event(
         realm_id,
-        actor_id,
+        &actor_for_station(actor_id, attendees.2)?,
         strand_id,
         status,
         None,
@@ -83,6 +91,23 @@ fn inkson_rsvp_payload(
 }
 
 /// Reads the schedule revision frontier and the live RSVP heads.
+async fn assert_realm_identity(client: &TestActorClient, realm_id: &str) -> Result<()> {
+    let view: arkret_models_collaboration::governance::realm_governance::RealmLifecycleView =
+        serde_json::from_value(
+            expect_json(
+                client.get(&format!("/_arkret/self/realms/{realm_id}")),
+                StatusCode::OK,
+            )
+            .await?,
+        )?;
+    let actor = actor_for_station(&client.actor, client.service_id())?;
+    // The registered lifecycle DTO intentionally exposes owner_id as a
+    // principal; member_ids must retain their complete Actor identities.
+    assert_eq!(&view.owner_id, actor.signing_principal_id());
+    assert!(view.member_ids.contains(&actor));
+    Ok(())
+}
+
 async fn read_strand(client: &TestActorClient, strand_id: &str) -> Result<Value> {
     expect_json(
         client.get(&format!("/_soland/self/strands/{strand_id}")),
@@ -121,13 +146,19 @@ async fn inkson_schedule_frontier(
     .collect())
 }
 
-fn heads_for(strand: &Value, actor: &str) -> Vec<Value> {
+fn heads_for(strand: &Value, actor: &arkret_wire::ActorId) -> Vec<Value> {
     strand["rsvps"]
         .as_array()
         .map(|cells| {
             cells
                 .iter()
-                .filter(|cell| cell["actor_id"].as_str() == Some(actor))
+                // This product-private projection stores canonical Actor JSON
+                // in a string; decode it strictly and compare the full identity.
+                .filter(|cell| {
+                    cell["actor_id"].as_str()
+                        .and_then(|value| serde_json::from_str::<arkret_wire::ActorId>(value).ok())
+                        .as_ref() == Some(actor)
+                })
                 .flat_map(|cell| {
                     cell["heads"]
                         .as_array()
@@ -340,8 +371,6 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
-    let alice_core_id = actor_core_id(alice_did)?;
-    let bob_core_id = actor_core_id(bob_did)?;
     let alice = server
         .register_client(
             alice_did,
@@ -398,7 +427,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                     "metadata": {
                         "title": "Weekly sync",
                         "fields": {
-                            "calendar": calendar_subtree(alice_did, bob_did)?,
+                            "calendar": calendar_subtree(alice_did, bob_did, alice.service_id())?,
                             "x_future_display": {
                                 "badge": "preserve-me",
                                 "revision": 7
@@ -406,7 +435,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                         }
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": alice_core_id,
+                    "created_by": actor_for_station(alice_did, alice.service_id())?,
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
@@ -455,8 +484,8 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                             "recurrence": {"frequency": "weekly", "count": 10},
                             "location": {"title": "Room 2"},
                             "attendees": [
-                                {"actor_id": alice_core_id, "role": "organizer"},
-                                {"actor_id": bob_core_id, "role": "required"}
+                                {"actor_id": actor_for_station(alice_did, alice.service_id())?, "role": "organizer"},
+                                {"actor_id": actor_for_station(bob_did, bob.service_id())?, "role": "required"}
                             ]
                         }
                     }
@@ -477,13 +506,16 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
             bob_did,
             "accepted",
             &frontier,
-            (alice_did, bob_did),
+            (alice_did, bob_did, alice.service_id()),
         )?,
         frontier.clone(),
         bob_grant_refs,
     )
     .await?;
-    let bob_heads = heads_for(&read_strand(&bob, &strand_id).await?, &bob_core_id);
+    let bob_heads = heads_for(
+        &read_strand(&bob, &strand_id).await?,
+        &actor_for_station(bob_did, bob.service_id())?,
+    );
     if head_statuses(&bob_heads) != vec!["accepted".to_owned()] {
         return Err(anyhow!(
             "Bob's RSVP did not materialize through the real reducer"
@@ -502,7 +534,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 alice_did,
                 "accepted",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             frontier.clone(),
             calendar_grant_refs.clone(),
@@ -518,7 +550,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 alice_did,
                 "declined",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             frontier.clone(),
             calendar_grant_refs.clone(),
@@ -528,7 +560,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let second_digest = submit_prepared_event(&alice_second_device, &second_event).await?;
 
     let strand = read_strand(&alice, &strand_id).await?;
-    let heads = heads_for(&strand, &alice_core_id);
+    let heads = heads_for(&strand, &actor_for_station(alice_did, alice.service_id())?);
     if heads.len() != 2 {
         return Err(anyhow!(
             "concurrent responses must expose two heads, got {}; the server may not choose \
@@ -559,7 +591,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 alice_did,
                 "tentative",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             resolving_basis,
             calendar_grant_refs.clone(),
@@ -568,7 +600,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let resolved_digest = submitted_digest(&resolved)?;
 
     let strand = read_strand(&alice, &strand_id).await?;
-    let heads = heads_for(&strand, &alice_core_id);
+    let heads = heads_for(&strand, &actor_for_station(alice_did, alice.service_id())?);
     if heads.len() != 1 {
         return Err(anyhow!(
             "a response observing both heads must dominate them, got {} heads",
@@ -596,7 +628,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 alice_did,
                 "accepted",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             next_pair_basis.clone(),
             calendar_grant_refs.clone(),
@@ -612,7 +644,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 alice_did,
                 "declined",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             next_pair_basis,
             calendar_grant_refs.clone(),
@@ -623,7 +655,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     submit_prepared_event(&alice_second_device, &reverse_first).await?;
     let heads = heads_for(
         &read_strand(&alice_second_device, &strand_id).await?,
-        &alice_core_id,
+        &actor_for_station(alice_did, alice.service_id())?,
     );
     if heads.len() != 2
         || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
@@ -646,13 +678,16 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
                 alice_did,
                 "tentative",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             final_resolution_basis,
             calendar_grant_refs,
         )
         .await?;
-    let final_heads = heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id);
+    let final_heads = heads_for(
+        &read_strand(&alice, &strand_id).await?,
+        &actor_for_station(alice_did, alice.service_id())?,
+    );
     if final_heads.len() != 1 || head_statuses(&final_heads) != vec!["tentative".to_owned()] {
         return Err(anyhow!(
             "reversed arrival order must converge to the same causal successor"
@@ -704,7 +739,6 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
-    let alice_core_id = actor_core_id(alice_did)?;
     let alice = server
         .register_client(
             alice_did,
@@ -740,7 +774,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                     "metadata": {
                         "title": "Durable weekly sync",
                         "fields": {
-                            "calendar": calendar_subtree(alice_did, bob_did)?,
+                            "calendar": calendar_subtree(alice_did, bob_did, alice.service_id())?,
                             "x_future_display": {
                                 "badge": "preserve-me",
                                 "revision": 7
@@ -748,7 +782,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                         }
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": alice_core_id,
+                    "created_by": actor_for_station(alice_did, alice.service_id())?,
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
@@ -775,7 +809,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                 alice_did,
                 "accepted",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             frontier.clone(),
             grants.clone(),
@@ -791,7 +825,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                 alice_did,
                 "declined",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             frontier.clone(),
             grants.clone(),
@@ -799,12 +833,19 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .await?;
     let accepted_digest = submit_prepared_event(&alice, &accepted).await?;
     let declined_digest = submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id).len() != 2 {
+    if heads_for(
+        &read_strand(&alice, &strand_id).await?,
+        &actor_for_station(alice_did, alice.service_id())?,
+    )
+    .len()
+        != 2
+    {
         return Err(anyhow!(
             "pre-restart Calendar cell did not expose two heads"
         ));
     }
 
+    assert_realm_identity(&alice, &realm_id).await?;
     server.kill_immediately().await?;
     drop(server);
     let mut server =
@@ -814,12 +855,16 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .await?;
     let alice_second_device = alice.clone();
     let restarted_strand = read_strand(&alice, &strand_id).await?;
+    assert_realm_identity(&alice, &realm_id).await?;
     if restarted_strand["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(
             "unknown namespaced display metadata was lost across restart: {restarted_strand}"
         ));
     }
-    let heads = heads_for(&restarted_strand, &alice_core_id);
+    let heads = heads_for(
+        &restarted_strand,
+        &actor_for_station(alice_did, alice.service_id())?,
+    );
     if heads.len() != 2
         || head_statuses(&heads) != vec!["accepted".to_owned(), "declined".to_owned()]
     {
@@ -829,7 +874,13 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     }
     submit_prepared_event(&alice, &accepted).await?;
     submit_prepared_event(&alice_second_device, &declined).await?;
-    if heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id).len() != 2 {
+    if heads_for(
+        &read_strand(&alice, &strand_id).await?,
+        &actor_for_station(alice_did, alice.service_id())?,
+    )
+    .len()
+        != 2
+    {
         return Err(anyhow!("post-restart exact replay duplicated RSVP heads"));
     }
 
@@ -847,7 +898,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
                 alice_did,
                 "tentative",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
             resolution_basis,
             grants,
@@ -860,7 +911,10 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let alice = server
         .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
-    let heads = heads_for(&read_strand(&alice, &strand_id).await?, &alice_core_id);
+    let heads = heads_for(
+        &read_strand(&alice, &strand_id).await?,
+        &actor_for_station(alice_did, alice.service_id())?,
+    );
     if heads.len() != 1 || head_statuses(&heads) != vec!["tentative".to_owned()] {
         return Err(anyhow!(
             "resolved RSVP cell did not survive the second restart"
@@ -883,7 +937,6 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
     let bob_did = actor_did_for_service_did(server.service_did(), BOB_LOCAL)?;
     let alice_did = alice_did.as_str();
     let bob_did = bob_did.as_str();
-    let alice_core_id = actor_core_id(alice_did)?;
     let alice = server
         .register_client(
             alice_did,
@@ -917,10 +970,10 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
                     "schema_refs": ["ak.schema.calendar_event.v1"],
                     "metadata": {
                         "title": "Weekly sync",
-                        "fields": {"calendar": calendar_subtree(alice_did, bob_did)?}
+                        "fields": {"calendar": calendar_subtree(alice_did, bob_did, alice.service_id())?}
                     },
                     "tracks": {"synthesis": {"enabled": true, "is_primary": true}},
-                    "created_by": alice_core_id,
+                    "created_by": actor_for_station(alice_did, alice.service_id())?,
                     "created_at": "2026-05-02T00:00:00.000Z"
                 }
             }),
@@ -942,7 +995,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
                 alice_did,
                 "accepted",
                 &frontier,
-                (alice_did, bob_did),
+                (alice_did, bob_did, alice.service_id()),
             )?,
         )
         .await?;

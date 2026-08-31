@@ -170,7 +170,17 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
     )
     .await?;
 
-    let pre_destroy_seal = current_seal_id(&alice, &realm_id).await?;
+    // History reads after terminal acceptance are optional. Prepare a valid
+    // member write first, then prove that terminal acceptance fences it out.
+    // Bob's actor chain is unchanged by Alice's destroy, isolating this guard
+    // from an unrelated author-sequence conflict.
+    let after_destroy = bob
+        .author_event(
+            &realm_id,
+            "ak.message.create",
+            message_create_text_payload(&strand_id, "after delete")?,
+        )
+        .await?;
     alice
         .submit_event(
             &realm_id,
@@ -178,19 +188,11 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             json!({"reason": "owner_requested"}),
         )
         .await?;
-    await_seal_advance(&alice, &realm_id, &pre_destroy_seal).await?;
-    let after_destroy = alice
-        .author_event(
-            &realm_id,
-            "ak.message.create",
-            message_create_text_payload(&strand_id, "after delete")?,
-        )
-        .await?;
     expect_api_error(
         server
             .http()
             .post(server.url("/_arkret/self/events"))
-            .bearer_auth(&alice.token)
+            .bearer_auth(&bob.token)
             .json(&crate::publication::initial_submission(after_destroy, "")?),
         StatusCode::CONFLICT,
         // The top-level wire error code is `failed_precondition`; the

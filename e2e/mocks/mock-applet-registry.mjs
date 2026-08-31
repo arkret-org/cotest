@@ -971,9 +971,15 @@ function signedPackage(body) {
     serviceDid,
     packageDigest,
     registrationEpoch: packageBase.registration_epoch,
-    botInitialResolution: body.bot_actor_initial_resolution,
-    botMethodHistoryEvidence: body.bot_actor_method_history_evidence,
-    botVerificationMethod: body.bot_signing_verification_method,
+    ...(body.bot_actor_initial_resolution !== undefined
+      ? { botInitialResolution: body.bot_actor_initial_resolution }
+      : {}),
+    ...(body.bot_actor_method_history_evidence !== undefined
+      ? { botMethodHistoryEvidence: body.bot_actor_method_history_evidence }
+      : {}),
+    ...(body.bot_signing_verification_method !== undefined
+      ? { botVerificationMethod: body.bot_signing_verification_method }
+      : {}),
     botSigningKey: body.bot_signing_private_jwk
       ? createPrivateKey({ key: body.bot_signing_private_jwk, format: "jwk" })
       : undefined,

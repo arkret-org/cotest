@@ -22,6 +22,7 @@ import {
 } from "../../helpers/env";
 import { createDidHostClient } from "../../helpers/did-host";
 import { createMimiFacadeClient } from "../../helpers/mimi-facade";
+import { projectDidToCoreId } from "../../helpers/soland-api";
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64url");
@@ -354,7 +355,7 @@ test.describe("harness mocks selftest @fully-implemented", () => {
     // Applet E2E derives it from the DID operation and places it only in the
     // caller-signed registration Event manifest.
     expect(body.registration_epoch_evidence).toBeUndefined(); // stale-literal-allow
-    expect(body.service_id_document.id).toBe(body.applet_package.service_id);
+    expect(projectDidToCoreId(body.service_id_document.id)).toBe(body.applet_package.service_id);
 
     const identity = await (await request.get(`${baseUrl}/identity`)).json();
     expect(typeof identity.did).toBe("string");

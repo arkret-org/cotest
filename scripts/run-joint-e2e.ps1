@@ -48,6 +48,9 @@ param(
     [string]$InksonBaseUrl,
     [string]$InksonBetaBaseUrl,
     [string]$CoauthBaseUrl,
+    # Required for caller-owned Coauth: the configured owning Station identity,
+    # not an identity discovered from the private Account Authority endpoint.
+    [string]$CoauthServiceId,
     [string]$SolandCommand,
     [string]$SolandBin,
     # Optional externally provisioned PostgreSQL store for one managed
@@ -197,8 +200,6 @@ $SolandServiceId = $null
 $SolandServiceDid = $null
 $SolandBetaServiceId = $null
 $SolandBetaServiceDid = $null
-$CoauthServiceId = $null
-$CoauthEnrollmentAuthorityDid = "did:key:z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
 
 if ($PreflightOnly -and $SkipPreflight) {
     throw "-PreflightOnly cannot be combined with -SkipPreflight"
@@ -1755,12 +1756,16 @@ function Set-CoauthStationServiceIds {
 function Wait-HttpReady {
     param(
         [Parameter(Mandatory = $true)][string]$Url,
-        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds,
+        $ManagedService = $null
     )
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = $null
     while ((Get-Date) -lt $deadline) {
+        if ($ManagedService -and $ManagedService.Kind -eq "process" -and $ManagedService.Process.HasExited) {
+            throw "Managed service $($ManagedService.Name) exited before readiness; see its service logs"
+        }
         try {
             $requestOptions = @{}
             if (([System.Uri]$Url).Scheme -eq "https" -and $env:COTEST_RUN_SCOPED_CA_PEM) {
@@ -3540,11 +3545,11 @@ try {
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        if ($CoauthBaseUrl) {
+        if ($CoauthBaseUrl -and $CoauthServiceId) {
             $coauthPublic = $CoauthBaseUrl.TrimEnd("/")
             $coauthContainer = (Convert-ToContainerReachableUrl $coauthPublic).TrimEnd("/")
             $map.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthPublic
-            $map.SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID = $CoauthEnrollmentAuthorityDid
+            $map.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $CoauthServiceId
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthContainer/_arkret/gate/account/session-grants/introspect"
             $map.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthContainer/_arkret/gate/account/auth-sessions/logout"
             $map.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
@@ -3605,10 +3610,10 @@ try {
             SOLAND_WEBVH_DEGRADED_NO_WITNESS_MAX_SECS = "$WebvhDegradedNoWitnessMaxSecs"
             SOLAND_EMBEDDED_WEBVH_REGISTRATION_BEARER = $CoauthEmbeddedWebvhRegistrationBearer
         }
-        if ($CoauthBaseUrl) {
+        if ($CoauthBaseUrl -and $CoauthServiceId) {
             $coauthTrimmed = $CoauthBaseUrl.TrimEnd("/")
             $values.SOLAND_ACCOUNT_AUTHORITY_URL = $coauthTrimmed
-            $values.SOLAND_ACCOUNT_AUTHORITY_ENROLLMENT_DID = $CoauthEnrollmentAuthorityDid
+            $values.SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID = $CoauthServiceId
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_URL = "$coauthTrimmed/_arkret/gate/account/session-grants/introspect"
             $values.SOLAND_AUTH_SESSION_LOGOUT_URL = "$coauthTrimmed/_arkret/gate/account/auth-sessions/logout"
             $values.SOLAND_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
@@ -3629,6 +3634,17 @@ try {
             (Quote-PsLiteral $BinaryPath),
             (Quote-PsLiteral $ConfigPath),
             $Port
+    }
+
+    # Coauth is a private component of its owning Station, not a separate
+    # service identity. Provision the managed Station first, then pin that
+    # persisted identity when enabling its Account Authority process.
+    $needsAuthorityBootstrap = $StartCoauth -and $willStartDefaultSoland
+    $solandRestartPlans = [System.Collections.Generic.List[object]]::new()
+    $solandService = $null
+    $solandBetaService = $null
+    if ($CoauthBaseUrl -and -not $StartCoauth -and -not $CoauthServiceId) {
+        throw "Caller-owned Coauth requires -CoauthServiceId with its configured owning Station identity"
     }
 
     # Per-instance tracing files. Windows fully-buffers stdout when
@@ -3658,20 +3674,22 @@ try {
         # so the tests can scrape it. The docker runtime below only publishes
         # the HTTP port, so no metrics URL is exported for that mode.
         $solandMetricsBaseUrl = "http://127.0.0.1:$solandMetricsPort"
-        $SolandCommand = Build-SolandCommand `
-            -BinaryPath $solandBinary `
-            -ConfigPath (Join-Path $jointDir "soland.env") `
-            -BaseUrl $SolandBaseUrl `
-            -DatabaseUrl $solandDatabaseDsn `
-            -ObjectsRoot (Join-Path $jointDir "soland-objects") `
-            -StateRoot (Join-Path $jointDir "soland-state") `
-            -Port $solandPort `
-            -MetricsPort $solandMetricsPort `
-            -LogFile $solandTraceFile `
-            -CorsAllowOrigin $solandCorsAllowOrigin `
-            -KeyStoreMasterKey $SolandKeyStoreMasterKey `
-            -NotarySigningKey $SolandNotarySigningKey `
-            -FederationPeers $alphaPeer
+        $solandProcessArguments = @{
+            BinaryPath = $solandBinary
+            ConfigPath = (Join-Path $jointDir "soland.env")
+            BaseUrl = $SolandBaseUrl
+            DatabaseUrl = $solandDatabaseDsn
+            ObjectsRoot = (Join-Path $jointDir "soland-objects")
+            StateRoot = (Join-Path $jointDir "soland-state")
+            Port = $solandPort
+            MetricsPort = $solandMetricsPort
+            LogFile = $solandTraceFile
+            CorsAllowOrigin = $solandCorsAllowOrigin
+            KeyStoreMasterKey = $SolandKeyStoreMasterKey
+            NotarySigningKey = $SolandNotarySigningKey
+            FederationPeers = $alphaPeer
+        }
+        $SolandCommand = Build-SolandCommand @solandProcessArguments
         if ($jointTlsAssets) {
             $SolandCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $SolandCommand"
         }
@@ -3679,31 +3697,52 @@ try {
     if ($SolandCommand) {
         $solandWorkingDirectory = if ($generatedSolandCommand) { $repoRoot } else { Split-Path -Parent $SutManifest }
         $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
-        $managedServices.Add((Start-ManagedCommand -Name $solandName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir))
+        $launchName = if ($needsAuthorityBootstrap) { "$solandName-bootstrap" } else { $solandName }
+        $solandService = Start-ManagedCommand -Name $launchName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir
+        $managedServices.Add($solandService)
+        if ($needsAuthorityBootstrap) {
+            $solandRestartPlans.Add(@{
+                Name = $solandName; BaseUrl = $SolandBaseUrl; Service = $solandService
+                ConfigArguments = $solandProcessArguments; Command = $SolandCommand
+                WorkingDirectory = $solandWorkingDirectory
+            })
+        }
     } elseif ($willStartDockerSoland) {
         $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
         $solandMetricsPort = Get-FreeTcpPort
-        $solandDockerEnv = Build-SolandDockerEnvironment `
-            -BaseUrl $SolandBaseUrl `
-            -DatabaseUrl $solandDatabaseDsn `
-            -MetricsPort $solandMetricsPort `
-            -LogFileName ([System.IO.Path]::GetFileName($solandTraceFile)) `
-            -CorsAllowOrigin $solandCorsAllowOrigin `
-            -KeyStoreMasterKey $SolandKeyStoreMasterKey `
-            -NotarySigningKey $SolandNotarySigningKey `
-            -FederationPeers $alphaPeer
+        $solandDockerArguments = @{
+            BaseUrl = $SolandBaseUrl
+            DatabaseUrl = $solandDatabaseDsn
+            MetricsPort = $solandMetricsPort
+            LogFileName = ([System.IO.Path]::GetFileName($solandTraceFile))
+            CorsAllowOrigin = $solandCorsAllowOrigin
+            KeyStoreMasterKey = $SolandKeyStoreMasterKey
+            NotarySigningKey = $SolandNotarySigningKey
+            FederationPeers = $alphaPeer
+        }
+        $solandDockerEnv = Build-SolandDockerEnvironment @solandDockerArguments
         $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
-        $managedServices.Add((Start-ManagedDockerSoland `
-                    -Name $solandName `
-                    -Image $SolandImage `
-                    -HostPort $solandPort `
-                    -ContainerPort $SolandContainerPort `
-                    -ObjectsRoot (Join-Path $jointDir "soland-objects") `
-                    -StateRoot (Join-Path $jointDir "soland-state") `
-                    -LogDirectory $serviceLogDir `
-                    -Environment $solandDockerEnv))
+        $solandDockerStartArguments = @{
+            Name = $solandName
+            Image = $SolandImage
+            HostPort = $solandPort
+            ContainerPort = $SolandContainerPort
+            ObjectsRoot = (Join-Path $jointDir "soland-objects")
+            StateRoot = (Join-Path $jointDir "soland-state")
+            LogDirectory = $serviceLogDir
+            Environment = $solandDockerEnv
+        }
+        if ($needsAuthorityBootstrap) { $solandDockerStartArguments.Name += "-bootstrap" }
+        $solandService = Start-ManagedDockerSoland @solandDockerStartArguments
+        $managedServices.Add($solandService)
+        if ($needsAuthorityBootstrap) {
+            $solandRestartPlans.Add(@{
+                Name = $solandName; BaseUrl = $SolandBaseUrl; Service = $solandService
+                ConfigArguments = $solandDockerArguments; DockerArguments = $solandDockerStartArguments
+            })
+        }
     }
-    Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+    Wait-HttpReady -Url "$($SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $solandService
     $SolandServiceId = Get-DescribedServiceId -BaseUrl $SolandBaseUrl -ServiceName "soland"
     $SolandServiceDid = Get-DescribedServiceDid -BaseUrl $SolandBaseUrl -ServiceName "soland"
 
@@ -3712,50 +3751,99 @@ try {
         $solandBetaMetricsPort = Get-FreeTcpPort
         $solandBetaCorsAllowOrigin = $solandCorsAllowOrigin
         if ($SolandRuntime -eq "docker") {
-            $solandBetaDockerEnv = Build-SolandDockerEnvironment `
-                -BaseUrl $solandBetaBaseUrl `
-                -DatabaseUrl $solandBetaDatabaseDsn `
-                -MetricsPort $solandBetaMetricsPort `
-                -LogFileName ([System.IO.Path]::GetFileName($solandBetaTraceFile)) `
-                -CorsAllowOrigin $solandBetaCorsAllowOrigin `
-                -KeyStoreMasterKey $SolandBetaKeyStoreMasterKey `
-                -NotarySigningKey $SolandBetaNotarySigningKey `
-                -FederationPeers $SolandBaseUrl
-            $managedServices.Add((Start-ManagedDockerSoland `
-                        -Name "soland-beta" `
-                        -Image $SolandImage `
-                        -HostPort $solandBetaPort `
-                        -ContainerPort $SolandContainerPort `
-                        -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
-                        -StateRoot (Join-Path $jointDir "soland-beta-state") `
-                        -LogDirectory $serviceLogDir `
-                        -Environment $solandBetaDockerEnv))
+            $solandBetaDockerArguments = @{
+                BaseUrl = $solandBetaBaseUrl
+                DatabaseUrl = $solandBetaDatabaseDsn
+                MetricsPort = $solandBetaMetricsPort
+                LogFileName = ([System.IO.Path]::GetFileName($solandBetaTraceFile))
+                CorsAllowOrigin = $solandBetaCorsAllowOrigin
+                KeyStoreMasterKey = $SolandBetaKeyStoreMasterKey
+                NotarySigningKey = $SolandBetaNotarySigningKey
+                FederationPeers = $SolandBaseUrl
+            }
+            $solandBetaDockerEnv = Build-SolandDockerEnvironment @solandBetaDockerArguments
+            $solandBetaDockerStartArguments = @{
+                Name = "soland-beta"
+                Image = $SolandImage
+                HostPort = $solandBetaPort
+                ContainerPort = $SolandContainerPort
+                ObjectsRoot = (Join-Path $jointDir "soland-beta-objects")
+                StateRoot = (Join-Path $jointDir "soland-beta-state")
+                LogDirectory = $serviceLogDir
+                Environment = $solandBetaDockerEnv
+            }
+            if ($needsAuthorityBootstrap) { $solandBetaDockerStartArguments.Name += "-bootstrap" }
+            $solandBetaService = Start-ManagedDockerSoland @solandBetaDockerStartArguments
+            $managedServices.Add($solandBetaService)
+            if ($needsAuthorityBootstrap) {
+                $solandRestartPlans.Add(@{
+                    Name = "soland-beta"; BaseUrl = $solandBetaBaseUrl; Service = $solandBetaService
+                    ConfigArguments = $solandBetaDockerArguments; DockerArguments = $solandBetaDockerStartArguments
+                })
+            }
         } else {
-            $solandBetaCommand = Build-SolandCommand `
-                -BinaryPath $solandBinary `
-                -ConfigPath (Join-Path $jointDir "soland-beta.env") `
-                -BaseUrl $solandBetaBaseUrl `
-                -DatabaseUrl $solandBetaDatabaseDsn `
-                -ObjectsRoot (Join-Path $jointDir "soland-beta-objects") `
-                -StateRoot (Join-Path $jointDir "soland-beta-state") `
-                -Port $solandBetaPort `
-                -MetricsPort $solandBetaMetricsPort `
-                -LogFile $solandBetaTraceFile `
-                -CorsAllowOrigin $solandBetaCorsAllowOrigin `
-                -KeyStoreMasterKey $SolandBetaKeyStoreMasterKey `
-                -NotarySigningKey $SolandBetaNotarySigningKey `
-                -FederationPeers $SolandBaseUrl
+            $solandBetaProcessArguments = @{
+                BinaryPath = $solandBinary
+                ConfigPath = (Join-Path $jointDir "soland-beta.env")
+                BaseUrl = $solandBetaBaseUrl
+                DatabaseUrl = $solandBetaDatabaseDsn
+                ObjectsRoot = (Join-Path $jointDir "soland-beta-objects")
+                StateRoot = (Join-Path $jointDir "soland-beta-state")
+                Port = $solandBetaPort
+                MetricsPort = $solandBetaMetricsPort
+                LogFile = $solandBetaTraceFile
+                CorsAllowOrigin = $solandBetaCorsAllowOrigin
+                KeyStoreMasterKey = $SolandBetaKeyStoreMasterKey
+                NotarySigningKey = $SolandBetaNotarySigningKey
+                FederationPeers = $SolandBaseUrl
+            }
+            $solandBetaCommand = Build-SolandCommand @solandBetaProcessArguments
             if ($jointTlsAssets) {
                 $solandBetaCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $solandBetaCommand"
             }
-            $managedServices.Add((Start-ManagedCommand -Name "soland-beta" -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir))
+            $launchName = if ($needsAuthorityBootstrap) { "soland-beta-bootstrap" } else { "soland-beta" }
+            $solandBetaService = Start-ManagedCommand -Name $launchName -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir
+            $managedServices.Add($solandBetaService)
+            if ($needsAuthorityBootstrap) {
+                $solandRestartPlans.Add(@{
+                    Name = "soland-beta"; BaseUrl = $solandBetaBaseUrl; Service = $solandBetaService
+                    ConfigArguments = $solandBetaProcessArguments; Command = $solandBetaCommand
+                    WorkingDirectory = $repoRoot
+                })
+            }
         }
-        Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds
+        Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $solandBetaService
         $SolandBetaServiceId = Get-DescribedServiceId -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
         $SolandBetaServiceDid = Get-DescribedServiceDid -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
     }
 
+    if ($needsAuthorityBootstrap) {
+        $CoauthServiceId = $SolandServiceId
+        foreach ($plan in $solandRestartPlans) {
+            $expectedStationId = Get-DescribedServiceId -BaseUrl $plan.BaseUrl -ServiceName $plan.Name
+            Stop-ManagedCommand -Service $plan.Service
+            [void]$managedServices.Remove($plan.Service)
+            $configArguments = $plan.ConfigArguments
+            if ($plan.Service.Kind -eq "docker") {
+                $startArguments = $plan.DockerArguments
+                $startArguments.Name = $plan.Name
+                $startArguments.Environment = Build-SolandDockerEnvironment @configArguments
+                $service = Start-ManagedDockerSoland @startArguments
+            } else {
+                Build-SolandCommand @configArguments | Out-Null
+                $service = Start-ManagedCommand -Name $plan.Name -Command $plan.Command -WorkingDirectory $plan.WorkingDirectory -LogDirectory $serviceLogDir
+            }
+            $managedServices.Add($service)
+            Wait-HttpReady -Url "$($plan.BaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $service
+            $restartedStationId = Get-DescribedServiceId -BaseUrl $plan.BaseUrl -ServiceName $plan.Name
+            if ($restartedStationId -ne $expectedStationId) {
+                throw "Station identity changed while enabling Account Authority: $($plan.Name)"
+            }
+        }
+    }
+
     if ($StartCoauth) {
+        $CoauthServiceId = $SolandServiceId
         Set-CoauthStationServiceIds `
             -ConfigPath $coauthConfigPath `
             -SolandServiceId $SolandServiceId `
@@ -3777,9 +3865,6 @@ try {
         $managedServices.Add((Start-ManagedCommand -Name "coauth" -Command $CoauthCommand -WorkingDirectory $coauthWorkingDirectory -LogDirectory $serviceLogDir))
         $health = if ($CoauthHealthUrl) { $CoauthHealthUrl } else { "$($CoauthBaseUrl.TrimEnd('/'))/health" }
         Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
-        if ($CoauthBaseUrl) {
-            $CoauthServiceId = Get-DescribedServiceId -BaseUrl $CoauthBaseUrl -ServiceName "coauth"
-        }
     }
     if ($CoauthSecondaryCommand) {
         $managedServices.Add((Start-ManagedCommand -Name "coauth-secondary" -Command $CoauthSecondaryCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
@@ -3854,10 +3939,6 @@ try {
         finally {
             Pop-Location
         }
-    }
-
-    if ($CoauthBaseUrl -and -not $CoauthServiceId) {
-        $CoauthServiceId = Get-DescribedServiceId -BaseUrl $CoauthBaseUrl -ServiceName "coauth"
     }
 
     # Point the wire helper at the prebuilt binary so no test pays `cargo run`.

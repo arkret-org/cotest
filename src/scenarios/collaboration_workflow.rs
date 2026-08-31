@@ -47,6 +47,9 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     let alice_core_id = crate::harness::actor_core_id(&alice.actor)?;
     let bob_did = arkret_identifiers::Did::new(bob.actor.clone())?;
     let bob_core_id = arkret_identifiers::project_did_to_core_id(&bob_did)?;
+    let bob_account = arkret_wire::AccountId::new(bob_core_id.clone(), server.service_id().clone());
+    let bob_actor = serde_json::to_value(arkret_wire::ActorId::account(bob_account.clone()))?;
+    let bob_account = serde_json::to_value(bob_account)?;
     let hidden_bob = expect_json(
         server
             .http()
@@ -67,7 +70,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
     assert!(
         !hidden_results
             .iter()
-            .any(|result| result["principal_id"].as_str() == Some(bob_core_id.as_str()))
+            .any(|result| result["account_id"] == bob_account)
     );
 
     let me = expect_json(
@@ -121,7 +124,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .expect("search-users response users")
             .iter()
-            .any(|result| result["principal_id"].as_str() == Some(bob_core_id.as_str())),
+            .any(|result| result["account_id"] == bob_account),
         "accepted contact did not expose Bob in search-users: {visible_bob}"
     );
 
@@ -169,7 +172,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|member| member.as_str() == Some(bob_core_id.as_str()))
+            .any(|member| member == &bob_actor)
     );
 
     let sent = alice
@@ -255,7 +258,7 @@ pub async fn account_contact_space_message_sync_workflow() -> Result<()> {
             .as_array()
             .unwrap()
             .iter()
-            .any(|member| member.as_str() == Some(bob_core_id.as_str()))
+            .any(|member| member == &bob_actor)
     );
 
     let lifecycle = expect_json(

@@ -514,7 +514,7 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     )
     .await?;
 
-    cancel_invite_now(&alice, &realm_id, &invite_id, bob_client.actor.as_str()).await?;
+    cancel_invite_now(&alice, &realm_id, &invite_id, &bob_client).await?;
 
     eventually(
         "cancelled invite is hidden from invite listings",
@@ -673,10 +673,12 @@ async fn accept_invite_join_now(
         seal_source,
         realm_id,
         "ak.invite.accept",
-        serde_json::json!({
-            "invite_id": invite_id,
-            "delivery_status": "unroutable",
-        }),
+        serde_json::to_value(
+            arkret_models_collaboration::governance::membership_invite::InviteAcceptPayload {
+                invite_id: arkret_identifiers::InviteId::new(invite_id)?,
+                extensions: Default::default(),
+            },
+        )?,
     )
     .await
 }
@@ -685,20 +687,23 @@ async fn cancel_invite_now(
     inviter: &crate::harness::TestActorClient,
     realm_id: &str,
     invite_id: &str,
-    invitee: &str,
+    invitee: &crate::harness::TestActorClient,
 ) -> Result<Value> {
-    let invitee = actor_core_id(invitee)?;
+    use arkret_models_collaboration::governance::membership_invite::{
+        InviteCancelPayload, InviteCancelTargetState,
+    };
+    let payload = InviteCancelPayload::new(
+        arkret_identifiers::InviteId::new(invite_id)?,
+        client_account_id(invitee)?,
+        InviteCancelTargetState::Revoked,
+    )
+    .with_reason("admin_cancel");
     submit_event_now(
         inviter,
         inviter,
         realm_id,
         "ak.invite.cancel",
-        serde_json::json!({
-            "invite_id": invite_id,
-            "invitee_id": invitee,
-            "target_state": "revoked",
-            "reason": "admin_cancel",
-        }),
+        payload.to_value()?,
     )
     .await
 }

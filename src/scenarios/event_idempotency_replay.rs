@@ -63,13 +63,13 @@ pub async fn duplicate_event_submit_is_idempotent_and_projects_once() -> Result<
     .await?;
     let matching_events = listed["events"]
         .as_array()
-        .ok_or_else(|| anyhow!("events query response missing events array: {listed}"))?
+        .ok_or_else(|| anyhow!("events query response missing events array"))?
         .iter()
         .filter(|event| event["event_id"].as_str() == Some(event_id))
         .count();
     assert_eq!(
         matching_events, 1,
-        "events query should project the idempotent event exactly once: {listed}"
+        "events query should project the idempotent event exactly once"
     );
 
     Ok(())
@@ -95,8 +95,8 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         .await?;
 
     let created = submit_and_duplicate(&alice, &create_event).await?;
-    let create_event_id = submitted_event_id(&created)
-        .ok_or_else(|| anyhow!("create response missing event id: {created}"))?;
+    let create_event_id =
+        submitted_event_id(&created).ok_or_else(|| anyhow!("create response missing event id"))?;
     assert_projected_kind_count(
         &alice,
         &realm_id,
@@ -114,8 +114,8 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         )
         .await?;
     let revised = submit_and_duplicate(&alice, &revise_event).await?;
-    let revise_event_id = submitted_event_id(&revised)
-        .ok_or_else(|| anyhow!("revise response missing event id: {revised}"))?;
+    let revise_event_id =
+        submitted_event_id(&revised).ok_or_else(|| anyhow!("revise response missing event id"))?;
     let revise_barrier = submission_barrier(&revised)?;
     assert_projected_event_count(&alice, &realm_id, revise_event_id, 1, revise_barrier).await?;
     assert_projected_kind_count(&alice, &realm_id, "ak.message.revise", 1, revise_barrier).await?;
@@ -129,25 +129,25 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
         )
         .await?;
     let redacted = submit_and_duplicate(&alice, &redact_event).await?;
-    let redact_event_id = submitted_event_id(&redacted)
-        .ok_or_else(|| anyhow!("redact response missing event id: {redacted}"))?;
+    let redact_event_id =
+        submitted_event_id(&redacted).ok_or_else(|| anyhow!("redact response missing event id"))?;
     wait_for_next_realm_seal(&alice, &realm_id, &seal_before_redaction).await?;
     let visible_after_redaction =
         list_realm_events_after(&alice, &realm_id, submission_barrier(&redacted)?).await?;
     assert_eq!(
         event_count(&visible_after_redaction, create_event_id)?,
         1,
-        "redaction must retain the original create slot as a tombstone: {visible_after_redaction}"
+        "redaction must retain the original create slot as a tombstone"
     );
     assert_eq!(
         event_count(&visible_after_redaction, redact_event_id)?,
-        0,
-        "redaction event itself should remain hidden from projected timeline: {visible_after_redaction}"
+        1,
+        "canonical event scan must retain exactly one accepted redaction Event"
     );
     assert_eq!(
         event_count(&visible_after_redaction, revise_event_id)?,
         1,
-        "duplicate redaction replay should not duplicate the visible edit-chain projection: {visible_after_redaction}"
+        "duplicate redaction replay should not duplicate the visible edit-chain projection"
     );
     assert_event_is_redacted_tombstone(
         &visible_after_redaction,
@@ -162,7 +162,7 @@ pub async fn duplicate_edit_and_redaction_replay_project_once() -> Result<()> {
     assert_eq!(
         event_kind_count(&visible_after_redaction, "ak.message.revise")?,
         1,
-        "edit-chain projection should remain single after redaction replay: {visible_after_redaction}"
+        "edit-chain projection should remain single after redaction replay"
     );
 
     Ok(())
@@ -173,7 +173,7 @@ async fn current_realm_seal(alice: &TestActorClient, realm_id: &str) -> Result<S
     frontier["frontier"]["seal_basis"]["leaves"][0]
         .as_str()
         .map(ToOwned::to_owned)
-        .ok_or_else(|| anyhow!("Realm frontier has no sole Seal leaf: {frontier}"))
+        .ok_or_else(|| anyhow!("Realm frontier has no sole Seal leaf"))
 }
 
 async fn wait_for_next_realm_seal(
@@ -263,7 +263,7 @@ async fn list_realm_events_after(
 fn submission_barrier(response: &Value) -> Result<&str> {
     response["cursor"]
         .as_str()
-        .ok_or_else(|| anyhow!("event submission response missing barrier cursor: {response}"))
+        .ok_or_else(|| anyhow!("event submission response missing barrier cursor"))
 }
 
 async fn assert_projected_event_count(
@@ -277,7 +277,7 @@ async fn assert_projected_event_count(
     let actual = event_count(&listed, event_id)?;
     assert_eq!(
         actual, expected,
-        "projected event {event_id} count mismatch: {listed}"
+        "projected event {event_id} count mismatch"
     );
     Ok(())
 }
@@ -291,10 +291,7 @@ async fn assert_projected_kind_count(
 ) -> Result<()> {
     let listed = list_realm_events_after(alice, realm_id, barrier).await?;
     let actual = event_kind_count(&listed, kind)?;
-    assert_eq!(
-        actual, expected,
-        "projected kind {kind} count mismatch: {listed}"
-    );
+    assert_eq!(actual, expected, "projected kind {kind} count mismatch");
     Ok(())
 }
 
@@ -325,36 +322,36 @@ fn assert_event_is_redacted_tombstone(
     let event = projected_events(listed)?
         .iter()
         .find(|event| event["event_id"].as_str() == Some(event_id))
-        .ok_or_else(|| anyhow!("projected event {event_id} missing: {listed}"))?;
+        .ok_or_else(|| anyhow!("projected event {event_id} missing"))?;
     assert_eq!(
         event["view_kind"],
         json!("redacted_event_view"),
-        "projected event {event_id} must use the RedactedEventView contract: {event}"
+        "projected event {event_id} must use the RedactedEventView contract"
     );
     assert_eq!(
         event["redaction_reason"],
         json!("redacted"),
-        "projected event {event_id} must identify an explicit redaction: {event}"
+        "projected event {event_id} must identify an explicit redaction"
     );
     assert_eq!(
         event["reducer_input"],
         json!(false),
-        "a RedactedEventView must never be usable as reducer input: {event}"
+        "a RedactedEventView must never be usable as reducer input"
     );
     let hidden_fields = event["hidden_fields"]
         .as_array()
-        .ok_or_else(|| anyhow!("projected event {event_id} missing hidden_fields: {event}"))?;
+        .ok_or_else(|| anyhow!("projected event {event_id} missing hidden_fields"))?;
     assert!(
         hidden_fields.iter().any(|field| field == "payload"),
-        "projected event {event_id} must declare its payload hidden: {event}"
+        "projected event {event_id} must declare its payload hidden"
     );
     assert!(
         event.get("payload").is_none() && event.get("content").is_none(),
-        "projected event {event_id} retained payload/content outside the redacted view: {event}"
+        "projected event {event_id} retained payload/content outside the redacted view"
     );
     assert!(
         !serde_json::to_string(event)?.contains(leaked_body),
-        "projected event {event_id} still contains redacted plaintext: {event}"
+        "projected event {event_id} still contains redacted plaintext"
     );
     Ok(())
 }
@@ -362,5 +359,5 @@ fn assert_event_is_redacted_tombstone(
 fn projected_events(listed: &Value) -> Result<&Vec<Value>> {
     listed["events"]
         .as_array()
-        .ok_or_else(|| anyhow!("events query response missing events array: {listed}"))
+        .ok_or_else(|| anyhow!("events query response missing events array"))
 }
