@@ -290,6 +290,26 @@ fn validate_frontier_mismatch_reduction_terminal_states(case: &super::NamedCase)
             "validated_union_via_existing_scan_resolve_submit_surfaces_then_success_and_reset",
         ),
         (
+            "scan_discovers_a_missing_control_event_without_publication_sidecars",
+            "resolve_the_event_id_to_event_federation_submission_before_admission",
+        ),
+        (
+            "resolve_returns_the_first_accepted_control_ack_compensation_and_delayed_publication_evidence",
+            "byte_identical_evidence_replays_through_the_same_federation_admission_as_push",
+        ),
+        (
+            "ack_required_control_resolve_has_no_control_proposal_ack",
+            "fail_closed_without_receiver_minting_and_without_counting_raw_root_mismatch_as_peer_failure",
+        ),
+        (
+            "ackless_human_self_principal_control_resolve_carries_stable_admission_evidence",
+            "accept_only_after_source_station_producer_device_authorize_generation_and_seal_basis_replay",
+        ),
+        (
+            "resolve_carrier_contains_both_control_ack_and_ackless_admission_evidence",
+            "schema_violation_before_admission",
+        ),
+        (
             "challenge_or_backfill_network_failure",
             "ordinary_failure_counts_toward_three_consecutive_failures",
         ),
