@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use arkret_models_collaboration::event_sync::EventsSubmitFederationBatchRequestBody;
 use arkret_models_collaboration::governance::membership_invite::{
     MembershipPayload, MembershipPayloadState,
 };
@@ -69,7 +70,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     let account_authority_id = harness_account_authority_id().to_string();
     let node_envs = vec![
         vec![
-            ("DATABASE_URL".to_owned(), source_database_url),
+            ("DATABASE_URL".to_owned(), source_database_url.clone()),
             ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
             (
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
@@ -271,6 +272,14 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     )
     .await?;
     let cancelled_target_id = cancelled.targets[0].target_id.clone();
+    let cancelled_intent = durable_fanout_intent(
+        &source_database_url,
+        &realm_id,
+        &second_event_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    assert_cancelled_intent_unchanged(&cancelled_intent, &cancelled_intent)?;
 
     let bob_rejoin = member_payload(
         &realm_id,
@@ -278,9 +287,27 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
         group.server(1).service_id().clone(),
         MembershipPayloadState::Join,
     )?;
-    submit_and_settle_member_transition(&alice, &realm_id, bob_rejoin).await?;
+    let bob_rejoin_id = submit_and_settle_member_transition(&alice, &realm_id, bob_rejoin).await?;
+    let rejoin_intent = durable_fanout_intent(
+        &source_database_url,
+        &realm_id,
+        &bob_rejoin_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    let rejoined_actor = ActorId::account(AccountId::new(
+        arkret_wire::project_did_to_core_id(&Did::new(bob_did.clone())?)?,
+        group.server(1).service_id().clone(),
+    ));
+    assert_rejoin_history_intent(
+        &cancelled_intent,
+        &rejoin_intent,
+        &bob_rejoin_id,
+        &second_event_id,
+        &rejoined_actor,
+    )?;
     group.server_mut(1).start_external_process().await?;
-    tokio::time::sleep(Duration::from_secs(7)).await;
+    wait_for_target_state(&alice, &bob_rejoin_id, EventDeliveryTargetState::Delivered).await?;
     let after_rejoin = delivery_status(&alice, &second_event_id).await?;
     ensure!(
         after_rejoin.targets.len() == 1
@@ -288,16 +315,185 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             && after_rejoin.targets[0].status == EventDeliveryTargetState::CancelledAuthorityLost,
         "rejoin revived a terminal old fanout intent: {after_rejoin:?}"
     );
+    let old_after_rejoin = durable_fanout_intent(
+        &source_database_url,
+        &realm_id,
+        &second_event_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    assert_cancelled_intent_unchanged(&cancelled_intent, &old_after_rejoin)?;
+    let delivered_rejoin = durable_fanout_intent(
+        &source_database_url,
+        &realm_id,
+        &bob_rejoin_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    ensure!(delivered_rejoin["state"] == "delivered");
+    for field in ["id", "idempotency_key", "realm_fanout", "payload_json"] {
+        ensure!(
+            rejoin_intent[field] == delivered_rejoin[field],
+            "new rejoin intent changed frozen {field} during delivery"
+        );
+    }
     let bob = group.server(1).demo_client(&bob_did, BOB_DEVICE).await?;
+    // Cancellation terminates the old obligation, not the signed Control
+    // Event's availability as governance history under a new membership.
+    // The new Join batch includes its actor-chain predecessors and has its
+    // own current witness. Prove that source instead of forbidding history.
+    let history =
+        resolve_events(&bob, vec![bob_rejoin_id.clone(), second_event_id.clone()]).await?;
     ensure!(
-        resolve_events_allow_missing(&bob, vec![second_event_id])
-            .await?
-            .events
-            .is_empty(),
-        "authority-cancelled Event reached the target Soland"
+        history.iter().any(|event| event.event_id == bob_rejoin_id)
+            && history
+                .iter()
+                .any(|event| event.event_id == second_event_id),
+        "new authorized rejoin batch did not materialize its Control Event history"
+    );
+    eprintln!(
+        "fanout cancellation verified: old intent {} stayed cancelled with attempts={}, \
+         semantic_attempts={}, completed_at={} and byte-identical frozen payload; \
+         distinct rejoin intent {} delivered {} with predecessor {}",
+        cancelled_intent["id"],
+        cancelled_intent["attempts"],
+        cancelled_intent["semantic_attempts"],
+        cancelled_intent["completed_at"],
+        delivered_rejoin["id"],
+        bob_rejoin_id,
+        second_event_id,
     );
 
     Ok(())
+}
+
+/// Diagnostic read of this live scenario's source database, not a protocol
+/// surface. The public delivery-status DTO intentionally omits retry metadata.
+/// Capture the entire row so a cancelled intent cannot mutate an unlisted
+/// field while its public terminal state happens to remain unchanged.
+async fn durable_fanout_intent(
+    database_url: &str,
+    realm_id: &str,
+    source_event_id: &EventId,
+    peer_id: &DidCoreId,
+) -> Result<serde_json::Value> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let source_event_id = source_event_id.to_string();
+    let peer_id = peer_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let mut transaction = client.build_transaction().read_only(true).start()?;
+        let rows = transaction.query(
+            "SELECT to_jsonb(outbox)::text FROM federation_outbox AS outbox \
+             WHERE peer_id = $1 AND realm_fanout->>'realm_id' = $2 \
+             AND (realm_fanout->'source_event_ids') ? $3",
+            &[&peer_id, &realm_id, &source_event_id],
+        )?;
+        ensure!(
+            rows.len() == 1,
+            "expected one frozen intent for {source_event_id} at {peer_id}, found {}",
+            rows.len()
+        );
+        let snapshot = serde_json::from_str(rows[0].get::<_, &str>(0))?;
+        transaction.commit()?;
+        Ok(snapshot)
+    })
+    .await
+    .context("join durable fanout diagnostic read")?
+}
+
+fn assert_cancelled_intent_unchanged(
+    before: &serde_json::Value,
+    after: &serde_json::Value,
+) -> Result<()> {
+    ensure!(
+        before["state"] == "cancelled_authority_lost"
+            && before["completed_at"].is_i64()
+            && before["attempts"].is_i64()
+            && before["semantic_attempts"].is_i64(),
+        "old intent did not durably finish cancellation"
+    );
+    ensure!(
+        before == after,
+        "terminal cancelled intent {} changed after rejoin (attempts {} -> {}, \
+         semantic attempts {} -> {}, completed_at {} -> {})",
+        before["id"],
+        before["attempts"],
+        after["attempts"],
+        before["semantic_attempts"],
+        after["semantic_attempts"],
+        before["completed_at"],
+        after["completed_at"],
+    );
+    Ok(())
+}
+
+fn assert_rejoin_history_intent(
+    cancelled: &serde_json::Value,
+    rejoin: &serde_json::Value,
+    rejoin_event_id: &EventId,
+    dependency_event_id: &EventId,
+    rejoined_actor: &ActorId,
+) -> Result<()> {
+    ensure!(
+        rejoin["id"] != cancelled["id"]
+            && rejoin["idempotency_key"] != cancelled["idempotency_key"],
+        "new membership reused the cancelled intent identity"
+    );
+    let binding: soland_storage::RealmFanoutBinding =
+        serde_json::from_value(rejoin["realm_fanout"].clone())?;
+    binding.validate().map_err(anyhow::Error::msg)?;
+    ensure!(
+        binding.source_event_ids == vec![rejoin_event_id.to_string()]
+            && binding.authority_witnesses.len() == 1
+            && binding.authority_witnesses[0].member_id == *rejoined_actor
+            && binding.authority_witnesses[0].membership_event_ref == rejoin_event_id.as_str(),
+        "new history delivery did not freeze the exact new membership generation"
+    );
+    let body: EventsSubmitFederationBatchRequestBody = serde_json::from_str(
+        rejoin["payload_json"]
+            .as_str()
+            .context("rejoin intent payload")?,
+    )?;
+    let events = body
+        .events
+        .iter()
+        .map(|entry| (entry.event.event_id.clone(), &entry.event))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    ensure!(
+        events.len() == body.events.len(),
+        "new history batch duplicated Event ids"
+    );
+    let dependency = events
+        .get(dependency_event_id)
+        .context("new rejoin batch omitted old Control Event")?;
+    ensure!(dependency.kind.is_control_plane());
+    let rejoin_event = events
+        .get(rejoin_event_id)
+        .context("new rejoin batch omitted its root Event")?;
+    ensure!(rejoin_event.kind == EventKind::MemberState);
+    let membership: MembershipPayload =
+        serde_json::from_value(serde_json::to_value(&rejoin_event.payload)?)?;
+    ensure!(
+        membership.membership == MembershipPayloadState::Join
+            && membership.member_id == *rejoined_actor,
+        "new history batch root did not join the exact receiver account"
+    );
+    let mut pending = rejoin_event.prev_refs.clone();
+    let mut visited = std::collections::BTreeSet::new();
+    while let Some(event_id) = pending.pop() {
+        if !visited.insert(event_id.clone()) {
+            continue;
+        }
+        if &event_id == dependency_event_id {
+            return Ok(());
+        }
+        if let Some(event) = events.get(&event_id) {
+            pending.extend(event.prev_refs.iter().cloned());
+        }
+    }
+    bail!("old Control Event was not in the new rejoin's actual predecessor closure")
 }
 
 async fn wait_for_bootstrap_seal(client: &TestActorClient, realm_id: &str) -> Result<()> {
@@ -479,4 +675,46 @@ async fn wait_for_target_state(
     Err(anyhow!(
         "fanout target did not reach {expected:?}; last outcome: {last:?}"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_intent_snapshot_rejects_retry_or_frozen_binding_mutation() {
+        let cancelled = json!({
+            "id": "old-intent",
+            "state": "cancelled_authority_lost",
+            "attempts": 3,
+            "semantic_attempts": 0,
+            "completed_at": 1234,
+            "idempotency_key": "old-key",
+            "realm_fanout": {"authority_witnesses": ["old-generation"]},
+            "payload_json": "original signed payload",
+            "lease_token": null
+        });
+        assert_cancelled_intent_unchanged(&cancelled, &cancelled).unwrap();
+        for (field, replacement) in [
+            ("attempts", json!(4)),
+            ("semantic_attempts", json!(1)),
+            ("completed_at", json!(1235)),
+            ("state", json!("delivered")),
+            ("id", json!("replacement-intent")),
+            ("idempotency_key", json!("replacement-key")),
+            (
+                "realm_fanout",
+                json!({"authority_witnesses": ["new-generation"]}),
+            ),
+            ("payload_json", json!("replacement payload")),
+            ("lease_token", json!("reclaimed-after-cancellation")),
+        ] {
+            let mut changed = cancelled.clone();
+            changed[field] = replacement;
+            assert!(
+                assert_cancelled_intent_unchanged(&cancelled, &changed).is_err(),
+                "snapshot ignored changed {field}"
+            );
+        }
+    }
 }
