@@ -4,7 +4,7 @@
 //!   - `ak.vector.agent.provision.v1`
 //!   - `ak.vector.agent.pairing_expiry.v1`
 //!   - `ak.vector.agent.runtime_key_binding.v1`
-//!   - `ak.vector.agent.managed_pcr_separation.v1`
+//!   - `ak.vector.agent.pcr_separation.v1`
 //!   - `ak.vector.agent.repairing_supersede.v1`
 //!   - `ak.vector.agent.longevity_no_expiry.v1`
 //!   - `ak.vector.agent.controller_lifecycle.v1`
@@ -32,8 +32,7 @@ use serde_json::Value;
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
 pub const VECTOR_ID_AGENT_PAIRING_EXPIRY: &str = "ak.vector.agent.pairing_expiry.v1";
 pub const VECTOR_ID_AGENT_RUNTIME_KEY_BINDING: &str = "ak.vector.agent.runtime_key_binding.v1";
-pub const VECTOR_ID_AGENT_MANAGED_PCR_SEPARATION: &str =
-    "ak.vector.agent.managed_pcr_separation.v1";
+pub const VECTOR_ID_AGENT_PCR_SEPARATION: &str = "ak.vector.agent.pcr_separation.v1";
 pub const VECTOR_ID_AGENT_REPAIRING_SUPERSEDE: &str = "ak.vector.agent.repairing_supersede.v1";
 pub const VECTOR_ID_AGENT_LONGEVITY_NO_EXPIRY: &str = "ak.vector.agent.longevity_no_expiry.v1";
 pub const VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE: &str = "ak.vector.agent.controller_lifecycle.v1";
@@ -46,7 +45,7 @@ pub const ALL_AGENT_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_AGENT_PROVISION,
     VECTOR_ID_AGENT_PAIRING_EXPIRY,
     VECTOR_ID_AGENT_RUNTIME_KEY_BINDING,
-    VECTOR_ID_AGENT_MANAGED_PCR_SEPARATION,
+    VECTOR_ID_AGENT_PCR_SEPARATION,
     VECTOR_ID_AGENT_REPAIRING_SUPERSEDE,
     VECTOR_ID_AGENT_LONGEVITY_NO_EXPIRY,
     VECTOR_ID_AGENT_CONTROLLER_LIFECYCLE,
@@ -617,7 +616,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     Ok(())
 }
 
-pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
+pub fn run_agent_pcr_separation_vector() -> Result<()> {
     let agent = "ak:did_core:web:agent.example";
     let controller = "ak:did_core:web:controller.example";
     let agent_pcr = "ak:realm:AQc8B431O3SQubQ_5nFtF3-v2Z0sQi6h0P2tfGx0TPKE";
@@ -1497,7 +1496,7 @@ pub fn run_agent_vector_suite() -> Result<()> {
     run_agent_provision_vector().context("agent provision vector")?;
     run_agent_pairing_expiry_vector().context("agent pairing expiry vector")?;
     run_agent_runtime_key_binding_vector().context("agent runtime key binding vector")?;
-    run_agent_managed_pcr_separation_vector().context("Agent PCR separation vector")?;
+    run_agent_pcr_separation_vector().context("Agent PCR separation vector")?;
     run_agent_repairing_supersede_vector().context("agent repairing supersede vector")?;
     run_agent_longevity_no_expiry_vector().context("agent longevity vector")?;
     run_agent_controller_lifecycle_vector().context("agent controller lifecycle vector")?;

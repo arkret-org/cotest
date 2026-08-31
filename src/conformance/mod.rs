@@ -128,10 +128,10 @@ pub use agent_signer_evidence::{
 pub use agent_vectors::{
     ALL_AGENT_VECTOR_IDS, run_agent_act_on_behalf_vector, run_agent_controller_lifecycle_vector,
     run_agent_human_approval_required_vector, run_agent_longevity_no_expiry_vector,
-    run_agent_managed_pcr_separation_vector, run_agent_pairing_expiry_vector,
-    run_agent_provision_vector, run_agent_repairing_supersede_vector,
-    run_agent_runtime_key_binding_vector, run_agent_session_grant_replay_vector,
-    run_agent_vector_suite, validate_agent_human_approval_http_response,
+    run_agent_pairing_expiry_vector, run_agent_pcr_separation_vector, run_agent_provision_vector,
+    run_agent_repairing_supersede_vector, run_agent_runtime_key_binding_vector,
+    run_agent_session_grant_replay_vector, run_agent_vector_suite,
+    validate_agent_human_approval_http_response,
 };
 pub use applet_install::{
     run_applet_install_authoring_suite, run_applet_managed_actor_authority_suite,
