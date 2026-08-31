@@ -1054,7 +1054,6 @@ export type RealmSealFrontierView = {
         "target_device_authorize_event_id": string;
         "target_device_generation_ref": number;
         "proposal_event_id": string;
-        "proposal_digest": string;
         "accepted_at": string;
         "acceptance_seq": number;
         "control_proposal_ack": {
@@ -1451,7 +1450,6 @@ export type EventFederationSubmission = {
         "authority": "ak.authority.membership_compensation.v1";
         "admission_id": string;
         "join_event_id": string;
-        "join_event_digest": string;
         "membership_cell_id": string;
         "member_id": {
           "kind": "account";
@@ -1526,7 +1524,6 @@ export type EventFederationSubmission = {
     "join_accepted_proof": {
       "admission_id": string;
       "join_event_id": string;
-      "join_event_digest": string;
       "accepted_at": string;
       "issuer_id": string;
       "signature": {
