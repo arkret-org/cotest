@@ -705,8 +705,7 @@ fn valid_track_key(key: &str) -> bool {
 const REDACTABLE_FIELD_REGISTRY_REF: &str = "registry/redactable-field-registry.json";
 const REDACTABLE_PATH_SOURCE: &str = "registry/redactable-field-registry.json#/redactable_fields";
 
-/// Object refs the object-patch payload schema accepts, one per registered
-/// content-carrier object kind.
+/// Typed object refs for each registered content-carrier update surface.
 const PATCH_TARGET_REFS: &[(&str, &str)] = &[
     (
         "message",
@@ -755,10 +754,40 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
 
         let prestate = redactable_prestate(object_kind, &path);
         let observed = patch.apply(&prestate);
-        let payload = arkret_models_collaboration::object_patch::ObjectPatchPayload::for_target(
-            patch_target_ref(object_kind)?,
-            patch.clone(),
-        );
+        let target_ref = patch_target_ref(object_kind)?;
+        let payload: Result<Value> = match (object_kind, event_kind) {
+            ("strand", "ak.strand.update") => {
+                arkret_models_collaboration::events_payloads::StrandPatchPayload::for_strand(
+                    arkret_wire::StrandId::new(target_ref)?,
+                    patch.clone(),
+                )
+                .and_then(|payload| payload.to_value())
+                .map_err(Into::into)
+            }
+            ("morph", "ak.morph.update") => {
+                arkret_models_collaboration::events_payloads::MorphUpdatePayload::for_morph(
+                    arkret_wire::MorphId::new(target_ref)?,
+                    patch.clone(),
+                )
+                .and_then(|payload| payload.to_value())
+                .map_err(Into::into)
+            }
+            ("message", "ak.message.revise") => {
+                // Message revision is a replacement-content surface, not a
+                // generic patch surface. Its real closed DTO must reject a
+                // patch carrier; Patch::apply above separately proves the
+                // exact redactable-slot unset prohibition and reason code.
+                serde_json::from_value::<
+                    arkret_models_collaboration::events_payloads::MessageRevisePayload,
+                >(serde_json::json!({
+                    "message_id": arkret_wire::MessageId::new(target_ref)?,
+                    "patch": patch,
+                }))
+                .and_then(serde_json::to_value)
+                .map_err(Into::into)
+            }
+            _ => bail!("redactable slot case `{name}` does not name its registered update surface"),
+        };
 
         let decision = entry
             .pointer("/expected/decision")
@@ -795,7 +824,7 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                 }
                 if payload.is_ok() {
                     bail!(
-                        "the object-patch payload accepted `{path}` unset for `{name}`; the \
+                        "the typed update payload accepted `{path}` unset for `{name}`; the \
                          payload and container gates disagree"
                     );
                 }
@@ -820,7 +849,7 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                 })?;
                 payload.map_err(|error| {
                     anyhow!(
-                        "redactable slot case `{name}` was refused by the object-patch payload: \
+                        "redactable slot case `{name}` was refused by the typed update payload: \
                          `{error}`"
                     )
                 })?;
