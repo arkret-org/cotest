@@ -705,23 +705,6 @@ fn valid_track_key(key: &str) -> bool {
 const REDACTABLE_FIELD_REGISTRY_REF: &str = "registry/redactable-field-registry.json";
 const REDACTABLE_PATH_SOURCE: &str = "registry/redactable-field-registry.json#/redactable_fields";
 
-/// Object refs the object-patch payload schema accepts, one per registered
-/// content-carrier object kind.
-const PATCH_TARGET_REFS: &[(&str, &str)] = &[
-    (
-        "message",
-        "ak:message:AV624IkuHj3HmxAYE6uyYmBa4Est3gGGdnOsjn71z5L2",
-    ),
-    (
-        "morph",
-        "ak:morph:ASc_XP_IqOBAY6GgbPMLFCeZmi0uBNaWvHazHgmn-B8K",
-    ),
-    (
-        "strand",
-        "ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",
-    ),
-];
-
 fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
     let input = case
         .get("input")
@@ -743,6 +726,11 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
         let name = required_str(entry, "name")?;
         let object_kind = required_str(entry, "object_kind")?;
         let event_kind = required_str(entry, "event_kind")?;
+        if !registered.iter().any(|(kind, _)| kind == object_kind) {
+            bail!(
+                "redactable slot case `{name}` names an unregistered object kind `{object_kind}`"
+            );
+        }
         let patch: arkret_wire::patch::Patch =
             serde_json::from_value(entry.get("patch").cloned().ok_or_else(|| {
                 anyhow!("redactable slot case `{name}` carries no ak.schema.patch.v1 body")
@@ -755,9 +743,12 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
 
         let prestate = redactable_prestate(object_kind, &path);
         let observed = patch.apply(&prestate);
-        let payload = arkret_models_collaboration::object_patch::ObjectPatchPayload::for_target(
-            patch_target_ref(object_kind)?,
-            patch.clone(),
+        // The fixture supplies a registry-checked object kind, not an untrusted
+        // prestate id. Exercise the same semantic guard used by the reducer;
+        // payload constructors only cover each event kind's own wire shape.
+        let semantic = arkret_wire::patch::validate_patch_semantic_safety(
+            &patch,
+            arkret_wire::patch::PatchTargetKind::Verified(object_kind),
         );
 
         let decision = entry
@@ -793,10 +784,13 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                 if !error.to_string().contains(reason_code) {
                     bail!("redactable slot rejection `{name}` reported `{error}`");
                 }
-                if payload.is_ok() {
+                let semantic_error = semantic.err().ok_or_else(|| {
+                    anyhow!("the patch semantic guard accepted `{path}` unset for `{name}`")
+                })?;
+                if !semantic_error.to_string().contains(reason_code) {
                     bail!(
-                        "the object-patch payload accepted `{path}` unset for `{name}`; the \
-                         payload and container gates disagree"
+                        "redactable slot rejection `{name}` reported `{semantic_error}` from the \
+                         semantic guard instead of `{reason_code}`"
                     );
                 }
                 if entry
@@ -818,9 +812,9 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                 let post = observed.map_err(|error| {
                     anyhow!("redactable slot case `{name}` must be accepted, got `{error}`")
                 })?;
-                payload.map_err(|error| {
+                semantic.map_err(|error| {
                     anyhow!(
-                        "redactable slot case `{name}` was refused by the object-patch payload: \
+                        "redactable slot case `{name}` was refused by the patch semantic guard: \
                          `{error}`"
                     )
                 })?;
@@ -951,14 +945,6 @@ fn assert_ordinary_update_is_not_the_redaction_event(
         bail!("redactable slot case names an unregistered event kind `{event_kind}`");
     }
     Ok(())
-}
-
-fn patch_target_ref(object_kind: &str) -> Result<&'static str> {
-    PATCH_TARGET_REFS
-        .iter()
-        .find(|(kind, _)| *kind == object_kind)
-        .map(|(_, target_ref)| *target_ref)
-        .ok_or_else(|| anyhow!("no object-patch target ref for object kind `{object_kind}`"))
 }
 
 /// A materialized object carrying the addressed slot plus the ordinary optional
