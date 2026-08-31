@@ -773,7 +773,20 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                     arkret_wire::StrandId::new(target_ref)?,
                     patch.clone(),
                 )
-                .and_then(|payload| payload.to_value())
+                .and_then(|payload| {
+                    let value = payload.to_value()?;
+                    let decoded: arkret_models_collaboration::events_payloads::StrandPatchPayload =
+                        serde_json::from_value(value.clone()).map_err(|error| {
+                            arkret_wire::WireError::Protocol(format!(
+                                "strand update DTO round trip failed: {error}"
+                            ))
+                        })?;
+                    arkret_wire::patch::validate_patch_semantic_safety(
+                        &decoded.patch,
+                        arkret_wire::patch::PatchTargetKind::Verified("strand"),
+                    )?;
+                    Ok(value)
+                })
                 .map_err(Into::into)
             }
             ("morph", "ak.morph.update") => {
@@ -781,7 +794,20 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                     arkret_wire::MorphId::new(target_ref)?,
                     patch.clone(),
                 )
-                .and_then(|payload| payload.to_value())
+                .and_then(|payload| {
+                    let value = payload.to_value()?;
+                    let decoded: arkret_models_collaboration::events_payloads::MorphUpdatePayload =
+                        serde_json::from_value(value.clone()).map_err(|error| {
+                            arkret_wire::WireError::Protocol(format!(
+                                "morph update DTO round trip failed: {error}"
+                            ))
+                        })?;
+                    arkret_wire::patch::validate_patch_semantic_safety(
+                        &decoded.patch,
+                        arkret_wire::patch::PatchTargetKind::Verified("morph"),
+                    )?;
+                    Ok(value)
+                })
                 .map_err(Into::into)
             }
             ("message", "ak.message.revise") => {
@@ -843,10 +869,16 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                          semantic guard instead of `{reason_code}`"
                     );
                 }
-                if payload.is_ok() {
+                let payload_error = payload.err().ok_or_else(|| {
+                    anyhow!(
+                        "the typed update admission accepted `{path}` unset for `{name}`; the \
+                         typed and container gates disagree"
+                    )
+                })?;
+                if object_kind != "message" && !payload_error.to_string().contains(reason_code) {
                     bail!(
-                        "the typed update payload accepted `{path}` unset for `{name}`; the \
-                         payload and container gates disagree"
+                        "redactable slot rejection `{name}` reported `{payload_error}` after \
+                         typed DTO round trip instead of `{reason_code}`"
                     );
                 }
                 if entry
@@ -876,7 +908,7 @@ fn run_redactable_content_slot_unset_ban_case(case: &Value) -> Result<()> {
                 })?;
                 payload.map_err(|error| {
                     anyhow!(
-                        "redactable slot case `{name}` was refused by the typed update payload: \
+                        "redactable slot case `{name}` was refused by the typed update admission: \
                          `{error}`"
                     )
                 })?;
