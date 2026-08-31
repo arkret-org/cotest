@@ -988,7 +988,7 @@ mod tests {
         for (regime, actor_id, verification_method) in [
             ("minimal_metadata", "ak:did_core:web:alice.example", None),
             (
-                "native_agent",
+                "agent",
                 "ak:did_core:webvh:z6mkagent:agent.example",
                 Some("did:webvh:z6mkagent:agent.example#runtime-1"),
             ),

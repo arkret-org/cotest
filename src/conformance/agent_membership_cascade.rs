@@ -1,4 +1,4 @@
-//! Native Personal Agent membership-cascade conformance.
+//! Agent membership-cascade conformance.
 
 use std::collections::BTreeSet;
 

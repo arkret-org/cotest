@@ -736,7 +736,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Native Agent membership is immediately AND-gated by the exact
+    /// Agent membership is immediately AND-gated by the exact
     /// controller generation, while explicit cleanup stays caller-signed,
     /// complete-set, durable and atomic.
     agent_membership_cascade,

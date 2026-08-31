@@ -277,7 +277,7 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
     }
     const EXPECTED: &[(&str, &str)] = &[
         (
-            "accepted_native_agent_event",
+            "accepted_agent_event",
             "outcome_returns_one_receiver_signed_receipt_for_that_event",
         ),
         (
@@ -285,7 +285,7 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
             "outcome_carries_no_receipt_for_that_event",
         ),
         (
-            "rejected_quarantined_or_dependency_missing_native_agent_event",
+            "rejected_quarantined_or_dependency_missing_agent_event",
             "no_receipt_signed_and_none_returned",
         ),
         (

@@ -7,7 +7,7 @@
 //! local crypto/store bridge between those two surfaces, including canonical
 //! KeyPackage writes, Welcome handling, and restart recovery. It intentionally
 //! does not claim live Station, Account Authority, device-message, or
-//! HTTP conformance; those require a separately managed Agent runtime harness.
+//! HTTP conformance; those require a separately Agent runtime harness.
 
 use anyhow::{Context, Result, bail};
 use arkret::{
@@ -72,7 +72,7 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
         let (actual_input, signature) = match name {
             "upload_batch_required_fields"
             | "upload_batch_device"
-            | "upload_batch_native_agent"
+            | "upload_batch_agent"
             | "upload_batch_minimal_metadata_pairwise" => {
                 let unsigned: KeyPackagesUploadUnsignedRequest = serde_json::from_value(
                     case.get("unsigned_request")
@@ -155,16 +155,16 @@ fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> 
 }
 
 #[test]
-fn native_agent_welcome_is_not_consumed_by_human_device_recovery() -> Result<()> {
+fn agent_welcome_is_not_consumed_by_human_device_recovery() -> Result<()> {
     let agent_id = arkret::DidCoreId::new("ak:did_core:web:summary-agent.example")?;
-    let endpoint = arkret::MlsEndpointIdentity::native_agent_runtime(
+    let endpoint = arkret::MlsEndpointIdentity::agent_runtime(
         agent_id,
         arkret::DidUrl::new("did:web:summary-agent.example#runtime-1")
             .map_err(anyhow::Error::msg)?,
         arkret::EventId::new("ak:event:AZ405CdsF4uWwxBhArLvqgzVvWHWYcB3QJ6845E-2ET3")?,
     )?;
     let welcome = arkret::MlsWelcomeEnvelope {
-        group_id: "cotest-native-agent".to_owned(),
+        group_id: "cotest-agent".to_owned(),
         epoch: 1,
         recipient: endpoint,
         welcome: "AA".to_owned(),
@@ -173,7 +173,7 @@ fn native_agent_welcome_is_not_consumed_by_human_device_recovery() -> Result<()>
     };
     assert!(
         late_device_join_steps(&welcome).is_err(),
-        "human-device recovery must fail closed for a Native Agent endpoint"
+        "human-device recovery must fail closed for an Agent endpoint"
     );
     Ok(())
 }

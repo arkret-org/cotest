@@ -30,6 +30,6 @@ coauth processes, including cross-principal chat projections.
 - The UI-level request trace pins local Realm genesis authoring independently of
   the API helper and Soland reducer tests.
 - The agent projection case uses a real third DPoP session and real soland
-  events. Full personal-agent provisioning, pairing, participation grants, and
+  events. Full agent provisioning, pairing, participation grants, and
   runtime proof enforcement remain covered by `tests/agent_provision_e2e.rs`;
   this browser case owns the Inkson grouping and selector UX boundary.

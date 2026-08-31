@@ -142,7 +142,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
         upload_value.get("device_id").is_none()
             && upload_value.get("agent_verification_method").is_none()
             && upload_value.get("agent_key_authorize_event_id").is_none(),
-        "pairwise upload leaked a device or Native Agent mixed branch"
+        "pairwise upload leaked a device or Agent mixed branch"
     );
 
     reject_upload_mutation(&transport, &upload, |value| {
@@ -284,7 +284,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
             && claim_value["requester_authorization"]
                 .get("requester_agent_id")
                 .is_none(),
-        "pairwise claim leaked a device or Native Agent mixed branch"
+        "pairwise claim leaked a device or Agent mixed branch"
     );
 
     let mut wrong_method = serde_json::to_value(&negative_claim)?;

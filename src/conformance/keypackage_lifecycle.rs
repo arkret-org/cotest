@@ -1415,7 +1415,7 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
                     && request.target_agent_key_authorize_event_id.is_none()
                     && request.target_pairwise_verification_method.is_none()
             }
-            "native_agent" => {
+            "agent" => {
                 request.target_device_ids.is_empty()
                     && request.target_agent_id.is_some()
                     && request.target_agent_verification_method.is_some()
@@ -1449,7 +1449,7 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
                 changed["target_device_ids"][0] =
                     json!("ak:device:0196419b-0000-7000-8000-000000000099");
             }
-            "native_agent" => {
+            "agent" => {
                 changed["target_agent_key_authorize_event_id"] =
                     json!("ak:event:Aao964Xuq1Q7PmnLt9I97ih00Qs2N6qMkBgKgYCvUFFe");
             }
@@ -1464,7 +1464,7 @@ fn validate_unsigned_selector_transcripts(fixture: &KeypackageLifecycleFixture) 
             bail!("{branch} selector mutation did not change the idempotency digest");
         }
     }
-    if seen != BTreeSet::from(["device", "native_agent", "minimal_metadata_pairwise"]) {
+    if seen != BTreeSet::from(["device", "agent", "minimal_metadata_pairwise"]) {
         bail!("unsigned selector transcript branch set is incomplete");
     }
     Ok(())

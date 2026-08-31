@@ -458,7 +458,7 @@ fn execute_case(name: &str, case: &Value) -> Result<OutcomeClass> {
             historical_outcome(&fixture, None, false)
         }
         "minimal_metadata_forbids_agent_evidence_query" => {
-            if dispatch_signer_regime(true, SignerPrincipalKind::NativeAgent)
+            if dispatch_signer_regime(true, SignerPrincipalKind::Agent)
                 .map_err(|reason| anyhow!("{reason:?}"))?
                 == SignerRegime::MinimalMetadata
             {

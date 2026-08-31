@@ -59,7 +59,7 @@ const AGENT_VECTORS_FIXTURE_FILE: &str = "agent-vectors-fixture.json";
 
 fn validate_agent_vectors_fixture_metadata() -> Result<()> {
     let fixture = super::load_fixture_value(AGENT_VECTORS_FIXTURE_FILE)?;
-    super::validate_profile(&fixture, ProfileId::PERSONAL_AGENT_PROVISIONING_V1)?;
+    super::validate_profile(&fixture, ProfileId::AGENT_PROVISIONING_V1)?;
     let covers = fixture
         .get("covers_vectors")
         .and_then(Value::as_array)
@@ -203,7 +203,7 @@ pub fn run_agent_provision_vector() -> Result<()> {
         );
     }
     if CapabilityActionId::SELF_AGENT_COMMAND_PROVISION_V1 != "ak.self.agent.command.provision.v1" {
-        bail!("personal-agent provision capability action spelling drifted");
+        bail!("agent provision capability action spelling drifted");
     }
     // The provisioning error matrix MUST include `failed_precondition`
     // (modeled by absence of the controller-self capability binding)
@@ -623,7 +623,7 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     let agent_pcr = "ak:realm:AQc8B431O3SQubQ_5nFtF3-v2Z0sQi6h0P2tfGx0TPKE";
     let controller_pcr = "ak:realm:AR0PtbTxYB1FcA3wCiXkmkluv8VEeXQN_TrYLsL2RNVE";
     if agent_pcr == controller_pcr {
-        bail!("managed Agent reused the controller PCR");
+        bail!("Agent reused the controller PCR");
     }
     let notary = serde_json::to_value(crate::fixture_single_signer_notary(
         arkret_wire::DidCoreId::new(agent)?,
@@ -631,17 +631,17 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
     let genesis = serde_json::json!({
         "created_by": agent,
         "notary": notary,
-        "purpose": "managed_agent_control",
+        "purpose": "agent_control",
         "encryption_profile": "e2ee_required",
         "event_encryption_floor": "e2ee_required"
     });
     if genesis["created_by"] != agent
         || genesis["notary"]["signer"]["actor_id"]["service_id"] != agent
-        || genesis["purpose"] != "managed_agent_control"
+        || genesis["purpose"] != "agent_control"
         || genesis["encryption_profile"] != "e2ee_required"
         || genesis["event_encryption_floor"] != "e2ee_required"
     {
-        bail!("managed Agent PCR genesis boundary drifted");
+        bail!("Agent PCR genesis boundary drifted");
     }
     let authored = serde_json::json!({
         "actor_id": agent,
@@ -666,12 +666,12 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
             write.cell_family.map(|family| family.as_str())
                 == Some(arkret_wire::CellFamilyId::AGENT_STATUS_V1)
         })
-        .ok_or_else(|| anyhow!("managed Agent genesis status write is missing"))?;
+        .ok_or_else(|| anyhow!("Agent genesis status write is missing"))?;
     if status_write.condition_rule.map(|rule| rule.to_json_value())
         != Some(serde_json::json!({
             "kind": "field_equals",
             "field": "payload.object.purpose",
-            "const": "managed_agent_control"
+            "const": "agent_control"
         }))
         || status_write
             .effect_projection_rule
@@ -682,7 +682,7 @@ pub fn run_agent_managed_pcr_separation_vector() -> Result<()> {
                 "to": {"const": "active"}
             }))
     {
-        bail!("managed Agent genesis initial lifecycle transition drifted");
+        bail!("Agent genesis initial lifecycle transition drifted");
     }
     Ok(())
 }
@@ -974,7 +974,7 @@ fn valid_act_on_behalf_request() -> MiniActOnBehalfRequest<'static> {
 
 pub fn run_agent_act_on_behalf_vector() -> Result<()> {
     // The four new actor-private agent event kinds are pinned by the
-    // SDK constants list in personal_agent_provisioning; here we
+    // SDK constants list in agent_provisioning; here we
     // assert the side-effect that approvals are write-once.
     if arkret_wire::ReasonCode::APPROVAL_ALREADY_CONSUMED != "approval_already_consumed" {
         bail!(
@@ -1497,7 +1497,7 @@ pub fn run_agent_vector_suite() -> Result<()> {
     run_agent_provision_vector().context("agent provision vector")?;
     run_agent_pairing_expiry_vector().context("agent pairing expiry vector")?;
     run_agent_runtime_key_binding_vector().context("agent runtime key binding vector")?;
-    run_agent_managed_pcr_separation_vector().context("managed Agent PCR separation vector")?;
+    run_agent_managed_pcr_separation_vector().context("Agent PCR separation vector")?;
     run_agent_repairing_supersede_vector().context("agent repairing supersede vector")?;
     run_agent_longevity_no_expiry_vector().context("agent longevity vector")?;
     run_agent_controller_lifecycle_vector().context("agent controller lifecycle vector")?;

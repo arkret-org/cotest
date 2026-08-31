@@ -245,7 +245,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         expect(firstAuthorizedEventRef).not.toBe("");
 
         await inkson.reload();
-        await expect(inkson.getByTestId("personal-agent-admin")).toBeVisible({
+        await expect(inkson.getByTestId("agent-admin")).toBeVisible({
           timeout: 120_000,
         });
         await expect(approvalModal).toHaveCount(0);
@@ -368,7 +368,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
         // instead of authoring a second one, and it must not claim a second
         // peer KeyPackage.
         await inkson.reload();
-        await expect(inkson.getByTestId("personal-agent-admin")).toBeVisible({
+        await expect(inkson.getByTestId("agent-admin")).toBeVisible({
           timeout: 120_000,
         });
         const mlsSubmissions = trackMlsSubmissions(inkson);
@@ -1022,7 +1022,7 @@ async function provisionAgent(
   agentSlug: string,
 ): Promise<PairingHandle & { pairingLink: string }> {
   await inkson.goto("/settings/agents", { waitUntil: "domcontentloaded" });
-  await expect(inkson.getByTestId("personal-agent-admin")).toBeVisible({
+  await expect(inkson.getByTestId("agent-admin")).toBeVisible({
     timeout: 120_000,
   });
   await inkson.getByTestId("agent-admin-create-open-button").click();

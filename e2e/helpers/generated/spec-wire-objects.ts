@@ -19,7 +19,7 @@ export type RealmObject = {
   "owning_organization_ids"?: string[];
   "schema_refs": Array<string | "ak.profile.principal_control_realm.v1" | "ak.profile.direct_conversation_realm.v1" | "ak.profile.mls.minimal_metadata_realm.v1">;
   "fields"?: {
-    "purpose"?: "principal_control" | "managed_agent_control" | "applet_managed_control";
+    "purpose"?: "principal_control" | "agent_control" | "applet_managed_control";
     "collaboration_role"?: "direct_conversation";
     [key: string]: unknown;
   };
@@ -49,7 +49,7 @@ export type RealmObject = {
   "content_encryption_floor"?: "allow_plaintext" | "e2ee_required";
   "metadata_encryption_floor"?: "allow_plaintext" | "e2ee_required";
   "agent_participation"?: {
-    "native_agent": {
+    "agent": {
       "reply_message": boolean;
       "reaction_add": boolean;
       "reaction_remove": boolean;

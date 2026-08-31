@@ -8,7 +8,7 @@
 ## 结论
 
 - 不能宣称 joint-e2e 已包含流程库的全部流程。标准 joint smoke 现在直接覆盖账号注册/登录/会话、24 词 Recovery Key 设置与 fresh-browser MLS 内容恢复、第二设备登录后的旧设备显式批准、无需旧设备批准的 24 词 root re-anchor 恢复、普通 Realm 明文/MLS 两种创建与写入、Direct Conversation founding、基础消息同步、Agent/Sidecar 边界，以及当前 service route 认证。
-- planned route handover、ACK barrier/cutover、mirror 失联恢复、设备撤销后的 MLS/backup 全安全收口、Direct Conversation repair、native Agent/Sidecar 生产链和完整 Invite+MLS+history 重启链仍没有单条标准 joint smoke 闭环；明文 `since_join` 的旧历史隔离与 current baseline 双向写已补入 joint smoke，但不能替代 MLS/重启分支。
+- planned route handover、ACK barrier/cutover、mirror 失联恢复、设备撤销后的 MLS/backup 全安全收口、Direct Conversation repair、Agent/Sidecar 生产链和完整 Invite+MLS+history 重启链仍没有单条标准 joint smoke 闭环；明文 `since_join` 的旧历史隔离与 current baseline 双向写已补入 joint smoke，但不能替代 MLS/重启分支。
 - `ordinary-realm-creation.md` 与 `realm-invitation-history-bootstrap.md` 的 `since_join` current-projection 测试必须遵守 `arkret-spec/spec/v1/zh/sync/client-sync.md` 的已闭合 current object/security baseline 合同。
 - canonical `identity/recovery-key-to-encrypted-realm` 现在以同一真实注册账号对称验证 `encryption_profile=none` 与 `mls_rfc9420`：两者都必须创建、写入、刷新后读取；前者 wire 必须有明文且无 `encrypted_content`，后者必须有 `encrypted_content` 且不得泄露消息明文。
 - `encryption/key-backup` 的 A3 真实 OIDC 第二浏览器恢复已提升为 `@fully-implemented`，默认 smoke 同时要求该 scenario 与 canonical Realm scenario 出现在 JUnit 中，避免“测试存在但默认未选择”的假覆盖。
@@ -18,7 +18,7 @@
 
 - 12 篇流程/模型文档共 60 个 Mermaid block 均成对闭合，图类型可识别；图中引用的 `/_arkret/...` endpoint 和 `ak.*` operation/event identifier 在 current spec 的 schema/registry/OpenAPI 中没有发现未登记项。
 - 修正 `registration-pcr-genesis.md` 与 `device-pairing-and-recovery.md`：`InitialSessionGrantRequest` 已被 `InitialSessionGrantIntent` 取代，且 Standard human intent 不允许携带 `requested_scope`。
-- 修正普通 Realm、Invite/history、Direct Conversation 与 Personal Agent 流程的状态头：这些流程依赖的 `since_join` current baseline 或默认 availability holder-role 派生仍有已登记规范 blocker，不能标成 protocol closed。
+- 修正普通 Realm、Invite/history、Direct Conversation 与 Agent 流程的状态头：这些流程依赖的 `since_join` current baseline 或默认 availability holder-role 派生仍有已登记规范 blocker，不能标成 protocol closed。
 - 修正 route 两篇流程的实现边界：owner plan/inspect/cancel 和 Realm audience snapshot/reconcile 已落地；outbound publish、ACK barrier、cutover 和主动 mirror fetch 仍缺。
 - 删除已不存在的 `history-joined-enforcement.spec.ts` 引用，改指向现存 Playwright/Rust 分层证据；删除已经完成迁移的“旧 MLS creator payload 字段”状态说明。
 
@@ -35,7 +35,7 @@
 | `realm-event-server-fanout.md` | `joint/joint-inkson-smoke.spec.ts` 覆盖单服务 author/sync | `federation/cross-server.spec.ts`、`invite_service_fanout_live.rs`、`fanout_route_miss_live.rs`；`dual-soland` lane | **双服务 lane 覆盖**，不进入标准 joint smoke；route miss/repair 与跨服务 fanout 需专用双 Soland 拓扑。 |
 | `message-authoring-seal-sync.md` | `joint/joint-inkson-smoke.spec.ts`、`joint/multi-profile-same-server.spec.ts` | `sync/offline-conflict.spec.ts`、`offline-queue-replay.spec.ts`、`messaging/*`、`account_subscribe_long_poll.rs` | **主链覆盖，边界分层**：author/seal/read/sync 有 live；offline、stream/backfill、冲突修复由 full/Rust 覆盖。 |
 | `contact-direct-conversation-lifecycle.md` | `identity/direct-conversation-founding.spec.ts` | `federation/contact-graph-federation.spec.ts`、`governance/personal-blocklist.spec.ts`、`direct_conversation_flow.rs` | **founding 覆盖、repair 未闭环**：跨服务 contact/DC 与 block 有分层证据；successor Seal 合同已闭合，真实 Commit/Welcome availability 与 lost-state repair/rejoin live 证据仍缺。 |
-| `personal-agent-sidecar-strand-relay.md` | `joint/circle-sidecar-boundary.spec.ts`、`contact-agent-sidebar.spec.ts`；`agent-savfox-split-live.spec.ts` 仅在 Savfox 可用时执行 | Agent/Sidecar conformance、`agent_encrypted_realm_member_e2e.rs` | **部分且条件化**：对象边界进 smoke；successor Seal 合同已闭合，native Sidecar/Agent 生产入口、完整 availability/relay/恢复没有无条件闭环。 |
+| `agent-sidecar-strand-relay.md` | `joint/circle-sidecar-boundary.spec.ts`、`contact-agent-sidebar.spec.ts`；`agent-savfox-split-live.spec.ts` 仅在 Savfox 可用时执行 | Agent/Sidecar conformance、`agent_encrypted_realm_member_e2e.rs` | **部分且条件化**：对象边界进 smoke；successor Seal 合同已闭合，native Sidecar/Agent 生产入口、完整 availability/relay/恢复没有无条件闭环。 |
 | `device-pairing-and-recovery.md` | `identity/multi-device.spec.ts` 两条 fresh-browser entry、`identity/device-key-lifecycle.spec.ts`、`encryption/key-backup.spec.ts` A3 | `identity/recovery.spec.ts`、`recovery_completion_grant.rs`、`recovery_transaction_faults.rs` | **两条设备进入路径均有 joint 场景**：第二浏览器真实 OIDC 登录后必须停在未授权界面；一条由首设备核对 code 并经 canonical pairing gate 批准，另一条直接输入 24 词完成 recovery session、re-anchor SecurityTransaction 与 Standard grant；re-anchor 后旧 generation grant 的 fresh-introspection probe 必须 401/403。A3 另验证配对后解密历史 MLS；旧 Event signer、KeyPackage/key-share 与 backup 全收口仍待闭合。 |
 | `contact-lineage-model.md` | `identity/contact-graph.spec.ts` 的 scope lifecycle、`identity/direct-conversation-founding.spec.ts`、`joint/contact-agent-sidebar.spec.ts` | `federation/contact-graph-federation.spec.ts`、`direct_conversation_flow.rs` | **单服务核心 lineage 已进 smoke**：空 scope 保持 accepted、fresh successor 可恢复、旧 cursor 409、tombstone 后不再暴露 successor；跨域 continuity checkpoint/repair 与 glare 仍是分层证据。 |
 
@@ -93,4 +93,4 @@
 2. Soland G3–G7 生产编排落地后，增加双 Station `plan → publish → ACK → cutover → old endpoint down → mirror repair` 的 live 场景。
 3. 增加无测试后门的两账号 MLS Invite 场景，覆盖 Commit/Welcome finality、两种 history policy 与进程重启。
 4. 在现有旧 generation grant 失败断言上继续补旧 Event、KeyPackage 和 key-share 重放，并补撤销后的 MLS/backup 安全收口。
-5. native Agent/Sidecar 入口可达后，把当前条件化/分层证据升级为无条件 joint lane。
+5. Agent/Sidecar 入口可达后，把当前条件化/分层证据升级为无条件 joint lane。
