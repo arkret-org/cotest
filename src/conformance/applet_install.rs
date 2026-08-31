@@ -456,9 +456,10 @@ pub fn run_applet_registration_epoch_kat_suite() -> Result<()> {
     use arkret_models_integration::applet::AppletRegistrationEpochTranscript;
 
     let fixture = super::load_fixture_value(REGISTRATION_EPOCH_FIXTURE)?;
-    let embedded =
-        arkret_schema::embedded_json_artifact(&format!("fixtures/{REGISTRATION_EPOCH_FIXTURE}"))
-            .context("embedded Applet registration-epoch fixture")?;
+    let embedded = arkret_schema_conformance::spec_json_artifact(&format!(
+        "fixtures/{REGISTRATION_EPOCH_FIXTURE}"
+    ))
+    .context("embedded Applet registration-epoch fixture")?;
     if fixture != embedded {
         bail!("filesystem and SDK-embedded registration-epoch fixtures drifted");
     }

@@ -40,6 +40,7 @@ arkret-models-integration = { path = "../arkret-rust-sdk/crates/models-integrati
 arkret-policy = { path = "../arkret-rust-sdk/crates/policy" }
 arkret-push-policy = { path = "../arkret-rust-sdk/crates/push-policy" }
 arkret-schema = { path = "../arkret-rust-sdk/crates/schema", default-features = false }
+arkret-schema-conformance = { path = "../arkret-rust-sdk/crates/schema-conformance", default-features = false }
 arkret-signatures = { path = "../arkret-rust-sdk/crates/signatures", default-features = false, features = ["collaboration", "keypackages", "signer", "webvh"] }
 arkret-state = { path = "../arkret-rust-sdk/crates/state" }
 arkret-wire = { path = "../arkret-rust-sdk/crates/wire" }
@@ -140,7 +141,8 @@ arkret-models-identity = { workspace = true }
 arkret-models-integration = { workspace = true }
 arkret-policy = { workspace = true }
 arkret-push-policy.workspace = true
-arkret-schema = { workspace = true, features = ["embedded-artifacts"] }
+arkret-schema = { workspace = true }
+arkret-schema-conformance = { workspace = true }
 arkret-signatures = { workspace = true }
 arkret-state = { workspace = true }
 arkret-wire = { workspace = true, features = ["test-support"] }

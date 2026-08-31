@@ -16,9 +16,10 @@ pub fn run_authorization_lease_issuance_joint_gate() -> Result<()> {
             "independent authorization lease runner crossed dependency fence via {forbidden}"
         );
     }
-    let fixture =
-        arkret_schema::embedded_json_artifact("fixtures/authorization-lease-issuance-fixture.json")
-            .context("load embedded authorization lease issuance fixture")?;
+    let fixture = arkret_schema_conformance::spec_json_artifact(
+        "fixtures/authorization-lease-issuance-fixture.json",
+    )
+    .context("load embedded authorization lease issuance fixture")?;
     let sdk = arkret_wire::run_authorization_lease_issuance_fixture(&fixture)
         .context("SDK authorization lease runner failed")?;
     let reference_fixture: authorization_lease_issuance_reference::AuthorizationLeaseIssuanceFixture =

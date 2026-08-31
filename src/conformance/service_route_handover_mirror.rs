@@ -935,7 +935,7 @@ fn validate_semantics(fixture: &Fixture) -> Result<()> {
 }
 
 pub fn run_service_route_handover_mirror_fixture_suite() -> Result<()> {
-    let value = arkret_schema::embedded_json_artifact(FIXTURE_PATH)
+    let value = arkret_schema_conformance::spec_json_artifact(FIXTURE_PATH)
         .context("load embedded service-route handover fixture")?;
     let fixture: Fixture =
         serde_json::from_value(value).context("decode embedded service-route handover fixture")?;

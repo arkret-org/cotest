@@ -37,7 +37,7 @@ fn mls_fixture_still_covers_member_join_and_aad_pinning() -> Result<()> {
 
 #[test]
 fn keypackage_write_transcripts_match_the_embedded_spec_fixture() -> Result<()> {
-    let fixture = arkret_schema::embedded_json_artifact(KEYPACKAGE_TRANSCRIPT_FIXTURE)?;
+    let fixture = arkret_schema_conformance::spec_json_artifact(KEYPACKAGE_TRANSCRIPT_FIXTURE)?;
     let test_key = fixture
         .get("test_key")
         .context("KeyPackage transcript fixture missing test_key")?;

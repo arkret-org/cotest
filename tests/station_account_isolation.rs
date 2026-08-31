@@ -448,7 +448,8 @@ fn verify_admission(event: &Event, station: &str) -> Result<()> {
 }
 
 fn fixture_contract() -> Result<()> {
-    let fixture = arkret_schema::embedded_json_artifact("fixtures/station-admission-fixture.json")?;
+    let fixture =
+        arkret_schema_conformance::spec_json_artifact("fixtures/station-admission-fixture.json")?;
     ensure!(fixture["runner"]["entrypoint"] == "ak.suite.identity.station_admission.v1");
     ensure!(
         fixture["semantic_cases"]

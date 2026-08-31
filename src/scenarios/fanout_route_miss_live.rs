@@ -553,7 +553,7 @@ fn member_payload(
         let payload =
             MembershipPayload::join(realm_id.clone(), member, "fanout route-miss fixture")
                 .to_value()?;
-        arkret_schema::event_payload_validator_catalog()?
+        arkret_schema_conformance::event_payload_validator_catalog()?
             .validate_payload(EventKind::MemberState.as_str(), &payload)
             .context("fanout membership payload must satisfy the registered schema")?;
         Ok(payload)

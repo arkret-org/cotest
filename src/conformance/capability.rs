@@ -1542,7 +1542,7 @@ fn evaluate_authority_audit_fixture(fixture: &CapabilityCase) -> Result<()> {
 }
 
 fn evaluate_derived_authority_fixture(fixture: &CapabilityCase) -> Result<()> {
-    let descriptor = arkret_schema::embedded_capability_action("ak.capability.derived")?
+    let descriptor = arkret_schema::capability_action("ak.capability.derived")
         .ok_or_else(|| anyhow!("derived capability action descriptor missing"))?;
     let active = fixture.get("source_refs_active").and_then(Value::as_bool) == Some(true)
         && fixture

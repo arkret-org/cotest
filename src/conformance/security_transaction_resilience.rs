@@ -19,7 +19,7 @@ pub fn run_security_transaction_resilience_joint_gate() -> Result<()> {
             "independent resilience runner crossed dependency fence via {forbidden}"
         );
     }
-    let fixture = arkret_schema::embedded_json_artifact(
+    let fixture = arkret_schema_conformance::spec_json_artifact(
         "fixtures/security-transaction-resilience-fixture.json",
     )
     .context("load embedded security transaction resilience fixture")?;

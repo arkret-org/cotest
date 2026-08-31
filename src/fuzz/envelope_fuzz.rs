@@ -16,7 +16,7 @@ use std::panic;
 use std::sync::OnceLock;
 
 use arbitrary::{Arbitrary, Unstructured};
-use arkret_schema::{self as schema, ProtocolSchemaRegistry};
+use arkret_schema::ProtocolSchemaRegistry;
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
@@ -29,7 +29,7 @@ use super::panic_guard::catch;
 fn registry() -> &'static ProtocolSchemaRegistry {
     static REGISTRY: OnceLock<ProtocolSchemaRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        schema::schema_registry_from_default_spec_artifacts()
+        arkret_schema_conformance::schema_registry_from_default_spec_artifacts()
             .ok()
             .flatten()
             .unwrap_or_default()

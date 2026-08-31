@@ -31,8 +31,8 @@ use arkret_policy::{
     NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
     RealmOrganizationVerificationResult, verify_realm_organization_statement,
 };
-use arkret_schema::{
-    EventPayloadValidatorCatalog, event_payload_validator_catalog_from_embedded_spec_artifacts,
+use arkret_schema_conformance::{
+    EventPayloadValidatorCatalog, event_payload_validator_catalog_from_configured_spec_artifacts,
 };
 use arkret_wire::{DidCoreId, ObjectRef, RealmId};
 use chrono::{DateTime, Utc};
@@ -49,7 +49,7 @@ fn load_fixture(name: &str) -> Result<Value> {
 }
 
 fn strong_catalog() -> EventPayloadValidatorCatalog {
-    let catalog = event_payload_validator_catalog_from_embedded_spec_artifacts()
+    let catalog = event_payload_validator_catalog_from_configured_spec_artifacts()
         .expect("embedded spec artifacts must build the strong payload validator catalog");
     // Guard against silently falling back to the hand-written shapes: the
     // regression value of these tests depends on the strong schema dispatch.

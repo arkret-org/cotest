@@ -211,7 +211,7 @@ pub fn run_schema_definition_validator_kat() -> Result<()> {
         );
     }
     let event_kind = arkret_wire::EventKind::SchemaDefine;
-    let catalog = arkret_schema::event_payload_validator_catalog()?;
+    let catalog = arkret_schema_conformance::event_payload_validator_catalog()?;
     for case in kat.cases {
         let result = catalog
             .validate_payload(event_kind.as_str(), &case.payload)

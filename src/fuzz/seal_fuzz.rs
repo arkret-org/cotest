@@ -9,14 +9,13 @@
 //! `Result::Err` is acceptable.
 
 use arbitrary::{Arbitrary, Unstructured};
-use arkret_schema as schema;
 use arkret_wire::SchemaId;
 use serde_json::{Value, json};
 
 use super::panic_guard::catch;
 
 fn registry() -> arkret_schema::ProtocolSchemaRegistry {
-    schema::schema_registry_from_default_spec_artifacts()
+    arkret_schema_conformance::schema_registry_from_default_spec_artifacts()
         .ok()
         .flatten()
         .unwrap_or_default()
