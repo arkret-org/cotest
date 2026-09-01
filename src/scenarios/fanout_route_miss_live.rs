@@ -516,6 +516,7 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
     let node_envs = vec![
         vec![
             ("DATABASE_URL".to_owned(), source_database_url),
+            ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
             (
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
@@ -527,6 +528,7 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
         ],
         vec![
             ("DATABASE_URL".to_owned(), target_database_url),
+            ("SOLAND_FEDERATION_OUTBOUND".to_owned(), "1".to_owned()),
             (
                 "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
                 HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
@@ -637,6 +639,10 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
     // The only acquisition is Bob@Station-B -> self proxy -> peer authority
     // Station-A. Bob has never queried or cached Alice's signer beforehand.
     let outcome = bob.sdk().current_signer_evidence_query(&request).await?;
+    ensure!(
+        outcome.response.evidences.len() == 1,
+        "cold ordinary sender did not resolve exactly one evidence item"
+    );
     ensure!(outcome.response.issuer_id == *group.server(0).service_id());
     ensure!(outcome.response.verifier_id == *group.server(1).service_id());
     let CurrentSignerEvidenceItem::AccountDevice {
@@ -673,20 +679,37 @@ pub async fn run_current_signer_evidence_live() -> Result<()> {
     ensure!(displayed.contains(group.server(0).service_id().as_str()));
 
     let mut wrong_station = request.clone();
-    wrong_station.recipient_account_id.station_id = group.server(0).service_id().clone();
-    let wrong_response = bob
-        .post("/_arkret/self/current-signer-evidence/query")
-        .json(&wrong_station)
-        .send()
+    wrong_station.request_id = RequestId::new("ak:request:019b0000-0000-7000-8000-000000000102")?;
+    wrong_station.challenge = NonEmptyString::new(format!("ak.challenge:{}", "B".repeat(32)))
+        .map_err(anyhow::Error::msg)?;
+    let CurrentSignerEvidenceSelector::AccountDevice { account_id, .. } =
+        &mut wrong_station.queries[0]
+    else {
+        unreachable!()
+    };
+    account_id.station_id = group.server(1).service_id().clone();
+    let wrong_outcome = bob
+        .sdk()
+        .current_signer_evidence_query(&wrong_station)
         .await?;
     ensure!(
-        matches!(
-            wrong_response.status(),
-            StatusCode::NOT_FOUND | StatusCode::FORBIDDEN
-        ),
-        "wrong recipient Station was not rejected: {}",
-        wrong_response.status()
+        wrong_outcome.response.evidences.is_empty(),
+        "wrong authority Station did not return opaque empty evidence"
     );
+    let wrong_issuer_key = ed25519_dalek::VerifyingKey::from_bytes(&<[u8; 32]>::try_from(
+        arkret_canonical::base64url_decode(
+            &group
+                .server(1)
+                .service_notary_signer()
+                .frozen_public_key_b64u,
+        )?
+        .as_slice(),
+    )?)?;
+    arkret_signatures::current_signer_evidence::verify_current_signer_evidence_outcome(
+        &wrong_outcome,
+        &wrong_issuer_key,
+        Utc::now(),
+    )?;
 
     ensure!(
         outcome
@@ -737,7 +760,7 @@ fn cold_signal_envelope(
             aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519".to_owned(),
             epoch: 1,
             nonce: "AAAAAAAAAAAAAAAA".to_owned(),
-            ciphertext: "Q29sZFJlY2lwaWVudA".to_owned(),
+            ciphertext: "Q29sZFJlY2lwaWVudEV2aWRlbmNl".to_owned(),
             aad_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
         },
         proof: SignalProof {

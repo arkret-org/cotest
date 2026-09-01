@@ -23,12 +23,12 @@ fn mimi_report_requires_closed_exact_actor_authority() {
             },
             "membership_event_id": "ak:event:AZL87nwhLc8pnnvIhrfEQSfNkZvdPzaV3rFGVoJCQWW6",
             "room_binding_event_id": "ak:event:Adoyyx1AqvJH02hYxuUtpzuC-zpV8GxwFQ8XInZLbu3s",
-            "expires_at": "2026-09-01T00:05:00Z",
+            "expires_at": "2026-09-01T00:05:00.000Z",
             "proof": {
                 "kind": "detached_jws",
                 "verification_method": "did:web:alice.example#device-1",
                 "payload_digest": format!("sha256:{}", "0".repeat(64)),
-                "created_at": "2026-09-01T00:00:00Z",
+                "created_at": "2026-09-01T00:00:00.000Z",
                 "domain": "ak:trust_domain:example.com",
                 "audience": "ak:did_core:web:provider.example",
                 "jws": "e30..c2ln"
@@ -51,7 +51,7 @@ fn mimi_report_requires_closed_exact_actor_authority() {
                     }
                 },
                 "actor_seq": 1,
-                "created_at": "2026-09-01T00:00:00Z",
+                "created_at": "2026-09-01T00:00:00.000Z",
                 "prev_refs": [],
                 "refs": [],
                 "requirements": {},
@@ -90,13 +90,13 @@ fn directory_carrier_is_bounded_and_exclusive_on_peer_resolve() {
         "source_refs": [
             "ak:event:AZL87nwhLc8pnnvIhrfEQSfNkZvdPzaV3rFGVoJCQWW6"
         ],
-        "as_of": "2026-09-01T00:00:00Z",
-        "expires_at": "2026-09-01T00:05:00Z",
+        "as_of": "2026-09-01T00:00:00.000Z",
+        "expires_at": "2026-09-01T00:05:00.000Z",
         "proof": {
             "kind": "detached_jws",
             "verification_method": "did:web:station.example#notary-key",
             "payload_digest": format!("sha256:{}", "0".repeat(64)),
-            "created_at": "2026-09-01T00:00:00Z",
+            "created_at": "2026-09-01T00:00:00.000Z",
             "domain": "ak:trust_domain:example.com",
             "audience": "ak:did_core:web:directory.example",
             "jws": "e30..c2ln"

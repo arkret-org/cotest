@@ -495,6 +495,7 @@ pub(crate) struct NamedCase {
     pub(crate) expected: Option<Value>,
     pub(crate) request_contract: Option<Value>,
     pub(crate) cases: Option<Vec<Value>>,
+    pub(crate) mutations: Option<Vec<String>>,
 }
 
 // ── Shared utility functions ────────────────────────────────────────────────

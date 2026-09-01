@@ -76,13 +76,14 @@ fn claim_for(
     issuer: &str,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
-    Ok(crate::fixture_verified_handle_claim(
+    Ok(crate::fixture_verified_handle_claim_at(
         handle,
         subj.clone(),
         DidCoreId::new(issuer)?,
         audience.map(str::to_owned),
         at(2026, 5, 1),
         Some(at(2026, 7, 1)),
+        now_anchor(),
     )?)
 }
 

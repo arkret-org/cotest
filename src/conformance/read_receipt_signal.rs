@@ -147,7 +147,7 @@ pub fn run_genesis_join_policy_bundle_vector() -> Result<()> {
             "gate_id": "open",
             "kind": "principal_admission",
             "auto_resolve": true,
-            "allowed_principal_dids": ["did:web:alice.example"]
+            "allowed_principal_ids": ["ak:did_core:web:alice.example"]
         }]
     });
     let mut bundle = RealmPolicyBundlePayload::new(1);

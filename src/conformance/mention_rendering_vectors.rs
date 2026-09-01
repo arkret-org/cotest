@@ -89,13 +89,14 @@ fn verified_claim(
     subject: &DidCoreId,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
-    Ok(crate::fixture_verified_handle_claim(
+    Ok(crate::fixture_verified_handle_claim_at(
         handle,
         subject_account(subject)?,
         DidCoreId::new(ISSUER)?,
         audience.map(str::to_owned),
         at(2026, 5, 1),
         Some(at(2026, 7, 1)),
+        now_anchor(),
     )?)
 }
 

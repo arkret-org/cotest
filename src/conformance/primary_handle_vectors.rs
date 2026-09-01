@@ -95,13 +95,14 @@ fn claim(
     expires: DateTime<Utc>,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
-    Ok(crate::fixture_verified_handle_claim(
+    Ok(crate::fixture_verified_handle_claim_at(
         handle,
         subject()?,
         DidCoreId::new(issuer)?,
         audience.map(str::to_owned),
         created,
         Some(expires),
+        now_anchor(),
     )?)
 }
 

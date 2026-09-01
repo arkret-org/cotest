@@ -72,6 +72,32 @@ pub fn fixture_verified_handle_claim(
     issued_at: chrono::DateTime<chrono::Utc>,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
 ) -> arkret_wire::Result<arkret_models_identity::HandleClaim> {
+    fixture_verified_handle_claim_at(
+        handle,
+        subject_account_id,
+        issuer_id,
+        audience,
+        issued_at,
+        expires_at,
+        issued_at,
+    )
+}
+
+/// Build a verified HandleClaim fixture whose signed status view is fresh at
+/// `status_as_of`, independently of the immutable core's issuance timestamp.
+///
+/// Selection and directory vectors intentionally replay old claim cores under
+/// a current status attestation. Keeping those clocks separate prevents a
+/// weeks-old core from being mistaken for a fresh status view.
+pub fn fixture_verified_handle_claim_at(
+    handle: &str,
+    subject_account_id: arkret_wire::AccountId,
+    issuer_id: arkret_wire::DidCoreId,
+    audience: Option<String>,
+    issued_at: chrono::DateTime<chrono::Utc>,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    status_as_of: chrono::DateTime<chrono::Utc>,
+) -> arkret_wire::Result<arkret_models_identity::HandleClaim> {
     use arkret_models_identity::{
         Handle, HandleClaim, HandleClaimCore, HandleClaimStatus, HandleClaimVariant,
         HandleVisibility,
@@ -87,11 +113,11 @@ pub fn fixture_verified_handle_claim(
     ))
     .map_err(|error| arkret_wire::WireError::Protocol(error.to_owned()))?;
     let placeholder = Hash::new(format!("sha256:{}", "0".repeat(64)))?;
-    let proof = |purpose, payload_digest| PayloadProof {
+    let proof = |purpose, payload_digest, created_at| PayloadProof {
         kind: "detached_jws".to_owned(),
         verification_method: verification_method.clone(),
         payload_digest,
-        created_at: issued_at,
+        created_at,
         domain: Some(arkret_models_identity::HANDLE_CLAIM_PROOF_DOMAIN.to_owned()),
         audience: None,
         proof_purpose: Some(purpose),
@@ -114,15 +140,23 @@ pub fn fixture_verified_handle_claim(
         expires_at,
         source_refs: Vec::new(),
         proofs: [
-            proof(PayloadProofPurpose::IssuerAttestation, placeholder.clone()),
-            proof(PayloadProofPurpose::HolderAcceptance, placeholder.clone()),
+            proof(
+                PayloadProofPurpose::IssuerAttestation,
+                placeholder.clone(),
+                issued_at,
+            ),
+            proof(
+                PayloadProofPurpose::HolderAcceptance,
+                placeholder.clone(),
+                issued_at,
+            ),
         ],
     };
     let claim_digest = core.claim_digest()?;
     core.proofs[0].payload_digest = claim_digest.clone();
     core.proofs[1].payload_digest = claim_digest.clone();
 
-    let maximum_fresh_until = issued_at + chrono::Duration::seconds(300);
+    let maximum_fresh_until = status_as_of + chrono::Duration::seconds(300);
     let fresh_until = expires_at
         .map(|expires| expires.min(maximum_fresh_until))
         .unwrap_or(maximum_fresh_until);
@@ -131,13 +165,17 @@ pub fn fixture_verified_handle_claim(
         claim: core,
         claim_digest,
         status: HandleClaimStatus::Verified,
-        as_of: issued_at,
+        as_of: status_as_of,
         verifier_id: issuer_id,
-        verified_at: Some(issued_at),
+        verified_at: Some(status_as_of),
         revocation: None,
         revocation_digest: None,
         fresh_until,
-        status_proof: proof(PayloadProofPurpose::StatusAttestation, placeholder),
+        status_proof: proof(
+            PayloadProofPurpose::StatusAttestation,
+            placeholder,
+            status_as_of,
+        ),
     };
     claim.status_proof.domain = Some(arkret_models_identity::HANDLE_CLAIM_STATUS_DOMAIN.to_owned());
     claim.status_proof.payload_digest = claim.status_digest()?;

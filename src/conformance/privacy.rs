@@ -406,6 +406,9 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "first_ingest_source_ref_access_is_current_exact_and_bounded" => {
+                validate_first_ingest_source_ref_access_bounds(&case)?;
+            }
             "plaintext_visible_service_required_for_private_body_processing" => {
                 let expected = case
                     .expected
@@ -898,6 +901,131 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn validate_first_ingest_source_ref_access_bounds(case: &super::NamedCase) -> Result<()> {
+    if case.vector_id.as_deref() != Some("ak.vector.directory.announce_source_ref_access_bounds.v1")
+        || case.operation_id.as_deref() != Some("ak.find.directory.command.announce.v1")
+    {
+        bail!("{} has an unexpected vector or operation id", case.name);
+    }
+    let input = case
+        .input
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} is missing input", case.name))?;
+    let source_refs = input
+        .get("source_refs")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{} is missing source_refs", case.name))?;
+    let selector = input
+        .get("first_ingest_selector")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{} is missing first_ingest_selector", case.name))?;
+    let discovery_event_id = input
+        .get("discovery_event_id")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("{} is missing discovery_event_id", case.name))?;
+    let selector_is_exact_carrier_subset = !selector.is_empty()
+        && selector
+            .iter()
+            .all(|selected| source_refs.contains(selected))
+        && selector
+            .iter()
+            .any(|selected| selected.as_str() == Some(discovery_event_id));
+
+    let actor_keys = input
+        .get("same_principal_distinct_actor_keys")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("{} is missing actor-key fixtures", case.name))?;
+    let canonical_actor_keys = actor_keys
+        .iter()
+        .map(arkret_canonical::canonical_json_bytes)
+        .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+    let principals = actor_keys
+        .iter()
+        .filter_map(|actor| {
+            actor
+                .pointer("/account_id/principal_id")
+                .and_then(Value::as_str)
+        })
+        .collect::<BTreeSet<_>>();
+
+    let required_mutations = [
+        "wrong_authenticated_source",
+        "wrong_authenticated_directory",
+        "empty_source_refs",
+        "selector_outside_carrier",
+        "discovery_event_mismatch",
+        "carrier_reused_from_another_announce",
+        "expired_carrier",
+        "discovery_withdrawn",
+        "discovery_superseded",
+    ];
+    let mutations = case
+        .mutations
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} is missing mutations", case.name))?;
+    let expected = case
+        .expected
+        .as_ref()
+        .ok_or_else(|| anyhow!("{} is missing expected", case.name))?;
+    let valid = input
+        .get("authenticated_source_id")
+        .and_then(Value::as_str)
+        .is_some_and(|value| value.starts_with("ak:did_core:"))
+        && input
+            .get("authenticated_directory_id")
+            .and_then(Value::as_str)
+            .is_some_and(|value| value.starts_with("ak:did_core:"))
+        && selector_is_exact_carrier_subset
+        && canonical_actor_keys.len() == actor_keys.len()
+        && actor_keys.len() >= 2
+        && principals.len() == 1
+        && required_mutations
+            .iter()
+            .all(|required| mutations.iter().any(|value| value == required))
+        && expected.get("baseline_result").and_then(Value::as_str) == Some("accept")
+        && expected
+            .get("baseline_first_ingest_peer_exact_resolve_calls")
+            .and_then(Value::as_u64)
+            == Some(1)
+        && expected
+            .get("baseline_resolved_selector_is_carrier_subset")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && expected.get("mutation_result").and_then(Value::as_str) == Some("reject")
+        && expected
+            .get("mutation_index_writes")
+            .and_then(Value::as_u64)
+            == Some(0)
+        && expected
+            .get("mutation_peer_history_scan_calls")
+            .and_then(Value::as_u64)
+            == Some(0)
+        && expected
+            .get("actor_keys_remain_distinct")
+            .and_then(Value::as_bool)
+            == Some(true);
+    if !valid {
+        bail!(
+            "{} no longer proves exact, current, bounded first-ingest source-ref access",
+            case.name
+        );
+    }
+
+    record_vector_event(
+        "privacy.first_ingest_source_ref_access_is_current_exact_and_bounded",
+        input,
+        expected,
+        &json!({
+            "exact_resolve_calls": 1,
+            "selector_is_carrier_subset": selector_is_exact_carrier_subset,
+            "mutation_index_writes": 0,
+            "mutation_peer_history_scan_calls": 0,
+            "actor_keys_remain_distinct": canonical_actor_keys.len() == actor_keys.len(),
+        }),
+    );
     Ok(())
 }
 

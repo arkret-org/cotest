@@ -27,9 +27,9 @@ use arkret_signatures::agent_evidence::{
 };
 use arkret_signatures::{PublicKeyMaterial, sign_ed25519_detached_jws};
 use arkret_wire::{
-    Base64UrlString, Did, DidCoreId, DidUrl, DomainSeparationId, EventId, EventKind, Hash, Hlc,
-    NonEmptyString, NotarySig, ProtocolOperationId, RealmId, SchemaId, ScopeRef, Seal, SealId,
-    SealSignature, SignerEvidenceRef, project_did_to_core_id,
+    AccountId, ActorId, Base64UrlString, Did, DidCoreId, DidUrl, DomainSeparationId, EventId,
+    EventKind, Hash, Hlc, NonEmptyString, NotarySig, ProtocolOperationId, RealmId, SchemaId,
+    ScopeRef, Seal, SealId, SealSignature, SignerEvidenceRef, project_did_to_core_id,
 };
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use ed25519_dalek::{Signer, SigningKey};
@@ -131,6 +131,7 @@ struct ExecutableEvidence {
     current: AgentSignerEvidence,
     historical: AgentSignerEvidence,
     signer_id: DidCoreId,
+    signer_actor_id: ActorId,
     agent_key_id: NonEmptyString,
     controller_id: DidCoreId,
     verification_method: DidUrl,
@@ -831,6 +832,7 @@ fn verified_state<'a>(
         admission(evidence),
         &AgentEvidenceStateVerificationContext {
             signer_id: &fixture.signer_id,
+            signer_actor_id: &fixture.signer_actor_id,
             agent_key_id: &fixture.agent_key_id,
             controller_id: &fixture.controller_id,
             agent_key_authorize_event_id: &fixture.authorize_event_id,
@@ -910,6 +912,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let authority_id = project_did_to_core_id(&authority_service_did)?;
     let account_authority_id = project_did_to_core_id(&account_authority_service_did)?;
     let receiver_id = project_did_to_core_id(&receiver_service_did)?;
+    let signer_actor_id = ActorId::account(AccountId::new(signer_id.clone(), authority_id.clone()));
     let verification_method =
         DidUrl::new(format!("{signer_did}#runtime-1")).map_err(anyhow::Error::msg)?;
     let controller_verification_method =
@@ -965,7 +968,10 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         &serde_json::to_value(&key_cell_value)?,
         arkret_canonical::DigestSuite::Sha256,
     )?;
-    let lifecycle_cell_ref = nes(&arkret_wire::composite_subject(&[signer_id.as_str()])?)?;
+    let lifecycle_actor_key = signer_actor_id.canonical_key()?;
+    let lifecycle_cell_ref = nes(&arkret_wire::composite_subject(&[
+        lifecycle_actor_key.as_str()
+    ])?)?;
     let lifecycle_cell_ref = nes(&format!(
         "ak:cell:{AGENT_STATUS_COMPONENT}:{}",
         lifecycle_cell_ref.as_str()
@@ -999,7 +1005,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         ScopeRef::Realm {
             realm_id: realm_id.clone(),
         },
-        controller_id.clone(),
+        signer_id.clone(),
         authority_id.clone(),
         1,
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
@@ -1204,6 +1210,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         current,
         historical,
         signer_id,
+        signer_actor_id,
         agent_key_id,
         controller_id,
         verification_method,
