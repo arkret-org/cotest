@@ -39,10 +39,19 @@ pub fn run_signal_sequence_high_water_suite() -> Result<()> {
 }
 
 fn validate_allocator_cases(allocator: &Value) -> Result<()> {
-    if allocator["domain"]
+    if allocator["ordinary_domain"]
         != serde_json::json!(["sender_actor_id", "sender_device_id", "canonical_scope_ref"])
     {
         bail!("Signal allocator must bind the complete actor, device, and scope");
+    }
+    if allocator["agent_domain"]
+        != serde_json::json!([
+            "sender_actor_id",
+            "verified_agent_signing_public_key_digest",
+            "canonical_scope_ref"
+        ])
+    {
+        bail!("Agent Signal allocator must bind the complete actor, raw-key digest, and scope");
     }
     if allocator["value_type"].as_str() != Some("u64")
         || allocator["block_size"].as_u64() != Some(256)
@@ -83,6 +92,26 @@ fn validate_allocator_cases(allocator: &Value) -> Result<()> {
                     bail!("independent Signal scopes do not start from independent high-waters");
                 }
             }
+            Some("same_key_reauthorization_continues_sequence") => {
+                if case["same_public_key_digest"] != true
+                    || case["authorize_event_changed"] != true
+                    || case["after"].as_u64() != case["before"].as_u64().map(|value| value + 1)
+                    || case["reset_forbidden"] != true
+                {
+                    bail!("same-key Agent reauthorization reset or forked the sequence domain");
+                }
+            }
+            Some("accepted_runtime_replacement_starts_new_key_domain") => {
+                if case["same_actor"] != true
+                    || case["different_public_key_digest"] != true
+                    || case["old_key_authorization_current"] != false
+                    || case["new_key_authorization_current"] != true
+                    || case["new_domain_first"].as_u64() != Some(0)
+                    || case["old_runtime_rejected_before_high_water"] != true
+                {
+                    bail!("Agent runtime replacement did not require a new accepted key domain");
+                }
+            }
             other => bail!("unknown Signal allocator case {other:?}"),
         }
     }
@@ -98,7 +127,7 @@ mod tests {
         let fixture = load_fixture_value(FIXTURE).unwrap();
         validate_allocator_cases(&fixture["allocator"]).unwrap();
         let mut old = fixture["allocator"].clone();
-        old["domain"] = serde_json::json!(["sender_device_id", "canonical_scope_ref"]);
+        old["ordinary_domain"] = serde_json::json!(["sender_device_id", "canonical_scope_ref"]);
         assert!(validate_allocator_cases(&old).is_err());
     }
 }

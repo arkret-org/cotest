@@ -32,7 +32,9 @@ pub(super) fn envelope() -> Result<SignalEnvelope> {
             DidCoreId::new("ak:did_core:web:alice.example")?,
             DidCoreId::new("ak:did_core:web:station-a.example")?,
         )),
-        sender_device_id: DeviceId::new("ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb")?,
+        sender_device_id: Some(DeviceId::new(
+            "ak:device:01904100-0000-7000-8000-bbbbbbbbbbbb",
+        )?),
         seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
         signal_class: SignalClass::Session,
         sent_at,
@@ -97,7 +99,10 @@ fn device_authorization_gate(
         .is_some_and(|core_id| &core_id == signal.sender_actor_id.signing_principal_id());
     controller_matches
         && &signal.sender_actor_id == accepted_actor
-        && fragment == signal.sender_device_id.as_str()
+        && signal
+            .sender_device_id
+            .as_ref()
+            .is_some_and(|device_id| fragment == device_id.as_str())
         && current_active
         && directory_key_present
         && trust_anchor_present
@@ -380,8 +385,61 @@ pub fn run_signal_federation_fixture_suite() -> Result<()> {
             "signal_role_admission" | "signal_role_admission_mutations" => {
                 validate_role_case_contract(case)?;
             }
+            "signal_agent_sender_admission" => {
+                let mut agent = signal.clone();
+                agent.sender_device_id = None;
+                agent.proof.verification_method =
+                    crate::fixture_did_url("did:web:alice.example#agent-runtime");
+                crate::harness::attach_signal_proof(
+                    &mut agent,
+                    &SigningKey::from_bytes(&SIGNING_SEED),
+                );
+                agent.validate_structural()?;
+                if agent.sender_device_id.is_some()
+                    || verify_ed25519_signal_proof(&agent, &signing_public_key()).is_err()
+                    || case["expected"]["source_decision"] != "accept"
+                {
+                    bail!("valid Agent sender branch was not admitted as the device-less branch");
+                }
+            }
+            "signal_agent_sender_mutations" => validate_agent_mutation_contract(case)?,
             other => bail!("unknown Signal federation generator {other}"),
         }
+    }
+    Ok(())
+}
+
+fn validate_agent_mutation_contract(case: &Value) -> Result<()> {
+    let mutations = case
+        .pointer("/given_state/generator/mutations")
+        .or_else(|| case.pointer("/input/generator/mutations"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("Agent Signal mutation fixture is missing mutations"))?;
+    for required in [
+        "ordinary_account_without_sender_device_id",
+        "agent_with_sender_device_id",
+        "agent_with_controller_device_id",
+        "agent_key_revoked_or_superseded",
+        "agent_lifecycle_paused_or_deactivated",
+        "controller_membership_generation_ended",
+        "same_principal_other_station",
+        "stale_agent_leaf",
+        "leaf_authorization_ref_mismatch",
+        "concurrent_different_agent_keys",
+        "pairwise_actor_without_sender_device_id",
+    ] {
+        if !mutations
+            .iter()
+            .any(|value| value.as_str() == Some(required))
+        {
+            bail!("Agent Signal mutation fixture omitted {required}");
+        }
+    }
+    if case["expected"]["source_decision"] != "reject"
+        || case["expected"]["recipient_decision"] != "reject_before_display_or_high_water"
+        || case["expected"]["destination_does_not_resolve_remote_agent_authority"] != true
+    {
+        bail!("Agent Signal mutations do not preserve the three-role failure boundary");
     }
     Ok(())
 }

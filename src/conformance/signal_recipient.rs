@@ -8,11 +8,13 @@ use arkret::mls::{ArkretMlsGroup, ArkretMlsIdentity, ArkretMlsSigner, MlsVerifie
 use arkret::{AeadNonceReplayTracker, AuthorLeafCredential};
 use arkret_signatures::PublicKeyMaterial;
 use arkret_wire::{
-    AccountId, ActorId, Base64UrlString, DeviceId, DidCoreId, EncryptedPayloadScheme, EventId,
-    NonEmptyString, SignalEnvelope,
+    AccountId, ActorId, Base64UrlString, DeviceId, DidCoreId, DidUrl, EncryptedPayloadScheme,
+    EventId, NonEmptyString, SignalEnvelope,
 };
 use ed25519_dalek::SigningKey;
-use garth::signal::{SignalDecryptor, SignalReceiver, VerifiedSignalSenderKey};
+use garth::signal::{
+    SignalDecryptor, SignalReceiver, VerifiedSignalSenderAuthority, VerifiedSignalSenderKey,
+};
 
 use super::signal_federation::envelope;
 
@@ -33,15 +35,25 @@ impl SignalDecryptor for Recipient {
     ) -> garth::Result<Vec<u8>> {
         let mut guard = self.state.lock().unwrap();
         let (group, replay) = &mut *guard;
+        let authority = match sender.authority() {
+            VerifiedSignalSenderAuthority::AccountDevice {
+                device_authorize_event_id,
+                ..
+            } => arkret::mls::SignalSenderAuthority::AccountDevice {
+                public_key: sender.public_key(),
+                device_authorize_event_id,
+            },
+            VerifiedSignalSenderAuthority::Agent {
+                agent_key_authorize_event_id,
+                ..
+            } => arkret::mls::SignalSenderAuthority::Agent {
+                public_key: sender.public_key(),
+                verification_method: &signal.proof.verification_method,
+                agent_key_authorize_event_id,
+            },
+        };
         group
-            .open_signal_envelope(
-                signal,
-                CONTENT_SCHEME,
-                sender.public_key(),
-                sender.device_authorize_event_id(),
-                &self.winner,
-                replay,
-            )
+            .open_signal_envelope(signal, CONTENT_SCHEME, authority, &self.winner, replay)
             .map_err(|error| garth::Error::Protocol(error.to_string()))
     }
 }
@@ -59,7 +71,7 @@ impl Fixture {
         let authorization = crate::fixture_event_id("signal-alice-current-device-authorize");
         let alice = ArkretMlsIdentity::new_human_device(
             template.sender_actor_id.signing_principal_id().clone(),
-            template.sender_device_id.clone(),
+            template.sender_device_id.clone().unwrap(),
             ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&ALICE_SEED)),
         )
         .unwrap();
@@ -101,7 +113,13 @@ impl Fixture {
                     let AuthorLeafCredential::Basic { identity } = leaf.credential else {
                         panic!("expected BasicCredential")
                     };
-                    let is_alice = identity == template.sender_device_id.as_str().as_bytes();
+                    let is_alice = identity
+                        == template
+                            .sender_device_id
+                            .as_ref()
+                            .unwrap()
+                            .as_str()
+                            .as_bytes();
                     assert!(is_alice || identity == bob_device.as_str().as_bytes());
                     MlsVerifiedLeafBinding {
                         leaf_index: leaf.leaf_index,
@@ -173,7 +191,7 @@ impl Fixture {
                     .to_vec(),
             },
             signal.sender_actor_id.clone(),
-            signal.sender_device_id.clone(),
+            signal.sender_device_id.clone().unwrap(),
             signal.proof.verification_method.clone(),
             signal.sender_actor_id.as_account_id().unwrap().clone(),
             authorization,
@@ -273,7 +291,9 @@ fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
             .to_string();
         let reason = match mutation {
             "station" => "differs from the complete accepted MLS leaf actor",
-            "key" | "authorization" => "current device key or authorization differs",
+            "key" | "authorization" => {
+                "current endpoint authority differs from the accepted MLS leaf"
+            }
             "winner" => "not the accepted winning state",
             "missing_trust" => "lacks exact-authority verified state",
             "expired" => "already expired",
@@ -298,6 +318,128 @@ fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
             "{mutation}"
         );
     }
+}
+
+#[test]
+fn signal_recipient_accepts_a_real_agent_leaf_without_a_synthetic_device() {
+    let mut template = envelope().unwrap();
+    template.sender_device_id = None;
+    template.proof.verification_method =
+        DidUrl::new("did:web:alice.example#agent-runtime").unwrap();
+    let authorization = crate::fixture_event_id("signal-alice-current-agent-authorize");
+    let alice = ArkretMlsIdentity::new_agent(
+        template.sender_actor_id.signing_principal_id().clone(),
+        template.proof.verification_method.clone(),
+        authorization.clone(),
+        ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&ALICE_SEED)),
+    )
+    .unwrap();
+    let bob_device = DeviceId::new("ak:device:01904100-0000-7000-8000-cccccccccccc").unwrap();
+    let bob_actor = ActorId::account(AccountId::new(
+        DidCoreId::new("ak:did_core:web:bob.example").unwrap(),
+        DidCoreId::new("ak:did_core:web:station-b.example").unwrap(),
+    ));
+    let bob = ArkretMlsIdentity::new_human_device(
+        bob_actor.signing_principal_id().clone(),
+        bob_device.clone(),
+        ArkretMlsSigner::from_ed25519_signing_key(SigningKey::from_bytes(&BOB_SEED)),
+    )
+    .unwrap();
+    let alice_endpoint = alice.endpoint_identity();
+    let bob_endpoint = bob.endpoint_identity();
+    let package = bob.key_package_record().unwrap();
+    let mut sender = alice
+        .create_group(
+            template
+                .scope_ref
+                .canonical_effective_scope_key_bytes()
+                .unwrap(),
+        )
+        .unwrap();
+    sender
+        .install_local_creator_binding(template.sender_actor_id.clone(), None)
+        .unwrap();
+    let add = sender.add_member(&package).unwrap();
+    let mut recipient_group = ArkretMlsGroup::join_from_welcome(bob, &add.welcome).unwrap();
+    for group in [&mut sender, &mut recipient_group] {
+        let bindings = group
+            .active_author_leaves()
+            .into_iter()
+            .map(|leaf| {
+                let AuthorLeafCredential::Basic { identity } = leaf.credential else {
+                    panic!("expected BasicCredential")
+                };
+                let is_agent = identity
+                    == template
+                        .sender_actor_id
+                        .signing_principal_id()
+                        .as_str()
+                        .as_bytes();
+                MlsVerifiedLeafBinding {
+                    leaf_index: leaf.leaf_index,
+                    actor_id: if is_agent {
+                        template.sender_actor_id.clone()
+                    } else {
+                        bob_actor.clone()
+                    },
+                    endpoint: if is_agent {
+                        alice_endpoint.clone()
+                    } else {
+                        bob_endpoint.clone()
+                    },
+                    credential_ref: NonEmptyString::new(String::from_utf8(identity).unwrap())
+                        .unwrap(),
+                    signature_key: Base64UrlString::new(arkret_canonical::base64url_encode(
+                        &leaf.signature_key,
+                    ))
+                    .unwrap(),
+                    device_authorize_event_id: (!is_agent)
+                        .then(|| crate::fixture_event_id("signal-bob-agent-fixture-authorize")),
+                }
+            })
+            .collect();
+        group.install_verified_leaf_bindings(bindings).unwrap();
+    }
+    template.encrypted_payload.epoch = sender.epoch();
+    let plaintext = serde_json::to_vec(&serde_json::json!({
+        "kind": "ak.presence",
+        "payload_sequence": 0,
+        "actor_id": template.sender_actor_id,
+        "state": "online",
+        "ttl_ms": 30_000
+    }))
+    .unwrap();
+    let mut signal = template.clone();
+    signal.encrypted_payload = sender
+        .seal_signal_payload(&signal.aead_binding(), CONTENT_SCHEME, &plaintext)
+        .unwrap()
+        .encrypted_payload;
+    crate::harness::attach_signal_proof(&mut signal, &SigningKey::from_bytes(&ALICE_SEED));
+    let evidence = VerifiedSignalSenderKey::from_agent_evidence(
+        PublicKeyMaterial::Ed25519Raw {
+            bytes: SigningKey::from_bytes(&ALICE_SEED)
+                .verifying_key()
+                .to_bytes()
+                .to_vec(),
+        },
+        signal.sender_actor_id.clone(),
+        signal.proof.verification_method.clone(),
+        authorization,
+    )
+    .unwrap();
+    let resolver = |_: &SignalEnvelope| Some(evidence.clone());
+    let recipient = Recipient {
+        state: Mutex::new((recipient_group, AeadNonceReplayTracker::default())),
+        winner: signal.encrypted_payload.key_ref.group_state_ref.clone(),
+    };
+    let accepted = SignalReceiver::new()
+        .accept(&signal, &resolver, &recipient, signal.sent_at)
+        .unwrap();
+    assert_eq!(accepted.payload_sequence, 0);
+    assert!(matches!(
+        accepted.sender_endpoint,
+        arkret::SignalSequenceEndpoint::AgentKey { .. }
+    ));
 }
 
 /// Exercise the actual HTTP client's retry policy with a consumed request and

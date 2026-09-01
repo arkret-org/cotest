@@ -375,7 +375,7 @@ fn signed_call_signal_envelope(
         realm_id: realm_id.clone(),
         scope_ref: ScopeRef::Realm { realm_id },
         sender_actor_id: actor_id.clone(),
-        sender_device_id: device_id.clone(),
+        sender_device_id: Some(device_id.clone()),
         seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
         signal_class,
         sent_at: sent_at(),

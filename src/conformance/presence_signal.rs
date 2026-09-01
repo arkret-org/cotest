@@ -299,9 +299,9 @@ fn device_presence(
         expires_at: sent_at + Duration::milliseconds(TTL_MS as i64),
         scope_ref: ScopeRef::Realm { realm_id: realm()? },
         seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
-        sender_device_id: DeviceId::new(format!(
-            "ak:device:01904100-0000-7000-8000-{device_suffix}"
-        ))?,
+        sender_endpoint: arkret::SignalSequenceEndpoint::AccountDevice {
+            device_id: DeviceId::new(format!("ak:device:01904100-0000-7000-8000-{device_suffix}"))?,
+        },
     })
 }
 

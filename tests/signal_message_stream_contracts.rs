@@ -76,7 +76,9 @@ fn plaintext(frame: MessageStreamFrame) -> SignalPlaintext {
         expires_at: at(30),
         scope_ref: ScopeRef::Realm { realm_id: realm() },
         seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64))).unwrap(),
-        sender_device_id: device(),
+        sender_endpoint: arkret::SignalSequenceEndpoint::AccountDevice {
+            device_id: device(),
+        },
     }
 }
 
@@ -150,7 +152,12 @@ fn producer_and_consumer_self_heal_then_bind_direct_final() {
     );
 
     let removed = projection
-        .bind_verified_final(&final_event, &device())
+        .bind_verified_final(
+            &final_event,
+            &arkret::SignalSequenceEndpoint::AccountDevice {
+                device_id: device(),
+            },
+        )
         .unwrap()
         .expect("matching direct final removes preview");
     assert_eq!(removed.message_id, message_id);
