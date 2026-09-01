@@ -172,30 +172,15 @@ fn session_grant_request_value(
     audience: &str,
     session_intent_digest: &Hash,
 ) -> Result<Value> {
-    let issued_at = parse_time(required_str(vector, "issued_at")?)?;
-    let expires_at = parse_time(required_str(vector, "expires_at")?)?;
-    Ok(json!({
-        "request_id": required_str(vector, "request_id")?,
-        "principal_id": required_str(vector, "principal_id")?,
-        "device_id": required_str(vector, "device_id")?,
-        "audience_id": audience,
-        "accepted_device_possession_proof": {
-            "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
-            "purpose": "session_grant_issue",
-            "request_id": required_str(vector, "request_id")?,
-            "account_subject": required_str(vector, "account_subject")?,
-            "account_handoff_grant_digest": required_str(vector, "account_handoff_grant_digest")?,
-            "principal_id": required_str(vector, "principal_id")?,
-            "device_id": required_str(vector, "device_id")?,
-            "audience_id": audience,
-            "holder_jkt": required_str(vector, "holder_jkt")?,
-            "session_intent_digest": session_intent_digest,
-            "issued_at": arkret_canonical::format_timestamp_canonical(issued_at),
-            "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
-            "verification_method": required_str(vector, "verification_method")?,
-            "signature": arkret_canonical::base64url_encode([0x5a; 64])
-        }
-    }))
+    let mut request = vector
+        .get("request")
+        .cloned()
+        .ok_or_else(|| anyhow!("session grant vector missing request"))?;
+    request["audience_id"] = json!(audience);
+    request["accepted_device_possession_proof"]["audience_id"] = json!(audience);
+    request["accepted_device_possession_proof"]["session_intent_digest"] =
+        json!(session_intent_digest);
+    Ok(request)
 }
 
 fn parse_session_grant_request(value: Value) -> Result<SessionGrantRequestBody> {
@@ -274,7 +259,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
             "context": ProofContextId::SESSION_GRANT_ACCEPTED_DEVICE_POSSESSION_PROOF_V1,
             "purpose": "session_grant_refresh",
             "predecessor_session_grant_id": predecessor,
-            "principal_id": principal_id,
+            "account_id": AccountId::new(principal_id.clone(), audience.clone()),
             "device_id": device_id,
             "audience_id": audience,
             "holder_jkt": holder_jkt,
@@ -307,7 +292,7 @@ fn validate_closed_human_session_shapes() -> Result<()> {
             "request_id": request_id,
             "account_subject": format!("sha256:{}", "a".repeat(64)),
             "account_handoff_grant_digest": format!("sha256:{}", "b".repeat(64)),
-            "principal_id": principal_id,
+            "account_id": AccountId::new(principal_id.clone(), audience.clone()),
             "device_id": device_id,
             "audience_id": audience,
             "holder_jkt": holder_jkt,
@@ -500,14 +485,20 @@ fn classify_public_metadata_bare_bearer() -> &'static str {
 pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
     let fixture = auth_session_proof_fixture()?;
     let vector = case(&fixture, VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING)?;
+    let fixture_request = vector
+        .get("request")
+        .ok_or_else(|| anyhow!("session grant vector missing request"))?;
+    let fixture_proof = fixture_request
+        .get("accepted_device_possession_proof")
+        .ok_or_else(|| anyhow!("session grant vector missing accepted-device proof"))?;
     let now = parse_time("2026-06-19T00:00:00.000Z")?;
     let target_audience = required_str(vector, "target_audience")?;
     let server_max_ttl = Duration::seconds(required_u64(vector, "server_max_ttl_seconds")? as i64);
 
-    let principal_id = did(required_str(vector, "principal_id")?)?;
-    let device_id = device(required_str(vector, "device_id")?)?;
-    let request_id = required_str(vector, "request_id")?.parse()?;
-    let holder_jkt = required_str(vector, "holder_jkt")?;
+    let principal_id = did(required_str(fixture_request, "principal_id")?)?;
+    let device_id = device(required_str(fixture_request, "device_id")?)?;
+    let request_id = required_str(fixture_request, "request_id")?.parse()?;
+    let holder_jkt = required_str(fixture_proof, "holder_jkt")?;
     let target = did(target_audience)?;
     let expected_digest = human_session_grant_intent_digest(
         &request_id,
@@ -516,6 +507,9 @@ pub fn run_auth_session_grant_audience_binding_vector() -> Result<()> {
         &target,
         holder_jkt,
     )?;
+    if required_str(fixture_proof, "session_intent_digest")? != expected_digest.as_str() {
+        bail!("session grant fixture intent digest drifted from its canonical transcript");
+    }
 
     let mismatched_audience = required_str(vector, "mismatched_audience")?;
     let mismatched_digest = human_session_grant_intent_digest(
