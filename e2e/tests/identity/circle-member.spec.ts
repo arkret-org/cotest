@@ -110,7 +110,7 @@ test.describe("circle membership (same Station)", () => {
       { signerId: alice.id, realmId, actorId: bob.id, membership: "join" },
     );
     expect(membership.membership).toBe("join");
-    expect(membership.member_id).toEqual(accountActorId(bob.id));
+    expect(membership.actor_id).toEqual(accountActorId(bob.id));
 
     // CORE ASSERTION: bob did zero operations yet is a Circle member.
     const fetched = await getCircleArkret(
