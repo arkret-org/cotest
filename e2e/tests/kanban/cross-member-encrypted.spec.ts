@@ -492,7 +492,7 @@ async function openReaderBoard(
   await readyReaderBoard(reader, boardId);
 }
 
-test.describe("cross-member encrypted kanban", () => {
+test.describe("cross-member encrypted kanban @fully-implemented", () => {
   test("creator E2EE plaintext cache is encrypted in IndexedDB and survives reload", async ({
     browser,
     request,

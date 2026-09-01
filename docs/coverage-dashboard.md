@@ -5,7 +5,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 
 | Journey | Implemented | Promised | Coverage | Blocking fixme |
 |---|---:|---:|---:|---:|
-| UJ-A - First login and multi-device recovery | 67 | 67 | 100.0% | 0 |
+| UJ-A - First login and multi-device recovery | 68 | 68 | 100.0% | 0 |
 | UJ-B - Workspace creation, invites, and archive visibility | 19 | 19 | 100.0% | 0 |
 | UJ-C - Daily messaging, edits, reactions, receipts, and mentions | 41 | 41 | 100.0% | 0 |
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 9 | 9 | 100.0% | 0 |
@@ -21,7 +21,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | encryption/key-backup | domain-fallback | 5 | 5 | 0 |
 | encryption/mls-group | domain-fallback | 1 | 1 | 0 |
 | identity/account-device-auth | domain-fallback | 2 | 2 | 0 |
-| identity/account-handoff | domain-fallback | 2 | 2 | 0 |
+| identity/account-handoff | domain-fallback | 3 | 3 | 0 |
 | identity/account-states | domain-fallback | 7 | 7 | 0 |
 | identity/circle-member | domain-fallback | 4 | 4 | 0 |
 | identity/consent-grant | domain-fallback | 11 | 11 | 0 |

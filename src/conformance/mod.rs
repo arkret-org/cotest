@@ -2,6 +2,8 @@ mod account_status_issuer_ledger;
 mod agent_membership_cascade;
 mod agent_mls_keypackage_authorization;
 mod agent_participation;
+#[cfg(test)]
+mod agent_runtime_scope;
 mod agent_signer_evidence;
 mod agent_vectors;
 mod applet_install;
@@ -31,6 +33,7 @@ mod encoding;
 mod envelope;
 mod fanout_route_miss;
 mod federation;
+mod file_transfer_stream_aead;
 mod final_conformance_closure;
 mod handle_claim_rejection_vectors;
 mod helpers;
@@ -215,6 +218,11 @@ pub use encoding::{
 pub use envelope::{run_container_realm_control_payload_suite, run_event_envelope_fixture_suite};
 pub use fanout_route_miss::run_fanout_route_miss_suite;
 pub use federation::run_federation_fixture_suite;
+pub use file_transfer_stream_aead::{
+    ALL_FILE_TRANSFER_STREAM_AEAD_VECTOR_IDS, run_file_transfer_overall_digest_rejected_vector,
+    run_file_transfer_range_binding_rejected_vector,
+    run_file_transfer_stream_aead_byte_exact_vector, run_file_transfer_stream_aead_fixture_suite,
+};
 pub use final_conformance_closure::{
     ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS,
     run_applet_transaction_delivery_authentication_record_digest_vector,

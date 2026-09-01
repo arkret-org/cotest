@@ -4,6 +4,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $ci = Get-Content -LiteralPath (Join-Path $repoRoot ".github\workflows\ci.yml") -Raw
 $integration = Get-Content -LiteralPath (Join-Path $repoRoot ".github\workflows\integration.yml") -Raw
 $runner = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\run-joint-e2e.ps1") -Raw
+$selectionGate = Get-Content -LiteralPath (Join-Path $repoRoot "scripts\lib\selection-gate.ps1") -Raw
 $playwrightConfig = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\playwright.config.ts") -Raw
 $oidc = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\oidc-login-flow.spec.ts") -Raw
 $lifecycle = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\device-key-lifecycle.spec.ts") -Raw
@@ -11,6 +12,8 @@ $keyBackup = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\encryption
 $contactGraph = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\contact-graph.spec.ts") -Raw
 $multiDevice = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\multi-device.spec.ts") -Raw
 $realmMatrix = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\identity\recovery-key-to-encrypted-realm.spec.ts") -Raw
+$crossMemberKanban = Get-Content -LiteralPath (Join-Path $repoRoot "e2e\tests\kanban\cross-member-encrypted.spec.ts") -Raw
+. (Join-Path $repoRoot "scripts\lib\selection-gate.ps1")
 
 function Assert-Contains {
     param([string]$Text, [string]$Needle, [string]$Message)
@@ -44,16 +47,62 @@ Assert-NotContains $integration "terminal auth loss|transient self-path failure"
 
 Assert-Contains $runner '[switch]$ForbidSkippedTests' "joint runner has no non-skip enforcement"
 Assert-Contains $runner '[string]$RequireScenario' "joint runner has no required-scenario enforcement"
-Assert-Contains $runner 'Playwright selected zero tests' "joint runner has no zero-selection enforcement"
+Assert-Contains $selectionGate 'Playwright selected zero tests' "joint runner has no zero-selection enforcement"
 Assert-Contains $runner '"encryption/key-backup"' "joint-smoke does not require fresh-browser Recovery Key restore evidence"
 Assert-Contains $runner '"identity/contact-graph"' "joint-smoke does not require the Contact lineage lifecycle"
 Assert-Contains $runner '"identity/multi-device"' "joint-smoke does not require both fresh-device entry paths"
 Assert-Contains $runner '"identity/recovery-key-to-encrypted-realm"' "joint-smoke does not require the canonical Realm encryption matrix"
+Assert-Contains $runner '"kanban/cross-member-encrypted"' "joint-smoke does not require cross-member encrypted kanban evidence"
 Assert-Contains $playwrightConfig '"encryption/key-backup.spec.ts"' "joint-inkson does not discover fresh-browser Recovery Key restore"
 Assert-Contains $playwrightConfig '"identity/contact-graph.spec.ts"' "joint-inkson does not discover Contact lineage coverage"
 Assert-Contains $playwrightConfig '"identity/recovery-key-to-encrypted-realm.spec.ts"' "joint-inkson does not discover the canonical Realm encryption matrix"
+Assert-Contains $playwrightConfig '"kanban/cross-member-encrypted.spec.ts"' "joint-inkson does not discover cross-member encrypted kanban"
 Assert-Contains $contactGraph 'scope narrowing is reversible on one lineage' "Contact lineage lifecycle coverage is missing"
 Assert-Contains $contactGraph '@fully-implemented' "Contact lineage lifecycle is not selected by joint-smoke"
+Assert-Contains $crossMemberKanban 'cross-member encrypted kanban @fully-implemented' "cross-member encrypted kanban is not selected by joint-smoke"
+Assert-Contains $crossMemberKanban 'assertJointStackNotRequired(' "cross-member encrypted kanban does not fail loud when the required joint stack is unavailable"
+
+$selectedCases = New-Object System.Collections.Generic.List[object]
+$selectedCases.Add([pscustomobject]@{ name = "pre-join decrypt"; status = "passed" }) | Out-Null
+$selectedJunit = @{
+    "kanban/cross-member-encrypted.spec.ts" = [pscustomobject]@{ cases = $selectedCases }
+}
+$passingTotals = [pscustomobject]@{ passed = 1; failed = 0; skipped = 0; fixme = 0 }
+$selectedFailures = @(Get-JointSelectionGateFailures `
+        -RequiredScenarios @("kanban\cross-member-encrypted.spec.ts") `
+        -JunitByScenario $selectedJunit `
+        -Totals $passingTotals `
+        -ForbidRuntimeSkips $true `
+        -JunitParseError $null)
+if ($selectedFailures.Count -ne 0) {
+    throw "selected cross-member scenario failed the gate: $($selectedFailures -join '; ')"
+}
+
+$missingFailures = @(Get-JointSelectionGateFailures `
+        -RequiredScenarios @("kanban/cross-member-encrypted") `
+        -JunitByScenario @{} `
+        -Totals $passingTotals `
+        -ForbidRuntimeSkips $true `
+        -JunitParseError $null)
+Assert-Contains ($missingFailures -join "`n") "required scenario was not selected: kanban/cross-member-encrypted" "missing required scenario did not fail the selection gate"
+
+$zeroTotals = [pscustomobject]@{ passed = 0; failed = 0; skipped = 0; fixme = 0 }
+$zeroFailures = @(Get-JointSelectionGateFailures `
+        -RequiredScenarios @() `
+        -JunitByScenario @{} `
+        -Totals $zeroTotals `
+        -ForbidRuntimeSkips $true `
+        -JunitParseError $null)
+Assert-Contains ($zeroFailures -join "`n") "Playwright selected zero tests" "zero Playwright selection did not fail the selection gate"
+
+$skippedTotals = [pscustomobject]@{ passed = 0; failed = 0; skipped = 1; fixme = 0 }
+$skipFailures = @(Get-JointSelectionGateFailures `
+        -RequiredScenarios @("kanban/cross-member-encrypted") `
+        -JunitByScenario $selectedJunit `
+        -Totals $skippedTotals `
+        -ForbidRuntimeSkips $true `
+        -JunitParseError $null)
+Assert-Contains ($skipFailures -join "`n") "selected live tests skipped: 1" "runtime skip did not fail the selection gate"
 
 $e2eRoot = Join-Path $repoRoot "e2e"
 $playwrightCli = Join-Path $e2eRoot "node_modules\playwright\cli.js"
@@ -101,5 +150,18 @@ try {
 $deviceEntrySelection = ($deviceEntryListed -join "`n") -replace '\\', '/'
 Assert-Contains $deviceEntrySelection "identity/multi-device.spec.ts" "joint-inkson did not discover both fresh-device entry paths"
 Assert-Contains $deviceEntrySelection "Total: 2 tests in 1 file" "fresh-device entry selection changed; review the required scenario matrix"
+
+Push-Location $e2eRoot
+try {
+    $kanbanListed = @(& node $playwrightCli test --config playwright.config.ts --project=joint-inkson --grep "@fully-implemented" tests/kanban/cross-member-encrypted.spec.ts --list 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright cross-member kanban selection failed:`n$($kanbanListed -join [Environment]::NewLine)"
+    }
+} finally {
+    Pop-Location
+}
+$kanbanSelection = ($kanbanListed -join "`n") -replace '\\', '/'
+Assert-Contains $kanbanSelection "kanban/cross-member-encrypted.spec.ts" "joint-inkson did not discover cross-member encrypted kanban"
+Assert-Contains $kanbanSelection "Total: 3 tests in 1 file" "cross-member encrypted kanban smoke selection changed"
 
 Write-Host "Identity CI selection regression tests passed."

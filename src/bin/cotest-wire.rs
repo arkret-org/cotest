@@ -489,8 +489,11 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
         .get("state")
         .cloned()
         .context("prepared principal inception omitted DID document state")?;
-    let document_digest = canonical::canonical_sha256(&did_document)
-        .context("digest prepared principal DID document")?;
+    let normalized_did_document: arkret_models_identity::DidDocument =
+        serde_json::from_value(did_document.clone())
+            .context("project prepared principal DID document")?;
+    let document_digest = arkret_identity::document_canonical_digest(&normalized_did_document)
+        .map_err(|error| anyhow::anyhow!(error))?;
     let lease: arkret::IdentityCreationLease =
         serde_json::from_value(input.identity_creation_lease)
             .context("parse identity-creation lease")?;
@@ -549,7 +552,7 @@ fn principal_registration_fixture(input: Value) -> Result<Value> {
             canonical::canonical_json_bytes(&draft.log_entry)?
         ),
         "did_document": did_document,
-        "document_digest": document_digest,
+        "document_digest": document_digest.as_str(),
         "history_head": draft.version_id,
         // The signed genesis Event itself, not a reserved id for it. `ak:event:`
         // is an event-derived kind, so its id is a function of this finished

@@ -404,7 +404,6 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
         sent_at: parse_utc("2026-06-10T00:00:00.000Z")?,
         expires_at: parse_utc(expires_at)?,
         content: DeviceMessageContent::SecretSend(serde_json::from_value(content)?),
-        device_proof: None,
         unsigned: None,
     })
 }

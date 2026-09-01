@@ -108,6 +108,7 @@ export default defineConfig({
         "identity/passkey-login-flow.spec.ts",
         "identity/recovery-key-to-encrypted-realm.spec.ts",
         "identity/session-grant-dpop.spec.ts",
+        "kanban/cross-member-encrypted.spec.ts",
       ],
       use: { ...devices["Desktop Chrome"], baseURL },
     },

@@ -56,7 +56,7 @@
 
 ## 默认 joint-smoke 选择面
 
-默认 `joint-smoke` 使用 `@fully-implemented` grep。除既有 `joint/*.spec.ts` 与已标记合同外，身份专项 `joint-inkson` project 显式选择：
+默认 `joint-smoke` 使用 `@fully-implemented` grep。除既有 `joint/*.spec.ts` 与已标记合同外，`joint-inkson` project 显式选择：
 
 - `events/batch-realm-bootstrap.spec.ts`
 - `encryption/key-backup.spec.ts`
@@ -70,18 +70,19 @@
 - `identity/passkey-login-flow.spec.ts`
 - `identity/recovery-key-to-encrypted-realm.spec.ts`
 - `identity/session-grant-dpop.spec.ts`
+- `kanban/cross-member-encrypted.spec.ts`
 
 本轮新增选择项的标准是：能在标准 Soland+Inkson+Coauth 拓扑中执行，不依赖双 Soland、Savfox 或外部 provider，并且断言生产 HTTP/UI 行为。`joint/*.spec.ts` 中既有的 Savfox 条件场景仍会在缺少 Savfox 时 skip；专用拓扑测试继续由对应 lane 运行，避免标准 smoke 的绿色结果被误读成全流程闭环。
 
-此外，默认 `joint-smoke` 现在把 `identity/contact-graph`、`identity/multi-device`、`identity/recovery-key-to-encrypted-realm` 与 `encryption/key-backup` 都列为 required scenario；缺少任一 JUnit 证据、运行时 skip 或零选择都会使 gate 失败。
+此外，默认 `joint-smoke` 现在把 `identity/contact-graph`、`identity/multi-device`、`identity/recovery-key-to-encrypted-realm`、`encryption/key-backup` 与 `kanban/cross-member-encrypted` 都列为 required scenario；缺少任一 JUnit 证据、运行时 skip 或零选择都会使 gate 失败。
 
 ## 本轮验证状态
 
 - `npm run typecheck`：通过。
 - `npx playwright test --list --project joint-inkson --grep <两条 fresh-device entry 标题>`：通过，明确选择 `identity/multi-device.spec.ts` 的 accepted-device approval 与直接 24 词 recovery 两条用例。
-- `scripts/generate-e2e-coverage.ps1 -Check`、`npm run check:fixme`：通过；scenario evidence 在新增场景后已重生成，需在最终变更集上再次 `-Check`。
-- `npm run check:wire-types`：失败；`e2e/helpers/generated/spec-wire-objects.ts` 相对 current `arkret-spec` 已漂移。该失败不是本轮测试改动产生，但不能记录为通过；是否重生成需由对应 wire-generation 变更单独收口。
-- `scripts/tests/identity-ci-selection.tests.ps1`：通过；并固定 Recovery Key restore 与 Realm profile matrix 的 smoke/required-scenario 选择合同。
+- `scripts/generate-e2e-coverage.ps1 -Check`、`npm run check:fixme`：通过；coverage catalog 已在 kanban smoke 标签提升后重生成。
+- `npm run check:wire-types`：通过；`e2e/helpers/generated/spec-wire-objects.ts` 已按 current `arkret-spec` 重生成。
+- `scripts/tests/identity-ci-selection.tests.ps1`：通过；并固定 Recovery Key restore、Realm profile matrix 与 cross-member encrypted kanban 的 smoke/required-scenario 选择合同，同时覆盖 Windows 路径、`.spec.ts` 后缀、缺场景、零选择与 runtime skip。
 - `npx playwright test --list --project joint-inkson --grep <两条关键标题>`：通过，明确选择 `encryption/key-backup` A3 与 `identity/recovery-key-to-encrypted-realm`，共 2 个文件 2 条测试；这同时验证两个 spec 已进入默认 conformance project，而不只是全量 `chrome` project 可发现。
 - 流程库复核：12 篇流程/模型文档加 README、60 个 Mermaid block 的 fence/type 均有效；本地 Markdown 失效链接为 0，图文引用的 `/_arkret/*` 路径均能在 current operation registry 中解析，旧 `recipient_service_id` 与未登记 Agent grant 端点均已移除。
 - `git diff --check`：`cotest` 与 `arkret-work` 均通过。

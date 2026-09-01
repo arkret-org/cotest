@@ -5,8 +5,8 @@ use std::collections::BTreeMap;
 use anyhow::{Context as _, Result, anyhow, bail};
 use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
 use arkret_models_crypto::{
-    RecoveryProofKind, RecoveryProofSummary, RecoveryReceipt, RecoveryReceiptOutcome,
-    UnsignedRecoveryReceipt, UnsignedRecoveryReceiptBody,
+    RecoveryAuthorityKind, RecoveryProofKind, RecoveryProofSummary, RecoveryReceipt,
+    RecoveryReceiptOutcome, UnsignedRecoveryReceipt, UnsignedRecoveryReceiptBody,
 };
 use arkret_models_identity::{
     ACCOUNT_HANDOFF_ALLOWED_OPERATIONS, AccountHandoffBinding, AccountHandoffOutcome,
@@ -84,10 +84,10 @@ fn completion_vector() -> Result<CompletionVector> {
             trust_domain: "ak:trust_domain:example.net".parse()?,
             new_device_id: device_id.parse()?,
             identity_model: arkret_models_crypto::RecoveryIdentityModel::PcrPolicy,
+            recovery_authority_kind: RecoveryAuthorityKind::PcrPolicy,
             previous_model_generation_ref: previous_generation,
             result_model_generation_ref: result_generation,
             authorization_event_id: authorization_event_id.parse()?,
-            device_list_update_event_id: None,
             reanchor_event_id: Some(
                 "ak:event:AZk4PXzJ6MpkxXnYTUmgXzeIYNd0Wfnz3N0hwLHNV6Xq".parse()?,
             ),

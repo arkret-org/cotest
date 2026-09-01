@@ -1317,8 +1317,9 @@ test.describe("applet inbound transaction push — per-delivery source signature
   }
 
   // §7.3.1 currently places its discriminating `reason` at the Problem root.
-  // The conflict with the operation registry's specific Problem types is
-  // tracked in arkret-work/review/spec-open; do not accept an old nested shape.
+  // The conflict with the operation registry's specific Problem types was closed in
+  // arkret-work/review/spec-done/2026-08-28-0453-applet-signature-problem-discriminator-conflict.md;
+  // do not accept an old nested shape.
   function signatureReason(body: unknown): string | undefined {
     if (!body || typeof body !== "object") {
       return undefined;

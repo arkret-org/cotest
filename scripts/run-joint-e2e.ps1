@@ -195,6 +195,7 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot "lib\build-freshness.ps1")
 . (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
 . (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
+. (Join-Path $PSScriptRoot "lib\selection-gate.ps1")
 
 $SolandServiceId = $null
 $SolandServiceDid = $null
@@ -4897,7 +4898,8 @@ if (-not (Test-Path $junitPath)) {
 $requiredScenarios = @(
     $RequireScenario -split "," |
         ForEach-Object { $_.Trim() -replace '\\', '/' } |
-        Where-Object { $_ }
+        Where-Object { $_ } |
+        ForEach-Object { ConvertTo-CanonicalScenarioKey -Scenario $_ }
 )
 $forbidRuntimeSkips = [bool]$ForbidSkippedTests -or $RunProfile -eq "joint-smoke"
 if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
@@ -4907,33 +4909,17 @@ if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
         "identity/contact-graph"
         "identity/multi-device"
         "identity/recovery-key-to-encrypted-realm"
+        "kanban/cross-member-encrypted"
     ) | Sort-Object -Unique
 }
-$selectionGateFailures = New-Object System.Collections.Generic.List[string]
+$selectionGateFailures = @()
 if ($requiredScenarios.Count -gt 0 -or $forbidRuntimeSkips) {
-    if ($junitParseError) {
-        $selectionGateFailures.Add("junit evidence unavailable: $junitParseError") | Out-Null
-    } else {
-        $observedCases = $totals.passed + $totals.failed + $totals.skipped + $totals.fixme
-        if ($observedCases -eq 0) {
-            $selectionGateFailures.Add("Playwright selected zero tests") | Out-Null
-        }
-        foreach ($requiredScenario in $requiredScenarios) {
-            if (-not $junitByScenario.ContainsKey($requiredScenario)) {
-                $selectionGateFailures.Add("required scenario was not selected: $requiredScenario") | Out-Null
-                continue
-            }
-            # `cases` is a generic List[object]. Wrapping that list directly in
-            # `@(...)` trips PowerShell's dynamic binder on some 7.x builds.
-            $scenarioTotal = $junitByScenario[$requiredScenario].cases.Count
-            if ($scenarioTotal -eq 0) {
-                $selectionGateFailures.Add("required scenario selected zero testcases: $requiredScenario") | Out-Null
-            }
-        }
-        if ($forbidRuntimeSkips -and $totals.skipped -gt 0) {
-            $selectionGateFailures.Add("selected live tests skipped: $($totals.skipped)") | Out-Null
-        }
-    }
+    $selectionGateFailures = @(Get-JointSelectionGateFailures `
+            -RequiredScenarios $requiredScenarios `
+            -JunitByScenario $junitByScenario `
+            -Totals $totals `
+            -ForbidRuntimeSkips $forbidRuntimeSkips `
+            -JunitParseError $junitParseError)
 }
 if ($selectionGateFailures.Count -gt 0) {
     $exitCode = 1

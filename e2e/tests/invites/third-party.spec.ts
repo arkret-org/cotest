@@ -469,8 +469,8 @@ test.describe("third-party invite", () => {
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
-  // Former blocker, now resolved:
-  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // Former blocker and current live-verification owner:
+  // arkret-work/work/tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("bob submits ak.invite.claim with binding_proof + subject_proof; reducer accepts and converts to membership", async ({
     request,
   }) => {
@@ -557,8 +557,8 @@ test.describe("third-party invite", () => {
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
-  // Former blocker, now resolved:
-  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // Former blocker and current live-verification owner:
+  // arkret-work/work/tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("E3.1 expired token: reducer rejects claim with expired_invite_token", async ({
     request,
   }) => {
@@ -618,8 +618,8 @@ test.describe("third-party invite", () => {
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
-  // Former blocker, now resolved:
-  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // Former blocker and current live-verification owner:
+  // arkret-work/work/tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("E3.2 wrong DID claim (subject_proof != binding_proof.subject) rejected", async ({
     request,
   }) => {
@@ -694,8 +694,8 @@ test.describe("third-party invite", () => {
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK
   // (2026-08-02, `allowed_third_party_invite_verification_ids`) and in
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
-  // Former blocker, now resolved:
-  // arkret-work/review/spec-done/2026-08-01-third-party-invite-verification-service-allowlist-has-no-carrier.md
+  // Former blocker and current live-verification owner:
+  // arkret-work/work/tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
   test("E3.3 double-claim: second claim of same token rejected (token consumed)", async ({
     request,
   }) => {

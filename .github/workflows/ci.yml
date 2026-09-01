@@ -73,6 +73,41 @@ jobs:
         # `/// Gating:` justification and a valid `/// Tier:` declaration.
         run: bash scripts/check_ignore_comments.sh
 
+  operation-coverage:
+    name: operation test coverage inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: cotest
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-spec
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/soland
+          path: soland
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/inkson
+          path: inkson
+          ref: ${{ env.SIBLING_REF }}
+          token: ${{ secrets.CI_REPO_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: generator unit tests
+        working-directory: cotest
+        run: python -m unittest scripts.tests.test_operation_test_coverage
+      - name: reject stale or manually edited inventory
+        working-directory: cotest
+        run: python scripts/check_operation_test_coverage.py --check
+
   typecheck:
     name: typecheck (tsc --noEmit)
     runs-on: ubuntu-latest

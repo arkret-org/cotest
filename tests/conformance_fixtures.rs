@@ -657,6 +657,15 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// File-transfer streaming AEAD vectors consume the authenticated transfer
+    /// record rather than the MLS attachment transcript. They pin exact bytes,
+    /// Range response geometry, segment authentication, and overall digest.
+    file_transfer_stream_aead_fixture_suite_matches_reference_semantics,
+    "file_transfer_stream_aead_fixture",
+    cotest::conformance::run_file_transfer_stream_aead_fixture_suite,
+);
+
+conformance_test!(
     /// Push rule core vectors promoted to spec artifacts. Asserts the shared
     /// SDK core used by soland / chime / inkson keeps watch-level delivery,
     /// blind-wakeup, and reason-code semantics aligned.
