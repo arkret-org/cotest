@@ -851,8 +851,7 @@ export async function setInviteReceivePolicyArkret(
 
 export type IntroductionEvidence =
   | { kind: "consent_grant"; consent_grant_ref: string; consent_id?: string }
-  | { kind: "explicit_address" }
-  | { kind: "same_station" };
+  | { kind: "explicit_address" };
 
 // Build a `ak.invite.create` invite event whose payload satisfies soland's
 // invite-delivery consistency checks (src/routing/invites.rs

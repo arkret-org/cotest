@@ -341,7 +341,11 @@ test.describe("knock auto-resolve path", () => {
     ).toContain(joinResp.status());
 
     // bob leaves, then immediately re-applies with a still-valid g-vc proof.
-    const leave = await submitLeaveApi(request, bobToken, bob.id, realmId);
+    const leave = await submitLeaveApi(request, bobToken, bob.id, realmId, {
+      // Once bob's leave is accepted, anti-enumeration correctly hides the
+      // Realm from bob. Alice remains authorised to observe the new Seal.
+      controlObserverToken: aliceToken,
+    });
 
     const reapplyClaim = await issueClaim(request, bob.did, ["acme:employee"]);
     const resp = await submitCandidateJoin(

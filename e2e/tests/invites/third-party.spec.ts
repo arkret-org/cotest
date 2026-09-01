@@ -16,6 +16,7 @@ import {
   expectJsonOk,
   prepareSignedEventCbaApi,
   projectDidToCoreId,
+  readRealmSealBasis,
   registerEventSigner,
   retypeEventDerivedId,
   signedEventEnvelope,
@@ -254,10 +255,20 @@ async function submitThirdPartyInvite(
 async function submitClaim(
   request: APIRequestContext,
   bobToken: string,
+  realmMemberToken: string,
   claimant: JointUser,
   cell: ThirdPartyInviteCell,
   claimPayload: Record<string, unknown>,
 ): Promise<SelfEventsOutcome> {
+  // The claimant is not a Realm member yet. Carry the current accepted CBA
+  // basis obtained by an existing member as part of the out-of-band claim
+  // flow; the claimant's self surface cannot discover membership-private
+  // Realm state before the claim succeeds.
+  const sealBasis = await readRealmSealBasis(
+    request,
+    realmMemberToken,
+    cell.realmId,
+  );
   return await submitSelfEvent(
     request,
     bobToken,
@@ -267,6 +278,7 @@ async function submitClaim(
       kind: "ak.invite.claim",
       actorSeq: 0,
       prevRefs: [],
+      sealBasis,
       schemaId: "ak.schema.event.v1",
       payload: claimPayload,
     }),
@@ -296,10 +308,27 @@ test.describe("third-party invite", () => {
     const aliceToken = await issueDevSession(request, alice);
     // dev-login auto-provisions the did:key account for bob.
     const bobToken = await issueDevSession(request, bob);
+    const deviceKeyResponse = await request.post(
+      `${solandBaseUrl()}/_arkret/_conformance/device-signing-key`,
+      {
+        data: canonicalJson({
+          actor_id: bob.id,
+          device_id: bob.deviceId,
+          public_key_multibase: bobIdentity.publicKeyMultibase,
+        }),
+        headers: { "content-type": "application/json" },
+      },
+    );
+    expect(
+      deviceKeyResponse.status(),
+      `seed claimant device key returned ${deviceKeyResponse.status()}: ${await deviceKeyResponse.text()}`,
+    ).toBe(200);
     registerEventSigner({
       actorId: bob.id,
       deviceId: bob.deviceId,
-      verificationMethod: bobIdentity.verificationMethod,
+      // Event admission binds the current device fragment. The independent
+      // subject_proof below continues to use the did:key verification method.
+      verificationMethod: `${bob.did}#${bob.deviceId}`,
       signingSeedB64url: bobIdentity.signingSeedB64url,
     });
     const realmId = await createRealmApi(request, aliceToken, {
@@ -488,6 +517,7 @@ test.describe("third-party invite", () => {
     const claim = await submitClaim(
       request,
       ctx.bobToken,
+      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       claimPayload,
@@ -570,6 +600,7 @@ test.describe("third-party invite", () => {
     const claim = await submitClaim(
       request,
       ctx.bobToken,
+      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       buildClaimPayload({
@@ -639,6 +670,7 @@ test.describe("third-party invite", () => {
     const claim = await submitClaim(
       request,
       malloryToken,
+      ctx.aliceToken,
       mallory,
       ctx.cell,
       buildClaimPayload({
@@ -699,6 +731,7 @@ test.describe("third-party invite", () => {
     const firstClaim = await submitClaim(
       request,
       ctx.bobToken,
+      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       buildClaimPayload({
@@ -734,6 +767,7 @@ test.describe("third-party invite", () => {
     const secondClaim = await submitClaim(
       request,
       ctx.bobToken,
+      ctx.aliceToken,
       ctx.bob,
       ctx.cell,
       buildClaimPayload({

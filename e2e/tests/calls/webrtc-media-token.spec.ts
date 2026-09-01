@@ -14,6 +14,7 @@ import {
   solandServiceId,
 } from "../../helpers/env";
 import {
+  accountActorId,
   addRealmMemberApi,
   createRealmApi,
   wireErrCode,
@@ -105,7 +106,7 @@ test.describe("media token exchange", () => {
     expect(binding.realm_id).toBe(realmId);
     expect(binding.call_id).toBe(callId);
     expect(binding.focus_id).toBe(livekitFocus().focus_id);
-    expect(binding.actor_id).toBe(alice.id);
+    expect(binding.actor_id).toEqual(accountActorId(alice.id));
     expect(binding.device_id).toBe(alice.deviceId);
     expect(binding.participant_id).toBe(body.participant_id);
     expect(typeof binding.issued_at).toBe("string");
@@ -253,7 +254,7 @@ test.describe("media token exchange", () => {
     });
     expect(admitted.status(), await admitted.text()).toBe(200);
     const body = await admitted.json();
-    expect(body.participant_binding.actor_id).toBe(member.id);
+    expect(body.participant_binding.actor_id).toEqual(accountActorId(member.id));
   });
 });
 

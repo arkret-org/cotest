@@ -299,7 +299,11 @@ test.describe("contact graph (same Station)", () => {
           if (!resp.ok()) return false;
           const realm = await resp.json();
           return (
-            Array.isArray(realm.member_ids) && realm.member_ids.includes(bob.id)
+            Array.isArray(realm.member_ids) &&
+            realm.member_ids.some(
+              (memberId: unknown) =>
+                JSON.stringify(memberId) === JSON.stringify(accountActorId(bob.id)),
+            )
           );
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
@@ -416,10 +420,9 @@ test.describe("contact graph (same Station)", () => {
     ).toBe(0);
   });
 
-  // S7: revoked consent evidence is downgraded to explicit-address trust.
-  // Quarantine remains holder-private even when low-trust outcome disclosure
-  // is requested, so the sender receives only the deferred status.
-  test("S7 revoked invite consent is downgraded and quarantine remains opaque", async ({
+  // S7: revoked consent evidence is invalid, so the receiver derives the
+  // same_station evidence kind before considering explicit_address.
+  test("S7 revoked invite consent falls back to same_station policy", async ({
     request,
   }) => {
     const [aliceSession, bobSession] = await Promise.all([
@@ -453,20 +456,16 @@ test.describe("contact graph (same Station)", () => {
 
     await revokeInviteConsentArkret(request, aliceToken, alice, consent);
 
-    // bob pulls alice using the now-revoked consent_grant ref. The grant fails
-    // to verify and is downgraded to explicit_address (low trust). Default
-    // policy quarantines explicit_address. Because the subject (alice) did NOT
-    // block bob, low_trust disclosure default is opaque -> no disclosed_outcome.
-    // We assert the delivery is deferred and the peer is not notified; the
-    // explicit-feedback variant requires the subject to opt low_trust=outcome.
+    // Bob pulls alice using the now-revoked consent_grant ref. The grant fails
+    // to verify; because both actors are local to this Station, the receiver
+    // derives same_station before the explicit_address fallback.
     const realmId = await createRealmApi(request, bobToken, {
       title: `S7 revoked realm ${Date.now()}`,
       ownerId: bob.id,
     });
 
-    // Opt alice into low-trust outcome disclosure. Quarantine remains an
-    // intentional exception: it is holder-private consent state and therefore
-    // never discloses whether the holder retained the invite.
+    // Opt alice into low-trust outcome disclosure. The default same_station
+    // action is drop, which is disclosed as the closed outcome `blocked`.
     const policy = await getInviteReceivePolicyArkret(request, aliceToken);
     await setInviteReceivePolicyArkret(request, aliceToken, {
       ...policy,
@@ -483,13 +482,13 @@ test.describe("contact graph (same Station)", () => {
       recipientServer: "default",
     });
     expect(delivery.status).toBe("deferred");
-    expect(delivery.disclosed_outcome).toBeUndefined();
+    expect(delivery.disclosed_outcome).toBe("blocked");
 
     // alice is not actually a member.
     const invites = await listAuthzInvitesArkret(request, aliceToken);
     expect(
       countInvitesFor(invites, realmId, alice.id),
-      "revoked-consent invite must stay quarantined and holder-private",
+      "revoked-consent invite must be dropped by same_station policy",
     ).toBe(0);
   });
 

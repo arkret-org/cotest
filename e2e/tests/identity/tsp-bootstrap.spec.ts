@@ -17,6 +17,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
 import { mockTspEndpointBaseUrl, mockTspEndpointVid, solandBaseUrl } from "../../helpers/env";
+import { accountActorId } from "../../helpers/soland-api";
 import { ensureRegistered, issueDevSession, uniqueUser } from "../../helpers/users";
 
 test.describe.configure({ mode: "serial" });
@@ -176,7 +177,7 @@ test.describe("tsp bootstrap", () => {
     };
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.id,
+        from_vid: alice.did,
         to_vid: bobExternVid,
         payload_b64: b64(innerArkret),
         signature_b64: randomBytes(64).toString("base64"),
@@ -193,7 +194,7 @@ test.describe("tsp bootstrap", () => {
     // `ak.*` operation, and fabricates an ACK into the outbox. The inbox/outbox
     // record encodes that BOTH layers were processed independently.
     const inboxResp = await request.get(
-      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.id)}`,
+      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.did)}`,
     );
     expect(inboxResp.ok()).toBeTruthy();
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
@@ -206,7 +207,7 @@ test.describe("tsp bootstrap", () => {
       .poll(
         async () => {
           const outboxResp = await request.get(
-            `${endpoint.base}/tsp/outbox?vid=${encodeURIComponent(alice.id)}`,
+            `${endpoint.base}/tsp/outbox?vid=${encodeURIComponent(alice.did)}`,
           );
           if (!outboxResp.ok()) {
             return false;
@@ -238,7 +239,7 @@ test.describe("tsp bootstrap", () => {
 
     const identity = await fetchEndpointIdentity(request, endpoint.base);
     const bobExternVid = identity.vid;
-    await bootstrapRelationship(request, endpoint.base, alice.id);
+    await bootstrapRelationship(request, endpoint.base, alice.did);
 
     // Drop the TSP endpoint: the mock now returns 503 for message sends.
     const inject = await request.post(`${endpoint.base}/scenarios`, {
@@ -249,7 +250,7 @@ test.describe("tsp bootstrap", () => {
     const realmId = TSP_FIXTURE_REALM_IDS.fallback;
     const tspAttempt = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.id,
+        from_vid: alice.did,
         to_vid: bobExternVid,
         payload_b64: b64({ type: "ak.invite.create", realm_id: realmId, invitee_id: bobExternVid }),
         signature_b64: randomBytes(64).toString("base64"),
@@ -264,13 +265,13 @@ test.describe("tsp bootstrap", () => {
     // alive and the client is NOT fail-closed on the TSP outage.
     const eventsResp = await request.fetch(`${solandBaseUrl()}/_arkret/self/events`, {
       method: "QUERY",
-      data: { actor_ids: [alice.id] },
+      data: { actor_ids: [accountActorId(alice.id)] },
       headers: { authorization: `Bearer ${aliceToken}` },
     });
     expect(
-      [200, 400, 404].includes(eventsResp.status()),
+      eventsResp.status(),
       `default v1 core transport must remain reachable after TSP outage: ${eventsResp.status()}`,
-    ).toBeTruthy();
+    ).toBe(200);
 
     // transport.fallback audit (spec §8) is a soland-side TSP profile surface;
     // assert-if-present so the extension-profile gap does not block.
@@ -304,7 +305,7 @@ test.describe("tsp bootstrap", () => {
 
     const identity = await fetchEndpointIdentity(request, endpoint.base);
     const bobExternVid = identity.vid;
-    const bootstrap = await bootstrapRelationship(request, endpoint.base, alice.id);
+    const bootstrap = await bootstrapRelationship(request, endpoint.base, alice.did);
     expect(bootstrap.ok).toBe(true);
 
     // A TSP envelope whose VID resolves in a degraded (witness-offline) view
@@ -312,7 +313,7 @@ test.describe("tsp bootstrap", () => {
     // the trust assessment, not the authenticity check, is what degrades.
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.id,
+        from_vid: alice.did,
         to_vid: bobExternVid,
         // The inner payload self-declares the degraded VID-trust view so the
         // ACK round-trip can carry `vid_trust=degraded_no_witness` alongside
@@ -336,7 +337,7 @@ test.describe("tsp bootstrap", () => {
     // The recorded envelope preserves the degraded trust marker for the
     // relationship/ACK metadata (independent of authenticity).
     const inboxResp = await request.get(
-      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.id)}`,
+      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.did)}`,
     );
     expect(inboxResp.ok()).toBeTruthy();
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
@@ -367,7 +368,7 @@ test.describe("tsp bootstrap", () => {
 
     const identity = await fetchEndpointIdentity(request, endpoint.base);
     const bobExternVid = identity.vid;
-    await bootstrapRelationship(request, endpoint.base, alice.id);
+    await bootstrapRelationship(request, endpoint.base, alice.did);
 
     // Nested mode: the inner Arkret operation (real vid_local + operation name
     // + payload) is opaque to any intermediary. We model the on-the-wire outer
@@ -386,7 +387,7 @@ test.describe("tsp bootstrap", () => {
 
     const sendResp = await request.post(`${endpoint.base}/tsp/message`, {
       data: {
-        from_vid: alice.id,
+        from_vid: alice.did,
         to_vid: bobExternVid,
         // The terminus (bob_extern) receives the full inner Arkret payload.
         payload_b64: innerBytesB64,
@@ -397,7 +398,7 @@ test.describe("tsp bootstrap", () => {
 
     // The terminus successfully decodes + recognizes the inner operation.
     const inboxResp = await request.get(
-      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.id)}`,
+      `${endpoint.base}/tsp/inbox?vid=${encodeURIComponent(alice.did)}`,
     );
     const inbox = (await inboxResp.json()).envelopes as Array<Record<string, any>>;
     const terminus = inbox.find(

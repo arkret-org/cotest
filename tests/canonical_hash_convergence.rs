@@ -356,7 +356,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:1846198926e9849c38ba375656eab0f4519623bc1405470f2cb33f9c927163f6",
+        display_state, "sha256:9985c51228e3efef3178d1c419fef9d2e52360d14c9531b5ff7c67543a5bc698",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

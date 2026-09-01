@@ -1910,8 +1910,10 @@ export async function openUser(
       const response = await lookup.get(url.toString());
       expect(response.status(), "accepted-device principal resolution lookup").toBe(200);
       const publicResolution = await response.json() as PublicPrincipalResolution;
-      expect(publicResolution.principal_id).toBe(user.id);
-      expect(publicResolution.station_id).toBe(solandServiceId(opts.server));
+      expect(publicResolution.account_id).toEqual({
+        principal_id: user.id,
+        station_id: solandServiceId(opts.server),
+      });
       expect(publicResolution.projection_attestation.attestation.resolution_projection)
         .toEqual(publicResolution.resolution_projection);
       resolution = publicResolution.resolution_projection;

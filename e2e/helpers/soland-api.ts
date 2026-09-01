@@ -1472,7 +1472,11 @@ export async function submitLeaveApi(
   token: string,
   actorId: string,
   realmId: string,
-  opts: { server?: SolandKey; createdAt?: string } = {},
+  opts: {
+    server?: SolandKey;
+    createdAt?: string;
+    controlObserverToken?: string;
+  } = {},
 ) {
   const envelope = signedEventEnvelope({
     actorId,
@@ -1489,6 +1493,7 @@ export async function submitLeaveApi(
   const response = await submitSignedEventApi(request, token, envelope, {
     server: opts.server,
     context: `leave ${realmId}`,
+    controlObserverToken: opts.controlObserverToken,
   });
   return {
     ...response,
@@ -1688,7 +1693,6 @@ export function accountDataSetSubmission(args: {
 }): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     key: args.key,
-    holder_id: args.actorId,
     expected_revision: args.expectedRevision,
   };
   if (args.value === undefined) {
@@ -2002,7 +2006,11 @@ export async function submitSignedEventApi(
   request: APIRequestContext,
   token: string,
   envelope: Record<string, unknown>,
-  opts: { server?: SolandKey; context?: string } = {},
+  opts: {
+    server?: SolandKey;
+    context?: string;
+    controlObserverToken?: string;
+  } = {},
 ) {
   const context = opts.context ?? `submit ${String(envelope.kind)}`;
   await applyRegisteredCbaPlane(request, token, envelope, opts.server);
@@ -2080,11 +2088,20 @@ export async function submitSignedEventApi(
       const outcome = JSON.parse(text) as Record<string, unknown>;
       rememberPublicationEvidence([envelope], [authorizationLease], outcome);
       if (realmId && previousControlRoot) {
-        await waitForRealmControlIdleApi(request, token, realmId, {
+        // A successful leave may immediately remove the author from the
+        // Realm's read surface. Observe the resulting Control frontier with
+        // an explicitly authorised member when the caller supplies one;
+        // using the departed actor would correctly collapse to not_found.
+        await waitForRealmControlIdleApi(
+          request,
+          opts.controlObserverToken ?? token,
+          realmId,
+          {
           server: opts.server,
           afterControlEventSetRoot: previousControlRoot,
           timeoutMs: 60_000,
-        });
+          },
+        );
       }
       return outcome;
     }

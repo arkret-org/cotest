@@ -712,8 +712,9 @@
           "kind": "ordinary",
           "path": "src/scenarios/handle_to_join_e2e.rs",
           "markers": [
-            ".validate_remote_resolution(Some(TARGET_REALM_ID), Some(&account_a), now)",
-            ".validate_remote_resolution(Some(TARGET_REALM_ID), Some(&account_b), now)",
+            "Some(&account_a),",
+            "Some(&account_b),",
+            "&trusted_verifiers,",
             "MembershipPayload::join"
           ]
         },

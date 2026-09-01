@@ -19,6 +19,7 @@ import {
   type KeyObject,
 } from "node:crypto";
 import {
+  accountActorId,
   canonicalJson,
   projectDidToCoreId,
   sha256CanonicalJson,
@@ -166,10 +167,11 @@ export function signBindingProof(args: {
   bindingExpiresAt: string;
 }): Record<string, unknown> {
   const serviceId = projectDidToCoreId(args.verificationService.did);
+  const subjectAccountId = accountActorId(args.subjectId).account_id;
   const unsigned = {
     verification_id: serviceId,
     verification_method: args.verificationService.verificationMethod,
-    subject_id: args.subjectId,
+    subject_account_id: subjectAccountId,
     realm_id: args.cell.realmId,
     audience: INVITE_AUDIENCE,
     claim_nonce: args.claimNonce,
@@ -182,7 +184,7 @@ export function signBindingProof(args: {
     invite_digest: inviteRecordDigest(args.cell),
     invite_id: cellInviteId(args.cell),
     realm_id: args.cell.realmId,
-    subject_id: args.subjectId,
+    subject_account_id: subjectAccountId,
     token_commitment: args.cell.tokenCommitment,
     verification_id: serviceId,
   });
@@ -205,19 +207,22 @@ export function signSubjectProof(args: {
   claimNonce: string;
 }): Record<string, unknown> {
   const bindingDigest = `sha256:${sha256CanonicalJson(args.bindingProof)}`;
+  const subjectAccountId = accountActorId(
+    projectDidToCoreId(args.subject.did),
+  ).account_id;
   const transcript = transcriptBytes(SUBJECT_PROOF_TRANSCRIPT_DOMAIN, {
     audience: INVITE_AUDIENCE,
     binding_proof_digest: bindingDigest,
     claim_nonce: args.claimNonce,
     invite_id: cellInviteId(args.cell),
     realm_id: args.cell.realmId,
-    subject_id: projectDidToCoreId(args.subject.did),
+    subject_account_id: subjectAccountId,
     token_commitment: args.cell.tokenCommitment,
     verification_id: projectDidToCoreId(args.verificationServiceDid),
   });
   return {
     verification_method: args.subject.verificationMethod,
-    alg: "Ed25519",
+    signature_algorithm: "Ed25519",
     // soland subject_proof transcript_digest = `sha256:<hex>` over the raw
     // transcript byte string (sha256_digest(transcript)), NOT over canonical
     // JSON — hash the bytes directly.
@@ -238,7 +243,7 @@ export function buildClaimPayload(args: {
 }): Record<string, unknown> {
   return {
     invite_id: cellInviteId(args.cell),
-    subject_id: args.subjectId,
+    subject_account_id: accountActorId(args.subjectId).account_id,
     token_commitment: args.cell.tokenCommitment,
     claim_nonce: args.claimNonce,
     binding_proof: args.bindingProof,
