@@ -46,13 +46,13 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     let cipher = XChaCha20Poly1305::new_from_slice(&master_key)
         .map_err(|e| anyhow!("XChaCha20-Poly1305 key init: {e}"))?;
     let nonce_bytes = [0u8; 24];
-    let nonce = XNonce::from_slice(&nonce_bytes);
+    let nonce = XNonce::from(nonce_bytes);
     let plaintext = b"session_keys_blob";
     let ciphertext = cipher
-        .encrypt(nonce, plaintext.as_ref())
+        .encrypt(&nonce, plaintext.as_ref())
         .map_err(|e| anyhow!("XChaCha20-Poly1305 encrypt: {e}"))?;
     let decrypted = cipher
-        .decrypt(nonce, ciphertext.as_ref())
+        .decrypt(&nonce, ciphertext.as_ref())
         .map_err(|e| anyhow!("XChaCha20-Poly1305 decrypt: {e}"))?;
     if decrypted != plaintext {
         bail!("XChaCha20-Poly1305 round-trip mismatch");
@@ -61,7 +61,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     let wrong = derive_argon2id_key(b"wrong-passphrase", &salt)?;
     let wrong_cipher = XChaCha20Poly1305::new_from_slice(&wrong)
         .map_err(|e| anyhow!("XChaCha20-Poly1305 wrong-key init: {e}"))?;
-    if wrong_cipher.decrypt(nonce, ciphertext.as_ref()).is_ok() {
+    if wrong_cipher.decrypt(&nonce, ciphertext.as_ref()).is_ok() {
         bail!("wrong-key decrypt succeeded — AEAD broken");
     }
 
@@ -78,7 +78,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
     }
     let cipher_v2 = XChaCha20Poly1305::new_from_slice(&master_key_v2)
         .map_err(|e| anyhow!("XChaCha20-Poly1305 rotation key init: {e}"))?;
-    if cipher_v2.decrypt(nonce, ciphertext.as_ref()).is_ok() {
+    if cipher_v2.decrypt(&nonce, ciphertext.as_ref()).is_ok() {
         bail!("post-rotation cipher decrypted pre-rotation ciphertext — rotation invariant broken");
     }
 
@@ -248,13 +248,13 @@ pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
     let key = derive_argon2id_key(b"correct-passphrase", &salt)?;
     let cipher = XChaCha20Poly1305::new_from_slice(&key)
         .map_err(|e| anyhow!("XChaCha20-Poly1305 key init: {e}"))?;
-    let nonce = XNonce::from_slice(&[0u8; 24]);
+    let nonce = XNonce::from([0u8; 24]);
     let plaintext = b"key_backup_aead_round_trip_round_26";
     let ct = cipher
-        .encrypt(nonce, plaintext.as_ref())
+        .encrypt(&nonce, plaintext.as_ref())
         .map_err(|e| anyhow!("encrypt failed: {e}"))?;
     let pt = cipher
-        .decrypt(nonce, ct.as_ref())
+        .decrypt(&nonce, ct.as_ref())
         .map_err(|e| anyhow!("decrypt failed: {e}"))?;
     if pt != plaintext {
         bail!("AEAD round-trip mismatch");
@@ -262,7 +262,7 @@ pub fn run_key_backup_aead_round_trip_check() -> Result<()> {
     let wrong = derive_argon2id_key(b"wrong-passphrase", &salt)?;
     let wrong_cipher = XChaCha20Poly1305::new_from_slice(&wrong)
         .map_err(|e| anyhow!("XChaCha20-Poly1305 wrong-key init: {e}"))?;
-    if wrong_cipher.decrypt(nonce, ct.as_ref()).is_ok() {
+    if wrong_cipher.decrypt(&nonce, ct.as_ref()).is_ok() {
         bail!("wrong-key decrypt succeeded — AEAD invariant broken");
     }
     Ok(())

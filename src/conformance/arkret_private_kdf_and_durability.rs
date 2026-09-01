@@ -325,9 +325,11 @@ fn run_exporter_aead_seal_open(case: &Value) -> Result<()> {
     let plaintext = hex::decode(required_str(input, "plaintext_hex")?)?;
     let cipher = Aes128Gcm::new_from_slice(&content_key)
         .map_err(|_| anyhow!("invalid exporter AES-128-GCM content key"))?;
+    let nonce = Nonce::try_from(nonce.as_slice())
+        .map_err(|_| anyhow!("invalid exporter AES-128-GCM nonce"))?;
     let ciphertext = cipher
         .encrypt(
-            Nonce::from_slice(&nonce),
+            &nonce,
             Payload {
                 msg: &plaintext,
                 aad: &aad,

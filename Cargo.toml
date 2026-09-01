@@ -18,10 +18,10 @@ todo = "deny"
 unimplemented = "deny"
 
 [workspace.dependencies]
-aes-gcm = "0.10.3"
-anyhow = "1.0.102"
+aes-gcm = "0.11.1"
+anyhow = "1.0.104"
 arbitrary = "1.4"
-argon2 = { version = "0.5.3", default-features = false, features = ["alloc", "password-hash"] }
+argon2 = { version = "0.6.0", default-features = false, features = ["alloc", "password-hash"] }
 arkret = { path = "../arkret-rust-sdk/crates/sdk", features = ["mls"] }
 arkret-bootstrap = { path = "../arkret-rust-sdk/crates/bootstrap" }
 arkret-canonical = { path = "../arkret-rust-sdk/crates/canonical" }
@@ -44,40 +44,40 @@ arkret-schema-conformance = { path = "../arkret-rust-sdk/crates/schema-conforman
 arkret-signatures = { path = "../arkret-rust-sdk/crates/signatures", default-features = false, features = ["collaboration", "keypackages", "signer", "webvh"] }
 arkret-state = { path = "../arkret-rust-sdk/crates/state" }
 arkret-wire = { path = "../arkret-rust-sdk/crates/wire" }
-async-trait = "0.1.89"
-base64 = "0.22.1"
+async-trait = "0.1.92"
+base64 = "0.23.1"
 bip39 = { version = "2.2.2", default-features = false, features = ["std"] }
-chacha20poly1305 = { version = "0.10.1", default-features = false }
+chacha20poly1305 = { version = "0.11.0", default-features = false }
 chrono = "0.4.45"
-ed25519-dalek = { version = "2.2.0", default-features = false }
+ed25519-dalek = { version = "3.0.0", default-features = false }
 fs2 = "0.4.3"
 garth = { path = "../garth" }
 hex = "0.4.3"
 hkdf = "0.13.0"
 hmac = "0.13.0"
-hpke-rs = "0.6"
-hpke-rs-crypto = "0.6"
-hpke-rs-rust-crypto = "0.6"
+hpke-rs = "0.7"
+hpke-rs-crypto = "0.7"
+hpke-rs-rust-crypto = "0.7"
 inkson = { path = "../inkson" }
-jsonschema = { version = "0.46.5", default-features = false }
-postgres = "0.19.12"
+jsonschema = { version = "0.52.1", default-features = false }
+postgres = "0.19.14"
 proptest = { version = "1", default-features = false }
-rand_chacha = { version = "0.3.1", default-features = false }
-rcgen = "0.14.9"
+rand_chacha = { version = "0.10.0", default-features = false }
+rcgen = "0.14.10"
 reqwest = { version = "0.13.4", default-features = false }
 salvo = { version = "=0.96.0", default-features = false }
-serde = "1.0.228"
-serde_json = "1.0.150"
+serde = "1.0.229"
+serde_json = "1.0.151"
 serde_yaml_ng = "0.10.0"
-serial_test = "3.5.0"
+serial_test = "4.0.1"
 sha2 = "0.11.0"
 soland-domain = { path = "../soland/crates/domain" }
 soland-services = { path = "../soland/crates/services" }
 soland-storage = { path = "../soland/crates/storage" }
 soland-storage-memory = { path = "../soland/crates/storage-memory" }
 tempfile = "3.27.0"
-testcontainers = "0.27"
-tokio = "1.52.3"
+testcontainers = "0.28"
+tokio = "1.53.1"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 unicode-normalization = "0.1.25"
@@ -151,7 +151,7 @@ base64 = { workspace = true }
 bip39 = { workspace = true }
 chacha20poly1305 = { workspace = true, default-features = false, features = ["alloc"] }
 chrono = { workspace = true }
-ed25519-dalek = { workspace = true, default-features = false, features = ["std"] }
+ed25519-dalek = { workspace = true, default-features = false, features = ["alloc"] }
 fs2 = { workspace = true }
 garth = { workspace = true }
 hex = { workspace = true }
