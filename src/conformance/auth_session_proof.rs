@@ -240,7 +240,7 @@ fn issue_session_grant(
             .iter()
             .map(|operation| operation.as_str().to_owned())
             .collect(),
-        scope_details: None,
+        previous_session_grant_id: None,
     })
 }
 

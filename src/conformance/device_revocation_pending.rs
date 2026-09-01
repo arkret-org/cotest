@@ -241,6 +241,7 @@ fn request(
         (Some(expected_event_id), Some(7))
     };
     let principal_id = DidCoreId::new("ak:did_core:webvh:z6mkfixture")?;
+    let account_id = AccountId::new(principal_id, DidCoreId::new("ak:did_core:web:ps.example")?);
     let device_id: DeviceId = "ak:device:0196419b-0000-7000-8000-000000000001".parse()?;
     let intent_digest = hash(intent)?;
     let accepted_device_possession_proof =
@@ -252,7 +253,7 @@ fn request(
                     predecessor_session_grant_id: SessionGrantId::from_issuance_digest(
                         arkret_canonical::sha256_bytes(b"fixture predecessor"),
                     ),
-                    principal_id: principal_id.clone(),
+                    account_id: account_id.clone(),
                     device_id: device_id.clone(),
                     audience_id: DidCoreId::new("ak:did_core:web:ps.example")?,
                     holder_jkt: "A".repeat(43),
@@ -271,7 +272,7 @@ fn request(
             None
         };
     Ok(DeviceRevocationGateCheckRequestBody {
-        account_id: AccountId::new(principal_id, DidCoreId::new("ak:did_core:web:ps.example")?),
+        account_id,
         device_id,
         expected_device_authorize_event_id,
         expected_device_generation_ref,

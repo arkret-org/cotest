@@ -55,13 +55,42 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
         "ak:did_core:key:z6MkrJVnaZkeFzdQyRo91my9QRBqmbW4cSUCQY4fVn4N1",
     )?;
     let station_id = arkret_wire::DidCoreId::new("ak:did_core:web:soland.cotest.local")?;
+    let directory_id = arkret_wire::DidCoreId::new("ak:did_core:web:teabay.cotest.local")?;
+    let as_of = Utc::now();
+    let mut source_ref_access =
+        arkret_models_collaboration::history_key::DirectorySourceRefAccess {
+            kind: arkret_models_collaboration::history_key::DirectorySourceRefAccessKind::DirectoryAnnounce,
+            source_id: station_id.clone(),
+            directory_id: directory_id.clone(),
+            realm_id: discovery_realm_id.clone(),
+            discovery_event_id: discovery_event_id.clone(),
+            source_refs: vec![discovery_event_id.clone()],
+            as_of,
+            expires_at: as_of + chrono::Duration::minutes(5),
+            proof: arkret_wire::PayloadProof {
+                kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+                verification_method: arkret_wire::DidUrl::new(
+                    "did:web:soland.cotest.local#notary-key",
+                )
+                .map_err(anyhow::Error::msg)?,
+                payload_digest: arkret_wire::Hash::new(arkret_canonical::sha256_digest(
+                    b"placeholder",
+                ))?,
+                created_at: as_of,
+                domain: Some("ak:trust_domain:cotest.local".to_owned()),
+                audience: Some(arkret_wire::Audience::Single(directory_id.to_string())),
+                proof_purpose: None,
+                jws: "e30..c2ln".to_owned(),
+            },
+        };
+    source_ref_access.proof.payload_digest = source_ref_access.payload_digest()?;
     let body = arkret_models_discovery::DirectoryAnnounceRequestBody {
         discovery_event: arkret_wire::Event {
             event_id: discovery_event_id.clone(),
             kind: arkret_wire::EventKind::ActorDiscovery,
             realm_id: discovery_realm_id.clone(),
             scope_ref: arkret_wire::event_envelope::ScopeRef::Realm {
-                realm_id: discovery_realm_id,
+                realm_id: discovery_realm_id.clone(),
             },
             actor_id: arkret_wire::ActorId::account(arkret_wire::AccountId::new(
                 discovery_actor_id.clone(),
@@ -96,8 +125,8 @@ pub async fn teabay_rejects_unsigned_ingest_run() -> Result<()> {
             proofs: Vec::new(),
             requirements: arkret_wire::EventRequirements::default(),
         },
-        source_refs: vec![discovery_event_id.into_string()],
-        as_of: Utc::now(),
+        source_ref_access,
+        as_of,
         ttl_seconds: None,
         supersedes_announce_id: None,
     };

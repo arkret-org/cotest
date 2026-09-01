@@ -617,7 +617,6 @@ fn build_pcr_genesis_unit(
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
     let mut authorize_payload =
         arkret_models_collaboration::events_payloads::DeviceAuthorizePayload {
-            principal_id: principal_id.clone(),
             device_id: principal_device_id.clone(),
             device_public_key_did: device_public_key.clone(),
             hpke_key: hpke_key.clone(),
@@ -640,7 +639,9 @@ fn build_pcr_genesis_unit(
         arkret_models_collaboration::events_payloads::SignatureMaterial::NonEmptyString(non_empty(
             base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
                 device_key
-                    .sign(&authorize_payload.device_possession_signature_input()?)
+                    .sign(&authorize_payload.device_possession_signature_input(
+                        &arkret::AccountId::new(principal_id.clone(), station_id.clone()),
+                    )?)
                     .to_bytes(),
             ),
         )?);

@@ -3,9 +3,10 @@
 // Spec: identity/consent-model.md §2-§4
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
-import { solandBaseUrl } from "../../helpers/env";
+import { solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  accountActorId,
   authHeaders,
   canonicalJson,
   canonicalTimestamp,
@@ -32,8 +33,13 @@ import { selectDxcOption } from "../../helpers/dxc-select";
 test.describe.configure({ mode: "serial" });
 
 type ConsentCellBody = {
-  holder_principal_id: string;
-  peer_principal_id: string;
+  peer: {
+    kind: "actor";
+    actor_id: {
+      kind: "account";
+      account_id: { principal_id: string; station_id: string };
+    };
+  };
   consent_scope: string;
   state: "active" | "revoked" | "expired" | "pending";
 } & Record<string, unknown>;
@@ -118,15 +124,22 @@ async function expectConsentCell(
   scope: string,
   expectedState: "active" | "revoked" | "expired" | "pending",
 ) {
+  const peer = {
+    kind: "actor",
+    actor_id: {
+      kind: "account",
+      account_id: { principal_id: peerId, station_id: solandServiceId() },
+    },
+  } as const;
   const cell = await request.get(
-    `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(holderId)}` +
-      `?peer=${encodeURIComponent(peerId)}&scope=${encodeURIComponent(scope)}`,
+    `${solandBaseUrl()}/_arkret/self/consent/cell` +
+      `?peer=${encodeURIComponent(JSON.stringify(peer))}&consent_scope=${encodeURIComponent(scope)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   expect(cell.status()).toBe(200);
   const body = (await cell.json()) as Partial<ConsentCellBody>;
-  expect(body.holder_principal_id).toBe(holderId);
-  expect(body.peer_principal_id).toBe(peerId);
+  expect(holderId).not.toBe(peerId);
+  expect(body.peer).toEqual(peer);
   expect(body.consent_scope).toBe(consentWireScope(scope));
   expect(body.state).toBe(expectedState);
   return body as ConsentCellBody;
@@ -281,12 +294,12 @@ test.describe("consent grant", () => {
       // quarantine/anti-abuse path and creates no consent cell, pending state,
       // contact fact, or requester-visible outgoing projection.
       const holderCellUrl =
-        `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(bob.id)}` +
-        `?peer=${encodeURIComponent(alice.id)}&scope=message`;
+        `${solandBaseUrl()}/_arkret/self/consent/cell` +
+        `?peer=${encodeURIComponent(JSON.stringify({ kind: "actor", actor_id: { kind: "account", account_id: { principal_id: bob.id, station_id: solandServiceId() } } }))}&consent_scope=direct_message`;
       const peerRead = await request.get(holderCellUrl, {
         headers: authHeaders(aliceToken),
       });
-      expect(peerRead.status()).toBe(403);
+      expect(peerRead.status()).toBe(404);
       await expect(
         alicePage.page.getByTestId("consent-outgoing-request-row"),
       ).toHaveCount(0);
@@ -326,8 +339,8 @@ test.describe("consent grant", () => {
       await expect(pendingRow).toBeVisible({ timeout: 30_000 });
       await expect(pendingRow).toHaveAttribute("data-state", /pending/);
       const cellUrl =
-        `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(alice.id)}` +
-        `?peer=${encodeURIComponent(bob.id)}&scope=message`;
+        `${solandBaseUrl()}/_arkret/self/consent/cell` +
+        `?peer=${encodeURIComponent(JSON.stringify({ kind: "actor", actor_id: { kind: "account", account_id: { principal_id: bob.id, station_id: solandServiceId() } } }))}&consent_scope=direct_message`;
       const cell = await request.get(cellUrl, {
         headers: selfPathHeadersForDpopSession(
           aliceFlow.session,
@@ -392,7 +405,7 @@ test.describe("consent grant", () => {
       kind: "ak.consent.grant",
       payload: {
         consent_id: openBody.consent_id,
-        peer_id: bob.id,
+        peer: { kind: "actor", actor_id: accountActorId(bob.id) },
         consent_scope: "direct_message",
       },
     });
@@ -448,7 +461,7 @@ test.describe("consent grant", () => {
       kind: "ak.consent.grant",
       payload: {
         consent_id: openBody.consent_id,
-        peer_id: bob.id,
+        peer: { kind: "actor", actor_id: accountActorId(bob.id) },
         consent_scope: "direct_message",
       },
     });
@@ -579,7 +592,7 @@ test.describe("consent grant", () => {
       kind: "ak.consent.grant",
       payload: {
         consent_id: consentId,
-        peer_id: bob.id,
+        peer: { kind: "actor", actor_id: accountActorId(bob.id) },
         consent_scope: "direct_message",
         expires_at: canonicalTimestamp(
           new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -918,8 +931,8 @@ test.describe("consent grant", () => {
         .poll(
           async () => {
             const cell = await request.get(
-              `${solandBaseUrl()}/_arkret/self/consent/cells/${encodeURIComponent(alice.id)}` +
-                `?peer=${encodeURIComponent(bob.id)}&scope=invite`,
+              `${solandBaseUrl()}/_arkret/self/consent/cell` +
+                `?peer=${encodeURIComponent(JSON.stringify({ kind: "actor", actor_id: { kind: "account", account_id: { principal_id: bob.id, station_id: solandServiceId() } } }))}&consent_scope=invite`,
               { headers: { authorization: `Bearer ${aliceToken}` } },
             );
             if (cell.status() !== 200) {

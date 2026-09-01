@@ -1,6 +1,6 @@
 //! Key-backup KDF floor and unlock-proof conformance vectors.
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use arkret_models_crypto::{BackupKind, KeyBackupKeybag, KeyBackupPlaintext, KeyBackupUnlockProof};
 use arkret_wire::{ActorId, ProfileId};
 use serde::Deserialize;
@@ -137,7 +137,7 @@ fn encryption_sample(value: &Value) -> Value {
 
 struct RecoverySessionState {
     recovery_session_id: String,
-    principal_id: String,
+    account_id: arkret_wire::AccountId,
     requesting_device_id: String,
     proof_digest: String,
     fresh_device_proof: bool,
@@ -155,7 +155,12 @@ struct BackupEnvelopeState {
 fn recovery_session_state(value: &Value) -> Result<RecoverySessionState> {
     Ok(RecoverySessionState {
         recovery_session_id: required_str(value, "recovery_session_id")?.to_owned(),
-        principal_id: required_str(value, "principal_id")?.to_owned(),
+        account_id: serde_json::from_value(
+            value
+                .get("account_id")
+                .cloned()
+                .context("missing account_id")?,
+        )?,
         requesting_device_id: required_str(value, "requesting_device_id")?.to_owned(),
         proof_digest: required_str(value, "proof_digest")?.to_owned(),
         fresh_device_proof: value
@@ -214,7 +219,7 @@ fn authorize_unlock(
     if path_backup_id != proof.backup_id.as_str()
         || path_backup_id != envelope.backup_id
         || proof.recovery_session_id.as_str() != session.recovery_session_id
-        || proof.principal_id.as_str() != session.principal_id
+        || proof.account_id != session.account_id
         || proof.requesting_device_id.as_str() != session.requesting_device_id
         || backup_class_str(proof.backup_kind) != envelope.backup_kind
         || proof.series_id.as_str() != envelope.series_id
@@ -331,7 +336,7 @@ pub fn run_key_backup_unlock_proof_vector() -> Result<()> {
 
     let mut bearer_session = RecoverySessionState {
         recovery_session_id: session.recovery_session_id.clone(),
-        principal_id: session.principal_id.clone(),
+        account_id: session.account_id.clone(),
         requesting_device_id: session.requesting_device_id.clone(),
         proof_digest: session.proof_digest.clone(),
         fresh_device_proof: false,
@@ -406,7 +411,10 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
         "challenge": "BBBBBBBBBBBBBBBBBBBBBB",
         "nonce": "CCCCCCCCCCCCCCCCCCCCCC",
         "operation": "ak.self.keys.backups.resource.delete.v1",
-        "principal_id": "ak:did_core:webvh:z6mkfixture",
+        "account_id": {
+            "principal_id": "ak:did_core:webvh:z6mkfixture",
+            "station_id": "ak:did_core:webvh:z6mkauthorityfixture"
+        },
         "backup_id": "ak:backup:0196419b-0000-7000-8000-000000000001",
         "audience": "https://authority.example",
         "service_id": "ak:did_core:webvh:z6mkauthorityfixture",
@@ -535,7 +543,7 @@ pub fn run_key_backup_delete_authority_vector() -> Result<()> {
     }
 
     let request_identity = (
-        challenge.principal_id.to_string(),
+        serde_json::to_string(&challenge.account_id)?,
         challenge.backup_id.to_string(),
         challenge.request_id.to_string(),
     );

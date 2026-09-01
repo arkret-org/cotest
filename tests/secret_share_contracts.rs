@@ -9,7 +9,8 @@ use arkret_models_collaboration::sync_frames::account_sync::{
     DeviceMessagesSendRequestBody,
 };
 use arkret_wire::{
-    HPKE_SUITE_X25519_CHACHA20POLY1305_V1, ProtocolKind, SECRET_REQUEST_KIND, SECRET_SEND_KIND,
+    AccountId, HPKE_SUITE_X25519_CHACHA20POLY1305_V1, ProtocolKind, SECRET_REQUEST_KIND,
+    SECRET_SEND_KIND,
 };
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -20,6 +21,7 @@ use hpke_rs_rust_crypto::HpkeRustCrypto;
 use serde_json::{Value, json};
 
 const ACCOUNT_ID: &str = "ak:did_core:web:alice.example";
+const STATION_ID: &str = "ak:did_core:web:station.example";
 const OLD_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000a";
 const NEW_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000b";
 const OTHER_DEVICE: &str = "ak:device:01904100-0000-7000-8000-00000000000c";
@@ -165,6 +167,10 @@ fn d2d_root_secret_share_rejects_unsolicited_or_tampered_sends() -> Result<()> {
 
     let mut wrong_sender = envelope.clone();
     wrong_sender.sender = DeviceMessageSender::Device {
+        sender_account_id: AccountId::new(
+            DidCoreId::new(ACCOUNT_ID.to_owned())?,
+            DidCoreId::new(STATION_ID.to_owned())?,
+        ),
         sender_device_id: device_id(OTHER_DEVICE)?,
     };
     assert!(open_secret_send(&request, &wrong_sender).is_err());
@@ -349,14 +355,17 @@ fn send_aad(
     expires_at: &str,
 ) -> Result<Vec<u8>> {
     let device_message_id = DeviceMessageId::new(device_message_id)?;
-    let account = DidCoreId::new(ACCOUNT_ID.to_owned())?;
+    let account = AccountId::new(
+        DidCoreId::new(ACCOUNT_ID.to_owned())?,
+        DidCoreId::new(STATION_ID.to_owned())?,
+    );
     let sender_device_id = device_id(sender_device_id)?;
     let recipient_device_id = device_id(recipient_device_id)?;
     Ok(arkret_crypto::secret_share::SecretShareSendAad {
         device_message_id: &device_message_id,
-        sender_principal_id: &account,
+        sender_account_id: &account,
         sender_device_id: &sender_device_id,
-        recipient_principal_id: &account,
+        recipient_account_id: &account,
         recipient_device_id: &recipient_device_id,
         request_id,
         secret_id: SECRET_ID,
@@ -380,11 +389,17 @@ fn materialized_send_envelope(content: Value, expires_at: &str) -> Result<Device
     Ok(DeviceMessageEnvelope {
         device_message_id: DeviceMessageId::new(MESSAGE_ID)?,
         kind: ProtocolKind::new(SECRET_SEND_KIND).map_err(anyhow::Error::msg)?,
-        sender_principal_id: DidCoreId::new(ACCOUNT_ID.to_owned())?,
         sender: DeviceMessageSender::Device {
+            sender_account_id: AccountId::new(
+                DidCoreId::new(ACCOUNT_ID.to_owned())?,
+                DidCoreId::new(STATION_ID.to_owned())?,
+            ),
             sender_device_id: device_id(OLD_DEVICE)?,
         },
-        recipient_principal_id: DidCoreId::new(ACCOUNT_ID.to_owned())?,
+        recipient_account_id: AccountId::new(
+            DidCoreId::new(ACCOUNT_ID.to_owned())?,
+            DidCoreId::new(STATION_ID.to_owned())?,
+        ),
         recipient_device_id: device_id(NEW_DEVICE)?,
         sent_at: parse_utc("2026-06-10T00:00:00.000Z")?,
         expires_at: parse_utc(expires_at)?,

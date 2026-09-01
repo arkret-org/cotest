@@ -162,6 +162,10 @@ export async function grantInviteConsentArkret(
   opts: { server?: SolandKey } = {},
 ): Promise<InviteConsentGrant> {
   const consentId = `ak:consent:${uuidV7()}`;
+  const peer = {
+    kind: "actor",
+    actor_id: accountActorId(peerId, opts.server),
+  };
   const envelope = signedEventEnvelope({
     actorId: holder.id,
     realmId: principalControlRealmForId(holder.id),
@@ -169,7 +173,7 @@ export async function grantInviteConsentArkret(
     server: opts.server,
     payload: {
       consent_id: consentId,
-      peer_id: peerId,
+      peer,
       consent_scope: "invite",
       expires_at: canonicalTimestamp(
         new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -193,8 +197,8 @@ export async function grantInviteConsentArkret(
     .poll(
       async () => {
         const cellUrl =
-          `${solandBaseUrl(opts.server)}/_arkret/self/consent/cells/${encodeURIComponent(holder.id)}` +
-          `?peer=${encodeURIComponent(peerId)}&consent_scope=invite`;
+          `${solandBaseUrl(opts.server)}/_arkret/self/consent/cell` +
+          `?peer=${encodeURIComponent(canonicalJson(peer))}&consent_scope=invite`;
         const response = await request.get(cellUrl, {
           headers: authHeaders(token, "GET", cellUrl),
         });
@@ -794,14 +798,14 @@ async function uploadDirectConversationKeyPackage(
 
 export type InviteReceivePolicy = {
   schema: string;
-  subject_id: string;
+  account_id: ReturnType<typeof accountActorId>["account_id"];
   holder_allowed_introduction_kinds: string[];
   explicit_address_behavior: "drop" | "quarantine" | "notify";
   unknown_invites: "drop" | "quarantine";
   trusted_realm_ids?: string[];
-  trusted_principal_ids?: string[];
-  denied_principal_ids?: string[];
-  denied_subject_ids?: string[];
+  trusted_source_ids?: string[];
+  denied_source_ids?: string[];
+  denied_actor_ids?: Array<ReturnType<typeof accountActorId>>;
   disclosure?: {
     high_trust?: "opaque" | "outcome";
     low_trust?: "opaque" | "outcome";

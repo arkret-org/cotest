@@ -4,15 +4,15 @@
 //! `identity/identity-handles.md §3.2 / §17`.
 //!
 //! Wire-breaking cleanup:
-//!   * `claim_kind` enum lost `service_handle` — only `handle_binding` / `organization_handle`
-//!     remain. A `claim_kind=service_handle` envelope MUST schema-reject (VECT-COT-6).
-//!   * `subject_account_id.principal_id` MUST be a holder/principal did_core_id. A DID, account id,
-//!     or generic resource id MUST reject (VECT-COT-7), enforced by
+//!   * `claim.kind` excludes `service_handle` — only `handle_binding` / `organization_handle`
+//!     remain. A `claim.kind=service_handle` core MUST schema-reject (VECT-COT-6).
+//!   * `claim.subject_account_id.principal_id` MUST be a holder/principal did_core_id. A DID,
+//!     account id, or generic resource id MUST reject (VECT-COT-7), enforced by
 //!     [`arkret_models_identity::validate_handle_claim_subject`] and by the AccountId schema.
 //!
 //! VECT-COT-6 also pins that the SDK `HandleClaimKind` enum no longer carries a
 //! `ServiceHandle` variant, so any attempt to parse `service_handle` into
-//! the typed `claim_kind` field fails.
+//! the typed claim variant fails.
 
 use std::ffi::OsStr;
 use std::fs;
@@ -85,41 +85,67 @@ fn compile_handle_claim_schema() -> Result<jsonschema::Validator> {
 fn base_claim() -> Value {
     json!({
         "schema": "ak.schema.handle_claim.v1",
-        "handle": "alice:acme.example",
-        "subject_account_id": {
-            "principal_id": "ak:did_core:web:alice.principal.example",
-            "station_id": "ak:did_core:web:station.acme.example"
-        },
-        "issuer_id": "ak:did_core:web:coauth.acme.example",
-        "binding_state": "verified",
-        "claim_kind": "handle_binding",
-        "created_at": "2026-05-20T00:00:00.000Z",
-        "expires_at": "2026-06-20T00:00:00.000Z",
-        "proofs": [
-            {
-                "kind": "detached_jws",
-                "verification_method": "did:web:coauth.acme.example#key-1",
-                "payload_digest":
-                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "created_at": "2026-05-20T00:00:00.000Z",
-                "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
+        "claim": {
+            "schema": "ak.schema.handle_claim_core.v1",
+            "handle": "alice:acme.example",
+            "handle_aliases": [],
+            "subject_account_id": {
+                "principal_id": "ak:did_core:web:alice.principal.example",
+                "station_id": "ak:did_core:web:station.acme.example"
             },
-            // binding_state=verified claims MUST also carry a
-            // holder_acceptance proof (handle-claim.schema.json allOf[0]).
-            {
-                "kind": "detached_jws",
-                "verification_method": "did:web:alice.principal.example#key-1",
-                "proof_purpose": "holder_acceptance",
-                "payload_digest":
-                    "sha256:0000000000000000000000000000000000000000000000000000000000000000",
-                "created_at": "2026-05-20T00:00:00.000Z",
-                "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
-            }
-        ]
+            "issuer_id": "ak:did_core:web:coauth.acme.example",
+            "claim": { "kind": "handle_binding" },
+            "visibility": "public",
+            "audience": null,
+            "issued_at": "2026-05-20T00:00:00.000Z",
+            "expires_at": "2026-06-20T00:00:00.000Z",
+            "source_refs": [],
+            "proofs": [
+                {
+                    "kind": "detached_jws",
+                    "verification_method": "did:web:coauth.acme.example#key-1",
+                    "payload_digest":
+                        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "created_at": "2026-05-20T00:00:00.000Z",
+                    "domain": "ak.handle_claim_proof.v1",
+                    "proof_purpose": "issuer_attestation",
+                    "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
+                },
+                {
+                    "kind": "detached_jws",
+                    "verification_method": "did:web:alice.principal.example#key-1",
+                    "payload_digest":
+                        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                    "created_at": "2026-05-20T00:00:00.000Z",
+                    "domain": "ak.handle_claim_proof.v1",
+                    "proof_purpose": "holder_acceptance",
+                    "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
+                }
+            ]
+        },
+        "claim_digest":
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "status": "verified",
+        "as_of": "2026-05-20T00:01:00.000Z",
+        "verifier_id": "ak:did_core:web:directory.acme.example",
+        "verified_at": "2026-05-20T00:01:00.000Z",
+        "revocation": null,
+        "revocation_digest": null,
+        "fresh_until": "2026-05-20T00:06:00.000Z",
+        "status_proof": {
+            "kind": "detached_jws",
+            "verification_method": "did:web:directory.acme.example#key-1",
+            "payload_digest":
+                "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "created_at": "2026-05-20T00:01:00.000Z",
+            "domain": "ak.handle_claim_status.v1",
+            "proof_purpose": "status_attestation",
+            "jws": "eyJhbGciOiJFZDI1NTE5In0..signature"
+        }
     })
 }
 
-// ── VECT-COT-6 — claim_kind=service_handle rejected ─────────────────────────
+// ── VECT-COT-6 — claim.kind=service_handle rejected ─────────────────────────
 
 pub fn run_service_handle_rejected_vector() -> Result<()> {
     let validator = compile_handle_claim_schema()?;
@@ -138,7 +164,7 @@ pub fn run_service_handle_rejected_vector() -> Result<()> {
     }
     // Sanity: the proof digest in the fixture is well-formed.
     if !looks_like_sha256_digest(
-        ok["proofs"][0]["payload_digest"]
+        ok["claim"]["proofs"][0]["payload_digest"]
             .as_str()
             .unwrap_or_default(),
     ) {
@@ -147,10 +173,10 @@ pub fn run_service_handle_rejected_vector() -> Result<()> {
 
     // The retired `service_handle` value MUST schema-reject.
     let mut service = base_claim();
-    service["claim_kind"] = json!("service_handle");
+    service["claim"]["claim"]["kind"] = json!("service_handle");
     if validator.is_valid(&service) {
         bail!(
-            "VECT-COT-6: claim_kind=service_handle MUST schema-reject (enum is \
+            "VECT-COT-6: claim.kind=service_handle MUST schema-reject (enum is \
              [handle_binding, organization_handle])"
         );
     }
@@ -200,7 +226,7 @@ pub fn run_subject_not_principal_did_rejected_vector() -> Result<()> {
         "resource-handle-7",
     ] {
         let mut claim = base_claim();
-        claim["subject_account_id"]["principal_id"] = json!(bad_subject);
+        claim["claim"]["subject_account_id"]["principal_id"] = json!(bad_subject);
         if validator.is_valid(&claim) {
             bail!(
                 "VECT-COT-7: handle claim with non-principal account component `{bad_subject}` \

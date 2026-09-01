@@ -60,6 +60,91 @@ pub mod publication;
 pub mod scenarios;
 pub mod transcripts;
 
+/// Build a structurally valid, deterministic verified HandleClaim fixture.
+///
+/// The signatures are intentionally opaque fixture bytes; the shared model
+/// validator still checks every core/status digest and proof transcript field.
+pub fn fixture_verified_handle_claim(
+    handle: &str,
+    subject_account_id: arkret_wire::AccountId,
+    issuer_id: arkret_wire::DidCoreId,
+    audience: Option<String>,
+    issued_at: chrono::DateTime<chrono::Utc>,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+) -> arkret_wire::Result<arkret_models_identity::HandleClaim> {
+    use arkret_models_identity::{
+        Handle, HandleClaim, HandleClaimCore, HandleClaimStatus, HandleClaimVariant,
+        HandleVisibility,
+    };
+    use arkret_wire::{DidUrl, Hash, PayloadProof, PayloadProofPurpose};
+
+    let verification_method = DidUrl::new(format!(
+        "did:{}#handle-claim-fixture",
+        issuer_id
+            .as_str()
+            .strip_prefix("ak:did_core:")
+            .unwrap_or(issuer_id.as_str())
+    ))
+    .map_err(|error| arkret_wire::WireError::Protocol(error.to_owned()))?;
+    let placeholder = Hash::new(format!("sha256:{}", "0".repeat(64)))?;
+    let proof = |purpose, payload_digest| PayloadProof {
+        kind: "detached_jws".to_owned(),
+        verification_method: verification_method.clone(),
+        payload_digest,
+        created_at: issued_at,
+        domain: Some(arkret_models_identity::HANDLE_CLAIM_PROOF_DOMAIN.to_owned()),
+        audience: None,
+        proof_purpose: Some(purpose),
+        jws: "eyJhbGciOiJFZERTQSJ9..c2ln".to_owned(),
+    };
+    let mut core = HandleClaimCore {
+        schema: HandleClaimCore::SCHEMA.to_owned(),
+        handle: Handle::parse(handle)?,
+        handle_aliases: Vec::new(),
+        subject_account_id,
+        issuer_id: issuer_id.clone(),
+        claim: HandleClaimVariant::HandleBinding,
+        visibility: if audience.is_some() {
+            HandleVisibility::Restricted
+        } else {
+            HandleVisibility::Public
+        },
+        audience,
+        issued_at,
+        expires_at,
+        source_refs: Vec::new(),
+        proofs: [
+            proof(PayloadProofPurpose::IssuerAttestation, placeholder.clone()),
+            proof(PayloadProofPurpose::HolderAcceptance, placeholder.clone()),
+        ],
+    };
+    let claim_digest = core.claim_digest()?;
+    core.proofs[0].payload_digest = claim_digest.clone();
+    core.proofs[1].payload_digest = claim_digest.clone();
+
+    let maximum_fresh_until = issued_at + chrono::Duration::seconds(300);
+    let fresh_until = expires_at
+        .map(|expires| expires.min(maximum_fresh_until))
+        .unwrap_or(maximum_fresh_until);
+    let mut claim = HandleClaim {
+        schema: HandleClaim::SCHEMA.to_owned(),
+        claim: core,
+        claim_digest,
+        status: HandleClaimStatus::Verified,
+        as_of: issued_at,
+        verifier_id: issuer_id,
+        verified_at: Some(issued_at),
+        revocation: None,
+        revocation_digest: None,
+        fresh_until,
+        status_proof: proof(PayloadProofPurpose::StatusAttestation, placeholder),
+    };
+    claim.status_proof.domain = Some(arkret_models_identity::HANDLE_CLAIM_STATUS_DOMAIN.to_owned());
+    claim.status_proof.payload_digest = claim.status_digest()?;
+    claim.validate()?;
+    Ok(claim)
+}
+
 /// Build a deterministic, suite-tagged Event identity for fixtures that refer
 /// to an Event but do not carry that Event's envelope.
 ///

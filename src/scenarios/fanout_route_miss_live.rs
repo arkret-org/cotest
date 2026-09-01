@@ -11,7 +11,15 @@ use arkret_models_collaboration::http_bodies::{
     EventDeliveryStatusOutcome, EventDeliveryStatusRequestBody, EventDeliveryTargetState,
     EventsResolveOutcome, EventsResolveRequestBody, EventsSubmitOutcome,
 };
-use arkret_wire::{AccountId, ActorId, Did, DidCoreId, Event, EventId, EventKind};
+use arkret_models_collaboration::{
+    CurrentSignerEvidenceItem, CurrentSignerEvidenceQueryRequestBody, CurrentSignerEvidenceSelector,
+};
+use arkret_wire::{
+    AccountId, ActorId, Did, DidCoreId, DidUrl, Event, EventId, EventKind, Hash, NonEmptyString,
+    RealmId, RequestId, ScopeRef, SealId, ServiceOperationId, SignalClass, SignalEncryptedPayload,
+    SignalEnvelope, SignalKeyRef, SignalProof,
+};
+use chrono::Utc;
 use reqwest::StatusCode;
 use serde_json::json;
 
@@ -457,6 +465,295 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     );
 
     Ok(())
+}
+
+/// Live two-Station cold-recipient path. This intentionally uses the same
+/// mutually wired Soland processes and accepted Realm/member/device state as
+/// durable federation tests; no signer evidence is injected into the
+/// recipient before it calls the self proxy.
+pub async fn run_current_signer_evidence_live() -> Result<()> {
+    let (source_database_url, _source_ephemeral) = match std::env::var(
+        "COTEST_CURRENT_SIGNER_SOURCE_DATABASE_URL",
+    ) {
+        Ok(url) if !url.trim().is_empty() => (url, None),
+        _ => {
+            let source_ephemeral =
+                crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?;
+            let Some(database) = source_ephemeral.as_ref() else {
+                ensure!(
+                    std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
+                    "required live current-signer evidence: source PostgreSQL unavailable"
+                );
+                eprintln!(
+                    "skipping current-signer evidence live E2E: source PostgreSQL is unavailable"
+                );
+                return Ok(());
+            };
+            (database.connect_url.clone(), source_ephemeral)
+        }
+    };
+    let (target_database_url, _target_ephemeral) = match std::env::var(
+        "COTEST_CURRENT_SIGNER_TARGET_DATABASE_URL",
+    ) {
+        Ok(url) if !url.trim().is_empty() => (url, None),
+        _ => {
+            let target_ephemeral =
+                crate::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres()?;
+            let Some(database) = target_ephemeral.as_ref() else {
+                ensure!(
+                    std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
+                    "required live current-signer evidence: target PostgreSQL unavailable"
+                );
+                eprintln!(
+                    "skipping current-signer evidence live E2E: target PostgreSQL is unavailable"
+                );
+                return Ok(());
+            };
+            (database.connect_url.clone(), target_ephemeral)
+        }
+    };
+    let account_authority_id = harness_account_authority_id().to_string();
+    let node_envs = vec![
+        vec![
+            ("DATABASE_URL".to_owned(), source_database_url),
+            (
+                "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
+                HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
+            ),
+            (
+                "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
+                account_authority_id.clone(),
+            ),
+        ],
+        vec![
+            ("DATABASE_URL".to_owned(), target_database_url),
+            (
+                "SOLAND_ACCOUNT_AUTHORITY_URL".to_owned(),
+                HARNESS_ACCOUNT_AUTHORITY_ORIGIN.to_owned(),
+            ),
+            (
+                "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
+                account_authority_id,
+            ),
+        ],
+    ];
+    let Some(mut group) =
+        TestServerGroup::try_multi_external_with_node_envs("current-signer-evidence", &node_envs)
+            .await?
+    else {
+        ensure!(
+            std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
+            "required live current-signer evidence: prebuilt Soland unavailable"
+        );
+        eprintln!("skipping current-signer evidence live E2E: prebuilt Soland is unavailable");
+        return Ok(());
+    };
+
+    let alice_did = actor_did_for_service_did(group.server(0).service_did(), "evidence-alice")?;
+    let bob_did = actor_did_for_service_did(group.server(1).service_did(), "evidence-bob")?;
+    let alice = group
+        .server(0)
+        .register_client(&alice_did, "evidence-alice", ALICE_DEVICE)
+        .await?;
+    let bob = group
+        .server(1)
+        .register_client(&bob_did, "evidence-bob", BOB_DEVICE)
+        .await?;
+    let alice_principal = alice.principal.as_ref().context("source PCR bootstrap")?;
+    let bob_principal = bob.principal.as_ref().context("recipient PCR bootstrap")?;
+    let alice_account = AccountId::new(
+        alice_principal.core_id.clone(),
+        group.server(0).service_id().clone(),
+    );
+    let bob_account = AccountId::new(
+        bob_principal.core_id.clone(),
+        group.server(1).service_id().clone(),
+    );
+
+    let bootstrap = alice
+        .create_realm_bootstrap_with(json!({
+            "title": "Current signer evidence",
+            "summary": "Cold recipient evidence",
+            "public": false,
+            "plaintext_visible_services": [alice.service_id()]
+        }))
+        .await?;
+    let realm_id = bootstrap["realm_id"]
+        .as_str()
+        .context("evidence bootstrap realm_id")?
+        .to_owned();
+    let bootstrap_outcome: EventsSubmitOutcome =
+        serde_json::from_value(bootstrap["event_response"].clone())?;
+    let bootstrap_events = resolve_events(&alice, bootstrap_outcome.accepted.clone()).await?;
+    install_fixture_events(
+        group.server(1),
+        &bootstrap_events,
+        &bootstrap_outcome.control_proposal_acks,
+    )
+    .await?;
+    wait_for_bootstrap_seal(&alice, &realm_id).await?;
+    let bob_join = member_payload(
+        &realm_id,
+        &bob_did,
+        group.server(1).service_id().clone(),
+        MembershipPayloadState::Join,
+    )?;
+    let bob_join_id = submit_and_settle_member_transition(&alice, &realm_id, bob_join).await?;
+    // The external-process harness deliberately runs federation workers on
+    // their startup recovery path. Restart the authority after the durable
+    // join intent is committed so the cold-recipient test exercises the same
+    // real outbox replay path as the fanout durability scenarios.
+    group.server_mut(0).restart_external_process().await?;
+    wait_for_resolved_event(&bob, &alice, &bob_join_id).await?;
+
+    let envelope = cold_signal_envelope(
+        RealmId::new(realm_id)?,
+        ActorId::account(alice_account.clone()),
+        alice_principal.device_id.clone(),
+        DidUrl::new(format!(
+            "{}#{}",
+            alice_principal.did, alice_principal.device_id
+        ))
+        .map_err(anyhow::Error::msg)?,
+    )?;
+    let request_digest = Hash::new(arkret_canonical::sha256_digest(
+        arkret_canonical::canonical_json_bytes(&envelope)?,
+    ))?;
+    let request = CurrentSignerEvidenceQueryRequestBody {
+        request_id: RequestId::new("ak:request:019b0000-0000-7000-8000-000000000101")?,
+        realm_id: envelope.realm_id.clone(),
+        operation_id: ServiceOperationId::SelfSignalCommandSendV1,
+        request_digest,
+        recipient_account_id: bob_account.clone(),
+        challenge: NonEmptyString::new(format!("ak.challenge:{}", "A".repeat(32)))
+            .map_err(anyhow::Error::msg)?,
+        queries: vec![CurrentSignerEvidenceSelector::AccountDevice {
+            account_id: alice_account.clone(),
+            device_id: alice_principal.device_id.clone(),
+        }],
+    };
+    request.validate_for_envelope(&envelope)?;
+
+    // The only acquisition is Bob@Station-B -> self proxy -> peer authority
+    // Station-A. Bob has never queried or cached Alice's signer beforehand.
+    let outcome = bob.sdk().current_signer_evidence_query(&request).await?;
+    ensure!(outcome.response.issuer_id == *group.server(0).service_id());
+    ensure!(outcome.response.verifier_id == *group.server(1).service_id());
+    let CurrentSignerEvidenceItem::AccountDevice {
+        account_id,
+        device_id,
+        device_projection_attestation,
+    } = outcome
+        .response
+        .evidences
+        .first()
+        .context("origin Station omitted current device evidence")?
+    else {
+        bail!("origin Station returned the wrong current evidence branch");
+    };
+    ensure!(account_id == &alice_account && device_id == &alice_principal.device_id);
+    let issuer_key = ed25519_dalek::VerifyingKey::from_bytes(&<[u8; 32]>::try_from(
+        arkret_canonical::base64url_decode(
+            &group
+                .server(0)
+                .service_notary_signer()
+                .frozen_public_key_b64u,
+        )?
+        .as_slice(),
+    )?)?;
+    arkret_signatures::current_signer_evidence::verify_current_signer_evidence_outcome(
+        &outcome,
+        &issuer_key,
+        Utc::now(),
+    )?;
+    let displayed = format!(
+        "{} / {} / {}",
+        account_id, device_id, device_projection_attestation.proof.verification_method
+    );
+    ensure!(displayed.contains(group.server(0).service_id().as_str()));
+
+    let mut wrong_station = request.clone();
+    wrong_station.recipient_account_id.station_id = group.server(0).service_id().clone();
+    let wrong_response = bob
+        .post("/_arkret/self/current-signer-evidence/query")
+        .json(&wrong_station)
+        .send()
+        .await?;
+    ensure!(
+        matches!(
+            wrong_response.status(),
+            StatusCode::NOT_FOUND | StatusCode::FORBIDDEN
+        ),
+        "wrong recipient Station was not rejected: {}",
+        wrong_response.status()
+    );
+
+    ensure!(
+        outcome
+            .validate_for_request(&request, outcome.response.expires_at)
+            .is_err(),
+        "stale current-signer evidence remained usable"
+    );
+    let mut revoked = outcome.clone();
+    let CurrentSignerEvidenceItem::AccountDevice {
+        device_projection_attestation,
+        ..
+    } = &mut revoked.response.evidences[0]
+    else {
+        unreachable!()
+    };
+    device_projection_attestation.attestation.device_status =
+        arkret_models_crypto::DeviceStatus::Revoked;
+    ensure!(
+        revoked.validate_for_request(&request, Utc::now()).is_err(),
+        "revoked device evidence remained usable"
+    );
+    Ok(())
+}
+
+fn cold_signal_envelope(
+    realm_id: RealmId,
+    sender_actor_id: ActorId,
+    sender_device_id: arkret_wire::DeviceId,
+    verification_method: DidUrl,
+) -> Result<SignalEnvelope> {
+    let sent_at = Utc::now();
+    let mut envelope = SignalEnvelope {
+        realm_id: realm_id.clone(),
+        scope_ref: ScopeRef::Realm { realm_id },
+        sender_actor_id,
+        sender_device_id: Some(sender_device_id),
+        seal_ref: SealId::new(format!("ak:seal:sha256:{}", "a".repeat(64)))?,
+        signal_class: SignalClass::Session,
+        sent_at,
+        expires_at: sent_at + chrono::Duration::seconds(30),
+        encrypted_payload: SignalEncryptedPayload {
+            scheme: arkret_wire::SIGNAL_AEAD_SCHEME.to_owned(),
+            key_ref: SignalKeyRef {
+                algorithm: "MLS-EXPORTER-AEAD".to_owned(),
+                group_state_ref: crate::fixture_event_id("cold-signal-group-state").to_string(),
+            },
+            purpose: arkret_wire::SIGNAL_AEAD_PURPOSE.to_owned(),
+            aead_profile: "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519".to_owned(),
+            epoch: 1,
+            nonce: "AAAAAAAAAAAAAAAA".to_owned(),
+            ciphertext: "Q29sZFJlY2lwaWVudA".to_owned(),
+            aad_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+        },
+        proof: SignalProof {
+            kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
+            verification_method,
+            envelope_digest: Hash::new(format!("sha256:{}", "0".repeat(64)))?,
+            created_at: sent_at,
+            domain: None,
+            audience: None,
+            jws: "a..b".to_owned(),
+        },
+    };
+    envelope.encrypted_payload.aad_digest = envelope.expected_aad_digest()?;
+    envelope.proof.envelope_digest = envelope.envelope_digest()?;
+    envelope.validate_structural()?;
+    Ok(envelope)
 }
 
 async fn wait_for_frontier_exchange_success(

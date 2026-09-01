@@ -57,7 +57,7 @@ pub async fn contacts_invites_listing_export_and_audit_work() -> Result<()> {
         }))
         .await?;
     let invite_realm_id = invite_realm["realm_id"].as_str().unwrap().to_owned();
-    let introduction_evidence = IntroductionEvidence::SameStation;
+    let introduction_evidence = IntroductionEvidence::ExplicitAddress;
     let invite_expires_at = chrono::DateTime::parse_from_rfc3339("2026-12-31T00:00:00.000Z")?
         .with_timezone(&chrono::Utc);
     let invite_event = alice

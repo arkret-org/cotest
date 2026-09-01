@@ -23,7 +23,9 @@ use arkret_models_collaboration::events_payloads::{
     FoundingDeviceDescriptor, FoundingDeviceHpkeKeyAlgorithm, FoundingDeviceKeyAlgorithm,
     FoundingDeviceKeyPurpose, SignatureMaterial, device_authorize_payload_digest,
 };
-use arkret_wire::{Audience, DidUrl, Event, EventRef, NonEmptyString, ProducerEventProof};
+use arkret_wire::{
+    AccountId, Audience, DidUrl, Event, EventRef, NonEmptyString, ProducerEventProof,
+};
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey};
 use serde::Deserialize;
@@ -262,7 +264,6 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let hpke_key = non_empty("z6LSCotestPcrGenesisHpkeKey")?;
     let algorithms = vec![non_empty("ak.hpke_x25519_aead_chacha20poly1305.v1")?];
     let mut authorize_payload = DeviceAuthorizePayload {
-        principal_id: principal.clone(),
         device_id: device_id.clone(),
         device_public_key_did: device_public_key.clone(),
         hpke_key: hpke_key.clone(),
@@ -276,11 +277,16 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
         device_signature: SignatureMaterial::NonEmptyString(non_empty("pending")?),
         recovery_session_id: None,
     };
-    let signature = device_key.sign(&authorize_payload.device_possession_signature_input()?);
+    let subject_account_id = AccountId::new(
+        principal.clone(),
+        DidCoreId::new("ak:did_core:web:principal.example")?,
+    );
+    let signature =
+        device_key.sign(&authorize_payload.device_possession_signature_input(&subject_account_id)?);
     authorize_payload.device_signature = SignatureMaterial::NonEmptyString(non_empty(
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature.to_bytes()),
     )?);
-    arkret_signatures::verify_device_authorize_possession(&authorize_payload)
+    arkret_signatures::verify_device_authorize_possession(&authorize_payload, &subject_account_id)
         .map_err(|error| anyhow!(error.to_string()))?;
     let authorize_value = serde_json::to_value(&authorize_payload)?;
     let descriptor = FoundingDeviceDescriptor {
@@ -368,7 +374,8 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let mut tampered: DeviceAuthorizePayload =
         authorize.typed_payload::<arkret_wire::event_spec::DeviceAuthorize>()?;
     tampered.device_signature = SignatureMaterial::NonEmptyString(non_empty("AA")?);
-    if arkret_signatures::verify_device_authorize_possession(&tampered).is_ok() {
+    if arkret_signatures::verify_device_authorize_possession(&tampered, &subject_account_id).is_ok()
+    {
         bail!("PCR genesis accepted a mutated founding-device possession proof");
     }
     Ok(())

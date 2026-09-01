@@ -20,7 +20,7 @@ use arkret_identifiers::DidCoreId;
 use arkret_models_discovery::{
     DirectoryListHandlesForSubjectRequestBody, DirectorySubjectHandleList,
 };
-use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+use arkret_models_identity::{Handle, HandleClaim};
 use arkret_wire::AccountId;
 use chrono::{DateTime, TimeZone, Utc};
 
@@ -76,26 +76,14 @@ fn claim_for(
     issuer: &str,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
-    Ok(HandleClaim {
-        schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?,
-        handle_aliases: Vec::new(),
-        subject_account_id: subj.clone(),
-        issuer_id: DidCoreId::new(issuer)?,
-        vouching_id: None,
-        binding_state: HandleBindingState::Verified,
-        claim_kind: None,
-        visibility: None,
-        audience: audience.map(str::to_owned),
-        challenge: None,
-        claim_scope: Default::default(),
-        claims: Vec::new(),
-        created_at: at(2026, 5, 1),
-        expires_at: Some(at(2026, 7, 1)),
-        verified_at: None,
-        source_refs: Vec::new(),
-        proofs: Vec::new(),
-    })
+    Ok(crate::fixture_verified_handle_claim(
+        handle,
+        subj.clone(),
+        DidCoreId::new(issuer)?,
+        audience.map(str::to_owned),
+        at(2026, 5, 1),
+        Some(at(2026, 7, 1)),
+    )?)
 }
 
 // ── VECT-COT-3.1 — happy path single claim ──────────────────────────────────
@@ -194,7 +182,7 @@ pub fn run_audience_filter_applied_vector() -> Result<()> {
     // returning. We model that filter and assert the visible set.
     let visible: Vec<HandleClaim> = [in_scope.clone(), out_of_scope]
         .into_iter()
-        .filter(|c| match c.audience.as_deref() {
+        .filter(|c| match c.claim.audience.as_deref() {
             Some(a) => a == realm_ctx,
             None => true,
         })
@@ -205,14 +193,14 @@ pub fn run_audience_filter_applied_vector() -> Result<()> {
     let res = DirectorySubjectHandleList {
         account_id: s.clone(),
         claims: visible,
-        primary_handle: Some(in_scope.handle.clone()),
+        primary_handle: Some(in_scope.claim.handle.clone()),
         as_of: now_anchor(),
         next_cursor: None,
         has_more: false,
     };
     res.validate()
         .map_err(|e| anyhow!("audience-filtered response MUST validate: {e}"))?;
-    if res.claims[0].audience.as_deref() != Some(realm_ctx) {
+    if res.claims[0].claim.audience.as_deref() != Some(realm_ctx) {
         bail!("only the in-scope claim MAY remain");
     }
     Ok(())
@@ -233,16 +221,16 @@ pub fn run_issuer_trust_filter_vector() -> Result<()> {
         .filter(|c| {
             accepted_issuer_ids
                 .iter()
-                .any(|accepted| accepted == &c.issuer_id)
+                .any(|accepted| accepted == &c.claim.issuer_id)
         })
         .collect();
-    if visible.len() != 1 || visible[0].issuer_id.as_str() != ACME_ISSUER {
+    if visible.len() != 1 || visible[0].claim.issuer_id.as_str() != ACME_ISSUER {
         bail!("issuer-trust filter MUST keep only accepted_issuer_ids claims");
     }
     let res = DirectorySubjectHandleList {
         account_id: s.clone(),
         claims: visible,
-        primary_handle: Some(trusted.handle.clone()),
+        primary_handle: Some(trusted.claim.handle.clone()),
         as_of: now_anchor(),
         next_cursor: None,
         has_more: false,
@@ -348,7 +336,7 @@ pub fn run_primary_handle_field_aligned_with_3_2_1_vector() -> Result<()> {
     };
     let selected = select_primary_handle(&selection)
         .ok_or_else(|| anyhow!("§3.2.1 MUST select a primary handle"))?;
-    let selected_handle = selected.handle.clone();
+    let selected_handle = selected.claim.handle.clone();
 
     let res = DirectorySubjectHandleList {
         account_id: s.clone(),

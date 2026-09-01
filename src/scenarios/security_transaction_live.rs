@@ -25,7 +25,7 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
         .as_ref()
         .map(|principal| principal.pcr_realm_id.as_str().to_owned())
         .ok_or_else(|| anyhow::anyhow!("client carries its provisioned principal"))?;
-    let request = rotation_create_request(&actor, &pcr_realm)?;
+    let request = rotation_create_request(&actor, server.service_did().as_str(), &pcr_realm)?;
 
     let first = expect_json(
         client
@@ -78,6 +78,7 @@ pub async fn security_transaction_create_is_durable_on_live_soland() -> Result<(
 
 fn rotation_create_request(
     actor: &str,
+    station_id: &str,
     pcr_realm: &str,
 ) -> Result<SecurityTransactionCreateRequest> {
     let principal = Did::new(actor.to_owned())?;
@@ -95,7 +96,7 @@ fn rotation_create_request(
     Ok(SecurityTransactionCreateRequest::SecurityRotation(
         SecurityRotationTransactionCreateRequest::from_prepared_rotations(
             transaction_id,
-            principal_id,
+            arkret_wire::AccountId::new(principal_id, DidCoreId::new(station_id.to_owned())?),
             Utc::now() + chrono::Duration::hours(1),
             revoke_unit,
             hash('e')?,

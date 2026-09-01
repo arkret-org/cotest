@@ -61,7 +61,16 @@ fn domain_wire_constraint_vectors_reject_drift() {
 
     let consent = json!({
         "consent_id": "ak:consent:01904100-0000-7000-8000-000000000001",
-        "peer_id": "ak:did_core:webvh:z6mkfixture",
+        "peer": {
+            "kind": "actor",
+            "actor_id": {
+                "kind": "account",
+                "account_id": {
+                    "principal_id": "ak:did_core:webvh:z6mkfixture",
+                    "station_id": "ak:did_core:webvh:z6mkfixturestationexample"
+                }
+            }
+        },
         "consent_scope": "direct_message"
     });
     serde_json::from_value::<arkret::ConsentGrantPayload>(consent.clone())
@@ -667,7 +676,7 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     // SDK-level positive control: a canonical handle resolves one exact
     // Station account and round-trips without a parallel delivery identity.
     use arkret_identifiers::DidCoreId;
-    use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+    use arkret_models_identity::{Handle, HandleClaim};
     use arkret_wire::AccountId;
 
     let invite_handle = Handle::parse("alice:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
@@ -681,56 +690,44 @@ fn test_8_handle_rename_round_trip_sdk_shape() -> Result<()> {
     let subject = DidCoreId::new("ak:did_core:web:alice.acme.example")?;
     let station = DidCoreId::new("ak:did_core:web:station.acme.example")?;
     let account_id = AccountId::new(subject, station);
-    let claim = HandleClaim {
-        schema: HandleClaim::SCHEMA.to_owned(),
-        handle: invite_handle,
-        handle_aliases: vec!["acct:alice@acme.example".to_owned()],
-        subject_account_id: account_id.clone(),
-        issuer_id: DidCoreId::new("ak:did_core:web:directory.acme.example")?,
-        vouching_id: None,
-        binding_state: HandleBindingState::Verified,
-        claim_kind: None,
-        visibility: None,
-        audience: Some("ak:realm:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-".to_owned()),
-        challenge: None,
-        claim_scope: Default::default(),
-        claims: Vec::new(),
-        created_at: chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
+    let claim = cotest::fixture_verified_handle_claim(
+        invite_handle.canonical(),
+        account_id.clone(),
+        DidCoreId::new("ak:did_core:web:directory.acme.example")?,
+        Some("ak:realm:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-".to_owned()),
+        chrono::DateTime::parse_from_rfc3339("2026-05-27T00:00:00.000Z")?
             .with_timezone(&chrono::Utc),
-        expires_at: Some(
+        Some(
             chrono::DateTime::parse_from_rfc3339("2026-05-27T00:05:00.000Z")?
                 .with_timezone(&chrono::Utc),
         ),
-        verified_at: None,
-        source_refs: Vec::new(),
-        proofs: Vec::new(),
-    };
+    )?;
 
     let wire = serde_json::to_value(&claim).map_err(|e| anyhow!("serialise: {e}"))?;
-    if wire.get("handle").is_none() {
+    if wire.pointer("/claim/handle").is_none() {
         bail!(
             "TEST-8: serialised candidate MUST carry `handle` field (R3.1 wire \
              rename); shape: {wire:#}"
         );
     }
-    if wire.get("handle_uri").is_some() {
+    if wire.pointer("/claim/handle_uri").is_some() {
         bail!(
             "TEST-8: serialised candidate MUST NOT carry the retired \
              `handle_uri` field"
         );
     }
-    if wire.get("subject_account_id") != Some(&serde_json::to_value(&account_id)?) {
+    if wire.pointer("/claim/subject_account_id") != Some(&serde_json::to_value(&account_id)?) {
         bail!("TEST-8: handle claim must carry the complete Station account");
     }
     let decoded: HandleClaim =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise: {e}"))?;
-    if decoded.handle.canonical() != "alice:acme.example" {
+    if decoded.claim.handle.canonical() != "alice:acme.example" {
         bail!(
             "TEST-8: handle wire round-trip drifted; got `{}`",
-            decoded.handle.canonical()
+            decoded.claim.handle.canonical()
         );
     }
-    if decoded.subject_account_id != account_id {
+    if decoded.claim.subject_account_id != account_id {
         bail!("TEST-8: exact account wire round-trip drifted");
     }
     Ok(())

@@ -1,7 +1,7 @@
 //! Property checks for canonical handles and Station-scoped handle claims.
 
 use arkret_identifiers::DidCoreId;
-use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+use arkret_models_identity::{Handle, HandleClaim};
 use arkret_wire::AccountId;
 use chrono::{Duration, Utc};
 use proptest::prelude::*;
@@ -28,26 +28,16 @@ fn account(station: &str) -> AccountId {
 }
 
 fn base_claim(handle: &str, station: &str) -> HandleClaim {
-    HandleClaim {
-        schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Handle::parse(handle).unwrap(),
-        handle_aliases: Vec::new(),
-        subject_account_id: account(station),
-        issuer_id: DidCoreId::new("ak:did_core:web:issuer.example").unwrap(),
-        vouching_id: None,
-        binding_state: HandleBindingState::Pending,
-        claim_kind: None,
-        visibility: None,
-        audience: None,
-        challenge: None,
-        claim_scope: Default::default(),
-        claims: Vec::new(),
-        created_at: Utc::now(),
-        expires_at: None,
-        verified_at: None,
-        source_refs: Vec::new(),
-        proofs: Vec::new(),
-    }
+    let issued_at = Utc::now() - Duration::minutes(1);
+    cotest::fixture_verified_handle_claim(
+        handle,
+        account(station),
+        DidCoreId::new("ak:did_core:web:issuer.example").unwrap(),
+        None,
+        issued_at,
+        Some(issued_at + Duration::minutes(10)),
+    )
+    .unwrap()
 }
 
 proptest! {
@@ -70,22 +60,22 @@ proptest! {
     }
 
     #[test]
-    fn verified_requires_expiry(handle in arb_handle(), with_expiry in any::<bool>()) {
-        let mut claim = base_claim(&handle, "ak:did_core:web:station-a.example");
-        claim.binding_state = HandleBindingState::Verified;
-        claim.expires_at = with_expiry.then(|| Utc::now() + Duration::minutes(5));
-        prop_assert_eq!(claim.validate().is_ok(), with_expiry);
+    fn retired_flat_status_members_are_rejected(handle in arb_handle()) {
+        let claim = base_claim(&handle, "ak:did_core:web:station-a.example");
+        let mut wire = serde_json::to_value(claim).unwrap();
+        wire["binding_state"] = serde_json::json!("verified");
+        prop_assert!(serde_json::from_value::<HandleClaim>(wire).is_err());
     }
 
     #[test]
     fn same_principal_at_different_stations_is_not_the_same_subject(handle in arb_handle()) {
         let claim_a = base_claim(&handle, "ak:did_core:web:station-a.example");
         let claim_b = base_claim(&handle, "ak:did_core:web:station-b.example");
-        prop_assert_eq!(&claim_a.subject_account_id.principal_id, &claim_b.subject_account_id.principal_id);
-        prop_assert_ne!(&claim_a.subject_account_id, &claim_b.subject_account_id);
+        prop_assert_eq!(&claim_a.claim.subject_account_id.principal_id, &claim_b.claim.subject_account_id.principal_id);
+        prop_assert_ne!(&claim_a.claim.subject_account_id, &claim_b.claim.subject_account_id);
         prop_assert_ne!(
-            claim_a.subject_account_id.canonical_key().unwrap(),
-            claim_b.subject_account_id.canonical_key().unwrap()
+            claim_a.claim.subject_account_id.canonical_key().unwrap(),
+            claim_b.claim.subject_account_id.canonical_key().unwrap()
         );
     }
 }

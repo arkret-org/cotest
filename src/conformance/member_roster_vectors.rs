@@ -24,7 +24,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
 use arkret_models_collaboration::sync_frames::account_sync::{MemberRosterEntry, MembershipState};
 use arkret_models_identity::{
-    EffectiveIdentityEntry, Handle, HandleBindingState, HandleClaim, MemberIdentitySegment,
+    EffectiveIdentityEntry, HandleClaim, HandleClaimStatus, MemberIdentitySegment,
     RosterHandleClaimDigestEntry, member_display_state_digest,
 };
 use arkret_wire::{AccountId, ActorId};
@@ -97,33 +97,20 @@ fn pinned_claim_digest(byte: &str) -> Result<Hash> {
 
 /// A verified handle claim whose `subject` is `alice_subject()`.
 fn verified_claim_for_subject(handle: &str, subject: &AccountId) -> Result<HandleClaim> {
-    Ok(HandleClaim {
-        schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?,
-        handle_aliases: Vec::new(),
-        subject_account_id: subject.clone(),
-        issuer_id: DidCoreId::new("ak:did_core:web:coauth.acme.example")?,
-        vouching_id: None,
-        binding_state: HandleBindingState::Verified,
-        claim_kind: None,
-        visibility: None,
-        audience: None,
-        challenge: None,
-        claim_scope: Default::default(),
-        claims: Vec::new(),
-        created_at: Utc
-            .with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
+    Ok(crate::fixture_verified_handle_claim(
+        handle,
+        subject.clone(),
+        DidCoreId::new("ak:did_core:web:coauth.acme.example")?,
+        None,
+        Utc.with_ymd_and_hms(2026, 5, 20, 0, 0, 0)
             .single()
-            .expect("pinned created_at"),
-        expires_at: Some(
+            .expect("pinned issued_at"),
+        Some(
             Utc.with_ymd_and_hms(2026, 6, 20, 0, 0, 0)
                 .single()
                 .expect("pinned expires_at"),
         ),
-        verified_at: None,
-        source_refs: Vec::new(),
-        proofs: Vec::new(),
-    })
+    )?)
 }
 
 // ── VECT-ROST-1 ─────────────────────────────────────────────────────────────
@@ -452,9 +439,9 @@ pub fn run_member_roster_handle_claims_subject_alignment_vector() -> Result<()> 
 // ── VECT-COT-4c ─────────────────────────────────────────────────────────────
 
 /// VECT-COT-4c — `member_display_state_digest` is stable under issuer
-/// freshness hints. Re-packing the same claim with a different `verified_at`
-/// / proof set MUST leave the digest unchanged, because the digest folds
-/// only `{claim_digest, binding_state, expires_at}` of the visible claims.
+/// proof packing. Re-packing the same claim with different proof bytes MUST
+/// leave the digest unchanged, because the digest folds only
+/// `{claim_digest, status, revocation_digest, fresh_until}`.
 pub fn run_member_roster_display_state_digest_stable_under_freshness_hints_vector() -> Result<()> {
     let realm = fake_realm()?;
     let actor = alice()?;
@@ -470,12 +457,13 @@ pub fn run_member_roster_display_state_digest_stable_under_freshness_hints_vecto
         .expect("pinned expires_at");
     let claim_a = RosterHandleClaimDigestEntry {
         claim_digest: pinned_claim_digest("33")?,
-        binding_state: HandleBindingState::Verified,
-        expires_at: Some(expires),
+        status: HandleClaimStatus::Verified,
+        revocation_digest: None,
+        fresh_until: expires,
     };
     // Same canonical inputs — a "refreshed" claim with the identical
-    // claim_digest / binding_state / expires_at. (The issuer only bumped
-    // verified_at / repacked proofs, which are not part of the digest.)
+    // claim_digest / status / revocation_digest / fresh_until. Proof bytes
+    // are not part of this projection digest.
     let claim_b = claim_a.clone();
 
     let digest_a = member_display_state_digest(&realm, &actor, &events, &[claim_a])
@@ -496,8 +484,9 @@ pub fn run_member_roster_display_state_digest_stable_under_freshness_hints_vecto
     // MUST move the digest, proving the helper is not a no-op.
     let changed = RosterHandleClaimDigestEntry {
         claim_digest: pinned_claim_digest("44")?,
-        binding_state: HandleBindingState::Verified,
-        expires_at: Some(expires),
+        status: HandleClaimStatus::Verified,
+        revocation_digest: None,
+        fresh_until: expires,
     };
     let digest_changed = member_display_state_digest(&realm, &actor, &events, &[changed])
         .map_err(|e| anyhow!("member_display_state_digest changed: {e}"))?;

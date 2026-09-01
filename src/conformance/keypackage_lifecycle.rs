@@ -146,6 +146,14 @@ fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
         .ok_or_else(|| anyhow!("case missing string field {field}"))
 }
 
+fn required_account_principal<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
+    value
+        .get(field)
+        .and_then(|account| account.get("principal_id"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("case missing {field}.principal_id"))
+}
+
 fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
     value
         .pointer(&format!("/expected/{field}"))
@@ -265,9 +273,15 @@ fn claim_receipt_value(claims: &[Value]) -> Value {
         .expect("fixture claim record must carry its exact target device id");
     let request = json!({
         "claim_request_id": "AAAAAAAAAAAAAAAAAAAAAA",
-        "target_principal_id": "ak:did_core:webvh:z6mkfixture",
+        "target_account_id": {
+            "principal_id": "ak:did_core:webvh:z6mkfixture",
+            "station_id": "ak:did_core:webvh:z6mkfixtureservice"
+        },
         "intended_realm_id": "ak:realm:AdkQ-RmB1a8zyc52yl9GWAsodQ_EUle1WAVZqbO7pc19",
-        "requester_id": "ak:did_core:webvh:z6mkfixture",
+        "requester_account_id": {
+            "principal_id": "ak:did_core:webvh:z6mkfixture",
+            "station_id": "ak:did_core:webvh:z6mkfixtureservice"
+        },
         "mls_group_id": "fixture-group",
         "claim_purpose": "realm_membership",
         "required_capabilities": ["ak.content.v1"],
@@ -612,7 +626,7 @@ pub fn run_keypackage_exhaustion_claim_limits_vector() -> Result<()> {
         bail!("rate-limit external failure semantics drifted");
     }
 
-    let principal = core_did(required_str(vector, "target_principal_id")?)?;
+    let principal = core_did(required_account_principal(vector, "target_account_id")?)?;
     let signer = verification_method(
         "did:webvh:z6mkfixture:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
     )?;
@@ -699,7 +713,7 @@ pub fn run_keypackage_last_resort_claim_and_reuse_vector() -> Result<()> {
     if required_str(vector, "feature")? != LAST_RESORT_FEATURE {
         bail!("last-resort feature id drifted");
     }
-    let principal = core_did(required_str(vector, "target_principal_id")?)?;
+    let principal = core_did(required_account_principal(vector, "target_account_id")?)?;
     let signer = verification_method(
         "did:webvh:z6mkfixture:alice.example#ak:device:0196419b-0000-7000-8000-000000000001",
     )?;
@@ -1335,7 +1349,8 @@ pub fn run_keypackage_self_claim_authorization_idempotency_vector() -> Result<()
         bail!("exact retry did not return the byte-identical terminal outcome");
     }
     let mut conflict = request;
-    conflict["target_principal_id"] = json!("ak:did_core:webvh:z6mkfixturemalloryexample");
+    conflict["target_account_id"]["principal_id"] =
+        json!("ak:did_core:webvh:z6mkfixturemalloryexample");
     let conflict: arkret_models_crypto::KeyPackagesClaimRequestBody =
         serde_json::from_value(conflict)?;
     let conflict_digest = arkret_canonical::canonical_sha256(&serde_json::to_value(&conflict)?)?;

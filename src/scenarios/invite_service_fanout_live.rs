@@ -21,7 +21,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use arkret_identifiers::{ConsentId, DidCoreId, InviteId};
 use arkret_models_collaboration::account_lifecycle::{
-    ConsentCellView, ConsentGrantRequestBody, ConsentRevokeRequestBody,
+    ConsentCellView, ConsentGrantRequestBody, ConsentPeer, ConsentRevokeRequestBody,
 };
 use arkret_models_collaboration::events_payloads::ConsentGrantPayload;
 use arkret_models_collaboration::governance::invite_addressing::{
@@ -34,7 +34,9 @@ use arkret_models_collaboration::sync_frames::account_sync::{
 };
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
-use arkret_wire::{AccountDataKey, ConsentScope, EventInitialSubmission, InviteReceiveAction};
+use arkret_wire::{
+    AccountDataKey, AccountId, ActorId, ConsentScope, EventInitialSubmission, InviteReceiveAction,
+};
 use chrono::{Duration as ChronoDuration, Utc};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
@@ -252,9 +254,9 @@ async fn assert_service_account_data_fanout(
         "actor-private account-data fanout did not use the local Service sender"
     );
     ensure!(
-        envelope.sender_principal_id.as_str() == holder_core_id
-            && envelope.recipient_principal_id.as_str() == holder_core_id,
-        "Service fanout principal must be the holder on both sides"
+        envelope.recipient_account_id.principal_id.as_str() == holder_core_id
+            && envelope.recipient_account_id.station_id.as_str() == expected_service_id,
+        "Service fanout recipient AccountId must identify the exact holder account"
     );
     ensure!(
         envelope.recipient_device_id.as_str() == holder.device_id,
@@ -302,12 +304,20 @@ async fn grant_then_revoke_invite_consent(
         .principal
         .as_ref()
         .context("holder was not provisioned with a Principal Control Realm")?;
-    let holder_core_id = principal.core_id.clone();
-    let peer_core_id = DidCoreId::new(actor_core_id(&peer.actor)?)?;
+    let peer_principal = peer
+        .principal
+        .as_ref()
+        .context("peer was not provisioned with a Principal Control Realm")?;
+    let _holder_core_id = principal.core_id.clone();
     let consent_id = ConsentId::new(next_typed_id("consent"))?;
     let grant_payload = ConsentGrantPayload {
         consent_id: consent_id.clone(),
-        peer_id: peer_core_id,
+        peer: ConsentPeer::Actor {
+            actor_id: ActorId::account(AccountId::new(
+                peer_principal.core_id.clone(),
+                DidCoreId::new(peer.service_id())?,
+            )),
+        },
         consent_scope: ConsentScope::Invite,
         not_before: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
@@ -327,10 +337,7 @@ async fn grant_then_revoke_invite_consent(
         crate::publication::initial_submission(grant_event, "")?;
     let granted = expect_json(
         holder
-            .post(&format!(
-                "/_arkret/self/consent/cells/{}/grant",
-                holder_core_id.as_str()
-            ))
+            .post("/_arkret/self/consent/cells/grant")
             .json(&ConsentGrantRequestBody {
                 grant_event: grant_submission,
             }),
@@ -377,10 +384,7 @@ async fn grant_then_revoke_invite_consent(
         crate::publication::initial_submission(revoke_event, "")?;
     let revoked = expect_json(
         holder
-            .post(&format!(
-                "/_arkret/self/consent/cells/{}/revoke",
-                holder_core_id.as_str()
-            ))
+            .post("/_arkret/self/consent/cells/revoke")
             .json(&ConsentRevokeRequestBody {
                 revoke_event: revoke_submission,
             }),

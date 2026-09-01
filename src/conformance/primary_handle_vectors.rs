@@ -19,9 +19,9 @@ use arkret::identity::{
     HandleIssuerAuthorityClass, HandleIssuerPolicyEntry, PrimaryHandleSelectInput, claim_digest,
     select_primary_handle,
 };
-use arkret_identifiers::{DidCoreId, Hash};
-use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
-use arkret_wire::{AccountId, PayloadProof};
+use arkret_identifiers::DidCoreId;
+use arkret_models_identity::{Handle, HandleClaim};
+use arkret_wire::AccountId;
 use chrono::{DateTime, TimeZone, Utc};
 
 pub const VECTOR_ID_PH_EMPTY_FALLBACK: &str =
@@ -95,26 +95,14 @@ fn claim(
     expires: DateTime<Utc>,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
-    Ok(HandleClaim {
-        schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse {handle}: {e}"))?,
-        handle_aliases: Vec::new(),
-        subject_account_id: subject()?,
-        issuer_id: DidCoreId::new(issuer)?,
-        vouching_id: None,
-        binding_state: HandleBindingState::Verified,
-        claim_kind: None,
-        visibility: None,
-        audience: audience.map(str::to_owned),
-        challenge: None,
-        claim_scope: Default::default(),
-        claims: Vec::new(),
-        created_at: created,
-        expires_at: Some(expires),
-        verified_at: None,
-        source_refs: Vec::new(),
-        proofs: Vec::new(),
-    })
+    Ok(crate::fixture_verified_handle_claim(
+        handle,
+        subject()?,
+        DidCoreId::new(issuer)?,
+        audience.map(str::to_owned),
+        created,
+        Some(expires),
+    )?)
 }
 
 fn accepted(issuers: &[&str]) -> Vec<HandleIssuerPolicyEntry> {
@@ -133,7 +121,7 @@ fn accepted(issuers: &[&str]) -> Vec<HandleIssuerPolicyEntry> {
 }
 
 fn chosen_handle(claim: &HandleClaim) -> Result<String> {
-    Ok(claim.handle.canonical().to_owned())
+    Ok(claim.claim.handle.canonical().to_owned())
 }
 
 // ── VECT-COT-1.1 — empty candidate fallback ─────────────────────────────────
@@ -507,29 +495,16 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
     let created = at(2026, 5, 10);
     let expires = at(2026, 6, 25);
     let mut canonical = claim("alice:acme.example", ACME_ISSUER, created, expires, None)?;
-    canonical.handle_aliases = vec!["acct:alice@acme.example".to_owned()];
-    canonical.source_refs =
-        vec!["ak:event:AXDgux9OM2cf4fa-H7RpMXKtH9u31ncdIX_06P0_BG9X".to_owned()];
+    canonical.claim.handle_aliases = vec!["acct:alice@acme.example".to_owned()];
+    canonical.claim.source_refs = vec![crate::fixture_event_id("primary-handle-digest")];
 
     let base = claim_digest(&canonical).map_err(|e| anyhow!("claim_digest base: {e}"))?;
 
-    // Mutate ONLY the non-semantic hint fields (verified_at / challenge /
-    // proofs). The digest MUST stay byte-identical.
+    // Mutate only signed status-view fields. The immutable core digest MUST
+    // stay byte-identical.
     let mut hinted = canonical.clone();
     hinted.verified_at = Some(at(2026, 5, 26));
-    hinted.challenge = Some("nonce-xyz".to_owned());
-    hinted.proofs = vec![PayloadProof {
-        kind: "detached_jws".to_owned(),
-        verification_method: crate::fixture_did_url("did:web:coauth.acme.example#key-1"),
-        payload_digest: Hash::new(
-            "sha256:0000000000000000000000000000000000000000000000000000000000000001",
-        )?,
-        created_at: at(2026, 5, 26),
-        domain: None,
-        audience: None,
-        proof_purpose: None,
-        jws: "hint.only.shape".to_owned(),
-    }];
+    hinted.status_proof.jws = "different.status.signature".to_owned();
     let after = claim_digest(&hinted).map_err(|e| anyhow!("claim_digest hinted: {e}"))?;
     if base != after {
         bail!(
@@ -541,7 +516,7 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
     // Re-ordering an unordered-collection array (handle_aliases) MUST also
     // leave the digest unchanged (the SDK sorts before canonicalisation).
     let mut reordered = canonical.clone();
-    reordered.handle_aliases = vec!["acct:alice@acme.example".to_owned()];
+    reordered.claim.handle_aliases = vec!["acct:alice@acme.example".to_owned()];
     let reordered_digest = claim_digest(&reordered).map_err(|e| anyhow!("reordered: {e}"))?;
     if reordered_digest != base {
         bail!("claim_digest drifted across equivalent handle_aliases ordering");
@@ -549,7 +524,8 @@ pub fn run_claim_digest_stable_under_hint_vector() -> Result<()> {
 
     // A semantic change (the handle itself) MUST move the digest.
     let mut semantic = canonical.clone();
-    semantic.handle = Handle::parse("bob:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
+    semantic.claim.handle =
+        Handle::parse("bob:acme.example").map_err(|e| anyhow!("handle: {e}"))?;
     let semantic_digest = claim_digest(&semantic).map_err(|e| anyhow!("semantic: {e}"))?;
     if semantic_digest == base {
         bail!("claim_digest MUST change when a semantic field (handle) changes");

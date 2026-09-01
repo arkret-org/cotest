@@ -289,7 +289,7 @@ fn pinned_r3_2_inputs() -> (
 ) {
     use arkret_identifiers::{DidCoreId, EventId, Hash, RealmId};
     use arkret_models_identity::{
-        EffectiveIdentityEntry, HandleBindingState, MemberIdentitySegment,
+        EffectiveIdentityEntry, HandleClaimStatus, MemberIdentitySegment,
         RosterHandleClaimDigestEntry,
     };
 
@@ -323,12 +323,11 @@ fn pinned_r3_2_inputs() -> (
             "sha256:3333333333333333333333333333333333333333333333333333333333333333",
         )
         .unwrap(),
-        binding_state: HandleBindingState::Verified,
-        expires_at: Some(
-            chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 6, 20, 0, 0, 0)
-                .single()
-                .unwrap(),
-        ),
+        status: HandleClaimStatus::Verified,
+        revocation_digest: None,
+        fresh_until: chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 6, 20, 0, 0, 0)
+            .single()
+            .unwrap(),
     }];
     (realm, actor, events, claims)
 }
@@ -357,7 +356,7 @@ fn r3_2_identity_digests_match_pinned_baseline() {
     let display_state =
         member_display_state_digest(&realm, &actor, &events, &claims).expect("display digest");
     assert_eq!(
-        display_state, "sha256:bf8c654d813795bc1e9c0f5a7d387a1a0093d3eca69fd260dfc76db97a3b8e05",
+        display_state, "sha256:1846198926e9849c38ba375656eab0f4519623bc1405470f2cb33f9c927163f6",
         "member_display_state_digest baseline drifted (R3.2 VECT-COT-5)"
     );
 

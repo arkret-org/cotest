@@ -21,7 +21,7 @@ use arkret::identity::{
 };
 use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::events_payloads::mention::Mention;
-use arkret_models_identity::{Handle, HandleBindingState, HandleClaim};
+use arkret_models_identity::{Handle, HandleClaim};
 use arkret_wire::AccountId;
 use chrono::{DateTime, TimeZone, Utc};
 use serde_json::json;
@@ -89,26 +89,14 @@ fn verified_claim(
     subject: &DidCoreId,
     audience: Option<&str>,
 ) -> Result<HandleClaim> {
-    Ok(HandleClaim {
-        schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Handle::parse(handle).map_err(|e| anyhow!("handle parse: {e}"))?,
-        handle_aliases: Vec::new(),
-        subject_account_id: subject_account(subject)?,
-        issuer_id: DidCoreId::new(ISSUER)?,
-        vouching_id: None,
-        binding_state: HandleBindingState::Verified,
-        claim_kind: None,
-        visibility: None,
-        audience: audience.map(str::to_owned),
-        challenge: None,
-        claim_scope: Default::default(),
-        claims: Vec::new(),
-        created_at: at(2026, 5, 1),
-        expires_at: Some(at(2026, 7, 1)),
-        verified_at: None,
-        source_refs: Vec::new(),
-        proofs: Vec::new(),
-    })
+    Ok(crate::fixture_verified_handle_claim(
+        handle,
+        subject_account(subject)?,
+        DidCoreId::new(ISSUER)?,
+        audience.map(str::to_owned),
+        at(2026, 5, 1),
+        Some(at(2026, 7, 1)),
+    )?)
 }
 
 fn empty_selection<'a>(

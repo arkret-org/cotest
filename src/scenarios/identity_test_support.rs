@@ -510,7 +510,6 @@ async fn authorize_additional_principal_device(
         device_signing_key,
     )?;
     let payload = DeviceAuthorizePayload {
-        principal_id: founding.core_id.clone(),
         device_id: new_device_id,
         device_public_key_did: device_public_key,
         hpke_key: hpke_key.clone(),
@@ -835,7 +834,6 @@ async fn bootstrap_test_device_authorization(
             .map_err(anyhow::Error::msg)?,
     ];
     let mut payload = DeviceAuthorizePayload {
-        principal_id: principal_actor_id.clone(),
         device_id: device_id.clone(),
         device_public_key_did: device_public_key.clone(),
         hpke_key: hpke_key.clone(),
@@ -855,7 +853,12 @@ async fn bootstrap_test_device_authorization(
         NonEmptyString::new(
             URL_SAFE_NO_PAD.encode(
                 device_signing_key
-                    .sign(&payload.device_possession_signature_input()?)
+                    .sign(
+                        &payload.device_possession_signature_input(&arkret::AccountId::new(
+                            principal_actor_id.clone(),
+                            server.service_id().clone(),
+                        ))?,
+                    )
                     .to_bytes(),
             ),
         )

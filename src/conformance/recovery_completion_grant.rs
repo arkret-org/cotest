@@ -76,7 +76,7 @@ fn completion_vector() -> Result<CompletionVector> {
             transaction_id: transaction_id.parse()?,
             transaction_request_digest: transaction_request_digest.parse()?,
             prepared_plan_digest: prepared_plan_digest.parse()?,
-            principal_id: principal_id.parse()?,
+            account_id: arkret_wire::AccountId::new(principal_id.parse()?, audience.parse()?),
             recovery_session_id: "ak:recovery_session:019a8400-0000-7000-8000-000000000004"
                 .parse()?,
             policy_id: "ak:policy:019a8400-0000-7000-8000-000000000005".parse()?,
@@ -125,7 +125,7 @@ fn completion_vector() -> Result<CompletionVector> {
             transaction_id: transaction_id.parse()?,
             transaction_request_digest: transaction_request_digest.parse()?,
             prepared_plan_digest: prepared_plan_digest.parse()?,
-            principal_id: principal_id.parse()?,
+            account_id: arkret_wire::AccountId::new(principal_id.parse()?, audience.parse()?),
             coordinator_id: audience.parse()?,
             recovery_session_id: "ak:recovery_session:019a8400-0000-7000-8000-000000000004"
                 .parse()?,
@@ -192,7 +192,7 @@ fn completion_vector() -> Result<CompletionVector> {
         session_public_key,
         audience_id: audience.parse()?,
         granted_scope: standard_initial_session_grant_scope(),
-        scope_details: None,
+        previous_session_grant_id: None,
     };
     let outcome = IssueRecoveryCompletionGrantOutcome {
         transaction_id: transaction_id.parse()?,
@@ -263,7 +263,7 @@ fn validate_completion_vector(vector: &CompletionVector) -> Result<()> {
         || receipt.transaction_request_digest != vector.request.transaction_request_digest
         || receipt.receipt_id != attestation.terminal_receipt_id
         || receipt_digest != attestation.terminal_receipt_digest.as_str()
-        || receipt.principal_id != attestation.principal_id
+        || receipt.account_id != attestation.account_id
         || receipt.new_device_id != attestation.replacement_device_id
         || receipt.new_device_id != initial.device_id
         || receipt.authorization_event_id != vector.request.device_authorization_event_id

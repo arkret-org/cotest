@@ -28,7 +28,9 @@ use arkret_models_crypto::{
     KeyBackupUnlockProof, KeysBackupsUnlockRequestBody, ProofKind, UnsignedKeyBackup,
     UnsignedKeyBackupAuthData, UnsignedKeyBackupUnlockProof, UnsignedKeyBackupUnlockProofAuthData,
 };
-use arkret_wire::{Base64UrlString, DidUrl, EpochRange, HistoryEffectiveScope, RealmId, ScopeRef};
+use arkret_wire::{
+    AccountId, Base64UrlString, DidUrl, EpochRange, HistoryEffectiveScope, RealmId, ScopeRef,
+};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
@@ -274,7 +276,10 @@ fn unlock_proof(actor_id: &str) -> Result<KeyBackupUnlockProof> {
     )?;
     let unsigned = UnsignedKeyBackupUnlockProof::new(
         RecoverySessionId::new("ak:recovery_session:01964137-0000-7000-8000-0000000000aa")?,
-        did(actor_id)?,
+        AccountId::new(
+            did(actor_id)?,
+            DidCoreId::new("ak:did_core:web:soland.cotest.local".to_owned())?,
+        ),
         DeviceId::new(DEVICE_ID.to_owned())?,
         backup_id(BACKUP_ID)?,
         BackupKind::MlsHistory,

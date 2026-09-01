@@ -5,12 +5,10 @@
 //! also the routing source of truth; no delivery-binding policy or handover
 //! object participates in either step.
 
-use std::collections::BTreeMap;
-
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::governance::membership_invite::MembershipPayload;
-use arkret_models_identity::{Handle, HandleBindingState, HandleClaim, HandleClaimKind};
-use arkret_wire::{AccountId, ActorId, Audience, DidCoreId, DidUrl, Hash, PayloadProof, RealmId};
+use arkret_models_identity::HandleClaim;
+use arkret_wire::{AccountId, ActorId, DidCoreId, RealmId};
 use chrono::{DateTime, Duration, Utc};
 
 const PRINCIPAL_ID: &str = "ak:did_core:web:alice.acme.example";
@@ -25,13 +23,24 @@ pub async fn handle_to_join_e2e_run() -> Result<()> {
     let account_a = account(STATION_A)?;
     let account_b = account(STATION_B)?;
     let claim = verified_claim(account_a.clone(), now)?;
+    let trusted_verifiers = [DidCoreId::new(ISSUER_ID)?];
 
     claim
-        .validate_remote_resolution(Some(TARGET_REALM_ID), Some(&account_a), now)
+        .validate_remote_resolution(
+            Some(TARGET_REALM_ID),
+            Some(&account_a),
+            &trusted_verifiers,
+            now,
+        )
         .context("exact Station account must resolve")?;
     ensure!(
         claim
-            .validate_remote_resolution(Some(TARGET_REALM_ID), Some(&account_b), now)
+            .validate_remote_resolution(
+                Some(TARGET_REALM_ID),
+                Some(&account_b),
+                &trusted_verifiers,
+                now,
+            )
             .is_err(),
         "same principal at another Station must not resolve as the same account"
     );
@@ -71,36 +80,14 @@ fn account(station_id: &str) -> Result<AccountId> {
 }
 
 fn verified_claim(subject_account_id: AccountId, now: DateTime<Utc>) -> Result<HandleClaim> {
-    Ok(HandleClaim {
-        schema: HandleClaim::SCHEMA.to_owned(),
-        handle: Handle::parse(HANDLE)?,
-        handle_aliases: vec!["acct:alice@acme.example".to_owned()],
+    Ok(crate::fixture_verified_handle_claim(
+        HANDLE,
         subject_account_id,
-        issuer_id: DidCoreId::new(ISSUER_ID)?,
-        vouching_id: None,
-        binding_state: HandleBindingState::Verified,
-        claim_kind: Some(HandleClaimKind::HandleBinding),
-        visibility: None,
-        audience: Some(TARGET_REALM_ID.to_owned()),
-        challenge: None,
-        claim_scope: BTreeMap::new(),
-        claims: Vec::new(),
-        created_at: now - Duration::minutes(1),
-        expires_at: Some(now + Duration::hours(1)),
-        verified_at: Some(now - Duration::minutes(1)),
-        source_refs: vec!["ak:event:AccVsThCMukcEF5tfolTyrO1SoKc5W7qAlVm_mDWvfuw".to_owned()],
-        proofs: vec![PayloadProof {
-            kind: "detached_jws".to_owned(),
-            verification_method: DidUrl::new("did:web:directory.acme.example#key-1")
-                .map_err(anyhow::Error::msg)?,
-            payload_digest: Hash::new(format!("sha256:{}", "1".repeat(64)))?,
-            created_at: now - Duration::minutes(1),
-            domain: None,
-            audience: Some(Audience::Single(TARGET_REALM_ID.to_owned())),
-            proof_purpose: None,
-            jws: "eyJhbGciOiJFZERTQSJ9..c2ln".to_owned(),
-        }],
-    })
+        DidCoreId::new(ISSUER_ID)?,
+        Some(TARGET_REALM_ID.to_owned()),
+        now - Duration::minutes(1),
+        Some(now + Duration::hours(1)),
+    )?)
 }
 
 fn timestamp(value: &str) -> Result<DateTime<Utc>> {

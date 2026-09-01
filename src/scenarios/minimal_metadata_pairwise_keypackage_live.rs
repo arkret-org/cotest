@@ -720,8 +720,11 @@ fn signed_device_claim(
     let signed_at = Utc::now();
     let unsigned = PeerKeyPackagesClaimUnsignedRequest {
         claim_request_id: wire_value(Base64UrlString::new(request_token))?,
-        target_principal_id: target.actor_id.clone(),
-        requester_id: requester.core_id.clone(),
+        target_account_id: None,
+        requester_account_id: Some(AccountId::new(
+            requester.core_id.clone(),
+            service_id.clone(),
+        )),
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
         mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
@@ -772,8 +775,8 @@ fn signed_device_claim(
 
     let body = KeyPackagesClaimRequestBody {
         claim_request_id: unsigned.claim_request_id,
-        target_principal_id: unsigned.target_principal_id,
-        requester_id: unsigned.requester_id,
+        target_account_id: unsigned.target_account_id,
+        requester_account_id: unsigned.requester_account_id,
         intended_realm_id: unsigned.intended_realm_id,
         mls_group_id: unsigned.mls_group_id,
         claim_purpose: unsigned.claim_purpose,
@@ -1021,7 +1024,6 @@ async fn accept_welcome_and_consume(
                 ))?,
                 claim_request_id: claim_outcome.claim_request_id.clone(),
                 key_package_ref: wire_value(NonEmptyString::new(claimed.keypackage_ref.clone()))?,
-                recipient_principal_id: target.actor_id.clone(),
                 recipient: RecipientMlsDurableSigner::MinimalMetadataPairwise {
                     recipient_pairwise_verification_method: target.verification_method.clone(),
                 },
@@ -1156,8 +1158,8 @@ fn signed_pairwise_claim(
     let signed_at = Utc::now();
     let unsigned = PeerKeyPackagesClaimUnsignedRequest {
         claim_request_id: wire_value(Base64UrlString::new(request_token.clone()))?,
-        target_principal_id: target.actor_id.clone(),
-        requester_id: requester.actor_id.clone(),
+        target_account_id: None,
+        requester_account_id: None,
         intended_realm_id: RealmId::new(realm_id.to_owned())?,
         mls_group_id: wire_value(NonEmptyString::new(mls_group_id))?,
         claim_purpose: PeerKeyPackageClaimPurpose::RealmMembership,
@@ -1200,8 +1202,8 @@ fn signed_pairwise_claim(
 
     let body = KeyPackagesClaimRequestBody {
         claim_request_id: unsigned.claim_request_id,
-        target_principal_id: unsigned.target_principal_id,
-        requester_id: unsigned.requester_id,
+        target_account_id: unsigned.target_account_id,
+        requester_account_id: unsigned.requester_account_id,
         intended_realm_id: unsigned.intended_realm_id,
         mls_group_id: unsigned.mls_group_id,
         claim_purpose: unsigned.claim_purpose,

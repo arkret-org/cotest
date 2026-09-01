@@ -73,7 +73,7 @@ pub async fn owner_invite_remove_grant_revoke_survive_restart() -> Result<()> {
             invite_create_payload(
                 bob.actor.as_str(),
                 alice.service_id(),
-                canonical_sha256(&IntroductionEvidence::SameStation)?,
+                canonical_sha256(&IntroductionEvidence::ExplicitAddress)?,
                 chrono::Utc::now() + chrono::Duration::days(7),
             )?,
         )
