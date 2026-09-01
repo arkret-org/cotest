@@ -15,6 +15,12 @@
 //! accountable actor is part of the composite subject, which the reducer unit
 //! tests already pin. What only a live server can show is the concurrency and
 //! domination behaviour below.
+//!
+//! This is deliberately a **Soland product-integration scenario**, not a
+//! portable Arkret conformance vector. Writes and public lifecycle reads use
+//! registered `/_arkret/*` operations; assertions over materialized RSVP heads
+//! use Soland's product-private projection read because that implementation
+//! state is not part of the cross-implementation wire contract.
 
 use std::time::Duration;
 
@@ -108,7 +114,10 @@ async fn assert_realm_identity(client: &TestActorClient, realm_id: &str) -> Resu
     Ok(())
 }
 
-async fn read_strand(client: &TestActorClient, strand_id: &str) -> Result<Value> {
+async fn read_soland_product_projection_strand(
+    client: &TestActorClient,
+    strand_id: &str,
+) -> Result<Value> {
     expect_json(
         client.get(&format!("/_soland/self/strands/{strand_id}")),
         StatusCode::OK,
@@ -444,7 +453,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         )
         .await?;
     let strand_id = created_strand_id(&created)?;
-    let projected = read_strand(&alice, &strand_id).await?;
+    let projected = read_soland_product_projection_strand(&alice, &strand_id).await?;
     let preserved_display = json!({"badge": "preserve-me", "revision": 7});
     if projected["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(
@@ -513,7 +522,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     )
     .await?;
     let bob_heads = heads_for(
-        &read_strand(&bob, &strand_id).await?,
+        &read_soland_product_projection_strand(&bob, &strand_id).await?,
         &actor_for_station(bob_did, bob.service_id())?,
     );
     if head_statuses(&bob_heads) != vec!["accepted".to_owned()] {
@@ -559,7 +568,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let first_digest = submit_prepared_event(&alice, &first_event).await?;
     let second_digest = submit_prepared_event(&alice_second_device, &second_event).await?;
 
-    let strand = read_strand(&alice, &strand_id).await?;
+    let strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
     let heads = heads_for(&strand, &actor_for_station(alice_did, alice.service_id())?);
     if heads.len() != 2 {
         return Err(anyhow!(
@@ -599,7 +608,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         .await?;
     let resolved_digest = submitted_digest(&resolved)?;
 
-    let strand = read_strand(&alice, &strand_id).await?;
+    let strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
     let heads = heads_for(&strand, &actor_for_station(alice_did, alice.service_id())?);
     if heads.len() != 1 {
         return Err(anyhow!(
@@ -654,7 +663,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
     let reverse_second_digest = submit_prepared_event(&alice, &reverse_second).await?;
     submit_prepared_event(&alice_second_device, &reverse_first).await?;
     let heads = heads_for(
-        &read_strand(&alice_second_device, &strand_id).await?,
+        &read_soland_product_projection_strand(&alice_second_device, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
     );
     if heads.len() != 2
@@ -685,7 +694,7 @@ pub async fn calendar_rsvp_converges_across_concurrent_responses() -> Result<()>
         )
         .await?;
     let final_heads = heads_for(
-        &read_strand(&alice, &strand_id).await?,
+        &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
     );
     if final_heads.len() != 1 || head_statuses(&final_heads) != vec!["tentative".to_owned()] {
@@ -792,7 +801,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .await?;
     let strand_id = created_strand_id(&created)?;
     let preserved_display = json!({"badge": "preserve-me", "revision": 7});
-    let projected = read_strand(&alice, &strand_id).await?;
+    let projected = read_soland_product_projection_strand(&alice, &strand_id).await?;
     if projected["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(
             "unknown namespaced display metadata was lost on decode/store/read: {projected}"
@@ -834,7 +843,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     let accepted_digest = submit_prepared_event(&alice, &accepted).await?;
     let declined_digest = submit_prepared_event(&alice_second_device, &declined).await?;
     if heads_for(
-        &read_strand(&alice, &strand_id).await?,
+        &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
     )
     .len()
@@ -854,7 +863,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
     let alice_second_device = alice.clone();
-    let restarted_strand = read_strand(&alice, &strand_id).await?;
+    let restarted_strand = read_soland_product_projection_strand(&alice, &strand_id).await?;
     assert_realm_identity(&alice, &realm_id).await?;
     if restarted_strand["fields"]["x_future_display"] != preserved_display {
         return Err(anyhow!(
@@ -875,7 +884,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
     submit_prepared_event(&alice, &accepted).await?;
     submit_prepared_event(&alice_second_device, &declined).await?;
     if heads_for(
-        &read_strand(&alice, &strand_id).await?,
+        &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
     )
     .len()
@@ -912,7 +921,7 @@ pub async fn calendar_rsvp_persists_across_restart_and_replay() -> Result<()> {
         .demo_client(alice_did, "ak:device:01904100-0000-7000-8000-0000000000d1")
         .await?;
     let heads = heads_for(
-        &read_strand(&alice, &strand_id).await?,
+        &read_soland_product_projection_strand(&alice, &strand_id).await?,
         &actor_for_station(alice_did, alice.service_id())?,
     );
     if heads.len() != 1 || head_statuses(&heads) != vec!["tentative".to_owned()] {

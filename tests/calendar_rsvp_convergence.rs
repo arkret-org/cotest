@@ -1,4 +1,8 @@
-//! Live Calendar RSVP convergence.
+//! Soland product-integration coverage for live Calendar RSVP convergence.
+//!
+//! This suite observes the Soland-private materialized Strand projection and
+//! is therefore not evidence that another Arkret implementation must expose
+//! the same read endpoint.
 
 /// The live product coordinator must seal the bootstrap/control path without
 /// any admin compaction or on-demand frontier signing.

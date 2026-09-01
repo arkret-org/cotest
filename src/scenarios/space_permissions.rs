@@ -27,6 +27,8 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
         )
         .await?;
 
+    // Negative-surface residue gate: this retired Soland product endpoint is
+    // intentionally absent. The request is not a product consumer.
     expect_api_error(
         server.http().post(server.url("/_soland/self/spaces")).json(
             &crate::harness::NonProtocolTestBody::new(json!({"title": "No Auth"})),
@@ -67,6 +69,8 @@ pub async fn space_creation_and_owner_only_mutations_are_enforced() -> Result<()
         "capability_denied",
     )
     .await?;
+    // Keep the retired mutation surface absent after a real protocol Realm
+    // create; this prevents a local CRUD bypass from returning unnoticed.
     expect_api_error(
         server
             .http()

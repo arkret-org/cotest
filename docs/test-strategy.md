@@ -57,7 +57,13 @@ asserts only public HTTP behavior plus limited `arkret-rust-sdk` smoke paths.
 - `protocol_payloads`: payload envelope, encrypted content, receipts, and
   protocol object acceptance.
 - `space_permissions`: membership, owner-only mutation, deleted-space behavior,
-  non-member denial, and private visibility policy checks.
+  non-member denial, and private visibility policy checks. Its
+  `/_soland/self/spaces*` calls are negative-surface probes that require the
+  retired local CRUD endpoints to remain absent; they are not consumers.
+- `calendar_rsvp_convergence`: Soland product-integration coverage. Event
+  writes use registered protocol operations, while RSVP-head convergence is
+  observed through `/_soland/self/strands/{strand_id}` because the raw
+  materialized projection is intentionally outside portable conformance.
 - `conformance_fixtures`: offline spec-owned artifact suites for Event
   Envelope, encoding, redaction, capability, state resolution, sync,
   federation, registry drift, OpenAPI operation IDs, non-HTTP bindings, and
