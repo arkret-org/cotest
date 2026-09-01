@@ -17,7 +17,7 @@ use arkret_models_collaboration::governance::invite_addressing::{
 };
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::AccountDataList;
-use arkret_wire::AccountDataKey;
+use arkret_wire::{AccountDataKey, InviteReceiveAction};
 use reqwest::StatusCode;
 
 use super::{TestActorClient, actor_core_id, expect_json};
@@ -59,16 +59,27 @@ async fn opt_in_introduction_kind(invitee: &TestActorClient, kind: &str) -> Resu
     .await?;
     let mut policy: InviteReceivePolicy = serde_json::from_value(current)
         .context("invite-receive-policy response is not an InviteReceivePolicy")?;
-    if policy
+    let already_allowed = policy
         .holder_allowed_introduction_kinds
         .iter()
-        .any(|allowed| allowed == kind)
-    {
-        return Ok(());
+        .any(|allowed| allowed == kind);
+    if !already_allowed {
+        policy
+            .holder_allowed_introduction_kinds
+            .push(kind.to_owned());
     }
-    policy
-        .holder_allowed_introduction_kinds
-        .push(kind.to_owned());
+    if kind == "explicit_address" {
+        if !policy
+            .holder_allowed_introduction_kinds
+            .iter()
+            .any(|allowed| allowed == "same_station")
+        {
+            policy
+                .holder_allowed_introduction_kinds
+                .push("same_station".to_owned());
+        }
+        policy.explicit_address_behavior = InviteReceiveAction::Notify;
+    }
     expect_json(
         invitee
             .put("/_arkret/self/invite-receive-policy")

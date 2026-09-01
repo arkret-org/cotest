@@ -81,6 +81,15 @@ async fn set_explicit_address_behavior(
             .holder_allowed_introduction_kinds
             .push("explicit_address".to_owned());
     }
+    if !policy
+        .holder_allowed_introduction_kinds
+        .iter()
+        .any(|kind| kind == "same_station")
+    {
+        policy
+            .holder_allowed_introduction_kinds
+            .push("same_station".to_owned());
+    }
     policy.explicit_address_behavior = behavior;
     let updated = expect_json(
         holder
@@ -427,14 +436,26 @@ async fn assert_notify_invite_wakes_account_subscribe(
             "/_arkret/self/account/subscribe?catchup=true&after={cursor}"
         )),
         StatusCode::OK,
-    )
-    .await
-    .context("wait for invite-delivery account-subscribe wakeup")?;
+    );
+    let (invite_delta, delivered) = tokio::join!(invite_delta, dispatch);
     let wake_elapsed = wake_started.elapsed();
-    let delivered = dispatch
-        .await
+    let delivered = delivered
         .context("invite dispatch task panicked")?
         .context("create and dispatch notify invite")?;
+    let invite_delta = match invite_delta {
+        Ok(delta) => delta,
+        Err(error) => {
+            let queued = expect_json(holder.get("/_arkret/self/device_messages"), StatusCode::OK)
+                .await
+                .unwrap_or(Value::Null);
+            return Err(error).with_context(|| {
+                format!(
+                    "wait for invite-delivery account-subscribe wakeup; dispatch outcome was {}; queued device messages were {queued}",
+                    delivered.outcome
+                )
+            });
+        }
+    };
     ensure!(
         wake_elapsed < Duration::from_secs(3),
         "invite delivery did not wake the holder account subscribe promptly: {wake_elapsed:?}"

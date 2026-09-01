@@ -1633,7 +1633,7 @@ export async function setStrandWatchLevelApi(
   const actorId = await currentActorIdApi(request, token, opts);
   const payload: Record<string, unknown> = {
     strand_id: strandId,
-    watcher_actor_id: watcherActorId,
+    watcher_actor_id: accountActorId(watcherActorId, opts.server),
     level,
   };
   if (level !== null) {

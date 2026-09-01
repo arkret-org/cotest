@@ -1799,6 +1799,11 @@ async function allowExplicitInviteNotifications(
   });
   expect(current.status(), await current.text()).toBe(200);
   const policy = (await current.json()) as Record<string, unknown>;
+  const allowedKinds = Array.isArray(policy.holder_allowed_introduction_kinds)
+    ? policy.holder_allowed_introduction_kinds.filter(
+        (kind): kind is string => typeof kind === "string",
+      )
+    : [];
   const updated = await request.put(url, {
     headers: {
       ...selfPathHeadersForDpopSession(session, "PUT", url),
@@ -1806,6 +1811,9 @@ async function allowExplicitInviteNotifications(
     },
     data: canonicalJson({
       ...policy,
+      holder_allowed_introduction_kinds: Array.from(
+        new Set([...allowedKinds, "same_station", "explicit_address"]),
+      ),
       explicit_address_behavior: "notify",
     }),
   });

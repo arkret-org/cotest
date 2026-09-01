@@ -219,7 +219,7 @@ async fn unlock_backup_requires_body_proof(
     actor_id: &str,
 ) -> Result<()> {
     let baseline = KeysBackupsUnlockRequestBody {
-        proof: unlock_proof(actor_id)?,
+        proof: unlock_proof(actor_id, server.service_id())?,
     };
     crate::harness::expect_api_error(
         server
@@ -250,7 +250,7 @@ async fn principal_signing_unlock_reaches_trust_anchor(
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
             .json(&KeysBackupsUnlockRequestBody {
-                proof: unlock_proof(actor_id)?,
+                proof: unlock_proof(actor_id, server.service_id())?,
             }),
         StatusCode::UNAUTHORIZED,
         "untrusted_backup_signature",
@@ -266,7 +266,7 @@ async fn principal_signing_unlock_reaches_trust_anchor(
 /// No durable recovery-session record exists for this synthetic session id.
 /// `principal_signing` is the compatibility proof kind that may still reach
 /// the trust-anchor check without a bound recovery ceremony.
-fn unlock_proof(actor_id: &str) -> Result<KeyBackupUnlockProof> {
+fn unlock_proof(actor_id: &str, station_id: &DidCoreId) -> Result<KeyBackupUnlockProof> {
     let signing_key = device_signing_key();
     let multibase = ed25519_pubkey_to_did_key_multibase(signing_key.verifying_key().as_bytes());
     let verification_method = format!("did:key:{multibase}#{multibase}");
@@ -276,10 +276,7 @@ fn unlock_proof(actor_id: &str) -> Result<KeyBackupUnlockProof> {
     )?;
     let unsigned = UnsignedKeyBackupUnlockProof::new(
         RecoverySessionId::new("ak:recovery_session:01964137-0000-7000-8000-0000000000aa")?,
-        AccountId::new(
-            did(actor_id)?,
-            DidCoreId::new("ak:did_core:web:soland.cotest.local".to_owned())?,
-        ),
+        AccountId::new(did(actor_id)?, station_id.clone()),
         DeviceId::new(DEVICE_ID.to_owned())?,
         backup_id(BACKUP_ID)?,
         BackupKind::MlsHistory,

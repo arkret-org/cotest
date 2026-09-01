@@ -1550,16 +1550,36 @@ function Start-EphemeralPostgres {
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     $lastError = $null
+    $stableReadyChecks = 0
     while ((Get-Date) -lt $deadline) {
         $readyOutput = Invoke-NativeCapture -FilePath "docker" -Arguments @("exec", $containerName, "pg_isready", "-U", "arkret", "-d", "arkret")
         if ($LASTEXITCODE -eq 0) {
-            return [pscustomobject]@{
-                ContainerName = $containerName
-                HostPort = $port
-                Url = "postgresql://arkret:arkret@127.0.0.1:$port/arkret"
+            $tcp = [System.Net.Sockets.TcpClient]::new()
+            try {
+                $connect = $tcp.ConnectAsync("127.0.0.1", $port)
+                $hostReady = $connect.Wait(1000) -and $tcp.Connected
+            } catch {
+                $hostReady = $false
+                $lastError = $_.Exception.Message
+            } finally {
+                $tcp.Dispose()
             }
+            if ($hostReady) {
+                $stableReadyChecks += 1
+                if ($stableReadyChecks -ge 2) {
+                    return [pscustomobject]@{
+                        ContainerName = $containerName
+                        HostPort = $port
+                        Url = "postgresql://arkret:arkret@127.0.0.1:$port/arkret"
+                    }
+                }
+            } else {
+                $stableReadyChecks = 0
+            }
+        } else {
+            $stableReadyChecks = 0
+            $lastError = $readyOutput -join "`n"
         }
-        $lastError = $readyOutput -join "`n"
         Start-Sleep -Milliseconds 500
     }
 
@@ -5163,7 +5183,7 @@ $summary = [pscustomobject]@{
     test_totals = $totals
     required_scenarios = $requiredScenarios
     forbid_skipped_tests = $forbidRuntimeSkips
-    selection_gate_failures = $selectionGateFailures.ToArray()
+    selection_gate_failures = @($selectionGateFailures)
     evidence_counts = $evidenceTotals
     scenario_evidence_manifest = $scenarioEvidenceManifestPath
     started_at = $startedAt.ToString("o")
