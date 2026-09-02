@@ -292,14 +292,10 @@ fn validate_pcr_genesis_helpers() -> Result<()> {
     let descriptor = FoundingDeviceDescriptor {
         descriptor_version: 1,
         device_id: device_id.clone(),
-        device_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
-            device_public_key.as_bytes(),
         ))?,
         device_public_key_did: device_public_key,
         device_key_algorithm: FoundingDeviceKeyAlgorithm::Ed25519,
         device_key_purpose: FoundingDeviceKeyPurpose::EventSigningAndMlsIdentity,
-        hpke_key_digest: Hash::new(arkret_canonical::canonical::sha256_digest(
-            hpke_key.as_bytes(),
         ))?,
         hpke_key,
         hpke_key_algorithm: FoundingDeviceHpkeKeyAlgorithm::X25519,
