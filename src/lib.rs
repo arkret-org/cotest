@@ -163,13 +163,11 @@ pub fn fixture_verified_handle_claim_at(
     let mut claim = HandleClaim {
         schema: HandleClaim::SCHEMA.to_owned(),
         claim: core,
-        claim_digest,
         status: HandleClaimStatus::Verified,
         as_of: status_as_of,
         verifier_id: issuer_id,
         verified_at: Some(status_as_of),
         revocation: None,
-        revocation_digest: None,
         fresh_until,
         status_proof: proof(
             PayloadProofPurpose::StatusAttestation,
