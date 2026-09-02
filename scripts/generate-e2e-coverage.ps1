@@ -167,7 +167,7 @@ function Add-Dashboard {
         [pscustomobject]@{ id = 'UJ-D'; name = 'Encrypted realm lifecycle and cross-device decrypt'; include = { param($s) $s -like 'encryption/*' } },
         [pscustomobject]@{ id = 'UJ-E'; name = 'Federation and cross-domain collaboration'; include = { param($s) $s -like 'federation/*' -or $s -eq 'extensions/mimi-federation' } },
         [pscustomobject]@{ id = 'UJ-F'; name = 'Kanban collaboration and concurrent work'; include = { param($s) $s -like 'kanban/*' -or $s -like 'workflows/*' -or $s -eq 'messaging/discussion-upgrade' } },
-        [pscustomobject]@{ id = 'UJ-G'; name = 'Privacy rights, governance, appeal, and GDPR'; include = { param($s) $s -like 'governance/*' -or $s -in @('identity/consent-grant', 'spaces/moderation-ban') } },
+        [pscustomobject]@{ id = 'UJ-G'; name = 'Privacy rights, governance, and GDPR'; include = { param($s) $s -like 'governance/*' -or $s -in @('identity/consent-grant', 'spaces/moderation-ban') } },
         [pscustomobject]@{ id = 'UJ-H'; name = 'Calls, push, and cross-platform sync'; include = { param($s) $s -like 'calls/*' -or $s -in @('discovery/notifications', 'sync/transport-negotiation') } }
     )
 

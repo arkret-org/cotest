@@ -264,7 +264,6 @@ export function typedId(kind: string): string {
   if (
     [
       "actor_profile",
-      "appeal",
       "audit_binding",
       "audit_session",
       "audit_release",

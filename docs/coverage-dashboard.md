@@ -11,7 +11,7 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | UJ-D - Encrypted realm lifecycle and cross-device decrypt | 9 | 9 | 100.0% | 0 |
 | UJ-E - Federation and cross-domain collaboration | 19 | 19 | 100.0% | 0 |
 | UJ-F - Kanban collaboration and concurrent work | 45 | 45 | 100.0% | 0 |
-| UJ-G - Privacy rights, governance, appeal, and GDPR | 37 | 44 | 84.1% | 7 |
+| UJ-G - Privacy rights, governance, and GDPR | 28 | 35 | 80.0% | 7 |
 | UJ-H - Calls, push, and cross-platform sync | 24 | 24 | 100.0% | 0 |
 
 ## UJ-A - First login and multi-device recovery
@@ -91,12 +91,11 @@ This static inventory does not claim runtime verification; use an Arkret Joint P
 | workflows/support-escalation | domain-fallback | 3 | 3 | 0 |
 | workflows/team-onboarding | domain-fallback | 3 | 3 | 0 |
 
-## UJ-G - Privacy rights, governance, appeal, and GDPR
+## UJ-G - Privacy rights, governance, and GDPR
 
 | spec | mapping | implemented | promised | blocking |
 |---|---|---:|---:|---:|
 | governance/gdpr-audit-retention | domain-fallback | 7 | 7 | 0 |
-| governance/moderation-appeal | domain-fallback | 9 | 9 | 0 |
 | governance/organization-bootstrap | domain-fallback | 0 | 3 | 3 |
 | governance/organization-policy | domain-fallback | 1 | 5 | 4 |
 | governance/personal-blocklist | domain-fallback | 6 | 6 | 0 |
