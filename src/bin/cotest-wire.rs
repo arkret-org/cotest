@@ -712,13 +712,11 @@ fn build_pcr_genesis_unit(
     let descriptor = arkret_models_collaboration::events_payloads::FoundingDeviceDescriptor {
         descriptor_version: 1,
         device_id: principal_device_id,
-        ))?,
         device_public_key_did: device_public_key,
         device_key_algorithm:
             arkret_models_collaboration::events_payloads::FoundingDeviceKeyAlgorithm::Ed25519,
         device_key_purpose:
             arkret_models_collaboration::events_payloads::FoundingDeviceKeyPurpose::EventSigningAndMlsIdentity,
-        ))?,
         hpke_key,
         hpke_key_algorithm:
             arkret_models_collaboration::events_payloads::FoundingDeviceHpkeKeyAlgorithm::X25519,
