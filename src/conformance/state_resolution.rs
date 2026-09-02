@@ -676,57 +676,221 @@ fn validate_sealed_control_move_full_digest_collision(
             bail!("vector {vector_name} repeats resolution case {name}");
         }
     }
-    for (name, discriminator, expected, reason) in [
+    // Every accepted resolution projects its exact scope and nothing wider, so
+    // one accept spelling covers the whole family. Anything not listed here is
+    // an unreviewed case rather than a passing one.
+    let expectations: &[(&str, &str, Option<&str>)] = &[
         (
             "resolution_names_winner_by_digest_only",
-            "event_digest",
             "reject",
             Some(arkret_wire::ReasonCode::WITNESS_DISAGREEMENT),
         ),
         (
             "resolution_names_winner_by_canonical_bytes",
-            "canonical_bytes",
             "accept_and_project_exact_scope",
             None,
         ),
         (
+            "resolution_names_winner_by_variant_record_reference",
+            "accept_and_project_exact_scope",
+            None,
+        ),
+        (
+            "resolution_collision_missing_variant_record_is_dependency_missing",
+            "reject",
+            Some(arkret_wire::ErrorCode::DEPENDENCY_MISSING),
+        ),
+        (
+            "resolution_voids_complete_sibling_position",
+            "accept_and_project_exact_scope",
+            None,
+        ),
+        (
+            "resolution_cross_bucket_overflow_uses_sixty_five_siblings",
+            "accept_and_project_exact_scope",
+            None,
+        ),
+        (
+            "resolution_bucket_overflow_below_minimal_evidence_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION),
+        ),
+        (
+            "resolution_domain_non_joinable_reruns_registered_cell_family",
+            "accept_and_project_exact_scope",
+            None,
+        ),
+        (
+            "resolution_winner_outside_evidence_set_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::FAILED_PRECONDITION),
+        ),
+        (
+            "resolution_subject_carrying_bucket_digest_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION),
+        ),
+        (
+            "resolution_scope_mismatch_does_not_clear",
+            "accepted_cell_but_no_peer_state_transition",
+            None,
+        ),
+        (
+            "resolution_without_peer_alignment_does_not_clear_peer",
+            "accepted_cell_but_no_peer_state_transition",
+            None,
+        ),
+        (
+            "resolution_missing_recovery_capability",
+            "reject",
+            Some(arkret_wire::ReasonCode::RECOVERY_CAPABILITY_NOT_SEALED),
+        ),
+        (
+            "resolution_state_witness_role_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION),
+        ),
+        (
+            "witness_disagreement_single_source_does_not_clear",
+            "retain_confirmed_evidence",
+            None,
+        ),
+        (
+            "witness_disagreement_quorum_reagreement_does_not_clear",
+            "retain_confirmed_evidence",
+            None,
+        ),
+        (
             "cross_suite_discriminator_is_diagnostic_only",
-            "blake3_digest_of_same_preimage",
             "reject",
             Some(arkret_wire::ReasonCode::WITNESS_DISAGREEMENT),
         ),
-    ] {
+        (
+            "resolution_near_one_mib_collision_requires_variant_record",
+            "reject",
+            Some(arkret_wire::ErrorCode::PAYLOAD_TOO_LARGE),
+        ),
+        (
+            "resolution_near_one_mib_collision_accepts_variant_record",
+            "accept_and_project_exact_scope",
+            None,
+        ),
+        (
+            "resolution_variant_record_digest_mismatch_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::DIGEST_MISMATCH),
+        ),
+        (
+            "resolution_variant_record_size_mismatch_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION),
+        ),
+        (
+            "resolution_variant_record_foreign_realm_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION),
+        ),
+        (
+            "resolution_variant_record_proof_controller_mismatch_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION),
+        ),
+        (
+            "resolution_variant_record_event_id_recompute_mismatch_rejected",
+            "reject",
+            Some(arkret_wire::ReasonCode::EVENT_ID_DIGEST_MISMATCH),
+        ),
+        (
+            "resolution_cross_realm_winner_outside_event_realm_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SCHEMA_VIOLATION),
+        ),
+        (
+            "resolution_cross_realm_verdict_does_not_govern_other_realm",
+            "accept_and_project_exact_scope",
+            None,
+        ),
+        (
+            "resolution_peer_alignment_clears_only_exact_evidence_key",
+            "clear_exact_evidence_scope",
+            None,
+        ),
+        (
+            "resolution_peer_alignment_mismatch_keeps_peer_stale",
+            "retain_confirmed_evidence",
+            None,
+        ),
+        (
+            "resolution_cell_bottom_refails_closed_after_clear",
+            "requarantine_peer",
+            None,
+        ),
+    ];
+    for (name, expected, reason) in expectations {
         let case = cases
             .get(name)
             .ok_or_else(|| anyhow!("vector {vector_name} missing resolution case {name}"))?;
+        require_str_eq(case, "/expected", expected, vector_name)?;
+        match reason {
+            Some(reason) => require_str_eq(case, "/reason_code", reason, vector_name)?,
+            None if case.get("reason_code").is_some() => {
+                bail!("vector {vector_name} case {name} accepts but carries a rejection reason")
+            }
+            None => {}
+        }
+    }
+    let reviewed = expectations
+        .iter()
+        .map(|(name, ..)| *name)
+        .chain(["resolution_idempotent_replay"])
+        .collect::<BTreeSet<_>>();
+    for name in cases.keys() {
+        if !reviewed.contains(name) {
+            bail!("vector {vector_name} carries unreviewed resolution case {name}");
+        }
+    }
+
+    for (name, discriminator) in [
+        ("resolution_names_winner_by_digest_only", "event_digest"),
+        (
+            "resolution_names_winner_by_canonical_bytes",
+            "canonical_bytes",
+        ),
+        (
+            "cross_suite_discriminator_is_diagnostic_only",
+            "blake3_digest_of_same_preimage",
+        ),
+    ] {
         require_str_eq(
-            case,
+            cases[name],
             "/fork_resolution_identifies_winner_by",
             discriminator,
             vector_name,
         )?;
-        require_str_eq(case, "/expected", expected, vector_name)?;
-        if let Some(reason) = reason {
-            require_str_eq(case, "/reason_code", reason, vector_name)?;
-        } else if case.get("reason_code").is_some() {
-            bail!(
-                "vector {vector_name} canonical-bytes resolution must not carry a rejection reason"
-            );
-        }
     }
 
-    let canonical_case = cases
-        .get("resolution_names_winner_by_canonical_bytes")
-        .expect("required resolution case was checked above");
+    // A collision has no digest-only identity, so both the evidence and the
+    // verdict must denote complete canonical bytes.
+    let canonical_case = cases["resolution_names_winner_by_canonical_bytes"];
     require_str_eq(
         canonical_case,
         "/payload/subject/kind",
         "event_id_collision",
         vector_name,
     )?;
-    let variants = required_array(canonical_case, "/payload/subject/variants", vector_name)?;
-    if variants.len() < 2 {
-        bail!("vector {vector_name} collision resolution must carry the complete variant set");
+    require_str_eq(
+        canonical_case,
+        "/payload/conflict_evidence/kind",
+        "full_hash_collision",
+        vector_name,
+    )?;
+    let variants = required_array(
+        canonical_case,
+        "/payload/conflict_evidence/variants",
+        vector_name,
+    )?;
+    if variants.len() != 2 {
+        bail!("vector {vector_name} collision evidence must carry exactly two variants");
     }
     require_str_eq(
         canonical_case,
@@ -734,49 +898,197 @@ fn validate_sealed_control_move_full_digest_collision(
         "canonical_winner",
         vector_name,
     )?;
-    let winner = required_pointer_str(
-        canonical_case,
-        "/payload/verdict/canonical_event_bytes_b64u",
-        vector_name,
-    )?;
-    if !variants.iter().any(|variant| {
-        variant
-            .get("canonical_event_bytes_b64u")
-            .and_then(Value::as_str)
-            == Some(winner)
-    }) {
-        bail!("vector {vector_name} canonical winner must name one complete collision variant");
+    let winner = canonical_case
+        .pointer("/payload/verdict/winner_preimage")
+        .ok_or_else(|| anyhow!("vector {vector_name} collision winner must be a locator"))?;
+    if !variants.iter().any(|variant| variant == winner) {
+        bail!("vector {vector_name} canonical winner must be one of its own evidence variants");
     }
 
-    let void_case = cases
-        .get("resolution_voids_complete_sibling_bucket")
-        .ok_or_else(|| {
-            anyhow!("vector {vector_name} missing resolution case resolution_voids_complete_sibling_bucket")
-        })?;
+    // The reference arm exists because two preimages near the 1 MiB ceiling
+    // cannot both be inlined into a resolution Event bounded by the same limit.
+    let record_case = cases["resolution_names_winner_by_variant_record_reference"];
+    require_str_eq(
+        record_case,
+        "/payload/verdict/winner_preimage/kind",
+        "collision_variant_record",
+        vector_name,
+    )?;
+    require_str_eq(
+        cases["resolution_near_one_mib_collision_requires_variant_record"],
+        "/locator_kind",
+        "inline_canonical_bytes",
+        vector_name,
+    )?;
+    require_str_eq(
+        cases["resolution_near_one_mib_collision_accepts_variant_record"],
+        "/locator_kind",
+        "collision_variant_record",
+        vector_name,
+    )?;
+
+    // 17 and 65 are the bounded minimal proofs that the v1 single-bucket and
+    // cumulative ceilings were passed. Both land on one position cell, so a
+    // bucket-scoped and a cross-bucket verdict can never disagree.
+    let void_case = cases["resolution_voids_complete_sibling_position"];
     require_str_eq(
         void_case,
         "/payload/subject/kind",
-        "event_sibling_bucket",
+        "event_sibling_position",
         vector_name,
     )?;
-    require_array_len_at_least(
+    if void_case
+        .pointer("/payload/subject/prev_frontier_digest")
+        .is_some()
+    {
+        bail!("vector {vector_name} position subject must not carry a bucket digest");
+    }
+    require_str_eq(
         void_case,
-        "/payload/subject/sibling_event_digests",
-        2,
+        "/payload/conflict_evidence/kind",
+        "bucket_overflow",
+        vector_name,
+    )?;
+    require_array_len(
+        void_case,
+        "/payload/conflict_evidence/event_ids",
+        17,
         vector_name,
     )?;
     require_str_eq(void_case, "/payload/verdict/kind", "void_all", vector_name)?;
-    require_str_eq(
-        void_case,
-        "/expected",
-        "accept_and_project_exact_scope",
+    let cross_bucket = cases["resolution_cross_bucket_overflow_uses_sixty_five_siblings"];
+    require_array_len(
+        cross_bucket,
+        "/payload/conflict_evidence/event_ids",
+        65,
         vector_name,
     )?;
-    let critical_roles = string_vec_at(void_case, "/critical_ref_roles", vector_name)?
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    if critical_roles != BTreeSet::from(["recovery_capability", "state_witness"]) {
-        bail!("vector {vector_name} void-all resolution must bind recovery and witness authority");
+    require_str_eq(
+        cross_bucket,
+        "/expected_cell_subject_equals_case",
+        "resolution_voids_complete_sibling_position",
+        vector_name,
+    )?;
+    if void_case.pointer("/payload/subject") != cross_bucket.pointer("/payload/subject") {
+        bail!(
+            "vector {vector_name} single-bucket and cross-bucket overflow must share one cell subject"
+        );
+    }
+    require_array_len(
+        cases["resolution_bucket_overflow_below_minimal_evidence_rejected"],
+        "/payload/conflict_evidence/event_ids",
+        16,
+        vector_name,
+    )?;
+
+    // A domain conflict is re-derived from the registered family's own lattice;
+    // there is no conflict-rule registry to trust instead.
+    let domain_case = cases["resolution_domain_non_joinable_reruns_registered_cell_family"];
+    let family = required_pointer_str(
+        domain_case,
+        "/payload/conflict_evidence/cell_family",
+        vector_name,
+    )?;
+    if !family.starts_with("ak.component.") {
+        bail!("vector {vector_name} domain conflict must name a registered cell family");
+    }
+
+    // Exactly one critical recovery capability, and never a state_witness: the
+    // fork-resolution cell is `__unset__` before its first write, so the role
+    // that attests a pre-Bottom value has no referent here.
+    for name in [
+        "resolution_voids_complete_sibling_position",
+        "resolution_cross_bucket_overflow_uses_sixty_five_siblings",
+        "resolution_domain_non_joinable_reruns_registered_cell_family",
+        "resolution_names_winner_by_variant_record_reference",
+    ] {
+        let roles = string_vec_at(cases[name], "/critical_ref_roles", vector_name)?
+            .into_iter()
+            .collect::<Vec<_>>();
+        if roles
+            .iter()
+            .filter(|role| **role == "recovery_capability")
+            .count()
+            != 1
+        {
+            bail!("vector {vector_name} case {name} must bind exactly one recovery capability");
+        }
+        if roles.contains(&"state_witness") {
+            bail!("vector {vector_name} case {name} must not carry a state_witness role");
+        }
+    }
+    if !string_vec_at(
+        cases["resolution_state_witness_role_rejected"],
+        "/critical_ref_roles",
+        vector_name,
+    )?
+    .contains(&"state_witness")
+    {
+        bail!("vector {vector_name} state_witness negative must actually carry the role");
+    }
+
+    // Two phases that must not be merged: an accepted resolution normalizes
+    // local state, and only that peer's own exact-scope alignment clears it.
+    if cases["resolution_without_peer_alignment_does_not_clear_peer"]
+        .pointer("/peer_exact_scope_challenge_completed")
+        != Some(&Value::Bool(false))
+    {
+        bail!("vector {vector_name} unaligned case must leave the peer challenge incomplete");
+    }
+    let aligned = cases["resolution_peer_alignment_clears_only_exact_evidence_key"];
+    for path in [
+        "/peer_exact_scope_challenge_completed",
+        "/peer_sibling_set_equals_verdict",
+    ] {
+        if aligned.pointer(path) != Some(&Value::Bool(true)) {
+            bail!("vector {vector_name} alignment case must complete a matching challenge");
+        }
+    }
+    for path in [
+        "/other_peer_confirmed_evidence",
+        "/other_subject_confirmed_evidence",
+    ] {
+        require_str_eq(aligned, path, "retained", vector_name)?;
+    }
+    require_str_eq(
+        aligned,
+        "/ordinary_failure_window",
+        "unchanged",
+        vector_name,
+    )?;
+    if cases["resolution_peer_alignment_mismatch_keeps_peer_stale"]
+        .pointer("/peer_sibling_set_equals_verdict")
+        != Some(&Value::Bool(false))
+    {
+        bail!("vector {vector_name} alignment mismatch must not match the verdict");
+    }
+    require_str_eq(
+        cases["resolution_cell_bottom_refails_closed_after_clear"],
+        "/resolution_cell_status_after_clear",
+        "bottom",
+        vector_name,
+    )?;
+
+    // One Realm's verdict never rewrites another Realm's projection.
+    require_str_eq(
+        cases["resolution_cross_realm_winner_outside_event_realm_rejected"],
+        "/winner_variant_realm_relation",
+        "other_realm",
+        vector_name,
+    )?;
+    require_str_eq(
+        cases["resolution_cross_realm_verdict_does_not_govern_other_realm"],
+        "/other_realm_projection",
+        "unchanged_and_still_quarantined",
+        vector_name,
+    )?;
+
+    // Replaying one accepted Event is idempotent rather than a second write.
+    let replay = cases["resolution_idempotent_replay"];
+    if required_u64(replay, "/replay_count", vector_name)? < 2
+        || required_u64(replay, "/expected_store_transitions", vector_name)? != 1
+    {
+        bail!("vector {vector_name} replay case must prove one transition for repeated delivery");
     }
     Ok(())
 }
@@ -2337,6 +2649,19 @@ fn require_array_len_at_least(
     let array = required_array(value, pointer, vector_name)?;
     if array.len() < min_len {
         bail!("vector {vector_name} array at {pointer} must have at least {min_len} items");
+    }
+    Ok(())
+}
+
+/// Exact cardinality. The fork-resolution evidence bounds are the claim, not a
+/// floor: 17 proves the single-bucket ceiling was passed and 16 does not.
+fn require_array_len(value: &Value, pointer: &str, len: usize, vector_name: &str) -> Result<()> {
+    let array = required_array(value, pointer, vector_name)?;
+    if array.len() != len {
+        bail!(
+            "vector {vector_name} array at {pointer} must have exactly {len} items, found {}",
+            array.len()
+        );
     }
     Ok(())
 }
