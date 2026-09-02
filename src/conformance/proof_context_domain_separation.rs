@@ -34,13 +34,13 @@ use arkret_models_collaboration::http_bodies::{
     MimiKeyMaterialRequestBody, MimiRequestConsentRequestBody,
 };
 use arkret_models_discovery::{
-    DirectoryListHandlesForSubjectRequestBody, DirectoryResolveAgentSelectorRequestBody,
-    DirectoryResolveHandleRequestBody, DirectoryResolveOrganizationRequestBody,
-    DirectoryResolveTargetRequestBody,
+    DirectoryListHandlesForSubjectRequestBody, DirectoryRequestProof,
+    DirectoryResolveAgentSelectorRequestBody, DirectoryResolveHandleRequestBody,
+    DirectoryResolveOrganizationRequestBody, DirectoryResolveTargetRequestBody,
 };
 use arkret_signatures::proof::sign_ed25519_detached_jws;
 use arkret_signatures::{PublicKeyMaterial, verify_ed25519_detached_jws_payload_proof};
-use arkret_wire::{Audience, DidUrl, Hash, PayloadProof, ProofContextId, proof_kind};
+use arkret_wire::{Audience, DidCoreId, DidUrl, Hash, PayloadProof, ProofContextId, proof_kind};
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
@@ -403,6 +403,17 @@ fn signed_proof(
     Ok(proof)
 }
 
+fn directory_request_proof(proof: &PayloadProof) -> Result<DirectoryRequestProof> {
+    Ok(DirectoryRequestProof {
+        kind: proof.kind.clone(),
+        verification_method: proof.verification_method.clone(),
+        payload_digest: proof.payload_digest.clone(),
+        created_at: proof.created_at,
+        audience_id: DidCoreId::new(DIRECTORY_AUDIENCE).map_err(anyhow::Error::msg)?,
+        jws: proof.jws.clone(),
+    })
+}
+
 fn directory_families() -> Result<Vec<FamilyUnderTest>> {
     let list_handles: DirectoryListHandlesForSubjectRequestBody = serde_json::from_value(json!({
         "account_id": {"principal_id":"ak:did_core:web:bob.example", "station_id":"ak:did_core:web:station.example"},
@@ -421,7 +432,7 @@ fn directory_families() -> Result<Vec<FamilyUnderTest>> {
     }))?;
     let resolve_organization: DirectoryResolveOrganizationRequestBody =
         serde_json::from_value(json!({
-            "organization_principal_id": "ak:did_core:web:org.example",
+            "organization_id": "ak:did_core:web:org.example",
         }))?;
     let resolve_target: DirectoryResolveTargetRequestBody = serde_json::from_value(json!({
         "address": "arkret://alice.example/@alice",
@@ -433,31 +444,33 @@ fn directory_families() -> Result<Vec<FamilyUnderTest>> {
             "directory_list_handles_for_subject_request",
             ProofContextId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
             list_handles.payload_digest()?,
-            move |proof| Ok(list_handles.proof_binding_bytes(proof)?),
+            move |proof| Ok(list_handles.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),
         family(
             "directory_resolve_agent_selector_request",
             ProofContextId::DIRECTORY_RESOLVE_AGENT_SELECTOR_REQUEST_PROOF_V1,
             agent_selector.payload_digest()?,
-            move |proof| Ok(agent_selector.proof_binding_bytes(proof)?),
+            move |proof| Ok(agent_selector.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),
         family(
             "directory_resolve_handle_request",
             ProofContextId::DIRECTORY_RESOLVE_HANDLE_REQUEST_PROOF_V1,
             resolve_handle.payload_digest()?,
-            move |proof| Ok(resolve_handle.proof_binding_bytes(proof)?),
+            move |proof| Ok(resolve_handle.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),
         family(
             "directory_resolve_organization_request",
             ProofContextId::DIRECTORY_RESOLVE_ORGANIZATION_REQUEST_PROOF_V1,
             resolve_organization.payload_digest()?,
-            move |proof| Ok(resolve_organization.proof_binding_bytes(proof)?),
+            move |proof| {
+                Ok(resolve_organization.proof_binding_bytes(&directory_request_proof(proof)?)?)
+            },
         ),
         family(
             "directory_resolve_target_request",
             ProofContextId::DIRECTORY_RESOLVE_TARGET_REQUEST_PROOF_V1,
             resolve_target.payload_digest()?,
-            move |proof| Ok(resolve_target.proof_binding_bytes(proof)?),
+            move |proof| Ok(resolve_target.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),
     ])
 }

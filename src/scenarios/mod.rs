@@ -28,6 +28,7 @@ pub mod identity_directory;
 pub mod identity_test_support;
 pub mod interaction_models;
 pub mod invite_frozen_prestate_live;
+pub mod invite_new_source_quota_live;
 pub mod invite_service_fanout_live;
 pub mod joint_service_smoke;
 pub mod kanban_identity_boundary;

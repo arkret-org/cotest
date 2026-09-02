@@ -50,18 +50,20 @@ use crate::scenarios::identity_test_support::{
 };
 
 #[derive(Debug)]
-struct DispatchedInvite {
-    outcome: Value,
-    invite_id: InviteId,
+pub(crate) struct DispatchedInvite {
+    pub(crate) outcome: Value,
+    #[allow(dead_code)]
+    pub(crate) invite_id: InviteId,
 }
 
 #[derive(Debug)]
-struct PreparedInvite {
-    request: SelfInviteDispatchRequestBody,
-    invite_id: InviteId,
+pub(crate) struct PreparedInvite {
+    pub(crate) request: SelfInviteDispatchRequestBody,
+    #[allow(dead_code)]
+    pub(crate) invite_id: InviteId,
 }
 
-async fn set_explicit_address_behavior(
+pub(crate) async fn set_explicit_address_behavior(
     holder: &TestActorClient,
     behavior: InviteReceiveAction,
 ) -> Result<()> {
@@ -107,7 +109,7 @@ async fn set_explicit_address_behavior(
     Ok(())
 }
 
-async fn prepare_explicit_invite(
+pub(crate) async fn prepare_explicit_invite(
     inviter: &TestActorClient,
     holder: &TestActorClient,
     label: &str,
@@ -149,7 +151,7 @@ async fn prepare_explicit_invite(
     })
 }
 
-async fn dispatch_explicit_invite(
+pub(crate) async fn dispatch_explicit_invite(
     inviter: &TestActorClient,
     prepared: PreparedInvite,
 ) -> Result<DispatchedInvite> {
@@ -166,7 +168,7 @@ async fn dispatch_explicit_invite(
     })
 }
 
-async fn create_and_dispatch_explicit_invite(
+pub(crate) async fn create_and_dispatch_explicit_invite(
     inviter: &TestActorClient,
     holder: &TestActorClient,
     label: &str,
@@ -178,7 +180,7 @@ async fn create_and_dispatch_explicit_invite(
     .await
 }
 
-async fn account_data_row(holder: &TestActorClient, key: &str) -> Result<AccountDataRow> {
+pub(crate) async fn account_data_row(holder: &TestActorClient, key: &str) -> Result<AccountDataRow> {
     // Service-written invite cells are registered plaintext account data. The
     // holder-readable list is their canonical read surface; the single-key
     // resource route deliberately accepts only encrypted private-key patterns.

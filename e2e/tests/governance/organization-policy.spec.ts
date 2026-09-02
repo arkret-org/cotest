@@ -71,7 +71,7 @@ function realmOrganizationStatement(args: {
   if (args.revokesStatementId) statement.revokes_statement_id = args.revokesStatementId;
   statement.authorization = {
     issuer_id: projectDidToCoreId(args.organizationDid),
-    issuer_role: "organization_principal_id",
+    issuer_role: "organization",
     verification_method: `${args.organizationDid}#k1`,
     signed_at: canonicalTimestamp(),
     proof: "c2ln",

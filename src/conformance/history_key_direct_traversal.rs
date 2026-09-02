@@ -1300,9 +1300,9 @@ fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()
         .pointer("/events/register/payload/new_key_tuple")
         .context("RRK KAT omits register key tuple")?;
     let principal_id = DidCoreId::new(
-        key_tuple["holder_principal_id"]
+        key_tuple["controller_id"]
             .as_str()
-            .context("RRK tuple omits holder_principal_id")?,
+            .context("RRK tuple omits controller_id")?,
     )?;
     let verification_method = DidUrl::new(
         key_tuple["key_agreement_ref"]

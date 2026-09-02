@@ -122,7 +122,7 @@ pub async fn private_visibility_non_member_send_and_deleted_space_edges() -> Res
             .post(server.url("/_arkret/find/directory/search-realms"))
             .json(&arkret_models_discovery::DirectorySearchRealmsRequestBody {
                 query: Some("Private Space".to_owned()),
-                organization_principal_id: None,
+                organization_id: None,
                 source_realm_id: None,
                 requester_id: None,
                 proof_challenge: None,

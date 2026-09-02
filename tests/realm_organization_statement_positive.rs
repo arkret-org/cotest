@@ -65,7 +65,7 @@ fn active_statement() -> RealmOrganizationPayload {
         organization_policy_ref: None,
         authorization: RealmOrganizationAuthorization {
             issuer_id: DidCoreId::new(ORG_DID).unwrap(),
-            issuer_role: RealmOrganizationIssuerRole::OrganizationPrincipalId,
+            issuer_role: RealmOrganizationIssuerRole::Organization,
             verification_method: DidUrl::new(ORG_VERIFICATION_METHOD).unwrap(),
             delegation_ref: None,
             executed_by: None,

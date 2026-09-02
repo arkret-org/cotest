@@ -71,7 +71,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .post(server.url("/_arkret/find/directory/search-realms"))
             .json(&arkret_models_discovery::DirectorySearchRealmsRequestBody {
                 query: Some("Visibility Matrix".to_owned()),
-                organization_principal_id: None,
+                organization_id: None,
                 source_realm_id: None,
                 requester_id: None,
                 proof_challenge: None,
@@ -114,7 +114,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
                 query: Some("bob-privacy".to_owned()),
                 realm_id: None,
-                organization_principal_id: None,
+                organization_id: None,
                 cursor: None,
                 limit: None,
             }),
@@ -156,7 +156,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
                 query: Some("alice".to_owned()),
                 realm_id: None,
-                organization_principal_id: None,
+                organization_id: None,
                 cursor: None,
                 limit: None,
             }),
@@ -182,7 +182,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             &arkret_models_discovery::DirectorySearchActorsRequestBody {
                 query: Some("bob-privacy".to_owned()),
                 realm_id: None,
-                organization_principal_id: None,
+                organization_id: None,
                 cursor: None,
                 limit: None,
             },
@@ -202,7 +202,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             &arkret_models_discovery::DirectorySearchActorsRequestBody {
                 query: Some("bob-privacy".to_owned()),
                 realm_id: None,
-                organization_principal_id: None,
+                organization_id: None,
                 cursor: None,
                 limit: None,
             },
@@ -226,7 +226,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             &arkret_models_discovery::DirectorySearchActorsRequestBody {
                 query: Some("bob-privacy".to_owned()),
                 realm_id: None,
-                organization_principal_id: None,
+                organization_id: None,
                 cursor: None,
                 limit: None,
             },
@@ -267,7 +267,7 @@ pub async fn directory_discoverability_and_actor_privacy_work() -> Result<()> {
             .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
                 query: Some("bob-privacy".to_owned()),
                 realm_id: None,
-                organization_principal_id: None,
+                organization_id: None,
                 cursor: None,
                 limit: None,
             }),

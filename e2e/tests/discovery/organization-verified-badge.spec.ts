@@ -52,7 +52,7 @@ async function submitOrganizationStatement(
   if (revokesStatementId) statement.revokes_statement_id = revokesStatementId;
   statement.authorization = {
     issuer_id: projectDidToCoreId(organizationDid),
-    issuer_role: "organization_principal_id",
+    issuer_role: "organization",
     verification_method: `${organizationDid}#k1`,
     signed_at: canonicalTimestamp(),
     proof: "c2ln",
@@ -210,7 +210,7 @@ test.describe("directory verified organization badge", () => {
             issued_at: canonicalTimestamp(),
             authorization: {
               issuer_id: projectDidToCoreId(orgDid),
-              issuer_role: "organization_principal_id",
+              issuer_role: "organization",
               verification_method: `${orgDid}#k1`,
               signed_at: canonicalTimestamp(),
               proof: "c2ln",

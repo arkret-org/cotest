@@ -77,7 +77,7 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
         .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
             query: Some("Alice Wonderland".to_owned()),
             realm_id: None,
-            organization_principal_id: None,
+            organization_id: None,
             cursor: None,
             limit: None,
         })
@@ -124,7 +124,7 @@ pub async fn soland_teabay_directory_sync_run() -> Result<()> {
                 .json(&arkret_models_discovery::DirectorySearchActorsRequestBody {
                     query: Some("Alice Wonderland".to_owned()),
                     realm_id: None,
-                    organization_principal_id: None,
+                    organization_id: None,
                     cursor: None,
                     limit: None,
                 })
