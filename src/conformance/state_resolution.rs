@@ -825,6 +825,16 @@ fn validate_sealed_control_move_full_digest_collision(
             "requarantine_peer",
             None,
         ),
+        (
+            "recovery_seal_covering_only_fork_resolution_accepted",
+            "accept_and_project_exact_scope",
+            None,
+        ),
+        (
+            "recovery_seal_mixing_an_ordinary_move_rejected",
+            "reject",
+            Some(arkret_wire::ErrorCode::SEAL_SIGNER_UNAUTHORIZED),
+        ),
     ];
     for (name, expected, reason) in expectations {
         let case = cases
@@ -1068,6 +1078,29 @@ fn validate_sealed_control_move_full_digest_collision(
         "bottom",
         vector_name,
     )?;
+
+    // The step 2b recovery exception is per Seal: a recovery signer must not
+    // attach an ordinary Control Move to a fork-resolution Seal.
+    for (name, expect_fork_only) in [
+        ("recovery_seal_covering_only_fork_resolution_accepted", true),
+        ("recovery_seal_mixing_an_ordinary_move_rejected", false),
+    ] {
+        let case = cases[name];
+        require_str_eq(
+            case,
+            "/seal_signer_descriptor",
+            "recovery_members",
+            vector_name,
+        )?;
+        let kinds = string_vec_at(case, "/seal_delta_kinds", vector_name)?;
+        if kinds.len() < 2 {
+            bail!("vector {vector_name} case {name} must cover more than one delta item");
+        }
+        let fork_only = kinds.iter().all(|kind| *kind == "ak.fork.resolution");
+        if fork_only != expect_fork_only {
+            bail!("vector {vector_name} case {name} delta does not match its own claim");
+        }
+    }
 
     // One Realm's verdict never rewrites another Realm's projection.
     require_str_eq(
