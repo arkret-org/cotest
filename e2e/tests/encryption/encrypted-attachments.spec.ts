@@ -97,7 +97,6 @@ test.describe("encrypted attachments", () => {
         group_state_ref: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
       },
       epoch: 1,
-      ciphertext_digest: ciphertextDigest,
       size_bytes: ciphertext.length,
       media_type: "application/octet-stream",
     };
@@ -125,9 +124,13 @@ test.describe("encrypted attachments", () => {
     const body = JSON.parse(uploadText);
     expect(body.media_type).toBe("application/octet-stream");
     expect(body.size_bytes).toBe(ciphertext.length);
-    expect(body.content_digest).toBe(ciphertextDigest);
+    // content-types.md: the content-addressed blob_ref is the sole wire
+    // commitment to the stored ciphertext; neither the outcome nor the receipt
+    // carries a sibling content_digest.
+    expect(body.blob_ref).toBe(`ak:blob:${ciphertextDigest}`);
+    expect(body.content_digest).toBeUndefined();
     expect(body.upload_receipt.blob_ref).toBe(body.blob_ref);
-    expect(body.upload_receipt.content_digest).toBe(ciphertextDigest);
+    expect(body.upload_receipt.content_digest).toBeUndefined();
     expect(body.upload_receipt.size_bytes).toBe(ciphertext.length);
     expect(body.upload_receipt.issuer_id).toBe(solandServiceId());
     expect(body.upload_receipt.signature).toBeTruthy();
