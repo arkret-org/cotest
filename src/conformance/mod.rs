@@ -40,6 +40,7 @@ mod helpers;
 mod history_key_direct_traversal;
 mod identity_root;
 mod inkson_client;
+mod invite_new_source_quota;
 mod kernel_joint_gate;
 mod kernel_reference;
 mod key_backup_hardening;
@@ -244,6 +245,12 @@ pub use identity_root::{
     run_identity_root_anchor_checkpoint_suite,
 };
 pub use inkson_client::run_inkson_client_profile_manifest_suite;
+pub use invite_new_source_quota::{
+    CanonicalAdmissionCase, CanonicalContact, Decision as NewSourceQuotaDecision,
+    INVITE_NEW_SOURCE_QUOTA_FIXTURE, VECTOR_ID_NEW_SOURCE_QUOTA_EFFECTIVE_BOUNDS,
+    VECTOR_ID_NEW_SOURCE_QUOTA_HOLDER_ADMISSION, canonical_admission_case,
+    run_invite_new_source_quota_suite,
+};
 pub use kernel_joint_gate::{KERNEL_JOINT_GATE_FIXTURE, run_kernel_joint_gate_suite};
 pub use key_backup_hardening::{
     ALL_KEY_BACKUP_HARDENING_VECTOR_IDS, VECTOR_ID_KEY_BACKUP_DELETE_AUTHORITY,

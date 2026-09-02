@@ -4,6 +4,12 @@
 //! Covers `ak.vector.invite.new_source_quota_holder_admission.v1` and
 //! `ak.vector.invite.new_source_quota_effective_bounds.v1`.
 //!
+//! Every deployment ceiling and every expected outcome below is read out of the
+//! canonical fixture `invite-new-source-quota-fixture.json`. This scenario owns
+//! only the live wiring: it never restates a threshold or a decision, so a
+//! PostgreSQL-backed Station is measured against the same bytes the offline
+//! fixture runner executes.
+//!
 //! Every assertion is taken from the **holder's** `ak.account.invite_quarantine`
 //! cell, because the requester side is designed to be indistinguishable: an
 //! admitted quarantine, a quota drop, a TTL drop, an unknown holder and a policy
@@ -11,41 +17,31 @@
 //! could therefore never tell an enforced quota from an unenforced one, while a
 //! missing cell entry can.
 
+use std::collections::BTreeMap;
+
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::governance::invite_addressing::InviteReceivePolicy;
 use arkret_wire::{AccountDataKey, InviteReceiveAction, NewSourceQuotaOverride};
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::harness::{ArkretServer, TestActorClient, expect_json};
+use crate::conformance::{CanonicalAdmissionCase, canonical_admission_case};
+use crate::harness::{ArkretServer, TestActorClient, actor_core_id, expect_json};
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 use crate::scenarios::invite_service_fanout_live::{
     account_data_row, create_and_dispatch_explicit_invite, set_explicit_address_behavior,
 };
 
-/// Deployment ceiling used by both runs. The short window is deliberately long
-/// enough that no test step can slide out of it, so a missing entry can only be
-/// the quota and never an expiry race.
-const WINDOW_SECONDS: &str = "3600";
-const PER_WINDOW: &str = "2";
-const RETENTION_SECONDS: &str = "7200";
-const PER_RETENTION: &str = "3";
+/// The one admission timeline whose ledger and cell both start empty and whose
+/// contacts all fall inside a single short window, so a live Station can replay
+/// it without controlling the clock.
+const REPLAYABLE_ADMISSION_CASE: &str =
+    "short_window_ceiling_admits_then_drops_while_a_charged_source_still_enters";
+const ZERO_OVERRIDE_CASE: &str = "zero_holder_override_locks_the_inbox";
 
-fn quota_env() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("SOLAND_RECEIVE_POLICY_NEW_SOURCE_WINDOW_SECONDS", WINDOW_SECONDS),
-        ("SOLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_WINDOW", PER_WINDOW),
-        ("SOLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_WINDOW", "10"),
-        ("SOLAND_RECEIVE_POLICY_NEW_SOURCE_RETENTION_SECONDS", RETENTION_SECONDS),
-        (
-            "SOLAND_RECEIVE_POLICY_NEW_SOURCE_DEFAULT_PER_RETENTION",
-            PER_RETENTION,
-        ),
-        ("SOLAND_RECEIVE_POLICY_NEW_SOURCE_MAX_PER_RETENTION", "200"),
-    ]
-}
-
-/// Distinct source principals recorded in the holder's quarantine cell.
+/// Distinct source principals recorded in the holder's quarantine cell, oldest
+/// first and with repeats preserved: a repeat contact from an already-charged
+/// source is a second entry, not a second charge.
 async fn quarantined_sources(holder: &TestActorClient) -> Result<Vec<String>> {
     let row = match account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_QUARANTINE).await {
         Ok(row) => row,
@@ -104,70 +100,111 @@ async fn inviter(server: &ArkretServer, label: &str, device_suffix: u8) -> Resul
         .with_context(|| format!("bootstrap inviter {label}"))
 }
 
+async fn spawn_under_canonical_ceiling(
+    name: &str,
+    case: &CanonicalAdmissionCase,
+) -> Result<ArkretServer> {
+    ensure!(
+        case.starts_from_empty_state,
+        "{}: a live replay needs a timeline that starts from an empty ledger and cell",
+        case.name
+    );
+    let environment = case.deployment_environment();
+    let borrowed = environment
+        .iter()
+        .map(|(key, value)| (*key, value.as_str()))
+        .collect::<Vec<_>>();
+    ArkretServer::spawn_with_env(name, &borrowed).await
+}
+
 /// `ak.vector.invite.new_source_quota_holder_admission.v1`.
 pub async fn new_source_quota_holder_admission_run() -> Result<()> {
-    let server = ArkretServer::spawn_with_env("invite-new-source-quota", &quota_env()).await?;
+    let case = canonical_admission_case(REPLAYABLE_ADMISSION_CASE)?;
+    let server = spawn_under_canonical_ceiling("invite-new-source-quota", &case).await?;
     let holder = holder_with_quarantine_policy(&server, "bob-new-source-quota").await?;
 
-    // Two distinct new sources fit under the short-window ceiling.
-    let first = inviter(&server, "alice-new-source-quota-1", 0xd1).await?;
-    let second = inviter(&server, "alice-new-source-quota-2", 0xd2).await?;
-    for (peer, label) in [(&first, "quota first source"), (&second, "quota second source")] {
-        let dispatched = create_and_dispatch_explicit_invite(peer, &holder, label).await?;
+    // One live peer per canonical source alias. A repeated alias reuses the
+    // same peer, which is what makes the fourth contact a seen source rather
+    // than a fifth stranger.
+    let mut peers: BTreeMap<String, TestActorClient> = BTreeMap::new();
+    let mut principals: BTreeMap<String, String> = BTreeMap::new();
+    for (index, contact) in case.contacts.iter().enumerate() {
+        if !peers.contains_key(&contact.source) {
+            let label = format!("alice-new-source-quota-{}", contact.source);
+            let peer = inviter(&server, &label, 0xd1 + index as u8).await?;
+            principals.insert(contact.source.clone(), actor_core_id(&peer.actor)?);
+            peers.insert(contact.source.clone(), peer);
+        }
+
+        // A distinct label per contact keeps each dispatch its own invite, so a
+        // repeat from one source is a second delivery rather than an exact
+        // replay that section 6.1.1.4 excludes from quota evaluation.
+        let label = format!("quota contact {index} from {}", contact.source);
+        let peer = &peers[&contact.source];
+        let dispatched = create_and_dispatch_explicit_invite(peer, &holder, &label)
+            .await
+            .with_context(|| {
+                format!(
+                    "dispatch canonical contact[{index}] from {}",
+                    contact.source
+                )
+            })?;
         assert_opaque_deferred(&dispatched.outcome)?;
+
+        let expected = case
+            .quarantine_entry_sources_after(index + 1)
+            .iter()
+            .map(|alias| principals[alias].clone())
+            .collect::<Vec<_>>();
+        let observed = quarantined_sources(&holder).await?;
+        ensure!(
+            observed == expected,
+            "{}: after contact[{index}] ({} {:?}) the quarantine cell is {observed:?}, the canonical fixture declares {expected:?}",
+            case.name,
+            contact.source,
+            contact.expected_decision
+        );
     }
-    let admitted = quarantined_sources(&holder).await?;
-    ensure!(
-        admitted.len() == 2,
-        "the two sources inside the ceiling were not both admitted: {admitted:?}"
-    );
-
-    // A third distinct new source is over the short-window ceiling. It must be
-    // dropped silently: absent from the cell, unchanged on the wire.
-    let third = inviter(&server, "alice-new-source-quota-3", 0xd3).await?;
-    let over_quota = create_and_dispatch_explicit_invite(&third, &holder, "quota third source")
-        .await
-        .context("dispatch the over-quota source")?;
-    assert_opaque_deferred(&over_quota.outcome)?;
-    let after_denial = quarantined_sources(&holder).await?;
-    ensure!(
-        after_denial.len() == 2,
-        "an over-quota new source reached the quarantine cell: {after_denial:?}"
-    );
-
-    // An already-charged source is not a new source: a second contact from it
-    // is still admitted even though the window is full. This is what separates
-    // a real seen-source ledger from a plain per-holder counter.
-    let repeat = create_and_dispatch_explicit_invite(&first, &holder, "quota repeat source")
-        .await
-        .context("dispatch a repeat contact from an already-admitted source")?;
-    assert_opaque_deferred(&repeat.outcome)?;
-    let after_repeat = quarantined_sources(&holder).await?;
-    ensure!(
-        after_repeat.len() == 3,
-        "a repeat contact from an admitted source was charged as a new source: {after_repeat:?}"
-    );
 
     Ok(())
 }
 
 /// `ak.vector.invite.new_source_quota_effective_bounds.v1`.
 ///
-/// The holder override may only make the holder less reachable. Setting it to
-/// `0` locks the inbox to zero new sources even though the deployment default
-/// would admit two.
+/// The holder override may only make the holder less reachable. The canonical
+/// fixture pins the zero override to zero admissions even though the deployment
+/// default would admit more.
 pub async fn new_source_quota_effective_bounds_run() -> Result<()> {
-    let server = ArkretServer::spawn_with_env("invite-new-source-bounds", &quota_env()).await?;
+    let case = canonical_admission_case(ZERO_OVERRIDE_CASE)?;
+    let holder_override = case
+        .holder_override
+        .clone()
+        .context("the canonical zero-override case must publish a holder override")?;
+    let server = spawn_under_canonical_ceiling("invite-new-source-bounds", &case).await?;
     let holder = holder_with_quarantine_policy(&server, "bob-new-source-bounds").await?;
-    set_new_source_quota_override(&holder, 0, 0)
+    set_new_source_quota_override(&holder, &holder_override)
         .await
-        .context("publish the zero new-source override")?;
+        .context("publish the canonical holder override")?;
 
-    let peer = inviter(&server, "alice-new-source-bounds-1", 0xe1).await?;
-    let locked = create_and_dispatch_explicit_invite(&peer, &holder, "bounds locked source")
-        .await
-        .context("dispatch under a zero override")?;
-    assert_opaque_deferred(&locked.outcome)?;
+    for (index, contact) in case.contacts.iter().enumerate() {
+        let peer = inviter(
+            &server,
+            &format!("alice-new-source-bounds-{}", contact.source),
+            0xe1 + index as u8,
+        )
+        .await?;
+        let label = format!("bounds contact {index} from {}", contact.source);
+        let dispatched = create_and_dispatch_explicit_invite(&peer, &holder, &label)
+            .await
+            .with_context(|| format!("dispatch canonical contact[{index}] under the override"))?;
+        assert_opaque_deferred(&dispatched.outcome)?;
+    }
+
+    ensure!(
+        case.quarantine_entry_sources.is_empty(),
+        "{}: the canonical zero-override case must expect an empty quarantine cell",
+        case.name
+    );
     let sources = quarantined_sources(&holder).await?;
     ensure!(
         sources.is_empty(),
@@ -181,8 +218,7 @@ pub async fn new_source_quota_effective_bounds_run() -> Result<()> {
 /// receive policy the holder already has.
 async fn set_new_source_quota_override(
     holder: &TestActorClient,
-    per_window: u64,
-    per_retention: u64,
+    quota_override: &NewSourceQuotaOverride,
 ) -> Result<()> {
     let current = expect_json(
         holder.get("/_arkret/self/invite-receive-policy"),
@@ -191,10 +227,7 @@ async fn set_new_source_quota_override(
     .await?;
     let mut policy: InviteReceivePolicy = serde_json::from_value(current)
         .context("invite-receive-policy response is not an InviteReceivePolicy")?;
-    policy.new_source_quota = Some(NewSourceQuotaOverride {
-        new_sources_per_window: Some(per_window),
-        new_sources_per_retention: Some(per_retention),
-    });
+    policy.new_source_quota = Some(quota_override.clone());
     let updated = expect_json(
         holder
             .put("/_arkret/self/invite-receive-policy")

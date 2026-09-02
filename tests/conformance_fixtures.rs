@@ -771,6 +771,16 @@ conformance_test!(
 );
 
 conformance_test!(
+    /// The per-holder new-source quota clamps every holder override to the
+    /// deployment ceiling, admits exactly up to the effective sliding limits,
+    /// never charges or refreshes a seen source, never ledgers a dropped one,
+    /// and stays inside the opaque deferred equivalence class throughout.
+    invite_new_source_quota,
+    "invite_new_source_quota",
+    cotest::conformance::run_invite_new_source_quota_suite,
+);
+
+conformance_test!(
     /// Protocol-gap closure vectors assert proposal quorum evidence, durable
     /// security-transaction replay, closed track names, and WebSocket fallback.
     protocol_gap_closure_fixture_suite_matches_reference_semantics,
