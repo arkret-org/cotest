@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
-use super::helpers::profile_claims;
+use super::helpers::{is_empty_json_value, profile_claims};
 use super::{load_local_fixture_value, required_str, validate_profile, value_array};
 use crate::transcripts::record_vector_event;
 
@@ -206,15 +206,5 @@ fn collect_blockers(value: &Value, path: &str, summary: &mut BlockerSummary) {
             }
         }
         _ => {}
-    }
-}
-
-fn is_empty_json_value(value: &Value) -> bool {
-    match value {
-        Value::Null => true,
-        Value::Array(items) => items.is_empty(),
-        Value::Object(object) => object.is_empty(),
-        Value::String(text) => text.trim().is_empty(),
-        _ => false,
     }
 }

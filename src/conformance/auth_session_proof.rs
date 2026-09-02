@@ -20,7 +20,8 @@ use ed25519_dalek::{SigningKey, VerifyingKey};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::schema_validation_fixture::SchemaEnv;
+use super::schema_validation_fixture::schema_valid;
+use super::{expected_str, required_i64, required_str, required_u64};
 
 pub const VECTOR_ID_AUTH_SESSION_GRANT_AUDIENCE_BINDING: &str =
     "ak.vector.auth.session_grant_audience_binding.v1";
@@ -98,34 +99,6 @@ fn case<'a>(fixture: &'a AuthSessionProofFixture, vector_id: &str) -> Result<&'a
         .ok_or_else(|| anyhow!("auth session proof fixture missing case {vector_id}"))
 }
 
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing string field {field}"))
-}
-
-fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing expected.{field}"))
-}
-
-fn required_u64(value: &Value, field: &str) -> Result<u64> {
-    value
-        .get(field)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("case missing u64 field {field}"))
-}
-
-fn required_i64(value: &Value, field: &str) -> Result<i64> {
-    value
-        .get(field)
-        .and_then(Value::as_i64)
-        .ok_or_else(|| anyhow!("case missing i64 field {field}"))
-}
-
 fn required_string_array(value: &Value, field: &str) -> Result<Vec<String>> {
     value
         .get(field)
@@ -151,20 +124,6 @@ fn did(value: &str) -> Result<DidCoreId> {
 
 fn device(value: &str) -> Result<DeviceId> {
     DeviceId::new(value.to_owned()).map_err(Into::into)
-}
-
-fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
-    let env = SchemaEnv::load()?;
-    let validator = env.compile(schema_ref)?;
-    if !validator.is_valid(value) {
-        let errors = validator
-            .iter_errors(value)
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        bail!("value failed schema {schema_ref}: {errors}");
-    }
-    Ok(())
 }
 
 fn session_grant_request_value(

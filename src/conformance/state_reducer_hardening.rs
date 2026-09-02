@@ -10,6 +10,7 @@ use arkret_wire::{EventCellBottom, EventCellLattice, EventKind};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use super::{expected_bool, expected_str_opt, expected_u64_opt, required_str};
 use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_STATE_ROOT_INCREMENTAL: &str = "ak.vector.state_root.incremental.v1";
@@ -1079,37 +1080,4 @@ fn pointer_array<'a>(value: &'a Value, pointer: &str) -> Result<&'a [Value]> {
         .and_then(Value::as_array)
         .map(Vec::as_slice)
         .ok_or_else(|| anyhow!("missing array at {pointer}"))
-}
-
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("missing string field {field}"))
-}
-
-fn expected_bool(value: &Value, field: &str) -> Result<bool> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("missing bool expected.{field}"))
-}
-
-fn expected_str_opt<'a>(value: &'a Value, field: &str) -> Result<Option<&'a str>> {
-    match value.pointer(&format!("/expected/{field}")) {
-        Some(Value::String(s)) => Ok(Some(s)),
-        Some(_) => bail!("expected.{field} must be a string"),
-        None => Ok(None),
-    }
-}
-
-fn expected_u64_opt(value: &Value, field: &str) -> Result<Option<u64>> {
-    match value.pointer(&format!("/expected/{field}")) {
-        Some(Value::Number(number)) => number
-            .as_u64()
-            .map(Some)
-            .ok_or_else(|| anyhow!("expected.{field} must be u64")),
-        Some(_) => bail!("expected.{field} must be u64"),
-        None => Ok(None),
-    }
 }

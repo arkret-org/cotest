@@ -397,7 +397,7 @@ pub fn run_composite_state_subject_fixture_suite() -> Result<()> {
     }
     Ok(())
 }
-/// B3 Round 24 — composite (cell, subject) state-key encoding determinism +
+/// B3 — composite (cell, subject) state-key encoding determinism +
 /// reserved-name collision rejection.
 pub fn run_composite_state_key_encoding_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("composite_state_key_encoding_fixture.json")?;

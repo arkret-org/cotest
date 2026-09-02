@@ -1,5 +1,4 @@
-//! Bridge-contract scenarios — split from the previous 1300-line
-//! `bridge_contracts.rs` during the round 28 Q1 refactor.
+//! Bridge-contract scenarios.
 //!
 //! Each submodule is single-responsibility:
 //! - [`discovery`] — `/_soland/gate/auth/bridge/describe` smoke check

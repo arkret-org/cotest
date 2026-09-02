@@ -1,5 +1,4 @@
-//! Schema / policy / realtime scenarios — split from the previous 600-line
-//! `schema_policy_realtime.rs` during the round 28 Q1 refactor.
+//! Schema / policy / realtime scenarios.
 //!
 //! Each submodule is single-responsibility:
 //! - [`schema`] — `/_arkret/self/schemas` registry lifecycle and visibility.
@@ -7,8 +6,7 @@
 //! - [`typing`] — `/_arkret/self/typing` + `/_arkret/self/push_rules` realtime strand.
 //! - [`webrtc`] — `/_arkret/self/rtc/*` media surface and guards.
 //!
-//! No private helpers exist between scenarios in this family — the move is a
-//! pure mechanical extraction.
+//! No private helpers are shared between the scenarios in this family.
 
 pub mod policy;
 pub mod schema;

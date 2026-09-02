@@ -831,7 +831,7 @@ pub fn run_production_signing_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// Round-27 F-2 — fixture-decoupled multi-admin distinct-approver gate.
+/// F-2 — fixture-decoupled multi-admin distinct-approver gate.
 /// Asserts that a 2-of-2 approval pool requires 2 distinct DIDs to unlock,
 /// and that duplicate-DID submissions never count twice.
 pub fn run_multi_admin_distinct_approver_gate_check() -> Result<()> {
@@ -854,5 +854,3 @@ pub fn run_multi_admin_distinct_approver_gate_check() -> Result<()> {
     }
     Ok(())
 }
-
-// ── Round 27 — D5 / E3 / E4 / E5 / E6 / F-2 suites ─────────────────────────

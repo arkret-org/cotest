@@ -7,7 +7,7 @@ use arkret_models_collaboration::objects::read_receipts::{
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use super::load_fixture_value;
+use super::{FixtureRunner, load_fixture_value, required_array, required_str, required_u64};
 
 const READ_CURSOR_FIXTURE: &str = "read-cursor-multi-device-merge-fixture.json";
 const READ_CURSOR_SUITE: &str = "ak.suite.read_cursor.multi_device_merge.v1";
@@ -18,18 +18,11 @@ const ACCOUNT_DATA_VECTOR: &str = "ak.vector.account_data.cas_convergence.v1";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Runner {
-    kind: String,
-    entrypoint: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct ReadCursorFixture {
     profile: String,
     version: String,
     suite: String,
-    runner: Runner,
+    runner: FixtureRunner,
     covers_vectors: Vec<String>,
     shared: Map<String, Value>,
     cases: Vec<ReadCursorCase>,
@@ -190,7 +183,7 @@ struct AccountDataFixture {
     profile: String,
     version: String,
     suite: String,
-    runner: Runner,
+    runner: FixtureRunner,
     covers_vectors: Vec<String>,
     account_data_key: String,
     cases: Vec<Value>,
@@ -262,7 +255,7 @@ pub fn run_account_data_cas_convergence_vector_suite() -> Result<()> {
 
     let mut names = BTreeSet::new();
     for case in &fixture.cases {
-        let name = string_field(case, "name")?;
+        let name = required_str(case, "name")?;
         ensure!(names.insert(name), "duplicate account data case {name}");
         match name {
             "old_retry_after_new_write" => run_simple_cas_case(case, true)?,
@@ -292,7 +285,7 @@ fn validate_fixture_header(
     profile: &str,
     version: &str,
     suite: &str,
-    runner: &Runner,
+    runner: &FixtureRunner,
     vectors: &[String],
     expected_suite_name: &str,
     expected_entrypoint: &str,
@@ -314,7 +307,7 @@ fn validate_fixture_header(
 }
 
 fn register_from(value: &Value, deletion_mode: DeletionMode) -> Result<Register> {
-    let revision = u64_field(value, "revision")?;
+    let revision = required_u64(value, "revision")?;
     let content = value
         .get("content")
         .and_then(Value::as_str)
@@ -394,7 +387,7 @@ fn run_simple_cas_case(case: &Value, require_conflict_details: bool) -> Result<(
             })
             .context("expected a CAS conflict")?;
         ensure!(
-            conflict.0 == u64_field(expected, "conflict_current_revision")?,
+            conflict.0 == required_u64(expected, "conflict_current_revision")?,
             "conflict current_revision drifted"
         );
         ensure!(
@@ -413,7 +406,7 @@ fn run_delivery_matrix_case(case: &Value) -> Result<()> {
     let initial = object_field(case, "initial")?;
     let requests = requests_by_id(case)?;
     let expected = object_field(case, "expected")?;
-    let deliveries = array_field(case, "deliveries")?;
+    let deliveries = required_array(case, "deliveries")?;
     let mut final_states = Vec::new();
     for delivery in deliveries {
         let mut register = register_from(initial, DeletionMode::PhysicalDelete)?;
@@ -469,11 +462,11 @@ fn run_tombstone_gc_case(case: &Value) -> Result<()> {
     assert_outcome_ids(&outcomes, expected)?;
     assert_final_register(&register, expected)?;
     ensure!(
-        string_field(expected, "resource_get")? == "not_found",
+        required_str(expected, "resource_get")? == "not_found",
         "GC case must return not_found"
     );
     ensure!(
-        u64_field(expected, "not_found_current_revision")? == register.revision,
+        required_u64(expected, "not_found_current_revision")? == register.revision,
         "not_found current_revision drifted"
     );
     let conflict = outcomes.values().next().context("missing GC outcome")?;
@@ -491,7 +484,7 @@ fn run_tombstone_gc_case(case: &Value) -> Result<()> {
 }
 
 fn run_create_recreate_case(case: &Value) -> Result<()> {
-    for scenario in array_field(case, "scenarios")? {
+    for scenario in required_array(case, "scenarios")? {
         let mut register = register_from(
             object_field(scenario, "initial")?,
             DeletionMode::PhysicalDelete,
@@ -508,7 +501,7 @@ fn run_create_recreate_case(case: &Value) -> Result<()> {
 
 fn run_value_tombstone_case(case: &Value) -> Result<()> {
     ensure!(
-        string_field(case, "deletion_mode")? == "value_tombstone",
+        required_str(case, "deletion_mode")? == "value_tombstone",
         "value tombstone deletion_mode drifted"
     );
     let mut register = register_from(object_field(case, "initial")?, DeletionMode::ValueTombstone)?;
@@ -589,14 +582,14 @@ fn run_missing_revision_case(case: &Value) -> Result<()> {
             .get("all_rejected_before_handler")
             .and_then(Value::as_bool)
             == Some(true)
-            && string_field(expected, "error")? == "schema_violation",
+            && required_str(expected, "error")? == "schema_violation",
         "missing revision expectation drifted"
     );
     Ok(())
 }
 
 fn request_list(value: &Value) -> Result<Vec<Request>> {
-    array_field(value, "requests")?
+    required_array(value, "requests")?
         .iter()
         .cloned()
         .map(serde_json::from_value)
@@ -661,7 +654,7 @@ fn assert_outcome_ids(outcomes: &BTreeMap<String, ApplyOutcome>, expected: &Valu
 
 fn assert_final_register(register: &Register, expected: &Value) -> Result<()> {
     ensure!(
-        register.revision == u64_field(expected, "final_revision")?,
+        register.revision == required_u64(expected, "final_revision")?,
         "final revision drifted"
     );
     if let Some(content) = expected.get("final_content").and_then(Value::as_str) {
@@ -683,29 +676,8 @@ fn object_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
         .with_context(|| format!("missing object field {field}"))
 }
 
-fn array_field<'a>(value: &'a Value, field: &str) -> Result<&'a Vec<Value>> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .with_context(|| format!("missing array field {field}"))
-}
-
-fn string_field<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .with_context(|| format!("missing string field {field}"))
-}
-
-fn u64_field(value: &Value, field: &str) -> Result<u64> {
-    value
-        .get(field)
-        .and_then(Value::as_u64)
-        .with_context(|| format!("missing unsigned integer field {field}"))
-}
-
 fn string_array<'a>(value: &'a Value, field: &str) -> Result<Vec<&'a str>> {
-    array_field(value, field)?
+    required_array(value, field)?
         .iter()
         .map(|entry| {
             entry

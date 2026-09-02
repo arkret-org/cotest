@@ -1,4 +1,4 @@
-//! Round 4 / A2 — schema-validation-fixture driver.
+//! A2 — schema-validation-fixture driver.
 //!
 //! Loads `arkret-spec/spec/v1/artifacts/fixtures/schema-validation-fixture.json`
 //! and runs every positive/negative case against its `schema_ref`.

@@ -60,7 +60,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round 4 / A2 — schema-validation-fixture positive + negative cases
+    /// A2 — schema-validation-fixture positive + negative cases
     /// run against the schema referenced by `schema_ref`. Drift hard-fails.
     schema_validation_fixture_suite_matches_reference_semantics,
     "schema_validation_fixture",
@@ -121,7 +121,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round 4 / A2 — security-closure-fixture runner contract.
+    /// A2 — security-closure-fixture runner contract.
     /// Confirms the 12 `ak.vector.*` ids are present and every step
     /// exposes the full `runner {given_state, operation, transcript,
     /// expected_state_transition, expected_external_response,
@@ -404,7 +404,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-20 M5 — conflict-repair Move vectors (head_in single-op?Value,
+    /// M5 — conflict-repair Move vectors (head_in single-op?Value,
     /// self-authorising winner reject at lattice layer, manual repair via
     /// recovery_capability + anchorer endorsement). Stand-alone JSON fixture
     /// for SUT black-box validation; lattice round-trip stays in
@@ -423,7 +423,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-21 — Discovery profile (ak.profile.discovery.v1) advertise vs
+    /// Discovery profile (ak.profile.discovery.v1) advertise vs
     /// core/extension tier filtering, interop_bridge handling, and post-C16
     /// surface naming (blob_storage / realtime_media / moderation_reports).
     discovery_profile_fixture_suite_matches_reference_semantics,
@@ -456,7 +456,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-22 — Event-kind ? LatticeKind dispatch consistency. Cross-checks
+    /// Event-kind ? LatticeKind dispatch consistency. Cross-checks
     /// the live event-kind-registry: every active reducer-input durable kind
     /// with cell_family declares one core lattice, no cell_family appears in
     /// two lattices, namespace is ak.component.*, bottom is in {reject, expose},
@@ -468,42 +468,42 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-23 A1 — event-kind payload coverage.
+    /// A1 — event-kind payload coverage.
     event_kind_payload_coverage_fixture_suite_matches_reference_semantics,
     "event_kind_payload_coverage_fixture",
     cotest::conformance::run_event_kind_payload_coverage_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-23 B1 — quarantine-on-fork algorithm.
+    /// B1 — quarantine-on-fork algorithm.
     state_resolution_quarantine_fixture_suite_matches_reference_semantics,
     "state_resolution_quarantine_fixture",
     cotest::conformance::run_state_resolution_quarantine_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-23 B5 — membership transition FSM.
+    /// B5 — membership transition FSM.
     membership_fsm_fixture_suite_matches_reference_semantics,
     "membership_fsm_fixture",
     cotest::conformance::run_membership_fsm_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-23 C1 — constraint family coverage.
+    /// C1 — constraint family coverage.
     constraint_family_fixture_suite_matches_reference_semantics,
     "constraint_family_fixture",
     cotest::conformance::run_constraint_family_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-24 A5 — device-message / key-verification / key-backup negatives.
+    /// A5 — device-message / key-verification / key-backup negatives.
     device_message_negative_fixture_suite_matches_reference_semantics,
     "device_message_negative_fixture",
     cotest::conformance::run_device_message_negative_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-24 B3 — composite (cell, subject) state-key encoding determinism +
+    /// B3 — composite (cell, subject) state-key encoding determinism +
     /// reserved-name collision rejection.
     composite_state_key_encoding_fixture_suite_matches_reference_semantics,
     "composite_state_key_encoding_fixture",
@@ -511,7 +511,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-24 D1 — MLS / E2EE basic protocol (genesis, epoch advance, member
+    /// D1 — MLS / E2EE basic protocol (genesis, epoch advance, member
     /// join/leave, covered_frontier accumulation, AAD digest pinning).
     mls_e2ee_basic_fixture_suite_matches_reference_semantics,
     "mlR_e2ee_basic_fixture",
@@ -519,21 +519,21 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-25 D3 — Megolm-equivalent ratcheting vectors — smoke validation.
+    /// D3 — Megolm-equivalent ratcheting vectors — smoke validation.
     megolm_ratcheting_fixture_suite_matches_reference_semantics,
     "megolm_ratcheting_fixture",
     cotest::conformance::run_megolm_ratcheting_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-25 D4 — key backup encryption vectors — smoke validation.
+    /// D4 — key backup encryption vectors — smoke validation.
     key_backup_encryption_fixture_suite_matches_reference_semantics,
     "key_backup_encryption_fixture",
     cotest::conformance::run_key_backup_encryption_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-25 C2 — constraint evaluation_class fast-path coverage — smoke
+    /// C2 — constraint evaluation_class fast-path coverage — smoke
     /// validation.
     constraint_evaluation_class_fixture_suite_matches_reference_semantics,
     "constraint_evaluation_class_fixture",
@@ -541,16 +541,16 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-25 F-1 — recovery bridge full chain (coauth principal-cache ?
-    /// soland recovery ticket ? restore executor ? final state). Round-26
-    /// upgraded to full per-step state-machine + transition legality validation.
+    /// F-1 — recovery bridge full chain (coauth principal-cache ?
+    /// soland recovery ticket ? restore executor ? final state). Validates
+    /// the full per-step state machine plus transition legality.
     recovery_bridge_full_chain_fixture_suite_matches_reference_semantics,
     "recovery_bridge_full_chain_fixture",
     cotest::conformance::run_recovery_bridge_full_chain_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-26 D4 — fixture-decoupled key-backup AEAD round-trip primitive
+    /// D4 — fixture-decoupled key-backup AEAD round-trip primitive
     /// check (Argon2id + XChaCha20-Poly1305). Asserts the exact crypto
     /// primitive set the spec mandates is callable + correct.
     key_backup_aead_round_trip_round_26,
@@ -559,7 +559,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-26 D3 — fixture-decoupled megolm-equivalent HKDF chain check.
+    /// D3 — fixture-decoupled megolm-equivalent HKDF chain check.
     /// Asserts the KDF is deterministic + non-identity over a 16-step run.
     megolm_ratchet_kdf_chain_round_26,
     "megolm_ratchet_kdf_chain_round_26",
@@ -567,7 +567,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-26 F-1 — recovery-ticket state-machine legality matrix (legal
+    /// F-1 — recovery-ticket state-machine legality matrix (legal
     /// success / terminal paths accept; illegal transitions reject). Independent
     /// of the recovery_bridge_full_chain fixture so the FSM stays self-validating.
     recovery_ticket_state_machine_round_26,
@@ -576,7 +576,7 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-27 E3 — Multi-Realm federation Per-Realm anchor isolation +
+    /// E3 — Multi-Realm federation Per-Realm anchor isolation +
     /// cross-Realm rejection.
     multi_realm_federation_fixture_suite_matches_reference_semantics,
     "multi_realm_federation_fixture",
@@ -584,21 +584,21 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-27 E4 — frontier conflict resolution via lattice join.
+    /// E4 — frontier conflict resolution via lattice join.
     frontier_conflict_resolution_fixture_suite_matches_reference_semantics,
     "frontier_conflict_resolution_fixture",
     cotest::conformance::run_frontier_conflict_resolution_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-27 E5 — late-arriving anchor idempotency (no double-effect).
+    /// E5 — late-arriving anchor idempotency (no double-effect).
     late_arriving_anchor_fixture_suite_matches_reference_semantics,
     "late_arriving_anchor_fixture",
     cotest::conformance::run_late_arriving_anchor_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-27 E6 — redacted Move cross-server projection (round-25 MAL-14
+    /// E6 — redacted Move cross-server projection (MAL-14
     /// viewer-is-author audit-view rules).
     redacted_cross_server_fixture_suite_matches_reference_semantics,
     "redacted_cross_server_fixture",
@@ -606,21 +606,21 @@ conformance_test!(
 );
 
 conformance_test!(
-    /// Round-27 F-2 — restore approval/executor/artifact full workflows.
+    /// F-2 — restore approval/executor/artifact full workflows.
     restore_full_workflows_fixture_suite_matches_reference_semantics,
     "restore_full_workflows_fixture",
     cotest::conformance::run_restore_full_workflows_fixture_suite,
 );
 
 conformance_test!(
-    /// Round-27 E5 — fixture-decoupled late-arriving-anchor idempotency primitive.
+    /// E5 — fixture-decoupled late-arriving-anchor idempotency primitive.
     late_arriving_anchor_idempotency_round_27,
     "late_arriving_anchor_idempotency_round_27",
     cotest::conformance::run_late_arriving_anchor_idempotency_check,
 );
 
 conformance_test!(
-    /// Round-27 F-2 — fixture-decoupled multi-admin distinct-approver gate.
+    /// F-2 — fixture-decoupled multi-admin distinct-approver gate.
     multi_admin_distinct_approver_gate_round_27,
     "multi_admin_distinct_approver_gate_round_27",
     cotest::conformance::run_multi_admin_distinct_approver_gate_check,

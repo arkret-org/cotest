@@ -6,7 +6,8 @@ use arkret_wire::{ActorId, ProfileId};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::schema_validation_fixture::SchemaEnv;
+use super::schema_validation_fixture::{schema_rejects, schema_valid};
+use super::{expected_bool, expected_str, required_str};
 
 pub const VECTOR_ID_KEY_BACKUP_KDF_FLOOR_REJECTED: &str =
     "ak.vector.key_backup.kdf_floor_rejected.v1";
@@ -82,49 +83,6 @@ fn case<'a>(fixture: &'a KeyBackupHardeningFixture, vector_id: &str) -> Result<&
         .iter()
         .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("key backup hardening fixture missing case {vector_id}"))
-}
-
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing string field {field}"))
-}
-
-fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing expected.{field}"))
-}
-
-fn expected_bool(value: &Value, field: &str) -> Result<bool> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("case missing bool expected.{field}"))
-}
-
-fn schema_validator(schema_ref: &str) -> Result<jsonschema::Validator> {
-    let env = SchemaEnv::load()?;
-    env.compile(schema_ref)
-}
-
-fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
-    let validator = schema_validator(schema_ref)?;
-    if !validator.is_valid(value) {
-        let errors = validator
-            .iter_errors(value)
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        bail!("value failed schema {schema_ref}: {errors}");
-    }
-    Ok(())
-}
-
-fn schema_rejects(schema_ref: &str, value: &Value) -> Result<bool> {
-    Ok(!schema_validator(schema_ref)?.is_valid(value))
 }
 
 fn encryption_sample(value: &Value) -> Value {

@@ -1,4 +1,4 @@
-//! Round 4 / A2 — schema-validation-fixture runner.
+//! A2 — schema-validation-fixture runner.
 //!
 //! Loads every schema-validation-shaped fixture registered below from
 //! `arkret-spec/spec/v1/artifacts/fixtures/` and runs each positive/negative
@@ -179,6 +179,46 @@ struct SchemaDefinitionValidatorCase {
 
 fn default_true() -> bool {
     true
+}
+
+// ── Shared schema-assertion helpers ─────────────────────────────────────────
+//
+// Suites that validate an ad-hoc value against a spec schema (rather than
+// running a whole schema-validation fixture) share these three wrappers so
+// there is one place that loads [`SchemaEnv`] and formats the validator's
+// error list.
+
+/// Compile one `schema_ref` against the spec schema registry.
+pub(crate) fn schema_validator(schema_ref: &str) -> Result<jsonschema::Validator> {
+    SchemaEnv::load()?.compile(schema_ref)
+}
+
+/// Assert `value` satisfies `schema_ref`, reporting every validator error.
+pub(crate) fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
+    let validator = schema_validator(schema_ref)?;
+    if !validator.is_valid(value) {
+        let errors = validator
+            .iter_errors(value)
+            .map(|error| error.to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+        bail!("value failed schema {schema_ref}: {errors}");
+    }
+    Ok(())
+}
+
+/// Assert `value` is rejected by `schema_ref` (negative vectors).
+pub(crate) fn schema_invalid(schema_ref: &str, value: &Value) -> Result<()> {
+    if schema_validator(schema_ref)?.is_valid(value) {
+        bail!("value unexpectedly passed schema {schema_ref}");
+    }
+    Ok(())
+}
+
+/// Non-failing form of [`schema_invalid`] for suites that branch on the
+/// outcome instead of asserting it.
+pub(crate) fn schema_rejects(schema_ref: &str, value: &Value) -> Result<bool> {
+    Ok(!schema_validator(schema_ref)?.is_valid(value))
 }
 
 /// Public entry point: load every fixture in

@@ -2,7 +2,7 @@
   "profile": "ak.profile.redacted_cross_server_vectors.v1",
   "version": "2026-05-10",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "E6 Round 27 — redacted-Move cross-server projection. Spec authority: round-25 MAL-14 (redact reducer) + crypto-media/redaction.md. A redaction Move on peer A propagates to peer B's projection. Per MAL-14, the cell-level model preserves the original message and writes a parallel redaction_cells entry; the projected view depends on viewer-is-author (full audit view) vs member (tombstone-only). Cross-server: peer B must produce the same per-viewer projection peer A produces.",
+  "comment": "E6 — redacted-Move cross-server projection. Spec authority: MAL-14 (redact reducer) + crypto-media/redaction.md. A redaction Move on peer A propagates to peer B's projection. Per MAL-14, the cell-level model preserves the original message and writes a parallel redaction_cells entry; the projected view depends on viewer-is-author (full audit view) vs member (tombstone-only). Cross-server: peer B must produce the same per-viewer projection peer A produces.",
   "encoder": {
     "redaction_cell_model": "redaction_cells: BTreeMap<message_id, Option<RedactionCellValue>>; original MessageState preserved",
     "viewer_views": {

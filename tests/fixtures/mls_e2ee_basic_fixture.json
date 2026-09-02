@@ -2,7 +2,7 @@
   "profile": "ak.profile.mls_e2ee_basic_vectors.v1",
   "version": "2026-05-09",
   "inherits": ["_shared/_canonical_dids.json"],
-  "comment": "D1 Round 24 — MLS / E2EE basic protocol vectors. Spec authority: crypto-media/encryption-and-audit.md + extensions/mls-binding.md. Each MLS commit Move advances a group through epochs (RFC 9420 MLS protocol). Genesis Move creates epoch 0; subsequent commits join/leave members and advance to epoch N+1. covered_frontier or-set accumulates the governance refs each commit attests to. Encryption AAD digest pins the Move's ciphertext to the active group state — a bit-flip in any covered byte must produce a different digest, which the recipient verifies before decryption.",
+  "comment": "D1 — MLS / E2EE basic protocol vectors. Spec authority: crypto-media/encryption-and-audit.md + extensions/mls-binding.md. Each MLS commit Move advances a group through epochs (RFC 9420 MLS protocol). Genesis Move creates epoch 0; subsequent commits join/leave members and advance to epoch N+1. covered_frontier or-set accumulates the governance refs each commit attests to. Encryption AAD digest pins the Move's ciphertext to the active group state — a bit-flip in any covered byte must produce a different digest, which the recipient verifies before decryption.",
   "encoder": {
     "mls_protocol": "RFC 9420 MLS",
     "epoch_cell": "ak:cell:ak.component.mls.epoch.v1:<realm_id>",

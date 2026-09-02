@@ -105,7 +105,7 @@ test-with-containers = ["dep:testcontainers"]
 # `arkret` facade (`arkret::identity::*`). cotest's primary-handle /
 # mention vectors drive these directly so every implementation agrees on
 # the deterministic selection + canonical claim digest.
-# T5.3 (Round 22) — canonical hash convergence vectors in
+# T5.3 — canonical hash convergence vectors in
 # `tests/canonical_hash_convergence.rs` exercise the high-level
 # `EventProofBuilder` facade alongside the low-level canonical helpers
 # to pin that every Arkret service hashes payloads identically.

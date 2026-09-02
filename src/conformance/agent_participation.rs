@@ -20,6 +20,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;
+use super::{expected_str, required_str, required_u64};
 
 pub const VECTOR_ID_AGENT_MENTION_SELECTOR: &str = "ak.vector.agent.mention_selector.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN: &str =
@@ -102,27 +103,6 @@ fn case<'a>(fixture: &'a AgentParticipationFixture, vector_id: &str) -> Result<&
         .iter()
         .find(|case| case.get("vector_id").and_then(Value::as_str) == Some(vector_id))
         .ok_or_else(|| anyhow!("agent participation fixture missing case {vector_id}"))
-}
-
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing string field {field}"))
-}
-
-fn required_u64(value: &Value, field: &str) -> Result<u64> {
-    value
-        .get(field)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("case missing unsigned integer field {field}"))
-}
-
-fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing expected.{field}"))
 }
 
 fn participation_field(value: &Value, field: &str) -> Result<ParticipationBits> {

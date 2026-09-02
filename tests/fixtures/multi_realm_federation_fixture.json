@@ -1,7 +1,7 @@
 {
   "profile": "ak.profile.multi_realm_federation_vectors.v1",
   "version": "2026-05-10",
-  "comment": "E3 Round 27 — Multi-Realm federation between two nodes. Spec authority: federation/move-anchor-replication.md. Builds on E2 (round 26) two-node real-spawn, but extends to N realms under one federation pair. Per-Realm anchor isolation is the core invariant: each Realm has its own anchor frontier; replaying Move from server_a → server_b for Realm X must not affect Realm Y's frontier on either side.",
+  "comment": "E3 — Multi-Realm federation between two nodes. Spec authority: federation/move-anchor-replication.md. Builds on E2 two-node real-spawn, but extends to N realms under one federation pair. Per-Realm anchor isolation is the core invariant: each Realm has its own anchor frontier; replaying Move from server_a → server_b for Realm X must not affect Realm Y's frontier on either side.",
   "encoder": {
     "anchor_id_form": "ax:<realm_id>:<seq>",
     "frontier_isolation_rule": "anchor frontiers are partitioned by realm_id; cross-Realm operations are forbidden"

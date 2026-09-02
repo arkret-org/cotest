@@ -7,7 +7,8 @@ use serde_json::{Value, json};
 
 use super::{emit_vector, load_local_fixture};
 use crate::conformance::{
-    fixture_runner_entrypoint, load_fixture_value, required_str, validate_profile,
+    fixture_runner_entrypoint, load_fixture_value, required_field, required_str, string_set,
+    validate_profile,
 };
 
 const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
@@ -367,26 +368,6 @@ fn require_expected(case: &Value, expected: &str) -> Result<()> {
         bail!("MIMI interop expected outcome drifted: expected {expected}, got {actual}");
     }
     Ok(())
-}
-
-fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
-    value
-        .get(field)
-        .ok_or_else(|| anyhow!("missing object field {field}"))
-}
-
-fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .ok_or_else(|| anyhow!("missing array field {field}"))?
-        .iter()
-        .map(|entry| {
-            entry
-                .as_str()
-                .ok_or_else(|| anyhow!("{field} entry must be string"))
-        })
-        .collect::<Result<BTreeSet<_>>>()
 }
 
 /// W8 — MIMI Room Policy Component round-trip matrix.

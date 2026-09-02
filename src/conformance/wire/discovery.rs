@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use super::{emit_vector, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// Round-21 — Discovery profile (`ak.profile.discovery.v1`) black-box
+/// Discovery profile (`ak.profile.discovery.v1`) black-box
 /// vectors covering surface-class filtering and post-C16 surface naming.
 ///
 /// Spec authority: `registry/operation-registry.json` `surface_groups[]` and
@@ -304,7 +304,6 @@ pub fn run_discovery_profile_fixture_suite() -> Result<()> {
     Ok(())
 }
 
-// ────────────────────────── Round 22 ──────────────────────────
 /// Facet renderer/query structural guard. The historical fixture was folded
 /// into the canonical `view.schema.json`; keep this suite as an executable
 /// regression so stale Morph/View query shapes do not silently reappear.

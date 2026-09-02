@@ -1,11 +1,11 @@
-//! Round 4 / A2 — security-closure-fixture integration test surface.
+//! A2 — security-closure-fixture integration test surface.
 //!
 //! Two layers:
 //!
 //! 1. The **wire-shape gate** (always-runs): loads `security-closure-fixture.json` and confirms
-//!    every one of the 13 `ak.vector.*` ids the round-4 spec promotes is present and exposes the
-//!    typed `runner{}` contract introduced by spec commit `892c5d7 test: add security closure
-//!    runner contract`.
+//!    every one of the 13 `ak.vector.*` ids the spec promotes is present and exposes the typed
+//!    `runner{}` contract introduced by spec commit `892c5d7 test: add security closure runner
+//!    contract`.
 //!
 //! 2. The **per-vector local runner-contract gates**: one slot per vector, always active. Each test
 //!    validates that the canonical runner contract round-trips through cotest's typed comparison
@@ -38,7 +38,7 @@ use cotest::scenarios::security_closure_fixture::{
 #[test]
 fn security_closure_fixture_round_trips_full_runner_contract() {
     run_security_closure_fixture_suite()
-        .expect("security-closure-fixture.json must satisfy round-4 lint pins");
+        .expect("security-closure-fixture.json must satisfy its lint pins");
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn fixture_carries_every_required_vector_id() {
                 .security_closure_fixture
                 .iter()
                 .any(|v| v.vector_id == *vector_id),
-            "round-4 security closure fixture missing required vector_id {vector_id}",
+            "security closure fixture missing required vector_id {vector_id}",
         );
     }
 }
@@ -261,7 +261,7 @@ fn vector_e2ee_relaxed_window_exceeds_ceiling() {
 // ── Wire-shape parse + ObservedRunner smoke gates (always-runs) ─────────────
 //
 // These gates do NOT require any SUT — they prove the fixture parses with the
-// full round-4 runner contract (`given_state` / `operation` / `transcript` /
+// full runner contract (`given_state` / `operation` / `transcript` /
 // `expected_state_transition` / `expected_external_response` /
 // `expected_audit_reason`) and that the cotest-side comparison helpers can be
 // driven from a synthesised `ObservedRunner` without panic.
@@ -408,7 +408,7 @@ fn fixture_path_resolves_to_canonical_spec_artifacts_when_env_unset() {
     }
 }
 
-// ── Round 4 / C3 — multi-server federation historical_only gates ───────────
+// ── C3 — multi-server federation historical_only gates ───────────
 //
 // Non-ignored wire-shape gates for the
 // `ak.vector.federation.idempotency_after_key_revoke.v1` vector. They run

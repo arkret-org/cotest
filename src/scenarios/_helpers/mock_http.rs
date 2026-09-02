@@ -1,16 +1,14 @@
 //! Shared in-process salvo mock-server primitive.
 //!
-//! Replaces the former hand-written `TcpStream` HTTP/1.1 parser (round-28 dedup
-//! pass). Each scenario builds its own [`salvo::Router`] — their handlers differ
+//! Each scenario builds its own [`salvo::Router`] — their handlers differ
 //! (auth checks, capture, response shapes) — and hands it to [`spawn_mock`],
 //! which binds an ephemeral loopback port and serves the router on the current
 //! tokio runtime. The returned [`MockServer`] stops the server (by aborting its
 //! serve task, which drops the listener) when it goes out of scope.
 //!
-//! Using salvo — the same HTTP framework the production servers run on — removes
-//! the bespoke request framing / status-line code (and the old "every non-200
-//! reason is `Unauthorized`" wart) in favour of the framework's correct HTTP
-//! semantics.
+//! Salvo is deliberately the same HTTP framework the production servers run on,
+//! so request framing and status-line handling here match what a scenario would
+//! see against a real server instead of a bespoke parser's approximation.
 
 use std::net::SocketAddr;
 

@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
+use super::helpers::require_non_empty;
 use super::{load_local_fixture_value, required_str, validate_profile};
 use crate::transcripts::record_vector_event;
 
@@ -334,14 +335,6 @@ fn require_operation(case: &Value, operation: &str) -> Result<()> {
         bail!("{name} missing black_box_operations entry {operation}");
     }
     Ok(())
-}
-
-fn require_non_empty<'a>(value: &'a Value, pointer: &str, name: &str) -> Result<&'a str> {
-    value
-        .pointer(pointer)
-        .and_then(Value::as_str)
-        .filter(|text| !text.trim().is_empty())
-        .ok_or_else(|| anyhow!("{name} missing non-empty {pointer}"))
 }
 
 fn production_mode(case: &Value) -> bool {

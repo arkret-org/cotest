@@ -17,7 +17,8 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::schema_validation_fixture::SchemaEnv;
+use super::schema_validation_fixture::{schema_invalid, schema_valid};
+use super::{expected_bool, expected_str, expected_u64, required_str};
 
 pub const VECTOR_ID_KEYPACKAGE_EXHAUSTION_CLAIM_LIMITS: &str =
     "ak.vector.keypackage.exhaustion_claim_limits.v1";
@@ -139,40 +140,12 @@ fn case<'a>(fixture: &'a KeypackageLifecycleFixture, vector_id: &str) -> Result<
         .ok_or_else(|| anyhow!("keypackage lifecycle fixture missing case {vector_id}"))
 }
 
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing string field {field}"))
-}
-
 fn required_account_principal<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
     value
         .get(field)
         .and_then(|account| account.get("principal_id"))
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("case missing {field}.principal_id"))
-}
-
-fn expected_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("case missing expected.{field}"))
-}
-
-fn expected_bool(value: &Value, field: &str) -> Result<bool> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("case missing bool expected.{field}"))
-}
-
-fn expected_u64(value: &Value, field: &str) -> Result<u64> {
-    value
-        .pointer(&format!("/expected/{field}"))
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("case missing u64 expected.{field}"))
 }
 
 fn parse_time(value: &str) -> Result<DateTime<Utc>> {
@@ -205,29 +178,6 @@ fn device(value: &str) -> Result<DeviceId> {
 
 fn realm(value: &str) -> Result<RealmId> {
     RealmId::new(value.to_owned()).map_err(Into::into)
-}
-
-fn schema_valid(schema_ref: &str, value: &Value) -> Result<()> {
-    let env = SchemaEnv::load()?;
-    let validator = env.compile(schema_ref)?;
-    if !validator.is_valid(value) {
-        let errors = validator
-            .iter_errors(value)
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>()
-            .join("; ");
-        bail!("value failed schema {schema_ref}: {errors}");
-    }
-    Ok(())
-}
-
-fn schema_invalid(schema_ref: &str, value: &Value) -> Result<()> {
-    let env = SchemaEnv::load()?;
-    let validator = env.compile(schema_ref)?;
-    if validator.is_valid(value) {
-        bail!("value unexpectedly passed schema {schema_ref}");
-    }
-    Ok(())
 }
 
 struct ClaimRecordInput<'a> {

@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use super::{emit_vector, expected_outcome, expected_reason, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// E3 Round 27 — Multi-Realm federation. Per-Realm anchor isolation +
+/// E3 — Multi-Realm federation. Per-Realm anchor isolation +
 /// cross-Realm rejection.
 pub fn run_multi_realm_federation_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("multi_realm_federation_fixture.json")?;

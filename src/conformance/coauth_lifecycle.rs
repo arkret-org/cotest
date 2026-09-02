@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
+use super::helpers::require_non_empty;
 use super::{load_local_fixture_value, required_str, validate_profile};
 use crate::transcripts::record_vector_event;
 
@@ -270,12 +271,4 @@ fn string_array_at(value: &Value, pointer: &str, name: &str) -> Result<Vec<Strin
                 .ok_or_else(|| anyhow!("{name} {pointer}[] entries must be non-empty strings"))
         })
         .collect()
-}
-
-fn require_non_empty<'a>(value: &'a Value, pointer: &str, name: &str) -> Result<&'a str> {
-    value
-        .pointer(pointer)
-        .and_then(Value::as_str)
-        .filter(|text| !text.trim().is_empty())
-        .ok_or_else(|| anyhow!("{name} missing non-empty {pointer}"))
 }

@@ -13,7 +13,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;
 
-use super::fixture_path;
+use super::{fixture_path, required_str, required_u64};
 
 const FIXTURE: &str = "arkret-private-kdf-fixture.json";
 const MLS_LABEL_PREFIX: &[u8] = b"MLS 1.0 ";
@@ -652,18 +652,6 @@ fn case_by_name<'a>(cases: &'a [Value], name: &str) -> Result<&'a Value> {
         .iter()
         .find(|case| case["name"].as_str() == Some(name))
         .ok_or_else(|| anyhow!("fixture missing case {name}"))
-}
-
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value[field]
-        .as_str()
-        .ok_or_else(|| anyhow!("missing string field {field}"))
-}
-
-fn required_u64(value: &Value, field: &str) -> Result<u64> {
-    value[field]
-        .as_u64()
-        .ok_or_else(|| anyhow!("missing integer field {field}"))
 }
 
 fn strings_in_order(value: &Value) -> Result<Vec<&str>> {

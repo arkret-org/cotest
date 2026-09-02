@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_wire::ProfileId;
 use serde_json::Value;
 
-use super::{load_fixture_value, required_str, validate_profile};
+use super::{load_fixture_value, required_str, required_u64, validate_profile};
 
 const FIXTURE_FILE: &str = "scalability-limits-fixture.json";
 
@@ -766,11 +766,4 @@ fn bounded_outcome(
         .and_then(Value::as_u64)
         .ok_or_else(|| anyhow!("generated limit case missing integer {field}"))?;
     Ok(if value <= maximum { within } else { exceeded })
-}
-
-fn required_u64(value: &Value, field: &str) -> Result<u64> {
-    value
-        .get(field)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("generated limit case missing integer {field}"))
 }

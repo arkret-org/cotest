@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use super::{emit_vector, expected_outcome, expected_reason, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// D1 Round 24 — MLS / E2EE basic protocol vectors: genesis, epoch advance,
+/// D1 — MLS / E2EE basic protocol vectors: genesis, epoch advance,
 /// member join, member leave, covered_frontier accumulation, AAD pinning.
 pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
@@ -244,7 +244,7 @@ pub fn run_mls_e2ee_basic_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// D3 Round 26 — Megolm-equivalent ratcheting derivation + forward-secrecy.
+/// D3 — Megolm-equivalent ratcheting derivation + forward-secrecy.
 ///
 /// Spec: `crypto-media/encryption-and-audit.md` (group-key ratcheting).
 /// The Megolm-equivalent uses HKDF-SHA256 chains keyed off MLS epoch. This
@@ -484,7 +484,7 @@ pub fn run_megolm_ratcheting_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// Round-26 standalone — exercise the megolm-equivalent HKDF chain primitive.
+/// Standalone — exercise the megolm-equivalent HKDF chain primitive.
 /// Asserts the KDF is non-identity (output ≠ seed) and chain-length-deterministic
 /// (running N steps from a fixed seed always produces the same key_N).
 pub fn run_megolm_ratchet_kdf_chain_check() -> Result<()> {
@@ -513,7 +513,7 @@ pub fn run_megolm_ratchet_kdf_chain_check() -> Result<()> {
     }
     Ok(())
 }
-/// A5 Round 24 — device-message / key-verification / key-backup negative
+/// A5 — device-message / key-verification / key-backup negative
 /// envelope vectors. Spec extensions/device-messages.md + B-22 strict_key_ref
 /// rule + crypto-media/encryption-and-audit.md.
 pub fn run_device_message_negative_fixture_suite() -> Result<()> {

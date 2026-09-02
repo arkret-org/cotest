@@ -19,7 +19,7 @@ use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 use url::Url;
 
-use super::{load_fixture_value, required_str, validate_profile};
+use super::{load_fixture_value, required_field, required_str, validate_profile};
 
 const FIXTURE_FILE: &str = "did-webvh-v1-fixture.json";
 const VECTOR_ID: &str = "ak.vector.identity.did_webvh_v1_adapter.v1";
@@ -132,7 +132,7 @@ fn reject() -> CaseOutcome {
 fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
     match name {
         "accept_exact_v1_method" => {
-            validate_did_webvh_v1_method(required_value(input, "parameters")?)?;
+            validate_did_webvh_v1_method(required_field(input, "parameters")?)?;
             Ok(accept(None))
         }
         "accept_scid_substituted_over_the_whole_entry" => {
@@ -141,12 +141,12 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             // well. Deriving the SCID and the entry hash from the substituted
             // entry is the only way the published bytes and the versionId can
             // both match.
-            let preliminary = required_value(input, "preliminary_entry")?;
+            let preliminary = required_field(input, "preliminary_entry")?;
             let scid = derive_webvh_scid(preliminary)?;
             let mut published = finalize_webvh_scid_substitution(preliminary, &scid)?;
             let version_id = format!("1-{}", webvh_entry_hash_multibase(&published, &scid)?);
             published["versionId"] = json!(version_id);
-            let expected_published = required_value(input, "published_entry")?;
+            let expected_published = required_field(input, "published_entry")?;
             if &published != expected_published {
                 bail!(
                     "{name} published entry drifted: expected {expected_published}, got {published}"
@@ -162,14 +162,14 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
             // still publishes a self-consistent entry whose SCID re-derives,
             // so the residual literal is the only detector.
             expect_rejected(
-                derive_did_webvh_scid(required_value(input, "published_entry")?),
+                derive_did_webvh_scid(required_field(input, "published_entry")?),
                 name,
             )?;
             Ok(reject())
         }
         "reject_unknown_method_version" | "reject_missing_method_version" => {
             expect_rejected(
-                validate_did_webvh_v1_method(required_value(input, "parameters")?),
+                validate_did_webvh_v1_method(required_field(input, "parameters")?),
                 name,
             )?;
             Ok(reject())
@@ -239,7 +239,7 @@ fn execute_case(name: &str, input: &Value) -> Result<CaseOutcome> {
         "reject_state_id_s_method_or_scid_mismatch" => {
             let inception = principal_inception()?;
             let mut entry = inception.log_entry;
-            entry["state"]["id"] = required_value(input, "current_state")?["id"].clone();
+            entry["state"]["id"] = required_field(input, "current_state")?["id"].clone();
             let did = Did::new(required_str(input, "resolved_did")?)?;
             expect_rejected(verify_did_webvh_v1_log(&did, &[entry]), name)?;
             Ok(reject())
@@ -367,12 +367,6 @@ fn public_multikey(seed: [u8; 32]) -> String {
 
 fn timestamp(value: &str) -> Result<DateTime<Utc>> {
     Ok(DateTime::parse_from_rfc3339(value)?.with_timezone(&Utc))
-}
-
-fn required_value<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
-    value
-        .get(field)
-        .ok_or_else(|| anyhow!("missing field {field}"))
 }
 
 fn expect_rejected<T, E: std::fmt::Display>(

@@ -4,15 +4,17 @@
 //! currently specified in prose/artifacts but not yet backed by a live
 //! cross-service e2e harness.
 
-use std::collections::BTreeSet;
-
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{EventId, RealmId, StrandId};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::{load_artifact_json, load_local_fixture_value};
+use super::helpers::{contains_key_recursive, contains_literal_recursive};
+use super::{
+    load_artifact_json, load_local_fixture_value, required_field, required_str, string_set_of,
+    value_array,
+};
 use crate::transcripts::record_vector_event;
 
 const FIXTURE_FILE: &str = "private_chat_privacy_contracts.json";
@@ -654,14 +656,14 @@ fn validate_contact_list_row(vectors: &DirectConversationVectors) -> Result<()> 
         bail!("contact row with direct_conversation summary must be accepted");
     }
     for field in ["granted_by_me", "granted_to_me", "bidirectional_scopes"] {
-        let scopes = value_array(required_field(row, field)?)?;
+        let scopes = value_array(required_field(row, field)?, field)?;
         if scopes.is_empty() {
             bail!("contact row {field} must keep directional scopes");
         }
     }
     if let Some(effective) = row.get("effective_scopes") {
-        let effective = string_set(effective)?;
-        let bidirectional = string_set(required_field(row, "bidirectional_scopes")?)?;
+        let effective = string_set_of(effective)?;
+        let bidirectional = string_set_of(required_field(row, "bidirectional_scopes")?)?;
         if effective != bidirectional {
             bail!("effective_scopes must equal bidirectional_scopes when present");
         }
@@ -731,33 +733,6 @@ fn validate_schema_negative_shapes(valid_request: &Value, valid_response: &Value
     Ok(())
 }
 
-fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
-    value
-        .get(field)
-        .ok_or_else(|| anyhow!("missing field `{field}`"))
-}
-
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    required_field(value, field)?
-        .as_str()
-        .ok_or_else(|| anyhow!("field `{field}` must be a string"))
-}
-
-fn value_array(value: &Value) -> Result<&Vec<Value>> {
-    value.as_array().ok_or_else(|| anyhow!("expected array"))
-}
-
-fn string_set(value: &Value) -> Result<BTreeSet<String>> {
-    value_array(value)?
-        .iter()
-        .map(|item| {
-            item.as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| anyhow!("expected string array item"))
-        })
-        .collect::<Result<BTreeSet<_>>>()
-}
-
 fn validate_realm_id(value: &str) -> Result<()> {
     RealmId::new(value)
         .map(|_| ())
@@ -774,31 +749,6 @@ fn validate_event_id(value: &str) -> Result<()> {
     EventId::new(value)
         .map(|_| ())
         .map_err(|err| anyhow!("{err}"))
-}
-
-fn contains_key_recursive(value: &Value, needle: &str) -> bool {
-    match value {
-        Value::Object(map) => map
-            .iter()
-            .any(|(key, value)| key == needle || contains_key_recursive(value, needle)),
-        Value::Array(items) => items
-            .iter()
-            .any(|item| contains_key_recursive(item, needle)),
-        _ => false,
-    }
-}
-
-fn contains_literal_recursive(value: &Value, needle: &str) -> bool {
-    match value {
-        Value::Object(map) => map
-            .iter()
-            .any(|(key, value)| key.contains(needle) || contains_literal_recursive(value, needle)),
-        Value::Array(items) => items
-            .iter()
-            .any(|item| contains_literal_recursive(item, needle)),
-        Value::String(raw) => raw.contains(needle),
-        _ => false,
-    }
 }
 
 #[cfg(test)]

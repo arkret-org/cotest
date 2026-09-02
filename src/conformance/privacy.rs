@@ -3,7 +3,10 @@ use std::collections::BTreeSet;
 use anyhow::{Result, anyhow, bail};
 use serde_json::{Value, json};
 
-use super::{PrivacySecurityFixture, load_fixture_value, parse_fixture_value};
+use super::helpers::{contains_key_recursive, contains_literal_recursive};
+use super::{
+    PrivacySecurityFixture, load_fixture_value, parse_fixture_value, required_str, string_set_of,
+};
 use crate::transcripts::record_vector_event;
 
 pub fn run_privacy_security_fixture_suite() -> Result<()> {
@@ -51,7 +54,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // Round 2+3 (2026-05-20): fixture case renamed from
+            // 2026-05-20: fixture case renamed from
             // `hidden_space_resolve_indistinguishable` to
             // `hidden_realm_resolve_indistinguishable`; the directory
             // operation id is now canonical realm terminology.
@@ -87,7 +90,7 @@ pub fn run_privacy_security_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // Round 4 (2026-06-24): directory resolve operations gained
+            // 2026-06-24: directory resolve operations gained
             // failure-blinding vectors. Missing / hidden / unauthorized
             // resolutions MUST be indistinguishable — same 404 / not_found /
             // body shape / timing class — and MUST NOT leak the listed
@@ -1283,17 +1286,17 @@ fn validate_search_surface_separation(case: &super::NamedCase) -> Result<()> {
         );
     }
 
-    let required_surfaces = string_set(
+    let required_surfaces = string_set_of(
         expected
             .get("required_surfaces")
             .ok_or_else(|| anyhow!("privacy fixture {} missing required_surfaces", case.name))?,
     )?;
-    let forbidden_fields = string_set(
+    let forbidden_fields = string_set_of(
         expected
             .get("forbidden_fields")
             .ok_or_else(|| anyhow!("privacy fixture {} missing forbidden_fields", case.name))?,
     )?;
-    let forbidden_literals = string_set(
+    let forbidden_literals = string_set_of(
         expected
             .get("forbidden_literals")
             .ok_or_else(|| anyhow!("privacy fixture {} missing forbidden_literals", case.name))?,
@@ -1304,11 +1307,11 @@ fn validate_search_surface_separation(case: &super::NamedCase) -> Result<()> {
         .ok_or_else(|| anyhow!("privacy fixture {} missing surfaces", case.name))?;
     let mut seen = BTreeSet::new();
     for surface_case in surfaces {
-        let surface = required_value_str(surface_case, "surface")?;
+        let surface = required_str(surface_case, "surface")?;
         if !seen.insert(surface.to_owned()) {
             bail!("privacy fixture {} repeats surface {surface}", case.name);
         }
-        let profile = required_value_str(surface_case, "profile")?;
+        let profile = required_str(surface_case, "profile")?;
         let payload = surface_case
             .get("payload")
             .ok_or_else(|| anyhow!("surface {surface} missing payload"))?;
@@ -1355,7 +1358,7 @@ fn validate_search_surface_contract(
             if profile != "ak.profile.directory_service.v1" {
                 bail!("directory_search must use directory_service profile");
             }
-            if required_value_str(surface_case, "operation_id")?
+            if required_str(surface_case, "operation_id")?
                 != "ak.find.directory.read.search_realms.v1"
             {
                 bail!("directory_search operation_id drifted");
@@ -1397,7 +1400,7 @@ fn validate_search_surface_contract(
                     bail!("privacy_preserving_search token is not a sha256 digest");
                 }
             }
-            let candidate_digest = required_value_str(payload, "candidate_digest")?;
+            let candidate_digest = required_str(payload, "candidate_digest")?;
             if !is_sha256_digest(candidate_digest) {
                 bail!("privacy_preserving_search candidate_digest is invalid");
             }
@@ -1406,8 +1409,7 @@ fn validate_search_surface_contract(
             if profile != "ak.profile.mimi_interop.v1" {
                 bail!("bridge_interop must use mimi_interop profile");
             }
-            if required_value_str(surface_case, "operation_id")? != "ak.open.mimi.command.notify.v1"
-            {
+            if required_str(surface_case, "operation_id")? != "ak.open.mimi.command.notify.v1" {
                 bail!("bridge_interop operation_id drifted");
             }
             for forbidden in ["query_tokens", "candidate_digest", "title", "summary"] {
@@ -1415,7 +1417,7 @@ fn validate_search_surface_contract(
                     bail!("bridge_interop mixed search or directory field {forbidden}");
                 }
             }
-            let payload_digest = required_value_str(payload, "payload_digest")?;
+            let payload_digest = required_str(payload, "payload_digest")?;
             if !is_sha256_digest(payload_digest) {
                 bail!("bridge_interop payload_digest is invalid");
             }
@@ -1490,49 +1492,4 @@ fn is_sha256_digest(digest: &str) -> bool {
     digest
         .strip_prefix("sha256:")
         .is_some_and(|hex| hex.len() == 64 && hex.chars().all(|ch| ch.is_ascii_hexdigit()))
-}
-
-fn required_value_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("missing string field {field}"))
-}
-
-fn string_set(value: &Value) -> Result<BTreeSet<String>> {
-    value
-        .as_array()
-        .ok_or_else(|| anyhow!("expected string array"))?
-        .iter()
-        .map(|item| {
-            item.as_str()
-                .map(str::to_owned)
-                .ok_or_else(|| anyhow!("expected string array item"))
-        })
-        .collect::<Result<BTreeSet<_>>>()
-}
-
-fn contains_key_recursive(value: &Value, needle: &str) -> bool {
-    match value {
-        Value::Object(map) => map
-            .iter()
-            .any(|(key, value)| key == needle || contains_key_recursive(value, needle)),
-        Value::Array(items) => items
-            .iter()
-            .any(|item| contains_key_recursive(item, needle)),
-        _ => false,
-    }
-}
-
-fn contains_literal_recursive(value: &Value, needle: &str) -> bool {
-    match value {
-        Value::Object(map) => map
-            .iter()
-            .any(|(key, value)| key.contains(needle) || contains_literal_recursive(value, needle)),
-        Value::Array(items) => items
-            .iter()
-            .any(|item| contains_literal_recursive(item, needle)),
-        Value::String(raw) => raw.contains(needle),
-        _ => false,
-    }
 }

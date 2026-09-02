@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow, bail};
 use arkret_wire::ProfileId;
 use serde_json::{Value, json};
 
-use super::helpers::profile_claims;
+use super::helpers::{is_empty_json_value, profile_claims};
 use super::{load_local_fixture_value, required_str, validate_profile, value_array};
 use crate::transcripts::record_vector_event;
 
@@ -216,16 +216,6 @@ fn contains_non_empty_limitation(value: &Value) -> bool {
                 || contains_non_empty_limitation(item)
         }),
         Value::Array(items) => items.iter().any(contains_non_empty_limitation),
-        _ => false,
-    }
-}
-
-fn is_empty_json_value(value: &Value) -> bool {
-    match value {
-        Value::Null => true,
-        Value::Array(items) => items.is_empty(),
-        Value::Object(object) => object.is_empty(),
-        Value::String(text) => text.trim().is_empty(),
         _ => false,
     }
 }

@@ -58,7 +58,7 @@ pub fn run_federation_fixture_suite() -> Result<()> {
                     }),
                 );
             }
-            // Round 2+3 (2026-05-20): fixture case renamed from
+            // 2026-05-20: fixture case renamed from
             // `origin_destination_id_mismatch` to
             // `source_destination_id_mismatch`. The semantics
             // (federation source DID ≠ signed destination DID → reject)

@@ -31,7 +31,7 @@ use ed25519_dalek::{Signer as _, SigningKey};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::load_fixture_value;
+use super::{load_fixture_value, required_str};
 
 const KDF_FIXTURE: &str = "identity-recovery-kdf-fixture.json";
 const ROOT_ANCHOR_FIXTURE: &str = "identity-root-anchor-fixture.json";
@@ -554,13 +554,6 @@ fn require_vector(covers: &[String], vector: &str) -> Result<()> {
         bail!("fixture does not cover {vector}");
     }
     Ok(())
-}
-
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("missing string field {field}"))
 }
 
 fn compare_hex(name: &str, field: &str, actual: &[u8], expected: &str) -> Result<()> {

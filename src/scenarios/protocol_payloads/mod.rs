@@ -1,13 +1,10 @@
-//! Protocol-payload scenario — split from the previous 1000-line
-//! `protocol_payloads.rs` during the round 33.5 refactor.
+//! Protocol-payload scenario.
 //!
-//! The original monolith was a single 1000-line `async fn` covering the
-//! end-to-end happy path across events / keys / device-messages / key-backups /
-//! blob / push / moderation surfaces. Logic decomposition was
-//! straightforward because each protocol phase is largely independent: the
-//! only state plumbed between phases is `(server, token)`, plus a handful of
-//! intra-phase locals (e.g. `blob_ref` consumed by the range GET in the same
-//! phase).
+//! One end-to-end happy path across the events / keys / device-messages /
+//! key-backups / blob / push / moderation surfaces. Each protocol phase is
+//! largely independent: the only state plumbed between phases is
+//! `(server, token)`, plus a handful of intra-phase locals (e.g. `blob_ref`
+//! consumed by the range GET in the same phase).
 //!
 //! Submodules — each is a single async helper representing one protocol phase:
 //! - [`events_keys_setup`] — `/_arkret/self/events` plus `/_arkret/self/keys/{upload,query,claim}`

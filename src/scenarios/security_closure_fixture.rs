@@ -1,4 +1,4 @@
-//! Round 4 / A2 — per-vector scenario stubs for the security closure
+//! A2 — per-vector scenario stubs for the security closure
 //! fixture (`arkret-spec/spec/v1/artifacts/fixtures/security-closure-fixture.json`).
 //!
 //! Every vector listed in the spec snapshot is registered here. For each
@@ -20,7 +20,7 @@ use crate::conformance::{
     ObservedRunner, REQUIRED_SECURITY_CLOSURE_VECTOR_IDS, SecurityClosureFixture,
 };
 
-/// All vector ids covered by the round-4 security closure suite. Kept in
+/// All vector ids covered by the security closure suite. Kept in
 /// the same order as the spec fixture so diffs read top-to-bottom.
 pub const VECTOR_IDS: &[&str] = REQUIRED_SECURITY_CLOSURE_VECTOR_IDS;
 

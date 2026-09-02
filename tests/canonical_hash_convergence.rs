@@ -1,4 +1,4 @@
-//! T5.3 (Round 22, 2026-05-20) — canonical-JSON convergence vectors.
+//! T5.3 (2026-05-20) — canonical-JSON convergence vectors.
 //!
 //! Every Arkret service (coauth / soland / inkson / floria) now
 //! routes canonical-JSON encoding and `payload_digest` computation through

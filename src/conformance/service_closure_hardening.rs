@@ -7,6 +7,10 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::helpers::assert_expected_subset;
+use super::{
+    expected, required_array, required_bool, required_object, required_str, required_str_obj,
+    required_u64, string_set,
+};
 use crate::transcripts::record_vector_event;
 
 pub const VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED: &str =
@@ -480,64 +484,4 @@ fn record_step(vector_id: &str, name: &str, input: &Value, observed: &Value) {
         &expected,
         observed,
     );
-}
-
-fn required_object<'a>(value: &'a Value, field: &str) -> Result<&'a Map<String, Value>> {
-    value
-        .get(field)
-        .and_then(Value::as_object)
-        .ok_or_else(|| anyhow!("missing object field {field}"))
-}
-
-fn required_array<'a>(value: &'a Value, field: &str) -> Result<&'a [Value]> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .ok_or_else(|| anyhow!("missing array field {field}"))
-}
-
-fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("missing string field {field}"))
-}
-
-fn required_str_obj<'a>(value: &'a Map<String, Value>, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("missing string field {field}"))
-}
-
-fn required_u64(value: &Value, field: &str) -> Result<u64> {
-    value
-        .get(field)
-        .and_then(Value::as_u64)
-        .ok_or_else(|| anyhow!("missing u64 field {field}"))
-}
-
-fn required_bool(value: &Value, field: &str) -> Result<bool> {
-    value
-        .get(field)
-        .and_then(Value::as_bool)
-        .ok_or_else(|| anyhow!("missing bool field {field}"))
-}
-
-fn expected(value: &Value) -> Result<&Value> {
-    value
-        .get("expected")
-        .ok_or_else(|| anyhow!("missing expected object"))
-}
-
-fn string_set<'a>(value: &'a Value, field: &str) -> Result<BTreeSet<&'a str>> {
-    required_array(value, field)?
-        .iter()
-        .map(|entry| {
-            entry
-                .as_str()
-                .ok_or_else(|| anyhow!("{field} entry must be string"))
-        })
-        .collect::<Result<BTreeSet<_>>>()
 }

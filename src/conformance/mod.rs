@@ -35,6 +35,7 @@ mod fanout_route_miss;
 mod federation;
 mod file_transfer_stream_aead;
 mod final_conformance_closure;
+mod fixture_dsl;
 mod handle_claim_rejection_vectors;
 mod helpers;
 mod history_key_direct_traversal;
@@ -513,6 +514,16 @@ pub(crate) struct NamedCase {
 
 // ── Shared utility functions ────────────────────────────────────────────────
 
+// The fixture accessor layer (`required_*`, `expected_*`, `string_*`) lives in
+// `fixture_dsl` and is re-exported here so suites keep importing it as
+// `super::required_str` and friends.
+pub(crate) use fixture_dsl::{
+    FixtureRunner, expected, expected_bool, expected_str, expected_str_opt, expected_u64,
+    expected_u64_opt, required_array, required_bool, required_field, required_i64, required_object,
+    required_str, required_str_obj, required_u64, required_u64_obj, string_array_field, string_set,
+    string_set_of, string_vec,
+};
+
 pub(crate) fn spec_artifacts_root() -> PathBuf {
     if let Some(root) = std::env::var_os("COTEST_SPEC_ARTIFACTS_ROOT") {
         return PathBuf::from(root);
@@ -617,26 +628,6 @@ pub(crate) fn validate_profile(value: &Value, expected: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn string_array_field<'a>(value: &'a Value, field: &str) -> Result<Vec<&'a str>> {
-    value
-        .get(field)
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .map(|item| {
-            item.as_str()
-                .ok_or_else(|| anyhow!("{field} entry must be a string"))
-        })
-        .collect::<Result<Vec<_>>>()
-}
-
-pub(crate) fn required_str<'a>(value: &'a Value, field: &str) -> Result<&'a str> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .ok_or_else(|| anyhow!("missing string field {field}"))
-}
-
 pub(crate) fn fixture_runner_entrypoint(value: &Value) -> Result<&str> {
     value
         .get("runner")
@@ -644,13 +635,6 @@ pub(crate) fn fixture_runner_entrypoint(value: &Value) -> Result<&str> {
         .and_then(|runner| runner.get("entrypoint"))
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("fixture runner must be an object with string entrypoint"))
-}
-
-pub(crate) fn required_field<'a>(value: &'a Value, field: &str) -> Result<&'a Value> {
-    value
-        .as_object()
-        .and_then(|object| object.get(field))
-        .ok_or_else(|| anyhow!("missing object field {field}"))
 }
 
 pub(crate) fn value_array<'a>(value: &'a Value, context: &str) -> Result<&'a Vec<Value>> {

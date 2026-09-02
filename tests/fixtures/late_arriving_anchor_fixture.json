@@ -1,7 +1,7 @@
 {
   "profile": "ak.profile.late_arriving_anchor_vectors.v1",
   "version": "2026-05-10",
-  "comment": "E5 Round 27 — late-arriving Anchor idempotency. Spec authority: federation/move-anchor-replication.md. Peer B sees a Move m1 directly from peer A (e.g. via push). Later, peer A's Anchor for m1 arrives at peer B (e.g. via pull). Applying the Anchor must NOT double-effect — m1 was already projected; the Anchor only finalizes ordering metadata. Idempotency is the load-bearing invariant.",
+  "comment": "E5 — late-arriving Anchor idempotency. Spec authority: federation/move-anchor-replication.md. Peer B sees a Move m1 directly from peer A (e.g. via push). Later, peer A's Anchor for m1 arrives at peer B (e.g. via pull). Applying the Anchor must NOT double-effect — m1 was already projected; the Anchor only finalizes ordering metadata. Idempotency is the load-bearing invariant.",
   "encoder": {
     "anchor_apply_rule": "if all moves in the anchor are already projected on this peer, anchor application is a metadata-only update (mark as anchored, no projection delta)"
   },

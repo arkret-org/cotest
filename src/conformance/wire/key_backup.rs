@@ -12,7 +12,7 @@ const ARGON2ID_MEMORY_KIB: u32 = 65_536;
 const ARGON2ID_ITERATIONS: u32 = 3;
 const ARGON2ID_PARALLELISM: u32 = 1;
 
-/// D4 Round 26 — key backup encryption: Argon2id + XChaCha20-Poly1305 round-trip.
+/// D4 — key backup encryption: Argon2id + XChaCha20-Poly1305 round-trip.
 ///
 /// Spec: `crypto-media/encryption-and-audit.md` + `key-backup.schema.json`.
 /// Validator runs a real Argon2id derivation with the fixture's salt + spec
@@ -234,7 +234,7 @@ pub fn run_key_backup_encryption_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// Round-26 standalone — exercise the spec's mandated AEAD primitive
+/// Standalone — exercise the spec's mandated AEAD primitive
 /// (XChaCha20-Poly1305 + Argon2id) end-to-end. Decoupled from the
 /// fixture so an environment without the fixture file still exercises the
 /// crypto round-trip used by D4 key backup encryption.
@@ -412,7 +412,7 @@ fn argon2id_kdf_meets_floor(kdf: &Value) -> Result<bool> {
         && iterations >= u64::from(ARGON2ID_ITERATIONS)
         && parallelism >= u64::from(ARGON2ID_PARALLELISM))
 }
-/// F-1 Round 26 — recovery bridge full-chain state-machine legality.
+/// F-1 — recovery bridge full-chain state-machine legality.
 ///
 /// Spec: services/coauth-recovery.md + services/soland-recovery-ticket.md +
 /// services/restore-executor.md. The chain has 5 ordered steps:
@@ -589,7 +589,7 @@ pub fn run_recovery_bridge_full_chain_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// Round-26 standalone — recovery-ticket state-machine legality.
+/// Standalone — recovery-ticket state-machine legality.
 pub fn run_recovery_ticket_state_machine_check() -> Result<()> {
     let legal_paths: &[&[&str]] = &[
         &["issued", "executing", "executed"],
@@ -616,7 +616,7 @@ pub fn run_recovery_ticket_state_machine_check() -> Result<()> {
     }
     Ok(())
 }
-/// F-2 Round 27 — restore approval/executor/artifact full workflows.
+/// F-2 — restore approval/executor/artifact full workflows.
 pub fn run_restore_full_workflows_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("restore_full_workflows_fixture.json")?;
     validate_profile(&fixture, "ak.profile.restore_full_workflows_vectors.v1")?;
@@ -830,5 +830,3 @@ fn validate_ticket_state_transitions(transitions: &[&str]) -> bool {
     }
     true
 }
-
-// ── Round 27 — fixture-decoupled standalone checks ─────────────────────────

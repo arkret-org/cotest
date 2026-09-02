@@ -1,7 +1,7 @@
-//! Shared scenario helpers extracted from large submodules during the round 28
-//! refactor. Code here is identical to what previously lived inline in
-//! individual scenario files; the move keeps each scenario submodule
-//! single-responsibility while retaining the original semantics.
+//! Scenario helpers shared by more than one scenario submodule.
+//!
+//! Anything used by a single scenario stays inline in that scenario; this
+//! module exists so the scenario submodules stay single-responsibility.
 
 pub mod bridge;
 pub mod coauth_bootstrap;

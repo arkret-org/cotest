@@ -1,4 +1,4 @@
-//! Round 4 / A2 — security-closure-fixture runner contract.
+//! A2 — security-closure-fixture runner contract.
 //!
 //! Loads `arkret-spec/spec/v1/artifacts/fixtures/security-closure-fixture.json`
 //! (13 vector ids, runner contract introduced by spec commit
@@ -39,7 +39,7 @@ pub const SECURITY_CLOSURE_VECTORS_FIXTURE: &str = "security-closure-fixture.jso
 /// Canonical conformance profile for the security closure fixture suite.
 pub const SECURITY_CLOSURE_VECTORS_PROFILE: &str = "ak.vector_group.privacy_security.v1";
 
-/// The vector ids the round-4 spec promotes from prose to fixture. The list is
+/// The vector ids the spec promotes from prose to fixture. The list is
 /// pinned here so any drift on either side is loud.
 pub const REQUIRED_SECURITY_CLOSURE_VECTOR_IDS: &[&str] = &[
     crate::scenarios::security_closure_fixture::VECTOR_FEDERATION_IDEMPOTENCY_AFTER_KEY_REVOKE,
@@ -302,7 +302,8 @@ mod tests {
     #[test]
     fn spec_fixture_round_trips() {
         let fixture = SecurityClosureFixture::load().expect("spec fixture parses");
-        validate_security_closure_fixture(&fixture).expect("fixture must satisfy round-4 lint");
+        validate_security_closure_fixture(&fixture)
+            .expect("fixture must satisfy the security-closure lint");
         for required in REQUIRED_SECURITY_CLOSURE_VECTOR_IDS {
             assert!(
                 fixture

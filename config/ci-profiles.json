@@ -97,7 +97,7 @@
     },
     {
       "profile_id": "release-gate",
-      "description": "Release decision gate: profile conformance, privacy boundary, anti-enumeration, push wakeup, session/device revoke, federation replay, session-grant bridge checks, plus Move/Anchor/Lattice wire-model fixtures (move/anchor/lattice + holder consent or-set + composite state subject + mimi components + lattice round-trip + anchor view compaction + anchorer cell + conflict repair + MLS covered_frontier) and the round-21 discovery profile fixture covering tier filtering and post-C16 surface naming.",
+      "description": "Release decision gate: profile conformance, privacy boundary, anti-enumeration, push wakeup, session/device revoke, federation replay, session-grant bridge checks, plus Move/Anchor/Lattice wire-model fixtures (move/anchor/lattice + holder consent or-set + composite state subject + mimi components + lattice round-trip + anchor view compaction + anchorer cell + conflict repair + MLS covered_frontier) and the discovery profile fixture covering tier filtering and post-C16 surface naming.",
       "include_all_tests": false,
       "cargo_tests": [
         {

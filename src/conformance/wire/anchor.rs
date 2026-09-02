@@ -249,7 +249,7 @@ pub fn run_anchor_view_compaction_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// M5 — conflict-repair Move vectors (round 20).
+/// M5 — conflict-repair Move vectors.
 ///
 /// Stand-alone fixture (`tests/fixtures/conflict_repair_fixture.json`) — the
 /// JSON form for SUT black-box validation of the head_in / recovery_capability
@@ -420,7 +420,7 @@ pub fn run_conflict_repair_fixture_suite() -> Result<()> {
     }
     Ok(())
 }
-/// E4 Round 27 — frontier conflict resolution via lattice join.
+/// E4 — frontier conflict resolution via lattice join.
 pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("frontier_conflict_resolution_fixture.json")?;
     validate_profile(
@@ -520,7 +520,7 @@ pub fn run_frontier_conflict_resolution_fixture_suite() -> Result<()> {
     }
     Ok(())
 }
-/// E5 Round 27 — late-arriving anchor idempotency.
+/// E5 — late-arriving anchor idempotency.
 pub fn run_late_arriving_anchor_fixture_suite() -> Result<()> {
     let fixture = load_local_fixture("late_arriving_anchor_fixture.json")?;
     validate_profile(&fixture, "ak.profile.late_arriving_anchor_vectors.v1")?;
@@ -622,7 +622,7 @@ pub fn run_late_arriving_anchor_fixture_suite() -> Result<()> {
     }
     Ok(())
 }
-/// Round-27 E5 — fixture-decoupled idempotency primitive: applying the same
+/// E5 — fixture-decoupled idempotency primitive: applying the same
 /// anchor-id twice to a peer's anchored-set must be a set-insertion no-op
 /// on the second call. Independent of any specific fixture.
 pub fn run_late_arriving_anchor_idempotency_check() -> Result<()> {

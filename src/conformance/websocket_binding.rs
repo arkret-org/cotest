@@ -45,7 +45,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use super::schema_validation_fixture::SchemaEnv;
-use super::{load_fixture_value, required_str};
+use super::{FixtureRunner, load_fixture_value, required_str};
 
 const FIXTURE: &str = "websocket-binding-fixture.json";
 const PROFILE: &str = "ak.profile.binding.websocket.v1";
@@ -127,13 +127,6 @@ struct WebSocketBindingFixture {
     reauth_trace: Vec<ReauthCase>,
     drain_and_close_traces: Vec<DrainCase>,
     fallback_cases: Vec<FallbackCase>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct FixtureRunner {
-    kind: String,
-    entrypoint: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

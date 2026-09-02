@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::{emit_vector, expected_reason, load_local_fixture};
 use crate::conformance::{required_str, validate_profile};
 
-/// Round 22 — event-kind ↔ LatticeKind dispatch consistency vectors.
+/// Event-kind ↔ LatticeKind dispatch consistency vectors.
 ///
 /// Cross-checks the SDK's generated event-kind descriptors against the
 /// independently executable lattice registry. The fixture contains only
@@ -422,7 +422,7 @@ fn validate_canonical_fsm_contracts(
     }
     Ok(())
 }
-/// A1 Round 23 — event-kind payload coverage.
+/// A1 — event-kind payload coverage.
 pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -604,7 +604,7 @@ pub fn run_event_kind_payload_coverage_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// B1 Round 23 — quarantine-on-fork algorithm vectors.
+/// B1 — quarantine-on-fork algorithm vectors.
 pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
@@ -744,7 +744,7 @@ pub fn run_state_resolution_quarantine_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// B5 Round 23 — membership transition FSM vectors.
+/// B5 — membership transition FSM vectors.
 pub fn run_membership_fsm_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
@@ -854,7 +854,7 @@ pub fn run_membership_fsm_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// C1 Round 23 — constraint family × constraint_subkind coverage.
+/// C1 — constraint family × constraint_subkind coverage.
 pub fn run_constraint_family_fixture_suite() -> Result<()> {
     use std::collections::BTreeSet;
 
@@ -1108,7 +1108,7 @@ pub fn run_constraint_family_fixture_suite() -> Result<()> {
 
     Ok(())
 }
-/// C2 Round 26 — constraint evaluation_class fast-path classification.
+/// C2 — constraint evaluation_class fast-path classification.
 ///
 /// Spec: `extensions/constraint-schema.md` §2.3 evaluation_class table. Each
 /// (family, constraint_subkind) tuple maps to one canonical evaluation_class. The
