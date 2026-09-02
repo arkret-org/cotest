@@ -72,6 +72,7 @@ struct HistoryKeyRecoveryFixture {
     response_stream_cases: Value,
     history_response_capability_kat: Value,
     direct_traversal_replay_kat: Value,
+    backup_recovery_unlock_manifest_kat: Value,
     organization_recovery_archive_durable_before_gc_kat: Value,
 }
 
@@ -165,6 +166,8 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
     verify_history_candidate_store_kat(&fixture).context("history candidate store KAT")?;
     verify_history_static_gates(&fixture).context("history static gates")?;
     verify_scope_and_endpoint_kats(&fixture).context("history scope and endpoint KATs")?;
+    verify_backup_recovery_unlock_manifest(&fixture)
+        .context("backup recovery unlock manifest KAT")?;
 
     HistoryAccessPayload::initialize(HistoryAccess::AllHistoryForCurrentMembers).validate()?;
     HistoryAccessPayload::tighten().validate()?;
@@ -284,9 +287,170 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             "response_capability_kat_valid": true,
             "client_convergence_kat_valid": true,
             "streaming_scale_kats_valid": true,
+            "backup_recovery_unlock_manifest_kat_valid": true,
         }),
         &json!({"status": "validated"}),
     );
+    Ok(())
+}
+
+/// `identity/key-management.md` 1075-1076: the frozen unlock manifest.
+///
+/// Every number the fixture states is recomputed from
+/// `history-recovery-scalability-registry.json#backup_access`, because a KAT that
+/// merely restates its own constants proves nothing about the formula. The
+/// registry is the sole parameter source, so a drift there must surface here.
+fn verify_backup_recovery_unlock_manifest(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let kat = &fixture.backup_recovery_unlock_manifest_kat;
+    let registry = load_artifact_json("registry/history-recovery-scalability-registry.json")?;
+    let params = registry
+        .pointer("/backup_access/recovery_session_unlock")
+        .context("scalability registry omits backup_access.recovery_session_unlock")?;
+
+    let u64_at = |node: &Value, pointer: &str| -> Result<u64> {
+        node.pointer(pointer)
+            .and_then(Value::as_u64)
+            .with_context(|| format!("backup recovery unlock manifest KAT omits {pointer}"))
+    };
+
+    let scope_count = u64_at(kat, "/frozen_manifest/mls_history_scope_count")?;
+    let object_count = u64_at(kat, "/frozen_manifest/secret_storage_object_count")?;
+    let entry_count = u64_at(kat, "/frozen_manifest/entry_count")?;
+    let allowances_per_entry = u64_at(kat, "/frozen_manifest/allowances_per_entry")?;
+    let total_allowances = u64_at(kat, "/frozen_manifest/total_allowances")?;
+    if entry_count != scope_count + object_count {
+        bail!("frozen manifest entry_count is not the then-active recoverable object set");
+    }
+    if allowances_per_entry != u64_at(params, "/allowances_per_manifest_entry")?
+        || total_allowances != entry_count * allowances_per_entry
+    {
+        bail!("frozen manifest allowances drifted from the registry's per-entry allowance");
+    }
+    if scope_count < u64_at(params, "/minimum_conformance_mls_scope_count")? {
+        bail!("frozen manifest KAT falls below the registry's conformance scope floor");
+    }
+    if kat.pointer("/frozen_manifest/mutable_after_verified") != Some(&json!(false)) {
+        bail!("frozen manifest must be immutable after the verified transition");
+    }
+
+    let verified_at = u64_at(kat, "/session/verified_at_offset_seconds")?;
+    let expires_at = u64_at(kat, "/session/expires_at_offset_seconds")?;
+    let reserve = u64_at(kat, "/session/completion_reserve_seconds")?;
+    if expires_at - verified_at > u64_at(params, "/session_max_ttl_seconds")?
+        || reserve != u64_at(params, "/completion_reserve_seconds")?
+    {
+        bail!("recovery session TTL or completion reserve drifted from the registry");
+    }
+    let usable_seconds = expires_at
+        .checked_sub(verified_at)
+        .and_then(|window| window.checked_sub(reserve))
+        .filter(|window| *window > 0)
+        .context("verified session leaves no window before the completion reserve")?;
+    let expected_rate = (entry_count * 60).div_ceil(usable_seconds);
+    if u64_at(kat, "/computed_recovery_rate/minimum_unlocks_per_minute")? != expected_rate {
+        bail!("minimum_unlocks_per_minute does not equal the registry rate_formula result");
+    }
+    if u64_at(kat, "/computed_recovery_rate/max_concurrent_unlocks")?
+        != u64_at(params, "/max_concurrent_unlocks_per_session")?
+    {
+        bail!("max_concurrent_unlocks drifted from the registry");
+    }
+    if u64_at(kat, "/computed_recovery_rate/completed_unlocks")? != total_allowances {
+        bail!("the KAT must complete every frozen allowance");
+    }
+    let deadline = u64_at(kat, "/computed_recovery_rate/completion_deadline_offset_seconds")?;
+    if deadline != expires_at - reserve
+        || u64_at(kat, "/computed_recovery_rate/last_completion_offset_seconds")? > deadline
+        || kat.pointer("/computed_recovery_rate/completes_before_session_expiry")
+            != Some(&json!(true))
+    {
+        bail!("the manifest does not complete before the reserved deadline");
+    }
+
+    // 1075: manifest entries never touch the ordinary 24-hour principal counter.
+    if u64_at(kat, "/quota_outcome/ordinary_24h_principal_counter_before")?
+        != u64_at(kat, "/quota_outcome/ordinary_24h_principal_counter_after")?
+    {
+        bail!("frozen manifest unlocks charged the ordinary 24-hour principal counter");
+    }
+    if u64_at(kat, "/quota_outcome/consumed_manifest_allowances")? != total_allowances
+        || u64_at(kat, "/quota_outcome/remaining_manifest_allowances")? != 0
+    {
+        bail!("manifest allowance accounting drifted");
+    }
+    for flag in [
+        "/quota_outcome/all_scope_objects_recovered",
+        "/quota_outcome/fresh_device_proof_per_request",
+        "/quota_outcome/object_bound_unlock_proof_per_request",
+        "/quota_outcome/audit_per_request",
+    ] {
+        if kat.pointer(flag) != Some(&json!(true)) {
+            bail!("the recovery-session exception relaxed {flag}, which 1076 forbids");
+        }
+    }
+    if u64_at(kat, "/quota_outcome/batch_request_count")? != 0 {
+        bail!("the KAT issued a batch unlock request");
+    }
+
+    // The batch operation must be absent from the registry, not merely unused.
+    let forbidden_batch = required_str(kat, "forbidden_batch_operation_id")?;
+    if registry.pointer("/backup_access/unlock_operation/batch_operation") != Some(&Value::Null) {
+        bail!("the scalability registry restored a batch unlock operation");
+    }
+    let operations = load_artifact_json("registry/operation-registry.json")?;
+    let registered = operations["operations"]
+        .as_array()
+        .context("operation registry has no operations array")?
+        .iter()
+        .any(|row| row["operation_id"].as_str() == Some(forbidden_batch));
+    if registered {
+        bail!("{forbidden_batch} is registered; v1 defines no batch unlock");
+    }
+    let registered_unlock = required_str(
+        registry
+            .pointer("/backup_access/unlock_operation")
+            .context("registry omits unlock_operation")?,
+        "operation_id",
+    )?;
+    if required_str(kat, "operation_id")? != registered_unlock {
+        bail!("the KAT does not exercise the registered single-object unlock operation");
+    }
+
+    let expected_negatives: BTreeMap<&str, &str> = BTreeMap::from([
+        ("object_outside_frozen_manifest", "recovery_evidence_unbound"),
+        ("consumed_allowance_reuse", "rate_limited"),
+        ("manifest_mutation_after_verified", "recovery_evidence_unbound"),
+        ("batch_unlock_request", "schema_violation"),
+    ]);
+    let cases = kat["negative_cases"]
+        .as_array()
+        .context("backup recovery unlock manifest KAT omits negative_cases")?;
+    let mut seen = BTreeMap::new();
+    for case in cases {
+        seen.insert(
+            required_str(case, "name")?.to_owned(),
+            required_str(case, "expected_decision")?.to_owned(),
+        );
+    }
+    for (name, decision) in &expected_negatives {
+        match seen.get(*name) {
+            Some(actual) if actual == decision => {}
+            Some(actual) => bail!("negative case {name} decides {actual}, expected {decision}"),
+            None => bail!("backup recovery unlock manifest KAT omits negative case {name}"),
+        }
+    }
+    if seen.len() != expected_negatives.len() {
+        bail!("backup recovery unlock manifest KAT carries unregistered negative cases");
+    }
+    // 1075: a failed unlock must not fall back to the ordinary bucket.
+    if kat
+        .pointer("/negative_cases/0/ordinary_counter_fallback")
+        .and_then(Value::as_bool)
+        != Some(false)
+    {
+        bail!("an out-of-manifest object fell back to the ordinary 24-hour bucket");
+    }
+
     Ok(())
 }
 

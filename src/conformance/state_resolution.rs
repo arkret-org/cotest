@@ -57,6 +57,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
     let mut seen_realm_create_projection_closure = false;
     let mut seen_null_cell_subject_wire_form = false;
     let mut seen_realm_alias_single_carrier = false;
+    let mut seen_fork_resolution_peer_alignment = false;
     let mut seen_vector_ids = BTreeSet::new();
 
     for vector in vectors {
@@ -564,6 +565,30 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                     }),
                 );
             }
+            "fork_resolution_peer_alignment" => {
+                validate_fork_resolution_peer_alignment(vector, name)?;
+                seen_fork_resolution_peer_alignment = true;
+                record_vector_event(
+                    "state_resolution.cba.fork_resolution_peer_alignment",
+                    &json!({"vector": vector.clone()}),
+                    &json!({
+                        "sibling_position_face": "ak.peer.events.read.sibling_positions.v1",
+                        "collision_face": "ak.peer.events.read.resolve.v1",
+                        "contradicting_disclosure": "peer_stale_retained_without_new_fork_evidence",
+                    }),
+                    &json!({
+                        "sibling_position_face": pointer_str(
+                            vector,
+                            "/disclosure_faces/event_sibling_position",
+                        ),
+                        "collision_face": pointer_str(
+                            vector,
+                            "/disclosure_faces/event_id_collision",
+                        ),
+                        "case_count": required_array(vector, "/cases", name)?.len(),
+                    }),
+                );
+            }
             _ => bail!("unknown cba lattice vector: {name}"),
         }
     }
@@ -589,19 +614,113 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
         && seen_same_seal_bottom_serialization
         && seen_realm_create_projection_closure
         && seen_null_cell_subject_wire_form
-        && seen_realm_alias_single_carrier)
+        && seen_realm_alias_single_carrier
+        && seen_fork_resolution_peer_alignment)
     {
         bail!(
-            "cba lattice fixture must cover all 22 normative vectors \
+            "cba lattice fixture must cover all 23 normative vectors \
              (data_local / observation / control_seal / same_batch / data_bottom / \
               delta_plane_guard / compaction / seal_canonical / cas_mixed_basis / \
               auth_epoch / compaction_interval / inclusion_list / notary_fault / sealed_control_collision / \
               threshold_forensics / concurrent_revocation / actor_chain_realm_scope / \
               conflict_recovery / same_seal_bottom_serialization / realm_create_projection_closure / \
-              null_cell_subject_wire_form / realm_alias_single_carrier)"
+              null_cell_subject_wire_form / realm_alias_single_carrier / \
+              fork_resolution_peer_alignment)"
         );
     }
 
+    Ok(())
+}
+
+/// `sync/federation.md` §4.5.3 second phase: local normalization alone never
+/// clears `peer_stale`.
+///
+/// The two things this pins that a reader would otherwise get wrong: holding
+/// the winner is *not* alignment, because the verdict's negative half has to
+/// hold too; and a disclosure that contradicts the verdict keeps the peer stale
+/// rather than becoming new fork evidence. An undisclosed position is a
+/// fail-closed answer, not a peer failure.
+fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) -> Result<()> {
+    require_str_eq(
+        vector,
+        "/disclosure_faces/event_sibling_position",
+        "ak.peer.events.read.sibling_positions.v1",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/disclosure_faces/event_id_collision",
+        "ak.peer.events.read.resolve.v1",
+        vector_name,
+    )?;
+    require_str_eq(
+        vector,
+        "/subject/kind",
+        "event_sibling_position",
+        vector_name,
+    )?;
+    let cases = required_array(vector, "/cases", vector_name)?;
+    let mut aligned = BTreeSet::new();
+    let mut not_aligned = BTreeSet::new();
+    for case in cases {
+        let case_name = required_str(case, "name")?;
+        let alignment = case
+            .pointer("/expected/alignment")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                anyhow!("vector {vector_name} case {case_name} must declare expected.alignment")
+            })?;
+        match alignment {
+            "aligned" => {
+                if case.pointer("/expected/peer_stale").and_then(Value::as_str) != Some("cleared") {
+                    bail!(
+                        "vector {vector_name} case {case_name} aligns but does not clear peer_stale"
+                    );
+                }
+                aligned.insert(case_name.to_owned());
+            }
+            "not_aligned" => {
+                if case.pointer("/expected/peer_stale").and_then(Value::as_str) != Some("retained")
+                {
+                    bail!(
+                        "vector {vector_name} case {case_name} does not align but drops peer_stale"
+                    );
+                }
+                if case.pointer("/expected/fork_evidence").and_then(Value::as_str)
+                    == Some("witness_disagreement")
+                {
+                    bail!(
+                        "vector {vector_name} case {case_name} must not turn a contradicting \
+                         disclosure into fork evidence"
+                    );
+                }
+                not_aligned.insert(case_name.to_owned());
+            }
+            other => bail!(
+                "vector {vector_name} case {case_name} declares unknown alignment {other}"
+            ),
+        }
+    }
+    for required in [
+        "winner_single_element_aligns",
+        "void_all_empty_set_aligns",
+        "collision_subject_aligns_on_exact_point_resolve",
+    ] {
+        if !aligned.contains(required) {
+            bail!("vector {vector_name} must cover the aligning case {required}");
+        }
+    }
+    for required in [
+        "extra_sibling_does_not_align",
+        "missing_winner_does_not_align",
+        "undisclosed_position_does_not_align",
+        "actor_wide_scan_page_is_not_an_alignment_face",
+        "another_peer_alignment_does_not_clear_this_peer",
+    ] {
+        if !not_aligned.contains(required) {
+            bail!("vector {vector_name} must cover the non-aligning case {required}");
+        }
+    }
     Ok(())
 }
 

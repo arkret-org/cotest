@@ -1332,6 +1332,23 @@ async fn canonical_event_count(database_url: &str, event_id: &EventId) -> Result
     .await?
 }
 
+/// A `libpq` client tool with its diagnostic locale pinned to `C`.
+///
+/// This harness decides whether a restore failure is the benign cross-version
+/// `SET transaction_timeout` diagnostic by reading `stderr`. PostgreSQL's client
+/// tools translate their messages, so on a localized developer machine that same
+/// benign failure arrives in another language and reads as a fatal restore error.
+/// Pinning the locale is what makes the text match a contract rather than a
+/// property of whoever is running the suite.
+fn pg_tool(program: &str) -> Command {
+    let mut command = Command::new(program);
+    command
+        .env("LC_ALL", "C")
+        .env("LC_MESSAGES", "C")
+        .env("LANG", "C");
+    command
+}
+
 struct PostgresBackup {
     _directory: tempfile::TempDir,
     path: PathBuf,
@@ -1342,7 +1359,7 @@ async fn dump_postgres_database(database_url: &str) -> Result<PostgresBackup> {
     tokio::task::spawn_blocking(move || -> Result<PostgresBackup> {
         let directory = tempfile::tempdir().context("create PostgreSQL backup directory")?;
         let path = directory.path().join("target-old-backup.dump");
-        let output = Command::new("pg_dump")
+        let output = pg_tool("pg_dump")
             .arg("--format=custom")
             .arg("--no-owner")
             .arg("--no-privileges")
@@ -1368,7 +1385,7 @@ async fn restore_postgres_database(database_url: &str, backup: &PostgresBackup) 
     let database_url = database_url.to_owned();
     let backup_path = backup.path.clone();
     tokio::task::spawn_blocking(move || -> Result<()> {
-        let output = Command::new("pg_restore")
+        let output = pg_tool("pg_restore")
             .arg("--clean")
             .arg("--if-exists")
             .arg("--no-owner")
@@ -1384,7 +1401,8 @@ async fn restore_postgres_database(database_url: &str, backup: &PostgresBackup) 
         // omitting the zero-timeout SET does not change any restored data or
         // schema. Accept only that one cross-version diagnostic; every other
         // restore error remains fatal, and the scenario subsequently verifies
-        // the restored canonical state through Soland.
+        // the restored canonical state through Soland. The match below is only
+        // sound because `pg_tool` pins the diagnostic locale.
         let transaction_timeout_only = !output.status.success()
             && stderr.matches("pg_restore: error:").count() == 1
             && stderr.contains("unrecognized configuration parameter \"transaction_timeout\"")

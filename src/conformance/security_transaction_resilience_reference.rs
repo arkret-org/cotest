@@ -24,6 +24,7 @@ pub(crate) struct SecurityTransactionResilienceFixture {
     fault_matrix: Value,
     assertions: Vec<String>,
     rotation_cases: Vec<Value>,
+    pub(crate) continue_cases: Vec<Value>,
     equivalence_output: Value,
 }
 
@@ -262,15 +263,34 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
     {
         return Err("resilience equivalence fields changed".to_owned());
     }
+    // Pinned by name rather than by count: a count alone reports "incomplete"
+    // for an added assertion as loudly as for a deleted one, and says nothing
+    // about which.
+    const EXPECTED_ASSERTIONS: &[&str] = &[
+        "accepted_webvh_entry_resumes_the_same_reanchor_unit",
+        "conflicting_replay_returns_duplicate_conflict",
+        "continue_accepts_only_a_terminal_ready_client_attestation",
+        "coordinator_owned_prefix_is_advanced_only_by_the_durable_worker",
+        "device_attestation_readiness_is_derived_from_canonical_next_step",
+        "erased_series_never_becomes_active_again",
+        "exact_replay_returns_the_stored_outcome",
+        "one_transaction_id_and_one_reserved_id_set",
+        "pointer_switch_precedes_every_old_series_erase",
+        "public_store_log_telemetry_and_crash_artifact_contain_no_secret_material",
+        "request_plan_step_outputs_and_first_terminal_result_are_durable",
+    ];
     let assertions = fixture
         .assertions
         .iter()
         .map(String::as_str)
         .collect::<BTreeSet<_>>();
-    if assertions.len() != 9
-        || !assertions.contains("device_attestation_readiness_is_derived_from_canonical_next_step")
-    {
-        return Err("resilience assertion set is incomplete".to_owned());
+    let expected = EXPECTED_ASSERTIONS.iter().copied().collect::<BTreeSet<_>>();
+    if assertions != expected {
+        let missing = expected.difference(&assertions).copied().collect::<Vec<_>>();
+        let extra = assertions.difference(&expected).copied().collect::<Vec<_>>();
+        return Err(format!(
+            "resilience assertion set drifted: missing {missing:?}, unregistered {extra:?}"
+        ));
     }
     validate_schema_cases(fixture)
 }

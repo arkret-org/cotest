@@ -162,13 +162,14 @@ fn simple_mutations_reject_unregistered_success_discriminators() -> Result<()> {
         "ak.self.events.command.submit.v1",
         &json!({"status": "accepted", "accepted": []}),
     )?;
+    // The backups delete succeeds empty (key-management.md 7.8/7.8.1: a
+    // byte-identical retry returns the same empty body), so the typed-response
+    // half of this contract is carried by a sibling mutation that does return
+    // business fields.
     assert_typed_business_value_allowed(
         &schema_index,
-        "ak.self.keys.backups.resource.delete.v1",
-        &json!({
-            "deleted": true,
-            "backup_id": "ak:backup:01964137-0000-7000-8000-000000000000"
-        }),
+        "ak.self.keys.keypackages.command.revoke.v1",
+        &json!({"revoked": [], "failures": []}),
     )?;
     Ok(())
 }

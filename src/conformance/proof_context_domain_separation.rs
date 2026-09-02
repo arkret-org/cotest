@@ -147,37 +147,79 @@ pub fn run_proof_context_domain_separation_vector() -> Result<()> {
     Ok(())
 }
 
-/// Every per-family context is registered, bound to its own `object_family`,
-/// distinct from its siblings, and reachable through the shared vocabulary.
+/// Every per-family signing domain is registered, bound to its own
+/// `object_family`, distinct from its siblings, and reachable through the shared
+/// vocabulary.
+///
+/// The registry splits by *how the proof leaf is anchored*, not by family: a
+/// schema that reaches the shared `event-envelope.schema.json#/$defs/proof` leaf
+/// belongs in `contexts[]`, and one that declares its own local detached-proof
+/// leaf belongs in `domain_separations[]`. The five directory request families
+/// are locally anchored and the six MIMI families are not, so looking either
+/// group up in the other list is not a lenience to add -- it would accept
+/// exactly the ambiguity the split exists to remove.
 fn assert_registry_closure() -> Result<()> {
     let registry = load_artifact_json("registry/proof-context-registry.json")?;
-    let rows = registry
+    let contexts = registry
         .get("contexts")
         .and_then(Value::as_array)
         .ok_or_else(|| anyhow!("proof-context registry has no contexts[]"))?;
+    let separations = registry
+        .get("domain_separations")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("proof-context registry has no domain_separations[]"))?;
 
     let mut seen = BTreeSet::new();
-    for (context, object_family) in DIRECTORY_PER_FAMILY_PROOF_CONTEXTS
-        .iter()
-        .chain(MIMI_PER_FAMILY_PROOF_CONTEXTS)
-    {
-        if !seen.insert(*context) {
-            bail!("per-family proof context `{context}` is declared twice");
-        }
-        let row = rows
-            .iter()
-            .find(|row| row.get("context").and_then(Value::as_str) == Some(*context))
-            .ok_or_else(|| {
-                anyhow!("proof-context registry does not publish per-family context `{context}`")
-            })?;
-        if row.get("object_family").and_then(Value::as_str) != Some(*object_family) {
-            bail!(
-                "proof context `{context}` is not bound to object family `{object_family}`; a \
-                 context shared by two families is exactly the over-broad shape v1 removed"
-            );
-        }
-        if ProofContextId::from_wire(context).is_none() {
-            bail!("per-family proof context `{context}` is absent from the shared vocabulary");
+    for (list, key, families, locally_anchored) in [
+        (
+            separations,
+            "domain",
+            DIRECTORY_PER_FAMILY_PROOF_CONTEXTS,
+            true,
+        ),
+        (contexts, "context", MIMI_PER_FAMILY_PROOF_CONTEXTS, false),
+    ] {
+        let (list_name, other, other_key) = if locally_anchored {
+            ("domain_separations[]", contexts, "context")
+        } else {
+            ("contexts[]", separations, "domain")
+        };
+        for (context, object_family) in families {
+            if !seen.insert(*context) {
+                bail!("per-family proof context `{context}` is declared twice");
+            }
+            let row = list
+                .iter()
+                .find(|row| row.get(key).and_then(Value::as_str) == Some(*context))
+                .ok_or_else(|| {
+                    anyhow!(
+                        "proof-context registry does not publish per-family context \
+                         `{context}` in {list_name}"
+                    )
+                })?;
+            if other
+                .iter()
+                .any(|row| row.get(other_key).and_then(Value::as_str) == Some(*context))
+            {
+                bail!(
+                    "proof context `{context}` is registered in both lists; its anchoring \
+                     must be decidable from the schema alone"
+                );
+            }
+            if row.get("object_family").and_then(Value::as_str) != Some(*object_family) {
+                bail!(
+                    "proof context `{context}` is not bound to object family `{object_family}`; a \
+                     context shared by two families is exactly the over-broad shape v1 removed"
+                );
+            }
+            let in_vocabulary = if locally_anchored {
+                DomainSeparationId::from_wire(context).is_some()
+            } else {
+                ProofContextId::from_wire(context).is_some()
+            };
+            if !in_vocabulary {
+                bail!("per-family proof context `{context}` is absent from the shared vocabulary");
+            }
         }
     }
     if seen.len() != 11 {
@@ -188,13 +230,18 @@ fn assert_registry_closure() -> Result<()> {
     }
 
     for retired in RETIRED_OVER_BROAD_CONTEXTS {
-        if rows
+        let registered = contexts
             .iter()
             .any(|row| row.get("context").and_then(Value::as_str) == Some(*retired))
-        {
+            || separations
+                .iter()
+                .any(|row| row.get("domain").and_then(Value::as_str) == Some(*retired));
+        if registered {
             bail!("retired over-broad proof context `{retired}` is still registered");
         }
-        if ProofContextId::from_wire(retired).is_some() {
+        if ProofContextId::from_wire(retired).is_some()
+            || DomainSeparationId::from_wire(retired).is_some()
+        {
             bail!("retired over-broad proof context `{retired}` still parses in the SDK");
         }
     }
