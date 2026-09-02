@@ -2,7 +2,14 @@ use anyhow::Result;
 use arkret::{
     AgentKeyScope, AgentKeyScopeResource, AgentKeyScopeResourceKind, AgentProvisionRequestBody, Did,
 };
+use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
+use arkret_models_collaboration::http_bodies::{
+    DevicePairingBootstrap, DevicePairingNonce, DevicePairingResolveRequestBody,
+    DevicePairingStageOutcome, DevicePairingStageRequestBody, DevicePairingState,
+    DevicePairingStatusOutcome, DevicePairingStatusRequestBody,
+};
 use arkret_models_discovery::ServiceDescribe;
+use arkret_wire::{Base64UrlString, NonEmptyString};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::StatusCode;
@@ -202,55 +209,65 @@ pub async fn device_pairing_handoff_bundle_selects_all_canonical_routes() -> Res
         "Station must advertise the registered device-pairing handoff bundle"
     );
 
-    let stage = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/open/device-pairing/requests"))
-            .json(&json!({
-                "new_device_pubkey": {
-                    "kty": "OKP",
-                    "kid": "ak:device:01994100-0000-7000-8000-0000000000d1",
-                    "algorithm": "Ed25519",
-                    "key": URL_SAFE_NO_PAD.encode([7_u8; 32])
-                },
-                "client_nonce": URL_SAFE_NO_PAD.encode([9_u8; 16])
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    let request_id = stage["device_pairing_request_id"]
-        .as_str()
-        .expect("stage returns request id");
-    let pairing_code = stage["pairing_code"]
-        .as_str()
-        .expect("stage returns pairing code");
+    let stage: DevicePairingStageOutcome = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .post(server.url("/_arkret/open/device-pairing/requests"))
+                .json(&DevicePairingStageRequestBody {
+                    new_device_pubkey: PublicKey {
+                        kty: NonEmptyString::new("OKP").map_err(anyhow::Error::msg)?,
+                        kid: NonEmptyString::new("ak:device:01994100-0000-7000-8000-0000000000d1")
+                            .map_err(anyhow::Error::msg)?,
+                        algorithm: NonEmptyString::new("Ed25519").map_err(anyhow::Error::msg)?,
+                        key: Base64UrlString::new(URL_SAFE_NO_PAD.encode([7_u8; 32]))
+                            .map_err(anyhow::Error::msg)?,
+                        key_digest: None,
+                    },
+                    client_nonce: DevicePairingNonce::new(URL_SAFE_NO_PAD.encode([9_u8; 16]))
+                        .map_err(anyhow::Error::msg)?,
+                    display_name: None,
+                    device_metadata: None,
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    let request_id = stage.device_pairing_request_id.clone();
+    let pairing_code = stage.pairing_code.clone();
     let token = URL_SAFE_NO_PAD.encode(arkret_canonical::canonical_json_bytes(&json!({
-        "c": pairing_code,
-        "r": request_id
+        "c": pairing_code.as_str(),
+        "r": request_id.as_str()
     }))?);
 
-    let resolved = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/open/device-pairing/resolve"))
-            .json(&json!({"pairing_token": token})),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(resolved["device_pairing_request_id"], request_id);
-    assert_eq!(resolved["pairing_code"], pairing_code);
+    let resolved: DevicePairingBootstrap = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .post(server.url("/_arkret/open/device-pairing/resolve"))
+                .json(&DevicePairingResolveRequestBody {
+                    pairing_token: token,
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    assert_eq!(resolved.device_pairing_request_id, request_id);
+    assert_eq!(resolved.pairing_code, pairing_code);
 
-    let status = expect_json(
-        server
-            .http()
-            .post(server.url("/_arkret/open/device-pairing/requests/status"))
-            .json(&json!({
-                "device_pairing_request_id": request_id,
-                "pairing_code": pairing_code
-            })),
-        StatusCode::OK,
-    )
-    .await?;
-    assert_eq!(status["state"], "pending_authorization");
+    let status: DevicePairingStatusOutcome = serde_json::from_value(
+        expect_json(
+            server
+                .http()
+                .post(server.url("/_arkret/open/device-pairing/requests/status"))
+                .json(&DevicePairingStatusRequestBody {
+                    device_pairing_request_id: request_id,
+                    pairing_code,
+                }),
+            StatusCode::OK,
+        )
+        .await?,
+    )?;
+    assert_eq!(status.state, DevicePairingState::PendingAuthorization);
     Ok(())
 }

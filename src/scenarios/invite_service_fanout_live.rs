@@ -34,6 +34,7 @@ use arkret_models_collaboration::sync_frames::account_sync::{
 };
 use arkret_models_identity::ServiceResolutionCarrier;
 use arkret_models_identity::account::{AccountDataList, AccountDataRow};
+use arkret_wire::cba::SealBasis;
 use arkret_wire::{
     AccountDataKey, AccountId, ActorId, ConsentScope, EventInitialSubmission, InviteReceiveAction,
 };
@@ -43,10 +44,10 @@ use serde_json::{Value, json};
 
 use crate::harness::{
     TestActorClient, TestServerGroup, actor_core_id, expect_account_subscribe_delta, expect_json,
-    invite_create_payload, next_typed_id,
+    invite_create_payload, next_typed_id, refresh_typed_event_proof_with_signing_seed,
 };
 use crate::scenarios::identity_test_support::{
-    actor_did_for_service_did, seal_current_principal_control_frontier,
+    actor_did_for_service_did, seal_principal_control_frontier_with_pending_events,
 };
 
 #[derive(Debug)]
@@ -347,6 +348,7 @@ async fn grant_then_revoke_invite_consent(
         )
         .await?;
     let grant_event_id = grant_event.event_id.clone();
+    let pending_grant_event = grant_event.clone();
     let grant_submission: EventInitialSubmission =
         crate::publication::initial_submission(grant_event, "")?;
     let granted = expect_json(
@@ -368,13 +370,13 @@ async fn grant_then_revoke_invite_consent(
             .any(|dot| dot == &expected_dot),
         "consent grant projection omitted its Event-derived dot: {granted:?}"
     );
-    let device_signing_key = holder
-        .principal
-        .as_ref()
-        .context("holder was not provisioned with a device signing key")?
-        .device_signing_key
-        .clone();
-    seal_current_principal_control_frontier(holder, &device_signing_key).await?;
+    let device_signing_key = principal.device_signing_key.clone();
+    let grant_seal = seal_principal_control_frontier_with_pending_events(
+        holder,
+        &device_signing_key,
+        std::slice::from_ref(&pending_grant_event),
+    )
+    .await?;
 
     let revoke_payload = ConsentRevokePayload {
         consent_id,
@@ -387,13 +389,17 @@ async fn grant_then_revoke_invite_consent(
         revoked_at: Some(Utc::now()),
         reason: Some("cotest_invite_quarantine_invalidation".to_owned()),
     };
-    let revoke_event = holder
+    let mut revoke_event = holder
         .author_event(
             principal.pcr_realm_id.as_str(),
             "ak.consent.revoke",
             serde_json::to_value(revoke_payload)?,
         )
         .await?;
+    revoke_event.seal_basis = Some(SealBasis {
+        leaves: vec![grant_seal],
+    });
+    refresh_typed_event_proof_with_signing_seed(&mut revoke_event, device_signing_key.to_bytes())?;
     let revoke_submission: EventInitialSubmission =
         crate::publication::initial_submission(revoke_event, "")?;
     let revoked = expect_json(
@@ -612,7 +618,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     .await?;
     ensure!(
         quarantine_row.content["schema"] == "ak.schema.invite_quarantine.v1"
-            && quarantine_row.content["entries"]
+            && quarantine_row.content["quarantine_entries"]
                 .as_array()
                 .is_some_and(|entries| !entries.is_empty()),
         "invite_quarantine cell is not the closed non-empty v1 shape: {}",
@@ -643,7 +649,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
         "consent revoke did not CAS-advance invite_quarantine revision"
     );
     ensure!(
-        invalidated_row.content["entries"]
+        invalidated_row.content["quarantine_entries"]
             .as_array()
             .is_some_and(Vec::is_empty)
             && invalidated_row.content["last_invalidation"]["reason"] == "consent_revoke"

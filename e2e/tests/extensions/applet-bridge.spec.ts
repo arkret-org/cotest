@@ -1237,12 +1237,13 @@ test.describe("applet inbound transaction push — per-delivery source signature
   }) {
     const sourceServiceId = args.sourceServiceId ?? solandServiceId();
     const realmId = args.realmId ?? typedId("realm");
-    // Event actor_id is typed did_core_id; did:web is reserved for the
-    // no-history service profile (spec index.md), so even negative cases use a
-    // core-id actor (signature-layer rejection precedes actor validation).
-    const actorId =
+    // This inbound Applet event is authored by a service principal. Keep the
+    // complete ActorId union on both the Event and its auth_context; the scalar
+    // did_core_id is only the service identity carried by that union.
+    const actorDid =
       args.actorId ??
       `ak:did_core:web:bot-applet-${args.stamp}.joint-e2e.local`;
+    const actorId = serviceActorId(actorDid);
     const verificationMethod =
       args.verificationMethod ??
       `${solandServiceDid()}#applet-service-key`;
@@ -1257,10 +1258,6 @@ test.describe("applet inbound transaction push — per-delivery source signature
         realm_id: realmId,
       },
       actor_id: actorId,
-      // The Applet service authenticates the producer proof and transport;
-      // the receiving Arkret node is still the Event's Station and
-      // adds the admission proof before accepting the durable Event.
-      station_id: solandServiceId(),
       actor_seq: 0,
       created_at: canonicalEventTimestamp(),
       hlc: hlcForStamp(args.stamp),
@@ -1287,7 +1284,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
           body: `inbound push ${args.stamp}`,
         },
       },
-      executed_by: sourceServiceId,
+      executed_by: serviceActorId(sourceServiceId),
       authorization_ref: args.authorizationRef ?? typedId("grant"),
       applet_id: args.appletId ?? typedAppletId(),
       external_ref: {
@@ -1316,20 +1313,11 @@ test.describe("applet inbound transaction push — per-delivery source signature
     };
   }
 
-  // §7.3.1 currently places its discriminating `reason` at the Problem root.
-  // The conflict with the operation registry's specific Problem types was closed in
-  // arkret-work/review/spec-done/2026-08-28-0453-applet-signature-problem-discriminator-conflict.md;
-  // do not accept an old nested shape.
+  // RFC 9457 Problem `type` is the sole machine discriminator.  The operation
+  // registry deliberately forbids a second generic `reason`/`reason_code`
+  // discriminator for these signature failures.
   function signatureReason(body: unknown): string | undefined {
-    if (!body || typeof body !== "object") {
-      return undefined;
-    }
-    const record = body as Record<string, unknown>;
-    const direct = record.reason;
-    if (typeof direct === "string") {
-      return direct;
-    }
-    return undefined;
+    return wireErrCode(body);
   }
 
   async function setupBearer(request: APIRequestContext): Promise<string> {
@@ -1400,7 +1388,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const targetUri = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
     const resp = await request.post(targetUri, {
       headers: {
-        ...authHeaders(token),
+        ...authHeaders(token, "POST", targetUri),
         ...signedAppletTransactionHeaders({
           body,
           targetUri,
@@ -1432,16 +1420,21 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const token = await setupBearer(request);
     const stamp = Date.now();
     // Only Authorization: Bearer, NO Signature / Signature-Input. §7.3.1: MUST reject.
-    const resp = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
+    const transactionUrl = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const resp = await request.post(transactionUrl, {
       headers: {
-        ...authHeaders(token),
+        ...authHeaders(token, "POST", transactionUrl),
+        "content-type": "application/json",
         "Source-Service-ID": solandServiceId(),
         "Idempotency-Key": `inbound-nosig-${stamp}`,
       },
-      data: transactionPushBody({ stamp }),
+      data: canonicalJson(transactionPushBody({ stamp })),
     });
-    expect(resp.status()).toBe(401);
-    expect(signatureReason(await resp.json())).toBe("http_signature_required");
+    const responseText = await resp.text();
+    expect(resp.status(), responseText).toBe(401);
+    expect(signatureReason(JSON.parse(responseText))).toBe(
+      "http_signature_required",
+    );
   });
 
   test("invalid/forged Signature inbound transaction push → 401 http_signature_invalid", async ({
@@ -1451,9 +1444,12 @@ test.describe("applet inbound transaction push — per-delivery source signature
     const stamp = Date.now();
     // Structurally present but cryptographically bogus signature — cannot verify
     // against any registration service DID verification method. §7.3.1: reject.
-    const resp = await request.post(`${solandBaseUrl()}${TRANSACTIONS_PATH}`, {
+    const transactionUrl = `${solandBaseUrl()}${TRANSACTIONS_PATH}`;
+    const body = transactionPushBody({ stamp });
+    const resp = await request.post(transactionUrl, {
       headers: {
-        ...authHeaders(token),
+        ...authHeaders(token, "POST", transactionUrl),
+        "content-type": "application/json",
         "Source-Service-ID": solandServiceId(),
         "Idempotency-Key": `inbound-badsig-${stamp}`,
         "Content-Digest":
@@ -1463,7 +1459,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
         Signature:
           "sig1=:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=:",
       },
-      data: transactionPushBody({ stamp }),
+      data: canonicalJson(body),
     });
     expect(resp.status()).toBe(401);
     expect(signatureReason(await resp.json())).toBe("http_signature_invalid");
@@ -1484,7 +1480,7 @@ test.describe("applet inbound transaction push — per-delivery source signature
     // created/expires check alone.
     const expired = await request.post(targetUri, {
       headers: {
-        ...authHeaders(token),
+        ...authHeaders(token, "POST", targetUri),
         ...signedAppletTransactionHeaders({
           body,
           targetUri,

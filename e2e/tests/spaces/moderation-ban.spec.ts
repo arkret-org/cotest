@@ -18,6 +18,8 @@ import {
   canonicalJson,
   createRealmApi,
   grantCapabilityEventApi,
+  issueAuthorizationLeasesApi,
+  prepareEventForAuthorizationLeaseApi,
   prepareSignedEventCbaApi,
   queryRealmEventsApi,
   readRealmSealBasis,
@@ -26,6 +28,7 @@ import {
   sendMessageApi,
   signedEventEnvelope,
   submitSignedEventApi,
+  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
@@ -223,30 +226,36 @@ test.describe("moderation and ban", () => {
     expect(realmAfterBanBody.member_ids ?? []).not.toContain(mallory.id);
 
     const defaultStrandId = await resolveDefaultStrandId(request, aliceToken, realmId);
-    const bannedWrite = await request.post(`${solandBaseUrl()}/_arkret/self/events`, {
-      headers: authHeaders(malloryToken),
-      data: signedEventEnvelope({
-        actorId: mallory.id,
-        realmId,
-        kind: "ak.message.create",
-        payload: {
-          strand_id: defaultStrandId,
-          track_name: "discussion",
-          content: {
-            kind: "ak.content.text",
-            body: postBan,
-          },
+    const bannedWriteUrl = `${solandBaseUrl()}/_arkret/self/events`;
+    const bannedWriteEnvelope = signedEventEnvelope({
+      actorId: mallory.id,
+      realmId,
+      kind: "ak.message.create",
+      payload: {
+        strand_id: defaultStrandId,
+        track_name: "discussion",
+        content: {
+          kind: "ak.content.text",
+          body: postBan,
         },
-      }),
+      },
     });
-    expect([401, 403, 404, 412]).toContain(bannedWrite.status());
+    const bannedWrite = await request.post(bannedWriteUrl, {
+      headers: {
+        ...authHeaders(malloryToken, "POST", bannedWriteUrl),
+        "content-type": "application/json",
+      },
+      data: canonicalJson(bannedWriteEnvelope),
+    });
+    const bannedWriteText = await bannedWrite.text();
+    expect(bannedWrite.status(), bannedWriteText).toBe(403);
 
     const redactEvent = signedEventEnvelope({
       actorId: alice.id,
       realmId,
       kind: "ak.message.redact",
       payload: {
-        target_event_id: sent.event_id,
+        message_id: sent.event_id.replace(/^ak:event:/, "ak:message:"),
         reason: "moderator_redaction",
       },
     });
@@ -272,7 +281,7 @@ test.describe("moderation and ban", () => {
     expect(exportText).toContain(sent.event_id);
   });
 
-  test("E5.3 idempotent ban smoke: re-issuing ak.member.state{ban} leaves mallory non-member", async ({
+  test("E5.3 same-state ban is rejected and leaves mallory non-member", async ({
     request,
   }) => {
     const stamp = Date.now();
@@ -309,9 +318,26 @@ test.describe("moderation and ban", () => {
     await submitSignedEventApi(request, aliceToken, firstBan, {
       context: `first ban ${mallory.id}`,
     });
-    await submitSignedEventApi(request, aliceToken, secondBan, {
-      context: `second ban ${mallory.id}`,
-    });
+    // common-fields.md §4.5: every same-state membership transition is
+    // illegal. Full lease pre-admission must reject ban -> ban before it can
+    // enter the governance cell and create a Bottom join.
+    await prepareEventForAuthorizationLeaseApi(
+      request,
+      aliceToken,
+      secondBan,
+    );
+    const secondBanLease = await issueAuthorizationLeasesApi(
+      request,
+      aliceToken,
+      [secondBan],
+    );
+    const secondBanProblem = (await secondBanLease.json()) as {
+      type?: string;
+      reason_code?: string;
+    };
+    expect(secondBanLease.status()).toBe(422);
+    expect(wireErrCode(secondBanProblem)).toBe("failed_precondition");
+    expect(secondBanProblem.reason_code).toBe("invalid_membership_transition");
 
     const realm = await request.get(`${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}`, {
       headers: authHeaders(aliceToken),

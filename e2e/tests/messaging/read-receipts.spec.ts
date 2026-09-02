@@ -63,7 +63,8 @@ test.describe("read receipts + privacy", () => {
       {
         title: `G2.T7 Receipt ${stamp}`,
         discoverability: "listed",
-        historyAccess: "all_history_for_current_members",
+        historyAccess: "since_join",
+        encryptionProfile: "mls_rfc9420",
       },
     );
     const message = await sendPlaintextMessageViaApi(

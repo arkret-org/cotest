@@ -92,6 +92,10 @@ export async function setupTwoPartyCallRealm(
   const realmId = await createRealmApi(request, aliceToken, {
     title: `${opts.realmTitlePrefix ?? label} ${stamp}`,
     public: true,
+    // Every Signal is bound to an accepted MLS group state. A Realm created
+    // with encryption_profile=none is forbidden from having an MLS group, so
+    // call fixtures must declare the MLS capability axis at genesis.
+    encryption_profile: "mls_rfc9420",
   });
   await addRealmMemberApi(request, aliceToken, realmId, bob.id);
   return { alice, aliceToken, bob, bobToken, realmId };
@@ -599,11 +603,12 @@ export async function prepareSignalEnvelope(
       `seed Signal device key returned ${keyResponse.status()}: ${await keyResponse.text()}`,
     ).toBe(200);
   }
+  let basis: Record<string, unknown>;
   try {
-    const basis = await readRealmSealBasis(request, token, realmId);
+    basis = await readRealmSealBasis(request, token, realmId);
     envelope.seal_ref = (basis.leaves as string[])[0];
   } catch {
-    const basis = await seedConformanceRealmBasisApi(
+    basis = await seedConformanceRealmBasisApi(
       request,
       realmId,
       actorId,
@@ -611,7 +616,118 @@ export async function prepareSignalEnvelope(
     );
     envelope.seal_ref = basis.seal_id;
   }
+  const mlsBasis = await ensureSignalMlsBasis(
+    request,
+    actorId,
+    deviceId,
+    realmId,
+    envelope.scope_ref as Record<string, unknown>,
+    basis,
+  );
+  const encryptedPayload = envelope.encrypted_payload as Record<string, unknown>;
+  const keyRef = encryptedPayload.key_ref as Record<string, unknown>;
+  keyRef.group_state_ref = mlsBasis.group_state_ref;
+  encryptedPayload.epoch = mlsBasis.epoch;
   finalizeSignalEnvelopeProof(envelope);
+}
+
+type SignalMlsBasis = {
+  group_state_ref: string;
+  mls_group_id: string;
+  epoch: number;
+};
+
+const signalMlsBasisCache = new Map<string, Promise<SignalMlsBasis>>();
+
+async function ensureSignalMlsBasis(
+  request: APIRequestContext,
+  actorId: string,
+  deviceId: string,
+  realmId: string,
+  scopeRef: Record<string, unknown>,
+  sealBasis: Record<string, unknown>,
+): Promise<SignalMlsBasis> {
+  const cacheKey = canonicalJson(scopeRef);
+  const cached = signalMlsBasisCache.get(cacheKey);
+  if (cached) return await cached;
+  const pending = (async () => {
+    const createdAt = canonicalTimestamp();
+    const scopeKey =
+      scopeRef.kind === "circle"
+        ? String(scopeRef.circle_id)
+        : scopeRef.kind === "sidecar"
+          ? `${realmId}\u001f${String(scopeRef.sidecar_id)}`
+          : realmId;
+    // encryption-and-audit.md section 5.1 fixes this to unpadded base64url of
+    // the canonical effective-scope key bytes.
+    const mlsGroupId = base64url(Buffer.from(scopeKey, "utf8"));
+    const genesis = signedEventEnvelope({
+      actorId,
+      realmId,
+      kind: "ak.mls.genesis",
+      createdAt,
+      scopeRef,
+      sealBasis,
+      payload: {
+        mls_group_id: mlsGroupId,
+        effective_scope: scopeRef,
+        epoch: 0,
+        cipher_suite:
+          "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
+        group_info_ref: `ak:blob:sha256:${"3".repeat(64)}`,
+        group_info_digest: `sha256:${"3".repeat(64)}`,
+        ratchet_tree_ref: `ak:blob:sha256:${"4".repeat(64)}`,
+        ratchet_tree_digest: `sha256:${"4".repeat(64)}`,
+        governance_binding: {
+          binding_version: 1,
+          encoding_profile: "cbor-deterministic-rfc8949-v1",
+          realm_id: realmId,
+          ...(scopeRef.kind === "circle"
+            ? { circle_id: scopeRef.circle_id }
+            : {}),
+          ...(scopeRef.kind === "sidecar"
+            ? { sidecar_id: scopeRef.sidecar_id }
+            : {}),
+          effective_scope: scopeRef,
+          mls_group_id: mlsGroupId,
+          previous_epoch: 0,
+          next_epoch: 0,
+          // The endpoint is a development-only state-injection fixture under
+          // the exact namespace reserved by service-http-binding.md section
+          // 2.1.3. Production Genesis still obtains this digest from the
+          // verified governance-proof flow.
+          security_frontier_digest: `sha256:${"0".repeat(64)}`,
+          content_scheme: "mls_rfc9420",
+          binding_profile: "ak.profile.mls_governance_binding.full.v1",
+          reducer_profile: "ak.reducer.core.v1",
+        },
+        created_at: createdAt,
+      },
+    });
+    const response = await request.post(
+      `${solandBaseUrl()}/_arkret/_conformance/signal-mls-basis`,
+      {
+        headers: { "content-type": "application/json" },
+        data: canonicalJson({
+          creator_device_id: deviceId,
+          genesis_event: genesis,
+        }),
+      },
+    );
+    const text = await response.text();
+    expect(
+      response.status(),
+      `install Signal MLS basis returned ${response.status()}: ${text}`,
+    ).toBe(200);
+    return JSON.parse(text) as SignalMlsBasis;
+  })();
+  signalMlsBasisCache.set(cacheKey, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    signalMlsBasisCache.delete(cacheKey);
+    throw error;
+  }
 }
 
 export async function postCallSignalRaw(

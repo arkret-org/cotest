@@ -76,13 +76,19 @@ test.describe("account states", () => {
     );
     test.skip(!grant, "coauth DPoP grant debug endpoint is unavailable");
 
+    // The joint harness sends the request to Soland's loopback listener to
+    // model the deployment gateway route, but the client-visible endpoint is
+    // the Account Authority URL advertised by ServiceDescribe. Per
+    // account-lifecycle.md §4.1, DPoP `htu` binds that external URL rather
+    // than the gateway's internal upstream address.
     const logoutUrl = `${solandBaseUrl()}/_arkret/gate/account/logout`;
+    const logoutPublicUrl = `${coauthBase!.replace(/\/$/, "")}/_arkret/gate/account/logout`;
     const logout = await request.post(logoutUrl, {
       headers: selfPathGrantHeaders({
         deviceKey,
         grantJwt: grant!.grantJwt,
         method: "POST",
-        url: logoutUrl,
+        url: logoutPublicUrl,
       }),
     });
     expect(logout.status()).toBe(200);
@@ -94,7 +100,7 @@ test.describe("account states", () => {
         deviceKey,
         grantJwt: grant!.grantJwt,
         method: "POST",
-        url: logoutUrl,
+        url: logoutPublicUrl,
       }),
     });
     expect(repeatedLogout.status()).toBe(200);

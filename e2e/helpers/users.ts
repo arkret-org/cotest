@@ -396,8 +396,19 @@ export class JointUserPage {
   // Navigate to a specific Realm admin section (Members / Access / etc.).
   // Members is its own route; other admin sections live under settings.
   async gotoRealmAdminSection(realmId: string, section: string) {
+    const destination =
+      section === "members"
+        ? `/realms/${encodeURIComponent(realmId)}/members`
+        : `/realms/${encodeURIComponent(realmId)}/settings/${encodeURIComponent(section)}`;
+    // Realm administration is a supported deep link. A real same-origin
+    // navigation initializes the Dioxus router from that canonical route and
+    // avoids replaying unrelated browser-history entries left by OIDC flows.
+    await this.page.goto(destination, { waitUntil: "domcontentloaded" });
+    await expect
+      .poll(() => new URL(this.page.url()).pathname, { timeout: 120_000 })
+      .toBe(destination);
+
     if (section === "members") {
-      await this.navigateWithinApp(`/realms/${realmId}/members`);
       await expect(this.page.getByTestId("realm-members-panel")).toBeVisible({
         timeout: 120_000,
       });
@@ -405,7 +416,6 @@ export class JointUserPage {
       return;
     }
 
-    await this.navigateWithinApp(`/realms/${realmId}/settings/${section}`);
     await expect(this.page.getByTestId("realm-admin-panel")).toBeVisible({
       timeout: 120_000,
     });
@@ -494,6 +504,11 @@ export class JointUserPage {
     await expect(this.page.getByTestId("message-list")).toBeVisible({
       timeout: 120_000,
     });
+    await expect(this.page.getByTestId("chat-panel")).toHaveAttribute(
+      "data-initial-sync",
+      "complete",
+      { timeout: 120_000 },
+    );
   }
 
   // Membership is not an authorization source (capabilities.md §3.2).
@@ -505,43 +520,57 @@ export class JointUserPage {
     subjectId: string,
     action: string,
   ): Promise<string> {
-    const grantId = typedId("grant");
     await this.gotoRealmAdminSection(realmId, "security");
     await this.page.getByTestId("advanced-access-toggle").click();
-    await this.page.getByTestId("cap-grant-id-input").fill(grantId);
     await this.page.getByTestId("cap-grant-tag-input").fill(action);
     await this.page.getByTestId("cap-grant-subject-input").fill(subjectId);
     await this.page.getByTestId("cap-grant-submit-button").click();
     const status = this.page.getByTestId("realm-admin-status");
     await expect(status).toContainText("ak.capability.grant event", {
-      timeout: 60_000,
+      timeout: 120_000,
     });
     expect(await status.innerText()).not.toContain("failed");
 
     const grantsUrl = new URL(
       `${this.serverUrl}/_arkret/self/authz/effective-grants`,
     );
-    grantsUrl.searchParams.set(
-      "subject_actor_id",
-      canonicalJson(accountActorId(subjectId, undefined, this.session.grant?.accountId.station_id)),
+    const subject = accountActorId(
+      subjectId,
+      undefined,
+      this.session.grant?.accountId.station_id,
     );
+    grantsUrl.searchParams.set("subject_actor_id", canonicalJson(subject));
     grantsUrl.searchParams.set("realm_id", realmId);
+    let projectedGrantId: string | undefined;
     await expect
       .poll(
         async () => {
           const response = await this.page.request.get(grantsUrl.toString(), {
-            headers: this.selfPathHeaders("GET", grantsUrl.toString()),
+            headers: {
+              ...this.selfPathHeaders("GET", grantsUrl.toString()),
+              "Arkret-Operation":
+                "ak.self.authz.grants.read.effective.v1",
+            },
           });
           if (response.status() !== 200) return false;
           const body = (await response.json()) as {
-            grants?: Array<{ id?: string }>;
+            grants?: Array<{
+              id?: string;
+              subject?: unknown;
+              actions?: string[];
+            }>;
           };
-          return body.grants?.some((grant) => grant.id === grantId) ?? false;
+          projectedGrantId = body.grants?.find(
+            (grant) =>
+              canonicalJson(grant.subject) === canonicalJson(subject) &&
+              grant.actions?.includes(action),
+          )?.id;
+          return projectedGrantId?.startsWith("ak:grant:") ?? false;
         },
-        { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },
+        { timeout: 120_000, intervals: [250, 500, 1_000, 2_000] },
       )
       .toBe(true);
-    return grantId;
+    return projectedGrantId!;
   }
 
   private async dismissDeviceAuthorizationPrompt() {
@@ -984,34 +1013,45 @@ export class JointUserPage {
         await override.click({ timeout: 5_000 }).catch(() => undefined);
       }
       await expect(recoveryGate).toBeHidden({ timeout: 10_000 });
-      const alreadyCreated = /created ak:realm:/i.test(
-        (await strand.textContent().catch(() => "")) ?? "",
-      );
+      const alreadyCreated = await strand
+        .getByTestId("selected-realm-id")
+        .last()
+        .isVisible({ timeout: 100 })
+        .catch(() => false);
       if (!alreadyCreated) {
         await expect(createButton).toBeEnabled({ timeout: 30_000 });
         await this.clickCreateRealmControl(createButton, promptHandling);
       }
     }
 
-    await expect(strand).toContainText(/created ak:realm:/i, {
-      timeout: 30_000,
+    // Realm acceptance is only the first part of bootstrap. The Done step keeps
+    // its action disabled until governance and, where selected, MLS genesis are
+    // complete. Do not hand a partially bootstrapped Realm to the next action.
+    const done = strand.getByTestId("realm-setup-done");
+    await expect(done).toBeVisible({ timeout: 120_000 });
+    const selectedRealm = done.getByTestId("selected-realm-id");
+    await expect(selectedRealm).toHaveAttribute(
+      "title",
+      /^ak:realm:[A-Za-z0-9_-]{44}$/,
+      { timeout: 120_000 },
+    );
+    const openRealm = done.getByRole("link", {
+      name: /Open (?:Realm|workspace)/i,
     });
+    await expect(openRealm).toBeVisible({ timeout: 180_000 });
     const text = await strand.innerText();
     expect(text, `realm bootstrap failed: ${text}`).not.toContain(" failed:");
-    const match = text.match(
-      /created (ak:realm:[A-Za-z0-9_-]{44})(?![A-Za-z0-9_-])/i,
+    const realmId = await selectedRealm.getAttribute("title");
+    expect(realmId, `created realm id in: ${text}`).toMatch(
+      /^ak:realm:[A-Za-z0-9_-]{44}$/,
     );
-    expect(match, `created realm id in: ${text}`).not.toBeNull();
-    const realmId = match![1];
     if ((opts.seedMembers?.length ?? 0) > 0) {
-      await strand
-        .getByRole("link", { name: /Open (?:Realm|workspace)/i })
-        .click();
+      await openRealm.click();
     }
     for (const member of opts.seedMembers ?? []) {
-      await this.inviteFromAdmin(realmId, member);
+      await this.inviteFromAdmin(realmId!, member);
     }
-    return realmId;
+    return realmId!;
   }
 
   // Drive the Realm admin invite modal to invite `targetId` into realmId.
@@ -2079,6 +2119,10 @@ export async function openUser(
           .last()
           .click({ timeout: 10_000 })
           .catch(() => undefined);
+        // A pending Control Seal is reported as a transient publication
+        // outcome and re-enables this button. With noWaitAfter, Playwright can
+        // retry the blocked action; if the modal is still present the locator
+        // handler runs again and resubmits the same confirmed key.
       },
       { noWaitAfter: true },
     );

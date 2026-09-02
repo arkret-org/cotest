@@ -1239,7 +1239,22 @@ function Write-JointCaddyConfig {
         $lines += "https://$($route.Host):$TlsPort {"
         $lines += "`tbind 127.0.0.1"
         $lines += "`ttls $certificate $key"
-        $lines += "`treverse_proxy 127.0.0.1:$($route.BackendPort)"
+        $logoutBackend = $route.PSObject.Properties['LogoutBackendPort']
+        if ($null -ne $logoutBackend) {
+            # service-http-binding §2.1.2 exposes one Account Authority base
+            # to clients. The deployment gateway dispatches the canonical hard
+            # logout to the Principal service that owns its to-device/push
+            # cleanup, while all other gate/account operations remain on
+            # coauth. The external Host/URI are preserved for DPoP `htu`.
+            $lines += "`thandle /_arkret/gate/account/logout {"
+            $lines += "`t`treverse_proxy 127.0.0.1:$($logoutBackend.Value)"
+            $lines += "`t}"
+            $lines += "`thandle {"
+            $lines += "`t`treverse_proxy 127.0.0.1:$($route.BackendPort)"
+            $lines += "`t}"
+        } else {
+            $lines += "`treverse_proxy 127.0.0.1:$($route.BackendPort)"
+        }
         $lines += "}"
         $lines += ""
     }
@@ -3236,10 +3251,18 @@ try {
             $jointTlsRoutes += [pscustomobject]@{ Host = $solandBetaPublicHost; BackendPort = $solandBetaPort }
         }
         if ($coauthPublicHost) {
-            $jointTlsRoutes += [pscustomobject]@{ Host = $coauthPublicHost; BackendPort = $coauthPort }
+            $jointTlsRoutes += [pscustomobject]@{
+                Host = $coauthPublicHost
+                BackendPort = $coauthPort
+                LogoutBackendPort = $solandPort
+            }
         }
         if ($coauthBetaPublicHost) {
-            $jointTlsRoutes += [pscustomobject]@{ Host = $coauthBetaPublicHost; BackendPort = $coauthBetaPort }
+            $jointTlsRoutes += [pscustomobject]@{
+                Host = $coauthBetaPublicHost
+                BackendPort = $coauthBetaPort
+                LogoutBackendPort = $solandBetaPort
+            }
         }
         $caddyfilePath = Join-Path $jointTlsDir "Caddyfile"
         Write-JointCaddyConfig `

@@ -417,7 +417,7 @@ pub fn run_cba_lattice_fixture_suite() -> Result<()> {
                         "quarantine_scope": "entire_collision_group",
                         "accepted_seal_commitments": "unchanged",
                         "digest_only_resolution": "reject",
-                        "canonical_bytes_resolution": "accept",
+                        "canonical_bytes_resolution": "accept_and_project_exact_scope",
                     }),
                     &json!({
                         "quarantine_group": vector.pointer("/expected/quarantine_group"),
@@ -686,7 +686,7 @@ fn validate_sealed_control_move_full_digest_collision(
         (
             "resolution_names_winner_by_canonical_bytes",
             "canonical_bytes",
-            "accept",
+            "accept_and_project_exact_scope",
             None,
         ),
         (
@@ -713,6 +713,70 @@ fn validate_sealed_control_move_full_digest_collision(
                 "vector {vector_name} canonical-bytes resolution must not carry a rejection reason"
             );
         }
+    }
+
+    let canonical_case = cases
+        .get("resolution_names_winner_by_canonical_bytes")
+        .expect("required resolution case was checked above");
+    require_str_eq(
+        canonical_case,
+        "/payload/subject/kind",
+        "event_id_collision",
+        vector_name,
+    )?;
+    let variants = required_array(canonical_case, "/payload/subject/variants", vector_name)?;
+    if variants.len() < 2 {
+        bail!("vector {vector_name} collision resolution must carry the complete variant set");
+    }
+    require_str_eq(
+        canonical_case,
+        "/payload/verdict/kind",
+        "canonical_winner",
+        vector_name,
+    )?;
+    let winner = required_pointer_str(
+        canonical_case,
+        "/payload/verdict/canonical_event_bytes_b64u",
+        vector_name,
+    )?;
+    if !variants.iter().any(|variant| {
+        variant
+            .get("canonical_event_bytes_b64u")
+            .and_then(Value::as_str)
+            == Some(winner)
+    }) {
+        bail!("vector {vector_name} canonical winner must name one complete collision variant");
+    }
+
+    let void_case = cases
+        .get("resolution_voids_complete_sibling_bucket")
+        .ok_or_else(|| {
+            anyhow!("vector {vector_name} missing resolution case resolution_voids_complete_sibling_bucket")
+        })?;
+    require_str_eq(
+        void_case,
+        "/payload/subject/kind",
+        "event_sibling_bucket",
+        vector_name,
+    )?;
+    require_array_len_at_least(
+        void_case,
+        "/payload/subject/sibling_event_digests",
+        2,
+        vector_name,
+    )?;
+    require_str_eq(void_case, "/payload/verdict/kind", "void_all", vector_name)?;
+    require_str_eq(
+        void_case,
+        "/expected",
+        "accept_and_project_exact_scope",
+        vector_name,
+    )?;
+    let critical_roles = string_vec_at(void_case, "/critical_ref_roles", vector_name)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    if critical_roles != BTreeSet::from(["recovery_capability", "state_witness"]) {
+        bail!("vector {vector_name} void-all resolution must bind recovery and witness authority");
     }
     Ok(())
 }

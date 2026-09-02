@@ -8,22 +8,18 @@
 // through the DID resolver, so these fixtures MUST produce genuine signatures
 // over the exact canonical transcripts.
 //
-// Both the verification service and the subject use `did:key` DIDs so the key
-// material is self-resolving (DidKeyResolver) and no DID-document seeding is
-// needed against the joint harness.
+// The verification-service fixture owns a submitted DID document. The subject
+// proof uses the claimant's current accepted PCR device key, matching the
+// `#device-1` authority shape in third-party-invites.md §4.2-4.3.
 
-import {
-  createHash,
-  generateKeyPairSync,
-  sign as nodeSign,
-  type KeyObject,
-} from "node:crypto";
+import { generateKeyPairSync, sign as nodeSign, type KeyObject } from "node:crypto";
 import {
   accountActorId,
   canonicalJson,
   projectDidToCoreId,
   sha256CanonicalJson,
 } from "./soland-api";
+import { sdkInviteSubjectProof } from "./soland-api/wire-client";
 import {
   ed25519PrivateKeySeedB64url,
   encodeEd25519PubkeyMultibase,
@@ -33,7 +29,6 @@ import {
 // Domain separators — must match soland invite_claim_proofs.rs verbatim,
 // trailing "\n" included.
 const BINDING_PROOF_TRANSCRIPT_DOMAIN = "ak.invite.claim.binding_proof.v1\n";
-const SUBJECT_PROOF_TRANSCRIPT_DOMAIN = "ak.invite.claim.subject_proof.v1\n";
 const INVITE_AUDIENCE = "arkret.invite.claim";
 
 export type DidKeyIdentity = {
@@ -42,6 +37,12 @@ export type DidKeyIdentity = {
   publicKeyMultibase: string;
   signingSeedB64url: string;
   privateKey: KeyObject;
+};
+
+export type InviteSubjectIdentity = {
+  did: string;
+  verificationMethod: string;
+  signingSeedB64url: string;
 };
 
 export type ThirdPartyInviteCell = {
@@ -201,36 +202,28 @@ export function signBindingProof(args: {
 // "I agree to be bound by this exact binding_proof from this exact service".
 export function signSubjectProof(args: {
   cell: ThirdPartyInviteCell;
-  subject: DidKeyIdentity;
+  subject: InviteSubjectIdentity;
   verificationServiceDid: string;
   bindingProof: Record<string, unknown>;
   claimNonce: string;
 }): Record<string, unknown> {
-  const bindingDigest = `sha256:${sha256CanonicalJson(args.bindingProof)}`;
   const subjectAccountId = accountActorId(
     projectDidToCoreId(args.subject.did),
   ).account_id;
-  const transcript = transcriptBytes(SUBJECT_PROOF_TRANSCRIPT_DOMAIN, {
-    audience: INVITE_AUDIENCE,
-    binding_proof_digest: bindingDigest,
-    claim_nonce: args.claimNonce,
-    invite_id: cellInviteId(args.cell),
-    realm_id: args.cell.realmId,
-    subject_account_id: subjectAccountId,
-    token_commitment: args.cell.tokenCommitment,
-    verification_id: projectDidToCoreId(args.verificationServiceDid),
+  // This transcript is security-critical and has a typed canonical builder in
+  // the SDK. Drive that single authority instead of maintaining a second
+  // hand-written JSON projection in the Playwright harness.
+  return sdkInviteSubjectProof({
+    subjectAccountId,
+    inviteId: cellInviteId(args.cell),
+    realmId: args.cell.realmId,
+    tokenCommitment: args.cell.tokenCommitment,
+    claimNonce: args.claimNonce,
+    verificationId: projectDidToCoreId(args.verificationServiceDid),
+    bindingProof: args.bindingProof,
+    verificationMethod: args.subject.verificationMethod,
+    signingSeedB64url: args.subject.signingSeedB64url,
   });
-  return {
-    verification_method: args.subject.verificationMethod,
-    signature_algorithm: "Ed25519",
-    // soland subject_proof transcript_digest = `sha256:<hex>` over the raw
-    // transcript byte string (sha256_digest(transcript)), NOT over canonical
-    // JSON — hash the bytes directly.
-    transcript_digest: `sha256:${createHash("sha256")
-      .update(transcript)
-      .digest("hex")}`,
-    signature: ed25519SignatureB64url(args.subject.privateKey, transcript),
-  };
 }
 
 // Build the full `ak.invite.claim` payload from a signed binding/subject pair.

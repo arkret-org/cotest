@@ -22,7 +22,12 @@ import {
   issueDevSession,
   uniqueUser,
 } from "../../helpers/users";
-import { accountActorId, addRealmMemberApi, createRealmApi } from "../../helpers/soland-api";
+import {
+  accountActorId,
+  addRealmMemberApi,
+  createRealmApi,
+  wireErrCode,
+} from "../../helpers/soland-api";
 import {
   addCircleMemberArkret,
   addCircleMemberRaw,
@@ -32,6 +37,7 @@ import {
   getCircleArkret,
   grantCircleManageCapability,
   grantCircleMemberManageCapability,
+  issueCircleMemberLeaseRaw,
   removeCircleMemberArkret,
   restoreCircleArkret,
 } from "../../helpers/circle-api";
@@ -241,7 +247,7 @@ test.describe("circle membership (same Station)", () => {
 
     // mallory is NOT a realm member. Pulling her in must fail closed on the
     // strict-subset invariant.
-    const response = await addCircleMemberRaw(
+    const response = await issueCircleMemberLeaseRaw(
       request,
       aliceToken,
       circle.circle_id,
@@ -249,9 +255,12 @@ test.describe("circle membership (same Station)", () => {
     );
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(422);
-    expect(await errorWireCode(response), await response.text()).toBe(
-      "circle_member_must_be_realm_member",
-    );
+    const problem = (await response.json()) as {
+      type?: string;
+      reason_code?: string;
+    };
+    expect(wireErrCode(problem)).toBe("failed_precondition");
+    expect(problem.reason_code).toBe("circle_member_must_be_realm_member");
 
     // mallory is not a member.
     const fetched = await getCircleArkret(
@@ -264,7 +273,7 @@ test.describe("circle membership (same Station)", () => {
 
   // S8 capability: a realm member who is NOT the owner and holds no
   // `ak.circle.member.manage` capability tries to pull ANOTHER member into the
-  // Circle -> 403 `circle_member_manage_capability_required`. carol and dave
+  // Circle -> universal 403 `capability_denied`. carol and dave
   // are both `join` realm members so the strict-subset check passes and the
   // failure is purely the missing manage capability.
   test("S8 non-owner without manage capability pulling another -> 403 circle_member_manage_capability_required", async ({
@@ -313,8 +322,9 @@ test.describe("circle membership (same Station)", () => {
 
     // carol (non-owner, no manage capability on the Circle) tries to pull dave
     // in. The HTTP surface evaluates `ak.circle.member.manage` and fails
-    // closed with 403 + the canonical wire code.
-    const response = await addCircleMemberRaw(
+    // closed with the universal capability-denied surface. The operation
+    // registry declares no operation-specific error code for this endpoint.
+    const response = await issueCircleMemberLeaseRaw(
       request,
       carolToken,
       circle.circle_id,
@@ -323,7 +333,7 @@ test.describe("circle membership (same Station)", () => {
     expect(response.ok()).toBeFalsy();
     expect(response.status()).toBe(403);
     expect(await errorWireCode(response), await response.text()).toBe(
-      "circle_member_manage_capability_required",
+      "capability_denied",
     );
 
     // dave is not a Circle member.

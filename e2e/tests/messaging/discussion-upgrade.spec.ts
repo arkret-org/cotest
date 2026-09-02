@@ -208,7 +208,9 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
   test("Circle-scoped read receipt uses realm_id and remains scoped to the private Strand", async ({
     request,
   }) => {
-    const fixture = await createDiscussionFixture(request, "circle-receipt");
+    const fixture = await createDiscussionFixture(request, "circle-receipt", {
+      signalMls: true,
+    });
     const publicStrandId = await createStrandViaApi(
       request,
       fixture.aliceToken,
@@ -220,7 +222,10 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
       request,
       fixture,
       publicStrandId,
-      { members: [fixture.alice, fixture.bob] },
+      {
+        members: [fixture.alice, fixture.bob],
+        circleEncryptionProfile: "mls_rfc9420",
+      },
     );
     const privateMessage = await createDiscussionMessageViaApi(
       request,
@@ -535,13 +540,19 @@ type DiscussionFixture = {
 async function createDiscussionFixture(
   request: APIRequestContext,
   label: string,
+  opts: { signalMls?: boolean } = {},
 ): Promise<DiscussionFixture> {
   const stamp = Date.now();
   const fixture = await createTwoUserMessagingRealm(request, {
     label,
     title: `${label} realm ${stamp}`,
     realm: {
-      historyAccess: "all_history_for_current_members",
+      historyAccess: opts.signalMls
+        ? "since_join"
+        : "all_history_for_current_members",
+      ...(opts.signalMls
+        ? { encryptionProfile: "mls_rfc9420" as const }
+        : {}),
     },
   });
   return fixture;

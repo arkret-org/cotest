@@ -31,6 +31,8 @@ import {
   canonicalJson,
   canonicalTimestamp,
   expectJsonOk,
+  issueAuthorizationLeasesApi,
+  prepareEventForAuthorizationLeaseApi,
   prepareSignedEventSubmissionApi,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -331,6 +333,47 @@ export async function addCircleMemberRaw(
         },
       }),
     },
+  );
+}
+
+/// Exercise the authorization-lease pre-admission boundary for a Circle
+/// membership move. The issuer MUST refuse a move that already violates
+/// membership or capability policy; callers must not receive a lease and then
+/// rely on the later convenience endpoint to discover the same violation.
+export async function issueCircleMemberLeaseRaw(
+  request: APIRequestContext,
+  token: string,
+  circleId: string,
+  args: {
+    signerId: string;
+    realmId: string;
+    actorId: string;
+    membership?: CircleMembership;
+    server?: SolandKey;
+  },
+): Promise<APIResponse> {
+  const envelope = signedEventEnvelope({
+    actorId: args.signerId,
+    realmId: args.realmId,
+    kind: "ak.circle.member.state",
+    server: args.server,
+    payload: {
+      circle_id: circleId,
+      member_id: accountActorId(args.actorId, args.server),
+      membership: args.membership ?? "join",
+    },
+  });
+  await prepareEventForAuthorizationLeaseApi(
+    request,
+    token,
+    envelope,
+    args.server,
+  );
+  return await issueAuthorizationLeasesApi(
+    request,
+    token,
+    [envelope],
+    args.server,
   );
 }
 

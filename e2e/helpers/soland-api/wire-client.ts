@@ -7,6 +7,7 @@ type CotestWireCommand =
   | "sha256-canonical-json"
   | "event-envelope-proof"
   | "event-derived-id"
+  | "invite-subject-proof"
   | "mimi-consent-proof"
   | "mls-keypackage-upload-entry"
   | "principal-control-realm-id"
@@ -91,6 +92,30 @@ export function sdkEventDerivedIds(event: Record<string, unknown>): {
     "event-derived-id",
     event,
   );
+}
+
+export function sdkInviteSubjectProof(args: {
+  subjectAccountId: { principal_id: string; station_id: string };
+  inviteId: string;
+  realmId: string;
+  tokenCommitment: string;
+  claimNonce: string;
+  verificationId: string;
+  bindingProof: Record<string, unknown>;
+  verificationMethod: string;
+  signingSeedB64url: string;
+}): Record<string, unknown> {
+  return cotestWire<Record<string, unknown>>("invite-subject-proof", {
+    subject_account_id: args.subjectAccountId,
+    invite_id: args.inviteId,
+    realm_id: args.realmId,
+    token_commitment: args.tokenCommitment,
+    claim_nonce: args.claimNonce,
+    verification_id: args.verificationId,
+    binding_proof: args.bindingProof,
+    verification_method: args.verificationMethod,
+    signing_seed_b64url: args.signingSeedB64url,
+  });
 }
 
 export function sdkEventDerivedObjectId(

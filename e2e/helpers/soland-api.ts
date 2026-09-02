@@ -2355,6 +2355,20 @@ export async function submitSignedEventBatchApi(
           : {}),
       });
     }
+    const realmId = stringValue(events[0]?.realm_id);
+    const actorId = eventPrincipalId(events[0]);
+    const actorControlRealm = actorId
+      ? principalControlRealmForIdIfKnown(actorId)
+      : undefined;
+    const previousControlRoot =
+      realmId &&
+      events.every((event) => stringValue(event.realm_id) === realmId) &&
+      submissions.some((submission) => submission.control_proposal_ack) &&
+      !events.some((event) => event.kind === "ak.invite.accept") &&
+      (!actorControlRealm || realmId !== actorControlRealm)
+        ? (await readRealmSealFrontier(request, token, realmId, opts.server))
+            .control_event_set_root
+        : undefined;
     const eventsUrl = `${solandBaseUrl(opts.server)}/_arkret/self/events`;
     const response = await request.post(eventsUrl, {
       headers: {
@@ -2369,6 +2383,13 @@ export async function submitSignedEventBatchApi(
     if ([200, 201].includes(response.status())) {
       const outcome = JSON.parse(text) as Record<string, unknown>;
       rememberPublicationEvidence(events, authorizationLeases, outcome);
+      if (realmId && previousControlRoot) {
+        await waitForRealmControlIdleApi(request, token, realmId, {
+          server: opts.server,
+          afterControlEventSetRoot: previousControlRoot,
+          timeoutMs: 60_000,
+        });
+      }
       return outcome;
     }
     const body = JSON.parse(text) as unknown;
@@ -2596,6 +2617,21 @@ export async function issueAuthorizationLeasesApi(
     },
     data: canonicalJson(requestBody),
   });
+}
+
+/// Bind an authored Event to the same current CBA plane and actor frontier
+/// used by `prepareSignedEventSubmissionApi`, but stop before requesting the
+/// lease. Negative conformance cases use this boundary to assert that a lease
+/// issuer performs full pre-admission and therefore refuses an Event that
+/// cannot be admitted; a lease is never a way to create missing authority.
+export async function prepareEventForAuthorizationLeaseApi(
+  request: APIRequestContext,
+  token: string,
+  envelope: Record<string, unknown>,
+  server?: SolandKey,
+): Promise<void> {
+  await applyRegisteredCbaPlane(request, token, envelope, server);
+  await advanceEnvelopeToActorFrontier(request, token, envelope, server);
 }
 
 export function authorizationLeasesFromIssueOutcome(

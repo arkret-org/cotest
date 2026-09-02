@@ -18,7 +18,6 @@ import {
   uniqueUser,
   type JointUserPage,
 } from "../../helpers/users";
-import { encodeEd25519PubkeyMultibase } from "../../helpers/encoding";
 import { projectDidToCoreId } from "../../helpers/soland-api";
 import { jwkThumbprintEd25519 } from "../../helpers/session-grant-dpop";
 
@@ -94,7 +93,6 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       let realmId = "";
       let boardId = "";
       let firstSignerDid = "";
-      let firstSignerPublicKey = "";
       await test.step("the first session creates readable encrypted card content", async () => {
         await jointPage.gotoHome();
         await jointPage.completeRecoveryKeySetupIfPrompted();
@@ -122,7 +120,6 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
           cardDescription,
         );
         firstSignerDid = await currentSettingsSignerDid(page);
-        firstSignerPublicKey = didKeyMultibase(firstSignerDid);
       });
 
       await test.step("new-device pairing advertises the device identity key, not the grant-binding key", async () => {
@@ -154,9 +151,10 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
         expect(resolve.status(), await resolve.text()).toBe(200);
         const bootstrap = (await resolve.json()) as {
           new_device_pubkey?: {
+            kty?: string;
             key?: string;
             kid?: string;
-            public_key?: string;
+            algorithm?: string;
           };
         };
         const pairingPublicKey = bootstrap.new_device_pubkey?.key;
@@ -164,17 +162,16 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
           pairingPublicKey,
           "pairing request must publish the device identity signing public key",
         ).toBeTruthy();
+        expect(bootstrap.new_device_pubkey?.kty).toBe("OKP");
+        expect(bootstrap.new_device_pubkey?.algorithm).toBe("Ed25519");
         expect(
-          encodeEd25519PubkeyMultibase(
-            Buffer.from(pairingPublicKey as string, "base64url"),
-          ),
-          "pairing request raw key must encode to the device identity signing multibase",
-        ).toBe(firstSignerPublicKey);
+          Buffer.from(pairingPublicKey as string, "base64url"),
+          "pairing request must publish a canonical raw Ed25519 public key",
+        ).toHaveLength(32);
         expect(
           bootstrap.new_device_pubkey?.key,
           "pairing request must not publish the grant-binding cnf.jkt",
         ).not.toBe(activeGrant.jkt);
-        expect(bootstrap.new_device_pubkey?.public_key).toBeUndefined();
       });
 
       await test.step("soft refresh preserves the grant-binding key and device signer", async () => {
@@ -224,7 +221,7 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
         const secondSignerDid = await currentSettingsSignerDid(page);
         expect(
           secondSignerDid,
-          "event signer did:key should be stable across re-login",
+          "event signer verification method should be stable across re-login",
         ).toBe(firstSignerDid);
       });
 
@@ -341,11 +338,6 @@ function grantJkt(jwt: string): string | undefined {
   }
 }
 
-function didKeyMultibase(did: string): string {
-  expect(did, "expected a did:key signer").toMatch(/^did:key:z/);
-  return did.slice("did:key:".length);
-}
-
 async function reloadWithSessionGrantExpiringSoon(
   page: Page,
   expectedGrantJwt: string,
@@ -387,7 +379,7 @@ async function currentSettingsSignerDid(page: Page): Promise<string> {
     .poll(async () => (await signerDid.getAttribute("title")) ?? "", {
       timeout: 60_000,
     })
-    .toMatch(/^did:key:z/);
+    .not.toBe("");
   return (await signerDid.getAttribute("title"))!;
 }
 
@@ -464,19 +456,15 @@ async function addEncryptedDescription(
   await page.getByTestId("card-detail-tab-description").click();
   await page.getByTestId("card-detail-edit-description-button").click();
 
-  const editor = page.getByTestId("card-detail-description-input");
-  await expect(editor).toBeAttached({ timeout: 45_000 });
-  await editor.evaluate((node, value) => {
-    const textarea = node as HTMLTextAreaElement;
-    textarea.value = value;
-    textarea.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        inputType: "insertText",
-        data: value,
-      }),
-    );
-  }, description);
+  const richEditor = page
+    .getByTestId("card-detail-description-rich-editor")
+    .locator('.ProseMirror.toastui-editor-contents[contenteditable="true"]');
+  await expect(richEditor).toBeVisible({ timeout: 45_000 });
+  await richEditor.click();
+  await richEditor.pressSequentially(description);
+  await expect(page.getByTestId("card-detail-description-input")).toHaveValue(
+    description,
+  );
 
   const strandUpdate = page.waitForResponse(
     (response) =>

@@ -567,7 +567,22 @@ async fn authorize_additional_principal_device(
 pub async fn seal_current_principal_control_frontier(
     client: &TestActorClient,
     device_signing_key: &SigningKey,
-) -> Result<()> {
+) -> Result<arkret_wire::SealId> {
+    seal_principal_control_frontier_with_pending_events(client, device_signing_key, &[]).await
+}
+
+/// Publish a successor Seal while explicitly carrying caller-authored Control
+/// Moves that ordinary history reads cannot expose before finality.
+///
+/// A Control Move is only authoritative after an accepted Seal covers its
+/// canonical digest.  The author already owns the exact Event bytes at submit
+/// time, so a self-PCR notary must be able to include those bytes without
+/// pretending that an unsealed Move is part of the readable history.
+pub async fn seal_principal_control_frontier_with_pending_events(
+    client: &TestActorClient,
+    device_signing_key: &SigningKey,
+    caller_pending_events: &[arkret_wire::Event],
+) -> Result<arkret_wire::SealId> {
     let principal = Did::new(client.actor.clone())?;
     let provisioned = client
         .principal
@@ -589,6 +604,20 @@ pub async fn seal_current_principal_control_frontier(
             })
         })
         .collect::<Result<Vec<_>>>()?;
+    for pending in caller_pending_events {
+        if let Some(existing) = events
+            .iter()
+            .find(|event| event.actor_seq == pending.actor_seq)
+        {
+            anyhow::ensure!(
+                existing.event_id == pending.event_id,
+                "PCR history conflicts with caller-authored pending Event at actor_seq {}",
+                pending.actor_seq
+            );
+        } else {
+            events.push(pending.clone());
+        }
+    }
     events.sort_by_key(|event| event.actor_seq);
     let frontier_state = serde_json::from_value::<
         arkret_models_collaboration::event_sync::SealFrontierState,
@@ -623,7 +652,11 @@ pub async fn seal_current_principal_control_frontier(
                 client.query("/_arkret/self/events/resolve").json(
                     &arkret_models_collaboration::http_bodies::EventsResolveRequestBody {
                         event_ids: Vec::new(),
-                        event_digests: predecessor.delta.clone(),
+                        event_digests: if predecessor.covered_event_digests.is_empty() {
+                            predecessor.delta.clone()
+                        } else {
+                            predecessor.covered_event_digests.clone()
+                        },
                         include_payload: Some(true),
                         history_traversal_access: None,
                         max_response_bytes: None,
@@ -637,8 +670,55 @@ pub async fn seal_current_principal_control_frontier(
         prior_events.missing.is_empty() && prior_events.unauthorized.is_empty(),
         "accepted PCR predecessor Seal delta did not fully resolve"
     );
+    let prior_event_rows = prior_events.events;
+    let mut known_event_ids = prior_event_rows
+        .iter()
+        .chain(&events)
+        .map(|event| event.event_id.clone())
+        .collect::<std::collections::BTreeSet<_>>();
+    loop {
+        let unresolved = events
+            .iter()
+            .flat_map(|event| event.prev_refs.iter().cloned())
+            .filter(|event_id| !known_event_ids.contains(event_id))
+            .collect::<std::collections::BTreeSet<_>>();
+        if unresolved.is_empty() {
+            break;
+        }
+        let resolved: arkret_models_collaboration::http_bodies::EventsResolveOutcome =
+            serde_json::from_value(
+                expect_json(
+                    client.query("/_arkret/self/events/resolve").json(
+                        &arkret_models_collaboration::http_bodies::EventsResolveRequestBody {
+                            event_ids: unresolved.into_iter().collect(),
+                            event_digests: Vec::new(),
+                            include_payload: Some(true),
+                            history_traversal_access: None,
+                            max_response_bytes: None,
+                        },
+                    ),
+                    StatusCode::OK,
+                )
+                .await?,
+            )?;
+        anyhow::ensure!(
+            resolved.missing.is_empty() && resolved.unauthorized.is_empty(),
+            "caller-authored PCR Event predecessor closure did not fully resolve"
+        );
+        anyhow::ensure!(
+            !resolved.events.is_empty(),
+            "caller-authored PCR Event predecessor resolution made no progress"
+        );
+        for event in resolved.events {
+            if known_event_ids.insert(event.event_id.clone()) {
+                events.push(event);
+            }
+        }
+    }
+    events.sort_by_key(|event| event.actor_seq);
+
     let mut history_by_sequence = BTreeMap::new();
-    for event in prior_events.events {
+    for event in prior_event_rows {
         history_by_sequence.insert(event.actor_seq, event);
     }
     let mut pending_events = Vec::new();
@@ -657,7 +737,7 @@ pub async fn seal_current_principal_control_frontier(
     // predecessor closure above is sufficient; never fabricate an empty
     // successor just to make an idempotent ensure-sealed call do work.
     if pending_events.is_empty() {
-        return Ok(());
+        return Ok(leaf);
     }
     pending_events.sort_by_key(|event| event.actor_seq);
     let mut history = history_by_sequence.into_values().collect::<Vec<_>>();
@@ -697,7 +777,22 @@ pub async fn seal_current_principal_control_frontier(
             Hlc::new(format!("{physical_millis:012x}-{index:04x}-a13f9c2e"))?,
             &signer,
             &crate::publication::project_cells,
-        )?;
+        )
+        .with_context(|| {
+            let coordinates = history
+                .iter()
+                .map(|item| {
+                    format!(
+                        "{}:{}:{}",
+                        item.actor_id,
+                        item.actor_seq,
+                        item.kind.as_str()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("build PCR successor Seal from history [{coordinates}]")
+        })?;
         let outcome = serde_json::from_value::<
             arkret_models_collaboration::http_bodies::EventSealSubmitOutcome,
         >(
@@ -715,7 +810,7 @@ pub async fn seal_current_principal_control_frontier(
         );
         predecessor = seal;
     }
-    Ok(())
+    Ok(predecessor.id)
 }
 
 pub(crate) fn signed_keys_upload_body(

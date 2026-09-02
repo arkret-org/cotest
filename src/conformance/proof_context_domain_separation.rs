@@ -403,6 +403,10 @@ fn signed_proof(
     Ok(proof)
 }
 
+/// Adapt the common detached-JWS test carrier to the Directory-specific proof
+/// leaf. Directory v1 has exactly one canonical service audience and therefore
+/// uses `audience_id`; it does not use the generic proof's optional
+/// domain/audience vocabulary.
 fn directory_request_proof(proof: &PayloadProof) -> Result<DirectoryRequestProof> {
     Ok(DirectoryRequestProof {
         kind: proof.kind.clone(),

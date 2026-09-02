@@ -5,7 +5,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import { expect, test } from "../../helpers/arkret-test";
 import type { APIRequestContext } from "../../helpers/arkret-test";
-import { mockEmailBaseUrl, solandBaseUrl } from "../../helpers/env";
+import {
+  mockEmailBaseUrl,
+  solandBaseUrl,
+  solandServiceId,
+} from "../../helpers/env";
 import {
   alignSignedEventToActorFrontierApi,
   authHeaders,
@@ -18,6 +22,8 @@ import {
   projectDidToCoreId,
   readRealmSealBasis,
   registerEventSigner,
+  registeredEventSigningSeedB64url,
+  registeredEventVerificationMethod,
   retypeEventDerivedId,
   signedEventEnvelope,
   submitSignedEventApi,
@@ -45,19 +51,21 @@ import {
   submitPrincipalGenesisEntry,
 } from "../../helpers/webvh-api";
 
-// Mint a fresh did:key-backed claimant. did:key DIDs are self-resolving, so the
-// subject_proof Ed25519 key verifies against the SDK DidKeyResolver without any
-// DID-document seeding against the joint harness.
-function didKeyUser(prefix: string, identity: DidKeyIdentity): JointUser {
-  const stamp = randomUUID();
-  const deviceSuffix = stamp.replace(/-/g, "").slice(0, 12);
+function currentSubjectIdentity(user: JointUser) {
+  const verificationMethod = registeredEventVerificationMethod(
+    user.id,
+    user.deviceId,
+  );
+  const signingSeedB64url = registeredEventSigningSeedB64url(user.id);
+  if (!verificationMethod || !signingSeedB64url) {
+    throw new Error(
+      `current accepted device authority material is unavailable for ${user.id}`,
+    );
+  }
   return {
-    name: `${prefix}-${stamp}`.toLowerCase(),
-    id: projectDidToCoreId(identity.did),
-    did: identity.did,
-    deviceId: `ak:device:01904100-0000-7000-8000-${deviceSuffix}`,
-    handle: `@${prefix}-${stamp}`.toLowerCase(),
-    displayName: `${prefix} ${stamp}`,
+    did: user.did,
+    verificationMethod,
+    signingSeedB64url,
   };
 }
 
@@ -302,34 +310,19 @@ test.describe("third-party invite", () => {
     },
   ) {
     const alice = uniqueUser(`${opts.fixtureNonce}-alice`);
-    const bobIdentity = generateDidKeyIdentity();
-    const bob = didKeyUser(`${opts.fixtureNonce}-bob`, bobIdentity);
+    const bob = uniqueUser(`${opts.fixtureNonce}-bob`);
     await ensureRegistered(request, alice);
+    await ensureRegistered(request, bob);
+    const bobSubjectIdentity = currentSubjectIdentity(bob);
     const aliceToken = await issueDevSession(request, alice);
-    // dev-login auto-provisions the did:key account for bob.
     const bobToken = await issueDevSession(request, bob);
-    const deviceKeyResponse = await request.post(
-      `${solandBaseUrl()}/_arkret/_conformance/device-signing-key`,
-      {
-        data: canonicalJson({
-          actor_id: bob.id,
-          device_id: bob.deviceId,
-          public_key_multibase: bobIdentity.publicKeyMultibase,
-        }),
-        headers: { "content-type": "application/json" },
-      },
-    );
-    expect(
-      deviceKeyResponse.status(),
-      `seed claimant device key returned ${deviceKeyResponse.status()}: ${await deviceKeyResponse.text()}`,
-    ).toBe(200);
+    // The outer Event and subject proof are both signed by the current PCR
+    // device authority. A device is not a DID actor and its method is therefore
+    // resolved through the accepted device authorization, not a DID document.
     registerEventSigner({
       actorId: bob.id,
       deviceId: bob.deviceId,
-      // Event admission binds the current device fragment. The independent
-      // subject_proof below continues to use the did:key verification method.
       verificationMethod: `${bob.did}#${bob.deviceId}`,
-      signingSeedB64url: bobIdentity.signingSeedB64url,
     });
     const realmId = await createRealmApi(request, aliceToken, {
       title: `3PID invite reducer ${opts.fixtureNonce}`,
@@ -365,7 +358,7 @@ test.describe("third-party invite", () => {
       alice,
       aliceToken,
       bob,
-      bobIdentity,
+      bobIdentity: bobSubjectIdentity,
       bobToken,
       realmId,
       verificationService,
@@ -530,7 +523,7 @@ test.describe("third-party invite", () => {
 
     // Reducer effect: bob is now an invite-membership proposal in the Realm.
     const invitesResp = await request.get(
-      `${solandBaseUrl()}/_arkret/self/authz/invites?subject=${encodeURIComponent(ctx.bob.id)}&realm_id=${encodeURIComponent(ctx.realmId)}`,
+      `${solandBaseUrl()}/_arkret/self/authz/invites?realm_id=${encodeURIComponent(ctx.realmId)}`,
       {
         headers: {
           ...authHeaders(ctx.bobToken),
@@ -542,14 +535,19 @@ test.describe("third-party invite", () => {
       invites?: Array<{
         id?: string;
         realm_id?: string;
-        invitee_id?: string;
+        invitee_account_id?: {
+          principal_id?: string;
+          station_id?: string;
+        };
         state?: string;
-        status?: string;
       }>;
     }>(invitesResp, "list claimed invites");
     const claimed = (invitesBody.invites ?? []).find(
       (invite) =>
-        invite.realm_id === ctx.realmId && invite.invitee_id === ctx.bob.id,
+        invite.realm_id === ctx.realmId &&
+        invite.invitee_account_id?.principal_id === ctx.bob.id &&
+        invite.invitee_account_id.station_id === solandServiceId() &&
+        invite.state === "claimed",
     );
     expect(claimed, `claimed invite for ${ctx.bob.id}`).toBeTruthy();
   });
@@ -639,14 +637,15 @@ test.describe("third-party invite", () => {
     );
     expect(issued.rejected).toHaveLength(0);
 
-    const malloryIdentity = generateDidKeyIdentity();
-    const mallory = didKeyUser("s3-mallory", malloryIdentity);
+    const mallory = uniqueUser("s3-mallory");
+    await ensureRegistered(request, mallory);
+    const mallorySubjectIdentity = currentSubjectIdentity(mallory);
     const malloryToken = await issueDevSession(request, mallory);
     registerEventSigner({
       actorId: mallory.id,
       deviceId: mallory.deviceId,
-      verificationMethod: malloryIdentity.verificationMethod,
-      signingSeedB64url: malloryIdentity.signingSeedB64url,
+      // The outer Event and subject proof use Mallory's accepted PCR device.
+      verificationMethod: `${mallory.did}#${mallory.deviceId}`,
     });
 
     const claimNonce = `claim-${randomUUID()}`;
@@ -662,7 +661,7 @@ test.describe("third-party invite", () => {
     // mallory signs a subject_proof with HER key and submits as herself.
     const subjectProof = signSubjectProof({
       cell: ctx.cell,
-      subject: malloryIdentity,
+      subject: mallorySubjectIdentity,
       verificationServiceDid: ctx.verificationService.did,
       bindingProof,
       claimNonce,
@@ -682,13 +681,15 @@ test.describe("third-party invite", () => {
       }),
     );
     expect(claim.accepted).toHaveLength(0);
-    // The binding_proof names bob but mallory submits subject_id == her own
-    // DID, so the claim payload fails the subject/binding consistency gate
-    // before the token can ever be bound to the attacker DID. soland surfaces
-    // this as `schema_violation` with a subject-mismatch detail.
+    // The binding_proof names Bob's AccountId while Mallory submits her own
+    // subject_account_id, so the consistency gate must reject the claim before
+    // the token can be bound to the attacker. Keep the externally visible
+    // detail non-enumerating as required by third-party-invites.md section 6.
     expect(claim.rejectReason).toBe("schema_violation");
     const detail = claim.rejected[0]?.detail ?? "";
-    expect(detail).toContain("subject_id");
+    expect(detail).not.toContain(ctx.bob.id);
+    expect(detail).not.toContain(mallory.id);
+    expect(detail).not.toContain(ctx.cell.tokenCommitment);
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK

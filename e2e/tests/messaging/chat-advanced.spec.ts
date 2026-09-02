@@ -19,6 +19,7 @@ import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
+  addRealmMemberApi,
   accountSubscribeFramesApi,
   createRealmApi,
   grantCapabilityEventApi,
@@ -423,10 +424,10 @@ test.describe("chat advanced", () => {
       const realmId = await createRealmApi(request, aliceToken, {
         title: `typing API ${stamp}`,
         ownerId: aliceFlow.user.id,
-        invitees: [bob.id],
-        history_access: "all_history_for_current_members",
+        encryption_profile: "mls_rfc9420",
+        history_access: "since_join",
       });
-      await acceptInviteViaApi(request, bobToken, bob.id, realmId);
+      await addRealmMemberApi(request, aliceToken, realmId, bob.id);
       const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
       const sentAt = new Date();
       const envelope = buildSignalEnvelope({

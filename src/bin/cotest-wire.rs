@@ -5,10 +5,13 @@ use anyhow::{Context, Result, bail};
 use arkret_canonical as canonical;
 use arkret_event_draft::EventPayloadExt as _;
 use arkret_identifiers::{ConsentId, DeviceId, Did, DidCoreId, Hash, project_did_to_core_id};
+use arkret_models_collaboration::governance::membership_invite::{
+    InviteClaimBindingProof, InviteSubjectProof, InviteSubjectProofBody,
+};
 use arkret_models_collaboration::http_bodies::{MimiConsentDecision, MimiUpdateConsentRequestBody};
 use arkret_wire::{
-    Audience, AuditReasonText, DidUrl, Event, EventInitialSubmission, NonEmptyString, PayloadProof,
-    ProducerEventProof, SealBasis, SecurityClass, proof_kind,
+    AccountId, Audience, AuditReasonText, DidUrl, Event, EventInitialSubmission, NonEmptyString,
+    PayloadProof, ProducerEventProof, SealBasis, SecurityClass, proof_kind,
 };
 use base64::Engine as _;
 use chrono::{Timelike as _, Utc};
@@ -45,6 +48,19 @@ struct MimiConsentProofInput {
 struct MlsKeyPackageUploadEntryInput {
     principal_id: DidCoreId,
     device_id: DeviceId,
+    signing_seed_b64url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct InviteSubjectProofInput {
+    subject_account_id: AccountId,
+    invite_id: String,
+    realm_id: String,
+    token_commitment: String,
+    claim_nonce: String,
+    verification_id: String,
+    binding_proof: InviteClaimBindingProof,
+    verification_method: DidUrl,
     signing_seed_b64url: String,
 }
 
@@ -162,6 +178,7 @@ fn main() -> Result<()> {
         "event-derived-id" => event_derived_id(input)?,
         "event-envelope-parse" => event_envelope_parse(input)?,
         "mimi-consent-proof" => mimi_consent_proof(input)?,
+        "invite-subject-proof" => invite_subject_proof(input)?,
         "mls-keypackage-upload-entry" => mls_keypackage_upload_entry(input)?,
         "principal-control-realm-id" => principal_control_realm(input)?,
         "webvh-placeholder-did" => webvh_placeholder_did_command(input)?,
@@ -179,6 +196,34 @@ fn main() -> Result<()> {
 
     println!("{}", serde_json::to_string(&output)?);
     Ok(())
+}
+
+fn invite_subject_proof(input: Value) -> Result<Value> {
+    let input: InviteSubjectProofInput =
+        serde_json::from_value(input).context("parse invite subject proof input")?;
+    let binding_digest = input
+        .binding_proof
+        .canonical_digest()
+        .context("digest invite binding proof")?;
+    let transcript = InviteSubjectProofBody::from_wire_parts(
+        input.subject_account_id,
+        input.invite_id,
+        input.realm_id,
+        input.token_commitment,
+        input.claim_nonce,
+        input.verification_id,
+        binding_digest.as_str(),
+    )?;
+    let transcript_digest = transcript.transcript_digest()?;
+    let signing_key = signing_key_from_seed(&input.signing_seed_b64url)?;
+    let signature = signing_key.sign(&transcript.canonical_bytes()?).to_bytes();
+    let proof = InviteSubjectProof::new(
+        input.verification_method,
+        transcript_digest,
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature),
+    );
+    proof.validate()?;
+    serde_json::to_value(proof).context("serialize invite subject proof")
 }
 
 fn install_managed_actor_author(input: Value) -> Result<Value> {

@@ -115,10 +115,13 @@ test.describe("key backup + restore", () => {
       await device.gotoHome();
       await expectDpopDeviceActive(request, session);
 
-      // Principal bootstrap already generated and confirmed the first Recovery
-      // Key before openUserPage returned. The write can therefore precede any
-      // response listener registered by this test; verify its durable state.
-      const firstKey = session.recoveryKey ?? "";
+      // Recovery bootstrap is asynchronous after session injection. This test
+      // disables the global locator handler so it can retain the generated key;
+      // explicitly complete the mandatory setup once the enrolled device is
+      // authoritative, then verify the resulting durable protocol state.
+      const promptedKey =
+        await device.completeRecoveryKeySetupIfPrompted(120_000);
+      const firstKey = promptedKey ?? session.recoveryKey ?? "";
       expect(firstKey.split(/\s+/)).toHaveLength(24);
       await device.gotoAppPanel("/settings/recovery", "recovery-panel");
       await expect(device.page.getByTestId("recovery-key-section")).toBeVisible(
