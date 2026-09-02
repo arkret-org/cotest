@@ -7,12 +7,6 @@ use serde_json::json;
 #[test]
 fn mimi_report_requires_closed_exact_actor_authority() {
     let report = json!({
-        "strand_id": "ak:strand:AaCQjogT126mXVYM2VaV0guWrFdS4nCOsDP-Ft0iWyKp",
-        "mimi_room_uri": "mimi://provider.example/rooms/room-1",
-        "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",
-        "target_ref": "mimi://provider.example/rooms/room-1/messages/message-1",
-        "reporter_id": "ak:did_core:web:alice.example",
-        "source_provider_id": "ak:did_core:web:provider.example",
         "reporter_authority": {
             "actor_id": {
                 "kind": "account",
@@ -55,17 +49,28 @@ fn mimi_report_requires_closed_exact_actor_authority() {
                 "prev_refs": [],
                 "refs": [],
                 "requirements": {},
-                "payload": {},
+                "payload": {
+                    "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",
+                    "effective_scope": {
+                        "kind": "realm",
+                        "realm_id": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI"
+                    },
+                    "target_ref": "ak:realm:AY789mrKRCQEVlbVgiTgLdjVO5oCMJiUCrF-D-JlRNxI",
+                    "report_reason_code": "spam",
+                    "reporter_id": "ak:did_core:web:alice.example",
+                    "provenance": "mimi_facade",
+                    "source_provider_id": "ak:did_core:web:provider.example"
+                },
                 "proofs": []
             }
-        },
-        "abuse_reason_code": "spam"
+        }
     });
     let parsed: MimiReportAbuseRequestBody = serde_json::from_value(report.clone()).unwrap();
     assert_eq!(
-        parsed.reporter_authority.actor_id.signing_principal_id(),
-        &parsed.reporter_id
+        &parsed.report_event.event.actor_id,
+        &parsed.reporter_authority.actor_id
     );
+    assert!(parsed.report_payload().is_ok());
 
     let mut missing = report.clone();
     missing
@@ -74,9 +79,13 @@ fn mimi_report_requires_closed_exact_actor_authority() {
         .remove("reporter_authority");
     assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(missing).is_err());
 
-    let mut legacy = report;
+    let mut legacy = report.clone();
     legacy["reporter_authority"]["holder_claim"] = json!("opaque-bearer");
     assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(legacy).is_err());
+
+    let mut mirrored = report;
+    mirrored["reporter_id"] = json!("ak:did_core:web:alice.example");
+    assert!(serde_json::from_value::<MimiReportAbuseRequestBody>(mirrored).is_err());
 }
 
 #[test]

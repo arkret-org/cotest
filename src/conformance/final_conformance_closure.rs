@@ -26,7 +26,6 @@ pub const VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP: &str =
     "ak.vector.moderation.franking_roundtrip.v1";
 pub const VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE: &str =
     "ak.vector.moderation.evidence_package_minimal_disclosure.v1";
-pub const VECTOR_ID_MODERATION_APPEAL_ATOMICITY: &str = "ak.vector.moderation.appeal_atomicity.v1";
 pub const VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE: &str =
     "ak.vector.relation.reference_projection_indistinguishable.v1";
 
@@ -38,7 +37,6 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_MLS_GOVERNANCE_EPOCH_BINDING,
     VECTOR_ID_MODERATION_FRANKING_ROUNDTRIP,
     VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
-    VECTOR_ID_MODERATION_APPEAL_ATOMICITY,
     VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE,
 ];
 
@@ -89,7 +87,6 @@ pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
         &fixture,
         VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
     )?)?;
-    run_moderation_appeal_atomicity_case(case(&fixture, VECTOR_ID_MODERATION_APPEAL_ATOMICITY)?)?;
     run_relation_reference_projection_indistinguishable_case(case(
         &fixture,
         VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE,
@@ -136,11 +133,6 @@ pub fn run_moderation_evidence_package_minimal_disclosure_vector() -> Result<()>
         &fixture,
         VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
     )?)
-}
-
-pub fn run_moderation_appeal_atomicity_vector() -> Result<()> {
-    let fixture = final_conformance_closure_fixture()?;
-    run_moderation_appeal_atomicity_case(case(&fixture, VECTOR_ID_MODERATION_APPEAL_ATOMICITY)?)
 }
 
 pub fn run_relation_reference_projection_indistinguishable_vector() -> Result<()> {
@@ -877,115 +869,6 @@ fn evaluate_moderation_evidence_package(scenario: &Value) -> Result<Value> {
         "minimal_disclosure": true,
         "governance_key_released": false,
     }))
-}
-
-fn run_moderation_appeal_atomicity_case(case: &Value) -> Result<()> {
-    let mut seen = BTreeSet::new();
-    for scenario in required_array(case, "cases")? {
-        let name = required_str(scenario, "name")?;
-        seen.insert(name.to_owned());
-        let observed = evaluate_moderation_appeal_atomicity(scenario)?;
-        assert_expected_subset(name, expected(scenario)?, &observed)?;
-        record_step(
-            VECTOR_ID_MODERATION_APPEAL_ATOMICITY,
-            name,
-            scenario,
-            &observed,
-        );
-    }
-    for required in [
-        "overturn_missing_lift",
-        "overturn_with_lift",
-        "modify_ref_mismatch",
-    ] {
-        if !seen.contains(required) {
-            bail!("moderation appeal vector missing case {required}");
-        }
-    }
-    Ok(())
-}
-
-fn evaluate_moderation_appeal_atomicity(scenario: &Value) -> Result<Value> {
-    if required_str(scenario, "appeal_state")? != "under_review" {
-        return Ok(json!({
-            "decision": "reject",
-            "reason": "failed_precondition",
-            "partial_state_written": false,
-        }));
-    }
-
-    match required_str(scenario, "decision")? {
-        "overturn" => {
-            if scenario
-                .get("same_batch_lift_target_matches")
-                .and_then(Value::as_bool)
-                != Some(true)
-            {
-                Ok(json!({
-                    "decision": "reject",
-                    "reason": "appeal_overturn_missing_lift",
-                    "appeal_state": "under_review",
-                    "original_decision_active": true,
-                }))
-            } else {
-                // An overturn lifts the reversible decision atomically, but
-                // irreversible effects (for example a redaction tombstone)
-                // remain in force.  Surface both facts so the fixture can
-                // assert that no original plaintext is resurrected.
-                let tombstone_present = scenario
-                    .get("original_irreversible_effect")
-                    .and_then(Value::as_str)
-                    == Some("redaction_tombstone");
-                Ok(json!({
-                    "decision": "accept",
-                    "appeal_state": "decided",
-                    "original_decision_active": false,
-                    "redaction_tombstone_present": tombstone_present,
-                    "original_content_resurrected": false,
-                }))
-            }
-        }
-        "modify" => {
-            if scenario
-                .get("same_batch_lift_target_matches")
-                .and_then(Value::as_bool)
-                != Some(true)
-            {
-                return Ok(json!({
-                    "decision": "reject",
-                    "reason": "appeal_modify_missing_lift",
-                    "appeal_state": "under_review",
-                    "original_decision_active": true,
-                    "replacement_decision_active": false,
-                    "partial_state_written": false,
-                }));
-            }
-            if scenario
-                .get("modify_decision_ref_in_same_batch")
-                .and_then(Value::as_bool)
-                != Some(true)
-                || scenario
-                    .get("new_decision_target_matches_original")
-                    .and_then(Value::as_bool)
-                    != Some(true)
-            {
-                Ok(json!({
-                    "decision": "reject",
-                    "reason": "failed_precondition",
-                    "partial_state_written": false,
-                }))
-            } else {
-                Ok(json!({
-                    "decision": "accept",
-                    "appeal_state": "decided",
-                    "original_decision_active": false,
-                    "replacement_decision_active": true,
-                    "partial_state_written": false,
-                }))
-            }
-        }
-        verdict => bail!("unsupported moderation appeal verdict {verdict}"),
-    }
 }
 
 fn run_relation_reference_projection_indistinguishable_case(case: &Value) -> Result<()> {

@@ -675,9 +675,7 @@ async function ensureSignalMlsBasis(
         cipher_suite:
           "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
         group_info_ref: `ak:blob:sha256:${"3".repeat(64)}`,
-        group_info_digest: `sha256:${"3".repeat(64)}`,
         ratchet_tree_ref: `ak:blob:sha256:${"4".repeat(64)}`,
-        ratchet_tree_digest: `sha256:${"4".repeat(64)}`,
         governance_binding: {
           binding_version: 1,
           encoding_profile: "cbor-deterministic-rfc8949-v1",

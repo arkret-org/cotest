@@ -344,9 +344,7 @@ pub async fn run_minimal_metadata_pairwise_keypackage_live() -> Result<()> {
             "epoch": 0,
             "cipher_suite": "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519",
             "group_info_ref": format!("ak:blob:sha256:{}", "3".repeat(64)),
-            "group_info_digest": format!("sha256:{}", "3".repeat(64)),
             "ratchet_tree_ref": format!("ak:blob:sha256:{}", "4".repeat(64)),
-            "ratchet_tree_digest": format!("sha256:{}", "4".repeat(64)),
             "governance_binding": genesis_binding,
             "created_at": Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         }),

@@ -138,11 +138,6 @@ corrected:
   `circle.schema.json` `join_rule` enum is `invite|knock|public`. A
   `join_rule="public"` Circle failed durable write-through, so the Circle read
   back with no `member_ids`.
-- **soland** `routing/events/operations/policy/governance.rs` moderation actor
-  gate read `appellant` / `reviewer` / `closer`; `moderation-appeal.schema.json`
-  and soland's own reducer (`apply_moderation.rs`) use `appellant_id` /
-  `reviewer_id` / `closer_id`. A spec-conformant appeal submit was rejected with
-  `403 moderation_appeal_actor_missing`.
 - **cotest** peer/self events QUERY bodies sent `actors`;
   `EventsQueryPostRequestBody` names it `actor_ids` (soland reads
   `body.actor_ids`).
@@ -168,7 +163,3 @@ Test-side, not spec-side. Listed so they are not mistaken for product bugs:
   `federation_policy` and both encryption floors. `writeJoinPolicyApi`'s own doc
   comment states every `cas_register` revision is a complete replacement. This
   is what triggers finding 2 in practice.
-- `governance/moderation-appeal.spec.ts` submits `ak.moderation.appeal.review`
-  before the preceding submit has projected, yielding
-  `moderation_appeal_invalid_transition:none->under_review`. Needs a wait on the
-  appeal state, not a retry.

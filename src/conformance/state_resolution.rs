@@ -879,8 +879,9 @@ fn validate_sealed_control_move_full_digest_collision(
         )?;
     }
 
-    // A collision has no digest-only identity, so both the evidence and the
-    // verdict must denote complete canonical bytes.
+    // A collision has no digest-only identity. The evidence carries both
+    // complete canonical-byte locators and the verdict selects one by index,
+    // avoiding a third copy of the winning preimage.
     let canonical_case = cases["resolution_names_winner_by_canonical_bytes"];
     require_str_eq(
         canonical_case,
@@ -908,19 +909,21 @@ fn validate_sealed_control_move_full_digest_collision(
         "canonical_winner",
         vector_name,
     )?;
-    let winner = canonical_case
-        .pointer("/payload/verdict/winner_preimage")
-        .ok_or_else(|| anyhow!("vector {vector_name} collision winner must be a locator"))?;
-    if !variants.iter().any(|variant| variant == winner) {
-        bail!("vector {vector_name} canonical winner must be one of its own evidence variants");
+    let winner_index = canonical_case
+        .pointer("/payload/verdict/winner_index")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("vector {vector_name} collision winner must carry winner_index"))?;
+    if winner_index >= variants.len() as u64 {
+        bail!("vector {vector_name} collision winner_index is outside its own evidence variants");
     }
 
     // The reference arm exists because two preimages near the 1 MiB ceiling
     // cannot both be inlined into a resolution Event bounded by the same limit.
     let record_case = cases["resolution_names_winner_by_variant_record_reference"];
+    require_u64_eq(record_case, "/payload/verdict/winner_index", 0, vector_name)?;
     require_str_eq(
         record_case,
-        "/payload/verdict/winner_preimage/kind",
+        "/payload/conflict_evidence/variants/0/kind",
         "collision_variant_record",
         vector_name,
     )?;
@@ -2706,6 +2709,17 @@ fn require_str_eq(value: &Value, pointer: &str, expected: &str, vector_name: &st
         .ok_or_else(|| anyhow!("vector {vector_name} missing string at {pointer}"))?;
     if actual != expected {
         bail!("vector {vector_name} field {pointer} must be {expected:?}, got {actual:?}");
+    }
+    Ok(())
+}
+
+fn require_u64_eq(value: &Value, pointer: &str, expected: u64, vector_name: &str) -> Result<()> {
+    let actual = value
+        .pointer(pointer)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| anyhow!("vector {vector_name} missing integer {pointer}"))?;
+    if actual != expected {
+        bail!("vector {vector_name} {pointer} = {actual}, expected {expected}");
     }
     Ok(())
 }
