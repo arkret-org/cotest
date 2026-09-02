@@ -22,6 +22,7 @@ import {
   addRealmMemberApi,
   accountSubscribeFramesApi,
   createRealmApi,
+  eventPrincipalId,
   grantCapabilityEventApi,
   resolveDefaultStrandId,
   sendMessageApi,
@@ -461,7 +462,8 @@ test.describe("chat advanced", () => {
 
       const received = envelopes.find(
         (candidate) =>
-          candidate.sender_actor_id === aliceFlow.user.id &&
+          eventPrincipalId({ actor_id: candidate.sender_actor_id }) ===
+            aliceFlow.user.id &&
           signalPlaintext(candidate).kind === "ak.typing",
       );
       expect(received, "bob received encrypted typing Signal").toBeTruthy();

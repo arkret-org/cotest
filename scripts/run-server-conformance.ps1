@@ -281,6 +281,20 @@ function Get-CargoMetadataTestTargets {
     )
 }
 
+function Get-CargoTargetDirectory {
+    param([Parameter(Mandatory = $true)][string]$ManifestPath)
+
+    $metadataOutput = & cargo metadata --no-deps --format-version 1 --manifest-path $ManifestPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "cargo metadata failed for $ManifestPath with exit code $LASTEXITCODE"
+    }
+    $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    if (-not $metadata.target_directory) {
+        throw "cargo metadata did not return a target directory for $ManifestPath"
+    }
+    return [System.IO.Path]::GetFullPath([string]$metadata.target_directory)
+}
+
 function Assert-CargoTestConfiguration {
     param(
         [Parameter(Mandatory = $true)]$Config,
@@ -2157,6 +2171,7 @@ if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -I
 # by the current cotest build.  Build the selected SUT once, before starting
 # any Cargo test invocation, so both sides are compiled from the same checkout.
 # An explicit SOLAND_BIN remains an intentional immutable-binary override.
+$processSolandBin = $null
 if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
     Add-RawLogLine -Path $rawLog -Value "=== prepare process SUT ==="
     $buildOutput = @(
@@ -2171,10 +2186,17 @@ if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
     if ($buildExitCode -ne 0) {
         throw "Failed to build process SUT from $SutManifest (exit code $buildExitCode)"
     }
+    $solandTargetDirectory = Get-CargoTargetDirectory -ManifestPath $SutManifest
+    $solandBinaryName = if ($IsWindows) { "soland.exe" } else { "soland" }
+    $processSolandBin = Join-Path $solandTargetDirectory "debug\$solandBinaryName"
+    if (-not (Test-Path $processSolandBin)) {
+        throw "Process SUT build succeeded but the Cargo target binary is missing: $processSolandBin"
+    }
+    Add-RawLogLine -Path $rawLog -Value "process SUT binary: $processSolandBin"
 }
 
 $originalEnv = @()
-foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH") {
+foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN") {
     $originalEnv += [pscustomobject]@{
         Name   = $name
         Exists = Test-Path "Env:$name"
@@ -2205,6 +2227,9 @@ try {
     } else {
         $env:COTEST_SUT_MANIFEST = $SutManifest
         Remove-Item Env:COTEST_SUT_IMAGE -ErrorAction SilentlyContinue
+        if ($processSolandBin) {
+            $env:SOLAND_BIN = $processSolandBin
+        }
     }
 
     $exitCode = 0

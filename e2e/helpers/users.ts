@@ -47,6 +47,10 @@ import {
 } from "./soland-api";
 import { base58btcEncode } from "./encoding";
 import { withOperationSelectors } from "./arkret-test";
+import {
+  serverLoginViaCoauth,
+  submitCoauthPasswordCredentials,
+} from "./real-oidc-login";
 
 export type JointUser = {
   name: string;
@@ -1826,6 +1830,98 @@ export async function openDpopUserPageForAccount(
     await allowExplicitInviteNotifications(request, session, opts.server);
   }
   return openDpopUserPageFromSession(browser, session, opts);
+}
+
+/**
+ * Authorize a genuinely distinct sibling device through the protocol pairing
+ * ceremony and return its accepted Device ID.  Callers may then obtain a
+ * deployment-private dev session for that already-authorized device when they
+ * need to exercise API-only cross-device surfaces.
+ */
+export async function pairAcceptedSiblingDevice(
+  browser: Browser,
+  request: APIRequestContext,
+  foundingSession: DpopUserSession,
+): Promise<string> {
+  const first = await openDpopUserPageFromSession(browser, foundingSession, {
+    prepareMlsDevice: false,
+  });
+  expect(first, "founding device session must remain available").toBeTruthy();
+  const foundingPage = first!.page;
+  const second = await openUserPage(
+    browser,
+    uniqueUser(`paired-${foundingSession.user.name}`),
+    {
+      neutralLoginConfig: true,
+      autoCompleteRecoveryKeySetup: false,
+    },
+  );
+  try {
+    await second.page.goto("/login", { waitUntil: "domcontentloaded" });
+    await second.page.getByTestId("login-server-url").fill(solandBaseUrl());
+    await second.page.getByTestId("start-server-login-button").click();
+    await submitCoauthPasswordCredentials(
+      second.page,
+      foundingSession.account,
+    );
+    const approve = second.page.getByTestId("coauth-oauth-approve");
+    if (
+      await approve
+        .waitFor({ state: "visible", timeout: 20_000 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      await approve.click();
+    }
+    await expect(second.page.getByTestId("device-setup-required")).toBeVisible({
+      timeout: 120_000,
+    });
+
+    await second.page.getByTestId("device-setup-pairing-start").click();
+    const pairingCode = second.page.getByTestId("device-setup-pairing-code");
+    await expect(pairingCode).toBeVisible({ timeout: 30_000 });
+    const code = (await pairingCode.textContent())?.trim() ?? "";
+    expect(code).not.toBe("");
+
+    await foundingPage.gotoHome();
+    const approvalModal = foundingPage.page.getByTestId(
+      "device-pair-approval-modal",
+    );
+    await expect(approvalModal).toBeVisible({ timeout: 90_000 });
+    await expect(
+      foundingPage.page.getByTestId("device-pair-approval-code"),
+    ).toHaveText(code);
+    await foundingPage.page
+      .getByTestId("device-pair-approval-approve")
+      .click();
+    await expect(approvalModal).toBeHidden({ timeout: 90_000 });
+
+    await second.page.getByTestId("device-setup-pairing-status").click();
+    await expect(second.page.getByTestId("device-setup-status")).toContainText(
+      "Device authorization is accepted and verified",
+      { timeout: 90_000 },
+    );
+    await second.page
+      .getByRole("link", { name: "Sign in again after approval" })
+      .click();
+    await expect(second.page.getByTestId("login-panel")).toBeVisible({
+      timeout: 30_000,
+    });
+    await serverLoginViaCoauth(second.page, foundingSession.account);
+    await expect(second.page.getByTestId("client-shell")).toBeVisible({
+      timeout: 120_000,
+    });
+
+    const config = await second.page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem("inkson.config.v1") ?? "{}"),
+    ) as { active_account?: { device_id?: string } };
+    const deviceId = config.active_account?.device_id ?? "";
+    expect(deviceId).toMatch(/^ak:device:/);
+    expect(deviceId).not.toBe(foundingSession.user.deviceId);
+    return deviceId;
+  } finally {
+    await Promise.allSettled([foundingPage.close(), second.close()]);
+  }
 }
 
 async function allowExplicitInviteNotifications(

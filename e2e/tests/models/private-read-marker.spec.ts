@@ -27,8 +27,11 @@ import {
   typedId,
 } from "../../helpers/soland-api";
 import {
+  assertJointStackNotRequired,
+  createDpopUserSession,
   ensureRegistered,
   issueDevSession,
+  pairAcceptedSiblingDevice,
   uniqueUser,
 } from "../../helpers/users";
 
@@ -161,13 +164,22 @@ test.describe("private read marker", () => {
   // observes on its next `account/subscribe` poll. mark-all-read from device-2
   // then propagates back to device-1.
   test("alice's read marker syncs across devices via to-device; mark-all-read advances marker on all devices within sync window", async ({
+    browser,
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s11-prm-xdev-${stamp}`);
-    await ensureRegistered(request, alice);
-    const device1 = typedId("device");
-    const device2 = typedId("device");
+    const session = await createDpopUserSession(
+      request,
+      `s11-prm-xdev-${stamp}`,
+    );
+    if (!session) {
+      assertJointStackNotRequired("private read-marker sibling pairing");
+      test.skip(true, "joint Coauth endpoint is unavailable");
+      return;
+    }
+    const alice = session.user;
+    const device1 = alice.deviceId;
+    const device2 = await pairAcceptedSiblingDevice(browser, request, session);
     const token1 = await issueDevSession(request, alice, { deviceId: device1 });
     const token2 = await issueDevSession(request, alice, { deviceId: device2 });
 
@@ -240,13 +252,22 @@ test.describe("private read marker", () => {
   });
 
   test("E10.1 multi-device read marker eventual consistency: device-2 may lag but converges to device-1's last write within bounded sync window (spec §3)", async ({
+    browser,
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`s11-prm-ec-${stamp}`);
-    await ensureRegistered(request, alice);
-    const device1 = typedId("device");
-    const device2 = typedId("device");
+    const session = await createDpopUserSession(
+      request,
+      `s11-prm-ec-${stamp}`,
+    );
+    if (!session) {
+      assertJointStackNotRequired("private read-marker eventual consistency");
+      test.skip(true, "joint Coauth endpoint is unavailable");
+      return;
+    }
+    const alice = session.user;
+    const device1 = alice.deviceId;
+    const device2 = await pairAcceptedSiblingDevice(browser, request, session);
     const token1 = await issueDevSession(request, alice, { deviceId: device1 });
     const token2 = await issueDevSession(request, alice, { deviceId: device2 });
 

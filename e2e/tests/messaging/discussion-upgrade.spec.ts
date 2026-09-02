@@ -27,6 +27,7 @@ import {
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
+  waitForRealmControlIdleApi,
 } from "../../helpers/soland-api";
 import {
   ensureRegistered,
@@ -38,12 +39,16 @@ import { grantCircleMemberManageCapability } from "../../helpers/circle-api";
 import {
   buildSignalEnvelope,
   captureSubmittedSignalEnvelope,
+  prepareSignalEnvelope,
   signalPlaintext,
 } from "../../helpers/webrtc";
 
 test.describe.configure({ mode: "serial" });
 
-const circleScopeByStrand = new Map<string, string>();
+const circleScopeByStrand = new Map<
+  string,
+  { circleId: string; encryptionProfile: "none" | "mls_rfc9420" }
+>();
 
 test.describe("discussion upgrade to Circle-scoped private Strand", () => {
   test("API inline discussion track preserves strand_id and track_name", async ({
@@ -229,11 +234,11 @@ test.describe("discussion upgrade to Circle-scoped private Strand", () => {
     );
     const privateMessage = await createDiscussionMessageViaApi(
       request,
-      fixture.aliceToken,
-      fixture.alice,
+      fixture.bobToken,
+      fixture.bob,
       fixture.realmId,
       promoted.privateStrandId,
-      "private receipt target",
+      "private encrypted receipt target",
     );
     const sentAt = new Date();
     const sentAtIso = sentAt.toISOString();
@@ -637,7 +642,10 @@ async function promoteDiscussionToPrivateStrandViaApi(
     "private discussion",
     { scopeCircleId: circleId },
   );
-  circleScopeByStrand.set(privateStrandId, circleId);
+  circleScopeByStrand.set(privateStrandId, {
+    circleId,
+    encryptionProfile: opts.circleEncryptionProfile ?? "none",
+  });
   const relationId = await createConfidentialDiscussionRelationViaApi(
     request,
     fixture.aliceToken,
@@ -711,6 +719,11 @@ async function createDiscussionCircleViaApi(
       "join",
     );
   }
+  await waitForRealmControlIdleApi(
+    request,
+    fixture.aliceToken,
+    fixture.realmId,
+  );
   return circleId;
 }
 
@@ -787,23 +800,65 @@ async function createDiscussionMessageViaApi(
   strandId: string,
   body: string,
 ) {
+  const circleScope = circleScopeByStrand.get(strandId);
+  const circleId = circleScope?.circleId;
+  const scopeRef = circleId
+    ? {
+        kind: "circle",
+        realm_id: realmId,
+        circle_id: circleId,
+      }
+    : undefined;
+  let messageContent: Record<string, unknown>;
+  if (circleScope?.encryptionProfile === "mls_rfc9420") {
+    const basisProbe = buildSignalEnvelope({
+      actorId: actor.id,
+      deviceId: actor.deviceId,
+      realmId,
+      scopeRef,
+      plaintext: {
+        kind: "ak.typing",
+        payload_sequence: Date.now(),
+        strand_id: strandId,
+        is_typing: false,
+      },
+    });
+    await prepareSignalEnvelope(request, token, basisProbe);
+    const preparedPayload = basisProbe.encrypted_payload as Record<
+      string,
+      unknown
+    >;
+    const preparedKeyRef = preparedPayload.key_ref as Record<string, unknown>;
+    messageContent = {
+      encrypted_content: {
+        version: "1.0",
+        content_type: "application/vnd.arkret.message+json",
+        encryption_context: {
+          epoch: Number(preparedPayload.epoch),
+          group_state_ref: String(preparedKeyRef.group_state_ref),
+        },
+        ciphertext: Buffer.from(`${body} ${Date.now()}`, "utf8").toString(
+          "base64url",
+        ),
+      },
+    };
+  } else {
+    messageContent = {
+      content: { kind: "ak.content.text", body: `${body} ${Date.now()}` },
+    };
+  }
   const envelope = signedEventEnvelope({
     actorId: actor.id,
     realmId,
     kind: "ak.message.create",
-    scopeRef: circleScopeByStrand.has(strandId)
-      ? {
-          kind: "circle",
-          realm_id: realmId,
-          circle_id: circleScopeByStrand.get(strandId),
-        }
-      : undefined,
+    scopeRef,
     payload: {
       strand_id: strandId,
       track_name: "discussion",
-      content: { kind: "ak.content.text", body: `${body} ${Date.now()}` },
+      ...messageContent,
     },
   });
+  await alignSignedEventToActorFrontierApi(request, token, envelope);
   await submitSignedEventApi(request, token, envelope, {
     context: `discussion message ${body}`,
   });

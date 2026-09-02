@@ -1473,6 +1473,28 @@ function Get-PythonExecutable {
     throw "Python is required to patch generated coauth config"
 }
 
+function Get-CargoTargetDirectory {
+    param([Parameter(Mandatory = $true)][string]$RepositoryRoot)
+
+    $metadataOutput = $null
+    Push-Location $RepositoryRoot
+    try {
+        $metadataOutput = & cargo metadata --no-deps --format-version 1
+        if ($LASTEXITCODE -ne 0) {
+            throw "cargo metadata failed for $RepositoryRoot (exit=$LASTEXITCODE)"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+    $metadata = ($metadataOutput -join [Environment]::NewLine) | ConvertFrom-Json
+    $targetDirectory = [string]$metadata.target_directory
+    if ([string]::IsNullOrWhiteSpace($targetDirectory)) {
+        throw "cargo metadata did not return a target directory for $RepositoryRoot"
+    }
+    return $targetDirectory
+}
+
 function Resolve-CoauthBinary {
     param(
         [string]$ExplicitPath,
@@ -1486,8 +1508,9 @@ function Resolve-CoauthBinary {
     if ($env:COAUTH_BIN) {
         $candidates += $env:COAUTH_BIN
     }
-    $candidates += (Join-Path $WorkspaceRoot "coauth\target\debug\coauth.exe")
-    $candidates += (Join-Path $WorkspaceRoot "coauth\target\release\coauth.exe")
+    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "coauth")
+    $candidates += (Join-Path $targetDirectory "debug\coauth.exe")
+    $candidates += (Join-Path $targetDirectory "release\coauth.exe")
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
@@ -1507,8 +1530,9 @@ function Resolve-SolandBinary {
     $candidates = @()
     if ($ExplicitPath) { $candidates += $ExplicitPath }
     if ($env:SOLAND_BIN) { $candidates += $env:SOLAND_BIN }
-    $candidates += (Join-Path $WorkspaceRoot "soland\target\debug\soland.exe")
-    $candidates += (Join-Path $WorkspaceRoot "soland\target\release\soland.exe")
+    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "soland")
+    $candidates += (Join-Path $targetDirectory "debug\soland.exe")
+    $candidates += (Join-Path $targetDirectory "release\soland.exe")
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
@@ -1527,8 +1551,9 @@ function Resolve-TeabayBinary {
     $candidates = @()
     if ($ExplicitPath) { $candidates += $ExplicitPath }
     if ($env:TEABAY_BIN) { $candidates += $env:TEABAY_BIN }
-    $candidates += (Join-Path $WorkspaceRoot "teabay\target\debug\teabay.exe")
-    $candidates += (Join-Path $WorkspaceRoot "teabay\target\release\teabay.exe")
+    $targetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $WorkspaceRoot "teabay")
+    $candidates += (Join-Path $targetDirectory "debug\teabay.exe")
+    $candidates += (Join-Path $targetDirectory "release\teabay.exe")
 
     foreach ($candidate in $candidates) {
         if ($candidate -and (Test-Path $candidate)) {
@@ -2552,6 +2577,10 @@ if (-not $InksonRoot) {
     $InksonRoot = Join-Path $workspaceRoot "inkson"
 }
 $InksonRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InksonRoot)
+$cotestTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $repoRoot
+$solandTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Split-Path -Parent $SutManifest)
+$coauthTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot (Join-Path $workspaceRoot "coauth")
+$inksonTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $InksonRoot
 if (-not $SavfoxRoot) {
     $SavfoxRoot = Join-Path (Split-Path -Parent $workspaceRoot) "savfox-ai\savfox"
 }
@@ -2919,7 +2948,7 @@ $managedServiceFailuresMd = Join-Path $jointDir "managed-service-failures.md"
 # compiles out devtools while retaining the cotest-only session injection feature.
 # Dioxus places every non-release custom profile under its `debug` web output
 # directory even though Cargo itself uses the named `joint-e2e` profile.
-$inksonStaticRoot = Join-Path $InksonRoot "target\dx\inkson\debug\web\public"
+$inksonStaticRoot = Join-Path $inksonTargetDirectory "dx\inkson\debug\web\public"
 $inksonStaticIndex = Join-Path $inksonStaticRoot "index.html"
 $playwrightProjects = Resolve-PlaywrightProjects `
     -RunProfile $RunProfile `
@@ -2949,7 +2978,7 @@ try {
     $preparationTasks = New-Object System.Collections.Generic.List[object]
     $preparationTimings = New-Object System.Collections.Generic.List[object]
     if (-not $SkipBuild -and $willStartDefaultSoland -and $SolandRuntime -eq "process" -and -not $SolandBin -and -not $env:SOLAND_BIN) {
-        $defaultSolandBinary = Join-Path $workspaceRoot "soland\target\debug\soland.exe"
+        $defaultSolandBinary = Join-Path $solandTargetDirectory "debug\soland.exe"
         $freshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultSolandBinary `
             -RepositoryRoots @(
@@ -2980,7 +3009,7 @@ try {
     # full run. Build it once here and let the helper exec the binary directly
     # (`COTEST_WIRE_BIN`), which is what CI already does.
     if (-not $SkipBuild -and -not $env:COTEST_WIRE_BIN) {
-        $cotestWireBinary = Join-Path $repoRoot "target\debug\cotest-wire.exe"
+        $cotestWireBinary = Join-Path $cotestTargetDirectory "debug\cotest-wire.exe"
         $wireFreshness = Get-ArtifactFreshness `
             -ArtifactPath $cotestWireBinary `
             -RepositoryRoots @(
@@ -3029,7 +3058,7 @@ try {
             $preparationTimings.Add([pscustomobject]@{ name = "coauth-frontend"; status = "cache-hit"; duration_seconds = 0; detail = $coauthFrontendFreshness.Detail })
         }
 
-        $defaultCoauthBinary = Join-Path $workspaceRoot "coauth\target\debug\coauth.exe"
+        $defaultCoauthBinary = Join-Path $coauthTargetDirectory "debug\coauth.exe"
         $coauthFreshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultCoauthBinary `
             -RepositoryRoots @(
@@ -3052,7 +3081,8 @@ try {
     }
 
     if (-not $SkipBuild -and $StartSavfox -and -not $SavfoxBin -and -not $env:SAVFOX_BIN) {
-        $defaultSavfoxBinary = Join-Path $SavfoxRoot "target\debug\savfox.exe"
+        $savfoxTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $SavfoxRoot
+        $defaultSavfoxBinary = Join-Path $savfoxTargetDirectory "debug\savfox.exe"
         $savfoxFreshness = Get-ArtifactFreshness `
             -ArtifactPath $defaultSavfoxBinary `
             -RepositoryRoots @(
@@ -3107,7 +3137,7 @@ try {
             # profile. Re-run wasm-bindgen against Cargo's exact joint-e2e
             # artifact so the static bundle cannot silently lose the cotest
             # feature or regain debug-only devtools.
-            $jointE2eWasm = Join-Path $InksonRoot "target\wasm32-unknown-unknown\joint-e2e\inkson.wasm"
+            $jointE2eWasm = Join-Path $inksonTargetDirectory "wasm32-unknown-unknown\joint-e2e\inkson.wasm"
             $inksonWasmOutputDir = Join-Path $inksonStaticRoot "wasm"
             $finalizeInksonWasm = Join-Path $repoRoot "scripts\finalize-inkson-joint-e2e-wasm.ps1"
             $buildCommand = "$buildCommand; if (`$LASTEXITCODE -ne 0) { exit `$LASTEXITCODE }; & $(Quote-PsLiteral $finalizeInksonWasm) -SourceWasm $(Quote-PsLiteral $jointE2eWasm) -OutputDirectory $(Quote-PsLiteral $inksonWasmOutputDir)"
@@ -3558,7 +3588,8 @@ try {
         } elseif ($env:SAVFOX_BIN) {
             $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($env:SAVFOX_BIN)
         } else {
-            Join-Path $SavfoxRoot "target\debug\savfox.exe"
+            $savfoxTargetDirectory = Get-CargoTargetDirectory -RepositoryRoot $SavfoxRoot
+            Join-Path $savfoxTargetDirectory "debug\savfox.exe"
         }
         if (-not (Test-Path -LiteralPath $savfoxBinary -PathType Leaf)) {
             throw "Savfox binary not found: $savfoxBinary"
@@ -4054,7 +4085,7 @@ try {
     # Only when it actually exists: falling back to `cargo run` is slow but
     # correct, whereas exec'ing a missing path fails every canonical assertion.
     if (-not $env:COTEST_WIRE_BIN) {
-        $preparedWireBinary = Join-Path $repoRoot "target\debug\cotest-wire.exe"
+        $preparedWireBinary = Join-Path $cotestTargetDirectory "debug\cotest-wire.exe"
         if (Test-Path -LiteralPath $preparedWireBinary) {
             $env:COTEST_WIRE_BIN = $preparedWireBinary
         }
