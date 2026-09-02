@@ -1373,16 +1373,26 @@ async fn restore_postgres_database(database_url: &str, backup: &PostgresBackup) 
             .arg("--if-exists")
             .arg("--no-owner")
             .arg("--no-privileges")
-            .arg("--exit-on-error")
             .arg("--dbname")
             .arg(&database_url)
             .arg(&backup_path)
             .output()
             .context("run pg_restore for target old-backup fixture")?;
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // A newer pg_dump archive starts with `SET transaction_timeout = 0`.
+        // PostgreSQL 16 does not know that PostgreSQL 17+ session setting, but
+        // omitting the zero-timeout SET does not change any restored data or
+        // schema. Accept only that one cross-version diagnostic; every other
+        // restore error remains fatal, and the scenario subsequently verifies
+        // the restored canonical state through Soland.
+        let transaction_timeout_only = !output.status.success()
+            && stderr.matches("pg_restore: error:").count() == 1
+            && stderr.contains("unrecognized configuration parameter \"transaction_timeout\"")
+            && stderr.contains("errors ignored on restore: 1");
         ensure!(
-            output.status.success(),
+            output.status.success() || transaction_timeout_only,
             "pg_restore failed: {}",
-            String::from_utf8_lossy(&output.stderr)
+            stderr
         );
         Ok(())
     })

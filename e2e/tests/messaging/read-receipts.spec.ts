@@ -9,7 +9,6 @@ import {
   authHeaders,
   createSharedRealmViaApi,
   listReadMarkersViaApi,
-  sendPlaintextMessageViaApi,
 } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import { createTwoUserMessagingRealm } from "../../helpers/messaging-fixtures";
@@ -17,6 +16,7 @@ import {
   accountActorId,
   alignSignedEventToActorFrontierApi,
   canonicalJson,
+  resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
   typedId,
@@ -67,18 +67,62 @@ test.describe("read receipts + privacy", () => {
         encryptionProfile: "mls_rfc9420",
       },
     );
-    const message = await sendPlaintextMessageViaApi(
+    // read-receipts.md §2 defines the position as a message on the discussion
+    // track. The Realm is MLS-only, so prepare its accepted MLS basis and
+    // submit an encrypted Message rather than using plaintext or an unrelated
+    // durable Event merely as a test position.
+    const strandId = await resolveDefaultStrandId(request, bobToken, realmId);
+    const basisProbe = buildSignalEnvelope({
+      actorId: bob.id,
+      deviceId: bob.deviceId,
+      realmId,
+      plaintext: {
+        kind: "ak.typing",
+        payload_sequence: Date.now(),
+        strand_id: strandId,
+        is_typing: false,
+      },
+    });
+    await prepareSignalEnvelope(request, bobToken, basisProbe);
+    const preparedPayload = basisProbe.encrypted_payload as Record<
+      string,
+      unknown
+    >;
+    const preparedKeyRef = preparedPayload.key_ref as Record<string, unknown>;
+    const messageEnvelope = signedEventEnvelope({
+      actorId: bob.id,
+      realmId,
+      kind: "ak.message.create",
+      payload: {
+        strand_id: strandId,
+        track_name: "discussion",
+        encrypted_content: {
+          version: "1.0",
+          content_type: "application/vnd.arkret.message+json",
+          encryption_context: {
+            epoch: Number(preparedPayload.epoch),
+            group_state_ref: String(preparedKeyRef.group_state_ref),
+          },
+          ciphertext: Buffer.from(`receipt-target-${stamp}`, "utf8").toString(
+            "base64url",
+          ),
+        },
+      },
+    });
+    await alignSignedEventToActorFrontierApi(
       request,
       bobToken,
-      realmId,
-      `G2.T7 bob message ${stamp}`,
-      { actorId: bob.id },
+      messageEnvelope,
     );
+    await submitSignedEventApi(request, bobToken, messageEnvelope, {
+      context: "submit MLS receipt target message",
+    });
+    const targetEventId = String(messageEnvelope.event_id);
 
     const envelope = buildReceiptSignal({
       actor: alice,
       realmId,
-      eventId: message.event_id,
+      eventId: targetEventId,
       payloadSequence: 1,
     });
     const { result: receipt, envelopes } = await captureSubmittedSignalEnvelope(
@@ -99,11 +143,11 @@ test.describe("read receipts + privacy", () => {
     expect(receiptBody).not.toHaveProperty("event_id");
 
     const received = decryptedReceiptPayloads(envelopes).find(
-      (payload) => payload.event_id === message.event_id,
+      (payload) => payload.event_id === targetEventId,
     );
     expect(received).toMatchObject({
       actor_id: accountActorId(alice.id),
-      event_id: message.event_id,
+      event_id: targetEventId,
       read_scope: { kind: "realm" },
     });
     const receivedEnvelope = envelopes.find(
@@ -205,19 +249,19 @@ test.describe("read receipts + privacy", () => {
     request,
   }) => {
     const fixture = await createReceiptFixture(request, "highest-visible");
-    await sendPlaintextMessageViaApi(
+    await sendEncryptedReceiptMessage(
       request,
       fixture.bobToken,
+      fixture.bob,
       fixture.realmId,
       `highest visible second ${Date.now()}`,
-      { actorId: fixture.bob.id },
     );
-    const highest = await sendPlaintextMessageViaApi(
+    const highest = await sendEncryptedReceiptMessage(
       request,
       fixture.bobToken,
+      fixture.bob,
       fixture.realmId,
       `highest visible third ${Date.now()}`,
-      { actorId: fixture.bob.id },
     );
     const receipt = buildReceiptSignal({
       actor: fixture.alice,
@@ -279,12 +323,12 @@ test.describe("read receipts + privacy", () => {
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "disabled",
     });
-    const hiddenWindowMessage = await sendPlaintextMessageViaApi(
+    const hiddenWindowMessage = await sendEncryptedReceiptMessage(
       request,
       fixture.bobToken,
+      fixture.bob,
       fixture.realmId,
       `disabled-window ${Date.now()}`,
-      { actorId: fixture.bob.id },
     );
     const blocked = buildReceiptSignal({
       actor: fixture.alice,
@@ -312,12 +356,12 @@ test.describe("read receipts + privacy", () => {
     await setReadReceiptPolicy(request, fixture.bobToken, fixture, {
       disclosure: "required",
     });
-    const freshMessage = await sendPlaintextMessageViaApi(
+    const freshMessage = await sendEncryptedReceiptMessage(
       request,
       fixture.bobToken,
+      fixture.bob,
       fixture.realmId,
       `reenabled-window ${Date.now()}`,
-      { actorId: fixture.bob.id },
     );
     const receipt = buildReceiptSignal({
       actor: fixture.alice,
@@ -490,19 +534,19 @@ test.describe("read receipts + privacy", () => {
     // covering that highest event (members/private receipts never reach bob's
     // durable timeline).
     const fixture = await createReceiptFixture(request, "debounce-merge");
-    const second = await sendPlaintextMessageViaApi(
+    const second = await sendEncryptedReceiptMessage(
       request,
       fixture.bobToken,
+      fixture.bob,
       fixture.realmId,
       `debounce second ${Date.now()}`,
-      { actorId: fixture.bob.id },
     );
-    const highest = await sendPlaintextMessageViaApi(
+    const highest = await sendEncryptedReceiptMessage(
       request,
       fixture.bobToken,
+      fixture.bob,
       fixture.realmId,
       `debounce highest ${Date.now()}`,
-      { actorId: fixture.bob.id },
     );
 
     // Three rapid "scroll" positions for the same realm scope; the cursor must
@@ -625,17 +669,75 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
     title: `${label} receipt ${stamp}`,
     realm: {
       discoverability: "listed",
-      historyAccess: "all_history_for_current_members",
+      historyAccess: "since_join",
+      encryptionProfile: "mls_rfc9420",
     },
   });
-  const message = await sendPlaintextMessageViaApi(
+  const message = await sendEncryptedReceiptMessage(
     request,
     fixture.bobToken,
+    fixture.bob,
     fixture.realmId,
     `${label} message ${stamp}`,
-    { actorId: fixture.bob.id },
   );
   return { ...fixture, message };
+}
+
+async function sendEncryptedReceiptMessage(
+  request: APIRequestContext,
+  token: string,
+  actor: JointUser,
+  realmId: string,
+  body: string,
+) {
+  const strandId = await resolveDefaultStrandId(request, token, realmId);
+  const stamp = Date.now();
+  const basisProbe = buildSignalEnvelope({
+    actorId: actor.id,
+    deviceId: actor.deviceId,
+    realmId,
+    plaintext: {
+      kind: "ak.typing",
+      payload_sequence: stamp,
+      strand_id: strandId,
+      is_typing: false,
+    },
+  });
+  await prepareSignalEnvelope(request, token, basisProbe);
+  const preparedPayload = basisProbe.encrypted_payload as Record<
+    string,
+    unknown
+  >;
+  const preparedKeyRef = preparedPayload.key_ref as Record<string, unknown>;
+  const messageEnvelope = signedEventEnvelope({
+    actorId: actor.id,
+    realmId,
+    kind: "ak.message.create",
+    payload: {
+      strand_id: strandId,
+      track_name: "discussion",
+      encrypted_content: {
+        version: "1.0",
+        content_type: "application/vnd.arkret.message+json",
+        encryption_context: {
+          epoch: Number(preparedPayload.epoch),
+          group_state_ref: String(preparedKeyRef.group_state_ref),
+        },
+        ciphertext: Buffer.from(`${body} ${stamp}`, "utf8").toString(
+          "base64url",
+        ),
+      },
+    },
+  });
+  await alignSignedEventToActorFrontierApi(
+    request,
+    token,
+    messageEnvelope,
+  );
+  await submitSignedEventApi(request, token, messageEnvelope, {
+    context: `encrypted receipt target ${body}`,
+  });
+  return { event_id: String(messageEnvelope.event_id) };
 }
 
 function receiptEnvelope(
