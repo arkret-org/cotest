@@ -413,8 +413,9 @@ pub fn run_file_transfer_overall_digest_rejected_vector() -> Result<()> {
     let key = content_key(&kat)?;
     let ciphertext = decode(&kat.ciphertext_b64u, "ciphertext")?;
     let digest = format!("sha256:{}", hex::encode(Sha256::digest(&ciphertext)));
-    if digest != kat.record.content_digest
-        || kat.record.blob_ref != format!("ak:blob:{digest}")
+    // The content-addressed blob ref is the record's only ciphertext digest
+    // carrier (`conformance/encoding.md` §4.0.1).
+    if kat.record.blob_ref != format!("ak:blob:{digest}")
         || ciphertext.len() as u64 != kat.record.blob_size_bytes
     {
         bail!("file-transfer KAT overall ciphertext digest drifted");
@@ -433,7 +434,6 @@ pub fn run_file_transfer_overall_digest_rejected_vector() -> Result<()> {
     }
 
     let mut wrong_digest_record = kat.record.clone();
-    wrong_digest_record.content_digest = kat.invalid_overall_digest.clone();
     wrong_digest_record.blob_ref = format!("ak:blob:{}", kat.invalid_overall_digest);
     if file_transfer_aead::decrypt(&wrong_digest_record, &ciphertext, &key).is_ok() {
         bail!("file-transfer output was accepted with a mismatched overall digest");

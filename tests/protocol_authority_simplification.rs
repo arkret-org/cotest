@@ -48,7 +48,6 @@ fn producer_event() -> Event {
             verification_method: DidUrl::new("did:web:alice.example#device-1").unwrap(),
             event_digest: digest,
             signer_resolution_evidence_ref: None,
-            signer_resolution_evidence_digest: None,
             created_at: event.created_at,
             domain: None,
             audience: None,
@@ -64,8 +63,8 @@ fn accept(mut event: Event) -> Event {
     let EventProof::Producer(producer) = &event.proofs[0] else {
         unreachable!("fixture starts with a producer proof")
     };
-    let (signer_resolution_evidence_ref, signer_resolution_evidence_digest) =
-        cotest::fixture_signer_evidence_pair("authority-simplification-admission");
+    let signer_resolution_evidence_ref =
+        cotest::fixture_signer_evidence_ref("authority-simplification-admission");
     event.proofs.push(
         StationAdmissionProof {
             kind: StationAdmissionProofKind::StationAdmission,
@@ -75,9 +74,7 @@ fn accept(mut event: Event) -> Event {
             producer_verification_method: producer.verification_method.clone(),
             producer_signing_key_did: DidKey::new("did:key:z6MkhFixtureDeviceKey").unwrap(),
             producer_signer_resolution_evidence_ref: None,
-            producer_signer_resolution_evidence_digest: None,
             signer_resolution_evidence_ref,
-            signer_resolution_evidence_digest,
             accepted_at: event.created_at,
             jws: "header..admission-signature".to_owned(),
         }

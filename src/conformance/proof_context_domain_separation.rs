@@ -40,7 +40,9 @@ use arkret_models_discovery::{
 };
 use arkret_signatures::proof::sign_ed25519_detached_jws;
 use arkret_signatures::{PublicKeyMaterial, verify_ed25519_detached_jws_payload_proof};
-use arkret_wire::{Audience, DidCoreId, DidUrl, Hash, PayloadProof, ProofContextId, proof_kind};
+use arkret_wire::{
+    Audience, DidCoreId, DidUrl, DomainSeparationId, Hash, PayloadProof, ProofContextId, proof_kind,
+};
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 
@@ -50,23 +52,23 @@ use super::load_artifact_json;
 /// `ak.directory_operation_proof.v1`.
 pub const DIRECTORY_PER_FAMILY_PROOF_CONTEXTS: &[(&str, &str)] = &[
     (
-        ProofContextId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
+        DomainSeparationId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
         "directory_list_handles_for_subject_request",
     ),
     (
-        ProofContextId::DIRECTORY_RESOLVE_AGENT_SELECTOR_REQUEST_PROOF_V1,
+        DomainSeparationId::DIRECTORY_RESOLVE_AGENT_SELECTOR_REQUEST_PROOF_V1,
         "directory_resolve_agent_selector_request",
     ),
     (
-        ProofContextId::DIRECTORY_RESOLVE_HANDLE_REQUEST_PROOF_V1,
+        DomainSeparationId::DIRECTORY_RESOLVE_HANDLE_REQUEST_PROOF_V1,
         "directory_resolve_handle_request",
     ),
     (
-        ProofContextId::DIRECTORY_RESOLVE_ORGANIZATION_REQUEST_PROOF_V1,
+        DomainSeparationId::DIRECTORY_RESOLVE_ORGANIZATION_REQUEST_PROOF_V1,
         "directory_resolve_organization_request",
     ),
     (
-        ProofContextId::DIRECTORY_RESOLVE_TARGET_REQUEST_PROOF_V1,
+        DomainSeparationId::DIRECTORY_RESOLVE_TARGET_REQUEST_PROOF_V1,
         "directory_resolve_target_request",
     ),
 ];
@@ -446,25 +448,25 @@ fn directory_families() -> Result<Vec<FamilyUnderTest>> {
     Ok(vec![
         family(
             "directory_list_handles_for_subject_request",
-            ProofContextId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
+            DomainSeparationId::DIRECTORY_LIST_HANDLES_FOR_SUBJECT_REQUEST_PROOF_V1,
             list_handles.payload_digest()?,
             move |proof| Ok(list_handles.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),
         family(
             "directory_resolve_agent_selector_request",
-            ProofContextId::DIRECTORY_RESOLVE_AGENT_SELECTOR_REQUEST_PROOF_V1,
+            DomainSeparationId::DIRECTORY_RESOLVE_AGENT_SELECTOR_REQUEST_PROOF_V1,
             agent_selector.payload_digest()?,
             move |proof| Ok(agent_selector.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),
         family(
             "directory_resolve_handle_request",
-            ProofContextId::DIRECTORY_RESOLVE_HANDLE_REQUEST_PROOF_V1,
+            DomainSeparationId::DIRECTORY_RESOLVE_HANDLE_REQUEST_PROOF_V1,
             resolve_handle.payload_digest()?,
             move |proof| Ok(resolve_handle.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),
         family(
             "directory_resolve_organization_request",
-            ProofContextId::DIRECTORY_RESOLVE_ORGANIZATION_REQUEST_PROOF_V1,
+            DomainSeparationId::DIRECTORY_RESOLVE_ORGANIZATION_REQUEST_PROOF_V1,
             resolve_organization.payload_digest()?,
             move |proof| {
                 Ok(resolve_organization.proof_binding_bytes(&directory_request_proof(proof)?)?)
@@ -472,7 +474,7 @@ fn directory_families() -> Result<Vec<FamilyUnderTest>> {
         ),
         family(
             "directory_resolve_target_request",
-            ProofContextId::DIRECTORY_RESOLVE_TARGET_REQUEST_PROOF_V1,
+            DomainSeparationId::DIRECTORY_RESOLVE_TARGET_REQUEST_PROOF_V1,
             resolve_target.payload_digest()?,
             move |proof| Ok(resolve_target.proof_binding_bytes(&directory_request_proof(proof)?)?),
         ),

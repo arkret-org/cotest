@@ -223,9 +223,10 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         recording_id: recording_id.clone(),
         recording_start_event_id: start_event_id(),
         artifact_kind: CallRecordingArtifactKind::Recording,
-        blob_ref: BlobRef::new("ak:blob:019a7360-0000-7000-8000-000000000004").unwrap(),
-        content_digest: hash('a'),
-        ciphertext_digest: hash('b'),
+        // The content-addressed blob ref is the only ciphertext digest carrier
+        // the artifact has (`conformance/encoding.md` §4.0.1); there is no
+        // sibling content_digest or ciphertext_digest beside it.
+        blob_ref: BlobRef::new(format!("ak:blob:{}", hash('a'))).unwrap(),
         size_bytes: 1_048_576,
         duration_ms: 42_000,
         media_type: "video/mp4".to_owned(),
@@ -241,7 +242,6 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
                 media_service_id: DidCoreId::new("ak:did_core:web:recorder.example").unwrap(),
                 recording_start_event_id: start_event_id(),
             },
-            ciphertext_digest: hash('b'),
         },
         retention_policy_id: Some(
             PolicyId::new("ak:policy:019a7360-0000-7000-8000-000000000005").unwrap(),
@@ -286,7 +286,13 @@ fn ready_call_state_payload(artifact: Option<CallRecordingArtifact>) -> CallStat
             from: CallRecordingState::Stopped,
             to: CallRecordingState::Ready,
             result: Some(CallStatePayloadRecordingResult {
-                content_digest: artifact_ref.map(|artifact| artifact.content_digest.clone()),
+                content_digest: artifact_ref.and_then(|artifact| {
+                    artifact
+                        .blob_ref
+                        .as_str()
+                        .strip_prefix("ak:blob:")
+                        .and_then(|digest| Hash::new(digest.to_owned()).ok())
+                }),
                 duration_ms: artifact_ref.map(|artifact| artifact.duration_ms),
                 media_type: artifact_ref.map(|artifact| artifact.media_type.clone()),
                 retention_policy_id: artifact_ref

@@ -1217,7 +1217,6 @@ fn event_proof(input: Value, digest_mode: EventDigestMode) -> Result<Value> {
         verification_method: input.verification_method,
         event_digest,
         signer_resolution_evidence_ref: None,
-        signer_resolution_evidence_digest: None,
         created_at,
         domain: None,
         audience: None,

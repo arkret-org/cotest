@@ -5,8 +5,8 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret::{
-    EncryptedAttachmentGroupStateRef, EncryptedAttachmentKeyAlgorithm, EncryptedAttachmentKeyRef,
-    EventId, Hash,
+    BlobRef, EncryptedAttachmentGroupStateRef, EncryptedAttachmentKeyAlgorithm,
+    EncryptedAttachmentKeyRef, EventId, Hash,
 };
 use arkret_crypto::blob_aead::{
     ALG_STREAM_XCHACHA, SCHEME_STREAM, StreamDecryptor, StreamEncryptParams, decrypt_stream,
@@ -206,9 +206,13 @@ pub fn run_stream_aead_roundtrip_vector() -> Result<()> {
         bail!("incremental stream decrypt did not recover the original plaintext");
     }
 
+    // The content-addressed blob ref is the envelope's only ciphertext digest
+    // carrier (`conformance/encoding.md` §4.0.1), so a mismatched digest is a
+    // mismatched ref.
     let mut digest_mismatch_stream = stream.clone();
-    digest_mismatch_stream.ciphertext_digest =
-        Hash::new("sha256:0000000000000000000000000000000000000000000000000000000000000000")?;
+    digest_mismatch_stream.blob_ref = BlobRef::new(
+        "ak:blob:sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    )?;
     let digest_mismatch = EncryptedAttachment::Stream(digest_mismatch_stream);
     expect_reason(
         decrypt_stream(&ciphertext, &digest_mismatch, &key, &winning_epoch).unwrap_err(),

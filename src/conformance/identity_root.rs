@@ -529,15 +529,13 @@ fn with_proof(mut event: Event, verification_method: &arkret_wire::DidUrl) -> Re
         .refresh_content_bound_identity_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?;
     let digest =
         Hash::new(event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?)?;
-    let (signer_evidence_ref, signer_evidence_digest) =
-        crate::fixture_signer_evidence_pair(verification_method.as_str());
+    let signer_evidence_ref = crate::fixture_signer_evidence_ref(verification_method.as_str());
     event.proofs = vec![
         ProducerEventProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
             verification_method: verification_method.clone(),
             event_digest: digest,
             signer_resolution_evidence_ref: Some(signer_evidence_ref),
-            signer_resolution_evidence_digest: Some(signer_evidence_digest),
             created_at: event.created_at,
             domain: None,
             audience: Some(Audience::Single(event.realm_id.to_string())),

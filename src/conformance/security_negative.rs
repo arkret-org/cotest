@@ -394,14 +394,13 @@ mod tests {
         let canonical = canonical_event_payload_bytes(event).unwrap();
         let actor_id: arkret_wire::ActorId =
             serde_json::from_value(event["actor_id"].clone()).unwrap();
-        let (signer_evidence_ref, signer_evidence_digest) =
-            crate::fixture_signer_evidence_pair(actor_id.signing_principal_id().as_str());
+        let signer_evidence_ref =
+            crate::fixture_signer_evidence_ref(actor_id.signing_principal_id().as_str());
         let mut proof = ProducerEventProof {
             kind: proof_kind::DETACHED_JWS.to_owned(),
             verification_method: crate::fixture_did_url("did:web:alice.example#device"),
             event_digest: Hash::new(sha256_prefixed(&canonical)).unwrap(),
             signer_resolution_evidence_ref: Some(signer_evidence_ref),
-            signer_resolution_evidence_digest: Some(signer_evidence_digest),
             created_at: Utc.with_ymd_and_hms(2026, 5, 2, 0, 0, 0).unwrap(),
             domain: None,
             audience: None,

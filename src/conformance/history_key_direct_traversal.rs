@@ -1529,7 +1529,6 @@ fn attach_replay_kat_proof(event: &mut Event, verification_method: &DidUrl) -> R
             "ak:signer_evidence:{}",
             signer_evidence_digest.as_str()
         ))?),
-        signer_resolution_evidence_digest: Some(signer_evidence_digest),
         created_at: event.created_at,
         domain: None,
         audience: None,

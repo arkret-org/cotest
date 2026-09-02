@@ -754,7 +754,6 @@ fn operation_with_producer(
                     .expect("fixture verification method is valid"),
                 event_digest,
                 signer_resolution_evidence_ref: None,
-                signer_resolution_evidence_digest: None,
                 created_at,
                 domain: None,
                 audience: None,

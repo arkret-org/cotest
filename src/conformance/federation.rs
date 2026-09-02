@@ -374,7 +374,6 @@ fn validate_agent_event_admission_receipt_handoff_case(case: &super::NamedCase) 
             "agent_id",
             "verification_method",
             "producer_signer_resolution_evidence_ref",
-            "producer_signer_resolution_evidence_digest",
             "receiver_id"
         ]
     });

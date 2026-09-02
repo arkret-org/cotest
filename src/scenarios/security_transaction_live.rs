@@ -194,8 +194,7 @@ fn event_submission(
     });
     let event_digest =
         Hash::new(event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?)?;
-    let (signer_evidence_ref, signer_evidence_digest) =
-        crate::fixture_signer_evidence_pair(principal.as_str());
+    let signer_evidence_ref = crate::fixture_signer_evidence_ref(principal.as_str());
     event.proofs.push(
         arkret_wire::ProducerEventProof {
             kind: "DataIntegrityProof".to_owned(),
@@ -207,7 +206,6 @@ fn event_submission(
             ),
             event_digest,
             signer_resolution_evidence_ref: Some(signer_evidence_ref),
-            signer_resolution_evidence_digest: Some(signer_evidence_digest),
             created_at: now,
             domain: None,
             audience: None,

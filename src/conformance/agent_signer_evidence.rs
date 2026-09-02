@@ -157,7 +157,6 @@ struct ExecutableEvidence {
     realm_id: RealmId,
     producer_accepted_at: DateTime<Utc>,
     producer_signer_resolution_evidence_ref: SignerEvidenceRef,
-    producer_signer_resolution_evidence_digest: Hash,
     now: DateTime<Utc>,
 }
 
@@ -802,8 +801,6 @@ fn historical_outcome_with(
             producer_accepted_at: fixture.producer_accepted_at,
             producer_signer_resolution_evidence_ref: &fixture
                 .producer_signer_resolution_evidence_ref,
-            producer_signer_resolution_evidence_digest: &fixture
-                .producer_signer_resolution_evidence_digest,
             receiver_id,
             resolve_receiver_historical_key: &resolve,
         },
@@ -1168,11 +1165,10 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
 
     let event_id = event_id(3)?;
     let producer_accepted_at = now - Duration::seconds(1);
-    let producer_signer_resolution_evidence_digest = hash_byte(0x71)?;
-    let producer_signer_resolution_evidence_ref = SignerEvidenceRef::new(format!(
-        "ak:signer_evidence:{}",
-        producer_signer_resolution_evidence_digest
-    ))?;
+    // The content-addressed ref is the sole carrier of this digest; the
+    // receipt no longer mirrors it (`conformance/encoding.md` §4.0.1).
+    let producer_signer_resolution_evidence_ref =
+        SignerEvidenceRef::new(format!("ak:signer_evidence:{}", hash_byte(0x71)?))?;
     let mut receipt = AgentEventAdmissionReceipt {
         schema: nes(SchemaId::AGENT_SIGNER_ADMISSION_RECEIPT_V1)?,
         event_id: event_id.clone(),
@@ -1182,8 +1178,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         agent_id: signer_id.clone(),
         verification_method: verification_method.clone(),
         producer_signer_resolution_evidence_ref: producer_signer_resolution_evidence_ref.clone(),
-        producer_signer_resolution_evidence_digest: producer_signer_resolution_evidence_digest
-            .clone(),
         receiver_id: receiver_id.clone(),
         proof: pending_proof()?,
     };
@@ -1236,7 +1230,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         realm_id,
         producer_accepted_at,
         producer_signer_resolution_evidence_ref,
-        producer_signer_resolution_evidence_digest,
         now,
     })
 }

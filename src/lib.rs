@@ -273,16 +273,10 @@ pub fn fixture_single_signer_notary(actor_id: arkret_wire::DidCoreId) -> arkret_
 /// Build a deterministic content-addressed signer-evidence reference pair for
 /// Event fixtures that do not carry a Station admission proof.
 #[track_caller]
-pub fn fixture_signer_evidence_pair(
-    label: impl AsRef<[u8]>,
-) -> (arkret_wire::SignerEvidenceRef, arkret_wire::Hash) {
+pub fn fixture_signer_evidence_ref(label: impl AsRef<[u8]>) -> arkret_wire::SignerEvidenceRef {
     use sha2::{Digest, Sha256};
 
     let digest_hex = hex::encode(Sha256::digest(label.as_ref()));
-    let reference =
-        arkret_wire::SignerEvidenceRef::new(format!("ak:signer_evidence:sha256:{digest_hex}"))
-            .unwrap_or_else(|error| panic!("fixture signer-evidence ref is invalid: {error}"));
-    let digest = arkret_wire::Hash::new(format!("sha256:{digest_hex}"))
-        .unwrap_or_else(|error| panic!("fixture signer-evidence digest is invalid: {error}"));
-    (reference, digest)
+    arkret_wire::SignerEvidenceRef::new(format!("ak:signer_evidence:sha256:{digest_hex}"))
+        .unwrap_or_else(|error| panic!("fixture signer-evidence ref is invalid: {error}"))
 }
