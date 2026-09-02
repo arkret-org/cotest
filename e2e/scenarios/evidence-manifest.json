@@ -2021,31 +2021,6 @@
       ]
     },
     {
-      "scenario_key": "sync/sovereign-deployment",
-      "suite_kind": "joint-e2e",
-      "realism_level": "server-contract",
-      "evidence_class": "server-contract",
-      "real_services": [
-        "soland"
-      ],
-      "mocks": [],
-      "identity_establishment": [
-        "session_injection"
-      ],
-      "protocol_object_producers": [
-        "cotest_wire_oracle",
-        "raw_http_fixture"
-      ],
-      "declared_test_bypasses": [
-        "raw_http_fixture_or_oracle",
-        "session_injection"
-      ],
-      "claims_excluded": [
-        "registration_login_authorization",
-        "ui_driven_business_flow_for_raw_http_steps"
-      ]
-    },
-    {
       "scenario_key": "sync/transport-negotiation",
       "suite_kind": "joint-e2e",
       "realism_level": "server-contract",

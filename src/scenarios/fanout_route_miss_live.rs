@@ -1,5 +1,7 @@
 //! Two-Soland live closure for durable Realm fanout route misses.
 
+use std::path::PathBuf;
+use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
@@ -55,7 +57,7 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             (database.connect_url.clone(), source_ephemeral)
         }
     };
-    let (target_database_url, _target_ephemeral) = match std::env::var(
+    let (target_database_url, target_ephemeral) = match std::env::var(
         "COTEST_FANOUT_TARGET_DATABASE_URL",
     ) {
         Ok(url) if !url.trim().is_empty() => (url, None),
@@ -75,6 +77,8 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             (database.connect_url.clone(), target_ephemeral)
         }
     };
+    let target_database_is_harness_owned = target_ephemeral.is_some()
+        || std::env::var("COTEST_FANOUT_TARGET_DATABASE_EPHEMERAL").as_deref() == Ok("1");
     let account_authority_id = harness_account_authority_id().to_string();
     let node_envs = vec![
         vec![
@@ -297,6 +301,32 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
     .await?;
     assert_cancelled_intent_unchanged(&cancelled_intent, &cancelled_intent)?;
 
+    // Bring the target back while its membership is revoked. Its retained
+    // database is an older authorized view and still knows the Realm, so the
+    // immediate frontier pass attempts a real service-signed peer read. The
+    // source must re-evaluate current authorization, return the protocol's
+    // existence-concealing `not_found`, refuse disclosure, and
+    // leave the Event that was accepted after the target went offline absent.
+    group.server_mut(1).start_external_process().await?;
+    wait_for_frontier_exchange_error(
+        &target_database_url,
+        &realm_id,
+        group.server(0).service_id(),
+        "http_status:404",
+    )
+    .await?;
+    let revoked_bob = group.server(1).demo_client(&bob_did, BOB_DEVICE).await?;
+    let revoked_read =
+        resolve_events_allow_missing(&revoked_bob, vec![second_event_id.clone()]).await?;
+    ensure!(
+        revoked_read.events.is_empty()
+            && revoked_read.missing == vec![second_event_id.to_string()]
+            && revoked_read.unauthorized.is_empty(),
+        "revoked target learned an Event through stale federation authority: {revoked_read:?}"
+    );
+    eprintln!("live frontier matrix: permission revocation fail-closed passed");
+    group.server_mut(1).stop_external_process().await?;
+
     let bob_rejoin = member_payload(
         &realm_id,
         &bob_did,
@@ -451,6 +481,255 @@ pub async fn run_fanout_route_miss_live() -> Result<()> {
             && frontier_exchange["last_success_at"].is_number(),
         "peer-relative frontier exchange did not settle as success/reset: {frontier_exchange}"
     );
+    eprintln!("live frontier matrix: peer-relative visibility passed");
+
+    // The remaining delivery/recovery matrix uses a Realm that deliberately
+    // discloses plaintext to both Stations. Keep it separate from the
+    // visibility-scope case above so a legitimate scope difference cannot
+    // accidentally turn a recovery assertion into a no-op.
+    let baseline_bootstrap = alice
+        .create_realm_bootstrap_with(json!({
+            "title": "Frontier delivery baseline",
+            "summary": "Frontier delivery baseline",
+            "public": false,
+            "plaintext_visible_services": [
+                group.server(0).service_id(),
+                group.server(1).service_id()
+            ]
+        }))
+        .await?;
+    let baseline_realm_id = baseline_bootstrap["realm_id"]
+        .as_str()
+        .context("baseline bootstrap realm_id")?
+        .to_owned();
+    let baseline_bootstrap_outcome: EventsSubmitOutcome =
+        serde_json::from_value(baseline_bootstrap["event_response"].clone())?;
+    let baseline_bootstrap_events =
+        resolve_events(&alice, baseline_bootstrap_outcome.accepted.clone()).await?;
+    install_fixture_events(
+        group.server(1),
+        &baseline_bootstrap_events,
+        &baseline_bootstrap_outcome.control_proposal_acks,
+    )
+    .await?;
+    wait_for_bootstrap_seal(&alice, &baseline_realm_id).await?;
+    let baseline_join_id = submit_and_settle_member_transition(
+        &alice,
+        &baseline_realm_id,
+        member_payload(
+            &baseline_realm_id,
+            &bob_did,
+            group.server(1).service_id().clone(),
+            MembershipPayloadState::Join,
+        )?,
+    )
+    .await?;
+    wait_for_target_state(
+        &alice,
+        &baseline_join_id,
+        EventDeliveryTargetState::Delivered,
+    )
+    .await?;
+    let mut bob = group.server(1).demo_client(&bob_did, BOB_DEVICE).await?;
+    wait_for_resolved_event(&bob, &alice, &baseline_join_id).await?;
+    let baseline_strand_id = alice.create_default_strand(&baseline_realm_id).await?;
+
+    // Outcome-loss duplicate: first complete a real delivery, then stop the
+    // source and roll back only its terminal outbox bookkeeping. The target
+    // retains the committed Event. On restart the byte-identical request must
+    // receive a top-level duplicate outcome, and only that exact per-item
+    // confirmation may complete the source intent again.
+    let duplicate_submit = alice
+        .send_message(
+            &baseline_realm_id,
+            &baseline_strand_id,
+            "outcome loss duplicate",
+        )
+        .await?;
+    let duplicate_event_id = crate::harness::submitted_event_id(&duplicate_submit)?;
+    wait_for_target_state(
+        &alice,
+        &duplicate_event_id,
+        EventDeliveryTargetState::Delivered,
+    )
+    .await?;
+    wait_for_resolved_event(&bob, &alice, &duplicate_event_id).await?;
+    let duplicate_delivered = durable_fanout_intent(
+        &source_database_url,
+        &baseline_realm_id,
+        &duplicate_event_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    ensure!(duplicate_delivered["state"] == "delivered");
+    group.server_mut(0).stop_external_process().await?;
+    rewind_delivered_fanout_intent_for_outcome_loss(
+        &source_database_url,
+        &baseline_realm_id,
+        &duplicate_event_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    group.server_mut(0).start_external_process().await?;
+    wait_for_target_state(
+        &alice,
+        &duplicate_event_id,
+        EventDeliveryTargetState::Delivered,
+    )
+    .await?;
+    let duplicate_recovered = durable_fanout_intent(
+        &source_database_url,
+        &baseline_realm_id,
+        &duplicate_event_id,
+        group.server(1).service_id(),
+    )
+    .await?;
+    assert_outcome_loss_duplicate(
+        &duplicate_delivered,
+        &duplicate_recovered,
+        &duplicate_event_id,
+    )?;
+    ensure!(
+        canonical_event_count(&target_database_url, &duplicate_event_id).await? == 1,
+        "duplicate retry created more than one target canonical Event"
+    );
+    eprintln!("live frontier matrix: outcome-loss duplicate passed");
+
+    // Destination old-backup recovery: snapshot the harness-owned target
+    // database, deliver a new Event to both PostgreSQL stores, then restore the
+    // target to the older snapshot while the source intent remains delivered.
+    // Restarting the unchanged Station identity must permit authorized
+    // frontier/resolve backfill; historical delivery state is not retention.
+    let backup = if target_database_is_harness_owned {
+        group.server_mut(1).stop_external_process().await?;
+        let backup = dump_postgres_database(&target_database_url).await?;
+        group.server_mut(1).start_external_process().await?;
+        Some(backup)
+    } else {
+        ensure!(
+            std::env::var("COTEST_REQUIRE_LIVE").as_deref() != Ok("1"),
+            "required live old-backup recovery needs a harness-owned target PostgreSQL"
+        );
+        eprintln!(
+            "skipping destructive old-backup restore on caller-owned COTEST_FANOUT_TARGET_DATABASE_URL"
+        );
+        None
+    };
+    if let Some(backup) = backup {
+        bob = group.server(1).demo_client(&bob_did, BOB_DEVICE).await?;
+        let backup_submit = alice
+            .send_message(
+                &baseline_realm_id,
+                &baseline_strand_id,
+                "destination old backup backfill",
+            )
+            .await?;
+        let backup_event_id = crate::harness::submitted_event_id(&backup_submit)?;
+        wait_for_target_state(
+            &alice,
+            &backup_event_id,
+            EventDeliveryTargetState::Delivered,
+        )
+        .await?;
+        wait_for_resolved_event(&bob, &alice, &backup_event_id).await?;
+        let source_before_restore = durable_fanout_intent(
+            &source_database_url,
+            &baseline_realm_id,
+            &backup_event_id,
+            group.server(1).service_id(),
+        )
+        .await?;
+        group.server_mut(1).stop_external_process().await?;
+        restore_postgres_database(&target_database_url, &backup).await?;
+        ensure!(
+            canonical_event_count(&target_database_url, &backup_event_id).await? == 0,
+            "restored target backup unexpectedly retained the later Event"
+        );
+        group.server_mut(1).start_external_process().await?;
+        bob = group.server(1).demo_client(&bob_did, BOB_DEVICE).await?;
+        wait_for_resolved_event(&bob, &alice, &backup_event_id).await?;
+        ensure!(
+            canonical_event_count(&target_database_url, &backup_event_id).await? == 1,
+            "old-backup frontier recovery did not restore exactly one canonical Event"
+        );
+        let source_after_restore = durable_fanout_intent(
+            &source_database_url,
+            &baseline_realm_id,
+            &backup_event_id,
+            group.server(1).service_id(),
+        )
+        .await?;
+        ensure!(
+            source_before_restore == source_after_restore
+                && source_after_restore["state"] == "delivered",
+            "destination restore reopened or mutated the source delivery intent"
+        );
+        eprintln!("live frontier matrix: destination old-backup recovery passed");
+    }
+
+    // Local page-budget exhaustion: install a valid 405-Event actor chain only
+    // on the source while the target is stopped. Soland peers clamp scan pages
+    // to 100 rows, so four pages leave a continuation point. A durable
+    // checkpoint with a cursor proves the scan hit its local page bound; the
+    // exchange must remain healthy with zero failures and no peer blame.
+    // Dependency closure may still admit Events outside those scan pages, so
+    // Event presence is deliberately not used as a proxy for scan work.
+    group.server_mut(1).stop_external_process().await?;
+    clear_frontier_checkpoint(
+        &target_database_url,
+        &baseline_realm_id,
+        group.server(0).service_id(),
+    )
+    .await?;
+    let budget_event_ids = install_frontier_budget_events(
+        &alice,
+        group.server(0),
+        &source_database_url,
+        &baseline_realm_id,
+        &baseline_strand_id,
+        405,
+    )
+    .await?;
+    mark_fanout_intent_delivered_without_transport(
+        &source_database_url,
+        &baseline_realm_id,
+        budget_event_ids.first().context("budget Event head")?,
+        group.server(1).service_id(),
+    )
+    .await?;
+    ensure!(
+        canonical_event_count(
+            &target_database_url,
+            budget_event_ids.last().context("budget Event tail")?,
+        )
+        .await?
+            == 0,
+        "target old view already contained the budget tail Event"
+    );
+    group.server_mut(1).start_external_process().await?;
+    let checkpoint = wait_for_frontier_checkpoint(
+        &target_database_url,
+        &baseline_realm_id,
+        group.server(0).service_id(),
+    )
+    .await?;
+    ensure!(
+        checkpoint["cursor"].is_string(),
+        "bounded frontier pass did not persist a continuation cursor: {checkpoint}"
+    );
+    let budget_after = frontier_exchange_snapshot(
+        &target_database_url,
+        &baseline_realm_id,
+        group.server(0).service_id(),
+    )
+    .await?;
+    ensure!(
+        budget_after["status"] == "healthy"
+            && budget_after["consecutive_failures"] == 0
+            && budget_after["last_error"].is_null(),
+        "local frontier page budget was charged to the peer: {budget_after}"
+    );
+    eprintln!("live frontier matrix: local budget exhaustion without peer blame passed");
     eprintln!(
         "fanout cancellation verified: old intent {} stayed cancelled with attempts={}, \
          semantic_attempts={}, completed_at={} and byte-identical frozen payload; \
@@ -823,6 +1102,394 @@ async fn wait_for_frontier_exchange_success(
         }
     })
     .await?
+}
+
+async fn wait_for_frontier_exchange_error(
+    database_url: &str,
+    realm_id: &str,
+    peer_id: &DidCoreId,
+    expected_error: &str,
+) -> Result<serde_json::Value> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let peer_id = peer_id.to_string();
+    let expected_error = expected_error.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let deadline = std::time::Instant::now() + Duration::from_secs(90);
+        loop {
+            if let Some(row) = client.query_opt(
+                "SELECT status, consecutive_failures, last_success_at, last_frontier_root, last_error \
+                 FROM federation_frontier_exchange WHERE realm_id = $1 AND peer_id = $2",
+                &[&realm_id, &peer_id],
+            )? {
+                let snapshot = json!({
+                    "status": row.get::<_, String>(0),
+                    "consecutive_failures": row.get::<_, i32>(1),
+                    "last_success_at": row.get::<_, Option<i64>>(2),
+                    "last_frontier_root": row.get::<_, Option<String>>(3),
+                    "last_error": row.get::<_, Option<String>>(4),
+                });
+                if snapshot["last_error"].as_str() == Some(expected_error.as_str())
+                    && snapshot["consecutive_failures"].as_i64().unwrap_or_default() >= 1
+                {
+                    return Ok(snapshot);
+                }
+                if std::time::Instant::now() >= deadline {
+                    bail!(
+                        "frontier exchange did not expose {expected_error} before deadline: {snapshot}"
+                    );
+                }
+            } else if std::time::Instant::now() >= deadline {
+                bail!(
+                    "frontier exchange row was not created for revoked Realm {realm_id} and peer {peer_id}"
+                );
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    })
+    .await?
+}
+
+async fn frontier_exchange_snapshot(
+    database_url: &str,
+    realm_id: &str,
+    peer_id: &DidCoreId,
+) -> Result<serde_json::Value> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let peer_id = peer_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let row = client
+            .query_opt(
+                "SELECT status, consecutive_failures, last_success_at, last_frontier_root, last_error \
+                 FROM federation_frontier_exchange WHERE realm_id = $1 AND peer_id = $2",
+                &[&realm_id, &peer_id],
+            )?
+            .context("frontier exchange baseline row")?;
+        Ok(json!({
+            "status": row.get::<_, String>(0),
+            "consecutive_failures": row.get::<_, i32>(1),
+            "last_success_at": row.get::<_, Option<i64>>(2),
+            "last_frontier_root": row.get::<_, Option<String>>(3),
+            "last_error": row.get::<_, Option<String>>(4),
+        }))
+    })
+    .await?
+}
+
+async fn clear_frontier_checkpoint(
+    database_url: &str,
+    realm_id: &str,
+    peer_id: &DidCoreId,
+) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let peer_id = peer_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        client.execute(
+            "DELETE FROM federation_frontier_reduction_checkpoint \
+             WHERE realm_id = $1 AND peer_id = $2",
+            &[&realm_id, &peer_id],
+        )?;
+        Ok(())
+    })
+    .await?
+}
+
+async fn wait_for_frontier_checkpoint(
+    database_url: &str,
+    realm_id: &str,
+    peer_id: &DidCoreId,
+) -> Result<serde_json::Value> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let peer_id = peer_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<serde_json::Value> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        // Four peer pages can contain 400 signed Events. On debug Windows
+        // builds, receiver-side signature, dependency, and admission checks
+        // can legitimately exceed two minutes. The checkpoint must only
+        // become durable after that whole chunk commits, so keep the live
+        // harness patient instead of weakening the commit-before-cursor rule.
+        let deadline = std::time::Instant::now() + Duration::from_secs(600);
+        loop {
+            if let Some(row) = client.query_opt(
+                "SELECT remote_snapshot_digest, actor_set_digest, actor_id, cursor, updated_at \
+                 FROM federation_frontier_reduction_checkpoint \
+                 WHERE realm_id = $1 AND peer_id = $2",
+                &[&realm_id, &peer_id],
+            )? {
+                return Ok(json!({
+                    "remote_snapshot_digest": row.get::<_, String>(0),
+                    "actor_set_digest": row.get::<_, String>(1),
+                    "actor_id": row.get::<_, String>(2),
+                    "cursor": row.get::<_, Option<String>>(3),
+                    "updated_at": row.get::<_, i64>(4),
+                }));
+            }
+            if std::time::Instant::now() >= deadline {
+                bail!(
+                    "bounded frontier pass did not persist a checkpoint for Realm {realm_id} and peer {peer_id}"
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    })
+    .await?
+}
+
+async fn rewind_delivered_fanout_intent_for_outcome_loss(
+    database_url: &str,
+    realm_id: &str,
+    source_event_id: &EventId,
+    peer_id: &DidCoreId,
+) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let realm_id = realm_id.to_owned();
+    let source_event_id = source_event_id.to_string();
+    let peer_id = peer_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let next_attempt_at = chrono::Utc::now().timestamp();
+        let updated = client.execute(
+            "UPDATE federation_outbox SET state = 'pending', leased_from_state = NULL, \
+             next_attempt_at = $4, last_http_status = NULL, last_error_code = NULL, \
+             last_response_excerpt = NULL, lease_owner = NULL, lease_token = NULL, \
+             lease_expires_at = NULL, policy_version = NULL, completed_at = NULL \
+             WHERE peer_id = $1 AND realm_fanout->>'realm_id' = $2 \
+             AND (realm_fanout->'source_event_ids') ? $3 AND state = 'delivered'",
+            &[&peer_id, &realm_id, &source_event_id, &next_attempt_at],
+        )?;
+        ensure!(
+            updated == 1,
+            "expected one delivered intent for outcome-loss rewind, updated {updated}"
+        );
+        Ok(())
+    })
+    .await
+    .context("join outcome-loss outbox rewind")?
+}
+
+fn assert_outcome_loss_duplicate(
+    before: &serde_json::Value,
+    after: &serde_json::Value,
+    event_id: &EventId,
+) -> Result<()> {
+    for field in [
+        "id",
+        "peer_id",
+        "peer_url",
+        "endpoint",
+        "idempotency_key",
+        "payload_json",
+        "realm_fanout",
+        "created_at",
+    ] {
+        ensure!(
+            before[field] == after[field],
+            "outcome-loss retry changed frozen outbox field {field}"
+        );
+    }
+    ensure!(
+        after["state"] == "delivered"
+            && after["completed_at"].is_i64()
+            && after["attempts"].as_i64().unwrap_or_default()
+                > before["attempts"].as_i64().unwrap_or_default(),
+        "outcome-loss retry did not complete through a new attempt: {after}"
+    );
+    let response: EventsSubmitOutcome = serde_json::from_str(
+        after["last_response_excerpt"]
+            .as_str()
+            .context("duplicate retry response excerpt")?,
+    )?;
+    ensure!(
+        response.duplicate.contains(event_id)
+            && !response.accepted.contains(event_id)
+            && !response.quarantine.contains(event_id)
+            && !response
+                .rejections
+                .iter()
+                .any(|rejection| rejection.id == event_id.as_str()),
+        "outcome-loss retry was not completed by a top-level duplicate outcome for the exact Event: {response:?}"
+    );
+    Ok(())
+}
+
+async fn canonical_event_count(database_url: &str, event_id: &EventId) -> Result<i64> {
+    let database_url = database_url.to_owned();
+    let event_id = event_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<i64> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let row = client.query_one(
+            "SELECT COUNT(*)::bigint FROM canonical_events WHERE envelope->>'event_id' = $1",
+            &[&event_id],
+        )?;
+        Ok(row.get(0))
+    })
+    .await?
+}
+
+struct PostgresBackup {
+    _directory: tempfile::TempDir,
+    path: PathBuf,
+}
+
+async fn dump_postgres_database(database_url: &str) -> Result<PostgresBackup> {
+    let database_url = database_url.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<PostgresBackup> {
+        let directory = tempfile::tempdir().context("create PostgreSQL backup directory")?;
+        let path = directory.path().join("target-old-backup.dump");
+        let output = Command::new("pg_dump")
+            .arg("--format=custom")
+            .arg("--no-owner")
+            .arg("--no-privileges")
+            .arg("--file")
+            .arg(&path)
+            .arg(&database_url)
+            .output()
+            .context("run pg_dump for target old-backup fixture")?;
+        ensure!(
+            output.status.success(),
+            "pg_dump failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(PostgresBackup {
+            _directory: directory,
+            path,
+        })
+    })
+    .await?
+}
+
+async fn restore_postgres_database(database_url: &str, backup: &PostgresBackup) -> Result<()> {
+    let database_url = database_url.to_owned();
+    let backup_path = backup.path.clone();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let output = Command::new("pg_restore")
+            .arg("--clean")
+            .arg("--if-exists")
+            .arg("--no-owner")
+            .arg("--no-privileges")
+            .arg("--exit-on-error")
+            .arg("--dbname")
+            .arg(&database_url)
+            .arg(&backup_path)
+            .output()
+            .context("run pg_restore for target old-backup fixture")?;
+        ensure!(
+            output.status.success(),
+            "pg_restore failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        Ok(())
+    })
+    .await?
+}
+
+async fn install_frontier_budget_events(
+    client: &TestActorClient,
+    server: &crate::harness::ArkretServer,
+    database_url: &str,
+    realm_id: &str,
+    strand_id: &str,
+    count: usize,
+) -> Result<Vec<EventId>> {
+    ensure!(
+        count > 400,
+        "budget fixture must exceed four 100-row peer pages"
+    );
+    let mut template = client
+        .author_event(
+            realm_id,
+            arkret_wire::event_kind_str::MESSAGE_CREATE,
+            crate::harness::message_create_text_payload(strand_id, "frontier budget template")?,
+        )
+        .await?;
+    let first_actor_seq = template.actor_seq;
+    let first_prev_refs = template.prev_refs.clone();
+    let first_created_at = template.created_at;
+    let mut previous = None;
+    let mut events = Vec::with_capacity(count);
+    for index in 0..count {
+        template.actor_seq = first_actor_seq + index as u64;
+        template.prev_refs = previous.iter().cloned().collect::<Vec<_>>();
+        if index == 0 {
+            template.prev_refs = first_prev_refs.clone();
+        }
+        template.created_at = first_created_at + chrono::Duration::milliseconds(index as i64);
+        template.payload = serde_json::from_value(crate::harness::message_create_text_payload(
+            strand_id,
+            &format!("frontier budget row {index:04}"),
+        )?)?;
+        crate::harness::refresh_typed_event_proof(&mut template)?;
+        previous = Some(template.event_id.clone());
+        events.push(template.clone());
+    }
+    // Admit one real Event so Soland freezes the source Station signer
+    // evidence through the production path. Reuse that evidence carrier for
+    // the remaining synthetic history rows, but rebind and re-sign every
+    // admission proof. This keeps the 405-row frontier fixture cryptographically
+    // valid without creating hundreds of unrelated live fanout jobs.
+    expect_json(
+        client
+            .post("/_arkret/self/events")
+            .json(&arkret_wire::EventInitialSubmission::online(
+                events[0].clone(),
+            )),
+        StatusCode::OK,
+    )
+    .await?;
+    let admitted_seed = canonical_event_envelope(database_url, &events[0].event_id).await?;
+    let seed_admission = admitted_seed
+        .proofs
+        .iter()
+        .find_map(arkret_wire::EventProof::as_station_admission)
+        .context("production-admitted budget seed is missing its Station proof")?
+        .clone();
+    for event in events.iter_mut().skip(1) {
+        let producer = event
+            .proofs
+            .first()
+            .and_then(arkret_wire::EventProof::as_producer)
+            .context("authored budget Event is missing its producer proof")?
+            .clone();
+        let mut admission = seed_admission.clone();
+        admission.event_digest = Hash::new(
+            event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
+        )?;
+        admission.producer_proof_digest =
+            arkret_wire::StationAdmissionProof::producer_proof_digest(&producer)?;
+        admission.producer_verification_method = producer.verification_method.clone();
+        admission.jws.clear();
+        server.sign_station_admission_proof(&mut admission)?;
+        event.proofs.push(admission.into());
+        event.validate_station_admission_binding(arkret_canonical::DigestSuite::Sha256)?;
+    }
+    for chunk in events[1..].chunks(64) {
+        install_fixture_events(server, chunk, &[]).await?;
+    }
+    Ok(events.into_iter().map(|event| event.event_id).collect())
+}
+
+async fn canonical_event_envelope(database_url: &str, event_id: &EventId) -> Result<Event> {
+    let database_url = database_url.to_owned();
+    let event_id = event_id.to_string();
+    tokio::task::spawn_blocking(move || -> Result<Event> {
+        let mut client = postgres::Client::connect(&database_url, postgres::NoTls)?;
+        let row = client
+            .query_opt(
+                "SELECT envelope::text FROM canonical_events \
+                 WHERE envelope->>'event_id' = $1",
+                &[&event_id],
+            )?
+            .context("production-admitted budget seed was not retained")?;
+        Ok(serde_json::from_str(row.get::<_, &str>(0))?)
+    })
+    .await
+    .context("join canonical budget Event read")?
 }
 
 /// Diagnostic read of this live scenario's source database, not a protocol

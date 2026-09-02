@@ -180,7 +180,10 @@ pub(crate) async fn create_and_dispatch_explicit_invite(
     .await
 }
 
-pub(crate) async fn account_data_row(holder: &TestActorClient, key: &str) -> Result<AccountDataRow> {
+pub(crate) async fn account_data_row(
+    holder: &TestActorClient,
+    key: &str,
+) -> Result<AccountDataRow> {
     // Service-written invite cells are registered plaintext account data. The
     // holder-readable list is their canonical read surface; the single-key
     // resource route deliberately accepts only encrypted private-key patterns.

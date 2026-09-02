@@ -33,19 +33,15 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("GDPR / audit / retention", () => {
-  test("removed product-private export/erase rails stay fail-closed (404/405)", async ({ request }) => {
+  test("removed product-private export/erase rails stay unrecognized (404)", async ({ request }) => {
     const alice = uniqueUser("s27-probe");
     await ensureRegistered(request, alice);
     const token = await issueDevSession(request, alice);
 
     // The incomplete product-private export rail and the product-private erase
     // rail were intentionally removed — no compatibility shim, so both must
-    // stay fail-closed. The export GET path collides with no registered route
-    // and answers 404 unrecognized_endpoint; the erase POST path collides
-    // segment-wise with the registered `/_soland/self/account/{did}` GET
-    // pattern (extensions/sovereign.rs), so the canonical catch-all answers
-    // 405 method_not_allowed + Allow per api-conventions.md §10. Both codes
-    // are the spec-mandated "no such rail" answers; neither may be 2xx.
+    // stay fail-closed. Neither path collides with a registered route, so the
+    // canonical catch-all answers 404 unrecognized_endpoint for both methods.
     const exportProbe = await request.get(`${solandBaseUrl()}/_soland/self/account/export`, {
       headers: { authorization: `Bearer ${token}` },
     });
@@ -55,7 +51,7 @@ test.describe("GDPR / audit / retention", () => {
       headers: { authorization: `Bearer ${token}` },
       data: {},
     });
-    expect([404, 405]).toContain(eraseProbe.status());
+    expect(eraseProbe.status()).toBe(404);
 
   });
 

@@ -265,13 +265,16 @@ fn validate_frontier_mismatch_reduction_terminal_states(case: &super::NamedCase)
         || input["sibling_tuple"] != json!(["event_id", "event_digest", "prev_frontier_digest"])
         || input["actor_intersection_uses_complete_actor_id"] != true
         || input["validate_before_side_effects"] != true
+        || input["direction_binds_origin_and_destination_service"] != true
+        || input["aggregate_root_cross_peer_set_equality"] != false
+        || input["routine_scan_on_mismatch"] != false
     {
         bail!("{} reduction input contract drifted", case.name);
     }
     const EXPECTED: &[(&str, &str)] = &[
         (
             "equal_frontier_roots",
-            "success_and_reset_consecutive_failures_without_challenge",
+            "successful_observation_and_reset_without_set_equality_or_completeness",
         ),
         (
             "different_roots_with_policy_legitimate_empty_actor_intersection",
@@ -283,11 +286,11 @@ fn validate_frontier_mismatch_reduction_terminal_states(case: &super::NamedCase)
         ),
         (
             "different_roots_from_permanent_legal_replication_scope_difference",
-            "success_after_intersection_reduction_without_global_root_convergence",
+            "reconciliation_incomplete_diagnostic_without_routine_scan_peer_failure_or_global_root_convergence",
         ),
         (
             "peers_hold_different_legal_sibling_subsets_within_limits",
-            "validated_union_via_existing_scan_resolve_submit_surfaces_then_success_and_reset",
+            "known_id_or_operator_fallback_candidates_use_resolve_submit_admission_then_legal_union",
         ),
         (
             "scan_discovers_a_missing_control_event_without_publication_sidecars",
@@ -310,8 +313,8 @@ fn validate_frontier_mismatch_reduction_terminal_states(case: &super::NamedCase)
             "schema_violation_before_admission",
         ),
         (
-            "challenge_or_backfill_network_failure",
-            "ordinary_failure_counts_toward_three_consecutive_failures",
+            "actually_executed_resolve_or_operator_fallback_remote_network_failure",
+            "ordinary_remote_failure_counts_toward_three_consecutive_failures",
         ),
         (
             "carried_event_id_does_not_match_recomputed_complete_event_id",
@@ -326,8 +329,8 @@ fn validate_frontier_mismatch_reduction_terminal_states(case: &super::NamedCase)
             "first_confirmation_quarantines_affected_scope_and_sets_peer_stale",
         ),
         (
-            "local_or_remote_snapshot_changes_during_reduction",
-            "bounded_retry_without_cross_snapshot_conflict_decision",
+            "local_snapshot_changes_during_operator_fallback",
+            "stop_or_restart_with_local_diagnostic_without_peer_failure",
         ),
     ];
     validate_named_expectations(case, EXPECTED)?;
@@ -339,6 +342,9 @@ fn validate_frontier_mismatch_reduction_terminal_states(case: &super::NamedCase)
             "validated_case_count": EXPECTED.len(),
             "complete_actor_id_intersection": true,
             "validate_before_side_effects": true,
+            "direction_bound": true,
+            "aggregate_root_cross_peer_set_equality": false,
+            "routine_scan_on_mismatch": false,
         }),
     );
     Ok(())

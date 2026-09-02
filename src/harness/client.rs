@@ -573,6 +573,21 @@ impl TestActorClient {
                 .to_owned(),
         )?;
         let event_response = bootstrap["event_response"].clone();
+        let strand_id = self.create_default_strand(realm_id.as_str()).await?;
+        // A DataEvent that writes a cell has to name a covering authority in
+        // `refs[role=authorized_by]` / `authorization_ref`. For the creator that
+        // authority is the Realm authority-root cell the create contract wrote,
+        // not a grant id: v1 genesis issues no capability grant at all.
+        Ok(json!({
+            "realm_id": realm_id,
+            "default_strand_id": strand_id,
+            "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
+            "event_response": event_response,
+        }))
+    }
+
+    pub async fn create_default_strand(&self, realm_id: &str) -> Result<String> {
+        let realm_id = arkret_identifiers::RealmId::new(realm_id.to_owned())?;
         let actor_did = arkret_identifiers::Did::new(self.actor.clone())?;
         let actor_id = ActorId::account(AccountId::new(
             arkret_identifiers::project_did_to_core_id(&actor_did)?,
@@ -608,16 +623,7 @@ impl TestActorClient {
             .lock()
             .expect("cotest default-Strand map is not poisoned")
             .insert(realm_id.to_string(), strand_id.to_string());
-        // A DataEvent that writes a cell has to name a covering authority in
-        // `refs[role=authorized_by]` / `authorization_ref`. For the creator that
-        // authority is the Realm authority-root cell the create contract wrote,
-        // not a grant id: v1 genesis issues no capability grant at all.
-        Ok(json!({
-            "realm_id": realm_id,
-            "default_strand_id": strand_id,
-            "authority_root_ref": arkret_wire::REALM_AUTHORITY_ROOT_CELL,
-            "event_response": event_response,
-        }))
+        Ok(strand_id.to_string())
     }
 
     /// Submit only the Realm bootstrap control batch.

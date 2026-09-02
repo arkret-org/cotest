@@ -13,8 +13,6 @@ pub const VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED: &str =
     "ak.vector.invite.consumed_token_resubject_rejected.v1";
 pub const VECTOR_ID_SIGNAL_CLASS_TTL: &str = "ak.vector.signal.class_ttl.v1";
 pub const VECTOR_ID_PROJECTION_PAGINATION_SHAPE: &str = "ak.vector.projection.pagination_shape.v1";
-pub const VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT: &str =
-    "ak.vector.range_completeness.witness_disagreement.v1";
 pub const VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE: &str =
     "ak.vector.cursor.revoke_high_assurance.v1";
 pub const VECTOR_ID_DEVICE_REVOCATION_SEAL_BINDING: &str =
@@ -25,7 +23,6 @@ pub const ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_INVITE_CONSUMED_TOKEN_RESUBJECT_REJECTED,
     VECTOR_ID_SIGNAL_CLASS_TTL,
     VECTOR_ID_PROJECTION_PAGINATION_SHAPE,
-    VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT,
     VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE,
     VECTOR_ID_DEVICE_REVOCATION_SEAL_BINDING,
     VECTOR_ID_PUSH_WAKEUP_POLICY,
@@ -52,10 +49,6 @@ pub fn run_service_closure_hardening_fixture_suite() -> Result<()> {
     )?)?;
     run_signal_class_ttl_case(case(&fixture, VECTOR_ID_SIGNAL_CLASS_TTL)?)?;
     run_projection_pagination_shape_case(case(&fixture, VECTOR_ID_PROJECTION_PAGINATION_SHAPE)?)?;
-    run_range_completeness_witness_disagreement_case(case(
-        &fixture,
-        VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT,
-    )?)?;
     run_cursor_revoke_high_assurance_case(case(&fixture, VECTOR_ID_CURSOR_REVOKE_HIGH_ASSURANCE)?)?;
     run_device_revocation_seal_binding_case(case(
         &fixture,
@@ -81,14 +74,6 @@ pub fn run_signal_class_ttl_vector() -> Result<()> {
 pub fn run_projection_pagination_shape_vector() -> Result<()> {
     let fixture = service_closure_hardening_fixture()?;
     run_projection_pagination_shape_case(case(&fixture, VECTOR_ID_PROJECTION_PAGINATION_SHAPE)?)
-}
-
-pub fn run_range_completeness_witness_disagreement_vector() -> Result<()> {
-    let fixture = service_closure_hardening_fixture()?;
-    run_range_completeness_witness_disagreement_case(case(
-        &fixture,
-        VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT,
-    )?)
 }
 
 pub fn run_cursor_revoke_high_assurance_vector() -> Result<()> {
@@ -346,74 +331,6 @@ fn evaluate_projection_response(
         {
             return Ok(json!({"decision": "reject", "reason": "cursor_integrity_invalid"}));
         }
-    }
-    Ok(json!({"decision": "accept"}))
-}
-
-fn run_range_completeness_witness_disagreement_case(case: &Value) -> Result<()> {
-    let mut seen = BTreeSet::new();
-    for step in required_array(case, "steps")? {
-        let name = required_str(step, "name")?;
-        seen.insert(name.to_owned());
-        let observed = evaluate_range_completeness_step(step)?;
-        assert_expected_subset(name, expected(step)?, &observed)?;
-        record_step(
-            VECTOR_ID_RANGE_COMPLETENESS_WITNESS_DISAGREEMENT,
-            name,
-            step,
-            &observed,
-        );
-    }
-    for required in [
-        "actor_seq_digest_disagreement",
-        "range_root_disagreement",
-        "high_assurance_single_source_stays_pending",
-    ] {
-        if !seen.contains(required) {
-            bail!("range completeness vector missing step {required}");
-        }
-    }
-    Ok(())
-}
-
-fn evaluate_range_completeness_step(step: &Value) -> Result<Value> {
-    if let Some(witnesses) = step.get("witnesses").and_then(Value::as_array)
-        && witnesses.len() >= 2
-        && required_str(&witnesses[0], "realm_id")? == required_str(&witnesses[1], "realm_id")?
-        && super::value_field_actor(&witnesses[0], "actor_id")?
-            == super::value_field_actor(&witnesses[1], "actor_id")?
-        && required_u64(&witnesses[0], "actor_seq")? == required_u64(&witnesses[1], "actor_seq")?
-        && required_str(&witnesses[0], "event_digest")?
-            != required_str(&witnesses[1], "event_digest")?
-    {
-        return Ok(json!({
-            "decision": "reject",
-            "reason": "witness_disagreement",
-            "quarantine": true,
-        }));
-    }
-    if let Some(attestations) = step.get("attestations").and_then(Value::as_array)
-        && attestations.len() >= 2
-        && required_str(&attestations[0], "from_frontier")?
-            == required_str(&attestations[1], "from_frontier")?
-        && required_str(&attestations[0], "to_frontier")?
-            == required_str(&attestations[1], "to_frontier")?
-        && required_str(&attestations[0], "range_root")?
-            != required_str(&attestations[1], "range_root")?
-    {
-        return Ok(json!({
-            "decision": "reject",
-            "reason": "witness_disagreement",
-            "quarantine": true,
-        }));
-    }
-    if step.get("security_class").and_then(Value::as_str) == Some("high_assurance")
-        && step.get("attestation_mode").and_then(Value::as_str) == Some("single_source")
-    {
-        return Ok(json!({
-            "decision": "pending_stale",
-            "high_assurance_frontier_advanced": false,
-        }));
     }
     Ok(json!({"decision": "accept"}))
 }

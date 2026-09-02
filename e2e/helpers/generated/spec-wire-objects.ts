@@ -364,9 +364,9 @@ export type RealmObject = {
     "minimum_retention_ms"?: number;
   };
   "audit_policy"?: {
-    "range_completeness_witness_ids": string[];
-    "witnessed_min_attestations": number;
-    "witness_independence": "distinct_did" | "distinct_controlling_organization";
+    "seal_transparency_auditor_ids": string[];
+    "seal_transparency_min_attestations": number;
+    "seal_transparency_auditor_independence": "distinct_did" | "distinct_controlling_organization";
   };
   "digest_algorithm"?: "sha256" | "blake3";
   "notary": {

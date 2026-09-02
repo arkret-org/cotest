@@ -25,8 +25,6 @@ pub const VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE: &str =
 pub const VECTOR_ID_MODERATION_APPEAL_ATOMICITY: &str = "ak.vector.moderation.appeal_atomicity.v1";
 pub const VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE: &str =
     "ak.vector.relation.reference_projection_indistinguishable.v1";
-pub const VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY: &str =
-    "ak.vector.sync.range_completeness_client_query.v1";
 
 pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_APPLET_TRANSACTION_DELIVERY_AUTHENTICATION_RECORD_DIGEST,
@@ -38,7 +36,6 @@ pub const ALL_FINAL_CONFORMANCE_CLOSURE_VECTOR_IDS: &[&str] = &[
     VECTOR_ID_MODERATION_EVIDENCE_PACKAGE_MINIMAL_DISCLOSURE,
     VECTOR_ID_MODERATION_APPEAL_ATOMICITY,
     VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE,
-    VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY,
 ];
 
 const FINAL_CONFORMANCE_CLOSURE_FIXTURE_FILE: &str = "final-conformance-closure-fixture.json";
@@ -92,10 +89,6 @@ pub fn run_final_conformance_closure_fixture_suite() -> Result<()> {
     run_relation_reference_projection_indistinguishable_case(case(
         &fixture,
         VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE,
-    )?)?;
-    run_sync_range_completeness_client_query_case(case(
-        &fixture,
-        VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY,
     )?)?;
     Ok(())
 }
@@ -151,14 +144,6 @@ pub fn run_relation_reference_projection_indistinguishable_vector() -> Result<()
     run_relation_reference_projection_indistinguishable_case(case(
         &fixture,
         VECTOR_ID_RELATION_REFERENCE_PROJECTION_INDISTINGUISHABLE,
-    )?)
-}
-
-pub fn run_sync_range_completeness_client_query_vector() -> Result<()> {
-    let fixture = final_conformance_closure_fixture()?;
-    run_sync_range_completeness_client_query_case(case(
-        &fixture,
-        VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY,
     )?)
 }
 
@@ -1064,70 +1049,6 @@ fn evaluate_relation_reference_projection_indistinguishable(case: &Value) -> Res
     }))
 }
 
-fn run_sync_range_completeness_client_query_case(case: &Value) -> Result<()> {
-    let mut seen = BTreeSet::new();
-    for step in required_array(case, "steps")? {
-        let name = required_str(step, "name")?;
-        seen.insert(name.to_owned());
-        let observed = evaluate_sync_range_completeness_step(step)?;
-        assert_expected_subset(name, expected(step)?, &observed)?;
-        record_step(
-            VECTOR_ID_SYNC_RANGE_COMPLETENESS_CLIENT_QUERY,
-            name,
-            step,
-            &observed,
-        );
-    }
-    for required in [
-        "complete_attested_range",
-        "withheld_actor_seq_gap",
-        "featureless_server",
-        "high_assurance_single_source",
-    ] {
-        if !seen.contains(required) {
-            bail!("sync range completeness vector missing step {required}");
-        }
-    }
-    Ok(())
-}
-
-fn evaluate_sync_range_completeness_step(step: &Value) -> Result<Value> {
-    if step.get("feature_supported").and_then(Value::as_bool) != Some(true) {
-        return Ok(json!({"decision": "unattested", "error": false}));
-    }
-    if step.get("security_class").and_then(Value::as_str) == Some("high_assurance")
-        && step.get("attestation_mode").and_then(Value::as_str) == Some("single_source")
-    {
-        return Ok(json!({
-            "decision": "unattested",
-            "high_assurance_frontier_advanced": false,
-        }));
-    }
-    if step.get("attestation_mode").and_then(Value::as_str) != Some("federation_witness_attested") {
-        return Ok(json!({"decision": "unattested"}));
-    }
-
-    let seqs = u64_set(step, "returned_actor_seq")?;
-    let range = u64_vec(step, "attestation_actor_seq_range")?;
-    if range.len() != 2 {
-        bail!("sync range completeness attestation range must have two entries");
-    }
-    let range_complete = (range[0]..=range[1]).all(|seq| seqs.contains(&seq));
-    if range_complete && step.get("root_matches").and_then(Value::as_bool) == Some(true) {
-        return Ok(json!({"decision": "attested_complete"}));
-    }
-    let reason = if !range_complete {
-        "range_completeness_actor_seq_gap"
-    } else {
-        "range_completeness_root_mismatch"
-    };
-    Ok(json!({
-        "decision": "degraded",
-        "reason": reason,
-        "history_complete_displayed": false,
-    }))
-}
-
 fn record_step(vector_id: &str, name: &str, input: &Value, observed: &Value) {
     let expected = input.get("expected").cloned().unwrap_or_else(|| json!({}));
     record_vector_event(
@@ -1215,19 +1136,4 @@ fn string_vec(value: &Value, field: &str) -> Result<Vec<String>> {
                 .ok_or_else(|| anyhow!("{field} entry must be string"))
         })
         .collect()
-}
-
-fn u64_vec(value: &Value, field: &str) -> Result<Vec<u64>> {
-    required_array(value, field)?
-        .iter()
-        .map(|entry| {
-            entry
-                .as_u64()
-                .ok_or_else(|| anyhow!("{field} entry must be u64"))
-        })
-        .collect()
-}
-
-fn u64_set(value: &Value, field: &str) -> Result<BTreeSet<u64>> {
-    Ok(u64_vec(value, field)?.into_iter().collect())
 }

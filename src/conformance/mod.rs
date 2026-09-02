@@ -233,7 +233,6 @@ pub use final_conformance_closure::{
     run_moderation_evidence_package_minimal_disclosure_vector,
     run_moderation_franking_roundtrip_vector,
     run_relation_reference_projection_indistinguishable_vector,
-    run_sync_range_completeness_client_query_vector,
 };
 pub use handle_claim_rejection_vectors::{
     ALL_HANDLE_CLAIM_REJECTION_VECTOR_IDS, run_handle_claim_rejection_vector_suite,
@@ -393,7 +392,6 @@ pub use service_closure_hardening::{
     ALL_SERVICE_CLOSURE_HARDENING_VECTOR_IDS, run_cursor_revoke_high_assurance_vector,
     run_device_revocation_seal_binding_vector, run_invite_consumed_token_resubject_rejected_vector,
     run_projection_pagination_shape_vector, run_push_wakeup_policy_vector,
-    run_range_completeness_witness_disagreement_vector,
     run_service_closure_hardening_fixture_suite, run_signal_class_ttl_vector,
 };
 pub use service_route_handover_mirror::run_service_route_handover_mirror_fixture_suite;
