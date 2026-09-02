@@ -320,6 +320,10 @@ pub struct CanonicalAdmissionCase {
     /// True when the timeline starts from an empty ledger and an empty cell,
     /// which is the precondition for replaying it against a fresh live holder.
     pub starts_from_empty_state: bool,
+    /// True when the holder runs the `require_explicit_consent` profile
+    /// (`invite_receive_policy.consent_profile`), under which no contact ever
+    /// reaches the quarantine chokepoint.
+    pub requires_explicit_consent: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -426,6 +430,7 @@ pub fn canonical_admission_case(name: &str) -> Result<CanonicalAdmissionCase> {
         quarantine_entry_sources: case.expected.quarantine_entry_sources.clone(),
         starts_from_empty_state: case.initial_ledger.is_empty()
             && case.initial_quarantine_entry_sources.is_empty(),
+        requires_explicit_consent: case.consent_profile == ConsentProfile::RequireExplicitConsent,
     })
 }
 

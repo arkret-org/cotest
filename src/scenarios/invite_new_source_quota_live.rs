@@ -21,11 +21,13 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};
 use arkret_models_collaboration::governance::invite_addressing::InviteReceivePolicy;
-use arkret_wire::{AccountDataKey, InviteReceiveAction, NewSourceQuotaOverride};
+use arkret_wire::{AccountDataKey, ConsentProfile, InviteReceiveAction, NewSourceQuotaOverride};
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::conformance::{CanonicalAdmissionCase, canonical_admission_case};
+use crate::conformance::{
+    CanonicalAdmissionCase, NewSourceQuotaDecision, canonical_admission_case,
+};
 use crate::harness::{ArkretServer, TestActorClient, actor_core_id, expect_json};
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 use crate::scenarios::invite_service_fanout_live::{
@@ -38,6 +40,10 @@ use crate::scenarios::invite_service_fanout_live::{
 const REPLAYABLE_ADMISSION_CASE: &str =
     "short_window_ceiling_admits_then_drops_while_a_charged_source_still_enters";
 const ZERO_OVERRIDE_CASE: &str = "zero_holder_override_locks_the_inbox";
+/// `ak.vector.invite.new_source_quota_holder_admission.v1` step 7: the holder
+/// runs the `require_explicit_consent` profile, so the quota never evaluates.
+const REQUIRE_EXPLICIT_CONSENT_CASE: &str =
+    "require_explicit_consent_profile_has_no_quarantine_face";
 
 /// Distinct source principals recorded in the holder's quarantine cell, oldest
 /// first and with repeats preserved: a repeat contact from an already-charged
@@ -169,6 +175,67 @@ pub async fn new_source_quota_holder_admission_run() -> Result<()> {
     Ok(())
 }
 
+/// `ak.vector.invite.new_source_quota_holder_admission.v1` step 7
+/// (`consent-model.md` section 6.1 step 2).
+///
+/// The holder publishes `invite_receive_policy.consent_profile =
+/// require_explicit_consent`, the only carrier of that profile. Every contact
+/// without verified `consent_grant` evidence is then silently dropped on the
+/// holder Station: the quarantine cell stays empty, the quota never charges,
+/// and the requester still observes the same opaque `deferred` without a
+/// `disclosed_outcome` — the profile itself is not observable.
+pub async fn new_source_quota_require_explicit_consent_run() -> Result<()> {
+    let case = canonical_admission_case(REQUIRE_EXPLICIT_CONSENT_CASE)?;
+    ensure!(
+        case.requires_explicit_consent,
+        "{}: the canonical case must declare the require_explicit_consent profile",
+        case.name
+    );
+    ensure!(
+        case.quarantine_entry_sources.is_empty(),
+        "{}: the canonical case must end with an empty quarantine cell",
+        case.name
+    );
+    let server = spawn_under_canonical_ceiling("invite-require-explicit-consent", &case).await?;
+    let holder = holder_with_quarantine_policy(&server, "bob-require-explicit-consent").await?;
+    set_consent_profile(&holder, ConsentProfile::RequireExplicitConsent).await?;
+
+    let mut peers: BTreeMap<String, TestActorClient> = BTreeMap::new();
+    for (index, contact) in case.contacts.iter().enumerate() {
+        ensure!(
+            contact.expected_decision == NewSourceQuotaDecision::NotEvaluated,
+            "{}: contact[{index}] from {} must never reach the quota chokepoint under this profile",
+            case.name,
+            contact.source
+        );
+        if !peers.contains_key(&contact.source) {
+            let label = format!("alice-require-explicit-consent-{}", contact.source);
+            let peer = inviter(&server, &label, 0xe1 + index as u8).await?;
+            peers.insert(contact.source.clone(), peer);
+        }
+        let label = format!("explicit consent contact {index} from {}", contact.source);
+        let dispatched =
+            create_and_dispatch_explicit_invite(&peers[&contact.source], &holder, &label)
+                .await
+                .with_context(|| {
+                    format!(
+                        "dispatch canonical contact[{index}] from {}",
+                        contact.source
+                    )
+                })?;
+        assert_opaque_deferred(&dispatched.outcome)?;
+        let observed = quarantined_sources(&holder).await?;
+        ensure!(
+            observed.is_empty(),
+            "{}: after contact[{index}] ({}) the quarantine cell is {observed:?}; the require_explicit_consent profile has no quarantine face",
+            case.name,
+            contact.source
+        );
+    }
+
+    Ok(())
+}
+
 /// `ak.vector.invite.new_source_quota_effective_bounds.v1`.
 ///
 /// The holder override may only make the holder less reachable. The canonical
@@ -240,6 +307,33 @@ async fn set_new_source_quota_override(
     ensure!(
         updated.new_source_quota == policy.new_source_quota,
         "Station rewrote the holder new_source_quota override"
+    );
+    Ok(())
+}
+
+/// Publish the holder's consent profile through its only carrier,
+/// `invite_receive_policy.consent_profile`, and read it back unchanged.
+async fn set_consent_profile(holder: &TestActorClient, profile: ConsentProfile) -> Result<()> {
+    let current = expect_json(
+        holder.get("/_arkret/self/invite-receive-policy"),
+        StatusCode::OK,
+    )
+    .await?;
+    let mut policy: InviteReceivePolicy = serde_json::from_value(current)
+        .context("invite-receive-policy response is not an InviteReceivePolicy")?;
+    policy.consent_profile = profile;
+    let updated = expect_json(
+        holder
+            .put("/_arkret/self/invite-receive-policy")
+            .json(&policy),
+        StatusCode::OK,
+    )
+    .await?;
+    let updated: InviteReceivePolicy = serde_json::from_value(updated)
+        .context("updated invite-receive-policy is not an InviteReceivePolicy")?;
+    ensure!(
+        updated.consent_profile == profile,
+        "Station rewrote the holder consent_profile"
     );
     Ok(())
 }

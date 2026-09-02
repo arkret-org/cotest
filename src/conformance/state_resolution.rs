@@ -2233,6 +2233,19 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
                     vector_name,
                 )?;
             }
+            "legacy_target_cell_alias_rejected" => {
+                // event-auth-state-resolution.md section 9.5: `target_cell_id`
+                // is the only registered recovery target field; the retired
+                // `target_cell` alias is a closed-schema violation.
+                require_str_eq(case, "/payload_field_name", "target_cell", vector_name)?;
+                require_str_eq(case, "/expected/result", "reject", vector_name)?;
+                require_str_eq(case, "/expected/reason", "schema_violation", vector_name)?;
+            }
+            "duplicate_target_cell_fields_rejected" => {
+                require_str_eq(case, "/payload_extra_field", "target_cell", vector_name)?;
+                require_str_eq(case, "/expected/result", "reject", vector_name)?;
+                require_str_eq(case, "/expected/reason", "schema_violation", vector_name)?;
+            }
             "ordinary_mls_commit_cannot_recover_bottom" => {
                 require_str_eq(
                     case,
@@ -2273,6 +2286,8 @@ fn validate_conflict_recovery_move(vector: &Value, vector_name: &str) -> Result<
             "unsealed_recovery_move",
             "reset_on_a_cell_not_in_bottom",
             "target_cell_mismatch",
+            "legacy_target_cell_alias_rejected",
+            "duplicate_target_cell_fields_rejected",
             "ordinary_mls_commit_cannot_recover_bottom",
         ],
     )
