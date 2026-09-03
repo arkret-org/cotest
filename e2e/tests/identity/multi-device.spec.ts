@@ -69,9 +69,14 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       await expect(
         secondDevice.page.getByTestId("device-setup-required"),
       ).toBeVisible({ timeout: 120_000 });
+      // The device-setup panel MUST say that the account login by itself
+      // authorized nothing. The exact sentence is product copy, not spec text
+      // (crypto-media/device-lifecycle.md registers no wording), so this
+      // asserts the invariant clause the panel is required to carry rather
+      // than a full sentence that drifts with every copy edit.
       await expect(
         secondDevice.page.getByText(
-          "The account login alone cannot authorize a new device.",
+          "Login alone cannot authorize a new device, and no session was issued.",
         ),
       ).toBeVisible();
       await expect(secondDevice.page.getByTestId("client-shell")).toHaveCount(

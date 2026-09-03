@@ -376,8 +376,13 @@ test.describe("moderation and ban", () => {
     const alicePage = aliceFlow.page;
     try {
       await alicePage.gotoRealmAdminSection(realmId, "members");
+      // The roster row keys itself by `data-member-id`, whose value is the
+      // canonical ActorId key (`ActorId::to_string()` = canonical JSON), not a
+      // bare principal DID: inkson renamed the attribute and switched to the
+      // stable identity id in 6ff60d53. Match on the principal id as a
+      // substring so this does not depend on canonical key byte order.
       const malloryRow = alicePage.page.locator(
-        `[data-testid="member-row"][data-member-did="${mallory.id}"]`,
+        `[data-testid="member-row"][data-member-id*="${mallory.id}"]`,
       );
       await expect(malloryRow).toBeVisible({ timeout: 30_000 });
       // The "Recovery setup is incomplete" banner can render over the member

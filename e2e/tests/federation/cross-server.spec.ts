@@ -332,9 +332,11 @@ test.describe("cross-server federation", () => {
       await alicePage.page
         .getByTestId("members-section-pending-invites")
         .click();
+      // Same attribute rename as spaces/moderation-ban: the row carries
+      // `data-member-id` holding the canonical ActorId key, so match the
+      // principal id as a substring.
       const aliceInviteRow = alicePage.page.locator(
-        `[data-testid="pending-invite-row"][data-member-did="${bob.id}"], ` +
-          `[data-testid="invite-row"][data-member-did="${bob.id}"]`,
+        `[data-testid="pending-invite-row"][data-member-id*="${bob.id}"]`,
       );
       await expect(aliceInviteRow).toBeVisible({ timeout: 30_000 });
     } finally {

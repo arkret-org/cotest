@@ -52,7 +52,12 @@
 
 6. **alice** 进 `/settings/blocked-users`
    - 断言:`blocked-users-panel` 可见;`blocked-users-list` 渲染(可能为空)
-7. **alice** 在 `block-target-input` 填 `bob.did`,点 `block-user-button`
+7. **alice** 在 `block-target-input` 填 bob 的完整 composite ActorId(JSON,
+   `{"kind":"account","account_id":{"principal_id","station_id"}}`),点 `block-user-button`
+   - `client-preferences.md` §3.5 的机读 schema `account_blocklist_payload` 要求
+     `target.actor_id` 是复合 ActorId;裸 principal DID 命名不出 Station,`block-user-button`
+     会一直 `disabled`。该节散文与示例仍写 `did`,冲突见
+     `arkret-work review/spec-open/2026-09-03-1310-blocklist-actor-target-carrier-contradicts-its-schema.md`
    - 断言:`blocked-users-list` 新增一条 `blocked-user-row`,显示 bob.handle / bob.did
    - 断言:`write-status` 含 `blocklist updated` 或等效文本
 

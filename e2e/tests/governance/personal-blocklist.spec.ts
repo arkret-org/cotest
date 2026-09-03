@@ -6,6 +6,7 @@ import { expect, test, type APIRequestContext } from "../../helpers/arkret-test"
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
+  accountActorId,
   addRealmMemberApi,
   accountSubscribeDeltaApi,
   accountSubscribeFramesApi,
@@ -167,7 +168,14 @@ test.describe("personal blocklist", () => {
     const bobToken = await issueDevSession(request, bob);
     const aliceSubscribeOpts = () =>
       accountSubscribeDpopOpts(aliceFlow.session);
-    const bobIdVisiblePrefix = bob.id.slice(0, 16);
+    // The row identifies its target by `data-actor-id` (the canonical ActorId
+    // key). Its *visible* text truncates that value in the middle, so asserting
+    // on rendered text cannot see the principal id at all — match the attribute.
+    const bobBlockedRow = (page: typeof alicePage.page) =>
+      page
+        .getByTestId("blocked-user-row")
+        .filter({ has: page.locator(`[data-actor-id*="${bob.id}"]`) })
+        .or(page.locator(`[data-testid="blocked-user-row"][data-actor-id*="${bob.id}"]`));
     const apiActorSeq = 8_000_000_200_000_000 + (stamp % 100_000);
 
     try {
@@ -205,11 +213,18 @@ test.describe("personal blocklist", () => {
       ).toBeVisible({
         timeout: 30_000,
       });
-      await alicePage.page.getByTestId("block-target-input").fill(bob.id);
+      // client-preferences.md §3.5 target union: the machine-readable
+      // `account_blocklist_payload` requires `target.actor_id` to be a complete
+      // composite ActorId, not a bare principal DID (a bare principal_id cannot
+      // name the Station, and common-fields.md forbids falling back to one).
+      // The section's prose and JSON example still say `did`; that contradiction
+      // is tracked in
+      // arkret-work review/spec-open/2026-09-03-1310-blocklist-actor-target-carrier-contradicts-its-schema.md
+      await alicePage.page
+        .getByTestId("block-target-input")
+        .fill(JSON.stringify(accountActorId(bob.id)));
       await alicePage.page.getByTestId("block-user-button").click();
-      await expect(
-        alicePage.page.getByTestId("blocked-users-list"),
-      ).toContainText(bobIdVisiblePrefix, {
+      await expect(bobBlockedRow(alicePage.page).first()).toBeVisible({
         timeout: 30_000,
       });
       await expect(alicePage.page.getByTestId("write-status")).toContainText(
@@ -262,14 +277,11 @@ test.describe("personal blocklist", () => {
       await alicePage.page.goto("/settings/blocked-users", {
         waitUntil: "domcontentloaded",
       });
-      await alicePage.page
-        .getByTestId("blocked-user-row")
-        .filter({ hasText: bobIdVisiblePrefix })
+      await bobBlockedRow(alicePage.page)
+        .first()
         .getByTestId("unblock-button")
         .click();
-      await expect(
-        alicePage.page.getByTestId("blocked-users-list"),
-      ).not.toContainText(bobIdVisiblePrefix, {
+      await expect(bobBlockedRow(alicePage.page)).toHaveCount(0, {
         timeout: 30_000,
       });
       await expect

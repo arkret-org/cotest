@@ -464,11 +464,18 @@ test.describe("contact graph (same Station)", () => {
       ownerId: bob.id,
     });
 
-    // Opt alice into low-trust outcome disclosure. The default same_station
-    // action is drop, which is disclosed as the closed outcome `blocked`.
+    // Opt alice into low-trust outcome disclosure AND pin the low-trust action
+    // to `drop`. `invite-addressing.md` §5 leaves the low-trust default open
+    // ("默认 `quarantine`（SHOULD）或 `drop`"), and §5.1 fixes quarantine's wire
+    // landing at `status="deferred"` with NO `disclosed_outcome` under every
+    // trust tier and every `disclosure` value. Asserting `blocked` while
+    // relying on whichever SHOULD default the server picked made this test
+    // depend on an implementation choice rather than on the classification it
+    // is named for; `drop` is the branch that has an observable outcome.
     const policy = await getInviteReceivePolicyArkret(request, aliceToken);
     await setInviteReceivePolicyArkret(request, aliceToken, {
       ...policy,
+      explicit_address_behavior: "drop",
       disclosure: { high_trust: "outcome", low_trust: "outcome" },
     });
 
