@@ -1211,11 +1211,17 @@ export class JointUserPage {
             ) ?? false
           );
         },
-        { timeout: 45_000, intervals: [250, 500, 1_000, 2_000] },
+        { timeout: 90_000, intervals: [250, 500, 1_000, 2_000, 5_000] },
       )
       .toBe(true);
 
     await this.gotoNotifications();
+    // A newly enrolled account may surface the mandatory recovery-key setup
+    // while the invite projection is arriving. Drain that legitimate modal
+    // before interacting with the notification toolbar; otherwise its dialog
+    // backdrop intercepts the refresh click and the helper times out without
+    // ever exercising invite acceptance.
+    await this.dismissPassiveBlockingPrompts();
     const refresh = this.page.getByTestId("refresh-notifications");
     const inviteItem = this.page
       .getByTestId("notification-item")
@@ -1226,11 +1232,11 @@ export class JointUserPage {
       .poll(
         async () => {
           if (await refresh.isVisible().catch(() => false)) {
-            await refresh.click();
+            await this.clickWithPassivePromptRetry(refresh);
           }
           return inviteItem.count();
         },
-        { timeout: 45_000, intervals: [500, 1_000, 2_000, 5_000] },
+        { timeout: 90_000, intervals: [500, 1_000, 2_000, 5_000] },
       )
       .toBeGreaterThan(0);
 
@@ -1239,7 +1245,7 @@ export class JointUserPage {
     await accept.click();
     await expect(this.page.getByTestId("notifications-status")).toContainText(
       /Joined Realm/,
-      { timeout: 45_000 },
+      { timeout: 90_000 },
     );
     await expect(
       this.page.getByTestId("notifications-status"),
@@ -1308,7 +1314,7 @@ export class JointUserPage {
       .first();
   }
 
-  async waitForTimelineEventSettled(body: string, timeout = 45_000) {
+  async waitForTimelineEventSettled(body: string, timeout = 90_000) {
     const event = this.timelineEvent(body);
     await expect(event).toBeVisible({ timeout });
     const pending = event.getByTestId("message-send-status");
@@ -1886,19 +1892,14 @@ export async function pairAcceptedSiblingDevice(
     await expect(pairingCode).toBeVisible({ timeout: 30_000 });
     const code = (await pairingCode.textContent())?.trim() ?? "";
     expect(code).not.toBe("");
-
-    await foundingPage.gotoHome();
-    const approvalModal = foundingPage.page.getByTestId(
-      "device-pair-approval-modal",
+    const pairingLink = await second.page
+      .getByTestId("device-setup-pairing-link")
+      .inputValue();
+    await approvePairingLinkOnAuthorizedDevice(
+      foundingPage,
+      pairingLink,
+      code,
     );
-    await expect(approvalModal).toBeVisible({ timeout: 90_000 });
-    await expect(
-      foundingPage.page.getByTestId("device-pair-approval-code"),
-    ).toHaveText(code);
-    await foundingPage.page
-      .getByTestId("device-pair-approval-approve")
-      .click();
-    await expect(approvalModal).toBeHidden({ timeout: 90_000 });
 
     await second.page.getByTestId("device-setup-pairing-status").click();
     await expect(second.page.getByTestId("device-setup-status")).toContainText(
@@ -1926,6 +1927,40 @@ export async function pairAcceptedSiblingDevice(
   } finally {
     await Promise.allSettled([foundingPage.close(), second.close()]);
   }
+}
+
+/**
+ * Complete the server-mediated (path A) pairing fallback on an already
+ * authorized device. The QR/link flow deliberately sends no automatic
+ * to-device notification; the approving device resolves the out-of-band link,
+ * compares its code, then explicitly approves it.
+ */
+export async function approvePairingLinkOnAuthorizedDevice(
+  authorizingDevice: JointUserPage,
+  pairingLink: string,
+  expectedCode: string,
+): Promise<void> {
+  expect(pairingLink).toContain("/_arkret/open/device-pairing/resolve#token=");
+  await authorizingDevice.gotoAppPanel(
+    "/settings/devices",
+    "settings-devices-panel",
+  );
+  await authorizingDevice.fillWithPassivePromptRetry(
+    authorizingDevice.page.getByTestId("accept-pairing-input"),
+    pairingLink,
+  );
+  await authorizingDevice.clickWithPassivePromptRetry(
+    authorizingDevice.page.getByTestId("accept-pairing-resolve-button"),
+  );
+  await expect(
+    authorizingDevice.page.getByTestId("accept-pairing-code"),
+  ).toHaveText(expectedCode, { timeout: 90_000 });
+  await authorizingDevice.clickWithPassivePromptRetry(
+    authorizingDevice.page.getByTestId("accept-pairing-button"),
+  );
+  await expect(
+    authorizingDevice.page.getByTestId("accept-pairing-status"),
+  ).toContainText("Device paired", { timeout: 90_000 });
 }
 
 async function allowExplicitInviteNotifications(

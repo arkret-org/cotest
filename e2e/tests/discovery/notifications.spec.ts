@@ -270,6 +270,14 @@ test.describe("notifications", () => {
         seedMembers: [bob.id],
       });
       await bobDeviceA.acceptInvite(realmId);
+      // Membership and Realm ownership are not substitutes for an action
+      // capability. Bind the API-authored mention writes to an accepted
+      // ak.message.create grant before testing notification policy.
+      await alicePage.grantRealmCapability(
+        realmId,
+        alice.id,
+        "ak.message.create",
+      );
 
       await bobDeviceA.gotoNotificationSettings();
       await expect(

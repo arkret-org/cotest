@@ -4,7 +4,12 @@
 //   - discovery/read-receipts.md §2.1-§2.5 (ephemeral format, debounce, policy)
 //   - §3.1-§3.2 (actor-private read marker)
 
-import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Browser,
+} from "../../helpers/arkret-test";
 import {
   authHeaders,
   createSharedRealmViaApi,
@@ -22,8 +27,10 @@ import {
   typedId,
 } from "../../helpers/soland-api";
 import {
+  createDpopUserSession,
   ensureRegistered,
   issueDevSession,
+  pairAcceptedSiblingDevice,
   type JointUser,
   uniqueUser,
 } from "../../helpers/users";
@@ -462,6 +469,7 @@ test.describe("read receipts + privacy", () => {
   });
 
   test("actor-private read marker (ak.read_cursor.advance) syncs across alice's devices but does NOT broadcast to bob", async ({
+    browser,
     request,
   }) => {
     // spec: read-receipts.md §3.1-§3.2 / §6.6 — ak.read_cursor.advance is an
@@ -471,9 +479,15 @@ test.describe("read receipts + privacy", () => {
     // members. We model alice's two devices as two dev sessions over the same
     // DID with distinct device ids, and assert: both alice devices read the
     // converged marker, bob reads none.
-    const fixture = await createReceiptFixture(request, "read-cursor-sync");
-    const aliceSecond = withDevice(fixture.alice, secondDeviceId(fixture.alice));
-    await ensureRegistered(request, aliceSecond);
+    const { fixture, aliceSession } = await createPairableReceiptFixture(
+      browser,
+      request,
+      "read-cursor-sync",
+    );
+    const aliceSecond = withDevice(
+      fixture.alice,
+      await pairAcceptedSiblingDevice(browser, request, aliceSession),
+    );
     const aliceSecondToken = await issueDevSession(request, aliceSecond);
 
     const hlc = makeHlc(1);
@@ -605,6 +619,7 @@ test.describe("read receipts + privacy", () => {
   });
 
   test("E22.3 multi-device receipt coordination: HLC tie-break decides which device's marker fans out for shared receipt", async ({
+    browser,
     request,
   }) => {
     // spec: read-receipts.md §3.2 / §6.5 — concurrent read cursors for the same
@@ -612,9 +627,15 @@ test.describe("read receipts + privacy", () => {
     // lexicographic tiebreak. We submit two cursors carrying the SAME HLC from
     // two devices of one principal and assert the surviving marker is the one
     // from the lexicographically larger device_id, deterministically.
-    const fixture = await createReceiptFixture(request, "hlc-tiebreak");
-    const aliceSecond = withDevice(fixture.alice, secondDeviceId(fixture.alice));
-    await ensureRegistered(request, aliceSecond);
+    const { fixture, aliceSession } = await createPairableReceiptFixture(
+      browser,
+      request,
+      "hlc-tiebreak",
+    );
+    const aliceSecond = withDevice(
+      fixture.alice,
+      await pairAcceptedSiblingDevice(browser, request, aliceSession),
+    );
     const aliceSecondToken = await issueDevSession(request, aliceSecond);
 
     const lower =
@@ -684,6 +705,49 @@ async function createReceiptFixture(request: APIRequestContext, label: string) {
     `${label} message ${stamp}`,
   );
   return { ...fixture, message };
+}
+
+async function createPairableReceiptFixture(
+  browser: Browser,
+  request: APIRequestContext,
+  label: string,
+) {
+  const stamp = Date.now();
+  const [aliceSession, bobSession] = await Promise.all([
+    createDpopUserSession(request, `${label}-alice`),
+    createDpopUserSession(request, `${label}-bob`),
+  ]);
+  expect(aliceSession, "alice canonical account session").toBeTruthy();
+  expect(bobSession, "bob canonical account session").toBeTruthy();
+  const alice = aliceSession!.user;
+  const bob = bobSession!.user;
+  const [aliceToken, bobToken] = await Promise.all([
+    issueDevSession(request, alice),
+    issueDevSession(request, bob),
+  ]);
+  const realmId = await createSharedRealmViaApi(
+    request,
+    bob,
+    bobToken,
+    alice,
+    {
+      title: `${label} receipt ${stamp}`,
+      discoverability: "listed",
+      historyAccess: "since_join",
+      encryptionProfile: "mls_rfc9420",
+    },
+  );
+  const message = await sendEncryptedReceiptMessage(
+    request,
+    bobToken,
+    bob,
+    realmId,
+    `${label} message ${stamp}`,
+  );
+  return {
+    aliceSession: aliceSession!,
+    fixture: { alice, bob, aliceToken, bobToken, realmId, message },
+  };
 }
 
 async function sendEncryptedReceiptMessage(
@@ -920,22 +984,10 @@ async function listReadCursors(
   return Array.isArray(body.markers) ? (body.markers as ReadCursorMarker[]) : [];
 }
 
-// A second authorized device for the same principal. The DID is preserved; only
-// the device_id changes so two dev sessions model one actor with two devices.
+// Preserve the principal identity while selecting the device that was accepted
+// by the protocol pairing ceremony.
 function withDevice(user: JointUser, deviceId: string): JointUser {
   return { ...user, deviceId };
-}
-
-function secondDeviceId(user: JointUser): string {
-  // A second authorized device id for the same principal. It MUST stay a valid
-  // lowercase UUIDv7 (arkret_identifiers is_lowercase_uuidv7: version nibble 7,
-  // variant nibble 8/9/a/b), so we only rewrite the node (last) group, keeping
-  // the version/variant groups intact. A fixed node value guarantees the two
-  // device ids differ and sort deterministically for the §6.5 tiebreak.
-  const replacement = user.deviceId.endsWith("ffffffffffff")
-    ? "000000000000"
-    : "ffffffffffff";
-  return user.deviceId.replace(/[0-9a-f]{12}$/i, replacement);
 }
 
 // Valid position HLC per read-cursor.schema.json / soland validate_position:

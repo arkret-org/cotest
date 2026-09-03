@@ -5,8 +5,7 @@ import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
 import {
   assertJointStackNotRequired,
-  openUserPage,
-  uniqueUser,
+  openDpopUserPageForAccount,
 } from "../../helpers/users";
 
 async function installVirtualAuthenticator(context: BrowserContext, page: Page) {
@@ -70,10 +69,14 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
       handle,
     });
 
-    const returningUser = uniqueUser("passkey-login");
-    returningUser.id = account.id;
-    returningUser.did = account.did;
-    const jointPage = await openUserPage(browser, returningUser);
+    const returningFlow = await openDpopUserPageForAccount(
+      browser,
+      request,
+      "passkey-login",
+      account,
+    );
+    expect(returningFlow, "canonical founding-device session").toBeTruthy();
+    const jointPage = returningFlow!.page;
     const page = jointPage.page;
     const context = page.context();
     const authenticator = await installVirtualAuthenticator(context, page);

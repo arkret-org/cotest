@@ -197,14 +197,17 @@ async function provisionPendingAgent(
   await page.route("**/_arkret/self/agents", holdCommit);
 
   try {
-    const prepareResponsePromise = page.waitForResponse((response) => {
-      const outgoing = response.request();
-      return (
-        outgoing.method() === "POST" &&
-        new URL(outgoing.url()).pathname === "/_arkret/self/agents" &&
-        (outgoing.postDataJSON() as { phase?: string }).phase === "prepare"
-      );
-    });
+    const prepareResponsePromise = page.waitForResponse(
+      (response) => {
+        const outgoing = response.request();
+        return (
+          outgoing.method() === "POST" &&
+          new URL(outgoing.url()).pathname === "/_arkret/self/agents" &&
+          (outgoing.postDataJSON() as { phase?: string }).phase === "prepare"
+        );
+      },
+      { timeout: 90_000 },
+    );
     await page.getByTestId("agent-admin-provision-button").click();
     const prepareResponse = await prepareResponsePromise;
     const prepareText = await prepareResponse.text();

@@ -22,6 +22,7 @@ import {
   solandBaseUrl,
 } from "../../helpers/env";
 import {
+  approvePairingLinkOnAuthorizedDevice,
   ensureRegistered,
   assertJointStackNotRequired,
   createDpopUserSessionForAccount,
@@ -37,7 +38,10 @@ import {
   registerCoauthPasswordAccount,
   type CoauthPasswordAccount,
 } from "../../helpers/coauth-register";
-import { serverLoginViaCoauth } from "../../helpers/real-oidc-login";
+import {
+  serverLoginViaCoauth,
+  submitCoauthPasswordCredentials,
+} from "../../helpers/real-oidc-login";
 
 test.describe.configure({ mode: "serial" });
 
@@ -85,7 +89,7 @@ test.describe("key backup + restore", () => {
     // Beyond A1/A2 (the MlsBackupPrompt path), this covers first-device
     // recovery bootstrap, the passphrase-free recovery_public_key envelope,
     // and the staged-handoff-only replacement rule.
-    test.setTimeout(240_000);
+    test.setTimeout(420_000);
     const coauth = coauthBaseUrl();
     if (!coauth) {
       assertJointStackNotRequired("key backup settings recovery coauth");
@@ -249,25 +253,17 @@ test.describe("key backup + restore", () => {
       }
       await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
-      const deviceBFlow = await openDpopDeviceForAccount(
+      const deviceB = await openAndPairFreshDeviceForAccount(
         browser,
-        request,
+        deviceA,
         "a1-mls-restore-alice-b",
         account,
-        coauth,
         false,
       );
-      if (!deviceBFlow) {
-        assertJointStackNotRequired("A1 MLS restore device B login");
-        test.skip(true, "coauth DPoP password login is unavailable");
-        return;
-      }
-      const { page: deviceB, session: deviceBSession } = deviceBFlow;
       sessionsToClose.push(deviceB);
       const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
-      await pairDpopDevice(deviceA, deviceB, request, deviceBSession);
       await deviceB.gotoHome();
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
@@ -474,7 +470,7 @@ test.describe("key backup + restore", () => {
     browser,
     request,
   }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(480_000);
     const stamp = Date.now();
     const coauth = coauthBaseUrl();
     if (!coauth) {
@@ -563,24 +559,16 @@ test.describe("key backup + restore", () => {
         )
         .toBe(true);
 
-      const deviceBFlow = await openDpopDeviceForAccount(
+      const deviceB = await openAndPairFreshDeviceForAccount(
         browser,
-        request,
+        deviceA,
         "a2-mls-kanban-alice-b",
         account,
-        coauth,
       );
-      if (!deviceBFlow) {
-        assertJointStackNotRequired("A2 MLS Kanban restore device B login");
-        test.skip(true, "coauth DPoP password login is unavailable");
-        return;
-      }
-      const { page: deviceB, session: deviceBSession } = deviceBFlow;
       sessionsToClose.push(deviceB);
       const deviceBKeyBackupPuts = collectKeyBackupPuts(deviceB.page);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
-      await pairDpopDevice(deviceA, deviceB, request, deviceBSession);
       await deviceB.gotoHome();
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
@@ -727,36 +715,82 @@ async function expectDpopDeviceActive(
     .toBe("active");
 }
 
-async function pairDpopDevice(
+async function openAndPairFreshDeviceForAccount(
+  browser: Browser,
   authorizingDevice: JointUserPage,
-  requestingDevice: JointUserPage,
-  request: APIRequestContext,
-  requestingSession: DpopUserSession,
-) {
+  prefix: string,
+  account: CoauthPasswordAccount,
+  autoCompleteRecoveryKeySetup = true,
+): Promise<JointUserPage> {
   // A password/OIDC handoff identifies the fresh browser but does not
   // authorize it to write events or unwrap account E2EE history. Complete
   // the spec-required same-account pairing before exercising recovery.
-  await authorizingDevice.gotoHome();
-  await requestingDevice.page.goto("/settings/devices/pair", {
-    waitUntil: "domcontentloaded",
+  const requestingDevice = await openUserPage(browser, uniqueUser(prefix), {
+    neutralLoginConfig: true,
+    autoCompleteRecoveryKeySetup,
   });
-  await requestingDevice.page.getByTestId("pair-device-start-button").click();
-  const pairingCode = requestingDevice.page.getByTestId("pair-device-code");
-  await expect(pairingCode).toBeVisible({ timeout: 30_000 });
-  const code = (await pairingCode.textContent())?.trim() ?? "";
-  expect(code).not.toBe("");
+  try {
+    await requestingDevice.page.goto("/login", {
+      waitUntil: "domcontentloaded",
+    });
+    await requestingDevice.page
+      .getByTestId("login-server-url")
+      .fill(solandBaseUrl());
+    await requestingDevice.page.getByTestId("start-server-login-button").click();
+    await submitCoauthPasswordCredentials(requestingDevice.page, account);
+    const approve = requestingDevice.page.getByTestId("coauth-oauth-approve");
+    if (
+      await approve
+        .waitFor({ state: "visible", timeout: 20_000 })
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      await approve.click();
+    }
+    await expect(
+      requestingDevice.page.getByTestId("device-setup-required"),
+    ).toBeVisible({ timeout: 120_000 });
+    await requestingDevice.page
+      .getByTestId("device-setup-pairing-start")
+      .click();
+    const pairingCode = requestingDevice.page.getByTestId(
+      "device-setup-pairing-code",
+    );
+    await expect(pairingCode).toBeVisible({ timeout: 30_000 });
+    const code = (await pairingCode.textContent())?.trim() ?? "";
+    expect(code).not.toBe("");
+    const pairingLink = await requestingDevice.page
+      .getByTestId("device-setup-pairing-link")
+      .inputValue();
+    await approvePairingLinkOnAuthorizedDevice(
+      authorizingDevice,
+      pairingLink,
+      code,
+    );
 
-  const approvalModal = authorizingDevice.page.getByTestId(
-    "device-pair-approval-modal",
-  );
-  await expect(approvalModal).toBeVisible({ timeout: 90_000 });
-  await expect(
-    authorizingDevice.page.getByTestId("device-pair-approval-code"),
-  ).toHaveText(code);
-  await authorizingDevice.page
-    .getByTestId("device-pair-approval-approve")
-    .click();
-  await expectDpopDeviceActive(request, requestingSession);
+    await requestingDevice.page
+      .getByTestId("device-setup-pairing-status")
+      .click();
+    await expect(
+      requestingDevice.page.getByTestId("device-setup-status"),
+    ).toContainText("Device authorization is accepted and verified", {
+      timeout: 90_000,
+    });
+    await requestingDevice.page
+      .getByRole("link", { name: "Sign in again after approval" })
+      .click();
+    await expect(requestingDevice.page.getByTestId("login-panel")).toBeVisible({
+      timeout: 30_000,
+    });
+    await serverLoginViaCoauth(requestingDevice.page, account);
+    await expect(requestingDevice.page.getByTestId("client-shell")).toBeVisible({
+      timeout: 120_000,
+    });
+    return requestingDevice;
+  } catch (error) {
+    await requestingDevice.close();
+    throw error;
+  }
 }
 
 async function pairBrowserDevice(

@@ -14,6 +14,7 @@ import {
   submitCoauthPasswordCredentials,
 } from "../../helpers/real-oidc-login";
 import {
+  approvePairingLinkOnAuthorizedDevice,
   assertJointStackNotRequired,
   createDpopUserSessionForAccount,
   openDpopUserPageForAccount,
@@ -92,19 +93,14 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       await expect(pairingCode).toBeVisible({ timeout: 30_000 });
       const code = (await pairingCode.textContent())?.trim() ?? "";
       expect(code).not.toBe("");
-
-      await firstDevice.gotoHome();
-      const approvalModal = firstDevice.page.getByTestId(
-        "device-pair-approval-modal",
+      const pairingLink = await secondDevice.page
+        .getByTestId("device-setup-pairing-link")
+        .inputValue();
+      await approvePairingLinkOnAuthorizedDevice(
+        firstDevice,
+        pairingLink,
+        code,
       );
-      await expect(approvalModal).toBeVisible({ timeout: 90_000 });
-      await expect(
-        firstDevice.page.getByTestId("device-pair-approval-code"),
-      ).toHaveText(code);
-      await firstDevice.page
-        .getByTestId("device-pair-approval-approve")
-        .click();
-      await expect(approvalModal).toBeHidden({ timeout: 90_000 });
 
       await secondDevice.page
         .getByTestId("device-setup-pairing-status")

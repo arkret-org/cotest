@@ -507,8 +507,15 @@ test.describe("kanban end-to-end", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: crossRealm },
     );
-    expect(response.status()).toBe(412);
-    expect(wireErrCode(await response.json())).toBe(
+    const responseBody = await response.json();
+    // relation.md §4 fixes this as failed_precondition. The canonical HTTP
+    // binding for that problem class is 422; 412 is reserved for HTTP
+    // precondition headers and was an old harness assumption.
+    expect(response.status(), JSON.stringify(responseBody)).toBe(422);
+    const reason =
+      wireErrCode(responseBody) ?? responseBody.reason_code ??
+      responseBody.rejections?.[0]?.reason_code;
+    expect(reason, JSON.stringify(responseBody)).toBe(
       "cross_realm_structural_relation",
     );
   });

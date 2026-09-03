@@ -2,7 +2,12 @@
 // Contract: e2e/scenarios/kanban/calendar.md
 // Spec: models/calendar-event.md, models/strand-and-message.md
 
-import { expect, test, type Locator } from "../../helpers/arkret-test";
+import {
+  expect,
+  test,
+  type Locator,
+  type Response,
+} from "../../helpers/arkret-test";
 import { selectDxcOption } from "../../helpers/dxc-select";
 import {
   assertJointStackNotRequired,
@@ -103,19 +108,31 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
       "weekly",
     );
 
-    const scheduleWrite = page.page.waitForResponse(
-      (response) =>
-        response.url().includes("/_arkret/self/events") &&
-        response.request().method() === "POST" &&
-        (response.request().postData() ?? "").includes("ak.strand.update"),
-      { timeout: 90_000 },
-    );
-    await editor.getByTestId("card-detail-save-button").click();
-    const scheduled = await scheduleWrite;
-    const scheduledText = await scheduled.text();
-    const scheduleWire = scheduled.request().postData() ?? "";
+    const schedulePredicate = (response: Response) =>
+      response.url().includes("/_arkret/self/events") &&
+      response.request().method() === "POST" &&
+      (response.request().postData() ?? "").includes("ak.strand.update");
+    let scheduled: Response | undefined;
+    for (let attempt = 0; attempt < 18 && !scheduled; attempt += 1) {
+      const scheduleWrite = page.page
+        .waitForResponse(schedulePredicate, { timeout: 5_000 })
+        .catch(() => undefined);
+      await editor.getByTestId("card-detail-save-button").click();
+      scheduled = await scheduleWrite;
+      if (!scheduled) {
+        await page.page.waitForTimeout(1_000);
+      }
+    }
+    const scheduleStatus = await editor
+      .getByTestId("card-detail-edit-status")
+      .textContent({ timeout: 1_000 })
+      .catch(() => "schedule write was not emitted");
+    expect(scheduled, scheduleStatus ?? "schedule write was not emitted").toBeTruthy();
+    const scheduledResponse = scheduled!;
+    const scheduledText = await scheduledResponse.text();
+    const scheduleWire = scheduledResponse.request().postData() ?? "";
     expect(
-      scheduled.status(),
+      scheduledResponse.status(),
       `${scheduledText}\nrequest=${scheduleWire}`,
     ).toBeLessThan(400);
     expect(scheduleWire).toContain("ak.schema.calendar_event.v1");

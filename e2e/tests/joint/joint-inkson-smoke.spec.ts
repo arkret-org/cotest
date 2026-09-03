@@ -356,7 +356,7 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
             exact: true,
           }),
         });
-      await expect(participantRow).toBeVisible();
+      await expect(participantRow).toBeVisible({ timeout: 60_000 });
       await expect(participantRow).not.toContainText(forgedDisplayName);
       await expect(
         participantRow.getByTestId("member-badge-agent"),

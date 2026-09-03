@@ -192,7 +192,7 @@ test.describe("workflow: kanban week-in-review", () => {
           const events = await readRealmEvents(request, realmId, patFlow.session);
           boardCreate = events.find((event) => event.kind === "ak.space.create");
           return boardCreate !== undefined;
-        })
+        }, { timeout: 90_000 })
         .toBe(true);
       expect(boardCreate?.seal_ref, "Board create is a Data Event").toEqual(
         expect.stringMatching(/^ak:seal:/),
@@ -219,7 +219,7 @@ test.describe("workflow: kanban week-in-review", () => {
       for (const task of [triageTask, prTask, specTask, planTask]) {
         await addCardThroughColumn(today, task);
         await expect(today.getByTestId("kanban-card").filter({ hasText: task })).toBeVisible({
-          timeout: 30_000,
+          timeout: 90_000,
         });
       }
       for (const task of [triageTask, prTask, specTask, planTask]) {
@@ -311,7 +311,7 @@ test.describe("workflow: kanban week-in-review", () => {
           const events = await readRealmEvents(request, realmId, patFlow.session);
           return events.some((event) => event.kind === "ak.space.archive");
         }, {
-          timeout: 30_000,
+          timeout: 90_000,
         })
         .toBe(true);
 

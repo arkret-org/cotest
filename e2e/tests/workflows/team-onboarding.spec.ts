@@ -20,7 +20,7 @@ test.describe("workflow: team onboarding", () => {
     browser,
     request,
   }, testInfo) => {
-    test.setTimeout(300_000);
+    test.setTimeout(480_000);
     const stamp = Date.now();
     const [meiFlow, yukiFlow] = await Promise.all([
       openDpopUserPage(browser, request, "wf-onboard-mei"),

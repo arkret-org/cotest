@@ -223,7 +223,7 @@ test.describe("personal blocklist", () => {
         timeout: 30_000,
       });
       await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /blocklist updated/i,
+        /blocked/i,
         { timeout: 30_000 },
       );
       await stepShot(alicePage.page, testInfo, "blocked-users-after-block");

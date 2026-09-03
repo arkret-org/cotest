@@ -518,9 +518,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
     const creator = await openUserPage(browser, creatorSession.user, {
       grantJwt: creatorSession.grantJwt,
       dpopSeedB64url: creatorSession.dpopSeedB64url,
+      eventSigningSeedB64url: creatorSession.eventSigningSeedB64url,
       grantId: creatorSession.grantId,
       accountId: creatorSession.accountId,
       grantAudience: creatorSession.grantAudience,
+      recoveryKey: creatorSession.recoveryKey,
+      recoveryMaterialEvidence: creatorSession.recoveryMaterialEvidence,
     });
     const boardTitle = `Secure cache board ${stamp}`;
     const listTitle = `Secure cache list ${stamp}`;

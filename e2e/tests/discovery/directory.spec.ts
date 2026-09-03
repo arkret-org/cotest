@@ -144,12 +144,15 @@ test.describe("discovery", () => {
             if (aliceContacts.status() !== 200) return undefined;
             const body = (await aliceContacts.json()) as {
               contacts?: Array<{
-                peer?: { kind?: string; principal_id?: string };
+                peer?: {
+                  kind?: string;
+                  account_id?: { principal_id?: string };
+                };
                 state?: string;
               }>;
             };
             return body.contacts?.find(
-              (row) => row.peer?.principal_id === bob.id,
+              (row) => row.peer?.account_id?.principal_id === bob.id,
             )?.state;
           },
           { timeout: 60_000, intervals: [250, 500, 1_000, 2_000] },

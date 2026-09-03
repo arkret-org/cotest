@@ -93,22 +93,35 @@ export async function acceptInviteViaApi(
   listUrl.searchParams.set("subject", actorId);
   listUrl.searchParams.set("subject_station_id", solandServiceId(opts.server));
   listUrl.searchParams.set("realm_id", realmId);
-  const list = await request.get(listUrl.toString(), {
-    headers: {
-      ...authHeaders(token, "GET", listUrl.toString()),
-      "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
-    },
-  });
-  expect(list.status()).toBe(200);
-  const body = (await list.json()) as {
-    invites?: InviteObject[];
-  };
-  const invite = (body.invites ?? []).find(
-    (candidate) =>
-      candidate.realm_id === realmId &&
-      canonicalJson(candidate.invitee_account_id ?? null) === canonicalJson(accountActorId(actorId, opts.server).account_id),
-  );
-  expect(invite, `pending invite for ${actorId} in ${realmId}`).toBeTruthy();
+  let invite: InviteObject | undefined;
+  await expect
+    .poll(
+      async () => {
+        const list = await request.get(listUrl.toString(), {
+          headers: {
+            ...authHeaders(token, "GET", listUrl.toString()),
+            "Arkret-Operation": "ak.self.authz.invites.read.list.v1",
+          },
+        });
+        expect(list.status()).toBe(200);
+        const body = (await list.json()) as {
+          invites?: InviteObject[];
+        };
+        invite = (body.invites ?? []).find(
+          (candidate) =>
+            candidate.realm_id === realmId &&
+            canonicalJson(candidate.invitee_account_id ?? null) ===
+              canonicalJson(accountActorId(actorId, opts.server).account_id),
+        );
+        return Boolean(invite);
+      },
+      {
+        message: `pending invite for ${actorId} in ${realmId}`,
+        timeout: 60_000,
+        intervals: [250, 500, 1_000, 2_000, 5_000],
+      },
+    )
+    .toBe(true);
 
   await acceptInviteApi(request, token, actorId, realmId, invite!.id, opts);
 }
