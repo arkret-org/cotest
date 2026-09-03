@@ -114,6 +114,12 @@ pub(crate) fn harness_account_authority_id() -> DidCoreId {
         .expect("deterministic account authority core id")
 }
 
+pub(crate) fn harness_account_authority_public_key_multibase() -> String {
+    harness_account_authority_registration()
+        .did_public_key_multibase
+        .clone()
+}
+
 pub async fn spawn_with_harness_account_authority(
     name: &str,
     extra_env: &[(&str, &str)],

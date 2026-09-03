@@ -3667,6 +3667,9 @@ try {
             # Public half of patch-coauth-config.py's managed authority key;
             # the Station commits it before deriving its signed DID inception.
             $map.SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE = "z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
+            if ($AccountAuthorityBaseUrl) {
+                $map.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
+            }
         }
         if ($AccountAuthorityBaseUrl -and $AccountAuthorityServiceId) {
             $coauthPublic = $AccountAuthorityBaseUrl.TrimEnd("/")
@@ -3737,6 +3740,9 @@ try {
         }
         if ($script:UseManagedCoauthAssertionKey) {
             $values.SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE = "z6Mkfmm57fsb6VL7zVusP8zeA9SYkCKdvUhby2G7Yh8vvQ1P"
+            if ($AccountAuthorityBaseUrl) {
+                $values.SOLAND_ACCOUNT_AUTHORITY_URL = $AccountAuthorityBaseUrl.TrimEnd("/")
+            }
         }
         if ($AccountAuthorityBaseUrl -and $AccountAuthorityServiceId) {
             $coauthTrimmed = $AccountAuthorityBaseUrl.TrimEnd("/")

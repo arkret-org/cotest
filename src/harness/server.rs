@@ -27,7 +27,7 @@ use super::principal::ProvisionedTestPrincipal;
 use crate::scenarios::_helpers::coauth_bootstrap::{EphemeralPg, spawn_ephemeral_postgres_for};
 use crate::scenarios::identity_test_support::{
     ActorBootstrapRegistration, HARNESS_ACCOUNT_AUTHORITY_ORIGIN, bootstrap_registered_actor,
-    harness_account_authority_id,
+    harness_account_authority_id, harness_account_authority_public_key_multibase,
 };
 
 const EMBEDDED_WEBVH_REGISTRATION_BEARER: &str = "cotest-embedded-webvh-registration";
@@ -308,6 +308,12 @@ fn harness_account_authority_env(has: impl Fn(&str) -> bool) -> Vec<(String, Str
         env.push((
             "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID".to_owned(),
             harness_account_authority_id().to_string(),
+        ));
+    }
+    if !has("SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE") {
+        env.push((
+            "SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE".to_owned(),
+            harness_account_authority_public_key_multibase(),
         ));
     }
     env

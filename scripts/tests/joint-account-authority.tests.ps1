@@ -57,8 +57,11 @@ $dockerArguments = @{
 try {
     Build-SolandCommand @processArguments | Out-Null
     $bootstrapConfig = Get-Content -LiteralPath $configPath -Raw
-    if ($bootstrapConfig -match "SOLAND_ACCOUNT_AUTHORITY_(URL|SERVICE_ID)=") {
+    if ($bootstrapConfig -match "SOLAND_ACCOUNT_AUTHORITY_SERVICE_ID=") {
         throw "Identity bootstrap must not guess an Account Authority identity"
+    }
+    if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_URL="https://coauth.joint.example"') {
+        throw "Identity bootstrap must bind the managed Account Authority endpoint to its pinned key"
     }
     if ($bootstrapConfig -notmatch 'SOLAND_ACCOUNT_AUTHORITY_PUBLIC_KEY_MULTIBASE=') {
         throw "Station inception must preauthorize the deployment Account Authority public key"
@@ -77,8 +80,8 @@ try {
     }
     $script:UseManagedCoauthAssertionKey = $true
     $bootstrapDocker = Build-SolandDockerEnvironment @dockerArguments
-    if ($bootstrapDocker.Contains("SOLAND_ACCOUNT_AUTHORITY_URL")) {
-        throw "Docker identity bootstrap must not publish an unbound Account Authority"
+    if ($bootstrapDocker.SOLAND_ACCOUNT_AUTHORITY_URL -ne $CoauthBaseUrl) {
+        throw "Docker identity bootstrap must bind the managed Account Authority endpoint to its pinned key"
     }
 
     $CoauthServiceId = "ak:did_core:web:station.joint.example"
