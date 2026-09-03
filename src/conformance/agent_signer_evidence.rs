@@ -133,7 +133,7 @@ struct ExecutableEvidence {
     signer_id: DidCoreId,
     signer_actor_id: ActorId,
     agent_key_id: NonEmptyString,
-    controller_id: DidCoreId,
+    controller_principal_id: DidCoreId,
     verification_method: DidUrl,
     authorize_event_id: EventId,
     authorize_public_key_digest: Hash,
@@ -831,7 +831,7 @@ fn verified_state<'a>(
             signer_id: &fixture.signer_id,
             signer_actor_id: &fixture.signer_actor_id,
             agent_key_id: &fixture.agent_key_id,
-            controller_id: &fixture.controller_id,
+            controller_principal_id: &fixture.controller_principal_id,
             agent_key_authorize_event_id: &fixture.authorize_event_id,
             authorize_public_key_digest: &fixture.authorize_public_key_digest,
             authorize_signing_key_binding_digest: &fixture.binding_digest,
@@ -852,7 +852,7 @@ fn common_context<'a>(
     AgentEvidenceCommonContext {
         signer_id: &fixture.signer_id,
         agent_key_id: &fixture.agent_key_id,
-        controller_id: &fixture.controller_id,
+        controller_principal_id: &fixture.controller_principal_id,
         verification_method: &fixture.verification_method,
         agent_key_authorize_event_id: &fixture.authorize_event_id,
         authorize_public_key_digest: &fixture.authorize_public_key_digest,
@@ -905,7 +905,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         Did::new("did:webvh:z6mkaccount:account-authority.example")?;
     let receiver_service_did = Did::new("did:webvh:z6mkreceiver:receiver.example")?;
     let signer_id = project_did_to_core_id(&signer_did)?;
-    let controller_id = project_did_to_core_id(&controller_did)?;
+    let controller_principal_id = project_did_to_core_id(&controller_did)?;
     let authority_id = project_did_to_core_id(&authority_service_did)?;
     let account_authority_id = project_did_to_core_id(&account_authority_service_did)?;
     let receiver_id = project_did_to_core_id(&receiver_service_did)?;
@@ -933,7 +933,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         authorize_event_id.clone(),
         issued_at,
         Some(expires_at),
-        controller_id.clone(),
+        controller_principal_id.clone(),
         controller_verification_method,
         &controller_signing,
     )
@@ -1036,7 +1036,6 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let lifecycle_witness = AgentLifecycleWitness {
         component: nes(AGENT_STATUS_COMPONENT)?,
         agent_id: signer_id.clone(),
-        controller_id: controller_id.clone(),
         status: config.lifecycle_status,
         provenance: AgentLifecycleProvenance::DelegatedPcrGenesis {
             realm_create_event_id: event_id(2)?,
@@ -1092,7 +1091,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     };
     let mut gate = ControllerAccountGateAttestation {
         schema: nes(SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1)?,
-        principal_id: controller_id.clone(),
+        principal_id: controller_principal_id.clone(),
         eligibility: config.controller_eligibility,
         status: config.controller_status,
         basis_digest: canonical_hash(&basis)?,
@@ -1206,7 +1205,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         signer_id,
         signer_actor_id,
         agent_key_id,
-        controller_id,
+        controller_principal_id,
         verification_method,
         authorize_event_id,
         authorize_public_key_digest,

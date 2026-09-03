@@ -59,7 +59,7 @@ struct HistoryKeyRecoveryFixture {
     covers_vectors: Vec<String>,
     client_convergence_kat: Value,
     sender_crypto_kats: Value,
-    rrk_registration_rotation_kat: Value,
+    rhrk_registration_rotation_kat: Value,
     candidate_store_kat: Value,
     scope_and_endpoint_kats: Vec<Value>,
     direct_traversal_kat: Value,
@@ -158,9 +158,9 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
         .context("direct traversal replay KAT")?;
     verify_history_digest_and_sender_kats(&fixture).context("history digest and sender KATs")?;
     verify_governance_dependency_kats(&fixture).context("governance dependency KATs")?;
-    verify_rrk_method_evaluator(&fixture).context("RRK method evaluator")?;
-    verify_rrk_production_projection_and_join(&fixture).context("RRK production projection")?;
-    verify_rrk_durable_before_gc(&fixture).context("RRK durable-before-GC")?;
+    verify_rhrk_method_evaluator(&fixture).context("RHRK method evaluator")?;
+    verify_rhrk_production_projection_and_join(&fixture).context("RHRK production projection")?;
+    verify_rhrk_durable_before_gc(&fixture).context("RHRK durable-before-GC")?;
     verify_response_stream_fixture(&fixture).context("history response stream fixture")?;
     verify_client_convergence_kat(&fixture).context("history client convergence KAT")?;
     verify_history_candidate_store_kat(&fixture).context("history candidate store KAT")?;
@@ -278,8 +278,8 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             "direct_traversal_replay_kat_valid": true,
             "history_digest_and_sender_kats_valid": true,
             "governance_dependency_kats_valid": true,
-            "rrk_method_evaluator_valid": true,
-            "rrk_durable_before_gc_valid": true,
+            "rhrk_method_evaluator_valid": true,
+            "rhrk_durable_before_gc_valid": true,
             "candidate_store_kat_valid": true,
             "history_static_gates_valid": true,
             "scope_and_endpoint_kats_valid": true,
@@ -466,8 +466,8 @@ fn verify_backup_recovery_unlock_manifest(fixture: &HistoryKeyRecoveryFixture) -
     Ok(())
 }
 
-fn verify_rrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
-    let kat = &fixture.rrk_registration_rotation_kat;
+fn verify_rhrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+    let kat = &fixture.rhrk_registration_rotation_kat;
     let register_event: Event = serde_json::from_value(kat["events"]["register"].clone())?;
     let rotate_event: Event = serde_json::from_value(kat["events"]["rotate"].clone())?;
     let register_write = arkret_schema::project_registered_cell_writes(
@@ -476,29 +476,29 @@ fn verify_rrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture
     )?
     .into_iter()
     .next()
-    .context("RRK register produced no cell write")?;
+    .context("RHRK register produced no cell write")?;
     let rotate_write = arkret_schema::project_registered_cell_writes(
         &rotate_event,
         arkret_canonical::DigestSuite::Sha256,
     )?
     .into_iter()
     .next()
-    .context("RRK rotate produced no cell write")?;
+    .context("RHRK rotate produced no cell write")?;
     let ProjectedOp::Direct(register_op) = register_write.op else {
-        bail!("RRK register must project a direct CAS operation");
+        bail!("RHRK register must project a direct CAS operation");
     };
     let ProjectedOp::Direct(rotate_op) = rotate_write.op else {
-        bail!("RRK rotate must project a direct CAS operation");
+        bail!("RHRK rotate must project a direct CAS operation");
     };
     if rotate_op.from.as_ref() != Some(&kat["projected_rotate_op"]["from"])
         || rotate_op.value.as_ref() != Some(&kat["projected_rotate_op"]["to"])
     {
-        bail!("RRK production projector lost the exact from/to transition");
+        bail!("RHRK production projector lost the exact from/to transition");
     }
     let register_id = Hash::new(
         register_event.proofs[0]
             .as_producer()
-            .context("RRK register omits producer proof")?
+            .context("RHRK register omits producer proof")?
             .event_digest
             .as_str()
             .to_owned(),
@@ -506,7 +506,7 @@ fn verify_rrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture
     let rotate_id = Hash::new(
         rotate_event.proofs[0]
             .as_producer()
-            .context("RRK rotate omits producer proof")?
+            .context("RHRK rotate omits producer proof")?
             .event_digest
             .as_str()
             .to_owned(),
@@ -519,7 +519,7 @@ fn verify_rrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture
         ],
     );
     if joined != CellState::Value(kat["projected_rotate_op"]["to"].clone()) {
-        bail!("RRK production CAS did not settle the conformant rotation");
+        bail!("RHRK production CAS did not settle the conformant rotation");
     }
 
     let mut missing_head = rotate_event;
@@ -530,9 +530,9 @@ fn verify_rrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture
     )?
     .into_iter()
     .next()
-    .context("RRK missing-head mutation produced no cell write")?;
+    .context("RHRK missing-head mutation produced no cell write")?;
     let ProjectedOp::Direct(stale_op) = stale_write.op else {
-        bail!("RRK missing-head mutation must remain a direct CAS operation");
+        bail!("RHRK missing-head mutation must remain a direct CAS operation");
     };
     if stale_op.from.is_some()
         || !matches!(
@@ -546,12 +546,12 @@ fn verify_rrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixture
             CellState::Bottom(_)
         )
     {
-        bail!("RRK missing exact signed head_eq did not fail closed");
+        bail!("RHRK missing exact signed head_eq did not fail closed");
     }
     Ok(())
 }
 
-fn verify_rrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+fn verify_rhrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
     let kat = &fixture.organization_recovery_archive_durable_before_gc_kat;
     let replica: OrganizationRecoveryArchiveReplica =
         serde_json::from_value(kat["replica"].clone())?;
@@ -563,29 +563,29 @@ fn verify_rrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<(
         serde_json::from_value(kat["barrier_resolve_outcome"].clone())?;
     outcome.validate_for_query(&query)?;
     if outcome.items[0].archive_replica_digest != receipt.archive_replica_digest {
-        bail!("RRK holder list did not expose the exact accepted replica digest");
+        bail!("RHRK holder list did not expose the exact accepted replica digest");
     }
 
     let mut missing_digest = kat["barrier_resolve_outcome"].clone();
     missing_digest["items"][0]
         .as_object_mut()
-        .context("RRK list fixture item is not an object")?
+        .context("RHRK list fixture item is not an object")?
         .remove("archive_replica_digest");
     if serde_json::from_value::<OrganizationRecoveryArchiveListOutcome>(missing_digest).is_ok() {
-        bail!("RRK holder list accepted a row without archive_replica_digest");
+        bail!("RHRK holder list accepted a row without archive_replica_digest");
     }
 
     let mut ledger = OrganizationRecoveryArchiveGcLedger::new(&replica)?;
     if serde_json::to_value(&ledger)? != kat["coverage_ledger"]["initial"]
         || ledger.gc_local_history_secret().is_ok()
     {
-        bail!("RRK local GC did not fail closed before durable holder acceptance");
+        bail!("RHRK local GC did not fail closed before durable holder acceptance");
     }
     if ledger.record_durable_holder_acceptance(&replica, &receipt)?
         != OrganizationRecoveryArchiveReplicaAdmission::FirstAccepted
         || serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_first_accept"]
     {
-        bail!("RRK first durable holder acceptance did not update exact coverage evidence");
+        bail!("RHRK first durable holder acceptance did not update exact coverage evidence");
     }
     if ledger.record_durable_holder_acceptance(&replica, &receipt)?
         != OrganizationRecoveryArchiveReplicaAdmission::ExactDuplicate
@@ -593,10 +593,10 @@ fn verify_rrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<(
             != URL_SAFE_NO_PAD.decode(
                 kat["first_receipt_jcs_b64u"]
                     .as_str()
-                    .context("RRK KAT omits receipt canonical bytes")?,
+                    .context("RHRK KAT omits receipt canonical bytes")?,
             )?
     {
-        bail!("RRK exact duplicate did not return the first byte-identical receipt");
+        bail!("RHRK exact duplicate did not return the first byte-identical receipt");
     }
 
     let mut changed_replica = replica.clone();
@@ -605,7 +605,7 @@ fn verify_rrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<(
         .record_durable_holder_acceptance(&changed_replica, &receipt)
         .is_ok()
     {
-        bail!("RRK semantic retry with changed replica bytes did not conflict");
+        bail!("RHRK semantic retry with changed replica bytes did not conflict");
     }
 
     let mut changed_outcome = outcome.clone();
@@ -623,7 +623,7 @@ fn verify_rrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<(
         .is_ok()
         || serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_first_accept"]
     {
-        bail!("RRK barrier accepted changed archive bytes or mutated coverage state");
+        bail!("RHRK barrier accepted changed archive bytes or mutated coverage state");
     }
 
     let mut substituted_digest = outcome.clone();
@@ -633,16 +633,16 @@ fn verify_rrk_durable_before_gc(fixture: &HistoryKeyRecoveryFixture) -> Result<(
         .record_exact_holder_reread(&query, &substituted_digest)
         .is_ok()
     {
-        bail!("RRK barrier accepted archive_digest as replica access coordinate");
+        bail!("RHRK barrier accepted archive_digest as replica access coordinate");
     }
 
     ledger.record_exact_holder_reread(&query, &outcome)?;
     if serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_exact_reread"] {
-        bail!("RRK exact holder reread did not close the local coverage barrier");
+        bail!("RHRK exact holder reread did not close the local coverage barrier");
     }
     ledger.gc_local_history_secret()?;
     if serde_json::to_value(&ledger)? != kat["coverage_ledger"]["after_local_gc"] {
-        bail!("RRK GC changed more than the source-local history secret");
+        bail!("RHRK GC changed more than the source-local history secret");
     }
     Ok(())
 }
@@ -1464,40 +1464,40 @@ fn verify_scope_and_endpoint_kats(fixture: &HistoryKeyRecoveryFixture) -> Result
     Ok(())
 }
 
-fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
+fn verify_rhrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()> {
     use arkret_identity::history_recovery::resolve_realm_history_recovery_key;
 
-    let kat = &fixture.rrk_registration_rotation_kat;
+    let kat = &fixture.rhrk_registration_rotation_kat;
     let document = kat
         .pointer("/did_documents/register")
         .cloned()
-        .context("RRK KAT omits register DID Document")?;
+        .context("RHRK KAT omits register DID Document")?;
     let key_tuple = kat
         .pointer("/events/register/payload/new_key_tuple")
-        .context("RRK KAT omits register key tuple")?;
+        .context("RHRK KAT omits register key tuple")?;
     let principal_id = DidCoreId::new(
-        key_tuple["controller_id"]
+        key_tuple["method_controller_principal_id"]
             .as_str()
-            .context("RRK tuple omits controller_id")?,
+            .context("RHRK tuple omits method_controller_principal_id")?,
     )?;
     let verification_method = DidUrl::new(
         key_tuple["key_agreement_ref"]
             .as_str()
-            .context("RRK tuple omits key_agreement_ref")?,
+            .context("RHRK tuple omits key_agreement_ref")?,
     )
     .map_err(|err| anyhow::anyhow!(err))?;
     let expected_key: [u8; 32] = URL_SAFE_NO_PAD
         .decode(
             key_tuple["frozen_public_key_b64u"]
                 .as_str()
-                .context("RRK tuple omits frozen_public_key_b64u")?,
+                .context("RHRK tuple omits frozen_public_key_b64u")?,
         )?
         .try_into()
-        .map_err(|bytes: Vec<u8>| anyhow!("RRK frozen key is {} bytes", bytes.len()))?;
+        .map_err(|bytes: Vec<u8>| anyhow!("RHRK frozen key is {} bytes", bytes.len()))?;
     let resolved = resolve_realm_history_recovery_key(
         key_tuple["recovery_key_id"]
             .as_str()
-            .unwrap_or("rrk-fixture"),
+            .unwrap_or("rhrk-fixture"),
         &principal_id,
         &verification_method,
         &document,
@@ -1506,7 +1506,7 @@ fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()
         || resolved.principal_id != principal_id
         || resolved.verification_method != verification_method
     {
-        bail!("RRK exact method evaluator returned a different recipient tuple");
+        bail!("RHRK exact method evaluator returned a different recipient tuple");
     }
 
     let mutations = [
@@ -1526,18 +1526,18 @@ fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()
         let mut mutated = document.clone();
         *mutated
             .pointer_mut(pointer)
-            .with_context(|| format!("RRK mutation {name} pointer is absent"))? = replacement;
+            .with_context(|| format!("RHRK mutation {name} pointer is absent"))? = replacement;
         if resolve_realm_history_recovery_key(
             key_tuple["recovery_key_id"]
                 .as_str()
-                .unwrap_or("rrk-fixture"),
+                .unwrap_or("rhrk-fixture"),
             &principal_id,
             &verification_method,
             &mutated,
         )
         .is_ok()
         {
-            bail!("RRK exact method evaluator accepted {name}");
+            bail!("RHRK exact method evaluator accepted {name}");
         }
     }
 
@@ -1545,17 +1545,17 @@ fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()
     let duplicate = duplicate_method["verificationMethod"][0].clone();
     duplicate_method["verificationMethod"]
         .as_array_mut()
-        .context("RRK DID Document verificationMethod is not an array")?
+        .context("RHRK DID Document verificationMethod is not an array")?
         .push(duplicate);
     resolve_realm_history_recovery_key(
         key_tuple["recovery_key_id"]
             .as_str()
-            .unwrap_or("rrk-fixture"),
+            .unwrap_or("rhrk-fixture"),
         &principal_id,
         &verification_method,
         &duplicate_method,
     )
-    .expect_err("RRK exact method evaluator must reject multiple matching methods");
+    .expect_err("RHRK exact method evaluator must reject multiple matching methods");
 
     let mut wrong_curve = document.clone();
     let mut ed25519_key = vec![0xed, 0x01];
@@ -1566,12 +1566,12 @@ fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()
     resolve_realm_history_recovery_key(
         key_tuple["recovery_key_id"]
             .as_str()
-            .unwrap_or("rrk-fixture"),
+            .unwrap_or("rhrk-fixture"),
         &principal_id,
         &verification_method,
         &wrong_curve,
     )
-    .expect_err("RRK exact method evaluator must reject a non-X25519 multicodec key");
+    .expect_err("RHRK exact method evaluator must reject a non-X25519 multicodec key");
 
     let mut wrong_length = document.clone();
     let mut short_x25519_key = vec![0xec, 0x01];
@@ -1582,28 +1582,28 @@ fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()
     resolve_realm_history_recovery_key(
         key_tuple["recovery_key_id"]
             .as_str()
-            .unwrap_or("rrk-fixture"),
+            .unwrap_or("rhrk-fixture"),
         &principal_id,
         &verification_method,
         &wrong_length,
     )
-    .expect_err("RRK exact method evaluator must reject a non-32-byte X25519 key");
+    .expect_err("RHRK exact method evaluator must reject a non-32-byte X25519 key");
 
     let mut unrelated_service = document;
     unrelated_service["service"] = json!([{"type": "UnrelatedService"}]);
     resolve_realm_history_recovery_key(
         key_tuple["recovery_key_id"]
             .as_str()
-            .unwrap_or("rrk-fixture"),
+            .unwrap_or("rhrk-fixture"),
         &principal_id,
         &verification_method,
         &unrelated_service,
     )
-    .context("RRK DID service designation must not be required")?;
+    .context("RHRK DID service designation must not be required")?;
 
     let mutation_names = kat["negative_mutations"]
         .as_array()
-        .context("RRK KAT omits negative_mutations")?
+        .context("RHRK KAT omits negative_mutations")?
         .iter()
         .filter_map(|row| row["name"].as_str())
         .collect::<BTreeSet<_>>();
@@ -1622,7 +1622,7 @@ fn verify_rrk_method_evaluator(fixture: &HistoryKeyRecoveryFixture) -> Result<()
         "rotate_provenance_seal_mismatch",
     ] {
         if !mutation_names.contains(required) {
-            bail!("RRK fixture omits required mutation {required}");
+            bail!("RHRK fixture omits required mutation {required}");
         }
     }
     Ok(())

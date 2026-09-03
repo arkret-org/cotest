@@ -78,6 +78,7 @@ type SignedPackage = {
     applet_id: string;
     bot_actor_id: string;
     service_id: string;
+    controller_principal_id: string;
     namespaces?: {
       handles?: Array<{ pattern: string }>;
     };
@@ -933,7 +934,7 @@ test.describe("applet bridge", () => {
   });
 
   // COTEST-SEC-02: production-mode controller-signed package signature negative
-  // tests. Spec: extensions/applet-integration.md §4.1 — `controller_id` MUST
+  // tests. Spec: extensions/applet-integration.md §4.1 — `controller_principal_id` MUST
   // sign the registration; `proof` MUST be a controller DID detached proof
   // covering the canonical registration object (excluding `proof` itself), and
   // a package whose proof does not cover its body MUST be rejected. soland's
@@ -1081,6 +1082,38 @@ test.describe("applet bridge", () => {
       "rotated DID snapshot under the sealed epoch",
       rotatedSnapshot,
     );
+  });
+
+  test("E4.4a runtime service identity cannot substitute for controller_principal_id", async ({
+    request,
+  }) => {
+    const registryBase = requireMockAppletRegistry();
+    const stamp = Date.now();
+    const alice = uniqueUser(`applet-service-as-controller-${stamp}`);
+    await ensureRegistered(request, alice);
+    const aliceToken = await issueDevSession(request, alice);
+    const realmId = await createAppletInstallRealm(request, aliceToken, {
+      title: `applet service as controller ${stamp}`,
+      discoverability: "listed",
+      history_access: "since_join",
+    });
+    const signed = await signPackage(request, registryBase, {
+      package_id: `package:bridge:service-as-controller-${stamp}`,
+      namespace: `bridge.service.as.controller.${stamp}`,
+    });
+    const serviceAsController = tamperSignedPackage(signed, (pkg) => {
+      pkg.controller_principal_id = pkg.service_id;
+    });
+
+    const { response: denied } = await rawInstallApplet(
+      request,
+      aliceToken,
+      serviceAsController,
+      realmId,
+      `service-as-controller-${stamp}`,
+    );
+    expect(denied.status()).toBe(400);
+    expect(wireErrCode(await denied.json())).toBe("schema_violation");
   });
 
   test("E4.5 tampered package body: post-signing mutation breaks package_digest and is rejected with schema_violation", async ({
@@ -2198,7 +2231,7 @@ function appletRegistrationPayload(
   return {
     applet_id: pkg.applet_id,
     service_id: pkg.service_id,
-    controller_id: pkg.controller_id,
+    controller_principal_id: pkg.controller_principal_id,
     base_url: pkg.base_url,
     bot_actor_id: pkg.bot_actor_id,
     claimed_profiles: pkg.claimed_profiles,

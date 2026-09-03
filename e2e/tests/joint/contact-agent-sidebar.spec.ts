@@ -75,7 +75,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       const bobPage = jointRealm.bobPage.page;
       const allowedAgent = {
         agent_id: `ak:did_core:web:agents.joint-e2e.local:${stamp}`,
-        controller_id: jointRealm.alice.id,
+        controller_account_id: jointRealm.aliceSession.accountId,
         display_name: `Alice Allowed Agent ${stamp}`,
         agent_slug: `allowed-${stamp.toString(36)}`,
         direct_conversation: {
@@ -266,7 +266,7 @@ async function provisionPendingAgent(
     );
     expect(provisionPayload.schema).toBe("ak.schema.agent_provision.v1");
     expect(provisionPayload.agent_id).toBe(agentId);
-    expect(provisionPayload.controller_id).toBe(controller.user.id);
+    expect(provisionPayload.controller_principal_id).toBe(controller.user.id);
     expect(provisionPayload.principal_control_realm_id).toBe(
       principalControlRealmId,
     );

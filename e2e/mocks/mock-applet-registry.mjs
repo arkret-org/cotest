@@ -324,7 +324,7 @@ function registrationEpochHash(packageBase, evidence) {
       kind: "ak.applet.registration",
       applet_id: packageBase.applet_id,
       service_id: packageBase.service_id,
-      controller_id: packageBase.controller_id,
+      controller_principal_id: packageBase.controller_principal_id,
       base_url: packageBase.base_url,
       bot_actor_id: packageBase.bot_actor_id,
       protocols: [...packageBase.protocols].sort(),
@@ -858,7 +858,7 @@ function signedPackage(body) {
     package_id: body.package_id ?? `package:${safe}:${uuidV7Like()}`,
     applet_id: appletId,
     service_id: serviceId,
-    controller_id: body.controller_id ?? registryId,
+    controller_principal_id: body.controller_principal_id ?? registryId,
     base_url: body.base_url ?? serverBaseUrl(),
     bot_actor_id:
       body.bot_actor_id ?? `ak:did_core:web:bot-${safe}.joint-e2e.local`,

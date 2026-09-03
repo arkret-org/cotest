@@ -73,7 +73,7 @@ export type DirectConversationSummary = {
 
 export type ContactAgentProjection = {
   agent_id: string;
-  controller_id: string;
+  controller_account_id: { principal_id: string; station_id: string };
   display_name?: string;
   agent_slug?: string;
   direct_conversation?: DirectConversationSummary;

@@ -10,8 +10,6 @@
       "event_kind": "ak.self.agent.pause",
       "payload_def_ref": "agent_pause_payload",
       "payload": {
-        "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
         "transition": "pause",
         "previous_status": "active",
         "status_changed_at": "2026-05-27T05:00:00.000Z",
@@ -24,8 +22,6 @@
       "event_kind": "ak.self.agent.resume",
       "payload_def_ref": "agent_resume_payload",
       "payload": {
-        "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
         "transition": "resume",
         "previous_status": "paused",
         "status_changed_at": "2026-05-27T05:05:00.000Z"
@@ -37,8 +33,6 @@
       "event_kind": "ak.self.agent.deactivate",
       "payload_def_ref": "agent_deactivate_payload",
       "payload": {
-        "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
         "transition": "deactivate",
         "previous_status": "active",
         "status_changed_at": "2026-05-27T06:00:00.000Z",
@@ -53,7 +47,10 @@
       "reducer_input": false,
       "payload": {
         "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
+        "controller_account_id": {
+          "principal_id": "ak:did_core:web:controller.example",
+          "station_id": "ak:did_core:web:station.example"
+        },
         "draft_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c001",
         "proposed_action": "ak.message.create",
         "target": {
@@ -73,7 +70,10 @@
       "reducer_input": false,
       "payload": {
         "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
+        "controller_account_id": {
+          "principal_id": "ak:did_core:web:controller.example",
+          "station_id": "ak:did_core:web:station.example"
+        },
         "request_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c002",
         "proposed_action": "ak.message.create",
         "target": {
@@ -95,7 +95,6 @@
         "approval_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c004",
         "request_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c002",
         "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
         "proposed_action": "ak.message.create",
         "target": {
           "kind": "realm",
@@ -117,7 +116,6 @@
         "rejection_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c005",
         "request_id": "ak:agent_draft:01999999-0000-7000-8000-00000000c003",
         "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
         "reason": "policy_violation",
         "rejected_at": "2026-05-27T07:03:00.000Z"
       },
@@ -129,8 +127,6 @@
       "payload_def_ref": "agent_pause_payload",
       "reason": "actor_kind_reducer_managed",
       "payload": {
-        "agent_id": "ak:did_core:web:agent.example",
-        "controller_id": "ak:did_core:web:controller.example",
         "transition": "pause",
         "previous_status": "active",
         "status_changed_at": "2026-05-27T08:00:00.000Z",

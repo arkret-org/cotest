@@ -314,7 +314,7 @@ fn validate_direct_conversation_founder_derivation() -> Result<()> {
     // controller-to-own-Agent is fixed to the controller regardless of DID ordering, so an Agent
     // runtime key never needs Direct Conversation founding scope.
     let agent = DirectConversationFoundingAuthority::ControllerOwnedAgent {
-        controller_id: alice.clone(),
+        controller_actor_id: alice.clone(),
     };
     if direct_conversation_founder([bob.clone(), alice.clone()], &agent)? != alice {
         bail!("controller-owned-Agent founder must be the controller");

@@ -569,7 +569,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
 
         const evidence = {
           schema: "cotest.sidecar_savfox_joint_evidence.v1",
-          controller_id: jointRealm.alice.id,
+          controller_account_id: jointRealm.aliceSession.accountId,
           agent_id: firstPairing.agentId,
           source_realm_id: jointRealm.realmId,
           sidecar_id: ensured.sidecar_id,
@@ -678,7 +678,7 @@ jointTest.describe("Agent Savfox split live @fully-implemented", () => {
             JSON.stringify(
               {
                 schema: "cotest.sidecar_two_device_convergence.v1",
-                controller_id: jointRealm.alice.id,
+                controller_account_id: jointRealm.aliceSession.accountId,
                 device_ids: [
                   jointRealm.alice.deviceId,
                   secondControllerFlow.session.user.deviceId,
@@ -1372,7 +1372,7 @@ type SidecarFoldEvidenceEntry = {
 
 type SidecarFoldEvidence = {
   schema: string;
-  controller_id: string;
+  controller_account_id: { principal_id: string; station_id: string };
   source_realm_id: string;
   exchanges: SidecarFoldEvidenceEntry[];
 };

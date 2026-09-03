@@ -28,8 +28,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Result, anyhow, bail};
 use arkret::events::EventKind;
 use arkret::{
-    AgentSidecar, AgentSidecarAccessReadiness, AgentSidecarContextRef, AgentSidecarDisplayMode,
-    AgentSidecarEncryptionProfile, AgentSidecarEventExchangeBinding,
+    AccountId, AgentSidecar, AgentSidecarAccessReadiness, AgentSidecarContextRef,
+    AgentSidecarDisplayMode, AgentSidecarEncryptionProfile, AgentSidecarEventExchangeBinding,
     AgentSidecarExchangeBindingRole, AgentSidecarExchangeCompletionPolicy,
     AgentSidecarExchangeControl, AgentSidecarExchangeControlAction,
     AgentSidecarExchangeControlSchema, AgentSidecarExchangeFoldedFrontier, AgentSidecarExchangeId,
@@ -55,7 +55,7 @@ use arkret_signatures::{
     verify_ed25519_detached_jws_proof,
 };
 use arkret_wire::{
-    Base64UrlString, CapabilityActionId, EventRequirements, IdempotencyKey, ProfileId,
+    ActorId, Base64UrlString, CapabilityActionId, EventRequirements, IdempotencyKey, ProfileId,
     ProtocolOperationId, ReservationHandle,
 };
 use base64::Engine as _;
@@ -178,11 +178,11 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
             .ok_or_else(|| anyhow!("fixture realm_id is missing"))?
             .to_owned(),
     )?;
-    let controller_id = DidCoreId::new(
-        transcript["controller_id"]
-            .as_str()
-            .ok_or_else(|| anyhow!("fixture controller_id is missing"))?
-            .to_owned(),
+    let controller_account_id: AccountId = serde_json::from_value(
+        transcript
+            .get("controller_account_id")
+            .cloned()
+            .ok_or_else(|| anyhow!("fixture controller_account_id is missing"))?,
     )?;
     let desired_agent_ids = transcript["desired_agent_ids"]
         .as_array()
@@ -194,7 +194,7 @@ pub fn run_sidecar_mls_bootstrap_binding_vector() -> Result<()> {
     let digest = agent_sidecar_participant_authority_digest(
         sidecar_id.clone(),
         realm_id.clone(),
-        controller_id,
+        controller_account_id,
         &desired_agent_ids,
     )?;
 
@@ -373,7 +373,7 @@ struct SidecarStateSnapshot {
 }
 
 struct SidecarExecutableModel {
-    authenticated_controller: DidCoreId,
+    authenticated_controller_account_id: AccountId,
     has_ensure_capability: bool,
     lifecycle: AgentLifecycleStatus,
     durable: SidecarDurableState,
@@ -386,12 +386,12 @@ struct SidecarExecutableModel {
 
 impl SidecarExecutableModel {
     fn new(
-        authenticated_controller: DidCoreId,
+        authenticated_controller_account_id: AccountId,
         has_ensure_capability: bool,
         lifecycle: AgentLifecycleStatus,
     ) -> Self {
         Self {
-            authenticated_controller,
+            authenticated_controller_account_id,
             has_ensure_capability,
             lifecycle,
             durable: SidecarDurableState::default(),
@@ -404,11 +404,15 @@ impl SidecarExecutableModel {
     }
 
     fn with_existing(
-        authenticated_controller: DidCoreId,
+        authenticated_controller_account_id: AccountId,
         has_ensure_capability: bool,
         lifecycle: AgentLifecycleStatus,
     ) -> Result<Self> {
-        let mut model = Self::new(authenticated_controller, has_ensure_capability, lifecycle);
+        let mut model = Self::new(
+            authenticated_controller_account_id,
+            has_ensure_capability,
+            lifecycle,
+        );
         model.durable.coordinates = Some(fixed_sidecar_coordinates(false)?);
         Ok(model)
     }
@@ -425,7 +429,9 @@ impl SidecarExecutableModel {
     }
 
     fn authorize(&self, request: &SidecarEnsurePrepareRequestBody) -> SidecarModelResult<()> {
-        if !self.has_ensure_capability || request.controller_id != self.authenticated_controller {
+        if !self.has_ensure_capability
+            || request.controller_account_id != self.authenticated_controller_account_id
+        {
             return Err(SidecarModelError::CreateDenied);
         }
         match self.lifecycle {
@@ -697,7 +703,7 @@ fn unique_reservation_handle(
 ) -> SidecarModelResult<ReservationHandle> {
     let digest = arkret_canonical::canonical_sha256(&json!({
         "operation_id": request.operation_id,
-        "controller_id": request.controller_id,
+        "controller_account_id": request.controller_account_id,
         "device_id": device_id,
         "context": request.context_ref,
     }))
@@ -792,12 +798,12 @@ fn fixed_sidecar_coordinates(_existing_context: bool) -> Result<SidecarCoordinat
 }
 
 fn fixed_prepare_request(
-    controller_id: &DidCoreId,
+    controller_account_id: &AccountId,
     idempotency_key: &str,
     second_context: bool,
 ) -> Result<SidecarEnsurePrepareRequestBody> {
     fixed_prepare_request_for_operation(
-        controller_id,
+        controller_account_id,
         idempotency_key,
         second_context,
         "ak:operation:cotest.sidecar.ensure",
@@ -805,7 +811,7 @@ fn fixed_prepare_request(
 }
 
 fn fixed_prepare_request_for_operation(
-    controller_id: &DidCoreId,
+    controller_account_id: &AccountId,
     idempotency_key: &str,
     second_context: bool,
     operation_id: &str,
@@ -815,7 +821,7 @@ fn fixed_prepare_request_for_operation(
         operation_id: ProtocolOperationId::new(operation_id).map_err(anyhow::Error::msg)?,
         idempotency_key: IdempotencyKey::new(idempotency_key).map_err(anyhow::Error::msg)?,
         source_realm_id: RealmId::new("ak:realm:AZbWb-13w-oDGla4V2JFe2VWsjRVvQYYC-dr1JgcoXz5")?,
-        controller_id: controller_id.clone(),
+        controller_account_id: controller_account_id.clone(),
         context_ref: SidecarContextRef::Strand {
             strand_id: StrandId::new(if second_context {
                 "ak:strand:AasLcOpdB_lTv6ay3bQ6xOzA6mDGOT67AC66Gd65H8-W"
@@ -845,7 +851,7 @@ fn build_fixed_sidecar_prepare(
             ScopeRef::Realm {
                 realm_id: request.source_realm_id.clone(),
             },
-            sidecar_actor_id(&request.controller_id)?,
+            sidecar_actor_id(&request.controller_account_id)?,
             1,
             vec![frontier.clone()],
             Vec::new(),
@@ -882,7 +888,7 @@ fn build_fixed_sidecar_prepare(
             realm_id: request.source_realm_id.clone(),
             sidecar_id: sidecar_id.clone(),
         },
-        sidecar_actor_id(&request.controller_id)?,
+        sidecar_actor_id(&request.controller_account_id)?,
         if existing.is_some() { 3 } else { 2 },
         attach_prev_refs,
         attach_refs,
@@ -975,12 +981,18 @@ fn fixed_unsigned_sidecar_event(
     Ok(event)
 }
 
-fn sidecar_actor_id(actor_id: &DidCoreId) -> SidecarModelResult<arkret_wire::ActorId> {
-    Ok(arkret_wire::ActorId::account(arkret_wire::AccountId::new(
-        actor_id.clone(),
-        DidCoreId::new("ak:did_core:web:principal.example")
-            .map_err(|_| SidecarModelError::ModelInvariant)?,
-    )))
+fn sidecar_account(principal_id: DidCoreId) -> Result<AccountId> {
+    Ok(AccountId::new(
+        principal_id,
+        DidCoreId::new("ak:did_core:web:station.example")?,
+    ))
+}
+
+fn sidecar_actor_id(account_id: &AccountId) -> SidecarModelResult<arkret_wire::ActorId> {
+    account_id
+        .validate()
+        .map_err(|_| SidecarModelError::ModelInvariant)?;
+    Ok(arkret_wire::ActorId::account(account_id.clone()))
 }
 
 fn fixed_sidecar_draft(event: &Event) -> SidecarModelResult<PreparedEventDraft> {
@@ -1050,6 +1062,7 @@ fn validate_prepared_outcome(
     }
     if let Some(create) = &create {
         if create.kind != EventKind::SidecarCreate
+            || create.actor_id != sidecar_actor_id(&request.controller_account_id)?
             || create.scope_ref
                 != (ScopeRef::Realm {
                     realm_id: request.source_realm_id.clone(),
@@ -1075,7 +1088,7 @@ fn validate_prepared_outcome(
         .validate()
         .map_err(|_| SidecarModelError::DraftMismatch)?;
     if attach.kind != EventKind::SidecarContextAttach
-        || attach.actor_id != sidecar_actor_id(&request.controller_id)?
+        || attach.actor_id != sidecar_actor_id(&request.controller_account_id)?
         || attach.realm_id != request.source_realm_id
         || attach.scope_ref
             != (ScopeRef::Sidecar {
@@ -1244,7 +1257,7 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     {
         bail!("Sidecar ensure operation/profile registry drifted");
     }
-    let controller = DidCoreId::new("ak:did_core:web:controller.example")?;
+    let controller = sidecar_account(DidCoreId::new("ak:did_core:web:controller.example")?)?;
     let prepare_request = fixed_prepare_request(&controller, "cotest-sidecar-prepare-new", false)?;
     let mut model =
         SidecarExecutableModel::new(controller.clone(), true, AgentLifecycleStatus::Active);
@@ -1258,6 +1271,17 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
         || model.staged_write_epoch != 1
     {
         bail!("Sidecar prepare exact replay did not return the fixed first outcome");
+    }
+    let mut other_station_request = prepare_request.clone();
+    other_station_request.controller_account_id.station_id =
+        DidCoreId::new("ak:did_core:web:other-station.example")?;
+    let before_other_station = model.snapshot();
+    if !matches!(
+        model.prepare(&other_station_request),
+        Err(SidecarModelError::CreateDenied)
+    ) || model.snapshot() != before_other_station
+    {
+        bail!("Sidecar ensure merged the same principal across different Stations");
     }
     let SidecarPreparedOutcome::New {
         operation_id,
@@ -1312,6 +1336,14 @@ pub fn run_sidecar_ensure_idempotent_vector() -> Result<()> {
     assert_new_commit_failure_is_write_free(
         &mut model,
         &commit(unsigned_mutation, attach_event.clone()),
+        &public_key,
+        SidecarModelError::DraftMismatch,
+    )?;
+    let mut service_actor_mutation = create_event.clone();
+    service_actor_mutation.actor_id = ActorId::service(controller.principal_id.clone());
+    assert_new_commit_failure_is_write_free(
+        &mut model,
+        &commit(service_actor_mutation, attach_event.clone()),
         &public_key,
         SidecarModelError::DraftMismatch,
     )?;
@@ -1621,7 +1653,7 @@ impl SidecarAccessProjection {
 
 pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
     let _fixture_case = sidecar_fixture_case(VECTOR_ID_SIDECAR_ELIGIBILITY_STATES)?;
-    let controller = DidCoreId::new("ak:did_core:web:eligibility.example")?;
+    let controller = sidecar_account(DidCoreId::new("ak:did_core:web:eligibility.example")?)?;
     let request = fixed_prepare_request(&controller, "cotest-sidecar-eligibility", false)?;
     let mut active =
         SidecarExecutableModel::new(controller.clone(), true, AgentLifecycleStatus::Active);
@@ -1667,7 +1699,7 @@ pub fn run_sidecar_eligibility_states_vector() -> Result<()> {
 
 pub fn run_sidecar_existence_privacy_vector() -> Result<()> {
     let _fixture_case = sidecar_fixture_case(VECTOR_ID_SIDECAR_EXISTENCE_PRIVACY)?;
-    let controller = DidCoreId::new("ak:did_core:web:privacy.example")?;
+    let controller = sidecar_account(DidCoreId::new("ak:did_core:web:privacy.example")?)?;
     let request = fixed_prepare_request(&controller, "cotest-sidecar-privacy", false)?;
     let mut absent =
         SidecarExecutableModel::new(controller.clone(), false, AgentLifecycleStatus::Active);
@@ -1730,7 +1762,9 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
     let terminal_id = EventId::new("ak:event:AcQOShj1JyHhaaSQwjV-D2nyDc1M1yK4DTq0JtH4nPIx")?;
     let projection = AgentSidecarExchangeProjection {
         schema: AgentSidecarExchangeProjectionSchema::V1,
-        controller_id: DidCoreId::new("ak:did_core:web:alice.example.com")?,
+        controller_account_id: sidecar_account(DidCoreId::new(
+            "ak:did_core:web:alice.example.com",
+        )?)?,
         sidecar_id: sidecar,
         exchange_id: AgentSidecarExchangeId::new("Abcdefghijklmnopqrstuv")?,
         origin: AgentSidecarExchangeOrigin::SourceTrackRouted,
@@ -1879,7 +1913,7 @@ fn exchange_agent_t() -> Result<DidCoreId> {
 
 fn exchange_scope() -> Result<SidecarExchangeFoldScope> {
     Ok(SidecarExchangeFoldScope {
-        controller_id: exchange_controller()?,
+        controller_account_id: sidecar_account(exchange_controller()?)?,
         sidecar_id: SidecarId::new("ak:sidecar:ARp3V6IbuRJ1DuhggcFb2nOBwbPGWXaO4GLVY9SVMM5u")?,
     })
 }
@@ -1912,7 +1946,7 @@ fn exchange_request_fact(
     Ok(SidecarExchangeRequestFact {
         event_id: exchange_event_id(suffix)?,
         hlc: exchange_hlc(1)?,
-        actor_id: exchange_controller()?,
+        actor_account_id: sidecar_account(exchange_controller()?)?,
         actor_seq,
         event_digest: digest.to_owned(),
         exchange_id: exchange_id_x1()?,
@@ -1942,7 +1976,7 @@ fn exchange_agent_fact(
     Ok(SidecarExchangeAgentFact {
         event_id: exchange_event_id(suffix)?,
         hlc: exchange_hlc(counter)?,
-        actor_id: actor,
+        actor_principal_id: actor,
         binding,
         refs_after: vec![request_event_id],
     })
@@ -1960,7 +1994,7 @@ fn exchange_close_control(
     Ok(SidecarExchangeControlFact {
         event_id: exchange_event_id(suffix)?,
         hlc: exchange_hlc(0x40 + suffix)?,
-        actor_id: exchange_controller()?,
+        actor_account_id: sidecar_account(exchange_controller()?)?,
         actor_seq,
         event_digest: digest.to_owned(),
         refs_after: basis.clone(),
@@ -2000,7 +2034,7 @@ pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
     // becomes canonical, and an agent-authored request binding is invalid.
     let duplicate_request = exchange_request_fact(0x40, 9, "zz")?;
     let mut agent_authored_request = exchange_request_fact(0x41, 1, "zz")?;
-    agent_authored_request.actor_id = exchange_agent_s()?;
+    agent_authored_request.actor_account_id = sidecar_account(exchange_agent_s()?)?;
     let delivered = fold_sidecar_exchange(
         &scope,
         &exchange,
@@ -2062,10 +2096,11 @@ pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
     missing_causal_ref.refs_after = Vec::new();
     let mut unaddressed_actor = valid_response.clone();
     unaddressed_actor.event_id = exchange_event_id(0x53)?;
-    unaddressed_actor.actor_id = DidCoreId::new("ak:did_core:web:stranger.agents.example")?;
+    unaddressed_actor.actor_principal_id =
+        DidCoreId::new("ak:did_core:web:stranger.agents.example")?;
     let mut controller_response = valid_response.clone();
     controller_response.event_id = exchange_event_id(0x54)?;
-    controller_response.actor_id = exchange_controller()?;
+    controller_response.actor_principal_id = exchange_controller()?;
     let duplicate_delivery = valid_response.clone();
     let folded = fold_sidecar_exchange(
         &scope,
@@ -2128,7 +2163,7 @@ pub fn run_sidecar_exchange_binding_closed_loop_vector() -> Result<()> {
     )?;
     t_response.binding = non_coordinator_completion;
     let coordinator = with_internal.coordinator_agent_id.clone();
-    if t_response.actor_id == coordinator {
+    if t_response.actor_principal_id == coordinator {
         bail!("fixture expects T to be a non-coordinator");
     }
     let responding = fold_sidecar_exchange(
@@ -2628,10 +2663,11 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
             .as_str()
             .ok_or_else(|| anyhow!("recovery fixture realm_id is missing"))?,
     )?;
-    let controller_id = DidCoreId::new(
-        locator["controller_id"]
-            .as_str()
-            .ok_or_else(|| anyhow!("recovery fixture controller_id is missing"))?,
+    let controller_account_id: AccountId = serde_json::from_value(
+        locator
+            .get("controller_account_id")
+            .cloned()
+            .ok_or_else(|| anyhow!("recovery fixture controller_account_id is missing"))?,
     )?;
     let sidecar_id = SidecarId::new(
         locator["sidecar_id"]
@@ -2646,7 +2682,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     let participant_authority_digest = agent_sidecar_participant_authority_digest(
         sidecar_id.clone(),
         realm_id.clone(),
-        controller_id.clone(),
+        controller_account_id.clone(),
         &[],
     )?;
     let created_at: DateTime<Utc> = "2026-07-29T00:00:00.000Z".parse()?;
@@ -2655,7 +2691,7 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
             id: sidecar_id.clone(),
             schema: AgentSidecarSchema::V1,
             realm_id: realm_id.clone(),
-            controller_id: controller_id.clone(),
+            controller_account_id: controller_account_id.clone(),
             encryption_profile: AgentSidecarEncryptionProfile::MlsRfc9420,
             state: AgentSidecarState::Active,
             state_changed_at: None,
@@ -2686,8 +2722,8 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     let attach_event = arkret_wire::test_support::raw_event_at(
         EventKind::SidecarContextAttach.as_str(),
         scope,
-        controller_id.clone(),
-        DidCoreId::new("ak:did_core:web:principal.example")?,
+        controller_account_id.principal_id.clone(),
+        controller_account_id.station_id.clone(),
         20,
         exchange_hlc(0x81)?,
         serde_json::to_value(SidecarContextAttachPayload {
@@ -2731,6 +2767,34 @@ pub fn run_sidecar_context_locator_recovery_vector() -> Result<()> {
     .is_empty()
     {
         bail!("a non-controller Sidecar attachment must remain unresolved");
+    }
+    let same_principal_other_station_attach = arkret_wire::test_support::raw_event_at(
+        EventKind::SidecarContextAttach.as_str(),
+        attach_event.scope_ref.clone(),
+        controller_account_id.principal_id.clone(),
+        DidCoreId::new("ak:did_core:web:other-station.example")?,
+        22,
+        exchange_hlc(0x83)?,
+        serde_json::to_value(&attach_event.payload)?,
+        created_at,
+    )?;
+    if !recover_agent_sidecar_context_locators(
+        std::slice::from_ref(&view),
+        std::slice::from_ref(&same_principal_other_station_attach),
+    )?
+    .is_empty()
+    {
+        bail!("a same-principal attachment from another Station must remain unresolved");
+    }
+    let mut service_actor_attach = attach_event.clone();
+    service_actor_attach.actor_id = ActorId::service(controller_account_id.principal_id.clone());
+    if !recover_agent_sidecar_context_locators(
+        std::slice::from_ref(&view),
+        std::slice::from_ref(&service_actor_attach),
+    )?
+    .is_empty()
+    {
+        bail!("a service-authored Sidecar attachment must remain unresolved");
     }
     let pagination = &case["pagination"];
     if pagination["repeated_cursor_outcome"].as_str() != Some("backfill_pending")

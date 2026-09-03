@@ -177,11 +177,11 @@ pub fn run_agent_provision_vector() -> Result<()> {
             .ok_or_else(|| anyhow!("commitment agent_id is missing"))?
             .to_owned(),
     )?;
-    let controller_id = DidCoreId::new(
+    let controller_principal_id = DidCoreId::new(
         commitment
-            .get("controller_id")
+            .get("controller_principal_id")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("commitment controller_id is missing"))?
+            .ok_or_else(|| anyhow!("commitment controller_principal_id is missing"))?
             .to_owned(),
     )?;
     let requested_scope: AgentKeyScope = serde_json::from_value(
@@ -190,7 +190,8 @@ pub fn run_agent_provision_vector() -> Result<()> {
             .cloned()
             .ok_or_else(|| anyhow!("commitment requested_scope is missing"))?,
     )?;
-    let digest = agent_requested_scope_digest(&agent_id, &controller_id, &requested_scope)?;
+    let digest =
+        agent_requested_scope_digest(&agent_id, &controller_principal_id, &requested_scope)?;
     if commitment.get("expected_digest").and_then(Value::as_str) != Some(digest.as_str()) {
         bail!("Agent requested_scope DID commitment digest drifted");
     }
@@ -395,11 +396,11 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         .get("pairing_request_binding_input")
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow!("pairing_request_binding_input missing"))?;
-    let controller_id = DidCoreId::new(
+    let controller_principal_id = DidCoreId::new(
         pairing
-            .get("controller_id")
+            .get("controller_principal_id")
             .and_then(Value::as_str)
-            .ok_or_else(|| anyhow!("pairing controller_id missing"))?,
+            .ok_or_else(|| anyhow!("pairing controller_principal_id missing"))?,
     )?;
     let pairing_agent_id = DidCoreId::new(
         pairing
@@ -478,7 +479,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
     let canonical_pairing_binding = serde_json::json!({
         "agent_id": pairing_agent_id,
         "audience_id": audience,
-        "controller_id": controller_id,
+        "controller_principal_id": controller_principal_id,
         "expires_at": canonical_pairing_expires_at,
         "kind": "ak.agent.key_pairing_request_binding.v1",
         "operation_id": arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
@@ -504,7 +505,7 @@ pub fn run_agent_runtime_key_binding_vector() -> Result<()> {
         let digest =
             arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
             arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
-            &controller_id,
+            &controller_principal_id,
             &pairing_agent_id,
             &arkret_wire::OpaqueLocalId::new(pairing_request_id)
                 .map_err(|error| anyhow!(error))?,
