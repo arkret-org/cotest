@@ -273,7 +273,7 @@ async function addEncryptedDescription(
     timeout: 45_000,
   });
   await page.getByTestId("card-detail-tab-description").click();
-  await page.getByTestId("card-detail-add-description-button").click();
+  await page.getByTestId("card-detail-edit-description-button").click();
 
   const editor = page.getByTestId("card-detail-description-input");
   await expect(editor).toBeAttached({ timeout: 45_000 });

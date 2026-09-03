@@ -145,6 +145,23 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(calendar).toContainText(location);
     await expect(calendar).toContainText(/Weekly/i);
 
+    // Reload through the canonical projection before responding.  RSVP basis
+    // refs must come from an observed schedule frontier, not solely from the
+    // optimistic local card overlay used immediately after saving.
+    await page.page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.page.getByTestId("kanban-panel")).toBeVisible({
+      timeout: 120_000,
+    });
+    await page.page
+      .getByTestId("kanban-card")
+      .filter({ hasText: cardTitle })
+      .first()
+      .click();
+    await expect(detail).toBeVisible({ timeout: 45_000 });
+    await expect(
+      calendar.getByTestId("card-detail-calendar-agenda-unresolved"),
+    ).toHaveCount(0, { timeout: 90_000 });
+
     await calendar.getByRole("button", { name: "Series", exact: true }).click();
     const rsvpWrite = page.page.waitForResponse(
       (response) =>

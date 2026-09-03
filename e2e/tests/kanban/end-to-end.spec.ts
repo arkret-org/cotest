@@ -18,6 +18,7 @@ import {
   accountActorId,
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
@@ -505,7 +506,13 @@ test.describe("kanban end-to-end", () => {
     );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
-      { headers: authHeaders(aliceToken), data: crossRealm },
+      {
+        headers: {
+          ...authHeaders(aliceToken),
+          "content-type": "application/json",
+        },
+        data: canonicalJson(crossRealm),
+      },
     );
     const responseBody = await response.json();
     // relation.md §4 fixes this as failed_precondition. The canonical HTTP

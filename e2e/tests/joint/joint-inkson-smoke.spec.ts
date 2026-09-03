@@ -352,9 +352,9 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       const participantRow = jointRealm.alicePage.page
         .getByTestId("discussion-user-row")
         .filter({
-          has: jointRealm.alicePage.page.getByTitle(participantId, {
-            exact: true,
-          }),
+          // Participant row titles carry the canonical full Account ActorId
+          // (principal plus Station), not the bare principal id.
+          hasText: participantSession!.user.displayName,
         });
       await expect(participantRow).toBeVisible({ timeout: 60_000 });
       await expect(participantRow).not.toContainText(forgedDisplayName);

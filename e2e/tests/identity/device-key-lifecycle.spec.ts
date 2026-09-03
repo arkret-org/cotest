@@ -86,6 +86,10 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       await test.step("first real OIDC login establishes the device identity", async () => {
         await jointPage.gotoLogin();
         await serverLoginViaCoauth(page, account);
+        // Drive one authenticated self-path read so the observer captures the
+        // newly minted proof-bound grant rather than racing the first shell
+        // effect after the OAuth callback.
+        await jointPage.gotoHome();
       });
 
       let activeGrant = await grants.waitForLatest();
@@ -207,6 +211,7 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       const reloginStartIndex = grants.count();
       await test.step("returning real OIDC login gets a fresh grant-binding key", async () => {
         await serverLoginViaCoauth(page, account);
+        await jointPage.gotoHome();
       });
       const secondGrant = await grants.waitForDifferentAfter(
         activeGrant.jwt,

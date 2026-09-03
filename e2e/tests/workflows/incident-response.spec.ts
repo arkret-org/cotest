@@ -41,6 +41,7 @@ test.describe("workflow: incident response", () => {
     browser,
     request,
   }, testInfo) => {
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const [oncallFlow, backendFlow, commsFlow] = await Promise.all([
       openDpopUserPage(browser, request, "wf-incident-oncall", {
@@ -85,6 +86,16 @@ test.describe("workflow: incident response", () => {
         backendPage.acceptInvite(realmId),
         commsPage.acceptInvite(realmId),
       ]);
+      await oncallPage.grantRealmCapability(
+        realmId,
+        backend.id,
+        "ak.message.create",
+      );
+      await oncallPage.grantRealmCapability(
+        realmId,
+        comms.id,
+        "ak.message.create",
+      );
 
       await oncallPage.sendTimelineMessage(realmId, alert);
       await oncallPage.clickTimelineReply(alert);

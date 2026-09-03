@@ -1328,11 +1328,16 @@ export class JointUserPage {
     }
 
     // The wasm events adapter returns each bounded stream window as one batch,
-    // so an accepted Event can legitimately settle after the first 15-second
-    // optimistic interval. Keep the live deep-link mounted until the full
-    // operation timeout instead of turning a slow acknowledgement into an
-    // unrelated cold-start navigation.
+    // so an accepted Event can legitimately miss the first optimistic window.
+    // Re-enter through the durable projection once: this both proves the write
+    // survived reload and avoids treating a missed live-subscribe wakeup as an
+    // indefinitely pending write.
     const remainingTimeout = Math.max(5_000, timeout - initialTimeout);
+    await this.page.reload({ waitUntil: "domcontentloaded" });
+    await this.dismissPassiveBlockingPrompts();
+    await expect(this.page.getByTestId("chat-panel")).toBeVisible({
+      timeout: Math.min(remainingTimeout, 60_000),
+    });
     await expect(event).toBeVisible({ timeout: remainingTimeout });
     await expect(pending).toHaveCount(0, {
       timeout: remainingTimeout,
@@ -1772,6 +1777,10 @@ export async function createDpopUserSessionForAccount(
     principal_control_realm_id: principalControlRealmId,
     pcr_genesis_unit: checkpoint.pcr_genesis_unit,
     bootstrap_seal: bootstrapSeal,
+    // Agent provisioning is controller-authority bound.  The browser fixture
+    // must carry the exact Station-qualified authority proven by the handoff
+    // grant instead of relying on the serde compatibility default (`None`).
+    controller_authority: session.accountId,
   };
   const viewerUrl = `${solandBaseUrl(opts.server)}/_arkret/self/account/viewer`;
   const viewerResponse = await request.get(viewerUrl, {

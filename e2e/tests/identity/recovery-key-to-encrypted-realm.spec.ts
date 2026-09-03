@@ -304,7 +304,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         );
       });
 
-      await test.step("manual recovery performs one bounded batch-only refill", async () => {
+      await test.step("manual recovery preserves a healthy bounded inventory", async () => {
         await jointPage.gotoSettings();
         await page.getByTestId("settings-nav-item-encryption").click();
         await expect(page.getByTestId("encryption-settings")).toBeVisible();
@@ -313,29 +313,19 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
           .click();
         await expect(
           page.getByTestId("settings-mls-keypackages-refill-status"),
-        ).toContainText(/published|已发布|补充/, { timeout: 120_000 });
+        ).toContainText(/published:\s*0|已发布[^0-9]*0|补充[^0-9]*0/, {
+          timeout: 120_000,
+        });
 
-        await expect
-          .poll(
-            () =>
-              protocolHits.filter(
-                (hit) => hit.path === "/_arkret/self/keys/keypackages/upload",
-              ).length,
-            { timeout: 30_000 },
-          )
-          .toBe(uploadCountBeforeReload + 1);
-        const refill = protocolHits
-          .filter((hit) => hit.path === "/_arkret/self/keys/keypackages/upload")
-          .at(-1)!;
-        expect(refill.requestBody).toHaveProperty("endpoint_signature");
-        const entries = refill.requestBody?.keypackages as Array<
-          Record<string, unknown>
-        >;
-        expect(entries).toHaveLength(8);
-        for (const entry of entries) {
-          expect(entry).not.toHaveProperty("endpoint_signature");
-        }
-        expect(refill.responseBody).not.toHaveProperty("available_count");
+        // The fresh device still owns its full initial batch.  Replenishment
+        // is threshold based, so the explicit maintenance action is a no-op;
+        // it must not upload a duplicate batch merely because the user clicked
+        // the button.  The initial bounded upload shape is asserted above.
+        expect(
+          protocolHits.filter(
+            (hit) => hit.path === "/_arkret/self/keys/keypackages/upload",
+          ),
+        ).toHaveLength(uploadCountBeforeReload);
       });
 
       expect(

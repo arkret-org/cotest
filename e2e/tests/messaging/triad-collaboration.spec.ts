@@ -291,6 +291,21 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(alicePage.page, testInfo, "A-alice-space-created");
 
       await bobPage.acceptInvite(realmId);
+      await alicePage.grantRealmCapability(
+        realmId,
+        bob.id,
+        "ak.message.create",
+      );
+      await alicePage.grantRealmCapability(
+        realmId,
+        bob.id,
+        "ak.message.revise",
+      );
+      await alicePage.grantRealmCapability(
+        realmId,
+        bob.id,
+        "ak.message.redact",
+      );
       await stepShot(bobPage.page, testInfo, "A-bob-accepted-invite");
 
       // Phase B — alice and bob exchange messages with reply chain + edit.
@@ -327,6 +342,11 @@ test.describe("single-server triad collaboration", () => {
       await stepShot(alicePage.page, testInfo, "C-alice-invited-carol");
 
       await carolPage.acceptInvite(realmId);
+      await alicePage.grantRealmCapability(
+        realmId,
+        carol.id,
+        "ak.message.create",
+      );
       await stepShot(carolPage.page, testInfo, "C-carol-accepted-invite");
 
       await carolPage.gotoTimelineRealm(realmId);

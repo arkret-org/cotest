@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext, type Page } from "../../helpers/arkret-test";
 import { coauthBaseUrl, optionalEnv, solandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
-import { submitCoauthPasswordCredentials } from "../../helpers/real-oidc-login";
+import {
+  hardLogoutViaAccountMenu,
+  submitCoauthPasswordCredentials,
+} from "../../helpers/real-oidc-login";
 import {
   assertJointStackNotRequired,
   openDpopUserPageForAccount,
@@ -264,6 +267,11 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         );
         expect(logout.ok()).toBe(true);
 
+        // The Coauth account session and Inkson's Station session are
+        // independent. End the latter explicitly so /login does not correctly
+        // redirect the still-authenticated founding device back to the shell.
+        await jointPage.gotoHome();
+        await hardLogoutViaAccountMenu(jointPage);
         await jointPage.gotoLogin();
         await page.getByTestId("login-server-url").fill(solandBaseUrl());
         await page.getByTestId("start-server-login-button").click();

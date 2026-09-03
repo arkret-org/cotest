@@ -15,6 +15,7 @@ import { stepShot } from "../../helpers/screenshots";
 import { solandBaseUrl } from "../../helpers/env";
 import {
   accountActorId,
+  addRealmMemberApi,
   alignSignedEventToActorFrontierApi,
   authHeaders,
   canonicalTimestamp,
@@ -355,9 +356,11 @@ test.describe("project simulation", () => {
     const realmId = await createRealmApi(request, aliceToken, {
       title: `S16 Assign ${stamp}`,
       ownerId: alice.id,
-      invitees: [bob.id],
     });
-    await acceptInviteViaApi(request, bobToken, bob.id, realmId);
+    // Assignment is the behavior under test. Establish Bob's membership
+    // directly so invite-delivery policy/quarantine is not an unrelated
+    // prerequisite for reading the resulting Strand projection.
+    await addRealmMemberApi(request, aliceToken, realmId, bob.id);
 
     const { cardId } = await createBoardWithCard(
       request,

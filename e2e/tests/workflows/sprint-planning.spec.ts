@@ -70,6 +70,16 @@ test.describe("workflow: sprint planning", () => {
         bobPage.acceptInvite(realmId),
         carolPage.acceptInvite(realmId),
       ]);
+      await meiPage.grantRealmCapability(
+        realmId,
+        bob.id,
+        "ak.message.create",
+      );
+      await meiPage.grantRealmCapability(
+        realmId,
+        carol.id,
+        "ak.message.create",
+      );
       await Promise.all([
         bobPage.gotoTimelineRealm(realmId),
         carolPage.gotoTimelineRealm(realmId),

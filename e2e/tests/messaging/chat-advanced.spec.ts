@@ -558,6 +558,18 @@ test.describe("chat advanced", () => {
       });
       await bobPage.acceptInvite(realmId);
       await carolPage.acceptInvite(realmId);
+      for (const member of [bob.id, carol.id]) {
+        await alicePage.grantRealmCapability(
+          realmId,
+          member,
+          "ak.message.create",
+        );
+        await alicePage.grantRealmCapability(
+          realmId,
+          member,
+          "ak.reaction.add",
+        );
+      }
 
       await sendChat(alicePage, realmId, m1);
 
@@ -603,6 +615,10 @@ test.describe("chat advanced", () => {
         timeout: 30_000,
       });
 
+      // Alice's tab authored the original message before the peer reactions.
+      // Reload to prove both OR-Set additions survive the canonical account
+      // projection instead of relying on a best-effort live-subscribe wakeup.
+      await alicePage.page.reload({ waitUntil: "domcontentloaded" });
       await gotoChat(alicePage, realmId);
       const aliceOnM1 = alicePage.page
         .getByTestId("chat-message")
