@@ -96,6 +96,36 @@ function relationObject(args: {
   };
 }
 
+async function waitForStrandProjection(
+  request: APIRequestContext,
+  token: string,
+  realmId: string,
+  strandId: string,
+): Promise<void> {
+  const url = `${solandBaseUrl()}/_arkret/self/realms/${encodeURIComponent(realmId)}/strands`;
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(url, {
+          headers: authHeaders(token, "GET", url),
+        });
+        if (!response.ok()) return false;
+        const body = (await response.json()) as {
+          strands?: Array<{ strand_id?: string }>;
+        };
+        return (body.strands ?? []).some(
+          (strand) => strand.strand_id === strandId,
+        );
+      },
+      {
+        message: `Strand ${strandId} reaches the ${realmId} projection`,
+        timeout: 60_000,
+        intervals: [100, 250, 500, 1_000],
+      },
+    )
+    .toBe(true);
+}
+
 async function addCardThroughColumn(column: Locator, title: string) {
   const titleInput = column.getByTestId("new-card-title-input").last();
   if (!(await titleInput.isVisible({ timeout: 250 }).catch(() => false))) {
@@ -482,6 +512,14 @@ test.describe("kanban end-to-end", () => {
       realmB,
       `Card in B ${stamp}`,
     );
+    // Admission resolves endpoint home Realms from the accepted projection.
+    // Observe both create Events before submitting the negative relation so
+    // this test cannot accidentally exercise out-of-order replication
+    // tolerance for an endpoint that has not materialized yet.
+    await Promise.all([
+      waitForStrandProjection(request, aliceToken, realmA, cardInA),
+      waitForStrandProjection(request, aliceToken, realmB, cardInB),
+    ]);
 
     // contains edge in realm A pointing at a Card that lives in realm B.
     const crossRealm = signedEventEnvelope({
@@ -516,11 +554,15 @@ test.describe("kanban end-to-end", () => {
     );
     const responseBody = await response.json();
     // relation.md §4 fixes this as failed_precondition. The canonical HTTP
-    // binding for that problem class is 422; 412 is reserved for HTTP
-    // precondition headers and was an old harness assumption.
-    expect(response.status(), JSON.stringify(responseBody)).toBe(422);
+    // error-code-registry.json binds failed_precondition to HTTP 409. The
+    // cross-Realm discriminator is carried as its reason_code; 412 is reserved
+    // for HTTP/CBA precondition failures.
+    expect(response.status(), JSON.stringify(responseBody)).toBe(409);
+    expect(wireErrCode(responseBody), JSON.stringify(responseBody)).toBe(
+      "failed_precondition",
+    );
     const reason =
-      wireErrCode(responseBody) ?? responseBody.reason_code ??
+      responseBody.reason_code ?? responseBody.details?.reason_code ??
       responseBody.rejections?.[0]?.reason_code;
     expect(reason, JSON.stringify(responseBody)).toBe(
       "cross_realm_structural_relation",

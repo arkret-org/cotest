@@ -26,7 +26,6 @@ import {
   sha256CanonicalJson,
   signedEventEnvelope,
   submitSignedEventApi,
-  typedId,
   wireErrCode,
 } from "../../helpers/soland-api";
 import { acceptInviteViaApi } from "../../helpers/api";
@@ -374,14 +373,12 @@ test.describe("project simulation", () => {
       },
     );
 
-    const relationId = typedId("relation");
     const assignment = signedEventEnvelope({
       actorId: alice.id,
       realmId,
       kind: "ak.relation.create",
       payload: {
         relation: {
-          id: relationId,
           schema: "ak.schema.relation.v1",
           realm_id: realmId,
           relation_kind: "assigned_to",
@@ -392,6 +389,7 @@ test.describe("project simulation", () => {
         },
       },
     });
+    const relationId = sdkEventDerivedObjectId(assignment);
     await submitSignedEventApi(request, aliceToken, assignment, {
       context: "assign Card 1 to bob",
     });
@@ -722,7 +720,6 @@ test.describe("project simulation", () => {
       kind: "ak.relation.create",
       payload: {
         relation: {
-          id: typedId("relation"),
           schema: "ak.schema.relation.v1",
           realm_id: realmId,
           relation_kind: "assigned_to",
@@ -739,7 +736,6 @@ test.describe("project simulation", () => {
       kind: "ak.relation.create",
       payload: {
         relation: {
-          id: typedId("relation"),
           schema: "ak.schema.relation.v1",
           realm_id: realmId,
           relation_kind: "assigned_to",
@@ -796,27 +792,27 @@ test.describe("project simulation", () => {
       },
     );
 
-    const relationId = typedId("relation");
+    const assignment = signedEventEnvelope({
+      actorId: alice.id,
+      realmId,
+      kind: "ak.relation.create",
+      payload: {
+        relation: {
+          schema: "ak.schema.relation.v1",
+          realm_id: realmId,
+          relation_kind: "assigned_to",
+          from_ref: cardId,
+          to_ref: bob.id,
+          created_by: accountActorId(alice.id),
+          created_at: canonicalTimestamp(),
+        },
+      },
+    });
+    const relationId = sdkEventDerivedObjectId(assignment);
     await submitSignedEventApi(
       request,
       aliceToken,
-      signedEventEnvelope({
-        actorId: alice.id,
-        realmId,
-        kind: "ak.relation.create",
-        payload: {
-          relation: {
-            id: relationId,
-            schema: "ak.schema.relation.v1",
-            realm_id: realmId,
-            relation_kind: "assigned_to",
-            from_ref: cardId,
-            to_ref: bob.id,
-            created_by: accountActorId(alice.id),
-            created_at: canonicalTimestamp(),
-          },
-        },
-      }),
+      assignment,
       { context: "assign Card to bob" },
     );
 

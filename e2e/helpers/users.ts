@@ -1951,9 +1951,12 @@ export async function approvePairingLinkOnAuthorizedDevice(
 ): Promise<void> {
   expect(pairingLink).toContain("/_arkret/open/device-pairing/resolve#token=");
   await authorizingDevice.gotoAppPanel(
-    "/settings/devices",
+    "/settings/devices/pair",
     "settings-devices-panel",
   );
+  await expect(
+    authorizingDevice.page.getByTestId("accept-pairing-card"),
+  ).toBeVisible({ timeout: 60_000 });
   await authorizingDevice.fillWithPassivePromptRetry(
     authorizingDevice.page.getByTestId("accept-pairing-input"),
     pairingLink,

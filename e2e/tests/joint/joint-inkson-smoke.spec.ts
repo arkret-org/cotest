@@ -345,16 +345,19 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       });
       await expect(
         jointRealm.alicePage.page.locator(
-          `[data-testid="participant-agent-group"][data-controller-id="${jointRealm.alice.id}"]`,
+          `[data-testid="participant-agent-group"][data-controller-principal-id="${jointRealm.alice.id}"]`,
         ),
       ).toHaveCount(0);
 
       const participantRow = jointRealm.alicePage.page
         .getByTestId("discussion-user-row")
         .filter({
-          // Participant row titles carry the canonical full Account ActorId
-          // (principal plus Station), not the bare principal id.
-          hasText: participantSession!.user.displayName,
+          // A dev-login display name is not an authoritative profile label.
+          // Select the human row by the principal portion of the canonical
+          // full Account ActorId rendered by the participant identity label.
+          has: jointRealm.alicePage.page
+            .getByTestId("participant")
+            .filter({ hasText: participantId }),
         });
       await expect(participantRow).toBeVisible({ timeout: 60_000 });
       await expect(participantRow).not.toContainText(forgedDisplayName);

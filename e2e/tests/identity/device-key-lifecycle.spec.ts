@@ -253,14 +253,21 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
 function observeSessionGrants(page: Page) {
   const seen: CapturedGrant[] = [];
   page.on("request", (request) => {
-    const authorization = request.headers().authorization;
-    const jwt = authorization?.match(/^DPoP\s+(.+)$/i)?.[1];
-    if (!jwt) return;
-    const jkt = grantJkt(jwt);
-    if (!jkt) return;
-    if (seen.at(-1)?.jwt !== jwt) {
-      seen.push({ jwt, jkt });
-    }
+    // Playwright's synchronous header snapshot may omit security-sensitive
+    // headers. Read the complete request header set before extracting the
+    // proof-bound SessionGrant.
+    void request
+      .allHeaders()
+      .then((headers) => {
+        const jwt = headers.authorization?.match(/^DPoP\s+(.+)$/i)?.[1];
+        if (!jwt) return;
+        const jkt = grantJkt(jwt);
+        if (!jkt) return;
+        if (seen.at(-1)?.jwt !== jwt) {
+          seen.push({ jwt, jkt });
+        }
+      })
+      .catch(() => undefined);
   });
   return {
     count: () => seen.length,

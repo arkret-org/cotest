@@ -344,11 +344,7 @@ test.describe("identity.recovery-key-to-encrypted-realm @fully-implemented", () 
         protocolHits.filter(
           (hit) =>
             hit.status >= 500 &&
-            !(
-              hit.method === "POST" &&
-              hit.path === "/_arkret/root/identity/recovery-policy" &&
-              hit.errorCode === "frontier_unavailable"
-            ),
+            !isExpectedFrontierPending(hit),
         ),
         "unexpected Arkret 5xx responses",
       ).toEqual([]);
@@ -450,7 +446,23 @@ function errorCode(
     const code = (nested as Record<string, unknown>).code;
     if (typeof code === "string") return code;
   }
-  return typeof body?.code === "string" ? body.code : undefined;
+  if (typeof body?.code === "string") return body.code;
+  // RFC 9457 problem responses carry the Arkret wire code in the canonical
+  // problem type even when they omit the optional compatibility `code` field.
+  if (typeof body?.type === "string") {
+    const match = body.type.match(/\/problems\/([^/?#]+)$/);
+    if (match) return match[1];
+  }
+  return undefined;
+}
+
+function isExpectedFrontierPending(hit: ProtocolHit): boolean {
+  if (hit.errorCode !== "frontier_unavailable") return false;
+  return (
+    (hit.method === "POST" &&
+      hit.path === "/_arkret/root/identity/recovery-policy") ||
+    (hit.method === "QUERY" && hit.path === "/_arkret/self/seals/frontier")
+  );
 }
 
 async function readActiveIdentity(page: Page): Promise<{

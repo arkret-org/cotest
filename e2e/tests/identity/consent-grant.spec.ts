@@ -76,9 +76,10 @@ async function requestContact(
     actor.page.getByTestId("send-contact-request-button"),
   );
   const status = actor.page.getByTestId("contact-request-status");
-  const pendingRow = actor.page.locator(
-    `[data-testid="contact-row"][data-peer="${targetId}"]`,
-  );
+  const escapedTarget = targetId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const pendingRow = actor.page
+    .getByTestId("contact-row")
+    .filter({ has: actor.page.locator(`[title="${escapedTarget}"]`) });
   await expect
     .poll(
       async () => {

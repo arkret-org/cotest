@@ -152,11 +152,17 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(page.page.getByTestId("kanban-panel")).toBeVisible({
       timeout: 120_000,
     });
-    await page.page
-      .getByTestId("kanban-card")
-      .filter({ hasText: cardTitle })
-      .first()
-      .click();
+    // The canonical card route retains the selected Strand across a reload,
+    // so the detail may already be open. Only select the card when the route
+    // did not restore it; otherwise the modal itself intercepts the click.
+    if (!(await detail.isVisible({ timeout: 1_000 }).catch(() => false))) {
+      const reloadedCard = page.page
+        .getByTestId("kanban-card")
+        .filter({ hasText: cardTitle })
+        .first();
+      await expect(reloadedCard).toBeVisible({ timeout: 90_000 });
+      await reloadedCard.click();
+    }
     await expect(detail).toBeVisible({ timeout: 45_000 });
     await expect(
       calendar.getByTestId("card-detail-calendar-agenda-unresolved"),

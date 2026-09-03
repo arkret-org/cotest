@@ -171,11 +171,14 @@ test.describe("discovery", () => {
       const searchActorsText = await searchActors.text();
       expect(searchActors.status(), searchActorsText).toBe(200);
       const searchActorsBody = JSON.parse(searchActorsText) as {
-        actors?: Array<{ actor_id?: string; did?: string }>;
+        actors?: Array<{
+          actor_id?: ReturnType<typeof accountActorId>;
+          did?: string;
+        }>;
       };
       expect(searchActorsBody.actors).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ actor_id: bob.id }),
+          expect.objectContaining({ actor_id: accountActorId(bob.id) }),
         ]),
       );
 

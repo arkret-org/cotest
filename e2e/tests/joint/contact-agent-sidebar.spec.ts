@@ -2,6 +2,7 @@ import { expect, type APIRequestContext } from "../../helpers/arkret-test";
 import type { ContactListRow } from "../../helpers/contact-api";
 import { solandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
+import { accountActorId } from "../../helpers/soland-api";
 import {
   selfPathHeadersForDpopSession,
   type DpopUserSession,
@@ -218,11 +219,10 @@ async function provisionPendingAgent(
     );
     expect(preparation.status).toBe("awaiting_controller_event");
     const agentId = requiredString(preparation, "agent_id", "prepare outcome");
-    const principalControlRealmId = requiredString(
-      preparation,
-      "principal_control_realm_id",
-      "prepare outcome",
-    );
+    // The prepare phase is allocation-only.  The controller derives the Agent
+    // PCR id from its locally frozen genesis Event and first discloses it in
+    // the commit; the Station must not allocate or predict it here.
+    expect(preparation).not.toHaveProperty("principal_control_realm_id");
     const controllerRealmId = requiredString(
       preparation,
       "controller_realm_id",
@@ -239,12 +239,17 @@ async function provisionPendingAgent(
       "prepare outcome",
     );
     expect(agentId).toMatch(/^did:/);
-    expect(principalControlRealmId).toMatch(/^ak:realm:/);
     expect(controllerRealmId).toMatch(/^ak:realm:/);
     expect(allocationHandle).toBeTruthy();
     expect(requestedScopeDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
 
     const commit = await commitObserved;
+    const principalControlRealmId = requiredString(
+      commit,
+      "principal_control_realm_id",
+      "Agent provision commit",
+    );
+    expect(principalControlRealmId).toMatch(/^ak:realm:/);
     expect(commit.agent_id).toBe(agentId);
     expect(commit.principal_control_realm_id).toBe(principalControlRealmId);
     expect(commit.allocation_handle).toBe(allocationHandle);
@@ -260,7 +265,7 @@ async function provisionPendingAgent(
       "Agent provision EventInitialSubmission.event",
     );
     expect(provisionEvent.kind).toBe("ak.agent.provision");
-    expect(provisionEvent.actor_id).toBe(controller.user.id);
+    expect(provisionEvent.actor_id).toEqual(accountActorId(controller.user.id));
     expect(provisionEvent.realm_id).toBe(controllerRealmId);
     expect(provisionEvent.proofs).not.toHaveLength(0);
     const provisionPayload = asJsonObject(
