@@ -378,6 +378,10 @@ export class JointUserPage {
     await this.gotoAppPanel("/settings", "settings-panel");
   }
 
+  async gotoFileTransfer() {
+    await this.gotoAppPanel("/files", "file-transfer-panel");
+  }
+
   async gotoNotifications() {
     await this.gotoAppPanel("/notifications", "notifications-panel");
   }

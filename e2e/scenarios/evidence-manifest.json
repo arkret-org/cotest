@@ -437,6 +437,33 @@
       ]
     },
     {
+      "scenario_key": "encryption/file-transfer",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
       "scenario_key": "encryption/key-backup",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
@@ -882,6 +909,33 @@
         "raw_http_fixture_or_oracle"
       ],
       "claims_excluded": [
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "identity/account-profile-ui",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client",
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
       ]
     },
@@ -1521,6 +1575,32 @@
       ]
     },
     {
+      "scenario_key": "kanban/calendar",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
+        "registration_login_authorization"
+      ]
+    },
+    {
       "scenario_key": "kanban/cross-member-encrypted",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",
@@ -1896,6 +1976,32 @@
         "product_protocol_object_generation",
         "registration_login_authorization",
         "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
+      "scenario_key": "spaces/realm-profile",
+      "suite_kind": "joint-e2e",
+      "realism_level": "fixture-only",
+      "evidence_class": "fixture-only",
+      "real_services": [
+        "coauth",
+        "inkson",
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "inkson_product_client"
+      ],
+      "declared_test_bypasses": [
+        "create_realm_passive_prompt_dismissal",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "mls_backup_unlock_and_missing_recovery_prompt_behavior",
+        "registration_login_authorization"
       ]
     },
     {
