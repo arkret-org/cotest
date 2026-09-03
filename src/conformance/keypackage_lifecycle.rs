@@ -185,6 +185,7 @@ struct ClaimRecordInput<'a> {
     keypackage_ref: &'a str,
     principal_id: &'a DidCoreId,
     device_id: &'a DeviceId,
+    device_authorize_event_id: &'a str,
     last_resort: bool,
     expires_at: DateTime<Utc>,
 }
@@ -195,6 +196,7 @@ fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
         keypackage_ref,
         principal_id,
         device_id,
+        device_authorize_event_id,
         last_resort,
         expires_at,
     } = input;
@@ -205,7 +207,7 @@ fn claim_record_value(input: ClaimRecordInput<'_>) -> Value {
         "device_id": device_id.as_str(),
         "keypackage": "AQID",
         "capabilities": ["ak.content.v1"],
-        "device_authorize_event_id": "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
+        "device_authorize_event_id": device_authorize_event_id,
         "expires_at": arkret_canonical::format_timestamp_canonical(expires_at),
         "revocation_status": "active"
     });
@@ -408,6 +410,7 @@ impl MiniKeypackage {
             keypackage_ref: &self.keypackage_ref,
             principal_id: &self.principal_id,
             device_id: &self.device_id,
+            device_authorize_event_id: "ak:event:ARELvWOpF6BRrks3DlbQy-9XIE6aAQQumDQp7fA4ApeM",
             last_resort: self.last_resort,
             expires_at: self.expires_at,
         })
@@ -1045,6 +1048,7 @@ pub fn run_mls_welcome_keypackage_hash_vector() -> Result<()> {
         keypackage_ref,
         principal_id: &principal_id,
         device_id: &device_id,
+        device_authorize_event_id,
         last_resort: false,
         expires_at: parse_time("2100-01-01T00:00:00.000Z")?,
     });
