@@ -74,7 +74,7 @@ sha2 = "0.11.0"
 soland-domain = { path = "../soland/crates/domain" }
 soland-services = { path = "../soland/crates/services" }
 soland-storage = { path = "../soland/crates/storage" }
-soland-storage-memory = { path = "../soland/crates/storage-memory" }
+soland-storage-postgres = { path = "../soland/crates/storage-postgres", features = ["test-support"] }
 tempfile = "3.27.0"
 testcontainers = "0.28"
 tokio = "1.53.1"
@@ -174,7 +174,7 @@ sha2 = { workspace = true }
 soland-domain = { workspace = true }
 soland-services = { workspace = true }
 soland-storage = { workspace = true }
-soland-storage-memory = { workspace = true }
+soland-storage-postgres = { workspace = true }
 tempfile = { workspace = true }
 testcontainers = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["macros", "process", "rt-multi-thread", "time"] }
@@ -184,7 +184,6 @@ unicode-normalization = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-soland-storage-postgres = { path = "../soland/crates/storage-postgres" }
 # T8.2 — property tests for canonical-JSON / proof vectors and handle
 # claim validators across the SDK contract surface.
 proptest = { workspace = true, default-features = false, features = ["std"] }

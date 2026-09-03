@@ -7,7 +7,7 @@ use arkret_wire::{AccountId, ActorId, Did, DidCoreId, Event, EventKind, Hlc, Sco
 use chrono::{Duration, Utc};
 use serde_json::json;
 use soland_storage::*;
-use soland_storage_memory::SolandMemoryPersistenceStore;
+use soland_storage_postgres::test_database::TestDatabase;
 use soland_storage_postgres::{Db, PgPersistenceStore, PoolTuning};
 
 const DEVICE: &str = "ak:device:01904100-0000-7000-8000-000000002002";
@@ -459,16 +459,6 @@ fn fixture_contract() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn same_core_two_station_accounts_never_merge_state_memory() -> Result<()> {
-    fixture_contract()?;
-    let left = SolandMemoryPersistenceStore::new();
-    let right = SolandMemoryPersistenceStore::new();
-    let a = seed(&left, "station-a").await?;
-    let b = seed(&right, "station-b").await?;
-    verify_isolation(&left, &right, &a, &b).await
-}
-
 async fn connect(url: &str) -> Result<PgPersistenceStore> {
     Ok(PgPersistenceStore::new(
         Db::connect(Some(url), PoolTuning::default())
@@ -478,26 +468,25 @@ async fn connect(url: &str) -> Result<PgPersistenceStore> {
     ))
 }
 
+/// Two Stations, two databases, reopened pools.
+///
+/// This used to be ignored because it wanted two disposable databases that the
+/// suite could not produce. Leases produce them, so it now runs by default and
+/// is the only remaining form of this case: the in-memory twin it replaced
+/// proved isolation between two process-local maps, not between two databases.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "requires two disposable PostgreSQL databases; run explicitly for Station acceptance"]
 async fn same_core_two_station_accounts_never_merge_state_postgres_reopen() -> Result<()> {
     fixture_contract()?;
-    let left_db = cotest::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
-        "COTEST_SOLAND_DATABASE_URL",
-    )?
-    .context("Station acceptance requires PostgreSQL, not a skipped pass")?;
-    let right_db = cotest::scenarios::_helpers::coauth_bootstrap::spawn_ephemeral_postgres_for(
-        "COTEST_SOLAND_DATABASE_URL",
-    )?
-    .context("Station acceptance requires a second isolated PostgreSQL database")?;
-    let left = connect(&left_db.connect_url).await?;
-    let right = connect(&right_db.connect_url).await?;
+    let left_database = TestDatabase::lease().await;
+    let right_database = TestDatabase::lease().await;
+    let left = connect(left_database.url()).await?;
+    let right = connect(right_database.url()).await?;
     let a = seed(&left, "station-a").await?;
     let b = seed(&right, "station-b").await?;
     drop(left);
     drop(right);
     // New pools and repositories cannot consult the initial process-local caches.
-    let left = connect(&left_db.connect_url).await?;
-    let right = connect(&right_db.connect_url).await?;
+    let left = connect(left_database.url()).await?;
+    let right = connect(right_database.url()).await?;
     verify_isolation(&left, &right, &a, &b).await
 }

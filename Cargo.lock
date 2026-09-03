@@ -2080,7 +2080,6 @@ dependencies = [
  "soland-domain",
  "soland-services",
  "soland-storage",
- "soland-storage-memory",
  "soland-storage-postgres",
  "tempfile",
  "testcontainers",
@@ -3996,16 +3995,22 @@ dependencies = [
  "arkret-signatures",
  "arkret-state",
  "arkret-wire",
+ "base64 0.23.1",
+ "chacha20poly1305 0.11.0",
  "chrono",
  "ed25519-dalek 3.0.0",
  "getrandom 0.4.3",
  "gloo-timers 0.4.0",
+ "hex",
+ "hkdf 0.13.0",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
  "url",
+ "x25519-dalek 3.0.0",
  "zeroize",
 ]
 
@@ -9676,27 +9681,6 @@ dependencies = [
  "subtle",
  "thiserror 2.0.20",
  "tokio",
- "uuid",
-]
-
-[[package]]
-name = "soland-storage-memory"
-version = "0.3.0"
-dependencies = [
- "arkret-canonical",
- "arkret-event-draft",
- "arkret-identity",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-models-identity",
- "arkret-models-integration",
- "arkret-state",
- "arkret-wire",
- "async-trait",
- "chrono",
- "parking_lot",
- "serde_json",
- "soland-storage",
  "uuid",
 ]
 

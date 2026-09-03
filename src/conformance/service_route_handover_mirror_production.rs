@@ -28,7 +28,8 @@ use soland_storage::{
     ServiceResolutionForkEvidence, ServiceResolutionMirrorCommit, ServiceResolutionMirrorEntry,
     ServiceRouteStore,
 };
-use soland_storage_memory::MemoryServiceRouteStore;
+use soland_storage_postgres::PgServiceRouteStore;
+use soland_storage_postgres::test_database::TestDatabase;
 
 use crate::transcripts::record_vector_event;
 
@@ -234,7 +235,10 @@ impl ServiceRouteFetcher for ProductionFetcher {
 }
 
 async fn exercise_atomic_mirror_store() -> Result<()> {
-    let store = MemoryServiceRouteStore::new();
+    let database = TestDatabase::lease().await;
+    let store = PgServiceRouteStore {
+        pool: database.pool(),
+    };
     let source_did = Did::new("did:web:source.example")?;
     let receiver_did = Did::new("did:web:mirror.example")?;
     let source = service_id(&source_did)?;
@@ -395,7 +399,7 @@ async fn exercise_atomic_mirror_store() -> Result<()> {
 }
 
 async fn resolve_with(
-    store: Arc<MemoryServiceRouteStore>,
+    store: Arc<PgServiceRouteStore>,
     expected: &DidCoreId,
     record: ServiceResolutionRecord,
     now: DateTime<Utc>,
@@ -430,7 +434,10 @@ async fn exercise_resolver_safety() -> Result<()> {
         "https://new-route.example/",
     )?;
 
-    let restart_store = Arc::new(MemoryServiceRouteStore::new());
+    let restart_database = TestDatabase::lease().await;
+    let restart_store = Arc::new(PgServiceRouteStore {
+        pool: restart_database.pool(),
+    });
     resolve_with(restart_store.clone(), &expected, first.clone(), now)
         .await
         .0?;
@@ -504,7 +511,10 @@ async fn exercise_resolver_safety() -> Result<()> {
         "new core route was not resolved under its own distinct service identity"
     );
 
-    let quarantine_store = Arc::new(MemoryServiceRouteStore::new());
+    let quarantine_database = TestDatabase::lease().await;
+    let quarantine_store = Arc::new(PgServiceRouteStore {
+        pool: quarantine_database.pool(),
+    });
     let cached = resolve_with(quarantine_store.clone(), &expected, first.clone(), now)
         .await
         .0?;
@@ -529,7 +539,10 @@ async fn exercise_resolver_safety() -> Result<()> {
         "resolver consulted cache/fetcher before durable quarantine"
     );
 
-    let fork_store = Arc::new(MemoryServiceRouteStore::new());
+    let fork_database = TestDatabase::lease().await;
+    let fork_store = Arc::new(PgServiceRouteStore {
+        pool: fork_database.pool(),
+    });
     resolve_with(fork_store.clone(), &expected, first.clone(), now)
         .await
         .0?;
@@ -576,7 +589,7 @@ pub async fn run_service_route_handover_mirror_production_suite() -> Result<()> 
     exercise_resolver_safety().await?;
     record_vector_event(
         "service_route_handover_mirror.production",
-        &serde_json::json!({"store": "MemoryServiceRouteStore", "resolver": "ServiceRouteResolver"}),
+        &serde_json::json!({"store": "PgServiceRouteStore", "resolver": "ServiceRouteResolver"}),
         &serde_json::json!({
             "dual_idempotency": true,
             "atomic_floor_notice_ack": true,

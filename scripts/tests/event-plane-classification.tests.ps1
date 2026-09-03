@@ -16,7 +16,6 @@ $sourceRoots = @(
 
 $productionClassificationRoots = @(
     "soland\crates\http\src",
-    "soland\crates\storage-memory\src",
     "soland\crates\storage-postgres\src",
     "inkson\src",
     "cotest\src",

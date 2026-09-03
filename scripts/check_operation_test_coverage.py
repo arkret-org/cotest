@@ -367,10 +367,7 @@ def responsibility_for(layer: str, path: str, scope_name: str, scope_text: str) 
     if explicit is not None:
         return explicit.group(1)
     lowered = f"{path} {scope_name}".lower()
-    if path.endswith("/storage/src/contract_tests.rs") or any(
-        token in path
-        for token in ("/storage-memory/", "/storage-postgres/")
-    ):
+    if path.endswith("/storage/src/contract_tests.rs") or "/storage-postgres/" in path:
         return "storage_parity"
     if any(token in lowered for token in FAULT_KEYWORDS):
         return "fault_recovery"

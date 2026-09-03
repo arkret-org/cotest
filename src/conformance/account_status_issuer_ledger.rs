@@ -155,7 +155,10 @@ pub fn run_account_status_issuer_ledger_vector() -> Result<()> {
         .enable_all()
         .build()?;
     runtime.block_on(async {
-        let receiver = soland_storage_memory::SolandMemoryPersistenceStore::new();
+        let receiver_database =
+            soland_storage_postgres::test_database::TestDatabase::lease().await;
+        let receiver =
+            soland_storage_postgres::PgPersistenceStore::new(receiver_database.pool());
         let replicas = receiver.account_status_replicas();
 
         assert_genesis_replay_fork_and_binding_rollback(
@@ -360,7 +363,9 @@ async fn assert_gap_recovery_through_bounded_resolve(
     observed: &mut Observations,
 ) -> Result<()> {
     let account = "account-issuer-ledger-gap";
-    let authority_ledger = soland_storage_memory::SolandMemoryPersistenceStore::new();
+    let authority_database = soland_storage_postgres::test_database::TestDatabase::lease().await;
+    let authority_ledger =
+        soland_storage_postgres::PgPersistenceStore::new(authority_database.pool());
     // The Account Authority ledger enforces the same single-writer CAS the
     // receiver replays: `status_seq = current + 1` with an exact predecessor.
     let ledger = authority_ledger.account_status_replicas();
