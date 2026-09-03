@@ -910,6 +910,10 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
     let account_authority_id = project_did_to_core_id(&account_authority_service_did)?;
     let receiver_id = project_did_to_core_id(&receiver_service_did)?;
     let signer_actor_id = ActorId::account(AccountId::new(signer_id.clone(), authority_id.clone()));
+    let controller_actor_id = ActorId::account(AccountId::new(
+        controller_principal_id.clone(),
+        authority_id.clone(),
+    ));
     let verification_method =
         DidUrl::new(format!("{signer_did}#runtime-1")).map_err(anyhow::Error::msg)?;
     let controller_verification_method =
@@ -997,7 +1001,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         "01970e589d21-0001-a13f9c2e",
         &authority_verification_method,
     )?;
-    let accepted_status_event = arkret_wire::test_support::raw_event(
+    let mut accepted_status_event = arkret_wire::test_support::raw_event(
         EventKind::AgentProvision.as_str(),
         ScopeRef::Realm {
             realm_id: realm_id.clone(),
@@ -1008,6 +1012,7 @@ fn build_evidence(config: EvidenceConfig) -> Result<ExecutableEvidence> {
         Hlc::new("01970e589d21-0002-a13f9c2e")?,
         serde_json::json!({"agent_id": signer_id}),
     )?;
+    accepted_status_event.executed_by = Some(controller_actor_id);
     let provision_event_id = accepted_status_event.event_id.clone();
     let authorization = AgentAuthorizationEvidence {
         status: config.authorization_status,
