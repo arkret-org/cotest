@@ -241,8 +241,11 @@ test.describe("read receipts + privacy", () => {
       },
     );
     expect(receipt.status()).toBe(403);
-    const body = await receipt.json();
-    expect(JSON.stringify(body)).toContain("member");
+    const body = (await receipt.json()) as { type?: string };
+    // `read-receipts.md` §2.1 fixes the admission (the sender must be a joined
+    // member of the declared signed Seal basis) but not the human-readable
+    // detail string, so the contract to assert is the registered problem type.
+    expect(body.type).toBe("https://arkret.org/problems/capability_denied");
   });
 
   test("alice reads N messages while preference=send_read_receipts true; bob sees alice's receipt at the highest visible event within debounce window", async ({
