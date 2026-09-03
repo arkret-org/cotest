@@ -91,7 +91,7 @@ test.describe("circle membership (same Station)", () => {
       circle.circle_id,
     );
     expect(bobDirectoryView.member_ids).toEqual([]);
-    expect(bobDirectoryView.member_count).toBeUndefined();
+    expect("member_count" in bobDirectoryView).toBe(false);
     expect(bobDirectoryView.viewer_membership).toBeUndefined();
 
     // Circle-local management is not inherited from Realm ownership. Alice

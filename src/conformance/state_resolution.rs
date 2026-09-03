@@ -686,7 +686,9 @@ fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) ->
                         "vector {vector_name} case {case_name} does not align but drops peer_stale"
                     );
                 }
-                if case.pointer("/expected/fork_evidence").and_then(Value::as_str)
+                if case
+                    .pointer("/expected/fork_evidence")
+                    .and_then(Value::as_str)
                     == Some("witness_disagreement")
                 {
                     bail!(
@@ -696,9 +698,9 @@ fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) ->
                 }
                 not_aligned.insert(case_name.to_owned());
             }
-            other => bail!(
-                "vector {vector_name} case {case_name} declares unknown alignment {other}"
-            ),
+            other => {
+                bail!("vector {vector_name} case {case_name} declares unknown alignment {other}")
+            }
         }
     }
     for required in [

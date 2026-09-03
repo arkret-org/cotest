@@ -33,14 +33,10 @@ import {
 const BLOCKLIST_DATA_TYPE = "ak.account.blocklist";
 
 type BlocklistEntry = {
-  target:
-    | string
-    | {
-        kind?: string;
-        did?: string;
-        actor?: string;
-        id?: string;
-      };
+  target: {
+    kind: "actor";
+    actor_id: ReturnType<typeof accountActorId>;
+  };
   kind?: string;
   mode?: string;
   created_at?: string;
@@ -217,9 +213,8 @@ test.describe("personal blocklist", () => {
       // `account_blocklist_payload` requires `target.actor_id` to be a complete
       // composite ActorId, not a bare principal DID (a bare principal_id cannot
       // name the Station, and common-fields.md forbids falling back to one).
-      // The section's prose and JSON example still say `did`; that contradiction
-      // is tracked in
-      // arkret-work review/spec-open/2026-09-03-1310-blocklist-actor-target-carrier-contradicts-its-schema.md
+      // The outer target has one identity kind. Account and service authors are
+      // distinguished only by the complete ActorId carried in actor_id.
       await alicePage.page
         .getByTestId("block-target-input")
         .fill(JSON.stringify(accountActorId(bob.id)));
@@ -526,9 +521,9 @@ test.describe("personal blocklist", () => {
   });
 });
 
-function canonicalActorBlockEntry(did: string): BlocklistEntry {
+function canonicalActorBlockEntry(principalId: string): BlocklistEntry {
   return {
-    target: { kind: "actor", did },
+    target: { kind: "actor", actor_id: accountActorId(principalId) },
     mode: "block",
     created_at: new Date().toISOString(),
   };

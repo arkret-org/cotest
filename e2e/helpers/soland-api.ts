@@ -2985,8 +2985,8 @@ async function readRealmSealFrontier(
     pending_proposal_digests: (
       frontier.governance_health?.pending_proposals ?? []
     ).flatMap((proposal) =>
-      typeof proposal.proposal_digest === "string"
-        ? [proposal.proposal_digest]
+      typeof proposal.control_proposal_ack.proposal_digest === "string"
+        ? [proposal.control_proposal_ack.proposal_digest]
         : [],
     ),
   };

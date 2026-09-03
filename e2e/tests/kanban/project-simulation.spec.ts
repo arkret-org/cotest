@@ -130,11 +130,9 @@ async function readSpaceRow(
   );
 }
 
-// Create a board Space, a list Space parented to it, and a Card Strand placed
-// in that list. The placement rides `metadata.fields.board_space_id` /
-// `list_space_id` at create time, which the reducer materializes into the
-// derived `contains` position relation — the same relation the board-archive
-// cascade walks (soland apply_space_container.rs cascade_space_container_lifecycle).
+// Create a board Space, a list Space parented to it, then a Card Strand. A
+// separate `ak.strand.move` places the accepted create-derived Strand id in the
+// List; create metadata is content only and never acts as a position cell.
 async function createBoardWithCard(
   request: APIRequestContext,
   token: string,
@@ -212,9 +210,6 @@ async function createBoardWithCard(
           title: opts.cardTitle,
           fields: {
             status: "todo",
-            board_space_id: boardId,
-            list_space_id: listId,
-            rank: "r007",
             ...(opts.dueDate ? { due_date: opts.dueDate } : {}),
           },
         },
@@ -231,6 +226,22 @@ async function createBoardWithCard(
     token,
     cardEnvelope,
     { context: `create card ${opts.cardTitle}` },
+  );
+  await submitSignedEventApi(
+    request,
+    token,
+    signedEventEnvelope({
+      actorId,
+      realmId,
+      kind: "ak.strand.move",
+      payload: {
+        board_space_id: boardId,
+        strand_id: cardId,
+        target_space_id: listId,
+        rank: "r007",
+      },
+    }),
+    { context: `place card ${opts.cardTitle}` },
   );
 
   return { boardId, listId, cardId };

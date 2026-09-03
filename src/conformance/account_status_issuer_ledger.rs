@@ -155,10 +155,8 @@ pub fn run_account_status_issuer_ledger_vector() -> Result<()> {
         .enable_all()
         .build()?;
     runtime.block_on(async {
-        let receiver_database =
-            soland_storage_postgres::test_database::TestDatabase::lease().await;
-        let receiver =
-            soland_storage_postgres::PgPersistenceStore::new(receiver_database.pool());
+        let receiver_database = soland_storage_postgres::test_database::TestDatabase::lease().await;
+        let receiver = soland_storage_postgres::PgPersistenceStore::new(receiver_database.pool());
         let replicas = receiver.account_status_replicas();
 
         assert_genesis_replay_fork_and_binding_rollback(

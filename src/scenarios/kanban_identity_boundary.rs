@@ -71,16 +71,13 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     let (list_event_id, list_envelope) = submit_operation(&alice, &realm_id, &list).await?;
     let list_space_id = arkret::SpaceId::from_event_id(&list_event_id).to_string();
 
-    // ---- the card names the ACCEPTED containers -----------------------------
+    // ---- create the card, then place its accepted id -------------------------
     // Before authoring, the write has no object id of its own to leak: the
     // holder-local handle is the operation id, and it is not an Arkret id.
     let card = inkson::operation::ak_ops::kanban_card_strand_create(
         &realm_id,
         &alice.actor,
-        &board_space_id,
-        &list_space_id,
         "Boundary card",
-        "a0",
     )
     .map_err(|error| anyhow!("inkson card builder: {error:#}"))?
     .build_sdk_event("cotest")
@@ -96,6 +93,19 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     );
     let (card_event_id, _) = submit_operation(&alice, &realm_id, &card).await?;
     let card_strand_id = arkret::StrandId::from_event_id(&card_event_id).to_string();
+    let card_move = inkson::operation::ak_ops::strand_position_cas_update(
+        &realm_id,
+        &alice.actor,
+        "ak.strand.move",
+        &board_space_id,
+        &card_strand_id,
+        Value::Null,
+        json!({"list_space_id": list_space_id, "rank": "a0"}),
+    )
+    .map_err(|error| anyhow!("inkson card move builder: {error:#}"))?
+    .build_sdk_event("cotest")
+    .map_err(|error| anyhow!("inkson card move build: {error:#}"))?;
+    let (card_move_event_id, _) = submit_operation(&alice, &realm_id, &card_move).await?;
 
     // ---- retry: byte-identical resubmit is the SAME user operation ----------
     let retry = expect_json(
@@ -133,6 +143,7 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         ("ak.space.create", &board_event_id, &board),
         ("ak.space.create", &list_event_id, &list),
         ("ak.strand.create", &card_event_id, &card),
+        ("ak.strand.move", &card_move_event_id, &card_move),
     ] {
         let matching: Vec<&Value> = rows
             .iter()
@@ -156,7 +167,7 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
     }
     // No second object materialized for any of the three writes: nothing else
     // in the realm carries their holder-local aliases.
-    for operation in [&board, &list, &card] {
+    for operation in [&board, &list, &card, &card_move] {
         let alias_rows = rows
             .iter()
             .filter(|row| {
@@ -170,16 +181,22 @@ pub async fn kanban_creates_keep_one_identity_across_receipt_backfill_and_retry(
         );
     }
 
-    // ---- the card's payload names the accepted containers -------------------
+    // ---- placement references only the accepted Strand and containers -------
     let card_row = rows
         .iter()
         .find(|row| row["event_id"].as_str() == Some(card_event_id.as_str()))
         .ok_or_else(|| anyhow!("card create missing from backfill"))?;
-    assert_eq!(
-        card_row["payload"]["object"]["metadata"]["fields"]["list_space_id"].as_str(),
-        Some(list_space_id.as_str()),
-        "the card must reference the ACCEPTED List id, never a draft-derived one"
+    assert!(
+        card_row["payload"]["object"]["metadata"]["fields"]
+            .get("list_space_id")
+            .is_none()
     );
+    let move_row = rows
+        .iter()
+        .find(|row| row["event_id"].as_str() == Some(card_move_event_id.as_str()))
+        .ok_or_else(|| anyhow!("card placement move missing from backfill"))?;
+    assert_eq!(move_row["payload"]["strand_id"], card_strand_id);
+    assert_eq!(move_row["payload"]["target_space_id"], list_space_id);
     assert!(
         card_strand_id.starts_with("ak:strand:"),
         "the accepted Card id is retype(event_id) of its own create"

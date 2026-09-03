@@ -602,10 +602,7 @@ impl TestActorClient {
             .submit_event(
                 realm_id.as_str(),
                 arkret_wire::event_kind_str::STRAND_CREATE,
-                serde_json::to_value(StrandCreatePayload {
-                    object: strand,
-                    initial_relations: None,
-                })?,
+                serde_json::to_value(StrandCreatePayload { object: strand })?,
             )
             .await?;
         let strand_event_id = super::submitted_event_id(&created)?;

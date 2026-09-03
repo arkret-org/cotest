@@ -286,8 +286,14 @@ fn validate_fixture(fixture: &SecurityTransactionResilienceFixture) -> Result<()
         .collect::<BTreeSet<_>>();
     let expected = EXPECTED_ASSERTIONS.iter().copied().collect::<BTreeSet<_>>();
     if assertions != expected {
-        let missing = expected.difference(&assertions).copied().collect::<Vec<_>>();
-        let extra = assertions.difference(&expected).copied().collect::<Vec<_>>();
+        let missing = expected
+            .difference(&assertions)
+            .copied()
+            .collect::<Vec<_>>();
+        let extra = assertions
+            .difference(&expected)
+            .copied()
+            .collect::<Vec<_>>();
         return Err(format!(
             "resilience assertion set drifted: missing {missing:?}, unregistered {extra:?}"
         ));

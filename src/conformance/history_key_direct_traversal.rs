@@ -358,9 +358,15 @@ fn verify_backup_recovery_unlock_manifest(fixture: &HistoryKeyRecoveryFixture) -
     if u64_at(kat, "/computed_recovery_rate/completed_unlocks")? != total_allowances {
         bail!("the KAT must complete every frozen allowance");
     }
-    let deadline = u64_at(kat, "/computed_recovery_rate/completion_deadline_offset_seconds")?;
+    let deadline = u64_at(
+        kat,
+        "/computed_recovery_rate/completion_deadline_offset_seconds",
+    )?;
     if deadline != expires_at - reserve
-        || u64_at(kat, "/computed_recovery_rate/last_completion_offset_seconds")? > deadline
+        || u64_at(
+            kat,
+            "/computed_recovery_rate/last_completion_offset_seconds",
+        )? > deadline
         || kat.pointer("/computed_recovery_rate/completes_before_session_expiry")
             != Some(&json!(true))
     {
@@ -417,9 +423,15 @@ fn verify_backup_recovery_unlock_manifest(fixture: &HistoryKeyRecoveryFixture) -
     }
 
     let expected_negatives: BTreeMap<&str, &str> = BTreeMap::from([
-        ("object_outside_frozen_manifest", "recovery_evidence_unbound"),
+        (
+            "object_outside_frozen_manifest",
+            "recovery_evidence_unbound",
+        ),
         ("consumed_allowance_reuse", "rate_limited"),
-        ("manifest_mutation_after_verified", "recovery_evidence_unbound"),
+        (
+            "manifest_mutation_after_verified",
+            "recovery_evidence_unbound",
+        ),
         ("batch_unlock_request", "schema_violation"),
     ]);
     let cases = kat["negative_cases"]

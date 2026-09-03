@@ -22,7 +22,6 @@ export type PublicPrincipalResolution = {
     "updated_at": string;
   };
   "method_history_evidence": {
-    "adapter_version": "did:webvh:1.0";
     "evidence_kind": "webvh_log";
     "boundary": {
       "from_method_history_head": string;
@@ -47,7 +46,6 @@ export type PublicPrincipalResolution = {
     "log_entries": Array<Record<string, unknown>>;
     "witness_records": Array<Record<string, unknown>>;
   } | {
-    "adapter_version": "did:web:1";
     "evidence_kind": "did_web_document";
     "boundary": {
       "from_method_history_head": string;
@@ -70,7 +68,6 @@ export type PublicPrincipalResolution = {
       }>;
     };
   } | {
-    "adapter_version": "did:key:1";
     "evidence_kind": "did_key_expansion";
     "boundary": {
       "from_method_history_head": string;
@@ -140,7 +137,6 @@ export type CircleView = {
   "mls_group_id"?: string;
   "durability_policy"?: "none" | "organization_recovery_key";
   "state": "active" | "archived" | "tombstoned";
-  "member_count"?: number;
   "viewer_membership"?: "join" | "knock" | "leave" | "ban";
   "member_ids": Array<{
     "kind": "account";
@@ -1007,7 +1003,6 @@ export type InviteDeliveryRequestBody = {
       "event_digest": string;
       "created_at": string;
       "signer_resolution_evidence_ref"?: string;
-      "signer_resolution_evidence_digest"?: string;
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
@@ -1020,9 +1015,7 @@ export type InviteDeliveryRequestBody = {
       "producer_verification_method": string;
       "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
-      "producer_signer_resolution_evidence_digest"?: string;
       "signer_resolution_evidence_ref": string;
-      "signer_resolution_evidence_digest": string;
       "accepted_at": string;
       "jws": string;
     }>;
@@ -1170,7 +1163,6 @@ export type InviteDeliveryRequestBody = {
         "source_refs": string[];
         "proofs": unknown[];
       };
-      "claim_digest": string;
       "status": "pending" | "verified" | "revoked";
       "as_of": string;
       "verifier_id": string;
@@ -1204,7 +1196,6 @@ export type InviteDeliveryRequestBody = {
           [key: string]: unknown;
         };
       } | null;
-      "revocation_digest": string | null;
       "fresh_until": string;
       "status_proof": {
         "kind": "detached_jws";
@@ -1239,7 +1230,6 @@ export type RealmSealFrontierView = {
   "governance_health": {
     "status": "healthy" | "degraded";
     "pending_proposals": Array<{
-      "proposal_digest": string;
       "control_proposal_ack": {
         "kind": "signed_ack";
         "realm_id": string;
@@ -1265,7 +1255,7 @@ export type RealmSealFrontierView = {
         }>;
       };
       "decisions": Array<{
-        "kind": "signed_reject" | "signed_defer";
+        "kind": "signed_defer";
         "realm_id": string;
         "proposal_digest": string;
         "proposal_ack_digest": string;
@@ -1282,9 +1272,6 @@ export type RealmSealFrontierView = {
           "jws": string;
         }>;
       }>;
-      "current_decision_due_at": string;
-      "absolute_due_at": string;
-      "defer_count": number;
       "decision_state": "pending" | "deferred" | "overdue";
       "fault_reason"?: "control_proposal_decision_overdue";
       "device_revocation_state"?: {
@@ -1349,7 +1336,6 @@ export type RealmSealFrontierView = {
       };
     }>;
     "retained_faults": Array<{
-      "proposal_digest": string;
       "control_proposal_ack": {
         "kind": "signed_ack";
         "realm_id": string;
@@ -1509,7 +1495,6 @@ export type EventFederationSubmission = {
       "event_digest": string;
       "created_at": string;
       "signer_resolution_evidence_ref"?: string;
-      "signer_resolution_evidence_digest"?: string;
       "domain"?: string;
       "audience"?: string | string[];
       "proof_purpose"?: "issuer_attestation" | "holder_acceptance";
@@ -1522,9 +1507,7 @@ export type EventFederationSubmission = {
       "producer_verification_method": string;
       "producer_signing_key_did": string;
       "producer_signer_resolution_evidence_ref"?: string;
-      "producer_signer_resolution_evidence_digest"?: string;
       "signer_resolution_evidence_ref": string;
-      "signer_resolution_evidence_digest": string;
       "accepted_at": string;
       "jws": string;
     }>;
@@ -1735,7 +1718,6 @@ export type EventFederationSubmission = {
         "action": "ak.member.compensate.leave" | "ak.member.compensate.remove";
         "deadline": string;
       };
-      "delegation_digest": string;
       "signature": {
         "verification_method": string;
         "created_at": string;
@@ -1756,7 +1738,7 @@ export type EventFederationSubmission = {
     "terminal_certificate": {
       "domain": "ak.membership_compensation.terminal_certificate.v1";
       "admission_id": string;
-      "delegation_digest": string;
+      "delegation_id": string;
       "operation_id": string;
       "terminal_state": "failed_after_membership_acceptance" | "failed_after_mls_add";
       "certified_at": string;
@@ -1770,7 +1752,7 @@ export type EventFederationSubmission = {
     "single_use_cas_token": {
       "domain": "ak.membership_compensation.single_use_cas.v1";
       "admission_id": string;
-      "delegation_digest": string;
+      "delegation_id": string;
       "expected_state": "unused";
       "destination_id": string;
       "issued_at": string;

@@ -37,7 +37,7 @@ jointTest.describe("Circle and Sidecar object boundary @fully-implemented", () =
       expect(created.display.color_token).toBeTruthy();
       expect(created.display.symbol).toBeTruthy();
       expect(created.member_ids).toEqual([accountActorId(jointRealm.alice.id)]);
-      expect(created.member_count).toBe(1);
+      expect("member_count" in created).toBe(false);
       expect(created.viewer_membership).toBe("join");
 
       // Fail-closed assertion: the thread-shaped path is not registered and
