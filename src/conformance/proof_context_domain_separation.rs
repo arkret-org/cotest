@@ -458,7 +458,7 @@ fn signed_proof(
 /// domain/audience vocabulary.
 fn directory_request_proof(proof: &PayloadProof) -> Result<DirectoryRequestProof> {
     Ok(DirectoryRequestProof {
-        kind: proof.kind.clone(),
+        kind: arkret_models_discovery::DirectoryRequestProofKind::DetachedJws,
         verification_method: proof.verification_method.clone(),
         payload_digest: proof.payload_digest.clone(),
         created_at: proof.created_at,

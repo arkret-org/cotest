@@ -239,7 +239,6 @@ test.describe("notifications", () => {
         bobAccount,
         {
           prepareMlsDevice: false,
-          autoCompleteRecoveryKeySetup: false,
         },
       ),
     ]);

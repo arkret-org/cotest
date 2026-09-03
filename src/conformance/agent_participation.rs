@@ -194,9 +194,10 @@ fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorR
         controller_subject_id: claim.controller_subject_id.clone(),
         subject_id: claim.subject_id.clone(),
         agent_slug: claim.agent_slug.clone(),
-        verified: true,
         selector_claim: claim,
-        source_refs: vec!["ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-".to_owned()],
+        source_refs: vec![arkret_wire::EventId::new(
+            "ak:event:AR4I3pqI_AE1Vxb4LEKq2azQxWXhHobgzwnTJmhVKJT-".to_owned(),
+        )?],
         expires_at: None,
     };
     outcome.validate()?;

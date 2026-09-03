@@ -3132,7 +3132,7 @@ try {
             $buildCommand = Add-DioxusNoDownloadsEnvironment `
                 -Command "dx build --profile joint-e2e --platform web --features wasm-localstorage-secrets-test" `
                 -ProjectRoot $InksonRoot
-            # Dioxus 0.7.9 can assemble the shared debug output from a stale
+            # Dioxus 0.7.10 can assemble the shared debug output from a stale
             # wasm-dev executable even though Cargo built the requested custom
             # profile. Re-run wasm-bindgen against Cargo's exact joint-e2e
             # artifact so the static bundle cannot silently lose the cotest

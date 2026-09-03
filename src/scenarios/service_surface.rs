@@ -23,7 +23,7 @@ pub async fn server_exposes_core_service_surface() -> Result<()> {
 
     let sdk = server.sdk()?;
     let description = sdk.describe().await?;
-    assert_eq!(description.protocol_version, "1.0");
+    assert_eq!(description.protocol_version.as_str(), "1.0");
     assert_eq!(description.service_kind, arkret_wire::ServiceKind::Station);
 
     let server_describe = expect_json(

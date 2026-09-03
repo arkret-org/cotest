@@ -89,7 +89,7 @@ pub async fn teabay_directory_service_profile_is_discoverable() -> Result<()> {
         .json(
             &arkret_models_discovery::DirectoryResolveHandleRequestBody {
                 handle: "absent.example".to_owned(),
-                expected_principal_id: None,
+                expected_account_id: None,
                 proof_challenge: None,
                 claim_presentations: Vec::new(),
                 intent: None,

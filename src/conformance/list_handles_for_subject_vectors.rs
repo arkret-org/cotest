@@ -95,7 +95,7 @@ pub fn run_happy_path_single_claim_vector() -> Result<()> {
     let req = DirectoryListHandlesForSubjectRequestBody {
         account_id: s.clone(),
         realm_id: None,
-        intent: Some("mention".to_owned()),
+        intent: Some(arkret_models_discovery::DirectoryIntent::Mention),
         requester_id: None,
         proof_challenge: None,
         proofs: vec![],

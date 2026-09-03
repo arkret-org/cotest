@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { expect, test, type BrowserContext, type Page } from "../../helpers/arkret-test";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Page,
+} from "../../helpers/arkret-test";
 import { coauthBaseUrl, optionalEnv, solandBaseUrl } from "../../helpers/env";
 import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
 import {
@@ -11,7 +16,10 @@ import {
   openDpopUserPageForAccount,
 } from "../../helpers/users";
 
-async function installVirtualAuthenticator(context: BrowserContext, page: Page) {
+async function installVirtualAuthenticator(
+  context: BrowserContext,
+  page: Page,
+) {
   const cdp = await context.newCDPSession(page);
   await cdp.send("WebAuthn.enable");
   const authenticatorIds: string[] = [];
@@ -105,19 +113,25 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
       await test.step("recent password authentication registers and renames a passkey", async () => {
         await page.goto(`${coauth}/login`);
         await submitCoauthPasswordCredentials(page, account);
-        await expect(page).toHaveURL(new RegExp(`${coauth!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?$`));
+        await expect(page).toHaveURL(
+          new RegExp(`${coauth!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?$`),
+        );
 
         await page.goto(`${coauth}/security`);
         await page.locator("#new-passkey-label").fill("Virtual security key");
         await page.getByTestId("coauth-add-passkey").click();
-        await expect(page.getByText("Virtual security key", { exact: true })).toBeVisible({
+        await expect(
+          page.getByText("Virtual security key", { exact: true }),
+        ).toBeVisible({
           timeout: 30_000,
         });
 
         const label = page.locator('input[id^="passkey-label-"]');
         await label.fill("Renamed passkey");
         await page.getByRole("button", { name: "Save name" }).click();
-        await expect(page.getByText("Renamed passkey", { exact: true })).toBeVisible();
+        await expect(
+          page.getByText("Renamed passkey", { exact: true }),
+        ).toBeVisible();
       });
 
       await test.step("passkey assertion creates the normal browser session", async () => {
@@ -158,9 +172,12 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         await page.getByTestId("coauth-login-identifier-submit").click();
         await page.getByTestId("coauth-login-passkey").focus();
         await page.keyboard.press("Enter");
-        await expect(page).toHaveURL(new RegExp(`${coauth!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?$`), {
-          timeout: 30_000,
-        });
+        await expect(page).toHaveURL(
+          new RegExp(`${coauth!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?$`),
+          {
+            timeout: 30_000,
+          },
+        );
         await page.unroute(`**${finishPath}`);
         expect(finishBody).toBeTruthy();
         if (secondaryCoauth) {
@@ -187,7 +204,9 @@ test.describe("Coauth passkey browser lifecycle @fully-implemented", () => {
         );
         expect(crossOrigin.status()).toBe(403);
 
-        const listed = await context.request.get(`${coauth}/_coauth/self/passkeys`);
+        const listed = await context.request.get(
+          `${coauth}/_coauth/self/passkeys`,
+        );
         expect(listed.ok()).toBe(true);
         const body = (await listed.json()) as {
           passkeys: Array<Record<string, unknown>>;
