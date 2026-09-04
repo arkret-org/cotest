@@ -374,6 +374,30 @@
       ]
     },
     {
+      "scenario_key": "federation/three-server-p0",
+      "suite_kind": "joint-e2e",
+      "realism_level": "server-contract",
+      "evidence_class": "server-contract",
+      "real_services": [
+        "soland"
+      ],
+      "mocks": [],
+      "identity_establishment": [
+        "session_injection"
+      ],
+      "protocol_object_producers": [
+        "raw_http_fixture"
+      ],
+      "declared_test_bypasses": [
+        "raw_http_fixture_or_oracle",
+        "session_injection"
+      ],
+      "claims_excluded": [
+        "registration_login_authorization",
+        "ui_driven_business_flow_for_raw_http_steps"
+      ]
+    },
+    {
       "scenario_key": "governance/personal-blocklist",
       "suite_kind": "joint-e2e",
       "realism_level": "fixture-only",

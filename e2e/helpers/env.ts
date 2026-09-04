@@ -1,4 +1,5 @@
 import path from "node:path";
+import fs from "node:fs";
 
 export function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -13,16 +14,76 @@ export function optionalEnv(name: string): string | undefined {
   return value ? value : undefined;
 }
 
-export type SolandKey = "alpha" | "beta" | "default";
+export type SolandKey = `server${number}` | "default";
+
+type TopologyService = {
+  public_url?: string;
+  service_id?: string;
+  service_did?: string;
+};
+
+type TopologyServer = {
+  name: string;
+  soland?: TopologyService;
+  coauth?: TopologyService;
+  inkson?: TopologyService;
+};
+
+let cachedTopology: { server_count?: number; servers?: TopologyServer[] } | undefined;
+
+function topology(): { server_count?: number; servers?: TopologyServer[] } | undefined {
+  if (cachedTopology) return cachedTopology;
+  const topologyPath = optionalEnv("COTEST_TOPOLOGY_PATH");
+  if (!topologyPath) return undefined;
+  cachedTopology = JSON.parse(fs.readFileSync(topologyPath, "utf8"));
+  return cachedTopology;
+}
+
+function canonicalServer(key: SolandKey): `server${number}` {
+  const normalized = key === "default" ? "server1" : key;
+  if (!/^server[1-9][0-9]*$/.test(normalized)) {
+    throw new Error(`Invalid joint topology server key: ${key}`);
+  }
+  return normalized;
+}
+
+function serverEnvPrefix(key: SolandKey): string {
+  return canonicalServer(key).toUpperCase();
+}
+
+function topologyServer(key: SolandKey): TopologyServer | undefined {
+  const name = canonicalServer(key);
+  return topology()?.servers?.find((server) => server.name === name);
+}
+
+function requiredServerValue(
+  key: SolandKey,
+  suffix: string,
+  topologyValue: string | undefined,
+  server1Fallback?: string,
+): string {
+  const name = canonicalServer(key);
+  const [kind, ...fieldParts] = suffix.split("_");
+  const indexedName = `COTEST_${kind}_${serverEnvPrefix(key)}_${fieldParts.join("_")}`;
+  const value =
+    optionalEnv(indexedName) ??
+    topologyValue ??
+    (name === "server1" && server1Fallback
+      ? optionalEnv(server1Fallback)
+      : undefined);
+  if (!value) {
+    throw new Error(`Missing ${suffix} configuration for ${name}`);
+  }
+  return value;
+}
 
 export function solandBaseUrl(key: SolandKey = "default"): string {
-  if (key === "alpha") {
-    return requiredEnv("COTEST_SOLAND_ALPHA_BASE_URL").replace(/\/$/, "");
-  }
-  if (key === "beta") {
-    return requiredEnv("COTEST_SOLAND_BETA_BASE_URL").replace(/\/$/, "");
-  }
-  return requiredEnv("COTEST_SOLAND_BASE_URL").replace(/\/$/, "");
+  return requiredServerValue(
+    key,
+    "SOLAND_BASE_URL",
+    topologyServer(key)?.soland?.public_url,
+    "COTEST_SOLAND_BASE_URL",
+  ).replace(/\/$/, "");
 }
 
 // Conformance debug endpoints live on the spec-reserved test-only namespace
@@ -39,40 +100,20 @@ export function conformanceBaseUrl(key: SolandKey = "default"): string {
 // identity-did.md); the fixture SCID form matches the spec conformance
 // vectors. did:web is reserved for explicit no-history / negative fixtures.
 export function solandServiceId(key: SolandKey = "default"): string {
-  if (key === "alpha") {
-    return (
-      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_ID") ??
-      "ak:did_core:webvh:z6mkfixture"
-    );
-  }
-  if (key === "beta") {
-    return (
-      optionalEnv("COTEST_SOLAND_BETA_SERVICE_ID") ??
-      "ak:did_core:webvh:z6mkfixture"
-    );
-  }
-  return (
-    optionalEnv("COTEST_SOLAND_SERVICE_ID") ??
-    "ak:did_core:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
+  return requiredServerValue(
+    key,
+    "SOLAND_SERVICE_ID",
+    topologyServer(key)?.soland?.service_id,
+    "COTEST_SOLAND_SERVICE_ID",
   );
 }
 
 export function solandServiceDid(key: SolandKey = "default"): string {
-  if (key === "alpha") {
-    return (
-      optionalEnv("COTEST_SOLAND_ALPHA_SERVICE_DID") ??
-      "did:webvh:z6mkfixture:soland-alpha.joint-e2e.local"
-    );
-  }
-  if (key === "beta") {
-    return (
-      optionalEnv("COTEST_SOLAND_BETA_SERVICE_DID") ??
-      "did:webvh:z6mkfixture:soland-beta.joint-e2e.local"
-    );
-  }
-  return (
-    optionalEnv("COTEST_SOLAND_SERVICE_DID") ??
-    "did:key:z6MkquRrzPs7F2ueYKgkbi6CgpYqwhbpBRDLeyWEAHVBxAdN"
+  return requiredServerValue(
+    key,
+    "SOLAND_SERVICE_DID",
+    topologyServer(key)?.soland?.service_did,
+    "COTEST_SOLAND_SERVICE_DID",
   );
 }
 
@@ -85,50 +126,51 @@ export function solandServiceResolution(
   };
 }
 
-// True when the dual-soland topology (used by S2 cross-server federation)
-// has been provisioned by the harness. Scenarios consult this to skip
-// rather than fail when running on the single-server profile.
-export function hasDualSoland(): boolean {
-  return Boolean(
-    optionalEnv("COTEST_SOLAND_ALPHA_BASE_URL") &&
-    optionalEnv("COTEST_SOLAND_BETA_BASE_URL"),
+export function configuredServerCount(): number {
+  const declared = Number(optionalEnv("COTEST_SERVER_COUNT") ?? topology()?.server_count ?? 1);
+  if (!Number.isInteger(declared) || declared < 1) {
+    throw new Error(`Invalid COTEST_SERVER_COUNT: ${declared}`);
+  }
+  return declared;
+}
+
+export function hasServerCount(required: number): boolean {
+  return configuredServerCount() >= required;
+}
+
+export function configuredServerKeys(): SolandKey[] {
+  return Array.from(
+    { length: configuredServerCount() },
+    (_, index) => `server${index + 1}` as SolandKey,
   );
 }
 
-export function assertDualSolandNotRequired(context: string): void {
-  if (process.env.COTEST_REQUIRE_DUAL_SOLAND === "1") {
+export function assertServerCountNotRequired(context: string, required: number): void {
+  if (Number(optionalEnv("COTEST_REQUIRED_SERVER_COUNT") ?? 0) >= required) {
     throw new Error(
-      `${context}: COTEST_REQUIRE_DUAL_SOLAND=1 (dual soland topology declared present) ` +
-        `but alpha/beta soland endpoints are unavailable — refusing to silently skip ` +
-        `federation coverage and report a false green. Pass -DualSoland to ` +
-        `scripts/run-joint-e2e.ps1 or unset COTEST_REQUIRE_DUAL_SOLAND.`,
+      `${context}: the run requires ${required} independent servers, but only ` +
+        `${configuredServerCount()} are available; refusing a false-green skip.`,
     );
   }
 }
 
 export function inksonBaseUrl(key: SolandKey = "default"): string {
-  if (key === "alpha") {
-    return (
-      optionalEnv("COTEST_INKSON_ALPHA_BASE_URL")?.replace(/\/$/, "") ??
-      inksonBaseUrl()
-    );
-  }
-  if (key === "beta") {
-    return (
-      optionalEnv("COTEST_INKSON_BETA_BASE_URL")?.replace(/\/$/, "") ??
-      inksonBaseUrl()
-    );
-  }
-  return requiredEnv("COTEST_INKSON_BASE_URL").replace(/\/$/, "");
+  const value =
+    optionalEnv(`COTEST_INKSON_${serverEnvPrefix(key)}_BASE_URL`) ??
+    topologyServer(key)?.inkson?.public_url ??
+    optionalEnv("COTEST_INKSON_BASE_URL");
+  if (!value) throw new Error(`Missing Inkson URL for ${canonicalServer(key)}`);
+  return value.replace(/\/$/, "");
 }
 
 export function coauthBaseUrl(key: SolandKey = "default"): string | undefined {
-  if (key === "beta") {
-    // The runner provisions a distinct Account Authority for Beta. A replica
-    // of Alpha cannot issue Beta accounts merely because it trusts that peer.
-    return optionalEnv("COTEST_COAUTH_BETA_BASE_URL")?.replace(/\/$/, "");
-  }
-  return optionalEnv("COTEST_COAUTH_BASE_URL")?.replace(/\/$/, "");
+  return (
+    optionalEnv(`COTEST_COAUTH_${serverEnvPrefix(key)}_BASE_URL`) ??
+    topologyServer(key)?.coauth?.public_url ??
+    (canonicalServer(key) === "server1"
+      ? optionalEnv("COTEST_COAUTH_BASE_URL")
+      : undefined)
+  )?.replace(/\/$/, "");
 }
 
 export function embeddedWebvhRegistrationBearer(): string | undefined {

@@ -24,7 +24,7 @@
 - 1 × inkson(被测对象;routing 行为)
 - 1 × Playwright browser context — 一次性 alice user
 
-不需要 mocks、不需要 DualSoland。
+不需要 mocks、不需要 ServerCount 2。
 
 ## Actors
 

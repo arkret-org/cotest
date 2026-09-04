@@ -52,17 +52,22 @@ class PatchCoauthConfigTests(unittest.TestCase):
                 self.assertNotIn(retired, arkret)
             self.assertIn('endpoint: "https://station.test/"', arkret)
             self.assertIn("password_login_session_grants_enabled: true", arkret)
-            with patch("sys.argv", arguments + [
-                "--soland-beta-base-url", "https://station-beta.test",
-                "--owning-station", "soland-beta",
-                "--inkson-beta-base-url", "https://inkson-beta.test",
+            indexed_arguments = [value for value in arguments if value not in (
+                "--soland-base-url", "https://station.test"
+            )]
+            with patch("sys.argv", indexed_arguments + [
+                "--station", "server1=https://station-server1.test",
+                "--station", "server2=https://station-server2.test",
+                "--station", "server3=https://station-server3.test",
+                "--owning-station", "server2",
+                "--inkson-base-url", "https://inkson-server2.test",
             ]):
                 self.assertEqual(MODULE.main(), 0)
-            beta = output.read_text(encoding="utf-8")
-            self.assertIn("owning_station: soland-beta", beta)
-            self.assertIn('endpoint: "https://station-beta.test/"', beta)
-            self.assertIn('"https://inkson-beta.test/auth/callback"', beta)
-            self.assertIn('"https://inkson.test/auth/callback"', beta)
+            indexed = output.read_text(encoding="utf-8")
+            self.assertIn("owning_station: server2", indexed)
+            self.assertIn('endpoint: "https://station-server3.test/"', indexed)
+            self.assertIn('"https://inkson-server2.test/auth/callback"', indexed)
+            self.assertIn('"https://inkson.test/auth/callback"', indexed)
 
     def test_missing_current_key_fails_closed_without_legacy_fallback(self):
         with self.assertRaises(SystemExit):

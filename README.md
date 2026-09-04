@@ -71,7 +71,7 @@ Recommended entrypoints:
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile fast-smoke
 .\scripts\run-server-conformance.ps1 -Profile fast-smoke -PlanOnly
 .\scripts\test-cotest-planner.ps1
-.\scripts\run-server-conformance.ps1 -Runtime process -Profile dual-soland
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile multi-server
 .\scripts\run-hygiene.ps1
 .\scripts\demote-test.ps1 -SpecPath e2e\tests\path\spec.ts:42 -Reason "GAP-Px-yyy blocked by backing feature"
 .\scripts\promote-fixme.ps1 -SpecPath e2e\tests\path\spec.ts:42 -FeatureId cotest#local-feature `
@@ -163,7 +163,7 @@ Rules:
 - Embedded joint gates place their outputs directly in
   `runs/server-conformance/<timestamp>-<profile>/<gate-name>/`; they do not replace the
   stable joint result except for the dedicated `run-server-conformance.ps1 -Profile joint`
-  suite. The targeted `dual-soland` and `release-gate` legs never replace it.
+  suite. The targeted `multi-server` and `release-gate` legs never replace it.
 - Both scripts keep the newest 20 runs in their own family (`-KeepRuns`, `0`
   disables), so cotest and joint-e2e retention cannot prune one another.
 - CI sets `COTEST_JOINT_RUN_DIR` to fixed names under `runs/` (e.g.
@@ -422,8 +422,8 @@ This gives `cotest` an explicit result surface instead of relying only on
 scrolling terminal output.
 
 `-Profile fast-smoke` runs a small PR-oriented set from
-`config/ci-profiles.json`; `-Profile dual-soland` starts alpha/beta soland
-and alpha/beta inkson locally, then runs the federation Playwright matrix;
+`config/ci-profiles.json`; `-Profile multi-server` starts server1/server2/server3 Soland
+and the numbered joint topology locally, then runs the mandatory three-server federation matrix;
 `-Profile full-nightly` runs the complete suite.
 Selective profiles declare both the Cargo integration-test `target` and the
 test-name `filter`, so the runner builds and starts only the selected target.

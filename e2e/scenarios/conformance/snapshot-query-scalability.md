@@ -178,7 +178,7 @@
 
 - **E1 unknown vector_id** / **E2 vector version skew**:`ak.vector.snapshot.bogus.v1` 与 `protocol_version="0.9"` 的旧 vector → MUST 4xx + `unknown_vector_id` / `unsupported_vector_version`,不静默走默认 canonicalizer
 - **E3 cursor cross-query reuse**:把 Phase C 的 cursor_A 放到不同 query body 再 POST → MUST 4xx + `cursor_query_mismatch`(cursor 绑定到具体 query 形状)
-- **E4 snapshot 跨服务器一致性**(dual-soland only):同一 snapshot vector POST 给 alpha 与 beta,两边 `manifest_digest` / `chunk_hashes` MUST byte-equal;`hasDualSoland()` 为 false 时 skip
+- **E4 snapshot 跨服务器一致性**（multi-server only）：同一 snapshot vector POST 给 server1 与 server2，两边 `manifest_digest` / `chunk_hashes` MUST byte-equal；`hasServerCount(2)` 为 false 时 skip
 - **E5 large snapshot streaming**:chunk 总和 > 100 MiB 时端点必须分段验证不 OOM — 建议拆为 `conformance/snapshot-query-scalability.large-payload` 独立 spec,保持主 scenario 紧凑
 
 ## Implementation notes

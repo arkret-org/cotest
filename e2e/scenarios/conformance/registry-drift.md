@@ -26,7 +26,7 @@
 - 1 × soland，暴露 `/_arkret/describe` 和 `/_arkret/self/events`。
 - 1 × coauth，用于给负向写入探针颁发真实 dev session。
 - Cotest Playwright request fixture 可从同级 arkret-spec 仓库读取 `artifacts/{profiles,registry}/*.json`。
-- 不需要 dual-soland、browser context 或 mock service。
+- 不需要 multi-server、browser context 或 mock service。
 
 ## Steps
 

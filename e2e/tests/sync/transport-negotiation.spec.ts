@@ -39,7 +39,7 @@
 //   ✗ Binding fallback chain state machine — presupposes the above bindings
 
 import { expect, test } from "../../helpers/arkret-test";
-import { hasDualSoland, solandBaseUrl, solandServiceId } from "../../helpers/env";
+import { hasServerCount, solandBaseUrl, solandServiceId } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   createRealmApi,
@@ -73,8 +73,8 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeEach(() => {
   test.skip(
-    !hasDualSoland(),
-    "transport-negotiation requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
+    !hasServerCount(2),
+    "transport-negotiation requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
   );
 });
 
@@ -83,36 +83,36 @@ test.describe("transport negotiation", () => {
     request,
   }) => {
     // Sanity: both servers up and exposing binding-discovery surface.
-    const alphaHealth = await request.get(`${solandBaseUrl("alpha")}/health`);
-    expect(alphaHealth.ok()).toBeTruthy();
-    const betaHealth = await request.get(`${solandBaseUrl("beta")}/health`);
-    expect(betaHealth.ok()).toBeTruthy();
+    const server1Health = await request.get(`${solandBaseUrl("server1")}/health`);
+    expect(server1Health.ok()).toBeTruthy();
+    const server2Health = await request.get(`${solandBaseUrl("server2")}/health`);
+    expect(server2Health.ok()).toBeTruthy();
 
     // /server/describe MUST exist on both sides and SHOULD return at least
     // an http_json binding entry (transport-bindings.md §7).
-    const alphaDescribe = await request.get(`${solandBaseUrl("alpha")}/_arkret/describe`);
-    expect(alphaDescribe.status()).not.toBe(404);
-    const betaDescribe = await request.get(`${solandBaseUrl("beta")}/_arkret/describe`);
-    expect(betaDescribe.status()).not.toBe(404);
+    const server1Describe = await request.get(`${solandBaseUrl("server1")}/_arkret/describe`);
+    expect(server1Describe.status()).not.toBe(404);
+    const server2Describe = await request.get(`${solandBaseUrl("server2")}/_arkret/describe`);
+    expect(server2Describe.status()).not.toBe(404);
 
-    if (alphaDescribe.ok()) {
-      const alphaBody = await alphaDescribe.json();
+    if (server1Describe.ok()) {
+      const server1Body = await server1Describe.json();
       // service_id MUST be present; transport_bindings MUST include http_json.
-      expect(typeof alphaBody.service_id).toBe("string");
-      expect(Array.isArray(alphaBody.transport_bindings)).toBe(true);
-      const kinds = alphaBody.transport_bindings.map((b: { kind: string }) => b.kind);
+      expect(typeof server1Body.service_id).toBe("string");
+      expect(Array.isArray(server1Body.transport_bindings)).toBe(true);
+      const kinds = server1Body.transport_bindings.map((b: { kind: string }) => b.kind);
       expect(kinds).toContain("http_json");
     }
   });
 
-  test("federation push endpoint exists on β and rejects unsigned requests with a non-404 status", async ({
+  test("federation push endpoint exists on server2 and rejects unsigned requests with a non-404 status", async ({
     request,
   }) => {
     // Phase A baseline negative: hitting the federation push endpoint
     // without any RFC 9421 signature MUST NOT 404 (route exists) and
     // MUST NOT 200 (signature required). Expected: 400 / 401 / 403.
     const probe = await request.post(
-      `${solandBaseUrl("beta")}/_arkret/peer/events`,
+      `${solandBaseUrl("server2")}/_arkret/peer/events`,
       { data: { events: [] } },
     );
     expect(probe.status()).not.toBe(404);
@@ -122,7 +122,7 @@ test.describe("transport negotiation", () => {
     expect(probe.status()).toBeLessThan(500);
   });
 
-  test("E8.1 signature expiry / key mismatch: β returns one indistinguishable auth-failure envelope (no key_rotation_hint); a fresh re-sign passes auth", async ({
+  test("E8.1 signature expiry / key mismatch: server2 returns one indistinguishable auth-failure envelope (no key_rotation_hint); a fresh re-sign passes auth", async ({
     request,
   }) => {
     // spec: federation.md §3.2 + §8.3 minimal-disclosure MUST. Distinct
@@ -132,18 +132,18 @@ test.describe("transport negotiation", () => {
     //   / signature_expired / unknown_keyid) in the response — the real cause
     //   is audit-log only. soland: signature.rs folds every cause into
     //   FEDERATION_AUTH_FAILURE_MESSAGE + a fixed timing bucket.
-    const user = uniqueUser("e81-federation", "alpha");
-    await ensureRegistered(request, user, { server: "alpha" });
-    const token = await issueDevSession(request, user, { server: "alpha" });
+    const user = uniqueUser("e81-federation", "server1");
+    await ensureRegistered(request, user, { server: "server1" });
+    const token = await issueDevSession(request, user, { server: "server1" });
     const realmId = await createRealmApi(
       request,
       token,
       {
         title: "E8.1 federation signature fixture",
         ownerId: user.id,
-        creator_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("server1"),
       },
-      { server: "alpha" },
+      { server: "server1" },
     );
     const buildEvent = (tag: string) =>
       makeFederationEvent({
@@ -164,16 +164,16 @@ test.describe("transport negotiation", () => {
       // Federation transport carries the original first-publication evidence;
       // manufacture neither the lease nor the ingress receipt in the fixture.
       await submitSignedEventApi(request, token, event, {
-        server: "alpha",
+        server: "server1",
         context: `publish E8.1 ${tag} source Event`,
       });
       return event;
     };
 
     const pushOpts = {
-      origin: solandServiceId("alpha"),
-      destination: solandServiceId("beta"),
-      server: "beta" as const,
+      origin: solandServiceId("server1"),
+      destination: solandServiceId("server2"),
+      server: "server2" as const,
       realmId,
     };
 
@@ -183,7 +183,7 @@ test.describe("transport negotiation", () => {
     const expired = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [expiredEvent], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-expired`,
+        idempotencyKey: `${solandServiceId("server1")}#cotest-e81-expired`,
         expireSignature: true,
       }),
     );
@@ -194,7 +194,7 @@ test.describe("transport negotiation", () => {
     const tampered = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [tamperedEvent], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-tampered`,
+        idempotencyKey: `${solandServiceId("server1")}#cotest-e81-tampered`,
         tamperSignature: true,
       }),
     );
@@ -228,7 +228,7 @@ test.describe("transport negotiation", () => {
     const reSigned = await federationAuthFailureShape(
       await rawPushFederationEvents(request, [resignedEvent], {
         ...pushOpts,
-        idempotencyKey: `${solandServiceId("alpha")}#cotest-e81-resigned`,
+        idempotencyKey: `${solandServiceId("server1")}#cotest-e81-resigned`,
       }),
     );
     const passedAuth =

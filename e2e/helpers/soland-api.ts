@@ -18,6 +18,7 @@ import { xchacha20poly1305 } from "@noble/ciphers/chacha";
 import { operationSelector } from "./arkret-test";
 import {
   type SolandKey,
+  configuredServerKeys,
   solandBaseUrl,
   solandServiceDid,
   solandServiceId,
@@ -909,7 +910,7 @@ export async function createRealmApi(
   for (const invitee of data.invitees ?? []) {
     const recipientServiceId =
       data.invitee_ids?.[invitee] ?? solandServiceId(opts.server);
-    const recipientServer = (["default", "alpha", "beta"] as const).find(
+    const recipientServer = configuredServerKeys().find(
       (server) => solandServiceId(server) === recipientServiceId,
     );
     if (!recipientServer) throw new Error("directed invite recipient Station is not configured");
@@ -3921,7 +3922,7 @@ function signedFederationPushHeaders(
   // request is rejected on the freshness check, not on a bad signature.
   const created = opts.expireSignature ? nowSeconds - 600 : nowSeconds;
   const expires = opts.expireSignature ? nowSeconds - 300 : created + 300;
-  const sourceKey = (["default", "alpha", "beta"] as SolandKey[]).find(
+  const sourceKey = configuredServerKeys().find(
     (key) => solandServiceId(key) === sourceServiceId,
   );
   const keyid = `${sourceKey ? solandServiceDid(sourceKey) : serviceCoreIdToDid(sourceServiceId)}#federation-fanout-key`;
@@ -4014,12 +4015,17 @@ function serviceSigningSeed(serviceId: string): Buffer {
 }
 
 function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
-  let encoded: string | undefined;
-  if (serviceId === solandServiceId("default")) {
-    encoded = process.env.COTEST_SOLAND_SERVICE_SIGNING_KEY?.trim();
-  } else if (serviceId === solandServiceId("beta")) {
-    encoded = process.env.COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY?.trim();
-  }
+  const server = configuredServerKeys().find(
+    (candidate) => solandServiceId(candidate) === serviceId,
+  );
+  const indexedName = server
+    ? `COTEST_SOLAND_${String(server).toUpperCase()}_SERVICE_SIGNING_KEY`
+    : undefined;
+  const encoded =
+    (indexedName ? process.env[indexedName]?.trim() : undefined) ??
+    (server === "server1"
+      ? process.env.COTEST_SOLAND_SERVICE_SIGNING_KEY?.trim()
+      : undefined);
   if (!encoded) {
     return undefined;
   }
@@ -4036,7 +4042,7 @@ function configuredServiceSigningSeed(serviceId: string): Buffer | undefined {
 
 function trustDomainFromServiceId(serviceId: string): string {
   requireDidCoreId(serviceId);
-  const localKey = (["default", "alpha", "beta"] as SolandKey[]).find(
+  const localKey = configuredServerKeys().find(
     (key) => solandServiceId(key) === serviceId,
   );
   if (localKey) {

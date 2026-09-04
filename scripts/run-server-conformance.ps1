@@ -7,7 +7,7 @@ param(
     [string]$OutputRoot,
     [string]$CargoTestTarget,
     [string]$CargoTestFilter,
-    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "joint", "dual-soland")]
+    [ValidateSet("all", "fast-smoke", "compose", "release-gate", "full-nightly", "joint", "multi-server", "dual-soland")]
     [string]$Profile = "all",
     [string]$ProfileConfigPath,
     [switch]$PlanOnly,
@@ -88,7 +88,7 @@ function Invoke-JointSmokeGate {
         [ValidateSet("joint-smoke", "joint-full")][string]$RunProfile = "joint-smoke",
         [string]$PlaywrightProject = "chromium",
         [bool]$StartCoauth = $true,
-        [bool]$DualSoland = $false,
+        [ValidateRange(1, 32)][int]$ServerCount = 1,
         [bool]$StartMocks = $false,
         [string]$Grep,
         [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
@@ -114,9 +114,7 @@ function Invoke-JointSmokeGate {
     if ($StartCoauth) {
         $args += "-StartCoauth"
     }
-    if ($DualSoland) {
-        $args += "-DualSoland"
-    }
+    $args += @("-ServerCount", "$ServerCount")
     if ($StartMocks) {
         $args += "-StartMocks"
     }
@@ -1950,7 +1948,7 @@ if (-not $OutputRoot) {
     $OutputRoot = Join-Path $repoRoot "artifacts"
 }
 
-$delegatedProfile = $Profile -in @("joint", "dual-soland")
+$delegatedProfile = $Profile -in @("joint", "multi-server", "dual-soland")
 if ($delegatedProfile -and ($PlanOnly -or $ValidateProfile)) {
     throw "Profile '$Profile' delegates to the Playwright runner and does not have a Cargo test plan"
 }
@@ -2092,18 +2090,19 @@ if ($Profile -eq "joint") {
     exit ([int]$jointRun.exit_code)
 }
 
-if ($Profile -eq "dual-soland") {
-    $dualRun = Invoke-JointSmokeGate `
+if ($Profile -in @("multi-server", "dual-soland")) {
+    $profileServerCount = if ($Profile -eq "dual-soland") { Write-Warning "Profile dual-soland is deprecated; use multi-server."; 2 } else { 3 }
+    $multiRun = Invoke-JointSmokeGate `
         -RepoRoot $repoRoot `
         -RunDir $runDir `
         -RawLog $rawLog `
-        -OutputName "dual-soland" `
+        -OutputName "multi-server" `
         -RunProfile "joint-full" `
         -PlaywrightProject "chromium" `
         -StartCoauth $true `
-        -DualSoland $true `
+        -ServerCount $profileServerCount `
         -StartMocks $false `
-        -Grep "cross-server.federation" `
+        -Grep $(if ($profileServerCount -eq 2) { "cross-server federation" } else { "@three-server-p0" }) `
         -SolandRuntime $Runtime `
         -SolandImage $SutImage `
         -BuildSolandImage ([bool]$BuildImage) `
@@ -2118,16 +2117,16 @@ if ($Profile -eq "dual-soland") {
         suite_name             = "Arkret Joint Product E2E"
         generated_at           = (Get-Date).ToString("o")
         profile                = $Profile
-        status                 = $dualRun.status
-        exit_code              = $dualRun.exit_code
-        joint_summary_json     = $dualRun.summary_json
-        joint_summary_markdown = $dualRun.summary_markdown
-        output_root            = $dualRun.output_root
+        status                 = $multiRun.status
+        exit_code              = $multiRun.exit_code
+        joint_summary_json     = $multiRun.summary_json
+        joint_summary_markdown = $multiRun.summary_markdown
+        output_root            = $multiRun.output_root
         raw_log                = $rawLog
     }
     $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $summaryJson -Encoding UTF8
     @(
-        "# Arkret Joint Product E2E dual-soland profile",
+        "# Arkret Joint Product E2E multi-server profile",
         "",
         "- status: $($summary.status)",
         "- exit_code: $($summary.exit_code)",
@@ -2137,11 +2136,11 @@ if ($Profile -eq "dual-soland") {
         "- raw_log: $($summary.raw_log)"
     ) | Set-Content -Path $summaryMd -Encoding UTF8
     Write-Host ""
-    Write-Host "Arkret Joint Product E2E dual-soland profile complete:"
+    Write-Host "Arkret Joint Product E2E multi-server profile complete:"
     Write-Host "  status   : $($summary.status)"
     Write-Host "  summary  : $summaryMd"
     Write-Host "  joint    : $($summary.joint_summary_markdown)"
-    exit ([int]$dualRun.exit_code)
+    exit ([int]$multiRun.exit_code)
 }
 
 if ($Runtime -eq "docker" -and ($BuildImage -or -not (Test-DockerImagePresent -ImageTag $SutImage))) {

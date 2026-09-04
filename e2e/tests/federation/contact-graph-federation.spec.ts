@@ -1,6 +1,6 @@
-// Contact graph across Stations (α/β federation).
+// Contact graph across Stations (server1/server2 federation).
 //
-// Gated on hasDualSoland(): pass -DualSoland to scripts/run-joint-e2e.ps1.
+// Gated on hasServerCount(2): pass -ServerCount 2 to scripts/run-joint-e2e.ps1.
 //
 // Protocol face: `/_arkret/self/contacts/*`,
 // `/_arkret/self/direct-conversations/resolve`, `/_arkret/peer/invites`.
@@ -21,8 +21,8 @@
 
 import { expect, test } from "../../helpers/arkret-test";
 import {
-  assertDualSolandNotRequired,
-  hasDualSoland,
+  assertServerCountNotRequired,
+  hasServerCount,
   solandBaseUrl,
   solandServiceId,
 } from "../../helpers/env";
@@ -54,39 +54,39 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.beforeEach(() => {
-  if (!hasDualSoland()) {
-    assertDualSolandNotRequired("contact graph federation");
+  if (!hasServerCount(2)) {
+    assertServerCountNotRequired("contact graph federation", 2);
     test.skip(
       true,
-      "contact-graph federation requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
+      "contact-graph federation requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
     );
   }
 });
 
-test.describe("contact graph federation (α/β)", () => {
-  // S1-fed: cross-PS add friend (alice@α <-> bob@β), full positive handshake.
+test.describe("contact graph federation (server1/server2)", () => {
+  // S1-fed: cross-PS add friend (alice@server1 <-> bob@server2), full positive handshake.
   //
-  // alice@α requests bob@β with recipient_id=β -> the signed
-  // ak.contact.requested fact federates to β over the outbox -> bob@β sees
-  // pending_incoming -> bob accepts with requester_id=α -> the
-  // ak.contact.accepted fact federates back to α -> alice@α sees accepted +
-  // invite_consent_grant_ref (bob -> alice invite grant projected on α).
+  // alice@server1 requests bob@server2 with recipient_id=server2 -> the signed
+  // ak.contact.requested fact federates to server2 over the outbox -> bob@server2 sees
+  // pending_incoming -> bob accepts with requester_id=server1 -> the
+  // ak.contact.accepted fact federates back to server1 -> alice@server1 sees accepted +
+  // invite_consent_grant_ref (bob -> alice invite grant projected on server1).
   test("S1-fed cross-PS add friend federates request + accept and converges both sides", async ({
     request,
   }) => {
     const stamp = Date.now();
     const alice = uniqueUser(`cgf-s1-alice-${stamp}`);
     const bob = uniqueUser(`cgf-s1-bob-${stamp}`);
-    await ensureRegistered(request, alice, { server: "alpha" });
-    await ensureRegistered(request, bob, { server: "beta" });
+    await ensureRegistered(request, alice, { server: "server1" });
+    await ensureRegistered(request, bob, { server: "server2" });
     const aliceToken = await issueDevSession(request, alice, {
-      server: "alpha",
+      server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    // The beta default invite/contact policy quarantines explicit-address
+    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    // The server2 default invite/contact policy quarantines explicit-address
     // requests. Resolve a signed principal locator so the peer can notify and
     // project the pending_incoming row (invite-addressing.md Â§5).
-    const bobLocator = await resolvePrincipalLocator(request, bob.id, "beta", bobToken);
+    const bobLocator = await resolvePrincipalLocator(request, bob.id, "server2", bobToken);
 
     const { outcome } = await requestContactArkret(
       request,
@@ -94,24 +94,24 @@ test.describe("contact graph federation (α/β)", () => {
       bob.id,
       {
         requestedScopes: ["invite"],
-        server: "alpha",
-        recipientServiceId: solandServiceId("beta"),
+        server: "server1",
+        recipientServiceId: solandServiceId("server2"),
         introductionEvidence: {
           kind: "locator_ref",
           principal_locator: bobLocator,
         },
       },
     );
-    // alice's local view: a pending outgoing request exists on α.
+    // alice's local view: a pending outgoing request exists on server1.
     expect(outcome.state).toBe("pending_outgoing");
 
-    // The signed ak.contact.requested fact federates to β; bob@β sees the
+    // The signed ak.contact.requested fact federates to server2; bob@server2 sees the
     // incoming request once the outbox dispatcher drains (poll for delivery).
     await expect
       .poll(
         async () => {
           const row = await contactRow(request, bobToken, alice.id, {
-            server: "beta",
+            server: "server2",
           });
           return row?.state;
         },
@@ -119,23 +119,23 @@ test.describe("contact graph federation (α/β)", () => {
       )
       .toBe("pending_incoming");
 
-    // bob accepts on β granting invite, addressing the remote requester (α).
+    // bob accepts on server2 granting invite, addressing the remote requester (server1).
     const respondOutcome = await respondContactArkret(request, bobToken, {
       requestId: outcome.request_event_ref,
       requesterId: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
-      server: "beta",
-      requesterServiceId: solandServiceId("alpha"),
+      server: "server2",
+      requesterServiceId: solandServiceId("server1"),
     });
     expect(respondOutcome.state).toBe("accepted");
 
-    // The ak.contact.accepted fact federates back to α.
+    // The ak.contact.accepted fact federates back to server1.
     await expect
       .poll(
         async () => {
           const row = await contactRow(request, aliceToken, bob.id, {
-            server: "alpha",
+            server: "server1",
           });
           return row?.state;
         },
@@ -143,7 +143,7 @@ test.describe("contact graph federation (α/β)", () => {
       )
       .toBe("accepted");
     const aliceRow = await contactRow(request, aliceToken, bob.id, {
-      server: "alpha",
+      server: "server1",
     });
     expect(aliceRow?.next_prepare_input).toBeTruthy();
   });
@@ -157,20 +157,20 @@ test.describe("contact graph federation (α/β)", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`cgf-s3-alice-${stamp}`);
     const bob = uniqueUser(`cgf-s3-bob-${stamp}`);
-    await ensureRegistered(request, alice, { server: "alpha" });
-    await ensureRegistered(request, bob, { server: "beta" });
+    await ensureRegistered(request, alice, { server: "server1" });
+    await ensureRegistered(request, bob, { server: "server2" });
     const aliceToken = await issueDevSession(request, alice, {
-      server: "alpha",
+      server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    const bobLocator = await resolvePrincipalLocator(request, bob.id, "beta", bobToken);
+    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobLocator = await resolvePrincipalLocator(request, bob.id, "server2", bobToken);
 
     // Federated direct_message contact handshake (same path as S1-fed, but with
     // direct_message scope so the resolver's consent precondition is met).
     const { outcome } = await requestContactArkret(request, aliceToken, bob.id, {
       requestedScopes: ["direct_message"],
-      server: "alpha",
-      recipientServiceId: solandServiceId("beta"),
+      server: "server1",
+      recipientServiceId: solandServiceId("server2"),
       introductionEvidence: {
         kind: "locator_ref",
         principal_locator: bobLocator,
@@ -179,7 +179,7 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () =>
-          (await contactRow(request, bobToken, alice.id, { server: "beta" }))
+          (await contactRow(request, bobToken, alice.id, { server: "server2" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
@@ -189,21 +189,21 @@ test.describe("contact graph federation (α/β)", () => {
       requesterId: alice.id,
       action: "accept",
       grantedScopes: ["direct_message"],
-      server: "beta",
-      requesterServiceId: solandServiceId("alpha"),
+      server: "server2",
+      requesterServiceId: solandServiceId("server1"),
     });
-    // α converges to accepted once the accept fact federates back.
+    // server1 converges to accepted once the accept fact federates back.
     await expect
       .poll(
         async () =>
-          (await contactRow(request, aliceToken, bob.id, { server: "alpha" }))
+          (await contactRow(request, aliceToken, bob.id, { server: "server1" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .toBe("accepted");
 
     const resolved = await request.post(
-      `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
+      `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
       {
         headers: authHeaders(aliceToken),
         data: { peer: bob.id, create: true },
@@ -224,14 +224,14 @@ test.describe("contact graph federation (α/β)", () => {
     expect(draft?.request?.strand_id).toBe(body.main_strand_id);
     expect(draft?.request?.claim_purpose).toBe("direct_conversation");
     expect(draft?.transport_binding?.source_id).toBe(
-      solandServiceId("alpha"),
+      solandServiceId("server1"),
     );
     expect(draft?.transport_binding?.destination_id).toBe(
       bobLocator.recipient_id,
     );
 
     const retry = await request.post(
-      `${solandBaseUrl("alpha")}/_arkret/self/direct-conversations/resolve`,
+      `${solandBaseUrl("server1")}/_arkret/self/direct-conversations/resolve`,
       {
         headers: authHeaders(aliceToken),
         data: { peer: bob.id, create: true },
@@ -249,10 +249,10 @@ test.describe("contact graph federation (α/β)", () => {
     const stamp = Date.now();
     const [aliceFlow, bobFlow] = await Promise.all([
       openDpopUserPage(browser, request, `cgf-live-alice-${stamp}`, {
-        server: "alpha",
+        server: "server1",
       }),
       openDpopUserPage(browser, request, `cgf-live-bob-${stamp}`, {
-        server: "beta",
+        server: "server2",
       }),
     ]);
     test.skip(
@@ -265,8 +265,8 @@ test.describe("contact graph federation (α/β)", () => {
     const alice = aliceFlow.user;
     const bob = bobFlow.user;
     const [aliceToken, bobToken] = await Promise.all([
-      issueDevSession(request, alice, { server: "alpha" }),
-      issueDevSession(request, bob, { server: "beta" }),
+      issueDevSession(request, alice, { server: "server1" }),
+      issueDevSession(request, bob, { server: "server2" }),
     ]);
     const alicePage = aliceFlow.page;
     const bobPage = bobFlow.page;
@@ -275,7 +275,7 @@ test.describe("contact graph federation (α/β)", () => {
       const bobLocator = await resolvePrincipalLocator(
         request,
         bob.id,
-        "beta",
+        "server2",
         bobToken,
       );
       const { outcome } = await requestContactArkret(
@@ -284,8 +284,8 @@ test.describe("contact graph federation (α/β)", () => {
         bob.id,
         {
           requestedScopes: ["direct_message"],
-          server: "alpha",
-          recipientServiceId: solandServiceId("beta"),
+          server: "server1",
+          recipientServiceId: solandServiceId("server2"),
           introductionEvidence: {
             kind: "locator_ref",
             principal_locator: bobLocator,
@@ -300,7 +300,7 @@ test.describe("contact graph federation (α/β)", () => {
                 request,
                 bobToken,
                 alice.id,
-                { server: "beta" },
+                { server: "server2" },
               )
             )?.state,
           { timeout: 30_000, intervals: [500, 1_000, 2_000] },
@@ -311,8 +311,8 @@ test.describe("contact graph federation (α/β)", () => {
         requesterId: alice.id,
         action: "accept",
         grantedScopes: ["direct_message"],
-        server: "beta",
-        requesterServiceId: solandServiceId("alpha"),
+        server: "server2",
+        requesterServiceId: solandServiceId("server1"),
       });
       await expect
         .poll(
@@ -322,7 +322,7 @@ test.describe("contact graph federation (α/β)", () => {
                 request,
                 aliceToken,
                 bob.id,
-                { server: "alpha" },
+                { server: "server1" },
               )
             )?.state,
           { timeout: 30_000, intervals: [500, 1_000, 2_000] },
@@ -351,7 +351,7 @@ test.describe("contact graph federation (α/β)", () => {
               request,
               bobToken,
               alice.id,
-              { server: "beta" },
+              { server: "server2" },
             );
             return row?.direct_conversation;
           },
@@ -399,92 +399,92 @@ test.describe("contact graph federation (α/β)", () => {
     }
   });
 
-  // S4-fed: Alice's Alpha Account invites Bob's Beta Account with Bob's private consent.
-  test("S4-fed consent_grant evidence delivers cross-PS to β and bob joins", async ({
+  // S4-fed: Alice's Server1 Account invites Bob's Server2 Account with Bob's private consent.
+  test("S4-fed consent_grant evidence delivers cross-PS to server2 and bob joins", async ({
     request,
   }) => {
     const stamp = Date.now();
-    const alice = uniqueUser(`cgf-s4-alice-${stamp}`, "alpha");
-    const bob = uniqueUser(`cgf-s4-bob-${stamp}`, "beta");
+    const alice = uniqueUser(`cgf-s4-alice-${stamp}`, "server1");
+    const bob = uniqueUser(`cgf-s4-bob-${stamp}`, "server2");
 
-    await ensureRegistered(request, alice, { server: "alpha" });
-    await ensureRegistered(request, bob, { server: "beta" });
-    const aliceTokenAlpha = await issueDevSession(request, alice, { server: "alpha" });
-    const bobTokenBeta = await issueDevSession(request, bob, { server: "beta" });
-    const locator = await resolvePrincipalLocator(request, bob.id, "beta", bobTokenBeta);
-    const { outcome } = await requestContactArkret(request, aliceTokenAlpha, bob.id, {
-      requestedScopes: ["invite"], server: "alpha", recipientServiceId: solandServiceId("beta"),
+    await ensureRegistered(request, alice, { server: "server1" });
+    await ensureRegistered(request, bob, { server: "server2" });
+    const aliceTokenServer1 = await issueDevSession(request, alice, { server: "server1" });
+    const bobTokenServer2 = await issueDevSession(request, bob, { server: "server2" });
+    const locator = await resolvePrincipalLocator(request, bob.id, "server2", bobTokenServer2);
+    const { outcome } = await requestContactArkret(request, aliceTokenServer1, bob.id, {
+      requestedScopes: ["invite"], server: "server1", recipientServiceId: solandServiceId("server2"),
       introductionEvidence: { kind: "locator_ref", principal_locator: locator },
     });
-    await expect.poll(async () => (await contactRow(request, bobTokenBeta, alice.id, { server: "beta" }))?.state,
+    await expect.poll(async () => (await contactRow(request, bobTokenServer2, alice.id, { server: "server2" }))?.state,
       { timeout: 30_000 }).toBe("pending_incoming");
-    await respondContactArkret(request, bobTokenBeta, {
+    await respondContactArkret(request, bobTokenServer2, {
       requestId: outcome.request_event_ref, requesterId: alice.id, action: "accept",
-      grantedScopes: ["invite"], server: "beta", requesterServiceId: solandServiceId("alpha"),
+      grantedScopes: ["invite"], server: "server2", requesterServiceId: solandServiceId("server1"),
     });
-    const consent = await grantInviteConsentArkret(request, bobTokenBeta, bob, alice.id, { server: "beta" });
+    const consent = await grantInviteConsentArkret(request, bobTokenServer2, bob, alice.id, { server: "server2" });
     const grantRef = consent.eventRef;
 
-    // On α: alice creates the realm she wants to pull bob into.
+    // On server1: alice creates the realm she wants to pull bob into.
     const realmId = await createRealmApi(
       request,
-      aliceTokenAlpha,
+      aliceTokenServer1,
       {
         title: `S4-fed pull ${stamp}`,
         ownerId: alice.id,
-        creator_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("server1"),
         plaintext_visible_services: [
-          solandServiceId("alpha"),
-          solandServiceId("beta"),
+          solandServiceId("server1"),
+          solandServiceId("server2"),
         ],
       },
-      { server: "alpha" },
+      { server: "server1" },
     );
-    // Cross-PS private delivery: α signs, β receives + verifies the grant
+    // Cross-PS private delivery: server1 signs, server2 receives + verifies the grant
     // against ITS consent cells (subject=bob gave inviter=alice invite).
     const { outcome: delivery, inviteId } = await deliverInviteWithConsentGrant(
       request,
       {
         inviterId: alice.id,
-        inviterToken: aliceTokenAlpha,
+        inviterToken: aliceTokenServer1,
         realmId,
         inviteeId: bob.id,
         consentGrantRef: grantRef!,
-        originServer: "alpha",
-        recipientServer: "beta",
+        originServer: "server1",
+        recipientServer: "server2",
       },
     );
     expect(delivery.status).toBe("accepted");
     expect(delivery.disclosed_outcome).toBe("delivered");
 
-    // bob@β lists the pending invite and accepts -> becomes a member on β.
-    const invites = await listAuthzInvitesArkret(request, bobTokenBeta, {
-      server: "beta",
+    // bob@server2 lists the pending invite and accepts -> becomes a member on server2.
+    const invites = await listAuthzInvitesArkret(request, bobTokenServer2, {
+      server: "server2",
     });
     const invite = invites.find(
-      (i) => i.realm_id === realmId && i.invitee_account_id?.principal_id === bob.id && i.invitee_account_id.station_id === solandServiceId("beta"),
+      (i) => i.realm_id === realmId && i.invitee_account_id?.principal_id === bob.id && i.invitee_account_id.station_id === solandServiceId("server2"),
     );
-    expect(invite, "bob@β pending invite for the α realm").toBeTruthy();
+    expect(invite, "bob@server2 pending invite for the server1 realm").toBeTruthy();
     expect(invite!.id).toBe(inviteId);
 
-    await acceptInviteArkret(request, bobTokenBeta, {
+    await acceptInviteArkret(request, bobTokenServer2, {
       accepterId: bob.id,
       realmId,
       inviteId: invite!.id,
-      server: "beta",
-      sealBasis: await readRealmSealBasis(request, aliceTokenAlpha, realmId, "alpha"),
+      server: "server2",
+      sealBasis: await readRealmSealBasis(request, aliceTokenServer1, realmId, "server1"),
     });
     await expect
       .poll(
         async () => {
           const resp = await request.get(
-            `${solandBaseUrl("beta")}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
-            { headers: authHeaders(bobTokenBeta) },
+            `${solandBaseUrl("server2")}/_arkret/self/realms/${encodeURIComponent(realmId)}`,
+            { headers: authHeaders(bobTokenServer2) },
           );
           if (!resp.ok()) return false;
           const realm = await resp.json();
           return (
-            Array.isArray(realm.member_ids) && realm.member_ids.some((member: unknown) => JSON.stringify(member) === JSON.stringify(accountActorId(bob.id, "beta")))
+            Array.isArray(realm.member_ids) && realm.member_ids.some((member: unknown) => JSON.stringify(member) === JSON.stringify(accountActorId(bob.id, "server2")))
           );
         },
         { timeout: 30_000, intervals: [500, 1000, 2000] },
@@ -495,10 +495,10 @@ test.describe("contact graph federation (α/β)", () => {
   // Tombstone-fed: cross-PS contact tombstone federates an `ak.contact.tombstone`
   // fact to the peer's home Station.
   //
-  // alice@α and bob@β first become accepted contacts (same federated handshake
-  // as S1-fed). Then alice@α tombstones bob with block_peer=true and addresses
-  // bob's home PS via peer_id=β. soland's contact_tombstone handler
-  // federates `ak.contact.tombstone` over the durable outbox; β's
+  // alice@server1 and bob@server2 first become accepted contacts (same federated handshake
+  // as S1-fed). Then alice@server1 tombstones bob with block_peer=true and addresses
+  // bob's home PS via peer_id=server2. soland's contact_tombstone handler
+  // federates `ak.contact.tombstone` over the durable outbox; server2's
   // peer_contacts_submit downgrades its mirrored alice row to `tombstoned`.
   // Spec contact-and-direct-conversation.md §2/§4.1.
   test("tombstone-fed cross-PS tombstone downgrades the peer's mirrored row to tombstoned", async ({
@@ -507,19 +507,19 @@ test.describe("contact graph federation (α/β)", () => {
     const stamp = Date.now();
     const alice = uniqueUser(`cgf-tomb-alice-${stamp}`);
     const bob = uniqueUser(`cgf-tomb-bob-${stamp}`);
-    await ensureRegistered(request, alice, { server: "alpha" });
-    await ensureRegistered(request, bob, { server: "beta" });
+    await ensureRegistered(request, alice, { server: "server1" });
+    await ensureRegistered(request, bob, { server: "server2" });
     const aliceToken = await issueDevSession(request, alice, {
-      server: "alpha",
+      server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "beta" });
-    const bobLocator = await resolvePrincipalLocator(request, bob.id, "beta", bobToken);
+    const bobToken = await issueDevSession(request, bob, { server: "server2" });
+    const bobLocator = await resolvePrincipalLocator(request, bob.id, "server2", bobToken);
 
     // Federated accepted handshake (reuse S1-fed path).
     const { outcome } = await requestContactArkret(request, aliceToken, bob.id, {
       requestedScopes: ["invite"],
-      server: "alpha",
-      recipientServiceId: solandServiceId("beta"),
+      server: "server1",
+      recipientServiceId: solandServiceId("server2"),
       introductionEvidence: {
         kind: "locator_ref",
         principal_locator: bobLocator,
@@ -528,7 +528,7 @@ test.describe("contact graph federation (α/β)", () => {
     await expect
       .poll(
         async () =>
-          (await contactRow(request, bobToken, alice.id, { server: "beta" }))
+          (await contactRow(request, bobToken, alice.id, { server: "server2" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
@@ -538,32 +538,32 @@ test.describe("contact graph federation (α/β)", () => {
       requesterId: alice.id,
       action: "accept",
       grantedScopes: ["invite"],
-      server: "beta",
-      requesterServiceId: solandServiceId("alpha"),
+      server: "server2",
+      requesterServiceId: solandServiceId("server1"),
     });
     await expect
       .poll(
         async () =>
-          (await contactRow(request, aliceToken, bob.id, { server: "alpha" }))
+          (await contactRow(request, aliceToken, bob.id, { server: "server1" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )
       .toBe("accepted");
 
-    // alice@α tombstones bob, addressing bob's home PS (β) and hard-blocking.
+    // alice@server1 tombstones bob, addressing bob's home PS (server2) and hard-blocking.
     const tomb = await tombstoneContactArkret(request, aliceToken, bob.id, {
       blockPeer: true,
-      peerServiceId: solandServiceId("beta"),
-      server: "alpha",
+      peerServiceId: solandServiceId("server2"),
+      server: "server1",
     });
     expect(tomb.state).toBe("tombstoned");
 
-    // The `ak.contact.tombstone` fact federates to β; bob@β's mirrored alice
+    // The `ak.contact.tombstone` fact federates to server2; bob@server2's mirrored alice
     // row downgrades to `tombstoned` once the outbox dispatcher drains.
     await expect
       .poll(
         async () =>
-          (await contactRow(request, bobToken, alice.id, { server: "beta" }))
+          (await contactRow(request, bobToken, alice.id, { server: "server2" }))
             ?.state,
         { timeout: 30_000, intervals: [500, 1000, 2000] },
       )

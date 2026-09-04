@@ -25,7 +25,7 @@ import {
   waitForRealmControlIdleApi,
 } from "../../helpers/soland-api";
 import {
-  hasDualSoland,
+  hasServerCount,
   solandBaseUrl,
   solandServiceId,
 } from "../../helpers/env";
@@ -241,19 +241,19 @@ test.describe("offline sync + conflict repair", () => {
     // event is pulled via GET /_arkret/peer/events and bob's timeline catches
     // up to head.
     test.skip(
-      !hasDualSoland(),
-      "requires dual soland topology — pass -DualSoland to scripts/run-joint-e2e.ps1",
+      !hasServerCount(2),
+      "requires two-server topology — pass -ServerCount 2 to scripts/run-joint-e2e.ps1",
     );
 
     const stamp = Date.now();
-    const alice = uniqueUser(`g2t3-backfill-alice-${stamp}`, "alpha");
-    const bob = uniqueUser(`g2t3-backfill-bob-${stamp}`, "beta");
-    await ensureRegistered(request, alice, { server: "alpha" });
-    await ensureRegistered(request, bob, { server: "beta" });
+    const alice = uniqueUser(`g2t3-backfill-alice-${stamp}`, "server1");
+    const bob = uniqueUser(`g2t3-backfill-bob-${stamp}`, "server2");
+    await ensureRegistered(request, alice, { server: "server1" });
+    await ensureRegistered(request, bob, { server: "server2" });
     const aliceToken = await issueDevSession(request, alice, {
-      server: "alpha",
+      server: "server1",
     });
-    const bobToken = await issueDevSession(request, bob, { server: "beta" });
+    const bobToken = await issueDevSession(request, bob, { server: "server2" });
 
     const realmId = await createRealmApi(
       request,
@@ -263,33 +263,33 @@ test.describe("offline sync + conflict repair", () => {
         discoverability: "listed",
         history_access: "all_history_for_current_members",
         invitees: [bob.id],
-        invitee_ids: { [bob.id]: solandServiceId("beta") },
+        invitee_ids: { [bob.id]: solandServiceId("server2") },
         ownerId: alice.id,
-        creator_id: solandServiceId("alpha"),
+        creator_id: solandServiceId("server1"),
         plaintext_visible_services: [
-          solandServiceId("alpha"),
-          solandServiceId("beta"),
+          solandServiceId("server1"),
+          solandServiceId("server2"),
         ],
         federation_policy: "open",
       },
-      { server: "alpha" },
+      { server: "server1" },
     );
-    const betaInvite = await waitForInvite(
+    const server2Invite = await waitForInvite(
       request,
       bobToken,
       bob.id,
       realmId,
-      "beta",
+      "server2",
     );
     await acceptInviteApi(
       request,
       bobToken,
       bob.id,
-      betaInvite.realm_id,
-      betaInvite.id,
-      { server: "beta" },
+      server2Invite.realm_id,
+      server2Invite.id,
+      { server: "server2" },
     );
-    await waitForMember(request, aliceToken, bob.id, realmId, "alpha");
+    await waitForMember(request, aliceToken, bob.id, realmId, "server1");
 
     // Offline window: alice writes an event that bob never pulled.
     const missingBody = `offline payload body ${stamp}`;
@@ -310,17 +310,17 @@ test.describe("offline sync + conflict repair", () => {
       request,
       aliceToken,
       missingEvent,
-      "alpha",
+      "server1",
     );
-    const alphaEventsBeforeOfflineWrite = await queryRealmEventsApi(
+    const server1EventsBeforeOfflineWrite = await queryRealmEventsApi(
       request,
       aliceToken,
       realmId,
-      { server: "alpha", limit: 100 },
+      { server: "server1", limit: 100 },
     );
     const creatorBindingEvent = (
-      Array.isArray(alphaEventsBeforeOfflineWrite.events)
-        ? alphaEventsBeforeOfflineWrite.events
+      Array.isArray(server1EventsBeforeOfflineWrite.events)
+        ? server1EventsBeforeOfflineWrite.events
         : []
     ).find((event) => {
       if (!event || typeof event !== "object") {
@@ -343,7 +343,7 @@ test.describe("offline sync + conflict repair", () => {
         envelope.kind === "ak.member.state" &&
         actor?.kind === "account" &&
         account?.principal_id === alice.id &&
-        account.station_id === solandServiceId("alpha") &&
+        account.station_id === solandServiceId("server1") &&
         payload?.membership === "join"
       );
     }) as Record<string, unknown> | undefined;
@@ -354,28 +354,28 @@ test.describe("offline sync + conflict repair", () => {
     await pushFederationEvents(request, [missingEvent], {
       // Relay through the configured peer profile. A service's own
       // ServiceDescribe is not negotiated as a remote profile.
-      origin: solandServiceId("beta"),
-      destination: solandServiceId("alpha"),
-      server: "alpha",
+      origin: solandServiceId("server2"),
+      destination: solandServiceId("server1"),
+      server: "server1",
       realmId,
-      idempotencyKey: `${solandServiceId("beta")}#cotest-offline-source`,
+      idempotencyKey: `${solandServiceId("server2")}#cotest-offline-source`,
       serviceBindingFrontier: [String(creatorBindingEvent!.event_id)],
     });
-    await waitForEventBody(request, aliceToken, realmId, missingBody, "alpha");
+    await waitForEventBody(request, aliceToken, realmId, missingBody, "server1");
 
     // Bob's server has not seen the event while offline.
-    const betaBeforeEvents = await queryRealmEventsApi(
+    const server2BeforeEvents = await queryRealmEventsApi(
       request,
       bobToken,
       realmId,
-      { server: "beta", limit: 100 },
+      { server: "server2", limit: 100 },
     );
-    expect(JSON.stringify(betaBeforeEvents)).not.toContain(missingBody);
+    expect(JSON.stringify(server2BeforeEvents)).not.toContain(missingBody);
     // On reconnect: pull the missing event via the peer events query endpoint
     // and ingest it so bob's timeline catches up.
     const backfill = await queryPeerEventsApi(request, {
-      server: "alpha",
-      sourceServiceId: solandServiceId("beta"),
+      server: "server1",
+      sourceServiceId: solandServiceId("server2"),
       realmId,
       limit: 100,
     });
@@ -383,9 +383,9 @@ test.describe("offline sync + conflict repair", () => {
     expect(backfilledEvents.map((event) => event.event_id)).toContain(
       missingEvent.event_id,
     );
-    const betaBeforeEventIds = new Set(
-      (Array.isArray(betaBeforeEvents.events)
-        ? (betaBeforeEvents.events as Array<Record<string, unknown>>)
+    const server2BeforeEventIds = new Set(
+      (Array.isArray(server2BeforeEvents.events)
+        ? (server2BeforeEvents.events as Array<Record<string, unknown>>)
         : []
       )
         .map((event) => event.event_id)
@@ -394,12 +394,12 @@ test.describe("offline sync + conflict repair", () => {
     const eventsToIngest = backfilledEvents.filter(
       (event) =>
         typeof event.event_id === "string" &&
-        !betaBeforeEventIds.has(event.event_id),
+        !server2BeforeEventIds.has(event.event_id),
     );
     expect(eventsToIngest.map((event) => event.event_id)).toContain(
       missingEvent.event_id,
     );
-    const betaBindingEvent = backfilledEvents.find((event) => {
+    const server2BindingEvent = backfilledEvents.find((event) => {
       const payload =
         event.payload && typeof event.payload === "object"
           ? (event.payload as Record<string, unknown>)
@@ -412,41 +412,41 @@ test.describe("offline sync + conflict repair", () => {
       return (
         event.kind === "ak.invite.create" &&
         invitee?.principal_id === bob.id &&
-        invitee.station_id === solandServiceId("beta")
+        invitee.station_id === solandServiceId("server2")
       );
     });
     expect(
-      betaBindingEvent?.event_id,
-      "beta invite account-routing frontier",
+      server2BindingEvent?.event_id,
+      "server2 invite account-routing frontier",
     ).toEqual(expect.any(String));
     const ingest = await pushFederationEvents(request, eventsToIngest, {
-      origin: solandServiceId("alpha"),
-      destination: solandServiceId("beta"),
-      server: "beta",
+      origin: solandServiceId("server1"),
+      destination: solandServiceId("server2"),
+      server: "server2",
       realmId,
-      idempotencyKey: `${solandServiceId("beta")}#cotest-offline-backfill`,
-      serviceBindingFrontier: [String(betaBindingEvent!.event_id)],
+      idempotencyKey: `${solandServiceId("server2")}#cotest-offline-backfill`,
+      serviceBindingFrontier: [String(server2BindingEvent!.event_id)],
     });
     expect(ingest.rejections ?? []).toEqual([]);
     expect(ingest.accepted).toContain(String(missingEvent.event_id));
-    await waitForEventBody(request, bobToken, realmId, missingBody, "beta");
+    await waitForEventBody(request, bobToken, realmId, missingBody, "server2");
 
-    // Timeline caught up: beta's peer-readable event set now covers every
-    // event returned by alpha for this Realm. The standard peer frontier
+    // Timeline caught up: server2's peer-readable event set now covers every
+    // event returned by server1 for this Realm. The standard peer frontier
     // surface is intentionally fail-closed for this profile.
-    const betaAfter = await queryPeerEventsApi(request, {
-      server: "beta",
-      sourceServiceId: solandServiceId("alpha"),
+    const server2After = await queryPeerEventsApi(request, {
+      server: "server2",
+      sourceServiceId: solandServiceId("server1"),
       realmId,
       limit: 100,
     });
-    const betaAfterEventIds = new Set(
-      (betaAfter.events ?? [])
+    const server2AfterEventIds = new Set(
+      (server2After.events ?? [])
         .map((event) => event.event_id)
         .filter((eventId): eventId is string => typeof eventId === "string"),
     );
     for (const event of backfilledEvents) {
-      expect(betaAfterEventIds).toContain(String(event.event_id));
+      expect(server2AfterEventIds).toContain(String(event.event_id));
     }
   });
 });
@@ -456,7 +456,7 @@ async function waitForInvite(
   token: string,
   inviteeId: string,
   realmId: string,
-  server: "alpha" | "beta",
+  server: "server1" | "server2",
 ) {
   let found:
     | {
@@ -488,7 +488,7 @@ async function waitForMember(
   token: string,
   memberId: string,
   realmId: string,
-  server: "alpha" | "beta",
+  server: "server1" | "server2",
 ) {
   await expect
     .poll(
@@ -513,7 +513,7 @@ async function waitForEventBody(
   token: string,
   realmId: string,
   bodyText: string,
-  server: "alpha" | "beta",
+  server: "server1" | "server2",
 ) {
   await expect
     .poll(

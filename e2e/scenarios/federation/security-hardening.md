@@ -7,17 +7,17 @@ Validates deployment-level federation protections across two soland services.
 
 Harness requirements:
 
-- `-DualSoland`
+- `-ServerCount 2`
 - `COTEST_EXPECT_FEDERATION_DENYLIST=1` for denylist cases
 
 CI wiring:
 
 - `.github/workflows/integration.yml` runs this spec in a dedicated
-  dual-soland topology with `SOLAND_FEDERATION_DENYLIST` on beta and
-  `SOLAND_FEDERATION_PEER_DENYLIST` on alpha. This profile is separate from
+  multi-server topology with `SOLAND_FEDERATION_DENYLIST` on server2 and
+  `SOLAND_FEDERATION_PEER_DENYLIST` on server1. This profile is separate from
   the positive cross-server federation run so denylist posture cannot silently
   skip or mask the hardening checks.
-- The two nodes run under distinct hostnames (`soland-{alpha,beta}.security-ci.local`,
+- The two nodes run under distinct hostnames (`soland-{server1,server2}.security-ci.local`,
   mapped to loopback), because the denylist matcher compares hosts without
   ports: nodes sharing `127.0.0.1` could only be deny-listed as one. The
   hostnames also give each node a distinct service DID and trust domain,

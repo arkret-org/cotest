@@ -103,12 +103,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--coauth-base-url", required=True)
     parser.add_argument("--coauth-bind", required=True)
     parser.add_argument("--cedar-policy-file", required=True, type=pathlib.Path)
-    parser.add_argument("--inkson-base-url", required=True)
-    parser.add_argument("--inkson-beta-base-url")
+    parser.add_argument("--inkson-base-url", action="append", required=True)
+    parser.add_argument("--inkson-server2-base-url")
     parser.add_argument("--oauth-client-id", required=True)
-    parser.add_argument("--soland-base-url", required=True)
-    parser.add_argument("--soland-beta-base-url")
-    parser.add_argument("--owning-station", choices=("soland", "soland-beta"), default="soland")
+    parser.add_argument("--station", action="append", default=[])
+    parser.add_argument("--soland-base-url")
+    parser.add_argument("--soland-server2-base-url")
+    parser.add_argument("--owning-station", default="server1")
     parser.add_argument("--admin-audience")
     parser.add_argument("--session-grant-introspection-bearer", required=True)
     parser.add_argument("--embedded-webvh-registration-bearer", required=True)
@@ -125,17 +126,29 @@ def main() -> int:
         "MC4CAQAwBQYDK2VwBCIEIAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI",
     )
     coauth_base = trailing_slash(args.coauth_base_url)
-    soland_base = trailing_slash(args.soland_base_url)
-    soland_beta_base = (
-        trailing_slash(args.soland_beta_base_url)
-        if args.soland_beta_base_url
-        else None
-    )
-    inkson_callback = trailing_slash(args.inkson_base_url) + "auth/callback"
-    inkson_beta_callback = (
-        trailing_slash(args.inkson_beta_base_url) + "auth/callback"
-        if args.inkson_beta_base_url else None
-    )
+    station_items = list(args.station)
+    if not station_items and args.soland_base_url:
+        station_items.append(f"server1={args.soland_base_url}")
+        if args.soland_server2_base_url:
+            station_items.append(f"server2={args.soland_server2_base_url}")
+    if not station_items:
+        raise SystemExit("FATAL: at least one --station serverN=URL is required")
+    stations_by_name: list[tuple[str, str]] = []
+    for item in station_items:
+        name, separator, endpoint = item.partition("=")
+        if not separator or not re.fullmatch(r"server[1-9][0-9]*", name):
+            raise SystemExit(f"FATAL: invalid --station value {item!r}; expected serverN=URL")
+        if any(existing == name for existing, _ in stations_by_name):
+            raise SystemExit(f"FATAL: duplicate Station name {name!r}")
+        stations_by_name.append((name, trailing_slash(endpoint)))
+    if args.owning_station not in {name for name, _ in stations_by_name}:
+        raise SystemExit("FATAL: owning Station is not present in --station values")
+    inkson_urls = list(args.inkson_base_url)
+    if args.inkson_server2_base_url:
+        inkson_urls.append(args.inkson_server2_base_url)
+    inkson_callbacks = list(dict.fromkeys(
+        trailing_slash(value) + "auth/callback" for value in inkson_urls
+    ))
     admin_audience = args.admin_audience or coauth_base.rstrip("/") + "/api/v1"
 
     src = replace_first_line(
@@ -212,26 +225,19 @@ def main() -> int:
         "  client_name: Inkson Joint E2E\n"
         "  client_auth_method: none\n"
         "  redirect_uris:\n"
-        f"  - {yaml_string(inkson_callback)}\n"
+        f"  - {yaml_string(inkson_callbacks[0])}\n"
         "  - http://127.0.0.1/auth/callback\n"
         "  - http://localhost/auth/callback\n"
     )
-    if inkson_beta_callback and inkson_beta_callback != inkson_callback:
-        clients += f"  - {yaml_string(inkson_beta_callback)}\n"
+    for callback in inkson_callbacks[1:]:
+        clients += f"  - {yaml_string(callback)}\n"
     src = replace_top_level_section(src, "clients", clients)
 
-    stations = (
-        "  - name: soland\n"
-        f"    endpoint: {yaml_string(soland_base)}\n"
-        "    session_grant_introspection_bearer: "
-        f"{yaml_string(args.session_grant_introspection_bearer)}\n"
-        "    embedded_webvh_registration_bearer: "
-        f"{yaml_string(args.embedded_webvh_registration_bearer)}\n"
-    )
-    if soland_beta_base:
+    stations = ""
+    for station_name, station_endpoint in stations_by_name:
         stations += (
-            "  - name: soland-beta\n"
-            f"    endpoint: {yaml_string(soland_beta_base)}\n"
+            f"  - name: {station_name}\n"
+            f"    endpoint: {yaml_string(station_endpoint)}\n"
             "    session_grant_introspection_bearer: "
             f"{yaml_string(args.session_grant_introspection_bearer)}\n"
             "    embedded_webvh_registration_bearer: "

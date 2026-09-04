@@ -19,11 +19,11 @@
 
 ## 拓扑
 
-- 1 × soland_a (server A,通过 `solandBaseUrl("alpha")` / `SOLAND_A_PUBLIC_URL` 访问)
-- 1 × soland_b (server B,通过 `solandBaseUrl("beta")` / `SOLAND_B_PUBLIC_URL` 访问)
+- 1 × soland_a (server A,通过 `solandBaseUrl("server1")` / `SOLAND_A_PUBLIC_URL` 访问)
+- 1 × soland_b (server B,通过 `solandBaseUrl("server2")` / `SOLAND_B_PUBLIC_URL` 访问)
 - 1 × coauth (共享 private authentication process)
 
-两个 soland 实例通过 `SOLAND_FEDERATION_PEERS` 互相宣告;DID 文档(`did:web:soland-alpha.joint-e2e.local`、`did:web:soland-beta.joint-e2e.local`)在各自 `/.well-known/did.json` 暴露 service endpoint。
+两个 soland 实例通过 `SOLAND_FEDERATION_PEERS` 互相宣告;DID 文档(`did:web:soland-server1.joint-e2e.local`、`did:web:soland-server2.joint-e2e.local`)在各自 `/.well-known/did.json` 暴露 service endpoint。
 
 ## Actors
 
@@ -33,12 +33,12 @@
 | bob | `did:webvh:z6mkfixture:bob-s8-<uuid>.example` (注册在 soland_b) | server B 上的 destination actor;接收 federation push | 测试开始前 |
 
 服务 actor:
-- soland_a 自身 service DID = `did:web:soland-alpha.joint-e2e.local`,所有 outbound 请求 MUST 以该 service DID 作为 RFC 9421 keyid 签名
-- soland_b 自身 service DID = `did:web:soland-beta.joint-e2e.local`,验证入站签名时按 `Source-Service-ID` header 解析 keyid
+- soland_a 自身 service DID = `did:web:soland-server1.joint-e2e.local`,所有 outbound 请求 MUST 以该 service DID 作为 RFC 9421 keyid 签名
+- soland_b 自身 service DID = `did:web:soland-server2.joint-e2e.local`,验证入站签名时按 `Source-Service-ID` header 解析 keyid
 
 ## Pre-conditions
 
-- 两个 soland 实例 `/health` 返回 200(通过 `hasDualSoland()` gate)
+- 两个 soland 实例 `/health` 返回 200（通过 `hasServerCount(2)` gate）
 - alice 在 soland_a 上 `POST /_soland/self/account/register` + `POST /_soland/gate/auth/dev-login` 完成
 - bob 在 soland_b 上完成同样的注册 + dev session
 - 两侧 DID 文档暴露 `service` 数组；角色 Describe 的 `transport_bindings` 至少包含 `http_json`
@@ -54,9 +54,9 @@
    - Method: `POST`
    - Headers:
      - `Content-Type: application/json`
-     - `Source-Service-ID: did:web:soland-alpha.joint-e2e.local`
-     - `Destination-Service-ID: did:web:soland-beta.joint-e2e.local`
-     - `Signature-Input: sig1=("@method" "@target-uri" "content-digest" "source-service-id" "destination-service-id");created=<ts>;keyid="<alpha-key-id>";alg="ed25519"`
+     - `Source-Service-ID: did:web:soland-server1.joint-e2e.local`
+     - `Destination-Service-ID: did:web:soland-server2.joint-e2e.local`
+     - `Signature-Input: sig1=("@method" "@target-uri" "content-digest" "source-service-id" "destination-service-id");created=<ts>;keyid="<server1-key-id>";alg="ed25519"`
      - `Signature: sig1=:<base64>:`
      - `Content-Digest: sha-256=:<base64>:`
      - `Idempotency-Key: <uuid>`

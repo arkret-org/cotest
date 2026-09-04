@@ -46,7 +46,7 @@ param(
     [string]$InksonRoot,
     [string]$SolandBaseUrl,
     [string]$InksonBaseUrl,
-    [string]$InksonBetaBaseUrl,
+    [string]$InksonServer2BaseUrl,
     [string]$CoauthBaseUrl,
     # Required for caller-owned Coauth: the configured owning Station identity,
     # not an identity discovered from the private Account Authority endpoint.
@@ -54,8 +54,8 @@ param(
     [string]$SolandCommand,
     [string]$SolandBin,
     # Optional externally provisioned PostgreSQL store for one managed
-    # process-mode Soland. When omitted, the harness starts an isolated
-    # ephemeral PostgreSQL instance (two independent instances for DualSoland).
+    # process-mode Soland. Multi-server runs always use one isolated ephemeral
+    # PostgreSQL instance per server.
     [string]$SolandDatabaseUrl,
     [string]$SolandPostgresImage = "postgres:16-alpine",
     [switch]$RequireDecisionRace,
@@ -69,7 +69,7 @@ param(
     [switch]$DockerPull,
     [switch]$DockerNoCache,
     [string]$InksonCommand,
-    [string]$InksonBetaCommand,
+    [string]$InksonServer2Command,
     [switch]$SkipInkson,
     [string]$CoauthCommand,
     [string]$CoauthHealthUrl,
@@ -116,9 +116,15 @@ param(
     [switch]$SkipPreflight,
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
+    [ValidateRange(1, 32)]
+    [int]$ServerCount = 1,
+    [ValidateSet("full-mesh", "ordered-candidates")]
+    [string]$NetworkShape = "full-mesh",
+    # Deprecated input adapter. It is normalized immediately and never enters
+    # the topology, logs, reports, or scenario environment.
     [switch]$DualSoland,
-    [string]$SolandBetaNotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
-    [string]$SolandBetaKeyStoreMasterKey = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
+    [string]$SolandServer2NotarySigningKey = "ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg=",
+    [string]$SolandServer2KeyStoreMasterKey = "ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmY=",
     [switch]$StartMockIdp,
     [switch]$StartMockEmail,
     [switch]$StartMockWitness,
@@ -191,16 +197,26 @@ if ($MockWitnessExtraDids.Count -gt 0) {
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+if ($PSBoundParameters.ContainsKey("DualSoland")) {
+    Write-Warning "-DualSoland is deprecated; use -ServerCount 2. All outputs use server1/server2 naming."
+    if ($PSBoundParameters.ContainsKey("ServerCount") -and $ServerCount -ne 2) {
+        throw "-DualSoland cannot be combined with a conflicting -ServerCount"
+    }
+    $ServerCount = 2
+}
+$multiServer = $ServerCount -ge 2
+
 . (Join-Path $PSScriptRoot "lib\artifacts.ps1")
 . (Join-Path $PSScriptRoot "lib\build-freshness.ps1")
 . (Join-Path $PSScriptRoot "lib\secret-scan.ps1")
 . (Join-Path $PSScriptRoot "lib\failure-fingerprint.ps1")
 . (Join-Path $PSScriptRoot "lib\selection-gate.ps1")
+. (Join-Path $PSScriptRoot "lib\joint-e2e-environment.ps1")
 
 $SolandServiceId = $null
 $SolandServiceDid = $null
-$SolandBetaServiceId = $null
-$SolandBetaServiceDid = $null
+$SolandServer2ServiceId = $null
+$SolandServer2ServiceDid = $null
 $script:UseManagedCoauthAssertionKey = [bool]($StartCoauth -and -not $CoauthCommand)
 
 if ($PreflightOnly -and $SkipPreflight) {
@@ -921,19 +937,15 @@ function Invoke-JointE2ePreflight {
         # proofs (DNS answers, CA/SAN, did.jsonl history, negative probes) run
         # in Assert-JointTlsTopology once the services are up; here we only
         # check that the host environment can host the topology at all.
-        $caddy = Find-CommandPath @("caddy.exe", "caddy")
-        if ($caddy) {
-            Add-PreflightResult $results "tls proxy (caddy)" "pass" $caddy
-        } else {
-            Add-PreflightResult $results "tls proxy (caddy)" "fail" "caddy is required for the joint TLS identity topology"
-        }
+        $caddyInspection = Get-CotestCaddyInspection
+        Add-PreflightResult $results "tls proxy (caddy)" $caddyInspection.status $caddyInspection.detail
         $openssl = Find-OpenSslPath
         if ($openssl) {
             Add-PreflightResult $results "tls assets (openssl)" "pass" $openssl
         } else {
             Add-PreflightResult $results "tls assets (openssl)" "fail" "openssl is required to mint the joint CA and server certificates"
         }
-        $hostsPath = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
+        $hostsPath = Get-CotestHostsPath
         try {
             $hostsStream = [System.IO.File]::Open(
                 $hostsPath,
@@ -944,7 +956,9 @@ function Invoke-JointE2ePreflight {
             $hostsStream.Close()
             Add-PreflightResult $results "hosts file writable" "pass" $hostsPath
         } catch {
-            Add-PreflightResult $results "hosts file writable" "fail" "$hostsPath is not writable: $($_.Exception.Message). One-time elevated fix: icacls $hostsPath /grant `"$($env:USERNAME):(M)`""
+            $platform = Get-CotestPlatformInfo
+            $repair = if ($platform.os -eq "windows") { "Run elevated: pwsh -NoProfile -File $PSScriptRoot\setup-joint-e2e-hosts.ps1 -ServerCount $ServerCount" } else { "Privileged setup is not yet supported on $($platform.os)" }
+            Add-PreflightResult $results "hosts file writable" "fail" "$hostsPath is not writable: $($_.Exception.Message). $repair"
         }
     }
 
@@ -1184,37 +1198,63 @@ function Install-JointLoopbackHosts {
         [Parameter(Mandatory = $true)][string]$Marker
     )
 
-    $hostsPath = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
+    $hostsPath = Get-CotestHostsPath
     $existing = [System.IO.File]::ReadAllText($hostsPath)
-    if ($existing.Contains("# $Marker begin")) {
-        throw "hosts marker '$Marker' is already present; a previous run did not clean up"
-    }
-    $lines = @("", "# $Marker begin")
-    foreach ($hostName in $Hosts) {
-        $lines += "127.0.0.1`t$hostName"
-    }
-    $lines += "# $Marker end"
+    $patched = Add-CotestHostsBlock -Content $existing -Hosts $Hosts -Marker $Marker
     try {
-        [System.IO.File]::AppendAllText(
-            $hostsPath,
-            ($lines -join [Environment]::NewLine) + [Environment]::NewLine
-        )
+        [System.IO.File]::WriteAllText($hostsPath, $patched, [System.Text.UTF8Encoding]::new($false))
     } catch {
-        throw "joint TLS topology: cannot register loopback hosts in $hostsPath ($($_.Exception.Message)). One-time elevated fix: icacls $hostsPath /grant `"$($env:USERNAME):(M)`""
+        throw "joint TLS topology: cannot register loopback hosts in $hostsPath ($($_.Exception.Message)). Run the platform setup script reported by check-joint-e2e-prerequisites.ps1."
     }
 }
 
 function Remove-JointLoopbackHosts {
     param([Parameter(Mandatory = $true)][string]$Marker)
 
-    $hostsPath = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
+    $hostsPath = Get-CotestHostsPath
     $existing = [System.IO.File]::ReadAllText($hostsPath)
-    $escaped = [regex]::Escape($Marker)
-    $pattern = "(?ms)\r?\n?# $escaped begin.*?# $escaped end\r?\n?"
-    $patched = [regex]::Replace($existing, $pattern, "")
+    $patched = Remove-CotestHostsBlocks -Content $existing -Marker $Marker
     if ($patched -ne $existing) {
-        [System.IO.File]::WriteAllText($hostsPath, $patched)
+        [System.IO.File]::WriteAllText($hostsPath, $patched, [System.Text.UTF8Encoding]::new($false))
     }
+}
+
+function Sync-JointControlledServices {
+    param(
+        [Parameter(Mandatory = $true)][string]$TopologyPath,
+        [Parameter(Mandatory = $true)]$ManagedServices
+    )
+    if (-not (Test-Path -LiteralPath $TopologyPath -PathType Leaf)) { return @() }
+    $failures = [System.Collections.Generic.List[string]]::new()
+    $topology = Get-Content -Raw -LiteralPath $TopologyPath | ConvertFrom-Json
+    foreach ($server in @($topology.servers)) {
+        $controlProperty = $server.soland.PSObject.Properties["control"]
+        $control = if ($controlProperty) { $controlProperty.Value } else { $null }
+        if (-not $control -or -not $control.state_path -or -not (Test-Path -LiteralPath $control.state_path)) { continue }
+        $state = Get-Content -Raw -LiteralPath $control.state_path | ConvertFrom-Json
+        if ($state.status -eq "isolated") {
+            try {
+                & $control.script_path -TopologyPath $TopologyPath -ServerName $server.name -Action restore
+                if ($LASTEXITCODE -ne 0) { throw "controller exited with $LASTEXITCODE" }
+                $state = Get-Content -Raw -LiteralPath $control.state_path | ConvertFrom-Json
+            } catch {
+                $failures.Add("failed to restore isolated $($server.name): $($_.Exception.Message)")
+                continue
+            }
+        }
+        if ($control.kind -eq "process" -and $state.current_process_id -and [int]$state.current_process_id -ne [int]$server.soland.process_id) {
+            $managed = @($ManagedServices | Where-Object { $_.Kind -eq "process" -and $_.Name -eq "soland-$($server.name)" }) | Select-Object -Last 1
+            $replacement = Get-Process -Id ([int]$state.current_process_id) -ErrorAction SilentlyContinue
+            if (-not $managed -or -not $replacement) {
+                $failures.Add("replacement process for $($server.name) is unavailable")
+                continue
+            }
+            $managed.Process = $replacement
+            if ($state.stdout) { $managed.Stdout = [string]$state.stdout }
+            if ($state.stderr) { $managed.Stderr = [string]$state.stderr }
+        }
+    }
+    return @($failures)
 }
 
 function Write-JointCaddyConfig {
@@ -1678,11 +1718,13 @@ function New-CoauthJointConfig {
         [Parameter(Mandatory = $true)][string]$CoauthBind,
         [Parameter(Mandatory = $true)][string]$CedarPolicyFile,
         [Parameter(Mandatory = $true)][string]$InksonBaseUrl,
-        [string]$InksonBetaBaseUrl,
+        [string]$InksonServer2BaseUrl,
+        [string[]]$InksonBaseUrls = @(),
         [Parameter(Mandatory = $true)][string]$OAuthClientId,
         [Parameter(Mandatory = $true)][string]$SolandBaseUrl,
-        [string]$SolandBetaBaseUrl,
-        [string]$OwningStation = "soland",
+        [string]$SolandServer2BaseUrl,
+        [string[]]$StationBaseUrls = @(),
+        [string]$OwningStation = "server1",
         [Parameter(Mandatory = $true)][string]$SessionGrantIntrospectionBearer,
         [Parameter(Mandatory = $true)][string]$EmbeddedWebvhRegistrationBearer,
         [string]$MockEmailBaseUrl
@@ -1708,9 +1750,7 @@ function New-CoauthJointConfig {
         "--coauth-base-url", $CoauthBaseUrl,
         "--coauth-bind", $CoauthBind,
         "--cedar-policy-file", $CedarPolicyFile,
-        "--inkson-base-url", $InksonBaseUrl,
         "--oauth-client-id", $OAuthClientId,
-        "--soland-base-url", $SolandBaseUrl,
         "--owning-station", $OwningStation,
         "--session-grant-introspection-bearer", $SessionGrantIntrospectionBearer,
         "--embedded-webvh-registration-bearer", $EmbeddedWebvhRegistrationBearer
@@ -1718,11 +1758,13 @@ function New-CoauthJointConfig {
     if ($MockEmailBaseUrl) {
         $patchArgs += @("--mock-email-base-url", $MockEmailBaseUrl)
     }
-    if ($SolandBetaBaseUrl) {
-        $patchArgs += @("--soland-beta-base-url", $SolandBetaBaseUrl)
+    $resolvedInksonUrls = if (@($InksonBaseUrls).Count -gt 0) { @($InksonBaseUrls) } else { @($InksonBaseUrl, $InksonServer2BaseUrl) | Where-Object { $_ } }
+    foreach ($url in $resolvedInksonUrls) {
+        $patchArgs += @("--inkson-base-url", $url)
     }
-    if ($InksonBetaBaseUrl) {
-        $patchArgs += @("--inkson-beta-base-url", $InksonBetaBaseUrl)
+    $resolvedStationUrls = if (@($StationBaseUrls).Count -gt 0) { @($StationBaseUrls) } else { @($SolandBaseUrl, $SolandServer2BaseUrl) | Where-Object { $_ } }
+    for ($index = 0; $index -lt $resolvedStationUrls.Count; $index++) {
+        $patchArgs += @("--station", "server$($index + 1)=$($resolvedStationUrls[$index])")
     }
     if ((Split-Path -Leaf $python) -ieq "py.exe") {
         $patchArgs = @("-3") + $patchArgs
@@ -1789,16 +1831,11 @@ function Invoke-CoauthConfigSync {
 function Set-CoauthStationServiceIds {
     param(
         [Parameter(Mandatory = $true)][string]$ConfigPath,
-        [Parameter(Mandatory = $true)][string]$SolandServiceId,
-        [string]$SolandBetaServiceId
+        [Parameter(Mandatory = $true)][System.Collections.IDictionary]$StationServiceIds
     )
 
     $config = Get-Content -LiteralPath $ConfigPath -Raw
-    $pins = [ordered]@{ soland = $SolandServiceId }
-    if (-not [string]::IsNullOrWhiteSpace($SolandBetaServiceId)) {
-        $pins["soland-beta"] = $SolandBetaServiceId
-    }
-    foreach ($entry in $pins.GetEnumerator()) {
+    foreach ($entry in $StationServiceIds.GetEnumerator()) {
         if (-not $entry.Value.StartsWith("ak:did_core:", [System.StringComparison]::Ordinal)) {
             throw "Coauth Station '$($entry.Key)' received an invalid service_id pin"
         }
@@ -2053,6 +2090,7 @@ function Start-ManagedCommand {
         Kind = "process"
         Name = $Name
         Process = $process
+        WorkingDirectory = [System.IO.Path]::GetFullPath($WorkingDirectory)
         Stdout = $stdout
         Stderr = $stderr
         CommandLog = $commandLog
@@ -2614,6 +2652,12 @@ $solandChaosControlFile = Join-Path $jointDir "soland-decision-chaos.json"
 $null = New-Item -ItemType Directory -Force -Path $serviceLogDir
 $null = New-Item -ItemType Directory -Force -Path $screenshotDir
 $null = New-Item -ItemType Directory -Force -Path $visualBaselineDir
+$serverServiceLogDirs = @{}
+for ($serverIndex = 1; $serverIndex -le $ServerCount; $serverIndex++) {
+    $serverName = "server$serverIndex"
+    $serverServiceLogDirs[$serverName] = Join-Path $serviceLogDir $serverName
+    $null = New-Item -ItemType Directory -Force -Path $serverServiceLogDirs[$serverName]
+}
 
 # 0530-C: decide the public-identity topology before any base URL is minted.
 # Runner-owned process-mode services keep plain loopback listeners but publish
@@ -2624,24 +2668,24 @@ $jointTlsCoauth = ($StartCoauth -and -not $CoauthBaseUrl)
 $jointTlsEnabled = $jointTlsProcessSoland -or $jointTlsCoauth
 $jointTlsPort = $null
 $solandPublicHost = $null
-$solandBetaPublicHost = $null
+$solandServer2PublicHost = $null
 $coauthPublicHost = $null
-$coauthBetaPublicHost = $null
+$coauthServer2PublicHost = $null
 $jointTlsAssets = $null
 $jointTlsHostNames = @()
-$jointTlsHostsMarker = "cotest-joint-e2e $timestamp"
+$jointTlsHostsMarker = New-CotestHostsMarker -RunId $timestamp
 $jointTlsUnregisteredProbeHost = "unregistered.local.host"
 if ($jointTlsEnabled) {
     $jointTlsPort = Get-FreeTcpPort
     if ($jointTlsProcessSoland) {
-        $solandPublicHost = if ($DualSoland) { "soland-alpha.local.host" } else { "soland.local.host" }
-        if ($DualSoland) {
-            $solandBetaPublicHost = "soland-beta.local.host"
+        $solandPublicHost = "soland-server1.local.host"
+        if ($multiServer) {
+            $solandServer2PublicHost = "soland-server2.local.host"
         }
     }
     if ($jointTlsCoauth) {
-        $coauthPublicHost = "coauth.local.host"
-        if ($DualSoland) { $coauthBetaPublicHost = "coauth-beta.local.host" }
+        $coauthPublicHost = "coauth-server1.local.host"
+        if ($multiServer) { $coauthServer2PublicHost = "coauth-server2.local.host" }
     }
 }
 
@@ -2655,17 +2699,17 @@ if (-not $SolandBaseUrl) {
 } else {
     $solandPort = $null
 }
-$solandBetaPort = $null
-$solandBetaBaseUrl = $null
-if ($DualSoland) {
+$solandServer2Port = $null
+$solandServer2BaseUrl = $null
+if ($multiServer) {
     if ($SolandCommand) {
-        throw "-DualSoland is incompatible with -SolandCommand; the harness must generate both soland invocations."
+        throw "Multi-server runs are incompatible with -SolandCommand; use the indexed topology interface."
     }
-    $solandBetaPort = Get-FreeTcpPort
-    if ($solandBetaPublicHost) {
-        $solandBetaBaseUrl = "https://${solandBetaPublicHost}:$jointTlsPort"
+    $solandServer2Port = Get-FreeTcpPort
+    if ($solandServer2PublicHost) {
+        $solandServer2BaseUrl = "https://${solandServer2PublicHost}:$jointTlsPort"
     } else {
-        $solandBetaBaseUrl = "http://127.0.0.1:$solandBetaPort"
+        $solandServer2BaseUrl = "http://127.0.0.1:$solandServer2Port"
     }
 }
 if ($SolandRuntime -eq "docker" -and $SolandCommand) {
@@ -2674,10 +2718,10 @@ if ($SolandRuntime -eq "docker" -and $SolandCommand) {
 if ($SolandDatabaseUrl -and ($SolandRuntime -ne "process" -or $SolandCommand -or -not $solandPort)) {
     throw "-SolandDatabaseUrl is supported only when the harness owns one process-mode Soland."
 }
-if ($SolandDatabaseUrl -and $DualSoland) {
-    throw "-SolandDatabaseUrl cannot be shared by -DualSoland; provision independent databases instead."
+if ($SolandDatabaseUrl -and $multiServer) {
+    throw "-SolandDatabaseUrl cannot be shared by a multi-server run; use isolated runner-owned databases."
 }
-if ($SkipInkson -and ($InksonCommand -or $InksonBetaCommand -or $PSBoundParameters.ContainsKey("InksonBaseUrl") -or $PSBoundParameters.ContainsKey("InksonBetaBaseUrl"))) {
+if ($SkipInkson -and ($InksonCommand -or $InksonServer2Command -or $PSBoundParameters.ContainsKey("InksonBaseUrl") -or $PSBoundParameters.ContainsKey("InksonServer2BaseUrl"))) {
     throw "-SkipInkson cannot be combined with Inkson URLs or commands."
 }
 # Coauth's generated development config still requires an Inkson origin even
@@ -2694,19 +2738,19 @@ if (-not $SkipInkson) {
         $InksonBaseUrl = "http://127.0.0.1:$inksonPort"
     }
 }
-$inksonBetaPort = $null
-$inksonBetaBaseUrl = $null
+$inksonServer2Port = $null
+$inksonServer2BaseUrl = $null
 $inksonBaseUrlWasExplicit = $PSBoundParameters.ContainsKey("InksonBaseUrl")
-if ($DualSoland -and -not $SkipInkson) {
-    if ($InksonBetaBaseUrl) {
-        $inksonBetaBaseUrl = $InksonBetaBaseUrl
-    } elseif ($InksonBetaCommand) {
-        throw "-InksonBetaCommand requires -InksonBetaBaseUrl so the harness can route browser contexts."
+if ($multiServer -and -not $SkipInkson) {
+    if ($InksonServer2BaseUrl) {
+        $inksonServer2BaseUrl = $InksonServer2BaseUrl
+    } elseif ($InksonServer2Command) {
+        throw "-InksonServer2Command requires -InksonServer2BaseUrl so the harness can route browser contexts."
     } elseif ($InksonCommand -or $inksonBaseUrlWasExplicit) {
-        $inksonBetaBaseUrl = $InksonBaseUrl
+        $inksonServer2BaseUrl = $InksonBaseUrl
     } else {
-        $inksonBetaPort = Get-FreeTcpPort
-        $inksonBetaBaseUrl = "http://127.0.0.1:$inksonBetaPort"
+        $inksonServer2Port = Get-FreeTcpPort
+        $inksonServer2BaseUrl = "http://127.0.0.1:$inksonServer2Port"
     }
 }
 
@@ -2759,14 +2803,53 @@ if ($StartCoauth -and -not $CoauthBaseUrl) {
     $coauthPort = $null
 }
 $coauthSecondaryPort = $null
-$coauthBetaPort = $null
-$coauthBetaBaseUrl = $null
-$coauthBetaConfigPath = $null
-$CoauthBetaCommand = $null
-if ($StartCoauth -and $DualSoland) {
-    $coauthBetaPort = Get-FreeTcpPort
-    $coauthBetaBaseUrl = if ($coauthBetaPublicHost) { "https://${coauthBetaPublicHost}:$jointTlsPort" } else { "http://localhost:$coauthBetaPort" }
+$coauthServer2Port = $null
+$coauthServer2BaseUrl = $null
+$coauthServer2ConfigPath = $null
+$CoauthServer2Command = $null
+if ($StartCoauth -and $multiServer) {
+    $coauthServer2Port = Get-FreeTcpPort
+    $coauthServer2BaseUrl = if ($coauthServer2PublicHost) { "https://${coauthServer2PublicHost}:$jointTlsPort" } else { "http://localhost:$coauthServer2Port" }
 }
+$additionalServers = [System.Collections.Generic.List[object]]::new()
+for ($serverIndex = 3; $serverIndex -le $ServerCount; $serverIndex++) {
+    if ($SolandCommand) {
+        throw "-ServerCount $ServerCount is incompatible with -SolandCommand; use indexed caller-owned topology input instead"
+    }
+    $additionalSolandPort = Get-FreeTcpPort
+    $additionalSolandHost = if ($jointTlsProcessSoland) { "soland-server$serverIndex.local.host" } else { $null }
+    $additionalSolandBaseUrl = if ($additionalSolandHost) { "https://${additionalSolandHost}:$jointTlsPort" } else { "http://127.0.0.1:$additionalSolandPort" }
+    $additionalCoauthPort = if ($StartCoauth) { Get-FreeTcpPort } else { $null }
+    $additionalCoauthHost = if ($jointTlsCoauth) { "coauth-server$serverIndex.local.host" } else { $null }
+    $additionalCoauthBaseUrl = if ($additionalCoauthPort) {
+        if ($additionalCoauthHost) { "https://${additionalCoauthHost}:$jointTlsPort" } else { "http://localhost:$additionalCoauthPort" }
+    } else { $null }
+    $additionalServers.Add([pscustomobject]@{
+        Index = $serverIndex
+        Name = "server$serverIndex"
+        SolandName = "soland-server$serverIndex"
+        SolandPort = $additionalSolandPort
+        SolandHost = $additionalSolandHost
+        SolandBaseUrl = $additionalSolandBaseUrl
+        SolandMetricsPort = $null
+        SolandService = $null
+        SolandServiceId = $null
+        SolandServiceDid = $null
+        SolandDatabase = $null
+        SolandDatabaseDsn = $null
+        CoauthName = "coauth-server$serverIndex"
+        CoauthPort = $additionalCoauthPort
+        CoauthHost = $additionalCoauthHost
+        CoauthBaseUrl = $additionalCoauthBaseUrl
+        CoauthConfigPath = $null
+        CoauthCommand = $null
+        CoauthDatabase = $null
+        KeyStoreMasterKey = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+        NotarySigningKey = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+    })
+}
+$allSolandBaseUrls = @($SolandBaseUrl, $solandServer2BaseUrl) + @($additionalServers | ForEach-Object { $_.SolandBaseUrl }) | Where-Object { $_ }
+$allInksonBaseUrls = @($InksonBaseUrl, $inksonServer2BaseUrl) | Where-Object { $_ } | Select-Object -Unique
 $coauthSecondaryBaseUrl = $null
 $CoauthSecondaryCommand = $null
 if ($DualCoauth) {
@@ -2863,7 +2946,7 @@ if ($StartMockWitness) {
 # -StartMockDidHost exports COTEST_MOCK_DID_HOST_BASE_URL. coauth / inkson /
 # bridges expose no metrics endpoint, so they have no counterpart here.
 $solandMetricsPort = $null
-$solandBetaMetricsPort = $null
+$solandServer2MetricsPort = $null
 $teabayMetricsPort = $null
 $solandMetricsBaseUrl = $null
 $teabayMetricsBaseUrl = $null
@@ -2915,13 +2998,25 @@ if ($StartMockChallengeProvider) {
 
 $managedServices = New-Object System.Collections.Generic.List[object]
 $managedServiceFailures = @()
+$runtimeServers = [System.Collections.Generic.List[object]]::new()
+$topologyPath = Join-Path $jointDir "topology.json"
+$topology = New-CotestServerTopology `
+    -ServerCount $ServerCount `
+    -StartCoauth ([bool]$StartCoauth) `
+    -NetworkShape $NetworkShape `
+    -TlsPort $(if ($jointTlsPort) { $jointTlsPort } else { 443 }) `
+    -RunRoot $jointDir
+$topology | Add-Member -NotePropertyName generated_at -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o"))
+$topology | Add-Member -NotePropertyName lifecycle -NotePropertyValue "planned"
+$topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
 $mockAppletRegistryStateKeyFile = $null
-$ephemeralPostgres = $null
-$ephemeralCoauthBetaPostgres = $null
+$ephemeralCoauthServer1Postgres = $null
+$ephemeralCoauthServer2Postgres = $null
 $ephemeralSolandPostgres = $null
-$ephemeralSolandBetaPostgres = $null
+$ephemeralSolandServer2Postgres = $null
+$additionalPostgresContainers = [System.Collections.Generic.List[object]]::new()
 $solandDatabaseDsn = $SolandDatabaseUrl
-$solandBetaDatabaseDsn = $null
+$solandServer2DatabaseDsn = $null
 # Durable protocol stores exported for the secret scan. Kept apart from the log
 # roots because the verdict differs by artifact class: signed authorization
 # evidence is expected here, recovery private material never is.
@@ -2933,7 +3028,7 @@ $generatedSolandCommand = $false
 $generatedInksonCommand = $false
 $willStartDefaultSoland = (-not $SolandCommand -and $null -ne $solandPort)
 $willStartDefaultInkson = (-not $SkipInkson -and -not $InksonCommand -and $null -ne $inksonPort)
-$willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($DualSoland -and $null -ne $solandBetaPort)))
+$willStartDockerSoland = ($SolandRuntime -eq "docker" -and ($willStartDefaultSoland -or ($multiServer -and $null -ne $solandServer2Port)))
 $startedSolandRuntime = if ($willStartDockerSoland) { "docker" } elseif ($willStartDefaultSoland) { "process" } elseif ($SolandCommand) { "process-command" } else { "attached" }
 $coauthConfigPath = $null
 $e2eRoot = Join-Path $repoRoot "e2e"
@@ -3261,7 +3356,10 @@ try {
     $jointTlsDir = $null
     if ($jointTlsEnabled) {
         $jointTlsDir = Join-Path $jointDir "tls"
-        $jointTlsHostNames = @($solandPublicHost, $solandBetaPublicHost, $coauthPublicHost, $coauthBetaPublicHost) | Where-Object { $_ }
+        $jointTlsHostNames = @(
+            @($solandPublicHost, $solandServer2PublicHost, $coauthPublicHost, $coauthServer2PublicHost) +
+            @($additionalServers | ForEach-Object { @($_.SolandHost, $_.CoauthHost) })
+        ) | ForEach-Object { $_ } | Where-Object { $_ }
         $jointTlsAssets = New-JointTlsAssets `
             -Directory $jointTlsDir `
             -DnsNames $jointTlsHostNames `
@@ -3277,8 +3375,8 @@ try {
         if ($solandPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{ Host = $solandPublicHost; BackendPort = $solandPort }
         }
-        if ($solandBetaPublicHost) {
-            $jointTlsRoutes += [pscustomobject]@{ Host = $solandBetaPublicHost; BackendPort = $solandBetaPort }
+        if ($solandServer2PublicHost) {
+            $jointTlsRoutes += [pscustomobject]@{ Host = $solandServer2PublicHost; BackendPort = $solandServer2Port }
         }
         if ($coauthPublicHost) {
             $jointTlsRoutes += [pscustomobject]@{
@@ -3287,11 +3385,23 @@ try {
                 LogoutBackendPort = $solandPort
             }
         }
-        if ($coauthBetaPublicHost) {
+        if ($coauthServer2PublicHost) {
             $jointTlsRoutes += [pscustomobject]@{
-                Host = $coauthBetaPublicHost
-                BackendPort = $coauthBetaPort
-                LogoutBackendPort = $solandBetaPort
+                Host = $coauthServer2PublicHost
+                BackendPort = $coauthServer2Port
+                LogoutBackendPort = $solandServer2Port
+            }
+        }
+        foreach ($server in $additionalServers) {
+            if ($server.SolandHost) {
+                $jointTlsRoutes += [pscustomobject]@{ Host = $server.SolandHost; BackendPort = $server.SolandPort }
+            }
+            if ($server.CoauthHost) {
+                $jointTlsRoutes += [pscustomobject]@{
+                    Host = $server.CoauthHost
+                    BackendPort = $server.CoauthPort
+                    LogoutBackendPort = $server.SolandPort
+                }
             }
         }
         $caddyfilePath = Join-Path $jointTlsDir "Caddyfile"
@@ -3467,8 +3577,8 @@ try {
             Write-Host "coauth postgres: using externally-provisioned DSN (docker skipped)"
             $coauthPostgresDsn = $CoauthPostgresUrl
         } else {
-            $ephemeralPostgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
-            $coauthPostgresDsn = $ephemeralPostgres.Url
+            $ephemeralCoauthServer1Postgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
+            $coauthPostgresDsn = $ephemeralCoauthServer1Postgres.Url
         }
         $coauthConfigPath = New-CoauthJointConfig `
             -CoauthBinary $coauthBinary `
@@ -3479,28 +3589,47 @@ try {
             -CoauthBind "127.0.0.1:$coauthPort" `
             -CedarPolicyFile $coauthPolicyFile `
             -InksonBaseUrl $InksonBaseUrl `
-            -InksonBetaBaseUrl $inksonBetaBaseUrl `
+            -InksonServer2BaseUrl $inksonServer2BaseUrl `
+            -InksonBaseUrls $allInksonBaseUrls `
             -OAuthClientId $CoauthOAuthClientId `
             -SolandBaseUrl $SolandBaseUrl `
-            -SolandBetaBaseUrl $solandBetaBaseUrl `
+            -SolandServer2BaseUrl $solandServer2BaseUrl `
+            -StationBaseUrls $allSolandBaseUrls `
             -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
             -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
             -MockEmailBaseUrl $mockEmailBaseUrl
-        if ($DualSoland) {
+        if ($multiServer) {
             # Each Station owns a separate Account Authority and durable account
-            # store. DualCoauth remains a replica of Alpha, not Beta's authority.
-            $ephemeralCoauthBetaPostgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-beta-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
-            $coauthBetaDir = Join-Path $jointDir "coauth-beta"
-            $coauthBetaConfigPath = New-CoauthJointConfig `
-                -CoauthBinary $coauthBinary -RepoRoot $repoRoot -JointDir $coauthBetaDir `
-                -PostgresUrl $ephemeralCoauthBetaPostgres.Url `
-                -CoauthBaseUrl $coauthBetaBaseUrl -CoauthBind "127.0.0.1:$coauthBetaPort" `
-                -CedarPolicyFile $coauthPolicyFile -InksonBaseUrl $InksonBaseUrl -InksonBetaBaseUrl $inksonBetaBaseUrl `
-                -OAuthClientId $CoauthOAuthClientId -SolandBaseUrl $SolandBaseUrl -SolandBetaBaseUrl $solandBetaBaseUrl `
-                -OwningStation "soland-beta" `
+            # store. DualCoauth remains a replica of Server1, not Server2's authority.
+            $ephemeralCoauthServer2Postgres = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-coauth-server2-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
+            $coauthServer2Dir = Join-Path $jointDir "coauth-server2"
+            $coauthServer2ConfigPath = New-CoauthJointConfig `
+                -CoauthBinary $coauthBinary -RepoRoot $repoRoot -JointDir $coauthServer2Dir `
+                -PostgresUrl $ephemeralCoauthServer2Postgres.Url `
+                -CoauthBaseUrl $coauthServer2BaseUrl -CoauthBind "127.0.0.1:$coauthServer2Port" `
+                -CedarPolicyFile $coauthPolicyFile -InksonBaseUrl $InksonBaseUrl -InksonServer2BaseUrl $inksonServer2BaseUrl `
+                -InksonBaseUrls $allInksonBaseUrls `
+                -OAuthClientId $CoauthOAuthClientId -SolandBaseUrl $SolandBaseUrl -SolandServer2BaseUrl $solandServer2BaseUrl `
+                -StationBaseUrls $allSolandBaseUrls -OwningStation "server2" `
                 -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
                 -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer -MockEmailBaseUrl $mockEmailBaseUrl
-            Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthBetaConfigPath -LogDirectory $coauthBetaDir -TimeoutSeconds $StartupTimeoutSeconds
+            Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory $coauthServer2Dir -TimeoutSeconds $StartupTimeoutSeconds
+        }
+        foreach ($server in $additionalServers) {
+            $server.CoauthDatabase = Start-EphemeralPostgres -Image $CoauthPostgresImage -NamePrefix "cotest-$($server.CoauthName)-$timestamp" -TimeoutSeconds $StartupTimeoutSeconds
+            $additionalPostgresContainers.Add($server.CoauthDatabase)
+            $coauthServerDir = Join-Path $jointDir $server.CoauthName
+            $server.CoauthConfigPath = New-CoauthJointConfig `
+                -CoauthBinary $coauthBinary -RepoRoot $repoRoot -JointDir $coauthServerDir `
+                -PostgresUrl $server.CoauthDatabase.Url -CoauthBaseUrl $server.CoauthBaseUrl `
+                -CoauthBind "127.0.0.1:$($server.CoauthPort)" -CedarPolicyFile $coauthPolicyFile `
+                -InksonBaseUrl $InksonBaseUrl -InksonBaseUrls $allInksonBaseUrls `
+                -OAuthClientId $CoauthOAuthClientId -SolandBaseUrl $SolandBaseUrl `
+                -StationBaseUrls $allSolandBaseUrls -OwningStation $server.Name `
+                -SessionGrantIntrospectionBearer $CoauthSessionGrantIntrospectionBearer `
+                -EmbeddedWebvhRegistrationBearer $CoauthEmbeddedWebvhRegistrationBearer `
+                -MockEmailBaseUrl $mockEmailBaseUrl
+            Invoke-CoauthMigrations -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory $coauthServerDir -TimeoutSeconds $StartupTimeoutSeconds
         }
         if ($DualCoauth) {
             $coauthSecondaryConfigPath = Join-Path $jointDir "coauth-secondary.yaml"
@@ -3542,8 +3671,11 @@ try {
         }
         $CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthConfigPath)
         $CoauthHealthUrl = "$($CoauthBaseUrl.TrimEnd('/'))/health"
-        if ($coauthBetaConfigPath) {
-            $CoauthBetaCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthBetaConfigPath)
+        if ($coauthServer2ConfigPath) {
+            $CoauthServer2Command = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthServer2ConfigPath)
+        }
+        foreach ($server in $additionalServers) {
+            $server.CoauthCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $server.CoauthConfigPath)
         }
         if ($DualCoauth) {
             $CoauthSecondaryCommand = "$coauthCaPrefix& {0} --config {1} --no-env-overrides --enable-test-endpoints --allow-insecure-loopback-http --allow-insecure-dev-email-bypass --allow-insecure-password-bootstrap server --no-migrate --no-sync" -f (Quote-PsLiteral $coauthBinary), (Quote-PsLiteral $coauthSecondaryConfigPath)
@@ -3612,12 +3744,20 @@ try {
             -TimeoutSeconds $StartupTimeoutSeconds
         $solandDatabaseDsn = $ephemeralSolandPostgres.Url
     }
-    if ($DualSoland) {
-        $ephemeralSolandBetaPostgres = Start-EphemeralPostgres `
+    if ($multiServer) {
+        $ephemeralSolandServer2Postgres = Start-EphemeralPostgres `
             -Image $SolandPostgresImage `
-            -NamePrefix "cotest-soland-beta-$timestamp" `
+            -NamePrefix "cotest-soland-server2-$timestamp" `
             -TimeoutSeconds $StartupTimeoutSeconds
-        $solandBetaDatabaseDsn = $ephemeralSolandBetaPostgres.Url
+        $solandServer2DatabaseDsn = $ephemeralSolandServer2Postgres.Url
+    }
+    foreach ($server in $additionalServers) {
+        $server.SolandDatabase = Start-EphemeralPostgres `
+            -Image $SolandPostgresImage `
+            -NamePrefix "cotest-$($server.SolandName)-$timestamp" `
+            -TimeoutSeconds $StartupTimeoutSeconds
+        $server.SolandDatabaseDsn = $server.SolandDatabase.Url
+        $additionalPostgresContainers.Add($server.SolandDatabase)
     }
 
     function Build-SolandDockerEnvironment {
@@ -3776,7 +3916,7 @@ try {
     $needsAuthorityBootstrap = $StartCoauth -and $willStartDefaultSoland
     $solandRestartPlans = [System.Collections.Generic.List[object]]::new()
     $solandService = $null
-    $solandBetaService = $null
+    $solandServer2Service = $null
     if ($CoauthBaseUrl -and -not $StartCoauth -and -not $CoauthServiceId) {
         throw "Caller-owned Coauth requires -CoauthServiceId with its configured owning Station identity"
     }
@@ -3788,11 +3928,11 @@ try {
     # tracing-appender (see soland/src/main.rs `init_tracing`). This is the
     # file scenarios should `tail -f` when debugging projection / reducer
     # paths against the runner.
-    $solandTraceFile = Join-Path $serviceLogDir "soland.trace.log"
-    $alphaPeer = ""
+    $solandTraceFile = Join-Path $serverServiceLogDirs["server1"] "soland-server1.trace.log"
+    $server1Peer = ""
     $solandCorsOrigins = @(
         $InksonBaseUrl
-        $inksonBetaBaseUrl
+        $inksonServer2BaseUrl
     ) | Where-Object { $_ } | Select-Object -Unique
     $solandCorsAllowOrigin = if (@($solandCorsOrigins).Count -gt 0) {
         $solandCorsOrigins -join ","
@@ -3802,7 +3942,7 @@ try {
     if (-not $SolandCommand -and $solandPort -and $SolandRuntime -eq "process") {
         $generatedSolandCommand = $true
         $solandBinary = Resolve-SolandBinary -ExplicitPath $SolandBin -WorkspaceRoot $workspaceRoot
-        $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
+        $server1Peer = @($allSolandBaseUrls | Where-Object { $_ -ne $SolandBaseUrl }) -join ","
         $solandMetricsPort = Get-FreeTcpPort
         # DID-P1-C02 — process runtime binds the metrics listener on loopback,
         # so the tests can scrape it. The docker runtime below only publishes
@@ -3821,7 +3961,7 @@ try {
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $SolandKeyStoreMasterKey
             NotarySigningKey = $SolandNotarySigningKey
-            FederationPeers = $alphaPeer
+            FederationPeers = $server1Peer
         }
         $SolandCommand = Build-SolandCommand @solandProcessArguments
         if ($jointTlsAssets) {
@@ -3830,19 +3970,19 @@ try {
     }
     if ($SolandCommand) {
         $solandWorkingDirectory = if ($generatedSolandCommand) { $repoRoot } else { Split-Path -Parent $SutManifest }
-        $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
+        $solandName = "soland-server1"
         $launchName = if ($needsAuthorityBootstrap) { "$solandName-bootstrap" } else { $solandName }
-        $solandService = Start-ManagedCommand -Name $launchName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serviceLogDir
+        $solandService = Start-ManagedCommand -Name $launchName -Command $SolandCommand -WorkingDirectory $solandWorkingDirectory -LogDirectory $serverServiceLogDirs["server1"]
         $managedServices.Add($solandService)
         if ($needsAuthorityBootstrap) {
             $solandRestartPlans.Add(@{
                 Name = $solandName; BaseUrl = $SolandBaseUrl; Service = $solandService
                 ConfigArguments = $solandProcessArguments; Command = $SolandCommand
-                WorkingDirectory = $solandWorkingDirectory
+                WorkingDirectory = $solandWorkingDirectory; LogDirectory = $serverServiceLogDirs["server1"]
             })
         }
     } elseif ($willStartDockerSoland) {
-        $alphaPeer = if ($DualSoland) { $solandBetaBaseUrl } else { "" }
+        $server1Peer = @($allSolandBaseUrls | Where-Object { $_ -ne $SolandBaseUrl }) -join ","
         $solandMetricsPort = Get-FreeTcpPort
         $solandDockerArguments = @{
             BaseUrl = $SolandBaseUrl
@@ -3852,10 +3992,10 @@ try {
             CorsAllowOrigin = $solandCorsAllowOrigin
             KeyStoreMasterKey = $SolandKeyStoreMasterKey
             NotarySigningKey = $SolandNotarySigningKey
-            FederationPeers = $alphaPeer
+            FederationPeers = $server1Peer
         }
         $solandDockerEnv = Build-SolandDockerEnvironment @solandDockerArguments
-        $solandName = if ($DualSoland) { "soland-alpha" } else { "soland" }
+        $solandName = "soland-server1"
         $solandDockerStartArguments = @{
             Name = $solandName
             Image = $SolandImage
@@ -3863,7 +4003,7 @@ try {
             ContainerPort = $SolandContainerPort
             ObjectsRoot = (Join-Path $jointDir "soland-objects")
             StateRoot = (Join-Path $jointDir "soland-state")
-            LogDirectory = $serviceLogDir
+            LogDirectory = $serverServiceLogDirs["server1"]
             Environment = $solandDockerEnv
         }
         if ($needsAuthorityBootstrap) { $solandDockerStartArguments.Name += "-bootstrap" }
@@ -3880,75 +4020,126 @@ try {
     $SolandServiceId = Get-DescribedServiceId -BaseUrl $SolandBaseUrl -ServiceName "soland"
     $SolandServiceDid = Get-DescribedServiceDid -BaseUrl $SolandBaseUrl -ServiceName "soland"
 
-    if ($DualSoland) {
-        $solandBetaTraceFile = Join-Path $serviceLogDir "soland-beta.trace.log"
-        $solandBetaMetricsPort = Get-FreeTcpPort
-        $solandBetaCorsAllowOrigin = $solandCorsAllowOrigin
+    if ($multiServer) {
+        $solandServer2TraceFile = Join-Path $serverServiceLogDirs["server2"] "soland-server2.trace.log"
+        $solandServer2MetricsPort = Get-FreeTcpPort
+        $solandServer2CorsAllowOrigin = $solandCorsAllowOrigin
         if ($SolandRuntime -eq "docker") {
-            $solandBetaDockerArguments = @{
-                BaseUrl = $solandBetaBaseUrl
-                DatabaseUrl = $solandBetaDatabaseDsn
-                MetricsPort = $solandBetaMetricsPort
-                LogFileName = ([System.IO.Path]::GetFileName($solandBetaTraceFile))
-                CorsAllowOrigin = $solandBetaCorsAllowOrigin
-                KeyStoreMasterKey = $SolandBetaKeyStoreMasterKey
-                NotarySigningKey = $SolandBetaNotarySigningKey
-                FederationPeers = $SolandBaseUrl
+            $solandServer2DockerArguments = @{
+                BaseUrl = $solandServer2BaseUrl
+                DatabaseUrl = $solandServer2DatabaseDsn
+                MetricsPort = $solandServer2MetricsPort
+                LogFileName = ([System.IO.Path]::GetFileName($solandServer2TraceFile))
+                CorsAllowOrigin = $solandServer2CorsAllowOrigin
+                KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
+                NotarySigningKey = $SolandServer2NotarySigningKey
+                FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
             }
-            $solandBetaDockerEnv = Build-SolandDockerEnvironment @solandBetaDockerArguments
-            $solandBetaDockerStartArguments = @{
-                Name = "soland-beta"
+            $solandServer2DockerEnv = Build-SolandDockerEnvironment @solandServer2DockerArguments
+            $solandServer2DockerStartArguments = @{
+                Name = "soland-server2"
                 Image = $SolandImage
-                HostPort = $solandBetaPort
+                HostPort = $solandServer2Port
                 ContainerPort = $SolandContainerPort
-                ObjectsRoot = (Join-Path $jointDir "soland-beta-objects")
-                StateRoot = (Join-Path $jointDir "soland-beta-state")
-                LogDirectory = $serviceLogDir
-                Environment = $solandBetaDockerEnv
+                ObjectsRoot = (Join-Path $jointDir "soland-server2-objects")
+                StateRoot = (Join-Path $jointDir "soland-server2-state")
+                LogDirectory = $serverServiceLogDirs["server2"]
+                Environment = $solandServer2DockerEnv
             }
-            if ($needsAuthorityBootstrap) { $solandBetaDockerStartArguments.Name += "-bootstrap" }
-            $solandBetaService = Start-ManagedDockerSoland @solandBetaDockerStartArguments
-            $managedServices.Add($solandBetaService)
+            if ($needsAuthorityBootstrap) { $solandServer2DockerStartArguments.Name += "-bootstrap" }
+            $solandServer2Service = Start-ManagedDockerSoland @solandServer2DockerStartArguments
+            $managedServices.Add($solandServer2Service)
             if ($needsAuthorityBootstrap) {
                 $solandRestartPlans.Add(@{
-                    Name = "soland-beta"; BaseUrl = $solandBetaBaseUrl; Service = $solandBetaService
-                    ConfigArguments = $solandBetaDockerArguments; DockerArguments = $solandBetaDockerStartArguments
+                    Name = "soland-server2"; BaseUrl = $solandServer2BaseUrl; Service = $solandServer2Service
+                    ConfigArguments = $solandServer2DockerArguments; DockerArguments = $solandServer2DockerStartArguments
                 })
             }
         } else {
-            $solandBetaProcessArguments = @{
+            $solandServer2ProcessArguments = @{
                 BinaryPath = $solandBinary
-                ConfigPath = (Join-Path $jointDir "soland-beta.env")
-                BaseUrl = $solandBetaBaseUrl
-                DatabaseUrl = $solandBetaDatabaseDsn
-                ObjectsRoot = (Join-Path $jointDir "soland-beta-objects")
-                StateRoot = (Join-Path $jointDir "soland-beta-state")
-                Port = $solandBetaPort
-                MetricsPort = $solandBetaMetricsPort
-                LogFile = $solandBetaTraceFile
-                CorsAllowOrigin = $solandBetaCorsAllowOrigin
-                KeyStoreMasterKey = $SolandBetaKeyStoreMasterKey
-                NotarySigningKey = $SolandBetaNotarySigningKey
-                FederationPeers = $SolandBaseUrl
+                ConfigPath = (Join-Path $jointDir "soland-server2.env")
+                BaseUrl = $solandServer2BaseUrl
+                DatabaseUrl = $solandServer2DatabaseDsn
+                ObjectsRoot = (Join-Path $jointDir "soland-server2-objects")
+                StateRoot = (Join-Path $jointDir "soland-server2-state")
+                Port = $solandServer2Port
+                MetricsPort = $solandServer2MetricsPort
+                LogFile = $solandServer2TraceFile
+                CorsAllowOrigin = $solandServer2CorsAllowOrigin
+                KeyStoreMasterKey = $SolandServer2KeyStoreMasterKey
+                NotarySigningKey = $SolandServer2NotarySigningKey
+                FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $solandServer2BaseUrl }) -join ",")
             }
-            $solandBetaCommand = Build-SolandCommand @solandBetaProcessArguments
+            $solandServer2Command = Build-SolandCommand @solandServer2ProcessArguments
             if ($jointTlsAssets) {
-                $solandBetaCommand = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $solandBetaCommand"
+                $solandServer2Command = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $solandServer2Command"
             }
-            $launchName = if ($needsAuthorityBootstrap) { "soland-beta-bootstrap" } else { "soland-beta" }
-            $solandBetaService = Start-ManagedCommand -Name $launchName -Command $solandBetaCommand -WorkingDirectory $repoRoot -LogDirectory $serviceLogDir
-            $managedServices.Add($solandBetaService)
+            $launchName = if ($needsAuthorityBootstrap) { "soland-server2-bootstrap" } else { "soland-server2" }
+            $solandServer2Service = Start-ManagedCommand -Name $launchName -Command $solandServer2Command -WorkingDirectory $repoRoot -LogDirectory $serverServiceLogDirs["server2"]
+            $managedServices.Add($solandServer2Service)
             if ($needsAuthorityBootstrap) {
                 $solandRestartPlans.Add(@{
-                    Name = "soland-beta"; BaseUrl = $solandBetaBaseUrl; Service = $solandBetaService
-                    ConfigArguments = $solandBetaProcessArguments; Command = $solandBetaCommand
-                    WorkingDirectory = $repoRoot
+                    Name = "soland-server2"; BaseUrl = $solandServer2BaseUrl; Service = $solandServer2Service
+                    ConfigArguments = $solandServer2ProcessArguments; Command = $solandServer2Command
+                    WorkingDirectory = $repoRoot; LogDirectory = $serverServiceLogDirs["server2"]
                 })
             }
         }
-        Wait-HttpReady -Url "$($solandBetaBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $solandBetaService
-        $SolandBetaServiceId = Get-DescribedServiceId -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
-        $SolandBetaServiceDid = Get-DescribedServiceDid -BaseUrl $solandBetaBaseUrl -ServiceName "soland-beta"
+        Wait-HttpReady -Url "$($solandServer2BaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $solandServer2Service
+        $SolandServer2ServiceId = Get-DescribedServiceId -BaseUrl $solandServer2BaseUrl -ServiceName "soland-server2"
+        $SolandServer2ServiceDid = Get-DescribedServiceDid -BaseUrl $solandServer2BaseUrl -ServiceName "soland-server2"
+    }
+
+    foreach ($server in $additionalServers) {
+        $server.SolandMetricsPort = Get-FreeTcpPort
+        $traceFile = Join-Path $serverServiceLogDirs[$server.Name] "$($server.SolandName).trace.log"
+        $configArguments = @{
+            BaseUrl = $server.SolandBaseUrl
+            DatabaseUrl = $server.SolandDatabaseDsn
+            MetricsPort = $server.SolandMetricsPort
+            CorsAllowOrigin = $solandCorsAllowOrigin
+            KeyStoreMasterKey = $server.KeyStoreMasterKey
+            NotarySigningKey = $server.NotarySigningKey
+            FederationPeers = (@($allSolandBaseUrls | Where-Object { $_ -ne $server.SolandBaseUrl }) -join ",")
+        }
+        if ($SolandRuntime -eq "docker") {
+            $configArguments.LogFileName = [System.IO.Path]::GetFileName($traceFile)
+            $dockerEnvironment = Build-SolandDockerEnvironment @configArguments
+            $startArguments = @{
+                Name = $(if ($needsAuthorityBootstrap) { "$($server.SolandName)-bootstrap" } else { $server.SolandName })
+                Image = $SolandImage
+                HostPort = $server.SolandPort
+                ContainerPort = $SolandContainerPort
+                ObjectsRoot = (Join-Path $jointDir "$($server.SolandName)-objects")
+                StateRoot = (Join-Path $jointDir "$($server.SolandName)-state")
+                LogDirectory = $serverServiceLogDirs[$server.Name]
+                Environment = $dockerEnvironment
+            }
+            $server.SolandService = Start-ManagedDockerSoland @startArguments
+            $managedServices.Add($server.SolandService)
+            if ($needsAuthorityBootstrap) {
+                $solandRestartPlans.Add(@{ Name = $server.SolandName; BaseUrl = $server.SolandBaseUrl; Service = $server.SolandService; ConfigArguments = $configArguments; DockerArguments = $startArguments })
+            }
+        } else {
+            $configArguments.BinaryPath = $solandBinary
+            $configArguments.ConfigPath = Join-Path $jointDir "$($server.SolandName).env"
+            $configArguments.ObjectsRoot = Join-Path $jointDir "$($server.SolandName)-objects"
+            $configArguments.StateRoot = Join-Path $jointDir "$($server.SolandName)-state"
+            $configArguments.Port = $server.SolandPort
+            $configArguments.LogFile = $traceFile
+            $command = Build-SolandCommand @configArguments
+            if ($jointTlsAssets) { $command = "`$env:SSL_CERT_FILE=$(Quote-PsLiteral $jointTlsAssets.CaPemPath); $command" }
+            $launchName = if ($needsAuthorityBootstrap) { "$($server.SolandName)-bootstrap" } else { $server.SolandName }
+            $server.SolandService = Start-ManagedCommand -Name $launchName -Command $command -WorkingDirectory $repoRoot -LogDirectory $serverServiceLogDirs[$server.Name]
+            $managedServices.Add($server.SolandService)
+            if ($needsAuthorityBootstrap) {
+                $solandRestartPlans.Add(@{ Name = $server.SolandName; BaseUrl = $server.SolandBaseUrl; Service = $server.SolandService; ConfigArguments = $configArguments; Command = $command; WorkingDirectory = $repoRoot; LogDirectory = $serverServiceLogDirs[$server.Name] })
+            }
+        }
+        Wait-HttpReady -Url "$($server.SolandBaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $server.SolandService
+        $server.SolandServiceId = Get-DescribedServiceId -BaseUrl $server.SolandBaseUrl -ServiceName $server.SolandName
+        $server.SolandServiceDid = Get-DescribedServiceDid -BaseUrl $server.SolandBaseUrl -ServiceName $server.SolandName
     }
 
     if ($needsAuthorityBootstrap) {
@@ -3960,7 +4151,15 @@ try {
             $configArguments = $plan.ConfigArguments
             if ($StartCoauth) {
                 $configArguments.AccountAuthorityServiceId = $expectedStationId
-                $configArguments.AccountAuthorityBaseUrl = if ($plan.BaseUrl -eq $solandBetaBaseUrl) { $coauthBetaBaseUrl } else { $CoauthBaseUrl }
+                if ($plan.BaseUrl -eq $SolandBaseUrl) {
+                    $configArguments.AccountAuthorityBaseUrl = $CoauthBaseUrl
+                } elseif ($plan.BaseUrl -eq $solandServer2BaseUrl) {
+                    $configArguments.AccountAuthorityBaseUrl = $coauthServer2BaseUrl
+                } else {
+                    $matchedServer = $additionalServers | Where-Object { $_.SolandBaseUrl -eq $plan.BaseUrl } | Select-Object -First 1
+                    if (-not $matchedServer) { throw "No Account Authority mapping exists for $($plan.Name)" }
+                    $configArguments.AccountAuthorityBaseUrl = $matchedServer.CoauthBaseUrl
+                }
             }
             if ($plan.Service.Kind -eq "docker") {
                 $startArguments = $plan.DockerArguments
@@ -3969,7 +4168,7 @@ try {
                 $service = Start-ManagedDockerSoland @startArguments
             } else {
                 Build-SolandCommand @configArguments | Out-Null
-                $service = Start-ManagedCommand -Name $plan.Name -Command $plan.Command -WorkingDirectory $plan.WorkingDirectory -LogDirectory $serviceLogDir
+                $service = Start-ManagedCommand -Name $plan.Name -Command $plan.Command -WorkingDirectory $plan.WorkingDirectory -LogDirectory $plan.LogDirectory
             }
             $managedServices.Add($service)
             Wait-HttpReady -Url "$($plan.BaseUrl.TrimEnd('/'))/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $service
@@ -3982,20 +4181,21 @@ try {
 
     if ($StartCoauth) {
         $CoauthServiceId = $SolandServiceId
-        Set-CoauthStationServiceIds `
-            -ConfigPath $coauthConfigPath `
-            -SolandServiceId $SolandServiceId `
-            -SolandBetaServiceId $SolandBetaServiceId
+        $stationServiceIds = [ordered]@{ server1 = $SolandServiceId }
+        if ($SolandServer2ServiceId) { $stationServiceIds.server2 = $SolandServer2ServiceId }
+        foreach ($server in $additionalServers) { $stationServiceIds[$server.Name] = $server.SolandServiceId }
+        Set-CoauthStationServiceIds -ConfigPath $coauthConfigPath -StationServiceIds $stationServiceIds
         if ($DualCoauth) {
-            Set-CoauthStationServiceIds `
-                -ConfigPath $coauthSecondaryConfigPath `
-                -SolandServiceId $SolandServiceId `
-                -SolandBetaServiceId $SolandBetaServiceId
+            Set-CoauthStationServiceIds -ConfigPath $coauthSecondaryConfigPath -StationServiceIds $stationServiceIds
         }
         Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthConfigPath -LogDirectory $serviceLogDir
-        if ($coauthBetaConfigPath) {
-            Set-CoauthStationServiceIds -ConfigPath $coauthBetaConfigPath -SolandServiceId $SolandServiceId -SolandBetaServiceId $SolandBetaServiceId
-            Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthBetaConfigPath -LogDirectory (Split-Path -Parent $coauthBetaConfigPath)
+        if ($coauthServer2ConfigPath) {
+            Set-CoauthStationServiceIds -ConfigPath $coauthServer2ConfigPath -StationServiceIds $stationServiceIds
+            Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $coauthServer2ConfigPath -LogDirectory (Split-Path -Parent $coauthServer2ConfigPath)
+        }
+        foreach ($server in $additionalServers) {
+            Set-CoauthStationServiceIds -ConfigPath $server.CoauthConfigPath -StationServiceIds $stationServiceIds
+            Invoke-CoauthConfigSync -CoauthBinary $coauthBinary -ConfigPath $server.CoauthConfigPath -LogDirectory (Split-Path -Parent $server.CoauthConfigPath)
         }
     }
 
@@ -4004,7 +4204,7 @@ try {
             throw "CoauthCommand requires CoauthBaseUrl or CoauthHealthUrl"
         }
         $coauthWorkingDirectory = if ($StartCoauth) { Join-Path $workspaceRoot "coauth" } else { $workspaceRoot }
-        $managedServices.Add((Start-ManagedCommand -Name "coauth" -Command $CoauthCommand -WorkingDirectory $coauthWorkingDirectory -LogDirectory $serviceLogDir))
+        $managedServices.Add((Start-ManagedCommand -Name "coauth-server1" -Command $CoauthCommand -WorkingDirectory $coauthWorkingDirectory -LogDirectory $serverServiceLogDirs["server1"]))
         $health = if ($CoauthHealthUrl) { $CoauthHealthUrl } else { "$($CoauthBaseUrl.TrimEnd('/'))/health" }
         Wait-HttpReady -Url $health -TimeoutSeconds $StartupTimeoutSeconds
     }
@@ -4012,14 +4212,22 @@ try {
         $managedServices.Add((Start-ManagedCommand -Name "coauth-secondary" -Command $CoauthSecondaryCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
         Wait-HttpReady -Url "$coauthSecondaryBaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
     }
-    if ($CoauthBetaCommand) {
-        $managedServices.Add((Start-ManagedCommand -Name "coauth-beta" -Command $CoauthBetaCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serviceLogDir))
-        Wait-HttpReady -Url "$coauthBetaBaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
+    if ($CoauthServer2Command) {
+        $managedServices.Add((Start-ManagedCommand -Name "coauth-server2" -Command $CoauthServer2Command -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serverServiceLogDirs["server2"]))
+        Wait-HttpReady -Url "$coauthServer2BaseUrl/health" -TimeoutSeconds $StartupTimeoutSeconds
+    }
+    foreach ($server in $additionalServers) {
+        if ($server.CoauthCommand) {
+            $coauthService = Start-ManagedCommand -Name $server.CoauthName -Command $server.CoauthCommand -WorkingDirectory (Join-Path $workspaceRoot "coauth") -LogDirectory $serverServiceLogDirs[$server.Name]
+            $managedServices.Add($coauthService)
+            $server | Add-Member -NotePropertyName CoauthService -NotePropertyValue $coauthService -Force
+            Wait-HttpReady -Url "$($server.CoauthBaseUrl)/health" -TimeoutSeconds $StartupTimeoutSeconds -ManagedService $coauthService
+        }
     }
 
     $inksonService = $null
-    $inksonBetaService = $null
-    $generatedInksonBetaCommand = $false
+    $inksonServer2Service = $null
+    $generatedInksonServer2Command = $false
     if (-not $SkipInkson -and -not $InksonCommand -and $inksonPort) {
         $InksonCommand = "node {0} {1} {2} 127.0.0.1" -f `
             (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
@@ -4028,7 +4236,7 @@ try {
         $generatedInksonCommand = $true
     }
     if ($InksonCommand) {
-        $inksonName = if ($DualSoland) { "inkson-alpha" } else { "inkson" }
+        $inksonName = "inkson-server1"
         $inksonService = Start-ManagedCommand -Name $inksonName -Command $InksonCommand -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
         $managedServices.Add($inksonService)
     }
@@ -4038,21 +4246,21 @@ try {
             Wait-DioxusAppReady -Url $InksonBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
-    if (-not $SkipInkson -and $DualSoland -and $inksonBetaBaseUrl -and $inksonBetaBaseUrl -ne $InksonBaseUrl) {
-        if (-not $InksonBetaCommand -and $inksonBetaPort) {
-            $InksonBetaCommand = "node {0} {1} {2} 127.0.0.1" -f `
+    if (-not $SkipInkson -and $multiServer -and $inksonServer2BaseUrl -and $inksonServer2BaseUrl -ne $InksonBaseUrl) {
+        if (-not $InksonServer2Command -and $inksonServer2Port) {
+            $InksonServer2Command = "node {0} {1} {2} 127.0.0.1" -f `
                 (Quote-PsLiteral (Join-Path $e2eRoot "scripts\serve-static.mjs")),
                 (Quote-PsLiteral $inksonStaticRoot),
-                $inksonBetaPort
-            $generatedInksonBetaCommand = $true
+                $inksonServer2Port
+            $generatedInksonServer2Command = $true
         }
-        if ($InksonBetaCommand) {
-            $inksonBetaService = Start-ManagedCommand -Name "inkson-beta" -Command $InksonBetaCommand -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
-            $managedServices.Add($inksonBetaService)
+        if ($InksonServer2Command) {
+            $inksonServer2Service = Start-ManagedCommand -Name "inkson-server2" -Command $InksonServer2Command -WorkingDirectory $InksonRoot -LogDirectory $serviceLogDir
+            $managedServices.Add($inksonServer2Service)
         }
-        Wait-HttpReady -Url $inksonBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        if ($generatedInksonBetaCommand) {
-            Wait-DioxusAppReady -Url $inksonBetaBaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        Wait-HttpReady -Url $inksonServer2BaseUrl -TimeoutSeconds $StartupTimeoutSeconds
+        if ($generatedInksonServer2Command) {
+            Wait-DioxusAppReady -Url $inksonServer2BaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         }
     }
 
@@ -4106,10 +4314,15 @@ try {
         }
         $jointTlsServices = @()
         if ($solandPublicHost -and $SolandServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland"; ServiceDid = $SolandServiceDid }
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-server1"; ServiceDid = $SolandServiceDid }
         }
-        if ($solandBetaPublicHost -and $SolandBetaServiceDid) {
-            $jointTlsServices += [pscustomobject]@{ Name = "soland-beta"; ServiceDid = $SolandBetaServiceDid }
+        if ($solandServer2PublicHost -and $SolandServer2ServiceDid) {
+            $jointTlsServices += [pscustomobject]@{ Name = "soland-server2"; ServiceDid = $SolandServer2ServiceDid }
+        }
+        foreach ($server in $additionalServers) {
+            if ($server.SolandHost -and $server.SolandServiceDid) {
+                $jointTlsServices += [pscustomobject]@{ Name = $server.SolandName; ServiceDid = $server.SolandServiceDid }
+            }
         }
         Assert-JointTlsTopology `
             -TlsPort $jointTlsPort `
@@ -4128,6 +4341,8 @@ try {
     $env:COTEST_SOLAND_BASE_URL = $SolandBaseUrl
     $env:COTEST_SOLAND_SERVICE_ID = $SolandServiceId
     $env:COTEST_SOLAND_SERVICE_DID = $SolandServiceDid
+    $env:COTEST_SERVER_COUNT = "$ServerCount"
+    $env:COTEST_REQUIRED_SERVER_COUNT = if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") { "3" } else { "0" }
     if ($SkipInkson) {
         $env:COTEST_SKIP_INKSON = "1"
     } else {
@@ -4165,48 +4380,93 @@ try {
     } else {
         Remove-Item Env:COTEST_SKIP_INKSON -ErrorAction SilentlyContinue
     }
-    if ($DualSoland) {
-        $env:COTEST_SOLAND_ALPHA_BASE_URL = $SolandBaseUrl
-        $env:COTEST_SOLAND_ALPHA_SERVICE_ID = $SolandServiceId
-        $env:COTEST_SOLAND_ALPHA_SERVICE_DID = $SolandServiceDid
-        $env:COTEST_SOLAND_BETA_BASE_URL = $solandBetaBaseUrl
-        $env:COTEST_SOLAND_BETA_SERVICE_ID = $SolandBetaServiceId
-        $env:COTEST_SOLAND_BETA_SERVICE_DID = $SolandBetaServiceDid
-        if ($SolandBetaNotarySigningKey) {
-            $env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY = $SolandBetaNotarySigningKey
-        } else {
-            Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
-        }
-        $env:COTEST_REQUIRE_DUAL_SOLAND = "1"
-        if ($InksonBaseUrl) {
-            $env:COTEST_INKSON_ALPHA_BASE_URL = $InksonBaseUrl
-        } else {
-            Remove-Item Env:COTEST_INKSON_ALPHA_BASE_URL -ErrorAction SilentlyContinue
-        }
-        if ($inksonBetaBaseUrl) {
-            $env:COTEST_INKSON_BETA_BASE_URL = $inksonBetaBaseUrl
-        } else {
-            Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue
-        }
-    } else {
-        Remove-Item Env:COTEST_SOLAND_ALPHA_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_ALPHA_SERVICE_ID -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_BETA_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_ID -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_SOLAND_BETA_SERVICE_SIGNING_KEY -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_REQUIRE_DUAL_SOLAND -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_INKSON_ALPHA_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_INKSON_BETA_BASE_URL -ErrorAction SilentlyContinue
+    $runtimeServers.Clear()
+    $runtimeServers.Add([pscustomobject]@{ Index = 1; Name = "server1"; SolandBaseUrl = $SolandBaseUrl; SolandServiceId = $SolandServiceId; SolandServiceDid = $SolandServiceDid; SolandPort = $solandPort; SolandService = $solandService; SolandDatabase = $ephemeralSolandPostgres; CoauthBaseUrl = $CoauthBaseUrl; CoauthPort = $coauthPort; CoauthConfigPath = $coauthConfigPath; InksonBaseUrl = $InksonBaseUrl; SigningKey = $SolandNotarySigningKey })
+    if ($multiServer) {
+        $runtimeServers.Add([pscustomobject]@{ Index = 2; Name = "server2"; SolandBaseUrl = $solandServer2BaseUrl; SolandServiceId = $SolandServer2ServiceId; SolandServiceDid = $SolandServer2ServiceDid; SolandPort = $solandServer2Port; SolandService = $solandServer2Service; SolandDatabase = $ephemeralSolandServer2Postgres; CoauthBaseUrl = $coauthServer2BaseUrl; CoauthPort = $coauthServer2Port; CoauthConfigPath = $coauthServer2ConfigPath; InksonBaseUrl = $(if ($inksonServer2BaseUrl) { $inksonServer2BaseUrl } else { $InksonBaseUrl }); SigningKey = $SolandServer2NotarySigningKey })
     }
+    foreach ($server in $additionalServers) {
+        $runtimeServers.Add([pscustomobject]@{ Index = $server.Index; Name = $server.Name; SolandBaseUrl = $server.SolandBaseUrl; SolandServiceId = $server.SolandServiceId; SolandServiceDid = $server.SolandServiceDid; SolandPort = $server.SolandPort; SolandService = $server.SolandService; SolandDatabase = $server.SolandDatabase; CoauthBaseUrl = $server.CoauthBaseUrl; CoauthPort = $server.CoauthPort; CoauthConfigPath = $server.CoauthConfigPath; InksonBaseUrl = $InksonBaseUrl; SigningKey = $server.NotarySigningKey })
+    }
+    foreach ($server in $runtimeServers) {
+        $solandStoragePrefix = if ($server.Index -eq 1) { "soland" } else { "soland-$($server.Name)" }
+        Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.SolandBaseUrl
+        Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_SERVICE_ID" -Value $server.SolandServiceId
+        Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_SERVICE_DID" -Value $server.SolandServiceDid
+        if ($server.SigningKey) { Set-Item -Path "Env:COTEST_SOLAND_$($server.Name.ToUpperInvariant())_SERVICE_SIGNING_KEY" -Value $server.SigningKey }
+        if ($server.InksonBaseUrl) { Set-Item -Path "Env:COTEST_INKSON_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.InksonBaseUrl }
+        if ($server.CoauthBaseUrl) { Set-Item -Path "Env:COTEST_COAUTH_$($server.Name.ToUpperInvariant())_BASE_URL" -Value $server.CoauthBaseUrl }
+    }
+    $topologyServers = @()
+    foreach ($server in $runtimeServers) {
+        $solandManaged = @($managedServices | Where-Object { $_.Name -eq "soland-$($server.Name)" }) | Select-Object -Last 1
+        $coauthManaged = @($managedServices | Where-Object { $_.Name -eq "coauth-$($server.Name)" }) | Select-Object -Last 1
+        $peerNames = @($runtimeServers | Where-Object { $_.Name -ne $server.Name } | ForEach-Object { $_.Name })
+        if ($NetworkShape -eq "ordered-candidates") {
+            $peerNames = @(
+                for ($offset = 1; $offset -lt $runtimeServers.Count; $offset++) {
+                    $candidateIndex = (($server.Index - 1 + $offset) % $runtimeServers.Count) + 1
+                    "server$candidateIndex"
+                }
+            )
+        }
+        $topologyServers += [pscustomobject]@{
+            name = $server.Name
+            role = "station"
+            soland = [pscustomobject]@{
+                public_url = $server.SolandBaseUrl
+                listen_address = if ($server.SolandPort) { "127.0.0.1:$($server.SolandPort)" } else { $null }
+                service_id = $server.SolandServiceId
+                service_did = $server.SolandServiceDid
+                storage = [pscustomobject]@{
+                    database = if ($server.SolandDatabase) { $server.SolandDatabase.ContainerName } else { "caller-owned" }
+                    objects = Join-Path $jointDir "$solandStoragePrefix-objects"
+                    state = Join-Path $jointDir "$solandStoragePrefix-state"
+                }
+                log_directory = $serverServiceLogDirs[$server.Name]
+                process_id = if ($solandManaged -and $solandManaged.Kind -eq "process") { $solandManaged.Process.Id } else { $null }
+                container_id = if ($solandManaged -and $solandManaged.Kind -eq "docker") { $solandManaged.ContainerName } else { $null }
+                control = if ($solandManaged) { [pscustomobject]@{
+                    kind = $solandManaged.Kind
+                    script_path = (Join-Path $PSScriptRoot "control-joint-e2e-service.ps1")
+                    state_path = (Join-Path $jointDir "controls\$($server.Name).json")
+                    working_directory = if ($solandManaged.Kind -eq "process") { $solandManaged.WorkingDirectory } else { $null }
+                    command_log = if ($solandManaged.Kind -eq "process") { $solandManaged.CommandLog } else { $null }
+                } } else { $null }
+            }
+            coauth = if ($server.CoauthBaseUrl) { [pscustomobject]@{
+                public_url = $server.CoauthBaseUrl
+                listen_address = if ($server.CoauthPort) { "127.0.0.1:$($server.CoauthPort)" } else { $null }
+                owning_service_id = $server.SolandServiceId
+                storage = [pscustomobject]@{ database = if ($server.Index -eq 1 -and $ephemeralCoauthServer1Postgres) { $ephemeralCoauthServer1Postgres.ContainerName } elseif ($server.Index -eq 2 -and $ephemeralCoauthServer2Postgres) { $ephemeralCoauthServer2Postgres.ContainerName } elseif ($server.Index -ge 3) { $additionalServers[$server.Index - 3].CoauthDatabase.ContainerName } else { "caller-owned" }; state = Split-Path -Parent $server.CoauthConfigPath }
+                config_path = $server.CoauthConfigPath
+                log_directory = $serverServiceLogDirs[$server.Name]
+                process_id = if ($coauthManaged -and $coauthManaged.Kind -eq "process") { $coauthManaged.Process.Id } else { $null }
+                container_id = $null
+            } } else { $null }
+            peers = $peerNames
+            candidate_sources = $peerNames
+        }
+    }
+    $topology = [pscustomobject]@{
+        schema = "cotest.joint-topology.v1"
+        generated_at = (Get-Date).ToUniversalTime().ToString("o")
+        lifecycle = "running"
+        network_shape = $NetworkShape
+        server_count = $ServerCount
+        tls = [pscustomobject]@{ enabled = [bool]$jointTlsEnabled; port = $jointTlsPort; ca_path = if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }; unregistered_probe = if ($jointTlsPort) { "https://unregistered.local.host:$jointTlsPort" } else { $null } }
+        servers = $topologyServers
+    }
+    Assert-CotestTopologyIsolation -Topology $topology
+    $topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
+    $env:COTEST_TOPOLOGY_PATH = $topologyPath
     if ($CoauthBaseUrl) {
         Assert-CoauthDpopGrantSeamReady -BaseUrl $CoauthBaseUrl
         $env:COTEST_COAUTH_BASE_URL = $CoauthBaseUrl.TrimEnd("/")
-        if ($coauthBetaBaseUrl) {
-            Assert-CoauthDpopGrantSeamReady -BaseUrl $coauthBetaBaseUrl
-            $env:COTEST_COAUTH_BETA_BASE_URL = $coauthBetaBaseUrl
-        } else {
-            Remove-Item Env:COTEST_COAUTH_BETA_BASE_URL -ErrorAction SilentlyContinue
+        if ($coauthServer2BaseUrl) {
+            Assert-CoauthDpopGrantSeamReady -BaseUrl $coauthServer2BaseUrl
         }
+        foreach ($server in $additionalServers) { Assert-CoauthDpopGrantSeamReady -BaseUrl $server.CoauthBaseUrl }
         $env:COTEST_COAUTH_SERVICE_ID = $CoauthServiceId
         $env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER = $CoauthSessionGrantIntrospectionBearer
         # The OAuth client_id soland is configured to advertise (see
@@ -4232,7 +4492,6 @@ try {
         }
     } else {
         Remove-Item Env:COTEST_COAUTH_BASE_URL -ErrorAction SilentlyContinue
-        Remove-Item Env:COTEST_COAUTH_BETA_BASE_URL -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SERVICE_ID -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_COAUTH_SESSION_GRANT_INTROSPECTION_BEARER -ErrorAction SilentlyContinue
         Remove-Item Env:COTEST_OIDC_CLIENT_ID -ErrorAction SilentlyContinue
@@ -4432,6 +4691,11 @@ catch {
     Write-Warning "Joint runner failed at line $($runnerError.line) ($($runnerError.type)); see phase logs in $jointDir"
 }
 finally {
+    $controlFailures = @(Sync-JointControlledServices -TopologyPath $topologyPath -ManagedServices $managedServices)
+    if ($controlFailures.Count -gt 0) {
+        $exitCode = 1
+        foreach ($controlFailure in $controlFailures) { Write-Warning $controlFailure }
+    }
     $managedServiceFailures = @(Get-ManagedServiceFailures -Services $managedServices)
     Write-ManagedServiceFailureReport `
         -Failures $managedServiceFailures `
@@ -4447,7 +4711,7 @@ finally {
         for ($index = $managedServices.Count - 1; $index -ge 0; $index--) {
             Stop-ManagedCommand -Service $managedServices[$index]
         }
-        if ($ephemeralPostgres) {
+        if ($ephemeralCoauthServer1Postgres) {
             # Dump before teardown: the durable protocol store is the one
             # artifact the secret scan cannot reconstruct afterwards, and it is
             # where a recovery-material leak would be most damaging and least
@@ -4455,19 +4719,19 @@ finally {
             # evidence the spec requires the server to persist does not drown
             # the finding.
             $postgresDump = Export-EphemeralPostgresDump `
-                -ContainerName $ephemeralPostgres.ContainerName `
+                -ContainerName $ephemeralCoauthServer1Postgres.ContainerName `
                 -OutputPath (Join-Path $storeDumpDir "coauth-postgres.sql")
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             }
-            Stop-EphemeralPostgres -ContainerName $ephemeralPostgres.ContainerName
+            Stop-EphemeralPostgres -ContainerName $ephemeralCoauthServer1Postgres.ContainerName
         }
-        if ($ephemeralCoauthBetaPostgres) {
+        if ($ephemeralCoauthServer2Postgres) {
             $postgresDump = Export-EphemeralPostgresDump `
-                -ContainerName $ephemeralCoauthBetaPostgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir "coauth-beta-postgres.sql")
+                -ContainerName $ephemeralCoauthServer2Postgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir "coauth-server2-postgres.sql")
             if ($postgresDump) { Write-Host "postgres dump: $postgresDump" }
-            Stop-EphemeralPostgres -ContainerName $ephemeralCoauthBetaPostgres.ContainerName
+            Stop-EphemeralPostgres -ContainerName $ephemeralCoauthServer2Postgres.ContainerName
         }
         if ($ephemeralSolandPostgres) {
             $postgresDump = Export-EphemeralPostgresDump `
@@ -4478,14 +4742,26 @@ finally {
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralSolandPostgres.ContainerName
         }
-        if ($ephemeralSolandBetaPostgres) {
+        if ($ephemeralSolandServer2Postgres) {
             $postgresDump = Export-EphemeralPostgresDump `
-                -ContainerName $ephemeralSolandBetaPostgres.ContainerName `
-                -OutputPath (Join-Path $storeDumpDir "soland-beta-postgres.sql")
+                -ContainerName $ephemeralSolandServer2Postgres.ContainerName `
+                -OutputPath (Join-Path $storeDumpDir "soland-server2-postgres.sql")
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
             }
-            Stop-EphemeralPostgres -ContainerName $ephemeralSolandBetaPostgres.ContainerName
+            Stop-EphemeralPostgres -ContainerName $ephemeralSolandServer2Postgres.ContainerName
+        }
+        foreach ($server in $additionalServers) {
+            foreach ($store in @(
+                [pscustomobject]@{ Database = $server.CoauthDatabase; File = "$($server.CoauthName)-postgres.sql" },
+                [pscustomobject]@{ Database = $server.SolandDatabase; File = "$($server.SolandName)-postgres.sql" }
+            )) {
+                if ($store.Database) {
+                    $postgresDump = Export-EphemeralPostgresDump -ContainerName $store.Database.ContainerName -OutputPath (Join-Path $storeDumpDir $store.File)
+                    if ($postgresDump) { Write-Host "postgres dump: $postgresDump" }
+                    Stop-EphemeralPostgres -ContainerName $store.Database.ContainerName
+                }
+            }
         }
         if ($jointTlsEnabled) {
             # 0530-C: revert the hosts entries and delete private keys.
@@ -4982,6 +5258,9 @@ $requiredScenarios = @(
         ForEach-Object { ConvertTo-CanonicalScenarioKey -Scenario $_ }
 )
 $forbidRuntimeSkips = [bool]$ForbidSkippedTests -or $RunProfile -eq "joint-smoke"
+if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") {
+    $requiredScenarios = @($requiredScenarios; "federation/three-server-p0") | Sort-Object -Unique
+}
 if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
     $requiredScenarios = @(
         $requiredScenarios
@@ -5003,6 +5282,21 @@ if ($requiredScenarios.Count -gt 0 -or $forbidRuntimeSkips) {
 }
 if ($selectionGateFailures.Count -gt 0) {
     $exitCode = 1
+}
+if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") {
+    $p0ScenarioKey = "federation/three-server-p0.spec.ts"
+    if ($junitByScenario.ContainsKey($p0ScenarioKey)) {
+        $p0Cases = $junitByScenario[$p0ScenarioKey].cases
+        if ($p0Cases.Count -lt 5) {
+            $selectionGateFailures += "three-server P0 selected fewer than five mandatory cases"
+            $exitCode = 1
+        }
+        $p0Skipped = @($p0Cases | Where-Object { $_.status -in @("skipped", "fixme") })
+        if ($p0Skipped.Count -gt 0) {
+            $selectionGateFailures += "three-server P0 contains runtime skips or fixmes"
+            $exitCode = 1
+        }
+    }
 }
 $scenarioLines += ""
 $scenarioLines += "## selection gate"
@@ -5253,13 +5547,10 @@ $summary = [pscustomobject]@{
     runner_error = $runnerError
     soland_runtime = $startedSolandRuntime
     soland_image = if ($startedSolandRuntime -eq "docker") { $SolandImage } else { $null }
-    soland_base_url = $SolandBaseUrl
-    soland_service_id = $SolandServiceId
-    soland_beta_base_url = $solandBetaBaseUrl
-    soland_beta_service_id = if ($DualSoland) { $SolandBetaServiceId } else { $null }
-    dual_soland = [bool]$DualSoland
-    inkson_alpha_base_url = if ($DualSoland) { $InksonBaseUrl } else { $null }
-    inkson_beta_base_url = if ($DualSoland) { $inksonBetaBaseUrl } else { $null }
+    server_count = $ServerCount
+    network_shape = $NetworkShape
+    topology_json = $topologyPath
+    servers = if ($topology) { $topology.servers } else { @() }
     mock_idp_base_url = $mockIdpBaseUrl
     mock_email_base_url = $mockEmailBaseUrl
     mock_witness_base_url = $mockWitnessBaseUrl
@@ -5271,27 +5562,20 @@ $summary = [pscustomobject]@{
     mock_did_host_scid = if ($mockDidHostBaseUrl) { $MockDidHostScid } else { $null }
     # DID-P1-C02 resolver call-count trace: the endpoints the run's
     # authority_network_call_count / signature_verify_count were read from.
-    soland_metrics_url = $solandMetricsBaseUrl
+    soland_server1_metrics_url = $solandMetricsBaseUrl
     teabay_metrics_url = $teabayMetricsBaseUrl
     mock_mimi_facade_base_url = $mockMimiFacadeBaseUrl
     mock_mimi_facade_did = if ($mockMimiFacadeBaseUrl) { $MockMimiFacadeDid } else { $null }
-    inkson_base_url = $InksonBaseUrl
-    coauth_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
+    inkson_server1_base_url = $InksonBaseUrl
+    coauth_server1_base_url = if ($CoauthBaseUrl) { $CoauthBaseUrl } else { $null }
     coauth_secondary_base_url = $coauthSecondaryBaseUrl
-    coauth_beta_base_url = $coauthBetaBaseUrl
-    coauth_beta_config = $coauthBetaConfigPath
-    coauth_beta_postgres_container = if ($ephemeralCoauthBetaPostgres) { $ephemeralCoauthBetaPostgres.ContainerName } else { $null }
     dual_coauth = [bool]$DualCoauth
-    coauth_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
-    coauth_config = $coauthConfigPath
-    coauth_postgres_container = if ($ephemeralPostgres) { $ephemeralPostgres.ContainerName } else { $null }
-    soland_postgres_container = if ($ephemeralSolandPostgres) { $ephemeralSolandPostgres.ContainerName } else { $null }
-    soland_beta_postgres_container = if ($ephemeralSolandBetaPostgres) { $ephemeralSolandBetaPostgres.ContainerName } else { $null }
+    coauth_server1_service_id = if ($CoauthBaseUrl) { $CoauthServiceId } else { $null }
     teabay_base_url = if ($TeabayBaseUrl) { $TeabayBaseUrl } else { $null }
     teabay_service_id = if ($TeabayBaseUrl) { $TeabayServiceId } else { $null }
     teabay_database_url = if ($TeabayBaseUrl) { $TeabayDatabaseUrl } else { $null }
-    coauth_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
-    coauth_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_arkret/gate/account/session-grants/introspect" } else { $null }
+    coauth_server1_oauth_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/oauth/introspect" } else { $null }
+    coauth_server1_session_grant_introspection_url = if ($CoauthBaseUrl) { "$($CoauthBaseUrl.TrimEnd('/'))/_arkret/gate/account/session-grants/introspect" } else { $null }
     screenshots = $screenshotDir
     visual_baselines = $visualBaselineDir
     diagnostics = Join-Path $jointDir "diagnostics"
@@ -5337,13 +5621,9 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - exit_code: $($summary.exit_code)
 - soland_runtime: $($summary.soland_runtime)
 - soland_image: $($summary.soland_image)
-- soland_base_url: $($summary.soland_base_url)
-- soland_service_id: $($summary.soland_service_id)
-- soland_beta_base_url: $($summary.soland_beta_base_url)
-- soland_beta_service_id: $($summary.soland_beta_service_id)
-- dual_soland: $($summary.dual_soland)
-- inkson_alpha_base_url: $($summary.inkson_alpha_base_url)
-- inkson_beta_base_url: $($summary.inkson_beta_base_url)
+- server_count: $($summary.server_count)
+- network_shape: $($summary.network_shape)
+- topology_json: $($summary.topology_json)
 - mock_idp_base_url: $($summary.mock_idp_base_url)
 - mock_email_base_url: $($summary.mock_email_base_url)
 - mock_witness_base_url: $($summary.mock_witness_base_url)
@@ -5352,12 +5632,11 @@ $summary | ConvertTo-Json -Depth 6 | Set-Content -Path $summaryJson -Encoding UT
 - mock_witness_quorum_dids: $($mockWitnessQuorumDids -join ",")
 - mock_mimi_facade_base_url: $($summary.mock_mimi_facade_base_url)
 - mock_mimi_facade_did: $($summary.mock_mimi_facade_did)
-- inkson_base_url: $($summary.inkson_base_url)
-- coauth_base_url: $($summary.coauth_base_url)
-- coauth_service_id: $($summary.coauth_service_id)
-- coauth_config: $($summary.coauth_config)
-- coauth_oauth_introspection_url: $($summary.coauth_oauth_introspection_url)
-- coauth_session_grant_introspection_url: $($summary.coauth_session_grant_introspection_url)
+- inkson_server1_base_url: $($summary.inkson_server1_base_url)
+- coauth_server1_base_url: $($summary.coauth_server1_base_url)
+- coauth_server1_service_id: $($summary.coauth_server1_service_id)
+- coauth_server1_oauth_introspection_url: $($summary.coauth_server1_oauth_introspection_url)
+- coauth_server1_session_grant_introspection_url: $($summary.coauth_server1_session_grant_introspection_url)
 - teabay_base_url: $($summary.teabay_base_url)
 - teabay_service_id: $($summary.teabay_service_id)
 - screenshots: $($summary.screenshots)
@@ -5405,10 +5684,7 @@ Write-Host "  soland rt   : $($summary.soland_runtime)"
 if ($summary.soland_image) {
     Write-Host "  soland image: $($summary.soland_image)"
 }
-Write-Host "  soland      : $SolandBaseUrl"
-if ($DualSoland) {
-    Write-Host "  soland-beta : $solandBetaBaseUrl"
-}
+foreach ($server in $runtimeServers) { Write-Host "  soland-$($server.Name): $($server.SolandBaseUrl)" }
 if ($mockIdpBaseUrl) {
     Write-Host "  mock-idp    : $mockIdpBaseUrl"
 }
@@ -5425,7 +5701,7 @@ if ($mockDidHostBaseUrl) {
     Write-Host "  mock-did-host: $mockDidHostBaseUrl ($MockDidHostAuthority, scid=$MockDidHostScid)"
 }
 if ($solandMetricsBaseUrl) {
-    Write-Host "  soland metrics: $solandMetricsBaseUrl/metrics"
+    Write-Host "  soland-server1 metrics: $solandMetricsBaseUrl/metrics"
 }
 if ($teabayMetricsBaseUrl) {
     Write-Host "  teabay metrics: $teabayMetricsBaseUrl/metrics"
@@ -5434,16 +5710,16 @@ if ($mockMimiFacadeBaseUrl) {
     Write-Host "  mock-mimi-facade: $mockMimiFacadeBaseUrl ($MockMimiFacadeDid)"
 }
 if ($InksonBaseUrl) {
-    Write-Host "  inkson      : $InksonBaseUrl"
+    Write-Host "  inkson-server1 : $InksonBaseUrl"
 }
-if ($DualSoland -and $inksonBetaBaseUrl) {
-    Write-Host "  inkson-beta : $inksonBetaBaseUrl"
+if ($multiServer -and $inksonServer2BaseUrl) {
+    Write-Host "  inkson-server2 : $inksonServer2BaseUrl"
 }
 if ($CoauthBaseUrl) {
-    Write-Host "  coauth      : $CoauthBaseUrl"
+    Write-Host "  coauth-server1 : $CoauthBaseUrl"
 }
 if ($coauthSecondaryBaseUrl) {
-    Write-Host "  coauth-beta : $coauthSecondaryBaseUrl"
+    Write-Host "  coauth-server1-replica : $coauthSecondaryBaseUrl"
 }
 if ($TeabayBaseUrl) {
     Write-Host "  teabay      : $TeabayBaseUrl"
@@ -5451,6 +5727,7 @@ if ($TeabayBaseUrl) {
 Write-Host "  screenshots : $screenshotDir"
 Write-Host "  visual base : $visualBaselineDir"
 Write-Host "  report      : $summaryMd"
+Write-Host "  topology    : $topologyPath"
 Write-Host "  secret scan : $($summary.secret_scan_status) ($secretScanMd)"
 if ($isStandaloneJointSuite) {
     Write-Host "  latest      : $(Join-Path $OutputRoot 'latest\joint-e2e')"

@@ -125,7 +125,7 @@ Recommended scripted entrypoints:
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile fast-smoke
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile release-gate
 .\scripts\run-server-conformance.ps1 -Runtime process -Profile full-nightly
-.\scripts\run-server-conformance.ps1 -Runtime process -Profile dual-soland
+.\scripts\run-server-conformance.ps1 -Runtime process -Profile multi-server
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage
 ```
 
@@ -156,12 +156,12 @@ entries use the exact `test_target` plus `test_filter` pair.
 `run-server-conformance.ps1 -Profile <profile> -PlanOnly` to inspect commands, or add
 `-ValidateProfile` to require each filter to match exactly one listed test.
 
-`dual-soland` is a local matrix profile, not a remote workflow. It delegates to
-`run-joint-e2e.ps1 -DualSoland -RunProfile joint-full -Grep "cross-server.federation"`,
-starts alpha/beta soland on separate ports, starts alpha/beta inkson when the
-runner owns the web servers, and injects `COTEST_SOLAND_ALPHA_*`,
-`COTEST_SOLAND_BETA_*`, `COTEST_INKSON_ALPHA_BASE_URL`, and
-`COTEST_INKSON_BETA_BASE_URL` for federation specs.
+`multi-server` is a local matrix profile, not a remote workflow. It delegates to
+`run-joint-e2e.ps1 -ServerCount 3 -RunProfile joint-full -Grep "@three-server-p0"`,
+starts server1/server2/server3 Soland on separate ports with independent stores and identities,
+and injects indexed `COTEST_SOLAND_SERVERN_*`, `COTEST_COAUTH_SERVERN_*`, and
+`COTEST_INKSON_SERVERN_BASE_URL` values for federation specs. The deprecated
+`dual-soland` profile remains a warning-emitting two-server adapter only.
 
 The local hygiene gate is `scripts/run-hygiene.ps1`. It runs `cargo deny check`,
 `typos`, and `cargo audit`, then records `raw.log`, `summary.json`,
@@ -283,7 +283,7 @@ Recommended local run:
 .\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
 .\scripts\run-joint-e2e.ps1 -PreflightOnly -StartCoauth -CoauthPostgresUrl <dsn>
 .\scripts\run-joint-e2e.ps1 -RunnerSelfTest
-.\scripts\run-server-conformance.ps1 -Profile dual-soland
+.\scripts\run-server-conformance.ps1 -Profile multi-server
 .\scripts\run-joint-e2e.ps1 -StartMockMimiFacade -Grep "mock-mimi-facade"
 ```
 
@@ -341,8 +341,8 @@ spec is wired end-to-end against real services.
 additional release-gate check and writes `joint-smoke-gate.*`. Use
 `-SkipJointSmokeGate` only for local protocol-only release-gate debugging.
 
-Dual-soland runs write both `service-gaps.md` and `service-traces.md` under the
-joint artifact directory. `service-traces.md` indexes each alpha/beta soland
+Multi-server runs write both `service-gaps.md` and `service-traces.md` under the
+joint artifact directory. `service-traces.md` indexes each numbered Soland
 trace file plus stdout/stderr and command logs, so projection and federation
 failures can be debugged without reconstructing paths from HAR files.
 

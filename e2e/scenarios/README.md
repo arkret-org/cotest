@@ -28,7 +28,7 @@ e2e/
 - **68 条 scenarios**(19 个领域),其中
   - **66** 条业务 scenario 与 spec 一一对应(`scenarios/<domain>/<name>.md` ↔ `tests/<domain>/<name>.spec.ts`)
   - **2** 条 harness/probe 专属:[`harness/mocks-selftest`](harness/mocks-selftest.md)、[`spaces/admin-section-route`](spaces/admin-section-route.md)
-  - `workflows/incident-response`、dual-soland federation、history visibility、MIMI facade harness 等新增 coverage 均已登记到 catalog
+  - `workflows/incident-response`、multi-server federation、history visibility、MIMI facade harness 等新增 coverage 均已登记到 catalog
 - **86 个 playwright spec 文件**
 - **349 live test / 12 fixme / 149 条件 skip**(条件 skip 出现在 live test 体内或 `describe` 头部,基于运行时的 mock / topology / transport / claim_kind 状态决定是否执行)
 - **11 个 mock service**:OIDC IdP / Email 3PID / WebVH witness / DID host / Push gateway / Applet registry / TSP endpoint / MIMI facade / Claim issuer / Challenge provider / Savfox model
@@ -102,10 +102,10 @@ e2e/
 & "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -StartMocks -RunProfile joint-full
 
 # 双服务器 + 全部 mocks(最大覆盖)
-& "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -DualSoland -StartMocks -RunProfile joint-full
+& "D:\Works\arkret\cotest\scripts\run-joint-e2e.ps1" -StartCoauth -ServerCount 2 -StartMocks -RunProfile joint-full
 
-# cotest 本地 dual-soland profile(只跑 federation matrix)
-& "D:\Works\arkret\cotest\scripts\run-server-conformance.ps1" -Profile dual-soland
+# cotest 本地 multi-server profile(只跑 federation matrix)
+& "D:\Works\arkret\cotest\scripts\run-server-conformance.ps1" -Profile multi-server
 
 # 单个领域
 & "..." -StartCoauth -Grep "encryption/"

@@ -165,7 +165,7 @@ function buildInviteLocatorUrl(
 export async function issueInviteLocatorToken(
   request: APIRequestContext,
   sessionToken: string,
-  server: SolandKey = "alpha",
+  server: SolandKey = "server1",
 ): Promise<string> {
   const response = await request.post(
     `${solandBaseUrl(server)}/_arkret/self/invite-locators`,
