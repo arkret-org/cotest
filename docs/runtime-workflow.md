@@ -67,6 +67,22 @@ The harness reads these environment variables:
 - `scripts/run-joint-e2e.ps1 -SolandImage <tag>` for Playwright runs backed by
   a soland image.
 
+### Conformance storage
+
+`run-server-conformance.ps1 -Profile all|full-nightly` starts one ephemeral
+PostgreSQL and publishes it twice:
+
+- `COTEST_SOLAND_DATABASE_URL` is the store the harness hands to a spawned SUT.
+- `SOLAND_TEST_DATABASE_URL` is what soland's `TestDatabase::lease()` reads for
+  tests that link the storage adapter in-process. Those tests take sibling
+  `<database>_slotNN` leases, so they never touch the database the SUT migrates.
+
+Set either variable yourself to run against an existing server; an explicit
+`SOLAND_TEST_DATABASE_URL` or `DATABASE_URL` is left untouched. Without a
+reachable database the in-process tests panic with `no test database is
+configured` rather than passing vacuously -- soland has one storage
+implementation, so there is nothing to fall back to.
+
 ### Docker image contract
 
 The default image asset is [docker/soland.Dockerfile](../docker/soland.Dockerfile).

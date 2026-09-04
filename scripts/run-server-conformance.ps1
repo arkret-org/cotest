@@ -93,6 +93,38 @@ function Get-FreeTcpPort {
     }
 }
 
+# soland's `TestDatabase::lease()` reads `SOLAND_TEST_DATABASE_URL`, then
+# `DATABASE_URL`. It never reads `COTEST_SOLAND_DATABASE_URL`, which only names
+# the store the harness hands to a spawned SUT. Tests that link the storage
+# adapter in-process therefore saw no database at all and panicked with
+# "no test database is configured", so a clean shell could not reach a green
+# `-Profile all` run without an undocumented variable set by hand.
+#
+# Leases are taken as sibling `<database>_slotNN` databases created through the
+# configured URL, so pointing them at the conformance store cannot touch the
+# database the SUT itself migrates.
+#
+# Returns the value to publish, or $null when the caller already aimed the
+# suite somewhere and that choice must win.
+function Resolve-SolandTestDatabaseUrl {
+    param(
+        [AllowNull()][string]$ConformanceDatabaseUrl,
+        [AllowNull()][string]$ExistingSolandTestDatabaseUrl,
+        [AllowNull()][string]$ExistingDatabaseUrl
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ExistingSolandTestDatabaseUrl)) {
+        return $null
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ExistingDatabaseUrl)) {
+        return $null
+    }
+    if ([string]::IsNullOrWhiteSpace($ConformanceDatabaseUrl)) {
+        return $null
+    }
+    return $ConformanceDatabaseUrl
+}
+
 function Start-CotestTestPostgres {
     param(
         [string]$Image = "postgres:16-alpine",
@@ -2265,7 +2297,7 @@ if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
 }
 
 $originalEnv = @()
-foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN", "COTEST_SOLAND_DATABASE_URL") {
+foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN", "COTEST_SOLAND_DATABASE_URL", "SOLAND_TEST_DATABASE_URL") {
     $originalEnv += [pscustomobject]@{
         Name   = $name
         Exists = Test-Path "Env:$name"
@@ -2307,6 +2339,17 @@ try {
         $testPostgres = Start-CotestTestPostgres
         $env:COTEST_SOLAND_DATABASE_URL = $testPostgres.Url
         Add-RawLogLine -Path $rawLog -Value "conformance test PostgreSQL: $($testPostgres.ContainerName)"
+    }
+
+    $solandTestDatabaseUrl = Resolve-SolandTestDatabaseUrl `
+        -ConformanceDatabaseUrl $env:COTEST_SOLAND_DATABASE_URL `
+        -ExistingSolandTestDatabaseUrl $env:SOLAND_TEST_DATABASE_URL `
+        -ExistingDatabaseUrl $env:DATABASE_URL
+    if ($solandTestDatabaseUrl) {
+        # The URL carries credentials; the raw log is scanned for those, so
+        # record only that in-process leases were pointed at the same store.
+        $env:SOLAND_TEST_DATABASE_URL = $solandTestDatabaseUrl
+        Add-RawLogLine -Path $rawLog -Value "in-process storage leases: conformance PostgreSQL"
     }
 
     $exitCode = 0
