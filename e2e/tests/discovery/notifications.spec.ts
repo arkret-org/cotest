@@ -19,6 +19,7 @@ import {
   submitSignedEventApi,
 } from "../../helpers/soland-api";
 import {
+  approvePairingLinkOnAuthorizedDevice,
   assertJointStackNotRequired,
   ensureRegistered,
   issueDevSession,
@@ -564,15 +565,14 @@ test.describe("notifications", () => {
       await expect(pairingCode).toBeVisible({ timeout: 30_000 });
       const code = (await pairingCode.textContent())?.trim() ?? "";
       expect(code).not.toBe("");
-
-      const approvalModal = bobDevice1.page.getByTestId(
-        "device-pair-approval-modal",
+      const pairingLink = await bobDevice2Page.page
+        .getByTestId("pair-device-secret")
+        .inputValue();
+      await approvePairingLinkOnAuthorizedDevice(
+        bobDevice1,
+        pairingLink,
+        code,
       );
-      await expect(approvalModal).toBeVisible({ timeout: 90_000 });
-      await expect(
-        bobDevice1.page.getByTestId("device-pair-approval-code"),
-      ).toHaveText(code);
-      await bobDevice1.page.getByTestId("device-pair-approval-approve").click();
 
       const viewerUrl = `${solandBaseUrl()}/_arkret/self/account/viewer`;
       await expect

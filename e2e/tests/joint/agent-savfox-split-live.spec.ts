@@ -18,6 +18,7 @@ import {
   type JointRealmFixture,
 } from "../../helpers/joint-fixture";
 import {
+  approvePairingLinkOnAuthorizedDevice,
   createDpopUserSessionForAccount,
   type DpopUserSession,
   type JointUserPage,
@@ -1199,18 +1200,14 @@ async function openAndPairSecondController(
     await expect(pairingCode).toBeVisible({ timeout: 30_000 });
     const code = (await pairingCode.textContent())?.trim() ?? "";
     expect(code).not.toBe("");
-
-    const approvalModal = jointRealm.alicePage.page.getByTestId(
-      "device-pair-approval-modal",
+    const pairingLink = await device.page
+      .getByTestId("pair-device-secret")
+      .inputValue();
+    await approvePairingLinkOnAuthorizedDevice(
+      jointRealm.alicePage,
+      pairingLink,
+      code,
     );
-    await expect(approvalModal).toBeVisible({ timeout: 90_000 });
-    await expect(
-      jointRealm.alicePage.page.getByTestId("device-pair-approval-code"),
-    ).toHaveText(code);
-    await jointRealm.alicePage.page
-      .getByTestId("device-pair-approval-approve")
-      .click();
-    await expect(approvalModal).toBeHidden({ timeout: 90_000 });
 
     await device.page.getByTestId("pair-device-status-button").click();
     await expect(device.page.getByTestId("pair-device-status")).toContainText(

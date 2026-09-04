@@ -558,8 +558,7 @@ async fn authorize_additional_principal_device(
                     authorize_event: crate::publication::initial_submission(authorize_event, "")?,
                     display_name: None,
                     device_metadata: None,
-                    device_pairing_request_id: Some(stage.device_pairing_request_id.clone()),
-                    challenge_transcript: None,
+                    device_pairing_request_id: stage.device_pairing_request_id.clone(),
                 }),
             StatusCode::OK,
         )
