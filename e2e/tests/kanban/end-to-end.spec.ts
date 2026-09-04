@@ -619,6 +619,14 @@ test.describe("kanban end-to-end", () => {
         },
       },
     });
+    // Same shape as the cross-Realm rejection above: the registered CBA plane
+    // has to be on the envelope before it is signed-and-sent, and the body has
+    // to be JCS bytes. Posting the bare object let Playwright serialise it in
+    // insertion order, so the write was refused at wire validation
+    // (422 schema_violation, "canonical JSON input is not byte-for-byte
+    // canonical") and never reached the archived-Strand reducer this case is
+    // about.
+    await prepareSignedEventCbaApi(request, aliceToken, trackWrite);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,
@@ -626,7 +634,13 @@ test.describe("kanban end-to-end", () => {
     );
     const response = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
-      { headers: authHeaders(aliceToken), data: trackWrite },
+      {
+        headers: {
+          ...authHeaders(aliceToken),
+          "content-type": "application/json",
+        },
+        data: canonicalJson(trackWrite),
+      },
     );
     const responseBody = await response.json();
     expect(response.status(), JSON.stringify(responseBody)).toBe(409);

@@ -697,11 +697,20 @@ test.describe("third-party invite", () => {
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker and current live-verification owner:
   // arkret-work/work/tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
-  test("E3.3 double-claim: second claim of same token rejected (token consumed)", async ({
+  test("E3.3 double-claim: second claim of same token is wire-indistinguishable", async ({
     request,
   }) => {
     // third-party-invites.md §4.3 step 6 / §6.1 — once a token is claimed the
-    // invite is `claimed`; a second claim is refused with duplicate_conflict.
+    // invite is `claimed`, and a second claim is refused.
+    //
+    // conformance-vectors.md §9.7.1 fixes what the claimant may learn: the
+    // reducer's own reason for case 7 (claim nonce / token replay) is
+    // `duplicate_conflict`, but "所有失败通过外部 claim surface 返回不可枚举
+    // `not_found` 或同形态响应；具体 reason 只进入 audit / per-event rejected
+    // diagnostics". Asserting the internal reason here would require the claim
+    // surface to be an enumeration oracle that distinguishes "already claimed"
+    // from "no such invite" — exactly what that clause forbids, and what E3.1
+    // already pins for the expired-token case.
     const ctx = await setupPendingInvite(request, {
       fixtureNonce: "s3-double",
     });
@@ -780,6 +789,6 @@ test.describe("third-party invite", () => {
       }),
     );
     expect(secondClaim.accepted).toHaveLength(0);
-    expect(secondClaim.rejectReason).toBe("duplicate_conflict");
+    expect(secondClaim.rejectReason).toBe("not_found");
   });
 });
