@@ -51,9 +51,50 @@ function Add-InstallAction {
 
 function Update-CotestProcessPath {
     if (-not $IsWindows) { return }
-    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $env:PATH = @($machinePath, $userPath) | Where-Object { $_ } | Join-String -Separator ";"
+    # Refresh from the persisted stores so a just-installed package becomes
+    # visible, but keep the entries the caller handed this process first. A
+    # plain overwrite silently discards a run-scoped PATH prefix, which makes a
+    # tool that is installed-but-unregistered impossible to surface without
+    # editing the machine or user environment.
+    $inherited = @(($env:PATH -split ";") | Where-Object { $_ -and $_.Trim() })
+    $persisted = @(
+        @(
+            [Environment]::GetEnvironmentVariable("Path", "Machine"),
+            [Environment]::GetEnvironmentVariable("Path", "User")
+        ) |
+            Where-Object { $_ } |
+            ForEach-Object { $_ -split ";" } |
+            Where-Object { $_ -and $_.Trim() }
+    )
+    $ordered = [System.Collections.Generic.List[string]]::new()
+    $seen = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($entry in @($inherited + $persisted)) {
+        $trimmed = $entry.TrimEnd("\")
+        if ($seen.Add($trimmed)) { $ordered.Add($entry) | Out-Null }
+    }
+    $env:PATH = $ordered -join ";"
+}
+
+# Git for Windows and the standard Win64 OpenSSL installer both keep the
+# executable outside the default PATH. run-joint-e2e.ps1 resolves those stable
+# locations before it mints the run-scoped CA, so this gate MUST accept the
+# same installations instead of failing a machine the runner can actually use.
+function Find-CotestOpenSslPath {
+    $command = Get-Command "openssl" -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+    $candidates = @()
+    if ($env:ProgramFiles) {
+        $candidates += (Join-Path $env:ProgramFiles "Git\usr\bin\openssl.exe")
+        $candidates += (Join-Path $env:ProgramFiles "OpenSSL-Win64\bin\openssl.exe")
+    }
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+    return $null
 }
 
 function Invoke-CotestPackageCommand {
@@ -263,7 +304,7 @@ if ($platform.os -eq "windows") {
         if (-not (Get-Command cargo -ErrorAction SilentlyContinue) -or -not (Get-Command rustc -ErrorAction SilentlyContinue)) {
             $null = Install-CotestWindowsPrerequisite -Name "Rustup" -WingetId "Rustlang.Rustup" -ChocolateyPackage "rustup.install" -ScoopPackage "rustup"
         }
-        if (-not (Get-Command openssl -ErrorAction SilentlyContinue)) {
+        if (-not (Find-CotestOpenSslPath)) {
             $null = Install-CotestWindowsPrerequisite -Name "OpenSSL" -WingetId "ShiningLight.OpenSSL.Dev" -ChocolateyPackage "openssl" -ScoopPackage "openssl"
         }
         if ((Get-CotestCaddyInspection).status -ne "pass") { $null = Install-CotestCaddy }
@@ -307,14 +348,24 @@ if ($isAdministrator) {
 }
 
 function Find-CotestTool {
-    param([string]$Name, [string[]]$Arguments = @("--version"), [bool]$Required = $true, [string[]]$Repair = @())
-    $command = Get-Command $Name -ErrorAction SilentlyContinue
-    if (-not $command) {
+    param(
+        [string]$Name,
+        [string[]]$Arguments = @("--version"),
+        [bool]$Required = $true,
+        [string[]]$Repair = @(),
+        [scriptblock]$Resolver
+    )
+    $source = if ($Resolver) {
+        & $Resolver
+    } else {
+        (Get-Command $Name -ErrorAction SilentlyContinue).Source
+    }
+    if ([string]::IsNullOrWhiteSpace($source)) {
         Add-Check $Name $(if ($Required) { "fail" } else { "warn" }) "not found on PATH" $Repair
         return
     }
-    $version = (& $command.Source @Arguments 2>&1 | Out-String).Trim()
-    Add-Check $Name "pass" "path=$($command.Source); version=$version"
+    $version = (& $source @Arguments 2>&1 | Out-String).Trim()
+    Add-Check $Name "pass" "path=$source; version=$version"
 }
 
 Add-Check "mode" "pass" $(if ($isAdministrator) { "install missing prerequisites, initialize hosts access, then check" } else { "install missing prerequisites when permitted, then check; hosts access remains read-only" })
@@ -322,7 +373,7 @@ Add-Check "platform" "pass" "os=$($platform.os); architecture=$($platform.archit
 Find-CotestTool "node"
 Find-CotestTool "npm"
 Find-CotestTool "npx"
-Find-CotestTool "openssl"
+Find-CotestTool "openssl" -Resolver { Find-CotestOpenSslPath }
 Find-CotestTool "cargo"
 Find-CotestTool "rustc"
 Find-CotestTool "docker" @("--version") $RequireDocker.IsPresent
