@@ -76,7 +76,7 @@ struct HistoryKeyRecoveryFixture {
     organization_recovery_archive_durable_before_gc_kat: Value,
 }
 
-pub fn run_history_key_direct_traversal_suite() -> Result<()> {
+pub async fn run_history_key_direct_traversal_suite() -> Result<()> {
     let fixture: HistoryKeyRecoveryFixture = serde_json::from_value(load_artifact_json(
         "fixtures/history-key-recovery-fixture.json",
     )?)?;
@@ -154,11 +154,8 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             .pointer("/since_join_lineage")
             .context("history-key fixture omits since_join_lineage")?,
     )?;
-    tokio::runtime::Builder::new_current_thread()
-        .build()?
-        .block_on(verify_direct_traversal_replay_kat(
-            &fixture.direct_traversal_replay_kat,
-        ))
+    verify_direct_traversal_replay_kat(&fixture.direct_traversal_replay_kat)
+        .await
         .context("direct traversal replay KAT")?;
     verify_history_digest_and_sender_kats(&fixture).context("history digest and sender KATs")?;
     verify_governance_dependency_kats(&fixture).context("governance dependency KATs")?;
@@ -2400,8 +2397,8 @@ fn verify_since_join_lineage(lineage: &Value) -> Result<()> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn direct_traversal_suite_uses_the_shared_wire_types() {
-        run_history_key_direct_traversal_suite().unwrap();
+    #[tokio::test]
+    async fn direct_traversal_suite_uses_the_shared_wire_types() {
+        run_history_key_direct_traversal_suite().await.unwrap();
     }
 }

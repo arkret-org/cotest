@@ -34,7 +34,7 @@ impl SignalDecryptor for Recipient {
         signal: &'a SignalEnvelope,
         sender: &'a VerifiedSignalSenderKey,
     ) -> BoxSignalDecryptFuture<'a> {
-        Box::pin(async move {
+        let result = {
             let mut guard = self.state.lock().unwrap();
             let (group, replay) = &mut *guard;
             let authority = match sender.authority() {
@@ -57,7 +57,8 @@ impl SignalDecryptor for Recipient {
             group
                 .open_signal_envelope(signal, CONTENT_SCHEME, authority, &self.winner, replay)
                 .map_err(|error| garth::Error::Protocol(error.to_string()))
-        })
+        };
+        Box::pin(async move { result })
     }
 }
 

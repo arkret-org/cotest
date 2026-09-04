@@ -1,15 +1,25 @@
-import { expect, test, type Page } from "../../helpers/arkret-test";
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from "../../helpers/arkret-test";
 import {
   coauthBaseUrl,
   optionalEnv,
   realOidcLoginHandle,
   realOidcLoginPassword,
+  solandBaseUrl,
 } from "../../helpers/env";
-import { registerCoauthPasswordAccount } from "../../helpers/coauth-register";
+import {
+  registerCoauthPasswordAccount,
+  type CoauthPasswordAccount,
+} from "../../helpers/coauth-register";
 import {
   hardLogoutViaAccountMenu,
   openAcceptedDeviceForOidcLogin,
   serverLoginViaCoauth,
+  submitCoauthPasswordCredentials,
   type RealOidcAccount,
 } from "../../helpers/real-oidc-login";
 import {
@@ -70,7 +80,12 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       returningUser.deviceId = registeredAccount.genesisDeviceId;
     }
     const jointPage = registeredAccount
-      ? await openAcceptedDeviceForOidcLogin(browser, request, registeredAccount, "oidc-key-life")
+      ? await openAcceptedDeviceForOidcLogin(
+          browser,
+          request,
+          registeredAccount,
+          "oidc-key-life",
+        )
       : await openUserPage(browser, returningUser);
     const page = jointPage.page;
     const grants = observeSessionGrants(page);
@@ -127,55 +142,62 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
       });
 
       await test.step("new-device pairing advertises the device identity key, not the grant-binding key", async () => {
-        await page.goto("/settings/devices/pair", {
-          waitUntil: "domcontentloaded",
-        });
-        await expect(page.getByTestId("pair-device-card")).toBeVisible({
-          timeout: 120_000,
-        });
-        await page.getByTestId("pair-device-start-button").click();
-        const secret = page.getByTestId("pair-device-secret");
-        await expect(secret).toBeVisible({ timeout: 30_000 });
-        const pairingLink = new URL(await secret.inputValue());
-        expect(pairingLink.search).toBe("");
-        const pairingToken = new URLSearchParams(pairingLink.hash.slice(1)).get(
-          "token",
+        const pairingProbe = await openFreshLoginBrowser(
+          browser,
+          "oidc-key-life-pairing-probe",
         );
-        expect(
-          pairingToken,
-          "pairing token must be carried in the URL fragment",
-        ).toBeTruthy();
-        const resolve = await request.post(
-          new URL(
-            "/_arkret/open/device-pairing/resolve",
-            pairingLink.origin,
-          ).toString(),
-          { data: { pairing_token: pairingToken } },
-        );
-        expect(resolve.status(), await resolve.text()).toBe(200);
-        const bootstrap = (await resolve.json()) as {
-          new_device_pubkey?: {
-            kty?: string;
-            key?: string;
-            kid?: string;
-            algorithm?: string;
+        try {
+          await loginFreshBrowserToDeviceSetup(pairingProbe.page, account);
+          await pairingProbe.page
+            .getByTestId("device-setup-pairing-start")
+            .click();
+          const pairingLinkInput = pairingProbe.page.getByTestId(
+            "device-setup-pairing-link",
+          );
+          await expect(pairingLinkInput).toBeVisible({ timeout: 30_000 });
+          const pairingLink = new URL(await pairingLinkInput.inputValue());
+          expect(pairingLink.search).toBe("");
+          const pairingToken = new URLSearchParams(
+            pairingLink.hash.slice(1),
+          ).get("token");
+          expect(
+            pairingToken,
+            "pairing token must be carried in the URL fragment",
+          ).toBeTruthy();
+          const resolve = await request.post(
+            new URL(
+              "/_arkret/open/device-pairing/resolve",
+              pairingLink.origin,
+            ).toString(),
+            { data: { pairing_token: pairingToken } },
+          );
+          expect(resolve.status(), await resolve.text()).toBe(200);
+          const bootstrap = (await resolve.json()) as {
+            new_device_pubkey?: {
+              kty?: string;
+              key?: string;
+              kid?: string;
+              algorithm?: string;
+            };
           };
-        };
-        const pairingPublicKey = bootstrap.new_device_pubkey?.key;
-        expect(
-          pairingPublicKey,
-          "pairing request must publish the device identity signing public key",
-        ).toBeTruthy();
-        expect(bootstrap.new_device_pubkey?.kty).toBe("OKP");
-        expect(bootstrap.new_device_pubkey?.algorithm).toBe("Ed25519");
-        expect(
-          Buffer.from(pairingPublicKey as string, "base64url"),
-          "pairing request must publish a canonical raw Ed25519 public key",
-        ).toHaveLength(32);
-        expect(
-          bootstrap.new_device_pubkey?.key,
-          "pairing request must not publish the grant-binding cnf.jkt",
-        ).not.toBe(activeGrant.jkt);
+          const pairingPublicKey = bootstrap.new_device_pubkey?.key;
+          expect(
+            pairingPublicKey,
+            "pairing request must publish the device identity signing public key",
+          ).toBeTruthy();
+          expect(bootstrap.new_device_pubkey?.kty).toBe("OKP");
+          expect(bootstrap.new_device_pubkey?.algorithm).toBe("Ed25519");
+          expect(
+            Buffer.from(pairingPublicKey as string, "base64url"),
+            "pairing request must publish a canonical raw Ed25519 public key",
+          ).toHaveLength(32);
+          expect(
+            bootstrap.new_device_pubkey?.key,
+            "pairing request must not publish the grant-binding cnf.jkt",
+          ).not.toBe(activeGrant.jkt);
+        } finally {
+          await pairingProbe.close();
+        }
       });
 
       await test.step("soft refresh preserves the grant-binding key and device signer", async () => {
@@ -250,6 +272,41 @@ test.describe("holder device key lifecycle separation @fully-implemented", () =>
   });
 });
 
+async function openFreshLoginBrowser(
+  browser: Browser,
+  label: string,
+): Promise<JointUserPage> {
+  return openUserPage(browser, uniqueUser(label), {
+    neutralLoginConfig: true,
+    autoCompleteRecoveryKeySetup: false,
+  });
+}
+
+async function loginFreshBrowserToDeviceSetup(
+  page: Page,
+  account: RealOidcAccount | CoauthPasswordAccount,
+): Promise<void> {
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("login-server-url").fill(solandBaseUrl());
+  await page.getByTestId("start-server-login-button").click();
+  await submitCoauthPasswordCredentials(page, account);
+
+  const approve = page.getByTestId("coauth-oauth-approve");
+  if (
+    await approve
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .then(() => true)
+      .catch(() => false)
+  ) {
+    await approve.click();
+  }
+
+  await expect(page.getByTestId("device-setup-required")).toBeVisible({
+    timeout: 120_000,
+  });
+  await expect(page.getByTestId("client-shell")).toHaveCount(0);
+}
+
 function observeSessionGrants(page: Page) {
   const seen: CapturedGrant[] = [];
   page.on("request", (request) => {
@@ -312,10 +369,14 @@ function observeSessionGrantRefreshes(page: Page) {
     void response
       .json()
       .then((body) => {
-        const jwt = typeof body?.grant_jwt === "string" ? body.grant_jwt : "";
+        const jwt =
+          typeof body?.session_grant === "string" ? body.session_grant : "";
+        const sessionPublicKey = body?.session_public_key;
         const jkt =
-          typeof body?.dpop_jkt === "string" && body.dpop_jkt.trim()
-            ? body.dpop_jkt
+          sessionPublicKey?.kty === "OKP" &&
+          sessionPublicKey?.crv === "Ed25519" &&
+          typeof sessionPublicKey?.x === "string"
+            ? jwkThumbprintEd25519(sessionPublicKey.x)
             : grantJkt(jwt);
         if (jwt && jkt && seen.at(-1)?.jwt !== jwt) {
           seen.push({ jwt, jkt });
@@ -342,7 +403,9 @@ function grantJkt(jwt: string): string | undefined {
     );
     const encoded = payload?.session_public_key;
     const jwk = typeof encoded === "string" ? JSON.parse(encoded) : encoded;
-    return jwk?.kty === "OKP" && jwk?.crv === "Ed25519" && typeof jwk?.x === "string"
+    return jwk?.kty === "OKP" &&
+      jwk?.crv === "Ed25519" &&
+      typeof jwk?.x === "string"
       ? jwkThumbprintEd25519(jwk.x)
       : undefined;
   } catch {

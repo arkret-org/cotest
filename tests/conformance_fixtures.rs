@@ -250,11 +250,12 @@ conformance_test!(
     cotest::conformance::run_service_closure_hardening_fixture_suite,
 );
 
-conformance_test!(
-    history_key_direct_traversal_fixture_matches_shared_sdk_types,
-    "history_key_direct_traversal_fixture",
-    cotest::conformance::run_history_key_direct_traversal_suite,
-);
+#[tokio::test]
+#[serial(conformance_fixtures)]
+async fn history_key_direct_traversal_fixture_matches_shared_sdk_types() -> Result<()> {
+    let _guard = enter_scenario("history_key_direct_traversal_fixture");
+    cotest::conformance::run_history_key_direct_traversal_suite().await
+}
 
 conformance_test!(
     push_route_revision_fixture_matches_production_sdk,
