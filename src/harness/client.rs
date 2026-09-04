@@ -1057,6 +1057,45 @@ impl TestActorClient {
         Ok(event)
     }
 
+    /// Author and submit one actor-private `ak.read_cursor.advance`.
+    ///
+    /// `read-receipts.md` §6.6 keeps this Event off the shared Realm timeline:
+    /// the device authors and signs the complete cursor, submits it through
+    /// `ak.self.read_cursor.command.advance.v1`
+    /// (`POST /_arkret/self/read-cursors`, service-http-binding.md), and the
+    /// service forwards those exact bytes without rebuilding or re-signing
+    /// them. Submitting through the shared Realm surface instead would test a
+    /// path the cursor is defined not to take.
+    ///
+    /// The cursor object carries no `updated_at` (`read-receipts.md` §6.1): it
+    /// is never updated in place, so the time of this update is the envelope
+    /// `created_at` and MUST NOT be restated in the payload.
+    pub async fn advance_read_cursor(&self, realm_id: &str, payload: Value) -> Result<Value> {
+        let event = self
+            .author_event(realm_id, "ak.read_cursor.advance", payload)
+            .await?;
+        expect_json(
+            self.post("/_arkret/self/read-cursors").json(&json!({
+                "advance_event": crate::publication::initial_submission(event, "")?
+            })),
+            StatusCode::OK,
+        )
+        .await
+    }
+
+    /// Read the actor-private read cursors this holder can see in `realm_id`.
+    ///
+    /// This is the read-back surface `read-receipts.md` §6.6 names, and the
+    /// only one that may carry a cursor.
+    pub async fn read_cursors(&self, realm_id: &str) -> Result<Value> {
+        expect_json(
+            self.get("/_arkret/self/read-cursors")
+                .query(&[("realm_id", realm_id)]),
+            StatusCode::OK,
+        )
+        .await
+    }
+
     pub async fn sync(&self) -> Result<Value> {
         let response = expect_response(
             self.get("/_arkret/self/account/subscribe?catchup=true")

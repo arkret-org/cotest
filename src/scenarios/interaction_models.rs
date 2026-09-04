@@ -1,11 +1,11 @@
 use anyhow::{Result, anyhow};
-use arkret_identifiers::{MessageId, ReadCursorId};
+use arkret_identifiers::MessageId;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
 use crate::harness::{
     actor_core_id, events_query_for_realm, expect_json, expect_response, expect_status,
-    message_redact_payload, message_revise_text_payload, next_typed_id, submitted_event_id,
+    message_redact_payload, message_revise_text_payload, submitted_event_id,
 };
 use crate::scenarios::identity_test_support::{
     actor_did_for_service_did, spawn_with_harness_account_authority,
@@ -154,17 +154,20 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
     // thread's root *message* (`ak:message:<event-token>`), not an opaque
     // `ak:thread:` string. Derive it from the root message's event id.
     let thread_root_ref = MessageId::from_event_id(&sent_event_id).to_string();
-    let read_cursor_id = ReadCursorId::new(next_typed_id("read_cursor"))?;
     let dave_actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
         arkret_wire::DidCoreId::new(actor_core_id(&dave.actor)?)?,
         server.service_id().clone(),
     ));
+    // `ak.read_cursor.advance` is actor-private (read-receipts.md §6.6): it is
+    // submitted through `ak.self.read_cursor.command.advance.v1`, read back
+    // from `/_arkret/self/read-cursors`, and MUST NOT enter the shared Realm
+    // timeline -- not even for the cursor's own owner. The three assertions
+    // below are that contract: accepted on the self surface, visible on the
+    // self surface, absent from the Realm surface.
     let marker = dave
-        .submit_event(
+        .advance_read_cursor(
             &realm_id,
-            "ak.read_cursor.advance",
             json!({
-                "id": read_cursor_id,
                 "schema": "ak.schema.read_cursor.v1",
                 "actor_id": dave_actor_id,
                 "device_id": dave.device_id,
@@ -176,21 +179,42 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
                 "position": {
                     "event_id": sent_event_id,
                     "hlc": "019041000000-0001-1dae0001"
-                },
-                "updated_at": "2026-05-02T00:00:00.000Z"
+                }
             }),
         )
         .await?;
-    assert_eq!(marker["status"], "accepted");
-    let marker_event_id = submitted_event_id(&marker)?;
+    assert_eq!(
+        marker["read_scope"]["container_ref"], thread_root_ref,
+        "read marker outcome names the thread root: {marker}"
+    );
+    assert_eq!(
+        marker["position"]["event_id"].as_str(),
+        Some(sent_event_id.as_str()),
+        "read marker outcome carries the acknowledged position: {marker}"
+    );
 
-    let markers = expect_json(
+    let markers = dave.read_cursors(&realm_id).await?;
+    assert!(
+        markers["markers"]
+            .as_array()
+            .expect("read cursor list response includes markers")
+            .iter()
+            .any(|entry| {
+                entry["read_scope"]["kind"] == "thread"
+                    && entry["read_scope"]["container_ref"] == thread_root_ref
+                    && entry["position"]["event_id"].as_str() == Some(sent_event_id.as_str())
+                    && entry["device_id"].as_str() == Some(dave.device_id.as_str())
+            }),
+        "actor-private read cursor surface did not return the accepted marker: {markers}"
+    );
+
+    let realm_events = expect_json(
         dave.query("/_arkret/self/events")
             .json(&events_query_for_realm(&realm_id, 50)?),
         StatusCode::OK,
     )
     .await?;
-    let marker_events = markers["events"]
+    let leaked = realm_events["events"]
         .as_array()
         .expect("events query response includes events")
         .iter()
@@ -200,13 +224,8 @@ pub async fn message_revision_reaction_marker_and_subscribe_work() -> Result<()>
         })
         .collect::<Vec<_>>();
     assert!(
-        marker_events.iter().any(|event| {
-            event["event_id"].as_str() == Some(marker_event_id.as_str())
-                && event["payload"]["position"]["event_id"].as_str() == Some(sent_event_id.as_str())
-                && event["payload"]["read_scope"]["container_ref"] == thread_root_ref
-                && event["payload"]["read_scope"]["kind"] == "thread"
-        }),
-        "events query did not include accepted read cursor marker: {markers}"
+        leaked.is_empty(),
+        "shared Realm query leaked actor-private read cursor Events: {leaked:?}"
     );
 
     let revised = alice

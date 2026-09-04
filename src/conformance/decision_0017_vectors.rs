@@ -44,7 +44,6 @@ struct ReadCursorCase {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CursorPosition {
-    id: String,
     device_id: String,
     event_id: String,
     hlc: String,
@@ -133,7 +132,6 @@ pub fn run_read_cursor_multi_device_merge_vector_suite() -> Result<()> {
 
 fn make_cursor(shared: &Map<String, Value>, position: &CursorPosition) -> Result<ReadCursor> {
     let mut value = shared.clone();
-    value.insert("id".to_owned(), Value::String(position.id.clone()));
     value.insert(
         "device_id".to_owned(),
         Value::String(position.device_id.clone()),
