@@ -379,11 +379,24 @@ if ($platform.os -ne "windows") {
 
 $requiredHosts = @(Get-CotestJointHostNames -ServerCount $ServerCount -IncludeCoauth $StartCoauth.IsPresent -IncludeUnregisteredProbe $true)
 $portsPerServer = if ($StartCoauth) { 4 } else { 2 }
-$minimumMemoryGb = [math]::Max(4, 2 + ($ServerCount * $(if ($StartCoauth) { 2 } else { 1 })))
-Add-Check "topology budget" "pass" "servers=$ServerCount; hosts=$($requiredHosts -join ','); estimated_tcp_ports=$($ServerCount * $portsPerServer + 1); recommended_memory_gb=$minimumMemoryGb; independent_databases=$($ServerCount * $(if ($StartCoauth) { 2 } else { 1 }))"
+$recommendedMemoryGb = [math]::Max(4, 2 + ($ServerCount * $(if ($StartCoauth) { 2 } else { 1 })))
+# The recommendation includes headroom for transient browser/build activity;
+# treating that exact boundary as a hard prerequisite made healthy machines
+# fail preflight because free memory naturally fluctuates by a few hundred MB.
+# Keep a lower safety floor as the actual gate and surface the headroom gap as
+# a warning so callers can close applications before a resource-heavy run.
+$minimumMemoryGb = [math]::Max(4, [math]::Ceiling($recommendedMemoryGb * 0.75))
+Add-Check "topology budget" "pass" "servers=$ServerCount; hosts=$($requiredHosts -join ','); estimated_tcp_ports=$($ServerCount * $portsPerServer + 1); recommended_memory_gb=$recommendedMemoryGb; minimum_memory_gb=$minimumMemoryGb; independent_databases=$($ServerCount * $(if ($StartCoauth) { 2 } else { 1 }))"
 if ($platform.os -eq "windows") {
     $availableMemoryGb = [math]::Round((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1MB, 2)
-    Add-Check "available memory" $(if ($availableMemoryGb -ge $minimumMemoryGb) { "pass" } else { "fail" }) "available_gb=$availableMemoryGb; required_gb=$minimumMemoryGb"
+    $memoryStatus = if ($availableMemoryGb -ge $recommendedMemoryGb) {
+        "pass"
+    } elseif ($availableMemoryGb -ge $minimumMemoryGb) {
+        "warn"
+    } else {
+        "fail"
+    }
+    Add-Check "available memory" $memoryStatus "available_gb=$availableMemoryGb; recommended_gb=$recommendedMemoryGb; minimum_gb=$minimumMemoryGb"
 }
 $outputDrive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($OutputDirectory))
 $freeDiskGb = [math]::Round($outputDrive.AvailableFreeSpace / 1GB, 2)

@@ -697,7 +697,10 @@ export async function createRealmApi(
      * Optional home Station DID for directed invite-create events.
      * Seed-member (`ak.member.state{membership=invite}`) events intentionally
      * have no delivery target; callers exercising cross-server invite fanout
-     * opt in here so the helper emits the canonical `ak.invite.create` event.
+     * opt in here so the helper emits the canonical `ak.invite.create` event
+     * and submits it through `ak.self.invites.command.dispatch.v1`. The
+     * Station, rather than the test process, then owns the durable peer
+     * delivery.
      */
     invitee_ids?: Record<string, string>;
     /**
@@ -918,7 +921,7 @@ export async function createRealmApi(
     );
     if (!recipientServer) throw new Error("directed invite recipient Station is not configured");
     const inviteeAccountId = accountActorId(invitee, recipientServer, recipientServiceId).account_id;
-    const evidence = { kind: "explicit_address" };
+    const evidence = { kind: "explicit_address" } as const;
     const sealBasis = await readRealmSealBasis(
       request,
       token,
@@ -948,6 +951,30 @@ export async function createRealmApi(
       server: opts.server,
       context: `directed invite ${invitee}`,
     });
+    if (data.invitee_ids?.[invitee] !== undefined) {
+      const inviteEventId = stringValue(inviteEvent.event_id);
+      if (!inviteEventId) {
+        throw new Error(`directed invite ${invitee} is missing event_id`);
+      }
+      const dispatch = await dispatchSelfInviteApi(
+        request,
+        token,
+        selfInviteDispatchBody({
+          eventId: inviteEventId,
+          inviteAddress: {
+            account_id: inviteeAccountId,
+            service_resolution: canonicalServiceResolution(recipientServer),
+          },
+          evidence,
+        }),
+        { server: opts.server },
+      );
+      if (dispatch.status !== "accepted" && dispatch.status !== "duplicate") {
+        throw new Error(
+          `directed invite dispatch for ${invitee} returned ${dispatch.status}`,
+        );
+      }
+    }
   }
 
   return realmId;

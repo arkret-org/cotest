@@ -273,8 +273,8 @@ function Find-CommandPath {
 }
 
 function Find-OpenSslPath {
-    $command = Find-CommandPath @("openssl.exe", "openssl")
-    if ($command) {
+    [string]$command = Find-CommandPath @("openssl.exe", "openssl")
+    if (-not [string]::IsNullOrWhiteSpace($command)) {
         return $command
     }
 
@@ -1673,9 +1673,9 @@ function Stop-EphemeralPostgres {
 # what `sql_private_material_column` exists for: it matches the column list and
 # flags the whole statement.
 #
-# A dump failure is reported and skipped rather than failing the run: this is
-# additional scan coverage, and the run's own verdict must not hinge on whether
-# `pg_dump` was reachable. The scan still fails closed on everything it did read.
+# A dump failure is returned to the caller as `$null`. The joint runner records
+# that as incomplete durable-store coverage and fails the run: a scan must never
+# claim success when a database it was expected to inspect disappeared.
 function Export-EphemeralPostgresDump {
     param(
         [Parameter(Mandatory = $true)][string]$ContainerName,
@@ -2356,6 +2356,68 @@ function Get-ManagedServiceFailures {
                     stdout = $service.Stdout
                     stderr = $service.Stderr
                 }) | Out-Null
+        }
+    }
+    return $failures.ToArray()
+}
+
+function Get-JointTopologyHealthFailures {
+    param(
+        [Parameter(Mandatory = $true)][string]$TopologyPath,
+        [Parameter(Mandatory = $true)]$ManagedServices
+    )
+
+    if (-not (Test-Path -LiteralPath $TopologyPath -PathType Leaf)) {
+        return @()
+    }
+
+    $managedNames = @{}
+    foreach ($service in $ManagedServices) {
+        $managedNames[[string]$service.Name] = $service
+    }
+
+    $failures = [System.Collections.Generic.List[object]]::new()
+    $topology = Get-Content -Raw -LiteralPath $TopologyPath | ConvertFrom-Json
+    foreach ($server in @($topology.servers)) {
+        foreach ($kind in @("soland", "coauth")) {
+            $serviceProperty = $server.PSObject.Properties[$kind]
+            if (-not $serviceProperty -or -not $serviceProperty.Value) { continue }
+
+            $name = "$kind-$($server.name)"
+            if (-not $managedNames.ContainsKey($name)) { continue }
+
+            $baseUrl = [string]$serviceProperty.Value.public_url
+            if ([string]::IsNullOrWhiteSpace($baseUrl)) { continue }
+
+            $healthy = $false
+            try {
+                $requestOptions = @{}
+                if (([System.Uri]$baseUrl).Scheme -eq "https") {
+                    $requestOptions.SkipCertificateCheck = $true
+                }
+                $response = Invoke-WebRequest `
+                    -Uri "$($baseUrl.TrimEnd('/'))/health" `
+                    -UseBasicParsing `
+                    -TimeoutSec 5 `
+                    -ErrorAction Stop `
+                    @requestOptions
+                $healthy = $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
+            }
+            catch {
+                $healthy = $false
+            }
+
+            if (-not $healthy) {
+                $managed = $managedNames[$name]
+                $failures.Add([pscustomobject]@{
+                        name = $name
+                        kind = $managed.Kind
+                        exit_code = $null
+                        detail = "managed service health endpoint was unavailable after test execution"
+                        stdout = $managed.Stdout
+                        stderr = $managed.Stderr
+                    }) | Out-Null
+            }
         }
     }
     return $failures.ToArray()
@@ -3046,6 +3108,7 @@ $solandServer2DatabaseDsn = $null
 # roots because the verdict differs by artifact class: signed authorization
 # evidence is expected here, recovery private material never is.
 $storeDumpDir = Join-Path $jointDir "stores"
+$storeDumpFailures = [System.Collections.Generic.List[string]]::new()
 $exitCode = 1
 $runnerError = $null
 $startedAt = Get-Date
@@ -4390,6 +4453,7 @@ try {
     }
     $topologyServers = @()
     foreach ($server in $runtimeServers) {
+        $solandStoragePrefix = if ($server.Index -eq 1) { "soland" } else { "soland-$($server.Name)" }
         $solandManaged = @($managedServices | Where-Object { $_.Name -eq "soland-$($server.Name)" }) | Select-Object -Last 1
         $coauthManaged = @($managedServices | Where-Object { $_.Name -eq "coauth-$($server.Name)" }) | Select-Object -Last 1
         $peerNames = @($runtimeServers | Where-Object { $_.Name -ne $server.Name } | ForEach-Object { $_.Name })
@@ -4448,8 +4512,11 @@ try {
         tls = [pscustomobject]@{ enabled = [bool]$jointTlsEnabled; port = $jointTlsPort; ca_path = if ($jointTlsAssets) { $jointTlsAssets.CaPemPath } else { $null }; unregistered_probe = if ($jointTlsPort) { "https://unregistered.local.host:$jointTlsPort" } else { $null } }
         servers = $topologyServers
     }
+    $topologyCandidatePath = Join-Path $jointDir "topology.candidate.json"
+    $topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyCandidatePath -Encoding utf8NoBOM
     Assert-CotestTopologyIsolation -Topology $topology
     $topology | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $topologyPath -Encoding utf8NoBOM
+    Remove-Item -LiteralPath $topologyCandidatePath -ErrorAction SilentlyContinue
     $env:COTEST_TOPOLOGY_PATH = $topologyPath
     if ($CoauthBaseUrl) {
         Assert-CoauthDpopGrantSeamReady -BaseUrl $CoauthBaseUrl
@@ -4639,8 +4706,18 @@ try {
         # joint run must not fail merely because those secrets are intentionally
         # absent. An explicit grep for @platform-live remains the opt-in path and
         # keeps the test's fail-closed precondition checks intact.
+        $grepInvertPatterns = [System.Collections.Generic.List[string]]::new()
         if (-not ($effectiveGrep -and $effectiveGrep.Contains("@platform-live"))) {
-            $playwrightArgs += @("--grep-invert", "@platform-live")
+            $grepInvertPatterns.Add("@platform-live")
+        }
+        # The three-server P0 describe block deliberately fails closed when its
+        # topology is absent. Broad one/two-server runs must not select it in the
+        # first place; an explicit grep remains an opt-in fail-closed probe.
+        if ($ServerCount -lt 3 -and -not ($effectiveGrep -and $effectiveGrep.Contains("@three-server-p0"))) {
+            $grepInvertPatterns.Add("@three-server-p0")
+        }
+        if ($grepInvertPatterns.Count -gt 0) {
+            $playwrightArgs += @("--grep-invert", ($grepInvertPatterns -join "|"))
         }
         $playwrightStdout = Join-Path $jointDir "playwright.stdout.log"
         $playwrightStderr = Join-Path $jointDir "playwright.stderr.log"
@@ -4651,19 +4728,33 @@ try {
         $playwrightCommand = $playwrightCli.FilePath
         $playwrightCommandArgs = @($playwrightCli.Arguments) + $playwrightArgs
         Push-Location $e2eRoot
+        $playwrightWriter = $null
         try {
             $previousErrorActionPreference = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
-            $playwrightOutput = & $playwrightCommand @playwrightCommandArgs 2>&1
+            $playwrightWriter = [System.IO.StreamWriter]::new(
+                $playwrightStdout,
+                $false,
+                [System.Text.UTF8Encoding]::new($false)
+            )
+            $playwrightWriter.AutoFlush = $true
+            & $playwrightCommand @playwrightCommandArgs 2>&1 | ForEach-Object {
+                $line = [string]$_
+                $safeLine = [regex]::Replace(
+                    $line,
+                    '(?i)(authorization\s*:\s*(?:bearer|dpop)\s+)(?!\[redacted\])\S+',
+                    '$1[redacted]'
+                )
+                $playwrightWriter.WriteLine($safeLine)
+                Write-Host $safeLine
+            }
             $exitCode = $LASTEXITCODE
-            $persistedPlaywrightOutput = @($playwrightOutput | ForEach-Object { [string]$_ } | Where-Object {
-                    $_ -notmatch '(?i)^\s*(?:-\s*)?authorization\s*:'
-                })
-            $persistedPlaywrightOutput | Set-Content -Path $playwrightStdout -Encoding UTF8
             "" | Set-Content -Path $playwrightStderr -Encoding UTF8
-            $persistedPlaywrightOutput | ForEach-Object { Write-Host $_ }
         }
         finally {
+            if ($playwrightWriter) {
+                $playwrightWriter.Dispose()
+            }
             if ($null -ne $previousErrorActionPreference) {
                 $ErrorActionPreference = $previousErrorActionPreference
             }
@@ -4674,12 +4765,22 @@ catch {
     $exitCode = 1
     # Capture a bounded diagnostic without config contents or command arguments.
     # Continue through cleanup and report/secret-scan finalization on setup errors.
+    $runnerErrorLog = Join-Path $jointDir "runner-error.log"
+    $runnerStackTrace = [string]$_.ScriptStackTrace
+    $runnerReason = ConvertTo-SecretPreview -Line ([string]$_.Exception.Message)
+    @(
+        "type=$($_.Exception.GetType().FullName)"
+        "line=$($_.InvocationInfo.ScriptLineNumber)"
+        "reason=$runnerReason"
+        "stack=$runnerStackTrace"
+    ) | Set-Content -LiteralPath $runnerErrorLog -Encoding UTF8
     $runnerError = [pscustomobject]@{
         type = $_.Exception.GetType().FullName
         line = $_.InvocationInfo.ScriptLineNumber
         phase = "runner"
+        diagnostic = $runnerErrorLog
     }
-    Write-Warning "Joint runner failed at line $($runnerError.line) ($($runnerError.type)); see phase logs in $jointDir"
+    Write-Warning "Joint runner failed at line $($runnerError.line) ($($runnerError.type)); see $runnerErrorLog"
 }
 finally {
     $controlFailures = @(Sync-JointControlledServices -TopologyPath $topologyPath -ManagedServices $managedServices)
@@ -4688,16 +4789,14 @@ finally {
         foreach ($controlFailure in $controlFailures) { Write-Warning $controlFailure }
     }
     $managedServiceFailures = @(Get-ManagedServiceFailures -Services $managedServices)
-    Write-ManagedServiceFailureReport `
-        -Failures $managedServiceFailures `
-        -JsonPath $managedServiceFailuresJson `
-        -MarkdownPath $managedServiceFailuresMd
-    if ($managedServiceFailures.Count -gt 0) {
-        $exitCode = 1
-        foreach ($failure in $managedServiceFailures) {
-            Write-Warning "Managed service '$($failure.name)' failed during the test run; see $managedServiceFailuresMd"
-        }
-    }
+    $failedManagedNames = @($managedServiceFailures | ForEach-Object { [string]$_.name })
+    $topologyHealthFailures = @(
+        Get-JointTopologyHealthFailures `
+            -TopologyPath $topologyPath `
+            -ManagedServices $managedServices |
+            Where-Object { $_.name -notin $failedManagedNames }
+    )
+    $managedServiceFailures = @($managedServiceFailures; $topologyHealthFailures)
     if (-not $KeepServices) {
         for ($index = $managedServices.Count - 1; $index -ge 0; $index--) {
             Stop-ManagedCommand -Service $managedServices[$index]
@@ -4714,6 +4813,8 @@ finally {
                 -OutputPath (Join-Path $storeDumpDir "coauth-postgres.sql")
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
+            } else {
+                $storeDumpFailures.Add($ephemeralCoauthServer1Postgres.ContainerName) | Out-Null
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralCoauthServer1Postgres.ContainerName
         }
@@ -4721,7 +4822,11 @@ finally {
             $postgresDump = Export-EphemeralPostgresDump `
                 -ContainerName $ephemeralCoauthServer2Postgres.ContainerName `
                 -OutputPath (Join-Path $storeDumpDir "coauth-server2-postgres.sql")
-            if ($postgresDump) { Write-Host "postgres dump: $postgresDump" }
+            if ($postgresDump) {
+                Write-Host "postgres dump: $postgresDump"
+            } else {
+                $storeDumpFailures.Add($ephemeralCoauthServer2Postgres.ContainerName) | Out-Null
+            }
             Stop-EphemeralPostgres -ContainerName $ephemeralCoauthServer2Postgres.ContainerName
         }
         if ($ephemeralSolandPostgres) {
@@ -4730,6 +4835,8 @@ finally {
                 -OutputPath (Join-Path $storeDumpDir "soland-postgres.sql")
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
+            } else {
+                $storeDumpFailures.Add($ephemeralSolandPostgres.ContainerName) | Out-Null
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralSolandPostgres.ContainerName
         }
@@ -4739,6 +4846,8 @@ finally {
                 -OutputPath (Join-Path $storeDumpDir "soland-server2-postgres.sql")
             if ($postgresDump) {
                 Write-Host "postgres dump: $postgresDump"
+            } else {
+                $storeDumpFailures.Add($ephemeralSolandServer2Postgres.ContainerName) | Out-Null
             }
             Stop-EphemeralPostgres -ContainerName $ephemeralSolandServer2Postgres.ContainerName
         }
@@ -4749,7 +4858,11 @@ finally {
             )) {
                 if ($store.Database) {
                     $postgresDump = Export-EphemeralPostgresDump -ContainerName $store.Database.ContainerName -OutputPath (Join-Path $storeDumpDir $store.File)
-                    if ($postgresDump) { Write-Host "postgres dump: $postgresDump" }
+                    if ($postgresDump) {
+                        Write-Host "postgres dump: $postgresDump"
+                    } else {
+                        $storeDumpFailures.Add($store.Database.ContainerName) | Out-Null
+                    }
                     Stop-EphemeralPostgres -ContainerName $store.Database.ContainerName
                 }
             }
@@ -4771,6 +4884,27 @@ finally {
         }
         if ($mockAppletRegistryStateKeyFile) {
             Remove-Item -LiteralPath $mockAppletRegistryStateKeyFile -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    foreach ($containerName in $storeDumpFailures) {
+        $managedServiceFailures += [pscustomobject]@{
+            name = $containerName
+            kind = "postgres"
+            exit_code = $null
+            detail = "required durable-store export failed; secret-scan coverage is incomplete"
+            stdout = $null
+            stderr = $null
+        }
+    }
+    Write-ManagedServiceFailureReport `
+        -Failures $managedServiceFailures `
+        -JsonPath $managedServiceFailuresJson `
+        -MarkdownPath $managedServiceFailuresMd
+    if ($managedServiceFailures.Count -gt 0) {
+        $exitCode = 1
+        foreach ($failure in $managedServiceFailures) {
+            Write-Warning "Managed service '$($failure.name)' failed during the test run; see $managedServiceFailuresMd"
         }
     }
 }
@@ -5250,17 +5384,17 @@ $requiredScenarios = @(
 )
 $forbidRuntimeSkips = [bool]$ForbidSkippedTests -or $RunProfile -eq "joint-smoke"
 if ($ServerCount -ge 3 -and $RunProfile -eq "joint-full") {
-    $requiredScenarios = @($requiredScenarios; "federation/three-server-p0") | Sort-Object -Unique
+    $requiredScenarios = @(@($requiredScenarios; "federation/three-server-p0") | Sort-Object -Unique)
 }
 if ($RunProfile -eq "joint-smoke" -and -not $Grep) {
-    $requiredScenarios = @(
+    $requiredScenarios = @(@(
         $requiredScenarios
         "encryption/key-backup"
         "identity/contact-graph"
         "identity/multi-device"
         "identity/recovery-key-to-encrypted-realm"
         "kanban/cross-member-encrypted"
-    ) | Sort-Object -Unique
+    ) | Sort-Object -Unique)
 }
 $selectionGateFailures = @()
 if ($requiredScenarios.Count -gt 0 -or $forbidRuntimeSkips) {
@@ -5469,7 +5603,11 @@ foreach ($descriptor in $secretScanRootDescriptors) {
 }
 $secretScan = [pscustomobject]@{
     generated_at = (Get-Date).ToString("o")
-    status = if ($secretScanSelfTestStatus -eq "passed" -and $secretScanCounts.failing -eq 0) {
+    status = if (
+        $secretScanSelfTestStatus -eq "passed" -and
+        $secretScanCounts.failing -eq 0 -and
+        $storeDumpFailures.Count -eq 0
+    ) {
         "passed"
     } else {
         "failed"
@@ -5477,6 +5615,10 @@ $secretScan = [pscustomobject]@{
     self_test = $secretScanSelfTestStatus
     scanned_roots = $secretScanRootDescriptors
     scanned_files = $secretScanFileCount
+    store_coverage = [pscustomobject]@{
+        status = if ($storeDumpFailures.Count -eq 0) { "complete" } else { "incomplete" }
+        failed_containers = $storeDumpFailures.ToArray()
+    }
     counts = $secretScanCounts
     redaction = $secretRedaction
     leaks = $secretLeaks
@@ -5493,6 +5635,7 @@ $secretScanLines = @(
     "- status: $($secretScan.status)",
     "- self_test: $($secretScan.self_test)",
     "- scanned_files: $($secretScan.scanned_files)",
+    "- durable_store_coverage: $($secretScan.store_coverage.status)",
     "- findings: $($secretScan.counts.findings)",
     "- failing: $($secretScan.counts.failing)",
     "- allowed_by_artifact_class: $($secretScan.counts.allowed_by_artifact_class)",
@@ -5501,6 +5644,10 @@ $secretScanLines = @(
     "- redacted_files: $(@($secretScan.redaction.redacted_files).Count)",
     ""
 )
+if ($secretScan.store_coverage.status -ne "complete") {
+    $secretScanLines += "Required PostgreSQL dumps were unavailable: $($secretScan.store_coverage.failed_containers -join ', ')"
+    $secretScanLines += ""
+}
 if (@($secretScan.redaction.not_redacted).Count -gt 0) {
     $secretScanLines += "NOT redacted (archive members - drop the archive): $(@($secretScan.redaction.not_redacted) -join ', ')"
     $secretScanLines += ""

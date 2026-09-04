@@ -263,29 +263,53 @@ function New-CotestServerTopology {
     }
 }
 
+function Assert-CotestUniqueTopologyValues {
+    param(
+        [Parameter(Mandatory = $true)]$Values,
+        [Parameter(Mandatory = $true)][string]$FailureMessage
+    )
+
+    $allValues = [System.Collections.Generic.List[string]]::new()
+    $uniqueValues = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($value in $Values) {
+        if ($null -eq $value -or [string]::IsNullOrWhiteSpace([string]$value)) { continue }
+        $text = [string]$value
+        $allValues.Add($text)
+        [void]$uniqueValues.Add($text)
+    }
+    if ($uniqueValues.Count -ne $allValues.Count) { throw $FailureMessage }
+}
+
 function Assert-CotestTopologyIsolation {
     param([Parameter(Mandatory = $true)]$Topology)
     if (@($Topology.servers).Count -ne [int]$Topology.server_count) { throw "topology server count does not match its server list" }
-    $names = @($Topology.servers | ForEach-Object { $_.name })
-    if (@($names | Sort-Object -Unique).Count -ne $names.Count) { throw "topology contains duplicate logical names" }
+    Assert-CotestUniqueTopologyValues `
+        -Values @($Topology.servers | ForEach-Object { $_.name }) `
+        -FailureMessage "topology contains duplicate logical names"
     foreach ($property in @("public_url", "listen_address", "service_did", "log_directory", "process_id", "container_id")) {
-        $values = @($Topology.servers | ForEach-Object { $_.soland.$property } | Where-Object { $_ })
-        if (@($values | Sort-Object -Unique).Count -ne $values.Count) { throw "topology reuses soland $property across servers" }
+        Assert-CotestUniqueTopologyValues `
+            -Values @($Topology.servers | ForEach-Object { $_.soland.$property }) `
+            -FailureMessage "topology reuses soland $property across servers"
     }
     foreach ($property in @("database", "objects", "state")) {
-        $values = @($Topology.servers | ForEach-Object { $_.soland.storage.$property } | Where-Object { $_ })
-        if (@($values | Sort-Object -Unique).Count -ne $values.Count) { throw "topology reuses Soland storage.$property across servers" }
+        Assert-CotestUniqueTopologyValues `
+            -Values @($Topology.servers | ForEach-Object { $_.soland.storage.$property }) `
+            -FailureMessage "topology reuses Soland storage.$property across servers"
     }
     $coauthServers = @($Topology.servers | Where-Object { $_.coauth })
     foreach ($property in @("public_url", "listen_address", "owning_service_id", "log_directory", "process_id", "container_id")) {
-        $values = @($coauthServers | ForEach-Object {
-            $entry = $_.coauth.PSObject.Properties[$property]
-            if ($entry) { $entry.Value }
-        } | Where-Object { $_ })
-        if (@($values | Sort-Object -Unique).Count -ne $values.Count) { throw "topology reuses coauth $property across servers" }
+        Assert-CotestUniqueTopologyValues `
+            -Values @($coauthServers | ForEach-Object {
+                $entry = $_.coauth.PSObject.Properties[$property]
+                if ($entry) { $entry.Value }
+            }) `
+            -FailureMessage "topology reuses coauth $property across servers"
     }
     foreach ($property in @("database", "state")) {
-        $values = @($coauthServers | ForEach-Object { $_.coauth.storage.$property } | Where-Object { $_ })
-        if (@($values | Sort-Object -Unique).Count -ne $values.Count) { throw "topology reuses Coauth storage.$property across servers" }
+        Assert-CotestUniqueTopologyValues `
+            -Values @($coauthServers | ForEach-Object { $_.coauth.storage.$property }) `
+            -FailureMessage "topology reuses Coauth storage.$property across servers"
     }
 }

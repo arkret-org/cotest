@@ -14,6 +14,8 @@ import {
 } from "../../helpers/env";
 import {
   acceptInviteApi,
+  authHeaders,
+  canonicalJson,
   createRealmApi,
   grantServiceCapabilityApi,
   listInvitesApi,
@@ -123,6 +125,37 @@ async function waitForInvite(
   return found!;
 }
 
+async function allowExplicitInviteNotifications(
+  request: APIRequestContext,
+  participant: Participant,
+) {
+  const url = `${solandBaseUrl(participant.server)}/_arkret/self/invite-receive-policy`;
+  const current = await request.get(url, {
+    headers: authHeaders(participant.token, "GET", url),
+  });
+  expect(current.status(), await current.text()).toBe(200);
+  const policy = (await current.json()) as Record<string, unknown>;
+  const allowedKinds = Array.isArray(policy.holder_allowed_introduction_kinds)
+    ? policy.holder_allowed_introduction_kinds.filter(
+        (kind): kind is string => typeof kind === "string",
+      )
+    : [];
+  const updated = await request.put(url, {
+    headers: {
+      ...authHeaders(participant.token, "PUT", url),
+      "content-type": "application/json",
+    },
+    data: canonicalJson({
+      ...policy,
+      holder_allowed_introduction_kinds: Array.from(
+        new Set([...allowedKinds, "explicit_address"]),
+      ),
+      explicit_address_behavior: "notify",
+    }),
+  });
+  expect(updated.status(), await updated.text()).toBe(200);
+}
+
 async function waitForText(
   request: APIRequestContext,
   participant: Participant,
@@ -169,6 +202,10 @@ async function createThreeServerRealm(
     });
   }
   const [alice, bob, carol] = participants;
+  await Promise.all([
+    allowExplicitInviteNotifications(request, bob),
+    allowExplicitInviteNotifications(request, carol),
+  ]);
   const realmId = await createRealmApi(request, alice.token, {
     title: `${label} ${stamp}`,
     discoverability: "listed",
