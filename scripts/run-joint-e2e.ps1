@@ -1749,11 +1749,11 @@ function New-CoauthJointConfig {
     if ($MockEmailBaseUrl) {
         $patchArgs += @("--mock-email-base-url", $MockEmailBaseUrl)
     }
-    $resolvedInksonUrls = if (@($InksonBaseUrls).Count -gt 0) { @($InksonBaseUrls) } else { @($InksonBaseUrl, $InksonServer2BaseUrl) | Where-Object { $_ } }
+    $resolvedInksonUrls = @(if (@($InksonBaseUrls).Count -gt 0) { @($InksonBaseUrls) } else { @($InksonBaseUrl, $InksonServer2BaseUrl) | Where-Object { $_ } })
     foreach ($url in $resolvedInksonUrls) {
         $patchArgs += @("--inkson-base-url", $url)
     }
-    $resolvedStationUrls = if (@($StationBaseUrls).Count -gt 0) { @($StationBaseUrls) } else { @($SolandBaseUrl, $SolandServer2BaseUrl) | Where-Object { $_ } }
+    $resolvedStationUrls = @(if (@($StationBaseUrls).Count -gt 0) { @($StationBaseUrls) } else { @($SolandBaseUrl, $SolandServer2BaseUrl) | Where-Object { $_ } })
     for ($index = 0; $index -lt $resolvedStationUrls.Count; $index++) {
         $patchArgs += @("--station", "server$($index + 1)=$($resolvedStationUrls[$index])")
     }

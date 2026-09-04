@@ -57,6 +57,7 @@ Assert-True ($runnerScript -match 'initialize-joint-e2e-environment\.ps1') "the 
 Assert-True ($runnerScript -notmatch '\[switch\]\$SkipPreflight') "the test entry must not expose a bootstrap bypass"
 Assert-True ($runnerScript -match 'postgres:18\.6-alpine') "the runner must pin PostgreSQL 18.6 Alpine"
 Assert-True ($runnerScript -match 'GetEnvironmentVariable\("Path", "Machine"\)' -and $runnerScript -match 'GetEnvironmentVariable\("Path", "User"\)') "the entry must refresh PATH after child-process installation"
+Assert-True ($runnerScript -match '\$resolvedStationUrls = @\(if ' -and $runnerScript -match '\$resolvedInksonUrls = @\(if ') "single-server URL collections must remain arrays under strict mode"
 $initializerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\initialize-joint-e2e-environment.ps1")
 Assert-True ($initializerScript -match 'Test-CotestAdministrator' -and $initializerScript -match 'if \(\$isAdministrator\)') "initializer must branch on administrator identity"
 Assert-True ($initializerScript -match 'mode = "install-and-check"') "dependency installation must be attempted by default"
