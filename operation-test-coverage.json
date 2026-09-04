@@ -7,25 +7,25 @@
     "test_layers": {
       "soland_unit": {
         "source_file_count": 281,
-        "source_sha256": "f96321c3757b7d3ccfeefa2f43d04efbc4939a103a0324a10f2f799d3253afe2",
+        "source_sha256": "74ceb35a43e3c54170a169c1b33ecb7f24e1169d29a8b9b9dd1e32e1d7941e29",
         "evidence_count": 300,
         "covered_operation_count": 161
       },
       "soland_http": {
         "source_file_count": 56,
-        "source_sha256": "f95cb7e9f4ed77fe900a2bbac14012d5100962f07e9d588cc8dc98106811a491",
+        "source_sha256": "08a70f576cf6f9a8c473e2559fe9983cd147f849c46cfb00be817b5ab028defa",
         "evidence_count": 113,
         "covered_operation_count": 36
       },
       "cotest_rust": {
         "source_file_count": 306,
-        "source_sha256": "13fd74c2047d46f32640e9df19ed4c0eb8d27efbb6d6e6a8a10d6d11708f2306",
+        "source_sha256": "6458f4588a07001f1e3a86bf1d006d3b9912a3beae6f2f3dd5685bdebeff2c0a",
         "evidence_count": 119,
         "covered_operation_count": 70
       },
       "cotest_e2e": {
         "source_file_count": 88,
-        "source_sha256": "bba61cc2ad091aaf797e2fa455dec0876e84bc8c7bb2a9536892b3608ee6f404",
+        "source_sha256": "a87ac43931c212240b64c07e1622eba605e037b6173f067db1383416f13d58f2",
         "evidence_count": 28,
         "covered_operation_count": 16
       },
@@ -145,7 +145,7 @@
       {
         "literal": "ak.self.events.read.future_unregistered.v1",
         "file": "soland/crates/http/src/routing/identity/agents/common.rs",
-        "line": 453,
+        "line": 451,
         "scope": "unknown_scope_action_fails_closed_before_admission",
         "classification": "security_negative_selector"
       },
@@ -179,11 +179,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1833,
+            "line": 1830,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1833
+              1830
             ],
             "protected_oracle": false,
             "scope_sha256": "08d47a5443c3a8cae53d5647cf5084a6439a0f1db82630541eaf3147a7eb3c3f",
@@ -280,11 +280,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1798,
+            "line": 1795,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1798
+              1795
             ],
             "protected_oracle": false,
             "scope_sha256": "8a395f97b2edc5743d1c7f47cc6cc38ced4f6334256a37131e87e2c87ce706e8",
@@ -723,11 +723,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1930,
+            "line": 1927,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1930
+              1927
             ],
             "protected_oracle": false,
             "scope_sha256": "00112bef03a48bb543e9c284696607b1dadf27c949ab85b637f84b73b5ffdd2a",
@@ -806,11 +806,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1878,
+            "line": 1875,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1878
+              1875
             ],
             "protected_oracle": false,
             "scope_sha256": "f0ef2dc57392822bed1a860cd185201a922d2368f8a6417e47e20fb63f68cd24",
@@ -889,11 +889,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 2040,
+            "line": 2037,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2040
+              2037
             ],
             "protected_oracle": false,
             "scope_sha256": "98b383a3bbb3e93a8852b0c6bd4ebb7c63b5f076c99675faa7033b4befddf3ed",
@@ -972,11 +972,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1991,
+            "line": 1988,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1991
+              1988
             ],
             "protected_oracle": false,
             "scope_sha256": "1f3cf32f89f01fd4b438c795b5c382e5950fd371a21df1fbec89de90780d457d",
@@ -1055,11 +1055,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/interop/push.rs",
-            "line": 393,
+            "line": 396,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              393
+              396
             ],
             "protected_oracle": false,
             "scope_sha256": "9d23e4290133e9f486311ab397e480c2d91f31945073f4dd7449d15edc522d1d",
@@ -1274,11 +1274,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/interop/push.rs",
-            "line": 352,
+            "line": 355,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              352
+              355
             ],
             "protected_oracle": false,
             "scope_sha256": "56e39bad8e6d633cce896d51241c0c561879ba2930f366e834f4251e6e78ab1f",
@@ -1740,11 +1740,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/spaces/directory/handles.rs",
-            "line": 772,
+            "line": 769,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              772
+              769
             ],
             "protected_oracle": false,
             "scope_sha256": "32b7b7f74cd0d5223d25b29cfd34c38a82362d72af1767a64b0254a2da63f396",
@@ -3602,11 +3602,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/pairing.rs",
-            "line": 648,
+            "line": 645,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              648
+              645
             ],
             "protected_oracle": false,
             "scope_sha256": "a720048d5a9f52dee38ad8d97471a0836d5de8838b096aa706640071df0c0ec9",
@@ -3953,11 +3953,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/account.rs",
-            "line": 190,
+            "line": 189,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              190
+              189
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -4392,11 +4392,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/agents/pairing.rs",
-            "line": 76,
+            "line": 75,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              76
+              75
             ],
             "protected_oracle": false,
             "scope_sha256": "8c75553c99d1a5df0859f4f622da7d5a32150db8d551b4fcf83b6cafe1c50783",
@@ -4558,11 +4558,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/agents/pairing.rs",
-            "line": 293,
+            "line": 290,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              293
+              290
             ],
             "protected_oracle": false,
             "scope_sha256": "d565bf21670e3ea9e42db6ccdc9f0b5f296c771d3680577264fdd5d1bc2d6ef9",
@@ -4658,11 +4658,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/device_pairing_open.rs",
-            "line": 57,
+            "line": 56,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              57
+              56
             ],
             "protected_oracle": false,
             "scope_sha256": "abb1e3eb3d6be3b96745406664cee2cf05328b49ef2172952885bc5cc29bd9b0",
@@ -4758,11 +4758,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/device_pairing_open.rs",
-            "line": 139,
+            "line": 138,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              139
+              138
             ],
             "protected_oracle": false,
             "scope_sha256": "044bb3e5c7798451e9b12822bdd616da32213555ec3b67d63a2fa000d34409b1",
@@ -4858,11 +4858,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/device_pairing_open.rs",
-            "line": 223,
+            "line": 222,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              223
+              222
             ],
             "protected_oracle": false,
             "scope_sha256": "e1a27b18984132ac7c4d32b397959e2307618f4b9b26cddbad958332c966c154",
@@ -5006,11 +5006,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/invites.rs",
-            "line": 1054,
+            "line": 1052,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1054
+              1052
             ],
             "protected_oracle": false,
             "scope_sha256": "53a3b30ea46adce499ce599ed3cab460a5489d7405d914d33873f1689fc69fe1",
@@ -6200,11 +6200,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 460,
+            "line": 456,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              460
+              456
             ],
             "protected_oracle": false,
             "scope_sha256": "9a6fa0c8f00ca198b94d64c363c09876b6acc3e40f196b751ebc7f17b90b6597",
@@ -6954,11 +6954,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/submit.rs",
-            "line": 2426,
+            "line": 2588,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2426
+              2588
             ],
             "protected_oracle": false,
             "scope_sha256": "7fc518a017fd4ce721f4243ea47f7c83aed8d50106360a718248b6e53d894daf",
@@ -6971,11 +6971,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/submit.rs",
-            "line": 2439,
+            "line": 2601,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2439
+              2601
             ],
             "protected_oracle": false,
             "scope_sha256": "540d317dcf3d5ab6c4aef6093edc93a7801df064ad265dd76768686f65def9c4",
@@ -6988,11 +6988,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/submit.rs",
-            "line": 2655,
+            "line": 2747,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2655
+              2747
             ],
             "protected_oracle": false,
             "scope_sha256": "481d38e1e93a749ca170697ab774734e512da81235955b2cfe4364b9ea36c704",
@@ -7005,11 +7005,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/submit.rs",
-            "line": 2664,
+            "line": 2756,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2664
+              2756
             ],
             "protected_oracle": false,
             "scope_sha256": "c2f71863495cf5bdf26066a9281eae3dbc8a25da99c788ebed94843342569703",
@@ -7056,11 +7056,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 997,
+            "line": 990,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              997
+              990
             ],
             "protected_oracle": false,
             "scope_sha256": "81bef9dfeb7be3839cd9d5be716d08b023389343954721a20f13f7460dee3b92",
@@ -7073,11 +7073,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1011,
+            "line": 1004,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1011
+              1004
             ],
             "protected_oracle": false,
             "scope_sha256": "6b7cc46456a686dad1c92ba7eee421e454fe5cad881ec61e72bda427bdaeec15",
@@ -7090,11 +7090,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1022,
+            "line": 1015,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1022
+              1015
             ],
             "protected_oracle": false,
             "scope_sha256": "f155e6837df020abff0fdf0a55501fd88a8e521b1d031be4ef3d9ec17a526868",
@@ -7226,11 +7226,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1441,
+            "line": 1434,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1441
+              1434
             ],
             "protected_oracle": false,
             "scope_sha256": "1d82508fa5790b2c39fbd146513b2316a45067c325d3be999842c7a0d90fbe37",
@@ -7243,11 +7243,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1453,
+            "line": 1446,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1453
+              1446
             ],
             "protected_oracle": false,
             "scope_sha256": "fec875fb0697d3ab0114a4d607c16dcdebf7b251a6f7311c94d2f6e640aa82d2",
@@ -7350,11 +7350,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1049,
+            "line": 1042,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1049
+              1042
             ],
             "protected_oracle": false,
             "scope_sha256": "2b22578640eda6caff4a855d71c7e4c4f4a613bda668fbb92b88caf259fef2c9",
@@ -7367,11 +7367,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1058,
+            "line": 1051,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1058
+              1051
             ],
             "protected_oracle": false,
             "scope_sha256": "8a706f123a3e92a4a4528759831aa96c4132db7e671cb2bae053a14cea722762",
@@ -7485,11 +7485,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1031,
+            "line": 1024,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1031
+              1024
             ],
             "protected_oracle": false,
             "scope_sha256": "9b2f0058de3e4dd83ff158cbfe0d658f98773a000349498b8118ba5dacd39189",
@@ -7502,11 +7502,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1040,
+            "line": 1033,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1040
+              1033
             ],
             "protected_oracle": false,
             "scope_sha256": "582863d85a3f193a7e0a7c23ead4e26dde3e7bc4d660500081e7840b955cb389",
@@ -7519,11 +7519,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1687,
+            "line": 1680,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1687
+              1680
             ],
             "protected_oracle": false,
             "scope_sha256": "e83d23306e901eee012ea4e06b052fa81505c883c2ed78a9e902273a8b245a90",
@@ -7789,11 +7789,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/governance_history.rs",
-            "line": 4052,
+            "line": 4030,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4052
+              4030
             ],
             "protected_oracle": false,
             "scope_sha256": "2b9fa0687e117a73585c260a65cc88e4ee6df44874450c638136f9aa8b5551d3",
@@ -8006,11 +8006,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/invites.rs",
-            "line": 658,
+            "line": 656,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              658
+              656
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -8432,11 +8432,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/governance_history.rs",
-            "line": 4247,
+            "line": 4225,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              4247
+              4225
             ],
             "protected_oracle": false,
             "scope_sha256": "6a8161c17585d300e8fb81971858a474fe1d75317b1bea9ee6a942cb04b5f361",
@@ -8615,11 +8615,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1581,
+            "line": 1574,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1581
+              1574
             ],
             "protected_oracle": false,
             "scope_sha256": "127bb800a59c0ed3fb7f91b460f1ac71cf688537ed815b625a0b4c98ef49a12c",
@@ -8632,11 +8632,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 1591,
+            "line": 1584,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1591
+              1584
             ],
             "protected_oracle": false,
             "scope_sha256": "0dbcaa34f12e81199584018cb30d59133356d08fcf70557b6a5af6e770cc0348",
@@ -9111,11 +9111,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 921,
+            "line": 917,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              921
+              917
             ],
             "protected_oracle": false,
             "scope_sha256": "af36051486b474ffe65559e77b060014a94ece22e2be30ecbee55a74a960534e",
@@ -9128,11 +9128,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 926,
+            "line": 922,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              926
+              922
             ],
             "protected_oracle": false,
             "scope_sha256": "9144bade51e31367a12e793e2aee5011da9b32045c6368279fab907b12fb2053",
@@ -9145,11 +9145,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/peer.rs",
-            "line": 953,
+            "line": 949,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              953
+              949
             ],
             "protected_oracle": false,
             "scope_sha256": "65a1b26e0c2e86855db32a8b845f6fd1a927f635c7b1e588d23355af5888348d",
@@ -9228,11 +9228,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/did/endpoints.rs",
-            "line": 686,
+            "line": 683,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              686
+              683
             ],
             "protected_oracle": false,
             "scope_sha256": "5ae5749d8bdeeacd00ec96ad727c82040752b717c6d7bbef953dc320f2315362",
@@ -9311,11 +9311,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/did/endpoints.rs",
-            "line": 528,
+            "line": 525,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              528
+              525
             ],
             "protected_oracle": false,
             "scope_sha256": "eb6fda45364c909200d019e72a4820f242056ad37b67c769f5372cb397832b9d",
@@ -9394,11 +9394,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/did/endpoints.rs",
-            "line": 590,
+            "line": 587,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              590
+              587
             ],
             "protected_oracle": false,
             "scope_sha256": "f5634d6759790405a8a69d4b007465a0c0522279278a73c9204debfa3e32033c",
@@ -9802,11 +9802,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/did/endpoints.rs",
-            "line": 435,
+            "line": 432,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              435
+              432
             ],
             "protected_oracle": false,
             "scope_sha256": "ff22114db3c35ff6670c91cd28176d4bc30f2a0da2168ed8ab1622eede262edb",
@@ -9903,11 +9903,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/did/endpoints.rs",
-            "line": 665,
+            "line": 662,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              665
+              662
             ],
             "protected_oracle": false,
             "scope_sha256": "183a7b0ce45fb9eb9044900dbd48f413003e9124dbadc62f691c81cf65e115ee",
@@ -10711,11 +10711,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account.rs",
-            "line": 202,
+            "line": 201,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              202
+              201
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -10728,11 +10728,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/account.rs",
-            "line": 1132,
+            "line": 1127,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1132
+              1127
             ],
             "protected_oracle": false,
             "scope_sha256": "c309f6b68cc9c4796b4a9444a72d32a622c0b8032797bac6ac313cd8df1f9c52",
@@ -11025,11 +11025,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account.rs",
-            "line": 924,
+            "line": 919,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              924
+              919
             ],
             "protected_oracle": false,
             "scope_sha256": "86272bca378741666af20e9a67aad4fdc7c9f092fdc7bdcbf5afd45b62a53ac1",
@@ -11209,11 +11209,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/events.rs",
-            "line": 2145,
+            "line": 2158,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2145
+              2158
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -11347,11 +11347,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account_data.rs",
-            "line": 593,
+            "line": 591,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              593
+              591
             ],
             "protected_oracle": false,
             "scope_sha256": "60c384d07193a83f3c19540937c0d90326810774fdda35a12a6cb76343c24344",
@@ -11430,11 +11430,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account_data.rs",
-            "line": 636,
+            "line": 634,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              636
+              634
             ],
             "protected_oracle": false,
             "scope_sha256": "35cef419faa20a2b17608fd0a3b7f5ae4ded9d19bf8baf37d1fe635ce8484c0a",
@@ -11513,11 +11513,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account_data.rs",
-            "line": 550,
+            "line": 548,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              550
+              548
             ],
             "protected_oracle": false,
             "scope_sha256": "1212513f1640e7fbaeb43988896bff0c501a74f7027220cdd073c6a2c0d4d70d",
@@ -11596,11 +11596,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account_data.rs",
-            "line": 451,
+            "line": 449,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              451
+              449
             ],
             "protected_oracle": false,
             "scope_sha256": "6b0aef4b7c93501e5476c65fdab3997143f14a5e2b69047e0d119133dd4a701b",
@@ -11697,11 +11697,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account.rs",
-            "line": 1515,
+            "line": 1506,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1515
+              1506
             ],
             "protected_oracle": false,
             "scope_sha256": "11b3bf011586154229857f0db2dd96d68630b36c9efd8b6f667dc0f2fcb76331",
@@ -11797,11 +11797,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 1302,
+            "line": 1292,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1302
+              1292
             ],
             "protected_oracle": false,
             "scope_sha256": "1d36f04ca81f5ec8f30edbdda57e4b86480e5ebdd04615d978339019bd2e328d",
@@ -11932,11 +11932,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 1242,
+            "line": 1232,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1242
+              1232
             ],
             "protected_oracle": false,
             "scope_sha256": "a681199ba28cbab538120664ecad231d9bd6c697ce788986067251e7e49c8099",
@@ -12050,11 +12050,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 199,
+            "line": 190,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              199
+              190
             ],
             "protected_oracle": false,
             "scope_sha256": "fe17ac8f0fb758af451b2960fa8e35045d15b0a9ca3734f16bc681beb7fe1a05",
@@ -12185,11 +12185,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 790,
+            "line": 780,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              790
+              780
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -12202,11 +12202,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 811,
+            "line": 801,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              811
+              801
             ],
             "protected_oracle": false,
             "scope_sha256": "f2527b31729653d51685d36b5b8c8a2f99ea820ba16ce8f2cea3419882b28dfa",
@@ -12337,11 +12337,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 1272,
+            "line": 1262,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1272
+              1262
             ],
             "protected_oracle": false,
             "scope_sha256": "dc6c367df68d32f590fea1e4ff45034bd0fa040d3a1eb766f875f39d865c2e7f",
@@ -12585,11 +12585,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 962,
+            "line": 952,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              962
+              952
             ],
             "protected_oracle": false,
             "scope_sha256": "bf625fddc1c935a921ceb682718449cccaa8af2ce141e5c16ebcbc47d519cec9",
@@ -12703,11 +12703,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/lifecycle.rs",
-            "line": 1007,
+            "line": 997,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1007
+              997
             ],
             "protected_oracle": false,
             "scope_sha256": "0228d37764908c301dce30147057b9c2d24a1cbb11de5a61358ea7a9575d504a",
@@ -12821,11 +12821,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/sidecar.rs",
-            "line": 107,
+            "line": 105,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              107
+              105
             ],
             "protected_oracle": false,
             "scope_sha256": "d58cdba583007b9631302a307e2303f2b148f9805ba519630a338c6ed5bab329",
@@ -12838,11 +12838,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/sidecar.rs",
-            "line": 114,
+            "line": 112,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              114
+              112
             ],
             "protected_oracle": false,
             "scope_sha256": "98ff4f0f0ed4bdde7ab88a56fef8a89f16b0292d31704fa208072494930479d3",
@@ -12855,11 +12855,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/sidecar.rs",
-            "line": 1353,
+            "line": 1347,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1353
+              1347
             ],
             "protected_oracle": false,
             "scope_sha256": "5f4759b3b97204d7384e27b94d27a1ef1c308bee2e7dc5ce661a1f1a5c737e39",
@@ -13151,11 +13151,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 228,
+            "line": 227,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              228
+              227
             ],
             "protected_oracle": false,
             "scope_sha256": "c061179edcd69a016c7595108e4cb4bcde9286e71f10b6491496648e827368bc",
@@ -13270,11 +13270,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 599,
+            "line": 597,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              599
+              597
             ],
             "protected_oracle": false,
             "scope_sha256": "2ace5a826932da5e774c0e6c3ccd6a47435d871be6f3f9aed8bd6ce5daaa8988",
@@ -13423,11 +13423,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1307,
+            "line": 1305,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1307
+              1305
             ],
             "protected_oracle": false,
             "scope_sha256": "ad47ebeda44d9fc861e6058c6a2ecedc5869a683b72cac336eb7843dc9d0e3f5",
@@ -13524,11 +13524,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 1410,
+            "line": 1408,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1410
+              1408
             ],
             "protected_oracle": false,
             "scope_sha256": "2fa87864ab5e7e9c94c7275b68d893c2613ffe74df4b8f1b3a3c9597a62c10c9",
@@ -13762,11 +13762,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/extensions/applet_bridge/endpoints.rs",
-            "line": 579,
+            "line": 577,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              579
+              577
             ],
             "protected_oracle": false,
             "scope_sha256": "66dcd488e7f60c089932034620e6e3d9ddc0b8a6263bab9ef86ead2b43620976",
@@ -14845,11 +14845,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/interop/webrtc.rs",
-            "line": 1274,
+            "line": 1271,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1274
+              1271
             ],
             "protected_oracle": false,
             "scope_sha256": "5cd01963d705edc3b28754be4c8100e305f99520e329d1a087ae4ed3be51b4e8",
@@ -14980,11 +14980,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/circles.rs",
-            "line": 378,
+            "line": 375,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              378
+              375
             ],
             "protected_oracle": false,
             "scope_sha256": "50ba657e995d751a32e89ab5af055cd3e7ca6931920f0588ed956e89ffca78ab",
@@ -15081,11 +15081,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/circles.rs",
-            "line": 646,
+            "line": 641,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              646
+              641
             ],
             "protected_oracle": false,
             "scope_sha256": "d5bf68a9577dd6bf36db44fa50bf7a5c35c55ff3cc5ec0afa2ac8b9fedb31d5e",
@@ -15164,11 +15164,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/circles.rs",
-            "line": 480,
+            "line": 475,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              480
+              475
             ],
             "protected_oracle": false,
             "scope_sha256": "d3cf80a5a7e5178e9492b2da57bdb91f0e7fdb4bd281a8445808bb82903cbcb0",
@@ -15247,11 +15247,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/circles.rs",
-            "line": 608,
+            "line": 603,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              608
+              603
             ],
             "protected_oracle": false,
             "scope_sha256": "2288c0f6a2290c5c1934d17144e049bac688da52caf9403ac3e57aa62d4f6212",
@@ -15330,11 +15330,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/circles.rs",
-            "line": 313,
+            "line": 310,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              313
+              310
             ],
             "protected_oracle": false,
             "scope_sha256": "7e9c7f073779f163fd6db7507480b44589a567c99383873ec33f559ec9d13138",
@@ -15413,11 +15413,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/circles.rs",
-            "line": 345,
+            "line": 342,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              345
+              342
             ],
             "protected_oracle": false,
             "scope_sha256": "c00193f331937b38dbfe0997454eb3695f9b8c56bcbd85df7f9b18139f52cb3b",
@@ -16697,11 +16697,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/device_messages.rs",
-            "line": 729,
+            "line": 726,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              729
+              726
             ],
             "protected_oracle": false,
             "scope_sha256": "c3d811045e41e55d09e8f37df8bfd4598cacf5f8ee2b9cdd34f9fb3e7774e7b7",
@@ -16964,11 +16964,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account.rs",
-            "line": 1710,
+            "line": 1701,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1710
+              1701
             ],
             "protected_oracle": false,
             "scope_sha256": "c8d97faaab93a60c1a5866416be8fea16aeba239fc019473b13083ab91482206",
@@ -17087,11 +17087,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 813,
+            "line": 786,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              813
+              786
             ],
             "protected_oracle": false,
             "scope_sha256": "92095a41b3dc9bb87b038140be4a9c801288d4bd0d901d19b4895380d7f63b02",
@@ -17104,11 +17104,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 914,
+            "line": 887,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              914
+              887
             ],
             "protected_oracle": false,
             "scope_sha256": "a49aa403833e455f456910b66763a0177dd1ba3c23a71ccea9018a091007b008",
@@ -17121,11 +17121,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 957,
+            "line": 930,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              957
+              930
             ],
             "protected_oracle": false,
             "scope_sha256": "5b8f726bdc871d5d2075d23a3c61ef67e7aaeaf12e0d9cd2e18bd1d88f75c212",
@@ -17138,11 +17138,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1159,
+            "line": 1138,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1159
+              1138
             ],
             "protected_oracle": false,
             "scope_sha256": "5b8f726bdc871d5d2075d23a3c61ef67e7aaeaf12e0d9cd2e18bd1d88f75c212",
@@ -17155,12 +17155,12 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 2017,
+            "line": 1995,
             "scope": "submit_idempotency_first_response_uses_exact_actor_and_operation_scope",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              2046,
-              2054
+              2024,
+              2032
             ],
             "protected_oracle": false,
             "scope_sha256": "72612bb2ef93dcee8ecb1d5da7aafbbb08fb7b8f72c14e4f0dc82de73ebd3d31",
@@ -17197,11 +17197,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/common.rs",
-            "line": 413,
+            "line": 411,
             "scope": "runtime_scope_assessment_uses_registered_layer_reasons",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              422
+              420
             ],
             "protected_oracle": false,
             "scope_sha256": "b8df52e19ac7081f28c9ba808ff6c565d8c15c6683c841c0d5fc709d311f77c6",
@@ -17220,16 +17220,16 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/pairing.rs",
-            "line": 2042,
+            "line": 2036,
             "scope": "authorize_scope_may_narrow_but_cannot_widen_provision_ceiling",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              2047,
+              2041,
+              2044,
               2050,
-              2056,
-              2077,
-              2093,
-              2107
+              2071,
+              2087,
+              2101
             ],
             "protected_oracle": false,
             "scope_sha256": "9577e6a73144336695c0254f9c32b79e14b7101dc2c2945bb6126fc9b265efa1",
@@ -17284,11 +17284,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/mls.rs",
-            "line": 3865,
+            "line": 3861,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3865
+              3861
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -17385,11 +17385,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1859,
+            "line": 1856,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1859
+              1856
             ],
             "protected_oracle": false,
             "scope_sha256": "d4128ecc7aedf1baa717e6648a7750ab7edc65b0e9de538dbebeffdbdf6aabd9",
@@ -17402,11 +17402,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1872,
+            "line": 1869,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1872
+              1869
             ],
             "protected_oracle": false,
             "scope_sha256": "a116cbfa441def1615406495400711238b1baf51899fe71e04b54a1a9231ac17",
@@ -17419,11 +17419,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 2042,
+            "line": 2039,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2042
+              2039
             ],
             "protected_oracle": false,
             "scope_sha256": "d4128ecc7aedf1baa717e6648a7750ab7edc65b0e9de538dbebeffdbdf6aabd9",
@@ -17521,11 +17521,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/events.rs",
-            "line": 1228,
+            "line": 1237,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1228
+              1237
             ],
             "protected_oracle": false,
             "scope_sha256": "d4128ecc7aedf1baa717e6648a7750ab7edc65b0e9de538dbebeffdbdf6aabd9",
@@ -17538,11 +17538,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/events.rs",
-            "line": 1266,
+            "line": 1275,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1266
+              1275
             ],
             "protected_oracle": false,
             "scope_sha256": "a49aa403833e455f456910b66763a0177dd1ba3c23a71ccea9018a091007b008",
@@ -17924,11 +17924,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1221,
+            "line": 1200,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1221
+              1200
             ],
             "protected_oracle": false,
             "scope_sha256": "1dc25903f30536cbe88b80f0bca98ae32513d56df5108bfffc2c79d6f883a38a",
@@ -18007,11 +18007,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 762,
+            "line": 735,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              762
+              735
             ],
             "protected_oracle": false,
             "scope_sha256": "c1235d9b52fcc60f6cb0adfe5897eff80487cc34001d298855169db88226ba61",
@@ -18024,11 +18024,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 771,
+            "line": 744,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              771
+              744
             ],
             "protected_oracle": false,
             "scope_sha256": "7f1df52020d4e3e218c9565dce88ee29aaae11a73975fb67dfd75d7bc91f41f4",
@@ -18161,11 +18161,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1699,
+            "line": 1677,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1699
+              1677
             ],
             "protected_oracle": false,
             "scope_sha256": "f66981202aeb5aea36f468eb577d1cfb0487de3f21213174e84bae199eba091e",
@@ -18178,11 +18178,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1713,
+            "line": 1691,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1713
+              1691
             ],
             "protected_oracle": false,
             "scope_sha256": "f03d6c35cc003883909544230dbba218a13e84911a4a06ec87a8596ec2bd9cd9",
@@ -18195,11 +18195,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/common.rs",
-            "line": 413,
+            "line": 411,
             "scope": "runtime_scope_assessment_uses_registered_layer_reasons",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              420
+              418
             ],
             "protected_oracle": false,
             "scope_sha256": "b8df52e19ac7081f28c9ba808ff6c565d8c15c6683c841c0d5fc709d311f77c6",
@@ -18319,11 +18319,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1857,
+            "line": 1854,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1857
+              1854
             ],
             "protected_oracle": false,
             "scope_sha256": "66eabd099d21410338c3e4b71dfd1243db8f03d71859cab70338dce0853c3d71",
@@ -18336,11 +18336,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 2040,
+            "line": 2037,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2040
+              2037
             ],
             "protected_oracle": false,
             "scope_sha256": "66eabd099d21410338c3e4b71dfd1243db8f03d71859cab70338dce0853c3d71",
@@ -18523,11 +18523,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1425,
+            "line": 1404,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1425
+              1404
             ],
             "protected_oracle": false,
             "scope_sha256": "4ebb87ebd3c5858aee15b2ebba202089c7b43def93f5579d8d3130722c06aebf",
@@ -18700,11 +18700,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/sync/events_query.rs",
-            "line": 927,
+            "line": 920,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              927
+              920
             ],
             "protected_oracle": false,
             "scope_sha256": "005c9e3b393013d93a13f9ec0a248a870783548e86f14cec1dedcba76b18f84d",
@@ -18768,11 +18768,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agent_pcr.rs",
-            "line": 1103,
+            "line": 1101,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1103
+              1101
             ],
             "protected_oracle": false,
             "scope_sha256": "42dfada58724e8487ba8561c10e451d00486c847ffd7d3ba0059ddd96e1856d9",
@@ -18785,11 +18785,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/common.rs",
-            "line": 413,
+            "line": 411,
             "scope": "runtime_scope_assessment_uses_registered_layer_reasons",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              419
+              417
             ],
             "protected_oracle": false,
             "scope_sha256": "b8df52e19ac7081f28c9ba808ff6c565d8c15c6683c841c0d5fc709d311f77c6",
@@ -18808,11 +18808,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/pairing.rs",
-            "line": 2042,
+            "line": 2036,
             "scope": "authorize_scope_may_narrow_but_cannot_widen_provision_ceiling",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              2110
+              2104
             ],
             "protected_oracle": false,
             "scope_sha256": "9577e6a73144336695c0254f9c32b79e14b7101dc2c2945bb6126fc9b265efa1",
@@ -19019,11 +19019,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1856,
+            "line": 1853,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1856
+              1853
             ],
             "protected_oracle": false,
             "scope_sha256": "a7096f9c4f6c3e93157fa1d03534f99e14715c63cf08230c91f4fabca11fdb47",
@@ -19036,11 +19036,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1868,
+            "line": 1865,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1868
+              1865
             ],
             "protected_oracle": false,
             "scope_sha256": "42dfada58724e8487ba8561c10e451d00486c847ffd7d3ba0059ddd96e1856d9",
@@ -19053,11 +19053,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 2039,
+            "line": 2036,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2039
+              2036
             ],
             "protected_oracle": false,
             "scope_sha256": "a7096f9c4f6c3e93157fa1d03534f99e14715c63cf08230c91f4fabca11fdb47",
@@ -19189,11 +19189,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/events.rs",
-            "line": 2131,
+            "line": 2144,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2131
+              2144
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -19421,11 +19421,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1197,
+            "line": 1176,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1197
+              1176
             ],
             "protected_oracle": false,
             "scope_sha256": "8b8f382e143f0ef0dec622bcfb0b9c0e5a4812de91b36a6814540ddf55d7bfe2",
@@ -19606,11 +19606,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/common.rs",
-            "line": 413,
+            "line": 411,
             "scope": "runtime_scope_assessment_uses_registered_layer_reasons",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              418
+              416
             ],
             "protected_oracle": false,
             "scope_sha256": "b8df52e19ac7081f28c9ba808ff6c565d8c15c6683c841c0d5fc709d311f77c6",
@@ -19629,11 +19629,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/common.rs",
-            "line": 568,
+            "line": 566,
             "scope": "realm_grant_must_preserve_provision_constraints",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              583
+              581
             ],
             "protected_oracle": false,
             "scope_sha256": "1d4e11cef83f0d8f160388e6991dfba53f7a7b5b867aef4ed7e0a5599ba7a8f2",
@@ -19880,11 +19880,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1855,
+            "line": 1852,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1855
+              1852
             ],
             "protected_oracle": false,
             "scope_sha256": "436391b3129bc1d1620f88ba29aebd9e9c1474bd12e14c435a1ad576ed8a10e2",
@@ -19897,11 +19897,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1864,
+            "line": 1861,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1864
+              1861
             ],
             "protected_oracle": false,
             "scope_sha256": "1e813d94468e354dfd3354f4090837cf01a8c6479eb6f256843583b28b824d23",
@@ -19914,11 +19914,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 2038,
+            "line": 2035,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2038
+              2035
             ],
             "protected_oracle": false,
             "scope_sha256": "436391b3129bc1d1620f88ba29aebd9e9c1474bd12e14c435a1ad576ed8a10e2",
@@ -19931,11 +19931,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 2046,
+            "line": 2043,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2046
+              2043
             ],
             "protected_oracle": false,
             "scope_sha256": "1e813d94468e354dfd3354f4090837cf01a8c6479eb6f256843583b28b824d23",
@@ -20271,11 +20271,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/governance_history.rs",
-            "line": 3803,
+            "line": 3781,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3803
+              3781
             ],
             "protected_oracle": false,
             "scope_sha256": "4b11f9e2ead7756dae592b3acf11293951c3f243c3190ab237baef464a649d78",
@@ -20567,11 +20567,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/account.rs",
-            "line": 1585,
+            "line": 1576,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1585
+              1576
             ],
             "protected_oracle": false,
             "scope_sha256": "a70bcc4b7d9d68d293c211de6288fbb7938f43f2cf701d3736a0dc4d5483cda3",
@@ -20992,11 +20992,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/invites.rs",
-            "line": 516,
+            "line": 514,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              516
+              514
             ],
             "protected_oracle": false,
             "scope_sha256": "4a9496b9e5a02f6fa7ccce6ecdd789d96b88312d8d571b73bca0fc731b833c16",
@@ -21009,11 +21009,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/invites.rs",
-            "line": 528,
+            "line": 526,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              528
+              526
             ],
             "protected_oracle": false,
             "scope_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
@@ -21026,11 +21026,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/invites.rs",
-            "line": 532,
+            "line": 530,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              532
+              530
             ],
             "protected_oracle": false,
             "scope_sha256": "dcaaa7c776676b648b19d645f248d3e3394ce0741b3e6d6b31a11c68cf95dac4",
@@ -21043,11 +21043,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/invites.rs",
-            "line": 576,
+            "line": 574,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              576
+              574
             ],
             "protected_oracle": false,
             "scope_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -21060,11 +21060,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/invites.rs",
-            "line": 693,
+            "line": 691,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              693
+              691
             ],
             "protected_oracle": false,
             "scope_sha256": "0fc0ffc485b976e93453cfddecdc549a12c0e10142c9aee1aecaa1f392e99bfd",
@@ -21243,11 +21243,11 @@
         "fault_recovery": [
           {
             "file": "soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
-            "line": 306,
+            "line": 305,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              306
+              305
             ],
             "protected_oracle": false,
             "scope_sha256": "599889caba5fe896661159c358d884f91293f839cb39b67c181f1c8e9a08a1a2",
@@ -21260,11 +21260,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
-            "line": 735,
+            "line": 733,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              735
+              733
             ],
             "protected_oracle": false,
             "scope_sha256": "9dd961ba4fc58e0f89a3e0422c7cc8e2524b9556d187525c6b9dd3cec4c7fcda",
@@ -21587,11 +21587,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/identity/key_backup.rs",
-            "line": 404,
+            "line": 408,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              404
+              408
             ],
             "protected_oracle": false,
             "scope_sha256": "ed5465f6ea1b3ec4894be531efe66d98838f58931568c9488094ac172a924481",
@@ -21604,11 +21604,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/key_backup.rs",
-            "line": 423,
+            "line": 427,
             "scope": "delete_intent_transcript_has_the_fixed_key_set_and_null_reason",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              454
+              458
             ],
             "protected_oracle": false,
             "scope_sha256": "91985584c89bf25a91613916ed73981aa369a564a065ed4ec7c181552b23ea1a",
@@ -21982,11 +21982,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/mls.rs",
-            "line": 2105,
+            "line": 2103,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2105
+              2103
             ],
             "protected_oracle": false,
             "scope_sha256": "ad0042cdc244b5fdc2a0ccc8644c1d1fc0fbbd65bcef57e666a23fa521f1dd61",
@@ -22134,11 +22134,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/mls.rs",
-            "line": 2659,
+            "line": 2656,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2659
+              2656
             ],
             "protected_oracle": false,
             "scope_sha256": "377117755cddea7fdddf4e4b6dee77887bcb77d47cc4a506f01051fb633d9575",
@@ -22235,11 +22235,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/mls.rs",
-            "line": 3707,
+            "line": 3703,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3707
+              3703
             ],
             "protected_oracle": false,
             "scope_sha256": "9cdb944d176b65d02f025bdef189747f5437641ba16287edde0dd4dbf7df6419",
@@ -22850,11 +22850,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/interop/moderation.rs",
-            "line": 1024,
+            "line": 1020,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1024
+              1020
             ],
             "protected_oracle": false,
             "scope_sha256": "cae1bb414c3aa702d670613d4e4aae64742a3e1b4f33970c205b41c2bd7760b8",
@@ -22993,11 +22993,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/interop/moderation.rs",
-            "line": 744,
+            "line": 740,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              744
+              740
             ],
             "protected_oracle": false,
             "scope_sha256": "e56f103e38732e8f592ebab9b65c8bdebc6892e66352b64e5a98bf8714f3d9b4",
@@ -23076,11 +23076,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/projection_query.rs",
-            "line": 1700,
+            "line": 1693,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1700
+              1693
             ],
             "protected_oracle": false,
             "scope_sha256": "abd2e3565bf110ba083ae31f6e72065d380aafd0f36211e4e0a40b447bac8ea3",
@@ -23159,11 +23159,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/projection_query.rs",
-            "line": 1625,
+            "line": 1620,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1625
+              1620
             ],
             "protected_oracle": false,
             "scope_sha256": "afee97e3087443d6917033c349481f2b2ea2586ff7479a6225022ce1b574dfaa",
@@ -23242,11 +23242,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/governance_history.rs",
-            "line": 3978,
+            "line": 3956,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              3978
+              3956
             ],
             "protected_oracle": false,
             "scope_sha256": "fb5781122938a31c60d51a0831d58ca96770860cb90619a1528202c55d67144b",
@@ -23491,11 +23491,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/spaces/space.rs",
-            "line": 166,
+            "line": 134,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              166
+              134
             ],
             "protected_oracle": false,
             "scope_sha256": "3d496d8ecae2a6ca3d33def400970461695e2a0310b8a654c4da0718e364c4f9",
@@ -23574,11 +23574,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/spaces/space.rs",
-            "line": 98,
+            "line": 66,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              98
+              66
             ],
             "protected_oracle": false,
             "scope_sha256": "7f86791fc073e89860724622201ce979e3cc4ed6ae4f590931ad9b7f3d567c8d",
@@ -23912,11 +23912,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 316,
+            "line": 314,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              316
+              314
             ],
             "protected_oracle": false,
             "scope_sha256": "3dbb7582257b1660836cb42206ccf756da60e732f7f2ae2fa7fbe242eed88688",
@@ -23929,11 +23929,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 378,
+            "line": 372,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              378
+              372
             ],
             "protected_oracle": false,
             "scope_sha256": "9d6e4c08f608c3a31628566f4526e8319100c2f600c94b3eee7d1f580ce39d6f",
@@ -24012,11 +24012,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 661,
+            "line": 638,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              661
+              638
             ],
             "protected_oracle": false,
             "scope_sha256": "6e7cb47f6f3d175dc10ac4bdbf36305982b759ec57dc18b60cc77f11b1e0d73c",
@@ -24112,11 +24112,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1608,
+            "line": 1587,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1608
+              1587
             ],
             "protected_oracle": false,
             "scope_sha256": "144a48938de50e7ee5aee03bb8f7d292991c9413afdc57e9480845f55fb41f89",
@@ -24129,11 +24129,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/events/event_log/endpoints.rs",
-            "line": 1622,
+            "line": 1601,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1622
+              1601
             ],
             "protected_oracle": false,
             "scope_sha256": "be556c95d407f55802588e67e27aa144e0d5733d3f1648387d96479a511f0325",
@@ -24146,11 +24146,11 @@
           },
           {
             "file": "soland/crates/http/src/routing/identity/agents/common.rs",
-            "line": 413,
+            "line": 411,
             "scope": "runtime_scope_assessment_uses_registered_layer_reasons",
             "scope_kind": "rust_test",
             "occurrence_lines": [
-              421
+              419
             ],
             "protected_oracle": false,
             "scope_sha256": "b8df52e19ac7081f28c9ba808ff6c565d8c15c6683c841c0d5fc709d311f77c6",
@@ -24270,11 +24270,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 1858,
+            "line": 1855,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              1858
+              1855
             ],
             "protected_oracle": false,
             "scope_sha256": "f723972e979a881fcae43f4dfdf6eb37e9dda34b2a5ad3efe69f1dc8c0dc4a5e",
@@ -24287,11 +24287,11 @@
           },
           {
             "file": "soland/crates/server/tests/http_api/agents.rs",
-            "line": 2041,
+            "line": 2038,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2041
+              2038
             ],
             "protected_oracle": false,
             "scope_sha256": "f723972e979a881fcae43f4dfdf6eb37e9dda34b2a5ad3efe69f1dc8c0dc4a5e",
@@ -24781,11 +24781,11 @@
         "fault_recovery": [
           {
             "file": "soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
-            "line": 216,
+            "line": 215,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              216
+              215
             ],
             "protected_oracle": false,
             "scope_sha256": "399174811206e9629bba91b2e9f6c5203c53e34f2fb5cd66c4f74810b472c1b9",
@@ -24947,11 +24947,11 @@
         "fault_recovery": [
           {
             "file": "soland/crates/http/src/routing/identity/recovery/security_transaction_endpoints.rs",
-            "line": 193,
+            "line": 192,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              193
+              192
             ],
             "protected_oracle": false,
             "scope_sha256": "363ee36151525ad80e6cb1f6b72e4c690eb40ddb98ffb484e9ff12a84559c4e9",
@@ -25348,11 +25348,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/sync/events_query.rs",
-            "line": 2416,
+            "line": 2409,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              2416
+              2409
             ],
             "protected_oracle": false,
             "scope_sha256": "a6ca4cbbee0ba2b2803017c6f87427f86b64b1294dcbfaf26e39146ca9026683",
@@ -25501,11 +25501,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/projection_query.rs",
-            "line": 901,
+            "line": 900,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              901
+              900
             ],
             "protected_oracle": false,
             "scope_sha256": "76b2678893ff34064daa3973157bda591cd5f32901a842a5ee96cb836dc76ab1",
@@ -25584,11 +25584,11 @@
         "protocol_kat": [
           {
             "file": "soland/crates/http/src/routing/events/projection_query.rs",
-            "line": 975,
+            "line": 973,
             "scope": "<module_helper>",
             "scope_kind": "module_helper",
             "occurrence_lines": [
-              975
+              973
             ],
             "protected_oracle": false,
             "scope_sha256": "d1855f96febe7762f301bc66ebd478fe5b189e296ca9543913c56e63dc520d69",
