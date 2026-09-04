@@ -394,7 +394,7 @@ pub fn spawn_ephemeral_postgres_for(database_url_env: &str) -> Result<Option<Eph
             "POSTGRES_DB=arkret",
             "-p",
             &format!("{}:5432", host_port.port()),
-            "postgres:16-alpine",
+            "postgres:18.6-alpine",
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())

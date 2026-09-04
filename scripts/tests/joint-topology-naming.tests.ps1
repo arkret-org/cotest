@@ -3,9 +3,8 @@ Set-StrictMode -Version Latest
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $topologyFiles = @(
     "scripts\run-joint-e2e.ps1",
-    "scripts\run-joint-e2e-ready.ps1",
+    "scripts\initialize-joint-e2e-environment.ps1",
     "scripts\control-joint-e2e-service.ps1",
-    "scripts\check-joint-e2e-prerequisites.ps1",
     "scripts\lib\joint-e2e-environment.ps1",
     "e2e\helpers\env.ts"
 )

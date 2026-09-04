@@ -275,20 +275,21 @@ Recommended local run:
 ```powershell
 .\scripts\run-server-conformance.ps1 -Profile joint
 .\scripts\run-server-conformance.ps1 -Runtime docker -BuildImage -Profile joint
-.\scripts\run-joint-e2e.ps1 -SkipNpmInstall
+.\scripts\run-joint-e2e.ps1
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -RunProfile joint-smoke
 .\scripts\run-joint-e2e.ps1 -SolandRuntime docker -BuildSolandImage -SkipInkson -RunProfile joint-smoke -PlaywrightProject chromium -Grep "soland /_arkret/describe"
-.\scripts\run-joint-e2e.ps1 -StartCoauth -SkipNpmInstall
-.\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke -SkipNpmInstall
-.\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall
+.\scripts\run-joint-e2e.ps1 -StartCoauth
+.\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-smoke
+.\scripts\run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full
 .\scripts\run-joint-e2e.ps1 -PreflightOnly -StartCoauth -CoauthPostgresUrl <dsn>
 .\scripts\run-joint-e2e.ps1 -RunnerSelfTest
 .\scripts\run-server-conformance.ps1 -Profile multi-server
 .\scripts\run-joint-e2e.ps1 -StartMockMimiFacade -Grep "mock-mimi-facade"
 ```
 
-Omit `-SkipNpmInstall` on a fresh checkout so the script installs the local
-Playwright dependencies in `e2e/`.
+The environment initializer attempts local npm and Playwright installation for
+every invocation. If a command is denied, it reports the failure and asks the
+user to retry elevated; only hosts ACL initialization is always administrator-only.
 
 The runner performs a preflight before starting services: Node/npm/npx,
 Playwright config/package/browser registry, default cargo/dx startup tools,

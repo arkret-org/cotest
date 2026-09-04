@@ -2,7 +2,7 @@
 
 ## 当前基线
 
-- 命令：`./scripts/run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full -SkipNpmInstall`
+- 命令：`./scripts/run-joint-e2e.ps1 -StartCoauth -RunProfile joint-full`
 - 完整运行：`artifacts/runs/20260719-210052/joint-e2e`
 - 480 tests：291 passed，22 failed，107 expected/profile skipped，60 因 serial 前置失败未运行。
 - 测试阶段耗时 25.9 分钟，runner 总耗时 1588.1 秒；托管服务失败数为 0。

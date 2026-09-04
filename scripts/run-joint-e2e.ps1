@@ -57,7 +57,7 @@ param(
     # process-mode Soland. Multi-server runs always use one isolated ephemeral
     # PostgreSQL instance per server.
     [string]$SolandDatabaseUrl,
-    [string]$SolandPostgresImage = "postgres:16-alpine",
+    [string]$SolandPostgresImage = "postgres:18.6-alpine",
     [switch]$RequireDecisionRace,
     [ValidateSet("process", "docker")]
     [string]$SolandRuntime = "process",
@@ -79,7 +79,7 @@ param(
     # that a ceremony started on one process can finish on another.
     [switch]$DualCoauth,
     [string]$CoauthBin,
-    [string]$CoauthPostgresImage = "postgres:16-alpine",
+    [string]$CoauthPostgresImage = "postgres:18.6-alpine",
     # Optional externally-provisioned Postgres DSN for coauth. When set, the
     # harness skips the docker-backed ephemeral Postgres entirely (useful when
     # Docker Desktop is unavailable and a local PostgreSQL serves instead).
@@ -109,11 +109,8 @@ param(
     # `could not find client` from coauth's /authorize. See cotest oidc-login-chain.spec.ts.
     [string]$CoauthOAuthClientId = "01GFWR28C4KNE04WG3HKXB7C9R",
     [int]$StartupTimeoutSeconds = 900,
-    [switch]$SkipNpmInstall,
-    [switch]$SkipBrowserInstall,
     [switch]$SkipBuild,
     [switch]$KeepServices,
-    [switch]$SkipPreflight,
     [switch]$PreflightOnly,
     [switch]$RunnerSelfTest,
     [ValidateRange(1, 32)]
@@ -219,9 +216,6 @@ $SolandServer2ServiceId = $null
 $SolandServer2ServiceDid = $null
 $script:UseManagedCoauthAssertionKey = [bool]($StartCoauth -and -not $CoauthCommand)
 
-if ($PreflightOnly -and $SkipPreflight) {
-    throw "-PreflightOnly cannot be combined with -SkipPreflight"
-}
 function Resolve-PlaywrightProjects {
     param(
         [string]$RunProfile,
@@ -673,7 +667,6 @@ function Invoke-JointE2ePreflight {
         [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
         [Parameter(Mandatory = $true)][string]$E2eRoot,
         [Parameter(Mandatory = $true)][string[]]$PlaywrightProjects,
-        [Parameter(Mandatory = $true)][bool]$SkipNpmInstall,
         [Parameter(Mandatory = $true)][bool]$StartCoauth,
         [Parameter(Mandatory = $true)][string]$CoauthPostgresImage,
         [string]$CoauthBin,
@@ -684,7 +677,7 @@ function Invoke-JointE2ePreflight {
         [string]$SolandCommand,
         [string]$SolandBin,
         [string]$SolandDatabaseUrl,
-        [string]$SolandPostgresImage = "postgres:16-alpine",
+        [string]$SolandPostgresImage = "postgres:18.6-alpine",
         [bool]$WillStartDefaultSoland = $false,
         [ValidateSet("process", "docker")][string]$SolandRuntime = "process",
         [string]$SolandImage,
@@ -726,10 +719,8 @@ function Invoke-JointE2ePreflight {
     $nodeModules = Join-Path $E2eRoot "node_modules"
     if (Test-Path $nodeModules) {
         Add-PreflightResult $results "e2e node_modules" "pass" $nodeModules
-    } elseif ($SkipNpmInstall) {
-        Add-PreflightResult $results "e2e node_modules" "fail" "node_modules missing while -SkipNpmInstall is set"
     } else {
-        Add-PreflightResult $results "e2e node_modules" "pass" "missing; runner will execute npm install"
+        Add-PreflightResult $results "e2e node_modules" "fail" "missing after environment initialization"
     }
 
     $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $E2eRoot
@@ -957,7 +948,7 @@ function Invoke-JointE2ePreflight {
             Add-PreflightResult $results "hosts file writable" "pass" $hostsPath
         } catch {
             $platform = Get-CotestPlatformInfo
-            $repair = if ($platform.os -eq "windows") { "Run elevated: pwsh -NoProfile -File $PSScriptRoot\setup-joint-e2e-hosts.ps1 -ServerCount $ServerCount" } else { "Privileged setup is not yet supported on $($platform.os)" }
+            $repair = if ($platform.os -eq "windows") { "Run elevated: pwsh -NoProfile -File $PSScriptRoot\initialize-joint-e2e-environment.ps1 -ServerCount $ServerCount" } else { "Privileged setup is not yet supported on $($platform.os)" }
             Add-PreflightResult $results "hosts file writable" "fail" "$hostsPath is not writable: $($_.Exception.Message). $repair"
         }
     }
@@ -1204,7 +1195,7 @@ function Install-JointLoopbackHosts {
     try {
         [System.IO.File]::WriteAllText($hostsPath, $patched, [System.Text.UTF8Encoding]::new($false))
     } catch {
-        throw "joint TLS topology: cannot register loopback hosts in $hostsPath ($($_.Exception.Message)). Run the platform setup script reported by check-joint-e2e-prerequisites.ps1."
+        throw "joint TLS topology: cannot register loopback hosts in $hostsPath ($($_.Exception.Message)). Run initialize-joint-e2e-environment.ps1 from an elevated PowerShell."
     }
 }
 
@@ -2601,6 +2592,40 @@ if ($RunnerSelfTest) {
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $workspaceRoot = (Resolve-Path (Join-Path $repoRoot "..")).Path
+$requiresDocker = (
+    ($StartCoauth -and -not $CoauthPostgresUrl) -or
+    ((-not $SolandBaseUrl -and -not $SolandCommand -and -not $SolandDatabaseUrl)) -or
+    $SolandRuntime -eq "docker"
+)
+$environmentOutputDirectory = if ($JointDir) {
+    Join-Path ([System.IO.Path]::GetFullPath($JointDir)) "environment"
+} else {
+    $environmentRoot = if ($OutputRoot) { [System.IO.Path]::GetFullPath($OutputRoot) } else { Join-Path $repoRoot "artifacts" }
+    Join-Path $environmentRoot ("environment\" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+}
+$environmentArgs = @(
+    "-NoProfile",
+    "-File", (Join-Path $PSScriptRoot "initialize-joint-e2e-environment.ps1"),
+    "-ServerCount", "$ServerCount",
+    "-OutputDirectory", $environmentOutputDirectory,
+    "-PostgresImage"
+)
+$environmentPostgresImages = @($SolandPostgresImage, $CoauthPostgresImage) | Sort-Object -Unique
+$environmentArgs += $environmentPostgresImages
+if ($StartCoauth) { $environmentArgs += "-StartCoauth" }
+if ($requiresDocker) { $environmentArgs += "-RequireDocker" }
+& (Get-Process -Id $PID).Path @environmentArgs
+$environmentExit = $LASTEXITCODE
+if ($environmentExit -ne 0) {
+    Write-Host "Joint E2E stopped before preparation or service startup. Environment report: $environmentOutputDirectory"
+    exit $environmentExit
+}
+if ($IsWindows) {
+    $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $env:PATH = @($machinePath, $userPath) | Where-Object { $_ } | Join-String -Separator ";"
+}
+
 $jointRunnerLock = Open-ExclusiveRunnerLock `
     -Path (Join-Path $repoRoot "artifacts\.joint-e2e-run.lock")
 if (-not $OutputRoot) {
@@ -3292,36 +3317,33 @@ try {
     ConvertTo-Json -InputObject @($preparationTimings.ToArray()) -Depth 4 |
         Set-Content -Path (Join-Path $jointDir "preparation-timings.json") -Encoding UTF8
 
-    if (-not $SkipPreflight) {
-        Invoke-JointE2ePreflight `
-            -RepoRoot $repoRoot `
-            -WorkspaceRoot $workspaceRoot `
-            -E2eRoot $e2eRoot `
-            -PlaywrightProjects $playwrightProjects `
-            -SkipNpmInstall ([bool]$SkipNpmInstall) `
-            -StartCoauth ([bool]$StartCoauth) `
-            -CoauthPostgresImage $CoauthPostgresImage `
-            -CoauthBin $CoauthBin `
-            -StartTeabay ([bool]$StartTeabay) `
-            -TeabayBin $TeabayBin `
-            -TeabayDatabaseUrl $TeabayDatabaseUrl `
-            -SolandBaseUrl $SolandBaseUrl `
-            -SolandCommand $SolandCommand `
-            -SolandBin $SolandBin `
-            -SolandDatabaseUrl $SolandDatabaseUrl `
-            -SolandPostgresImage $SolandPostgresImage `
-            -WillStartDefaultSoland $willStartDefaultSoland `
-            -SolandRuntime $SolandRuntime `
-            -SolandImage $SolandImage `
-            -WillStartDockerSoland $willStartDockerSoland `
-            -InksonBaseUrl $InksonBaseUrl `
-            -InksonCommand $InksonCommand `
-            -WillStartDefaultInkson $willStartDefaultInkson `
-            -InksonStaticIndex $inksonStaticIndex `
-            -JointTlsTopology ([bool]$jointTlsEnabled) `
-            -JsonPath $preflightJson `
-            -MarkdownPath $preflightMd
-    }
+    Invoke-JointE2ePreflight `
+        -RepoRoot $repoRoot `
+        -WorkspaceRoot $workspaceRoot `
+        -E2eRoot $e2eRoot `
+        -PlaywrightProjects $playwrightProjects `
+        -StartCoauth ([bool]$StartCoauth) `
+        -CoauthPostgresImage $CoauthPostgresImage `
+        -CoauthBin $CoauthBin `
+        -StartTeabay ([bool]$StartTeabay) `
+        -TeabayBin $TeabayBin `
+        -TeabayDatabaseUrl $TeabayDatabaseUrl `
+        -SolandBaseUrl $SolandBaseUrl `
+        -SolandCommand $SolandCommand `
+        -SolandBin $SolandBin `
+        -SolandDatabaseUrl $SolandDatabaseUrl `
+        -SolandPostgresImage $SolandPostgresImage `
+        -WillStartDefaultSoland $willStartDefaultSoland `
+        -SolandRuntime $SolandRuntime `
+        -SolandImage $SolandImage `
+        -WillStartDockerSoland $willStartDockerSoland `
+        -InksonBaseUrl $InksonBaseUrl `
+        -InksonCommand $InksonCommand `
+        -WillStartDefaultInkson $willStartDefaultInkson `
+        -InksonStaticIndex $inksonStaticIndex `
+        -JointTlsTopology ([bool]$jointTlsEnabled) `
+        -JsonPath $preflightJson `
+        -MarkdownPath $preflightMd
 
     if ($PreflightOnly) {
         Write-Host "Preflight completed; no services were started."
@@ -4261,37 +4283,6 @@ try {
         Wait-HttpReady -Url $inksonServer2BaseUrl -TimeoutSeconds $StartupTimeoutSeconds
         if ($generatedInksonServer2Command) {
             Wait-DioxusAppReady -Url $inksonServer2BaseUrl -TimeoutSeconds $StartupTimeoutSeconds
-        }
-    }
-
-    if (-not $SkipNpmInstall -and -not (Test-Path (Join-Path $e2eRoot "node_modules"))) {
-        Push-Location $e2eRoot
-        try {
-            & npm install
-            if ($LASTEXITCODE -ne 0) {
-                throw "npm install failed"
-            }
-        }
-        finally {
-            Pop-Location
-        }
-    }
-    $needsBundledChromium = ($playwrightProjects -contains "chromium") -or ($playwrightProjects -contains "joint-inkson")
-    if (-not $SkipBrowserInstall -and $needsBundledChromium) {
-        Push-Location $e2eRoot
-        try {
-            $playwrightCli = Resolve-PlaywrightCliInvocation -E2eRoot $e2eRoot
-            if (-not $playwrightCli) {
-                throw "Playwright CLI is required"
-            }
-            $browserInstallArgs = @($playwrightCli.Arguments) + @("install", "chromium")
-            & $playwrightCli.FilePath @browserInstallArgs
-            if ($LASTEXITCODE -ne 0) {
-                throw "playwright browser install failed"
-            }
-        }
-        finally {
-            Pop-Location
         }
     }
 

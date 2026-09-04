@@ -147,10 +147,6 @@ function Invoke-JointSmokeGate {
     if ($Grep) {
         $args += @("-Grep", $Grep)
     }
-    if (Test-Path (Join-Path $RepoRoot "e2e\node_modules")) {
-        $args += "-SkipNpmInstall"
-    }
-
     Add-RawLogLine -Path $RawLog -Value ""
     Add-RawLogLine -Path $RawLog -Value "=== $OutputName $RunProfile ==="
     $startedAt = Get-Date

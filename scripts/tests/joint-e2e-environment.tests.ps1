@@ -52,14 +52,21 @@ $linuxAdvice = @(Get-CotestCaddyRepairAdvice -PlatformInfo $linuxPlatform)
 Assert-True (($linuxAdvice -join "`n") -match "APT") "Debian advice must reference official APT instructions"
 Assert-True (($linuxAdvice -join "`n") -notmatch "winget") "Linux advice must not contain winget"
 
-$readyScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\run-joint-e2e-ready.ps1")
-Assert-True ($readyScript -match '"-ServerCount", "\$ServerCount"') "ready runner must forward ServerCount"
-Assert-True ($readyScript -match '"-NetworkShape", \$NetworkShape') "ready runner must forward NetworkShape"
-Assert-True ($readyScript -match 'exit \$runnerExit') "ready runner must preserve the runner exit code"
-$setupScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\setup-joint-e2e-hosts.ps1")
-Assert-True ($setupScript -match 'Test-CotestAdministrator') "setup must require administrator identity"
-Assert-True ($setupScript -match 'Export-Clixml' -and $setupScript -match 'Get-FileHash') "setup must back up ACLs and checksum the byte backup"
-Assert-True ($setupScript -match '\$\{TestUser\}:\(M\)' -and $setupScript -notmatch '(?i)Everyone:\(M\)|Users:\(M\)') "setup must grant Modify only to the named test user"
+$runnerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\run-joint-e2e.ps1")
+Assert-True ($runnerScript -match 'initialize-joint-e2e-environment\.ps1') "the sole test entry must invoke environment initialization"
+Assert-True ($runnerScript -notmatch '\[switch\]\$SkipPreflight') "the test entry must not expose a bootstrap bypass"
+Assert-True ($runnerScript -match 'postgres:18\.6-alpine') "the runner must pin PostgreSQL 18.6 Alpine"
+Assert-True ($runnerScript -match 'GetEnvironmentVariable\("Path", "Machine"\)' -and $runnerScript -match 'GetEnvironmentVariable\("Path", "User"\)') "the entry must refresh PATH after child-process installation"
+$initializerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\initialize-joint-e2e-environment.ps1")
+Assert-True ($initializerScript -match 'Test-CotestAdministrator' -and $initializerScript -match 'if \(\$isAdministrator\)') "initializer must branch on administrator identity"
+Assert-True ($initializerScript -match 'mode = "install-and-check"') "dependency installation must be attempted by default"
+Assert-True ($initializerScript -match 'if \(\$isAdministrator\) \{\s*\$null = Initialize-CotestWindowsHostsAccess') "only the hosts ACL initializer must be administrator-gated"
+Assert-True ($initializerScript.IndexOf('if ($platform.os -eq "windows")') -lt $initializerScript.LastIndexOf('if ($isAdministrator)')) "package installation must run before the administrator-only hosts branch"
+Assert-True ($initializerScript -notmatch 'standard user: read-only check|mode = .*check-only') "standard-user dependency handling must not regress to check-only"
+Assert-True ($initializerScript -match 'Export-Clixml' -and $initializerScript -match 'Get-FileHash') "initializer must back up ACLs and checksum the byte backup"
+Assert-True ($initializerScript -match '\$\{targetUser\}:\(M\)' -and $initializerScript -notmatch '(?i)Everyone:\(M\)|Users:\(M\)') "initializer must grant Modify only to the selected test user"
+Assert-True ($initializerScript -match 'winget\.Source search --name Caddy --exact') "Caddy installation must resolve the current winget package id"
+Assert-True ($initializerScript -notmatch '(?m)^\s*&\s*.*restore-joint-e2e-hosts') "initializer must never invoke restore automatically"
 $restoreScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\restore-joint-e2e-hosts.ps1")
 Assert-True ($restoreScript -match 'backup_sha256' -and $restoreScript -match 'SetSecurityDescriptorSddlForm') "restore must validate backup integrity and restore the ACL"
 

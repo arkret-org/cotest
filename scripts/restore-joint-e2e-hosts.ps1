@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-Removes cotest hosts blocks and restores the ACL saved by setup-joint-e2e-hosts.ps1.
+Manually removes cotest hosts blocks and restores the ACL saved by the environment initializer.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param([string]$StateDirectory, [string]$HostsPath)

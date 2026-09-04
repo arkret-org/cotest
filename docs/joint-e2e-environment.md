@@ -2,37 +2,37 @@
 
 The supported production-shaped local topology uses runner-owned processes, independent PostgreSQL stores, a run-scoped CA, and Caddy on loopback. Plain HTTP is diagnostic-only and is not an acceptance topology.
 
-## One-time and per-run commands
+## One entry and administrator initialization
 
-On Windows, an administrator performs the auditable one-time initialization for the exact developer account:
+The only test entry is `scripts/run-joint-e2e.ps1`. It always invokes the environment initializer before preparation or service startup:
 
 ```powershell
-pwsh -NoProfile -File scripts/setup-joint-e2e-hosts.ps1 -ServerCount 3 -TestUser "DOMAIN\developer"
+pwsh -NoProfile -File scripts/run-joint-e2e.ps1 -RunProfile joint-smoke -ServerCount 1 -StartCoauth
+pwsh -NoProfile -File scripts/run-joint-e2e.ps1 -RunProfile joint-full -ServerCount 1 -StartCoauth
+pwsh -NoProfile -File scripts/run-joint-e2e.ps1 -RunProfile joint-full -ServerCount 3 -StartCoauth
 ```
 
-The script backs up the hosts bytes and ACL, grants only that account `Modify`, proves a marked append/remove cycle, and records recovery state under `%ProgramData%\cotest\joint-e2e-hosts`. It does not install software or leave host entries behind. Run it twice to verify the idempotent no-op. Roll back with an elevated shell:
+Every invocation attempts to install missing packages, local npm dependencies, Playwright Chromium, and required Docker images. Most of these operations can succeed as a standard user. If an installation command is denied or otherwise fails, the run stops before preparation and tells the user to retry from an elevated PowerShell. Hosts ACL initialization is the only operation that is deliberately never attempted without administrator rights:
+
+```powershell
+pwsh -NoProfile -File scripts/initialize-joint-e2e-environment.ps1 -ServerCount 3 -StartCoauth -RequireDocker -TestUser "DOMAIN\developer"
+```
+
+In an elevated Windows shell, the same flow additionally initializes the exact developer account's hosts access. The hosts initializer backs up the hosts bytes and ACL, grants only that account `Modify`, proves a marked append/remove cycle, and records recovery state under `%ProgramData%\cotest\joint-e2e-hosts`.
+
+The restore script is never called by the entry or initializer. It is an explicit manual operation from an elevated shell:
 
 ```powershell
 pwsh -NoProfile -File scripts/restore-joint-e2e-hosts.ps1
 ```
 
-The rollback verifies the backup SHA-256, removes only `cotest-joint-e2e:<run-id>` blocks from the current hosts content, preserves every other line, and restores the saved ACL. macOS and Linux currently support read-only detection only; the preflight reports privileged setup as unsupported instead of suggesting Windows commands.
-
-Developers then run one command:
-
-```powershell
-pwsh -NoProfile -File scripts/run-joint-e2e-ready.ps1 -RunProfile joint-smoke -ServerCount 1 -StartCoauth
-pwsh -NoProfile -File scripts/run-joint-e2e-ready.ps1 -RunProfile joint-full -ServerCount 1 -StartCoauth
-pwsh -NoProfile -File scripts/run-joint-e2e-ready.ps1 -RunProfile joint-full -ServerCount 3 -StartCoauth
-```
-
-The ready entry point runs the read-only preflight first and refuses to start services if it fails. It does not accept `-SkipPreflight` or the deprecated two-server switch.
+The rollback verifies the backup SHA-256, removes only `cotest-joint-e2e:<run-id>` blocks from the current hosts content, preserves every other line, and restores the saved ACL. The runner still removes its own run-scoped hosts block in `finally`; that normal per-run cleanup is not an ACL restore. macOS and Linux currently support detection and local dependency installation, but automatic platform-package and hosts initialization are currently implemented only for Windows.
 
 ## Prerequisites
 
-The preflight records the OS, architecture, PowerShell, `PATH`, package managers, absolute tool paths, and versions. Required tools are Node.js/npm/npx, the local Playwright package and Chromium, OpenSSL, Rust/cargo, Caddy `>=2.8,<3`, and Docker when runner-owned PostgreSQL is requested. A local checkout/build also needs the Soland, Coauth, Inkson, cotest-wire, and PostgreSQL images described by the runner.
+The initializer records the OS, architecture, PowerShell, `PATH`, package managers, absolute tool paths, and versions. Required tools are Node.js/npm/npx, the local Playwright package and Chromium, OpenSSL, Rust/cargo, Caddy `>=2.8,<3`, and Docker when runner-owned PostgreSQL is requested. Runner-owned databases use the reproducible `postgres:18.6-alpine` image. A local checkout/build also needs the Soland, Coauth, Inkson and cotest-wire artifacts described by the runner.
 
-Caddy must include the standard TLS and reverse-proxy modules. The report records its absolute path, version output, SHA-256, module result, and inferred source. Caddy is never downloaded or installed by the preflight. Windows advice first runs an exact `winget search` so the current package ID is resolved rather than hard-coded; Chocolatey and Scoop are marked community-maintained. Homebrew is also community-maintained. Debian/Ubuntu advice points to Caddy's signed official APT repository, Fedora/RHEL to the official COPR/DNF instructions, and other systems to the signed/checksum-verified official release or container documentation.
+Caddy must include the standard TLS and reverse-proxy modules. The report records its absolute path, version output, SHA-256, module result, and inferred source. On Windows every invocation first runs an exact `winget search` and installs only the package ID returned by that search; it never guesses a Caddy package ID. Chocolatey and Scoop remain supported fallbacks and are recorded as community-maintained. If the package manager requires elevation, the failed command is reported and the user is told to retry elevated.
 
 ## Hosts and TLS contract
 
@@ -44,7 +44,7 @@ For `-ServerCount N`, the runner temporarily adds only these names to the actual
 
 The first two groups are Caddy sites using the run-scoped certificate. `unregistered.local.host` resolves to the same loopback Caddy listener but has no site; successful application traffic on it is a failure. The gate also checks the generated CA, certificate SANs, served leaf, SPKI pin, service DID history URL, HTTP downgrade, wrong CA/SPKI, and wrong-server identity paths. The CA is passed only to the managed process tree and is never imported into a user or machine root store.
 
-Each run holds a machine-local exclusive lock. Its marker names the exact run, and `finally` removes only that block. A read-only preflight reports stale markers and the exact restore command; it never silently edits them.
+Each run holds a machine-local exclusive lock. Its marker names the exact run, and `finally` removes only that block. Initialization reports stale markers and the exact manual restore command; neither the entry nor initializer invokes restore automatically.
 
 ## Three-server budget
 

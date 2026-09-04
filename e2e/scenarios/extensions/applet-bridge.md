@@ -148,7 +148,7 @@
 - 主链已 live 化。精确回归命令：
 
   ```powershell
-  .\scripts\run-joint-e2e.ps1 -StartCoauth -StartMockAppletRegistry -RunProfile joint-full -PlaywrightProject chromium -Grep 'applet package installs, bot joins space, ghost actor relays external messages with accountability chain' -SkipNpmInstall -SkipBrowserInstall
+  .\scripts\run-joint-e2e.ps1 -StartCoauth -StartMockAppletRegistry -RunProfile joint-full -PlaywrightProject chromium -Grep 'applet package installs, bot joins space, ghost actor relays external messages with accountability chain'
   ```
 
   通过证据：`artifacts/runs/20260726-033554/joint-e2e/playwright-report`。
