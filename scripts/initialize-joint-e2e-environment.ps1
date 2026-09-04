@@ -212,14 +212,14 @@ function Initialize-CotestWindowsHostsAccess {
         $withProbe = Add-CotestHostsBlock -Content $before -Hosts $probeHosts -Marker $probeMarker
         [System.IO.File]::WriteAllText($resolvedHostsPath, $withProbe, [System.Text.UTF8Encoding]::new($false))
         foreach ($hostName in $probeHosts) {
-            $answers = [Net.Dns]::GetHostAddresses($hostName)
+            $answers = @([Net.Dns]::GetHostAddresses($hostName))
             if ($answers.Count -eq 0 -or @($answers | Where-Object { -not [Net.IPAddress]::IsLoopback($_) }).Count -gt 0) {
                 throw "hosts setup probe resolved $hostName outside loopback"
             }
         }
         $cleaned = Remove-CotestHostsBlocks -Content ([System.IO.File]::ReadAllText($resolvedHostsPath)) -Marker $probeMarker
         [System.IO.File]::WriteAllText($resolvedHostsPath, $cleaned, [System.Text.UTF8Encoding]::new($false))
-        if ((Get-CotestHostsMarkers -Content ([System.IO.File]::ReadAllText($resolvedHostsPath))).Count -ne 0) {
+        if (@(Get-CotestHostsMarkers -Content ([System.IO.File]::ReadAllText($resolvedHostsPath))).Count -ne 0) {
             throw "hosts setup probe marker cleanup failed"
         }
         $manifest = [pscustomobject]@{
@@ -419,7 +419,10 @@ $report = [pscustomobject]@{
     caddy = $caddy
     actions = @($actions)
     results = @($results)
-    passed = (@($results | Where-Object { $_.status -eq "fail" }).Count -eq 0)
+    passed = (
+        @($results | Where-Object { $_.status -eq "fail" }).Count -eq 0 -and
+        @($actions | Where-Object { $_.status -eq "failed" }).Count -eq 0
+    )
 }
 $jsonPath = Join-Path $OutputDirectory "environment.json"
 $markdownPath = Join-Path $OutputDirectory "environment.md"
