@@ -217,14 +217,13 @@ async function createCardStrandApi(
       },
     },
   });
-  const strandId = sdkEventDerivedObjectId(envelope);
   await submitSignedEventApi(
     request,
     token,
     envelope,
     { context: `create card strand ${title}` },
   );
-  return strandId;
+  return sdkEventDerivedObjectId(envelope);
 }
 
 async function createSpaceApi(
@@ -256,11 +255,10 @@ async function createSpaceApi(
       },
     },
   });
-  const spaceId = sdkEventDerivedObjectId(envelope);
   await submitSignedEventApi(request, token, envelope, {
     context: `create ${kind} space ${title}`,
   });
-  return spaceId;
+  return sdkEventDerivedObjectId(envelope);
 }
 
 test.describe("kanban end-to-end", () => {

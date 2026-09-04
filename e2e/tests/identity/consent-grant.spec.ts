@@ -76,7 +76,10 @@ async function requestContact(
     actor.page.getByTestId("send-contact-request-button"),
   );
   const status = actor.page.getByTestId("contact-request-status");
-  const escapedTarget = targetId.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const targetActor = canonicalJson(accountActorId(targetId));
+  const escapedTarget = targetActor
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
   const pendingRow = actor.page
     .getByTestId("contact-row")
     .filter({ has: actor.page.locator(`[title="${escapedTarget}"]`) });
@@ -108,9 +111,13 @@ async function expectContactState(
   targetId: string,
   states: string[],
 ) {
-  const row = actor.page.locator(
-    `[data-testid="contact-row"][data-peer="${targetId}"]`,
-  );
+  const targetActor = canonicalJson(accountActorId(targetId));
+  const escapedTarget = targetActor
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
+  const row = actor.page
+    .getByTestId("contact-row")
+    .filter({ has: actor.page.locator(`[title="${escapedTarget}"]`) });
   await expect(row).toBeVisible({ timeout: 30_000 });
   await expect(row).toHaveAttribute(
     "data-state",
@@ -342,7 +349,9 @@ test.describe("consent grant", () => {
 
     try {
       await requestContact(bobPage, alice.id, "message");
-      const escapedId = alice.id.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      const escapedId = canonicalJson(accountActorId(alice.id))
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"');
       const pendingRow = bobPage.page
         .getByTestId("contact-row")
         .filter({ has: bobPage.page.locator(`[title="${escapedId}"]`) });

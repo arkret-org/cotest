@@ -195,9 +195,9 @@ test.describe("discovery", () => {
         alicePage.page.getByTestId("directory-search-button"),
       );
       await expect(
-        alicePage.page.locator(
-          `[data-testid="actor-result-did"][title="${cssStringEscape(bob.id)}"]`,
-        ),
+        alicePage.page
+          .getByTestId("actor-result")
+          .filter({ hasText: bob.id }),
       ).toBeVisible({ timeout: 30_000 });
       await stepShot(alicePage.page, testInfo, "post-contact-visible");
     } finally {

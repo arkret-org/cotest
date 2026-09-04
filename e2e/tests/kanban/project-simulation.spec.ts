@@ -18,6 +18,7 @@ import {
   addRealmMemberApi,
   alignSignedEventToActorFrontierApi,
   authHeaders,
+  canonicalJson,
   canonicalTimestamp,
   createRealmApi,
   prepareSignedEventCbaApi,
@@ -45,8 +46,11 @@ type StrandProjectionRow = {
   title?: string | null;
   board_space_id?: string | null;
   list_space_id?: string | null;
-  assigned_actor_ids?: string[];
-  assigned_to_relations?: Array<{ relation_id: string; actor_id: string }>;
+  assigned_actor_ids?: Array<ReturnType<typeof accountActorId>>;
+  assigned_to_relations?: Array<{
+    relation_id: string;
+    actor_id: ReturnType<typeof accountActorId>;
+  }>;
 };
 
 type SpaceProjectionRow = {
@@ -163,13 +167,13 @@ async function createBoardWithCard(
       },
     },
   });
-  const boardId = sdkEventDerivedObjectId(boardEnvelope);
   await submitSignedEventApi(
     request,
     token,
     boardEnvelope,
     { context: `create board ${opts.boardTitle}` },
   );
+  const boardId = sdkEventDerivedObjectId(boardEnvelope);
 
   const listEnvelope = signedEventEnvelope({
     actorId,
@@ -189,13 +193,13 @@ async function createBoardWithCard(
       },
     },
   });
-  const listId = sdkEventDerivedObjectId(listEnvelope);
   await submitSignedEventApi(
     request,
     token,
     listEnvelope,
     { context: `create list ${opts.listTitle}` },
   );
+  const listId = sdkEventDerivedObjectId(listEnvelope);
 
   const cardEnvelope = signedEventEnvelope({
     actorId,
@@ -220,13 +224,13 @@ async function createBoardWithCard(
       },
     },
   });
-  const cardId = sdkEventDerivedObjectId(cardEnvelope);
   await submitSignedEventApi(
     request,
     token,
     cardEnvelope,
     { context: `create card ${opts.cardTitle}` },
   );
+  const cardId = sdkEventDerivedObjectId(cardEnvelope);
   await submitSignedEventApi(
     request,
     token,
@@ -261,7 +265,7 @@ async function registerSingleAssigneeProfile(
     {
       relation_kind: "assigned_to",
       from_kind: "strand",
-      to_kind: "did",
+      to_kind: "actor",
       relation_scope: "realm",
       cardinality: "many_to_one",
       max_to_per_from: 1,
@@ -383,25 +387,29 @@ test.describe("project simulation", () => {
           realm_id: realmId,
           relation_kind: "assigned_to",
           from_ref: cardId,
-          to_ref: bob.id,
+          to_ref: accountActorId(bob.id),
           created_by: accountActorId(alice.id),
           created_at: canonicalTimestamp(),
         },
       },
     });
-    const relationId = sdkEventDerivedObjectId(assignment);
     await submitSignedEventApi(request, aliceToken, assignment, {
       context: "assign Card 1 to bob",
     });
+    const relationId = sdkEventDerivedObjectId(assignment);
 
     // bob reads the Realm's strands and finds himself on Card 1.
     const row = await readStrandRow(request, bobToken, realmId, cardId);
     expect(row, "Card 1 visible to bob").toBeTruthy();
-    expect(row?.assigned_actor_ids ?? []).toContain(bob.id);
+    expect(row?.assigned_actor_ids ?? []).toContainEqual(
+      accountActorId(bob.id),
+    );
     expect(
       (row?.assigned_to_relations ?? []).some(
         (relation) =>
-          relation.actor_id === bob.id && relation.relation_id === relationId,
+          canonicalJson(relation.actor_id) ===
+            canonicalJson(accountActorId(bob.id)) &&
+          relation.relation_id === relationId,
       ),
       "assigned_to relation surfaces with bob's actor + relation id",
     ).toBe(true);
@@ -724,7 +732,7 @@ test.describe("project simulation", () => {
           realm_id: realmId,
           relation_kind: "assigned_to",
           from_ref: cardId,
-          to_ref: alice.id,
+          to_ref: accountActorId(alice.id),
           created_by: accountActorId(alice.id),
           created_at: canonicalTimestamp(),
         },
@@ -740,7 +748,7 @@ test.describe("project simulation", () => {
           realm_id: realmId,
           relation_kind: "assigned_to",
           from_ref: cardId,
-          to_ref: bob.id,
+          to_ref: accountActorId(bob.id),
           created_by: accountActorId(alice.id),
           created_at: canonicalTimestamp(),
         },
@@ -802,22 +810,24 @@ test.describe("project simulation", () => {
           realm_id: realmId,
           relation_kind: "assigned_to",
           from_ref: cardId,
-          to_ref: bob.id,
+          to_ref: accountActorId(bob.id),
           created_by: accountActorId(alice.id),
           created_at: canonicalTimestamp(),
         },
       },
     });
-    const relationId = sdkEventDerivedObjectId(assignment);
     await submitSignedEventApi(
       request,
       aliceToken,
       assignment,
       { context: "assign Card to bob" },
     );
+    const relationId = sdkEventDerivedObjectId(assignment);
 
     const assigned = await readStrandRow(request, aliceToken, realmId, cardId);
-    expect(assigned?.assigned_actor_ids ?? []).toContain(bob.id);
+    expect(assigned?.assigned_actor_ids ?? []).toContainEqual(
+      accountActorId(bob.id),
+    );
 
     // Unassign: tombstone the assigned_to edge.
     await submitSignedEventApi(
@@ -829,7 +839,6 @@ test.describe("project simulation", () => {
         kind: "ak.relation.tombstone",
         payload: {
           relation_id: relationId,
-          relation_kind: "assigned_to",
         },
       }),
       { context: "unassign bob (ak.relation.tombstone)" },
@@ -841,7 +850,9 @@ test.describe("project simulation", () => {
       realmId,
       cardId,
     );
-    expect(unassigned?.assigned_actor_ids ?? []).not.toContain(bob.id);
+    expect(unassigned?.assigned_actor_ids ?? []).not.toContainEqual(
+      accountActorId(bob.id),
+    );
     expect(
       (unassigned?.assigned_to_relations ?? []).some(
         (relation) => relation.relation_id === relationId,

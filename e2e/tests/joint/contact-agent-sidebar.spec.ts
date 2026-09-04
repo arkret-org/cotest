@@ -1,8 +1,12 @@
 import { expect, type APIRequestContext } from "../../helpers/arkret-test";
-import type { ContactListRow } from "../../helpers/contact-api";
+import {
+  requestContactArkret,
+  respondContactArkret,
+  type ContactListRow,
+} from "../../helpers/contact-api";
 import { solandBaseUrl } from "../../helpers/env";
 import { test as jointTest } from "../../helpers/joint-fixture";
-import { accountActorId } from "../../helpers/soland-api";
+import { accountActorId, canonicalJson } from "../../helpers/soland-api";
 import {
   selfPathHeadersForDpopSession,
   type DpopUserSession,
@@ -18,13 +22,13 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       jointTest.setTimeout(360_000);
       const stamp = Date.now();
       const slug = `contacts-${stamp.toString(36)}`;
+      await jointRealm.bobPage.completeRecoveryKeySetupIfPrompted(30_000);
       const pendingAgentId = await provisionPendingAgent(
         request,
         jointRealm.aliceSession,
         jointRealm.alicePage,
         slug,
       );
-
       await establishDirectMessageContact(
         request,
         jointRealm.aliceSession,
@@ -61,11 +65,12 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       // it remains manageable in Settings → My Agents. Wait for Bob's
       // contact row first — contacts and own agents land from the same
       // sidebar load, so this guards against asserting before data arrives.
-      await expect(
-        alicePage.locator(
-          `[data-testid="direct-conversation-row"][data-peer="${jointRealm.bob.id}"]`,
-        ),
-      ).toBeVisible({ timeout: 30_000 });
+      const bobContact = alicePage.getByTestId("direct-conversation-row").first();
+      await expect(bobContact).toBeVisible({ timeout: 30_000 });
+      await expect(bobContact).toHaveAttribute(
+        "data-peer",
+        canonicalJson(accountActorId(jointRealm.bob.id)),
+      );
       await expect(
         aliceSelfGroup.locator(
           `[data-testid="contact-sidebar-agent-row"][data-agent="${pendingAgentId}"]`,
@@ -111,19 +116,22 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
           });
         },
       );
+      await bobPage.reload();
       await bobPage.getByTestId("realm-sidebar-tab-direct").click();
       const bobGroups = bobPage.locator(".contact-sidebar-group");
       await expect(bobGroups.first()).toHaveAttribute(
         "data-testid",
         "contact-sidebar-self-group",
       );
-      const aliceContact = bobPage.locator(
-        `[data-testid="direct-conversation-row"][data-peer="${jointRealm.alice.id}"]`,
-      );
+      const aliceContact = bobPage.getByTestId("direct-conversation-row").first();
       await expect(aliceContact).toBeVisible({ timeout: 30_000 });
-      const aliceGroup = bobPage.locator(
-        `.contact-sidebar-group[data-controller="${jointRealm.alice.id}"]`,
+      await expect(aliceContact).toHaveAttribute(
+        "data-peer",
+        canonicalJson(accountActorId(jointRealm.alice.id)),
       );
+      const aliceGroup = bobPage
+        .locator(".contact-sidebar-group")
+        .filter({ has: aliceContact });
       const toggle = aliceGroup.getByTestId("contact-sidebar-agent-toggle");
       await expect(toggle).toContainText("Agents 1");
       await toggle.click();
@@ -136,7 +144,11 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         jointRealm.alice.id,
       );
       await allowedAgentRow.click();
-      await expect(bobPage).toHaveURL(/\/direct\/.*0000000000b1\/.*0000000000b2$/);
+      await expect
+        .poll(() => new URL(bobPage.url()).pathname)
+        .toBe(
+          `/direct/${allowedAgent.direct_conversation.realm_id}/${allowedAgent.direct_conversation.main_strand_id}`,
+        );
     },
   );
 });
@@ -238,7 +250,7 @@ async function provisionPendingAgent(
       "requested_scope_digest",
       "prepare outcome",
     );
-    expect(agentId).toMatch(/^did:/);
+    expect(agentId).toMatch(/^ak:did_core:/);
     expect(controllerRealmId).toMatch(/^ak:realm:/);
     expect(allocationHandle).toBeTruthy();
     expect(requestedScopeDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -314,9 +326,36 @@ async function provisionPendingAgent(
     releaseCommit();
     const commitResponse = await commitResponsePromise;
     const commitText = await commitResponse.text();
-    expect(commitResponse.status(), commitText).toBe(201);
-    const completed = asJsonObject(
+    expect(commitResponse.status(), commitText).toBe(200);
+    const awaitingPcrGenesis = asJsonObject(
       JSON.parse(commitText),
+      "Agent provision awaiting-PCR-genesis outcome",
+    );
+    expect(awaitingPcrGenesis.status).toBe("awaiting_pcr_genesis");
+    expect(awaitingPcrGenesis.agent_id).toBe(agentId);
+    expect(awaitingPcrGenesis.principal_control_realm_id).toBe(
+      principalControlRealmId,
+    );
+    expect(awaitingPcrGenesis.requested_scope_digest).toBe(
+      requestedScopeDigest,
+    );
+
+    // The client now submits and seals the separately frozen Agent PCR
+    // genesis, publishes the DID binding entry, and only then exposes pairing.
+    await expect(page.getByTestId("agent-admin-pairing-card")).toBeVisible({
+      timeout: 120_000,
+    });
+
+    // Exact commit replay after those external acceptance steps returns the
+    // first terminal materialization without minting another pairing handle.
+    const retry = await request.post(url, {
+      headers: selfPathHeadersForDpopSession(controller, "POST", url),
+      data: commit,
+    });
+    const retryText = await retry.text();
+    expect(retry.status(), retryText).toBe(201);
+    const completed = asJsonObject(
+      JSON.parse(retryText),
       "Agent provision complete outcome",
     );
     expect(completed.status).toBe("complete");
@@ -325,19 +364,6 @@ async function provisionPendingAgent(
     expect(completed.requested_scope_digest).toBe(requestedScopeDigest);
     expect(completed.pairing_request_id).toBeTruthy();
     expect(completed.pairing_code).toBeTruthy();
-
-    // Exact commit replay is protocol idempotency, independent of the HTTP
-    // Idempotency-Key header and without minting a second pairing handle.
-    const retry = await request.post(url, {
-      headers: selfPathHeadersForDpopSession(controller, "POST", url),
-      data: commit,
-    });
-    const retryText = await retry.text();
-    expect(retry.status(), retryText).toBe(201);
-    expect(JSON.parse(retryText)).toEqual(completed);
-    await expect(page.getByTestId("agent-admin-pairing-card")).toBeVisible({
-      timeout: 120_000,
-    });
     return requiredString(completed, "agent_id", "complete outcome");
   } finally {
     releaseCommit();
@@ -350,33 +376,23 @@ async function establishDirectMessageContact(
   requester: DpopUserSession,
   responder: DpopUserSession,
 ): Promise<void> {
-  const requestUrl = `${solandBaseUrl()}/_arkret/self/contacts/request`;
-  const requested = await request.post(requestUrl, {
-    headers: selfPathHeadersForDpopSession(requester, "POST", requestUrl),
-    data: {
-      target: responder.user.id,
-      requested_scopes: ["direct_message"],
-      introduction_evidence: { kind: "explicit_address" },
-    },
-  });
-  const requestedText = await requested.text();
-  expect(requested.status(), requestedText).toBe(201);
-  const requestedBody = JSON.parse(requestedText) as {
-    request_event_ref: string;
-  };
-
-  const respondUrl = `${solandBaseUrl()}/_arkret/self/contacts/respond`;
-  const responded = await request.post(respondUrl, {
-    headers: selfPathHeadersForDpopSession(responder, "POST", respondUrl),
-    data: {
-      request_id: requestedBody.request_event_ref,
+  const { outcome } = await requestContactArkret(
+    request,
+    requester.grantJwt,
+    responder.user.id,
+    { requestedScopes: ["direct_message"] },
+  );
+  const responded = await respondContactArkret(
+    request,
+    responder.grantJwt,
+    {
+      requestId: outcome.request_event_ref,
       requesterId: requester.user.id,
       action: "accept",
-      granted_scopes: ["direct_message"],
+      grantedScopes: ["direct_message"],
     },
-  });
-  const respondedText = await responded.text();
-  expect(responded.status(), respondedText).toBe(200);
+  );
+  expect(responded.state).toBe("accepted");
 }
 
 async function listContacts(

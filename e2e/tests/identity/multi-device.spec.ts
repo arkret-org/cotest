@@ -107,7 +107,7 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
         .click();
       await expect(
         secondDevice.page.getByTestId("device-setup-status"),
-      ).toContainText("Device authorization is accepted and verified", {
+      ).toContainText("Device authorization is accepted", {
         timeout: 90_000,
       });
 

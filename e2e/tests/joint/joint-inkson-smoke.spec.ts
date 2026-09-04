@@ -353,11 +353,11 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         .getByTestId("discussion-user-row")
         .filter({
           // A dev-login display name is not an authoritative profile label.
-          // Select the human row by the principal portion of the canonical
-          // full Account ActorId rendered by the participant identity label.
-          has: jointRealm.alicePage.page
-            .getByTestId("participant")
-            .filter({ hasText: participantId }),
+          // Select the human row by the canonical full Account ActorId kept
+          // in the identity label's title; visible copy may be a handle.
+          has: jointRealm.alicePage.page.locator(
+            `xpath=.//*[@data-testid='participant-identity' and @title='${canonicalJson(accountActorId(participantId))}']`,
+          ),
         });
       await expect(participantRow).toBeVisible({ timeout: 60_000 });
       await expect(participantRow).not.toContainText(forgedDisplayName);

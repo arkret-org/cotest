@@ -373,10 +373,7 @@ test.describe("single-server triad collaboration", () => {
 
       await expect
         .poll(
-          async () => {
-            await alicePage.gotoTimelineRealm(realmId);
-            return alicePage.page.getByTestId("chat-redacted-tombstone").count();
-          },
+          () => alicePage.page.getByTestId("chat-redacted-tombstone").count(),
           { timeout: 60_000, intervals: [500, 1_000, 2_000, 5_000] },
         )
         .toBeGreaterThan(0);

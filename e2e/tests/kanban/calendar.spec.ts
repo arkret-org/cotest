@@ -84,12 +84,16 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(column).toBeVisible({ timeout: 45_000 });
     await addCard(column, cardTitle);
 
-    await column
-      .getByTestId("kanban-card")
-      .filter({ hasText: cardTitle })
-      .first()
-      .click();
     const detail = page.page.getByTestId("card-detail-modal");
+    // Creating a card may select it immediately. Avoid clicking through an
+    // already-open detail overlay, which correctly intercepts board input.
+    if (!(await detail.isVisible({ timeout: 1_000 }).catch(() => false))) {
+      await column
+        .getByTestId("kanban-card")
+        .filter({ hasText: cardTitle })
+        .first()
+        .click();
+    }
     await expect(detail).toBeVisible({ timeout: 45_000 });
     const calendar = detail.getByTestId("card-detail-calendar");
     await calendar.getByTestId("card-detail-edit-calendar-button").click();
@@ -155,7 +159,12 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     // The canonical card route retains the selected Strand across a reload,
     // so the detail may already be open. Only select the card when the route
     // did not restore it; otherwise the modal itself intercepts the click.
-    if (!(await detail.isVisible({ timeout: 1_000 }).catch(() => false))) {
+    const restoredOverlay = page.page.getByTestId("card-detail-overlay");
+    if (
+      !(await restoredOverlay
+        .isVisible({ timeout: 5_000 })
+        .catch(() => false))
+    ) {
       const reloadedCard = page.page
         .getByTestId("kanban-card")
         .filter({ hasText: cardTitle })

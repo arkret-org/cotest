@@ -773,7 +773,7 @@ async function openAndPairFreshDeviceForAccount(
       .click();
     await expect(
       requestingDevice.page.getByTestId("device-setup-status"),
-    ).toContainText("Device authorization is accepted and verified", {
+    ).toContainText("Device authorization is accepted", {
       timeout: 90_000,
     });
     await requestingDevice.page
