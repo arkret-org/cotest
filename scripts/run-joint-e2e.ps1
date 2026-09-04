@@ -3450,7 +3450,7 @@ try {
             -DnsNames $jointTlsHostNames `
             -RunLabel $timestamp
         Install-JointLoopbackHosts `
-            -Hosts ($jointTlsHostNames + $jointTlsUnregisteredProbeHost) `
+            -Hosts (@($jointTlsHostNames) + @($jointTlsUnregisteredProbeHost)) `
             -Marker $jointTlsHostsMarker
         $env:NODE_EXTRA_CA_CERTS = $jointTlsAssets.CaPemPath
         $env:COTEST_RUN_SCOPED_CA_PEM = $jointTlsAssets.CaPemPath
@@ -4776,11 +4776,12 @@ catch {
     ) | Set-Content -LiteralPath $runnerErrorLog -Encoding UTF8
     $runnerError = [pscustomobject]@{
         type = $_.Exception.GetType().FullName
+        message = $runnerReason
         line = $_.InvocationInfo.ScriptLineNumber
         phase = "runner"
         diagnostic = $runnerErrorLog
     }
-    Write-Warning "Joint runner failed at line $($runnerError.line) ($($runnerError.type)); see $runnerErrorLog"
+    Write-Warning "Joint runner failed at line $($runnerError.line) ($($runnerError.type)): $($runnerError.message); see $runnerErrorLog"
 }
 finally {
     $controlFailures = @(Sync-JointControlledServices -TopologyPath $topologyPath -ManagedServices $managedServices)

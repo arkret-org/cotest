@@ -1,6 +1,15 @@
-import { expect, type Page, type Browser, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  type Page,
+  type Browser,
+  type APIRequestContext,
+} from "@playwright/test";
 import { solandBaseUrl } from "./env";
-import { createDpopUserSessionForAccount, openDpopUserPageFromSession, type JointUserPage } from "./users";
+import {
+  createDpopUserSessionForAccount,
+  openDpopUserPageFromSession,
+  type JointUserPage,
+} from "./users";
 import type { CoauthPasswordAccount } from "./coauth-register";
 
 export type RealOidcAccount = { handle: string; password: string };
@@ -13,7 +22,9 @@ export async function submitCoauthPasswordCredentials(
   const loginPassword = page.locator("#login-password");
   const shell = page.getByTestId("client-shell");
 
-  await expect(loginHandle.or(loginPassword).or(shell)).toBeVisible({ timeout: 60_000 });
+  await expect(loginHandle.or(loginPassword).or(shell)).toBeVisible({
+    timeout: 60_000,
+  });
   if (await shell.isVisible()) {
     return;
   }
@@ -84,9 +95,14 @@ export async function serverLoginViaCoauth(
       });
     }
   }
-  const status = await page.getByTestId("auth-status").textContent().catch(() => null);
+  const status = await page
+    .getByTestId("auth-status")
+    .textContent()
+    .catch(() => null);
   // Read only the dedicated status element, never the page or recovery words.
-  const safeStatus = status?.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]").slice(0, 600);
+  const safeStatus = status
+    ?.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]")
+    .slice(0, 600);
   throw new Error(
     `coauth login did not reach the authenticated shell: ${new URL(page.url()).pathname}; status=${safeStatus ?? "unavailable"}`,
   );
@@ -98,7 +114,9 @@ export async function hardLogoutViaAccountMenu(
   const page = jointPage.page;
   await page.getByTestId("account-menu-button").click();
   await page.getByTestId("account-menu-session-logout").click();
-  await expect(page.getByTestId("login-panel")).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByTestId("login-panel")).toBeVisible({
+    timeout: 60_000,
+  });
   await expect(page.getByTestId("client-shell")).toHaveCount(0);
 }
 
@@ -112,12 +130,60 @@ export async function openAcceptedDeviceForOidcLogin(
   account: CoauthPasswordAccount,
   prefix: string,
 ): Promise<JointUserPage> {
-  const session = await createDpopUserSessionForAccount(request, prefix, account);
-  const flow = await openDpopUserPageFromSession(browser, session, { prepareMlsDevice: false });
-  if (!flow) throw new Error("canonical accepted-device fixture is unavailable");
+  return (
+    await prepareAcceptedDeviceForOidcLogin(
+      browser,
+      request,
+      account,
+      prefix,
+      false,
+    )
+  ).page;
+}
+
+export async function openAcceptedDeviceWithRecoveryKeyForOidcLogin(
+  browser: Browser,
+  request: APIRequestContext,
+  account: CoauthPasswordAccount,
+  prefix: string,
+): Promise<{ page: JointUserPage; recoveryKey: string }> {
+  const prepared = await prepareAcceptedDeviceForOidcLogin(
+    browser,
+    request,
+    account,
+    prefix,
+    true,
+  );
+  return {
+    page: prepared.page,
+    recoveryKey: prepared.recoveryKey ?? account.recoveryKey,
+  };
+}
+
+async function prepareAcceptedDeviceForOidcLogin(
+  browser: Browser,
+  request: APIRequestContext,
+  account: CoauthPasswordAccount,
+  prefix: string,
+  establishRecoveryKey: boolean,
+): Promise<{ page: JointUserPage; recoveryKey?: string }> {
+  const session = await createDpopUserSessionForAccount(
+    request,
+    prefix,
+    account,
+  );
+  const flow = await openDpopUserPageFromSession(browser, session, {
+    prepareMlsDevice: false,
+    autoCompleteRecoveryKeySetup: false,
+  });
+  if (!flow)
+    throw new Error("canonical accepted-device fixture is unavailable");
   try {
+    const recoveryKey = establishRecoveryKey
+      ? await flow.page.completeRecoveryKeySetupIfPrompted(30_000)
+      : undefined;
     await hardLogoutViaAccountMenu(flow.page);
-    return flow.page;
+    return { page: flow.page, recoveryKey };
   } catch (error) {
     await flow.page.close();
     throw error;

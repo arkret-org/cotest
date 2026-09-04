@@ -39,6 +39,7 @@ import {
   type CoauthPasswordAccount,
 } from "../../helpers/coauth-register";
 import {
+  openAcceptedDeviceWithRecoveryKeyForOidcLogin,
   serverLoginViaCoauth,
   submitCoauthPasswordCredentials,
 } from "../../helpers/real-oidc-login";
@@ -191,7 +192,7 @@ test.describe("key backup + restore", () => {
     browser,
     request,
   }) => {
-    test.setTimeout(240_000);
+    test.setTimeout(360_000);
     const stamp = Date.now();
     const coauth = coauthBaseUrl();
     if (!coauth) {
@@ -249,7 +250,12 @@ test.describe("key backup + restore", () => {
         `A1 historical encrypted card 3 ${stamp}`,
       ];
       for (const card of historicalCards) {
-        await deviceA.sendTimelineMessage(realmId, card);
+        await sendTimelineMessageAndWaitForPrivateBackup(
+          deviceA,
+          realmId,
+          card,
+          keyBackupPuts,
+        );
       }
       await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
 
@@ -343,13 +349,17 @@ test.describe("key backup + restore", () => {
       handle: envHandle!,
       password: envPassword!,
     };
-    const deviceAUser = uniqueUser("a3-oidc-mls-a");
-    if (registeredAccount) {
-      deviceAUser.id = registeredAccount.id;
-      deviceAUser.did = registeredAccount.did;
-      deviceAUser.deviceId = registeredAccount.genesisDeviceId;
-    }
-    const deviceA = await openUserPage(browser, deviceAUser);
+    const preparedDeviceA = registeredAccount
+      ? await openAcceptedDeviceWithRecoveryKeyForOidcLogin(
+          browser,
+          request,
+          registeredAccount,
+          "a3-oidc-mls-a",
+        )
+      : undefined;
+    const deviceA =
+      preparedDeviceA?.page ??
+      (await openUserPage(browser, uniqueUser("a3-oidc-mls-a")));
     const sessionsToClose: JointUserPage[] = [deviceA];
     const protocolFailures: string[] = [];
     const deviceATrace = collectSessionGrantHolderProofTrace(deviceA.page);
@@ -372,13 +382,34 @@ test.describe("key backup + restore", () => {
       const recoveryKey = await createMlsRecoveryBackupFromPrompt(
         deviceA.page,
         keyBackupPuts,
-        registeredAccount?.recoveryKey,
+        preparedDeviceA?.recoveryKey ?? registeredAccount?.recoveryKey,
       );
       await expectGrantDpopSelfPath(deviceATrace, "device A key backup upload");
       expect(
         deviceATrace.authorizedSelfRequests.filter((hit) => hit.missingDpop),
         "real OIDC device A must not fall back to naked bearer self/root calls",
       ).toEqual([]);
+      const historicalCards = [
+        `A3 historical encrypted card 1 ${stamp}`,
+        `A3 historical encrypted card 2 ${stamp}`,
+      ];
+      for (const card of historicalCards) {
+        await sendTimelineMessageAndWaitForPrivateBackup(
+          deviceA,
+          realmId,
+          card,
+          keyBackupPuts,
+        );
+      }
+      await expect
+        .poll(
+          () =>
+            deviceATrace.keyBackupWrites.some(
+              (hit) => hit.status === 200 && hit.hasDpop,
+            ),
+          { timeout: 120_000 },
+        )
+        .toBe(true);
       expect(
         deviceATrace.keyBackupWrites.some(
           (hit) => hit.status === 200 && hit.hasDpop,
@@ -386,37 +417,33 @@ test.describe("key backup + restore", () => {
         "key backup write must be authenticated by the real grant plus DPoP holder proof",
       ).toBe(true);
 
-      const historicalCards = [
-        `A3 historical encrypted card 1 ${stamp}`,
-        `A3 historical encrypted card 2 ${stamp}`,
-      ];
-      for (const card of historicalCards) {
-        await deviceA.sendTimelineMessage(realmId, card);
-      }
-      await expectMlsAccountSecretBackupUploaded(keyBackupPuts);
-
-      const deviceB = await openUserPage(browser, uniqueUser("a3-oidc-mls-b"));
+      const deviceB = await openAndPairFreshDeviceForAccount(
+        browser,
+        deviceA,
+        "a3-oidc-mls-b",
+        account,
+        false,
+      );
       sessionsToClose.push(deviceB);
       const deviceBTrace = collectSessionGrantHolderProofTrace(deviceB.page);
       collectA1ProtocolFailures(deviceB.page, protocolFailures);
 
-      await deviceB.gotoLogin();
-      await serverLoginViaCoauth(deviceB.page, account);
-      await expectGrantDpopSelfPath(deviceBTrace, "device B real OIDC login");
-      await pairBrowserDevice(deviceA, deviceB);
       await deviceB.gotoHome();
+      await expectGrantDpopSelfPath(deviceBTrace, "device B real OIDC login");
       await expect(deviceB.page.getByTestId("mls-unlock-banner")).toBeVisible({
         timeout: 90_000,
       });
       await unlockMlsAccountSecret(deviceB.page, recoveryKey);
       const successfulUnlock =
         await expectSuccessfulUnlockWithHolderProof(deviceBTrace);
+      expect(successfulUnlock.operationSelector).not.toBe("");
 
       const nakedUnlock = await deviceB.page.request.post(
         successfulUnlock.url,
         {
           headers: {
             authorization: `Bearer ${successfulUnlock.grantJwt}`,
+            "arkret-operation": successfulUnlock.operationSelector,
             "content-type": "application/json",
           },
           data: JSON.parse(successfulUnlock.postData),
@@ -719,7 +746,7 @@ async function openAndPairFreshDeviceForAccount(
   browser: Browser,
   authorizingDevice: JointUserPage,
   prefix: string,
-  account: CoauthPasswordAccount,
+  account: PasswordAccount,
   autoCompleteRecoveryKeySetup = true,
 ): Promise<JointUserPage> {
   // A password/OIDC handoff identifies the fresh browser but does not
@@ -736,7 +763,9 @@ async function openAndPairFreshDeviceForAccount(
     await requestingDevice.page
       .getByTestId("login-server-url")
       .fill(solandBaseUrl());
-    await requestingDevice.page.getByTestId("start-server-login-button").click();
+    await requestingDevice.page
+      .getByTestId("start-server-login-button")
+      .click();
     await submitCoauthPasswordCredentials(requestingDevice.page, account);
     const approve = requestingDevice.page.getByTestId("coauth-oauth-approve");
     if (
@@ -783,42 +812,16 @@ async function openAndPairFreshDeviceForAccount(
       timeout: 30_000,
     });
     await serverLoginViaCoauth(requestingDevice.page, account);
-    await expect(requestingDevice.page.getByTestId("client-shell")).toBeVisible({
-      timeout: 120_000,
-    });
+    await expect(requestingDevice.page.getByTestId("client-shell")).toBeVisible(
+      {
+        timeout: 120_000,
+      },
+    );
     return requestingDevice;
   } catch (error) {
     await requestingDevice.close();
     throw error;
   }
-}
-
-async function pairBrowserDevice(
-  authorizingDevice: JointUserPage,
-  requestingDevice: JointUserPage,
-) {
-  await authorizingDevice.gotoHome();
-  await requestingDevice.page.goto("/settings/devices/pair", {
-    waitUntil: "domcontentloaded",
-  });
-  await requestingDevice.page.getByTestId("pair-device-start-button").click();
-  const pairingCode = requestingDevice.page.getByTestId("pair-device-code");
-  await expect(pairingCode).toBeVisible({ timeout: 30_000 });
-  const code = (await pairingCode.textContent())?.trim() ?? "";
-  expect(code).not.toBe("");
-  const pairingLink = await requestingDevice.page
-    .getByTestId("pair-device-secret")
-    .inputValue();
-  await approvePairingLinkOnAuthorizedDevice(
-    authorizingDevice,
-    pairingLink,
-    code,
-  );
-
-  await requestingDevice.page.getByTestId("pair-device-status-button").click();
-  await expect(
-    requestingDevice.page.getByTestId("pair-device-status"),
-  ).toContainText("Approved.", { timeout: 30_000 });
 }
 
 type HolderProofRequest = {
@@ -830,6 +833,7 @@ type HolderProofRequest = {
   authorization: string;
   grantJwt: string;
   postData: string;
+  operationSelector: string;
 };
 
 type KeyBackupUnlockRequest = HolderProofRequest & {
@@ -895,6 +899,7 @@ function collectSessionGrantHolderProofTrace(
       authorization,
       grantJwt: authorization.replace(/^DPoP\s+/i, ""),
       postData,
+      operationSelector: headers["arkret-operation"] ?? "",
     };
     trace.authorizedSelfRequests.push(hit);
     if (
@@ -1156,6 +1161,21 @@ function mlsPrivatePlaintextBackupPutCount(
       hit.status === 200 &&
       /"item_kind"\s*:\s*"mls_private_plaintext"/.test(keyBackupWireData(hit)),
   ).length;
+}
+
+async function sendTimelineMessageAndWaitForPrivateBackup(
+  device: JointUserPage,
+  realmId: string,
+  body: string,
+  keyBackupPuts: KeyBackupPut[],
+) {
+  const backupsBefore = mlsPrivatePlaintextBackupPutCount(keyBackupPuts);
+  await device.sendTimelineMessage(realmId, body);
+  await expect
+    .poll(() => mlsPrivatePlaintextBackupPutCount(keyBackupPuts), {
+      timeout: 120_000,
+    })
+    .toBeGreaterThan(backupsBefore);
 }
 
 async function unlockMlsAccountSecret(page: Page, recoveryKey: string) {

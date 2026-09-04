@@ -67,6 +67,7 @@ Assert-True ($runnerScript -match 'required durable-store export failed' -and $r
 Assert-True ($runnerScript -match 'runner-error\.log' -and $runnerScript -match '\$_.ScriptStackTrace') "runner setup failures must retain a bounded stack diagnostic"
 Assert-True ($runnerScript -match '\$solandStoragePrefix = if \(\$server\.Index -eq 1\).*\r?\n\s*\$solandManaged') "runtime topology storage paths must recompute their per-server prefix"
 Assert-True ($runnerScript -match '\$requiredScenarios = @\(@\(\$requiredScenarios; "federation/three-server-p0"\) \| Sort-Object -Unique\)') "one required three-server scenario must remain collection-shaped"
+Assert-True ($runnerScript -match '-Hosts \(@\(\$jointTlsHostNames\) \+ @\(\$jointTlsUnregisteredProbeHost\)\)') "single-server TLS hosts must remain an array when the unregistered probe is appended"
 $initializerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot "..\initialize-joint-e2e-environment.ps1")
 Assert-True ($initializerScript -match 'Test-CotestAdministrator' -and $initializerScript -match 'if \(\$isAdministrator\)') "initializer must branch on administrator identity"
 Assert-True ($initializerScript -match 'mode = "install-and-check"') "dependency installation must be attempted by default"
