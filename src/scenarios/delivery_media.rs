@@ -548,7 +548,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         reason_code: None,
         audit_envelope: None,
     };
-    let plaintext_push = crate::harness::wire_negative_from_sdk(&push_baseline, |body| {
+    let plaintext_push = arkret_test_kit::wire_negative_from_sdk(&push_baseline, |body| {
         body["notification"]["content"] = json!({"body": "plaintext leak"});
     })?;
     expect_api_error(
@@ -594,7 +594,7 @@ pub async fn push_and_moderation_edges_are_enforced() -> Result<()> {
         "unauthenticated",
     )
     .await?;
-    let wrong_reporter = crate::harness::wire_negative_from_sdk(&moderation_request, |body| {
+    let wrong_reporter = arkret_test_kit::wire_negative_from_sdk(&moderation_request, |body| {
         body["report_event"]["event"]["payload"]["reporter_id"] =
             json!("ak:did_core:web:bob-delivery.example");
     })?;

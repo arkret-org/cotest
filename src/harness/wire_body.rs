@@ -1,3 +1,7 @@
+//! The named wire-negative body itself lives in `arkret_test_kit::negative`:
+//! it is protocol-generic and every implementation needs it, whereas the
+//! canonical-JSON request extension below is bound to `reqwest`.
+
 use anyhow::{Result, anyhow};
 use serde::{Serialize, Serializer};
 use serde_json::Value;
@@ -27,26 +31,6 @@ impl CanonicalJsonBody for reqwest::RequestBuilder {
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(bytes))
     }
-}
-
-/// Raw body for a named wire-negative case. Construction starts from a
-/// serializable SDK value and applies one deliberate mutation.
-pub struct WireNegativeBody(Value);
-
-impl Serialize for WireNegativeBody {
-    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
-        self.0.serialize(serializer)
-    }
-}
-
-pub fn wire_negative_from_sdk<T: Serialize>(
-    baseline: &T,
-    mutate: impl FnOnce(&mut Value),
-) -> Result<WireNegativeBody> {
-    let mut value = serde_json::to_value(baseline)
-        .map_err(|error| anyhow!("wire-negative baseline encode failed: {error}"))?;
-    mutate(&mut value);
-    Ok(WireNegativeBody(value))
 }
 
 /// Explicit isolation for non-protocol test infrastructure and probes of

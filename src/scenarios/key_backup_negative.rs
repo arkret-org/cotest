@@ -13,9 +13,7 @@ use chrono::{DateTime, Utc};
 use reqwest::StatusCode;
 use serde_json::Value;
 
-use crate::harness::{
-    ArkretServer, TestServerGroup, expect_api_error, expect_json, wire_negative_from_sdk,
-};
+use crate::harness::{ArkretServer, TestServerGroup, expect_api_error, expect_json};
 use crate::scenarios::identity_test_support::actor_did_for_service_did;
 
 const BACKUP_ID: &str = "ak:backup:01975510-0000-7000-8000-0000000000d3";
@@ -54,12 +52,13 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
 
     let missing_ciphertext_baseline =
         backup_body(server.service_id(), &alice.actor, DEVICE_A, BACKUP_ID)?;
-    let missing_ciphertext = wire_negative_from_sdk(&missing_ciphertext_baseline, |value| {
-        value
-            .as_object_mut()
-            .expect("SDK key backup is an object")
-            .remove("ciphertext");
-    })?;
+    let missing_ciphertext =
+        arkret_test_kit::wire_negative_from_sdk(&missing_ciphertext_baseline, |value| {
+            value
+                .as_object_mut()
+                .expect("SDK key backup is an object")
+                .remove("ciphertext");
+        })?;
     expect_backup_error(
         alice
             .put(&format!("/_arkret/self/keys/backups/{BACKUP_ID}"))
@@ -119,7 +118,7 @@ pub async fn key_backup_put_get_negative_run() -> Result<()> {
     .await?;
     assert_eq!(replayed, accepted, "same key and body must replay exactly");
 
-    let conflicting = wire_negative_from_sdk(&accepted_body, |value| {
+    let conflicting = arkret_test_kit::wire_negative_from_sdk(&accepted_body, |value| {
         value["plaintext_commitment"] = Value::String(
             "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
         );
@@ -175,7 +174,7 @@ async fn reject_digest_mismatch_on_put(
 ) -> Result<()> {
     let id = "ak:backup:01975510-0000-7000-8000-0000000000d5";
     let baseline = backup_body(server.service_id(), actor, DEVICE_A, id)?;
-    let body = wire_negative_from_sdk(&baseline, |value| {
+    let body = arkret_test_kit::wire_negative_from_sdk(&baseline, |value| {
         value["ciphertext"] = Value::String("tampered-ciphertext".to_owned());
         value["ciphertext_digest"] = Value::String(
             "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_owned(),

@@ -43,6 +43,7 @@ arkret-schema = { path = "../arkret-rust-sdk/crates/schema", default-features = 
 arkret-schema-conformance = { path = "../arkret-rust-sdk/crates/schema-conformance", default-features = false }
 arkret-signatures = { path = "../arkret-rust-sdk/crates/signatures", default-features = false, features = ["collaboration", "keypackages", "signer", "webvh"] }
 arkret-state = { path = "../arkret-rust-sdk/crates/state" }
+arkret-test-kit = { path = "../arkret-rust-sdk/crates/test-kit" }
 arkret-wire = { path = "../arkret-rust-sdk/crates/wire" }
 async-trait = "0.1.92"
 base64 = "0.23.1"
@@ -143,6 +144,7 @@ arkret-policy = { workspace = true }
 arkret-push-policy.workspace = true
 arkret-schema = { workspace = true }
 arkret-schema-conformance = { workspace = true }
+arkret-test-kit = { workspace = true }
 arkret-signatures = { workspace = true }
 arkret-state = { workspace = true }
 arkret-wire = { workspace = true, features = ["test-support"] }

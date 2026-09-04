@@ -1009,7 +1009,7 @@ pub async fn calendar_rsvp_without_cell_effect_is_rejected() -> Result<()> {
         )
         .await?;
     let submission = crate::publication::initial_submission(event, "")?;
-    let invalid_submission = crate::harness::wire_negative_from_sdk(&submission, |body| {
+    let invalid_submission = arkret_test_kit::wire_negative_from_sdk(&submission, |body| {
         body["event"]["effects"] = json!([]);
     })?;
     let response = alice

@@ -37,7 +37,7 @@ use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signer as _, SigningKey};
 use reqwest::StatusCode;
 
-use crate::harness::{ArkretServer, expect_json, wire_negative_from_sdk};
+use crate::harness::{ArkretServer, expect_json};
 
 pub const BACKUP_ID: &str = "ak:backup:01964137-0000-7000-8000-000000000000";
 
@@ -226,12 +226,15 @@ async fn unlock_backup_requires_body_proof(
             .http()
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
             .bearer_auth(token)
-            .json(&wire_negative_from_sdk(&baseline, |value| {
-                value
-                    .as_object_mut()
-                    .expect("SDK body is an object")
-                    .remove("proof");
-            })?),
+            .json(&arkret_test_kit::wire_negative_from_sdk(
+                &baseline,
+                |value| {
+                    value
+                        .as_object_mut()
+                        .expect("SDK body is an object")
+                        .remove("proof");
+                },
+            )?),
         StatusCode::UNPROCESSABLE_ENTITY,
         "schema_violation",
     )
