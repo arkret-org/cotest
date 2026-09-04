@@ -482,6 +482,10 @@ async function postReadCursor(
   readScope: { kind: string; container_ref?: string; track_name?: string },
   position: { event_id: string; hlc: string },
 ) {
+  // read-receipts.md §6.1: the cursor is never updated in place, so the payload
+  // carries no `updated_at`; the update time IS this envelope `created_at`, and
+  // the derived `read_marker_outcome` takes it from there. A payload restating
+  // it is a closed-shape violation (review/spec-done/2026-09-04-2130-read-cursor-advance-updated-at-envelope-equality.md).
   const updatedAt = new Date().toISOString();
   const event = signedEventEnvelope({
     actorId,
@@ -489,14 +493,12 @@ async function postReadCursor(
     kind: "ak.read_cursor.advance",
     createdAt: updatedAt,
     payload: {
-      id: typedId("read_cursor"),
       schema: "ak.schema.read_cursor.v1",
       actor_id: accountActorId(actorId),
       device_id: deviceId,
       realm_id: realmId,
       read_scope: readScope,
       position,
-      updated_at: updatedAt,
     },
   });
   await alignSignedEventToActorFrontierApi(request, token, event);

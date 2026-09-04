@@ -24,8 +24,7 @@ import {
   resolveDefaultStrandId,
   signedEventEnvelope,
   submitSignedEventApi,
-  typedId,
-} from "../../helpers/soland-api";
+  } from "../../helpers/soland-api";
 import {
   createDpopUserSession,
   ensureRegistered,
@@ -945,6 +944,10 @@ async function advanceReadCursor(
   actor: JointUser,
   body: ReadCursorAdvanceBody,
 ) {
+  // read-receipts.md §6.1: the cursor is never updated in place, so the payload
+  // carries no `updated_at`; the update time IS this envelope `created_at`, and
+  // the derived `read_marker_outcome` takes it from there. A payload restating
+  // it is a closed-shape violation (review/spec-done/2026-09-04-2130-read-cursor-advance-updated-at-envelope-equality.md).
   const updatedAt = new Date().toISOString();
   const event = signedEventEnvelope({
     actorId: actor.id,
@@ -952,14 +955,12 @@ async function advanceReadCursor(
     kind: "ak.read_cursor.advance",
     createdAt: updatedAt,
     payload: {
-      id: typedId("read_cursor"),
       schema: "ak.schema.read_cursor.v1",
       actor_id: accountActorId(actor.id),
       device_id: actor.deviceId,
       realm_id: body.realm_id,
       read_scope: body.read_scope,
       position: body.position,
-      updated_at: updatedAt,
     },
   });
   await alignSignedEventToActorFrontierApi(request, token, event);
