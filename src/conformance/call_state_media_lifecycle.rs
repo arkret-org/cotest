@@ -26,7 +26,7 @@
 use anyhow::{Result, bail};
 use arkret_identifiers::{BlobRef, CallId, DidCoreId, EventId, GrantId, Hash, PolicyId, RealmId};
 use arkret_models_collaboration::events_payloads::call::{
-    CallRecordingArtifact, CallRecordingArtifactKind, CallRecordingDeletionAudit,
+    CallRecordingArtifact, CallRecordingDeletionAudit,
     CallRecordingDeletionOutcome, CallRecordingDeletionTrigger, CallRecordingEncryption,
     CallRecordingEncryptionAlgorithm, CallRecordingEncryptionContext, CallRecordingId,
     CallRecordingRetention, CallRecordingStartPayload, CallRecordingState, CallRecordingTransition,
@@ -222,7 +222,6 @@ fn valid_recording_artifact() -> CallRecordingArtifact {
         call_id: call_id(),
         recording_id: recording_id.clone(),
         recording_start_event_id: start_event_id(),
-        artifact_kind: CallRecordingArtifactKind::Recording,
         // The content-addressed blob ref is the only ciphertext digest carrier
         // the artifact has (`conformance/encoding.md` §4.0.1); there is no
         // sibling content_digest or ciphertext_digest beside it.
