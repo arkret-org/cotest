@@ -156,22 +156,25 @@ test("@fully-implemented calendar schedule and RSVP survive the canonical Strand
     await expect(page.page.getByTestId("kanban-panel")).toBeVisible({
       timeout: 120_000,
     });
-    // The canonical card route retains the selected Strand across a reload,
-    // so the detail may already be open. Only select the card when the route
-    // did not restore it; otherwise the modal itself intercepts the click.
+    // The canonical card route may restore the selected Strand after the board
+    // itself becomes visible. Close that late overlay before selecting the
+    // projected card again; otherwise it correctly intercepts board input.
     const restoredOverlay = page.page.getByTestId("card-detail-overlay");
     if (
-      !(await restoredOverlay
-        .isVisible({ timeout: 5_000 })
-        .catch(() => false))
+      await restoredOverlay
+        .waitFor({ state: "visible", timeout: 30_000 })
+        .then(() => true)
+        .catch(() => false)
     ) {
-      const reloadedCard = page.page
-        .getByTestId("kanban-card")
-        .filter({ hasText: cardTitle })
-        .first();
-      await expect(reloadedCard).toBeVisible({ timeout: 90_000 });
-      await reloadedCard.click();
+      await restoredOverlay.getByTestId("card-detail-close-button").click();
+      await expect(restoredOverlay).toBeHidden({ timeout: 30_000 });
     }
+    const reloadedCard = page.page
+      .getByTestId("kanban-card")
+      .filter({ hasText: cardTitle })
+      .first();
+    await expect(reloadedCard).toBeVisible({ timeout: 90_000 });
+    await reloadedCard.click();
     await expect(detail).toBeVisible({ timeout: 45_000 });
     await expect(
       calendar.getByTestId("card-detail-calendar-agenda-unresolved"),

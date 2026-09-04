@@ -8,6 +8,7 @@
 // Pat edits the ETA on a reply (after realising EOD was wrong).
 
 import { expect, test } from "../../helpers/arkret-test";
+import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { openDpopUserPage } from "../../helpers/users";
 
@@ -46,6 +47,20 @@ test.describe("workflow: async daily standup", () => {
     const linUnblockPatFixed = `Reviewing PR #88 now — actually ack in 1h, sorry. ${stamp}`;
 
     try {
+      await Promise.all([
+        grantInviteConsentArkret(
+          request,
+          patFlow.session.grantJwt,
+          pat,
+          linFlow.user.id,
+        ),
+        grantInviteConsentArkret(
+          request,
+          quincyFlow.session.grantJwt,
+          quincy,
+          linFlow.user.id,
+        ),
+      ]);
       // Phase A — standup space (today's edition).
       const realmId = await linPage.createRealm({
         title: `Team Daily ${stamp}`,

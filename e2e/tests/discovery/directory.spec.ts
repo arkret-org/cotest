@@ -266,7 +266,7 @@ test.describe("discovery", () => {
         }),
       });
     let update = await postProfile();
-    if (update.status() === 412) {
+    if (update.status() === 503) {
       expect(await update.text()).toContain("frontier_unavailable");
       await submitPrincipalSuccessorSealApi(
         request,
@@ -276,7 +276,7 @@ test.describe("discovery", () => {
       );
       for (let attempt = 0; attempt < 120; attempt += 1) {
         update = await postProfile();
-        if (update.status() !== 412) break;
+        if (update.status() !== 503) break;
         expect(await update.text()).toContain("frontier_unavailable");
         await new Promise((resolve) => setTimeout(resolve, 250));
       }

@@ -399,7 +399,7 @@ test.describe("core object invariants", () => {
         data: staleMoveEnvelope,
       },
     );
-    expect(staleMove.status()).toBe(412);
+    expect(staleMove.status()).toBe(409);
     expect(wireErrCode(await staleMove.json())).toBe("failed_precondition");
 
     const basisAfterReject = await fetchRealmSealBasis(
@@ -681,8 +681,15 @@ test.describe("core object invariants", () => {
         data: canonicalJson({ event: crossRealmEnvelope }),
       },
     );
-    expect(crossRealm.status()).toBe(412);
-    expect(wireErrCode(await crossRealm.json())).toBe(
+    expect(crossRealm.status()).toBe(409);
+    const crossRealmBody = await crossRealm.json();
+    expect(wireErrCode(crossRealmBody), JSON.stringify(crossRealmBody)).toBe(
+      "failed_precondition",
+    );
+    expect(
+      crossRealmBody.reason_code ?? crossRealmBody.details?.reason_code,
+      JSON.stringify(crossRealmBody),
+    ).toBe(
       "cross_realm_structural_relation",
     );
   });

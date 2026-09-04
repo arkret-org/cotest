@@ -23,13 +23,30 @@ import { expect, type Locator } from "@playwright/test";
  */
 export async function selectDxcOption(scope: Locator, value: string): Promise<void> {
   const trigger = scope.locator('button[aria-haspopup="listbox"]').first();
-  await expect(trigger).toBeVisible({ timeout: 30_000 });
-  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
-    await trigger.click();
-  }
   const quotedValue = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  const option = scope.locator(`[role="option"][data-value="${quotedValue}"]`);
-  await option.click();
+  let selected = false;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await expect(trigger).toBeVisible({ timeout: 30_000 });
+      if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+        await trigger.click({ timeout: 15_000 });
+      }
+      // Recreate the locator on every attempt. Account bootstrap can complete
+      // a recovery-key modal between opening the popover and clicking its
+      // option, which remounts the dxc Select and detaches the old option.
+      await scope
+        .locator(`[role="option"][data-value="${quotedValue}"]`)
+        .click({ timeout: 15_000 });
+      selected = true;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!selected) {
+    throw lastError;
+  }
   if ((await trigger.getAttribute("aria-expanded")) === "true") {
     await trigger.press("Escape").catch(() => {});
     await scope.page().mouse.click(0, 0).catch(() => {});

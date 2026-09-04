@@ -29,6 +29,18 @@ macro_rules! conformance_test {
     };
 }
 
+macro_rules! conformance_async_test {
+    ($(#[$attr:meta])* $name:ident, $scenario:literal, $suite:path $(,)?) => {
+        $(#[$attr])*
+        #[tokio::test]
+        #[serial(conformance_fixtures)]
+        async fn $name() -> Result<()> {
+            let _guard = enter_scenario($scenario);
+            $suite().await
+        }
+    };
+}
+
 conformance_test!(
     schema_validation_suite_matches_reference_semantics,
     "schema_validation",
@@ -250,12 +262,11 @@ conformance_test!(
     cotest::conformance::run_service_closure_hardening_fixture_suite,
 );
 
-#[tokio::test]
-#[serial(conformance_fixtures)]
-async fn history_key_direct_traversal_fixture_matches_shared_sdk_types() -> Result<()> {
-    let _guard = enter_scenario("history_key_direct_traversal_fixture");
-    cotest::conformance::run_history_key_direct_traversal_suite().await
-}
+conformance_async_test!(
+    history_key_direct_traversal_fixture_matches_shared_sdk_types,
+    "history_key_direct_traversal_fixture",
+    cotest::conformance::run_history_key_direct_traversal_suite,
+);
 
 conformance_test!(
     push_route_revision_fixture_matches_production_sdk,

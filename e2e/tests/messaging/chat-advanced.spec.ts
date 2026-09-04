@@ -685,6 +685,11 @@ test.describe("chat advanced", () => {
         encryptionProfile: "none",
         seedMembers: [bob.id, carol.id],
       });
+      await alicePage.grantRealmCapability(
+        realmId,
+        alice.id,
+        "ak.message.create",
+      );
       await Promise.all([
         bobPage.acceptInvite(realmId),
         carolPage.acceptInvite(realmId),

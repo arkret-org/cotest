@@ -313,6 +313,14 @@ test.describe("workflow: support escalation", () => {
       await expect(
         alexPage.page.getByTestId("chat-redacted-tombstone"),
       ).toBeVisible({ timeout: 30_000 });
+      // The tombstone is rendered optimistically. Do not navigate away until
+      // the canonical ak.message.redact Event is accepted, otherwise the page
+      // can abort the in-flight submit and the reload correctly restores the
+      // still-live create Event.
+      await expect(alexPage.page.getByTestId("chat-status")).toContainText(
+        "Message removed",
+        { timeout: 60_000 },
+      );
       await stepShot(alexPage.page, testInfo, "redact-A-alex-tombstone");
 
       // Both parties reload: the receiver-side tombstone fold is now wired

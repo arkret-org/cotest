@@ -615,6 +615,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
         "realm_preview": {
             "realm_id": format!("ak:realm:{R}"),
             "title": "Acme HQ",
+            "member_count_bucket": 42,
             "as_of": "2026-05-27T00:00:00.000Z",
             "policy_revision": "rev-1"
         },

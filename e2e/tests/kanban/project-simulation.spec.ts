@@ -43,6 +43,7 @@ test.describe.configure({ mode: "serial" });
 type StrandProjectionRow = {
   strand_id: string;
   state: string;
+  stage?: string | null;
   title?: string | null;
   board_space_id?: string | null;
   list_space_id?: string | null;
@@ -415,7 +416,7 @@ test.describe("project simulation", () => {
     ).toBe(true);
   });
 
-  test("status FSM: Card transitions todo → in_progress → done via ak.strand.update; invalid transition (todo → done direct) rejected by FSM cell", async ({
+  test("canonical Strand stage uses ak.strand.stage.set; core permits planned → done without a workflow profile and rejects metadata.fields.status", async ({
     request,
   }) => {
     const alice = uniqueUser("s16-fsm-alice");
@@ -438,10 +439,7 @@ test.describe("project simulation", () => {
           object: {
             schema: "ak.schema.strand.v1",
             realm_id: realmId,
-            metadata: {
-              title: "Implement login",
-              fields: { status: "todo" },
-            },
+            metadata: { title: "Implement login" },
             stage: "planned",
             tracks: { discussion: { enabled: true, is_primary: true } },
             created_by: accountActorId(alice.id),
@@ -457,114 +455,52 @@ test.describe("project simulation", () => {
       "strand",
     );
 
-    const badDoneEvent = signedEventEnvelope({
+    // common-fields.md §5.3.3: without a profile-declared workflow FSM the
+    // core reducer intentionally imposes no direction on the eight stage
+    // values, so planned -> done is legal.
+    await submitSignedEventApi(
+      request,
+      aliceToken,
+      signedEventEnvelope({
+        actorId: alice.id,
+        realmId,
+        kind: "ak.strand.stage.set",
+        payload: {
+          strand_id: taskStrandId,
+          stage: "done",
+          expected_stage: "planned",
+        },
+      }),
+      { context: "advance card directly from planned to done" },
+    );
+    const task = await readStrandRow(request, aliceToken, realmId, taskStrandId);
+    expect(task?.stage).toBe("done");
+
+    // The legacy status spelling is forbidden wire, not a private core FSM.
+    const forbiddenStatusEvent = signedEventEnvelope({
       actorId: alice.id,
       realmId,
       kind: "ak.strand.update",
       payload: {
         target_ref: taskStrandId,
-        patch: { metadata: { fields: { status: "done" } } },
-      },
-    });
-    await prepareSignedEventCbaApi(request, aliceToken, badDoneEvent);
-    await alignSignedEventToActorFrontierApi(request, aliceToken, badDoneEvent);
-    const badDone = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: authHeaders(aliceToken),
-        data: badDoneEvent,
-      },
-    );
-    expect(badDone.status()).toBe(412);
-    expect(wireErrCode(await badDone.json())).toBe(
-      "strand_status_transition_invalid",
-    );
-
-    await submitSignedEventApi(
-      request,
-      aliceToken,
-      signedEventEnvelope({
-        actorId: alice.id,
-        realmId: realmId,
-        kind: "ak.strand.update",
-        payload: {
-          target_ref: taskStrandId,
-          patch: { metadata: { fields: { status: "in_progress" } } },
-        },
-      }),
-      { context: "advance card to in_progress" },
-    );
-
-    await submitSignedEventApi(
-      request,
-      aliceToken,
-      signedEventEnvelope({
-        actorId: alice.id,
-        realmId: realmId,
-        kind: "ak.strand.update",
-        payload: {
-          target_ref: taskStrandId,
-          patch: { metadata: { fields: { status: "done" } } },
-        },
-      }),
-      { context: "advance card to done" },
-    );
-
-    const incidentCreatedAt = canonicalTimestamp();
-    const incidentStrandEnvelope = signedEventEnvelope({
-        actorId: alice.id,
-        realmId: realmId,
-        kind: "ak.strand.create",
-        createdAt: incidentCreatedAt,
-        payload: {
-          object: {
-            schema: "ak.schema.strand.v1",
-            realm_id: realmId,
-            metadata: {
-              title: "SEV-2 checkout outage",
-              fields: { status: "investigating" },
-            },
-            stage: "in_progress",
-            tracks: { discussion: { enabled: true, is_primary: true } },
-            created_by: accountActorId(alice.id),
-            created_at: incidentCreatedAt,
-          },
-        },
-      });
-    await submitSignedEventApi(request, aliceToken, incidentStrandEnvelope, {
-      context: "create investigating incident strand",
-    });
-    const incidentStrandId = retypeEventDerivedId(
-      String(incidentStrandEnvelope.event_id),
-      "strand",
-    );
-
-    const badResolvedEvent = signedEventEnvelope({
-      actorId: alice.id,
-      realmId,
-      kind: "ak.strand.update",
-      payload: {
-        target_ref: incidentStrandId,
         patch: { metadata: { fields: { status: "resolved" } } },
       },
     });
-    await prepareSignedEventCbaApi(request, aliceToken, badResolvedEvent);
+    await prepareSignedEventCbaApi(request, aliceToken, forbiddenStatusEvent);
     await alignSignedEventToActorFrontierApi(
       request,
       aliceToken,
-      badResolvedEvent,
+      forbiddenStatusEvent,
     );
-    const badResolved = await request.post(
+    const forbiddenStatus = await request.post(
       `${solandBaseUrl()}/_arkret/self/events`,
       {
         headers: authHeaders(aliceToken),
-        data: badResolvedEvent,
+        data: forbiddenStatusEvent,
       },
     );
-    expect(badResolved.status()).toBe(412);
-    expect(wireErrCode(await badResolved.json())).toBe(
-      "strand_status_transition_invalid",
-    );
+    expect(forbiddenStatus.status()).toBe(422);
+    expect(wireErrCode(await forbiddenStatus.json())).toBe("schema_violation");
   });
 
   test("due_date past today renders as overdue badge on the card UI", async ({
@@ -943,7 +879,7 @@ test.describe("project simulation", () => {
       headers: authHeaders(aliceToken),
       data: writeEnvelope,
     });
-    expect(write.status()).toBe(412);
+    expect(write.status()).toBe(422);
     expect(wireErrCode(await write.json())).toBe("strand_not_active");
   });
 });

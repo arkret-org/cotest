@@ -168,12 +168,19 @@ pub async fn agent_lifecycle_surfaces_are_advertised_when_routes_exist() -> Resu
         },
         pairing_ttl_ms: None,
     };
-    expect_api_error(
+    let provision_error = expect_api_error(
         alice.post("/_arkret/self/agents").json(&provision),
-        StatusCode::PRECONDITION_FAILED,
+        StatusCode::CONFLICT,
         "failed_precondition",
     )
     .await?;
+    assert_eq!(
+        provision_error
+            .extensions
+            .get("reason_code")
+            .and_then(Value::as_str),
+        Some("agent_provision_scope_migration_required")
+    );
 
     expect_api_error(
         alice

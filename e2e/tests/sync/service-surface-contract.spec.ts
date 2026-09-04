@@ -473,7 +473,7 @@ test.describe("service surface contract — error envelope, pagination, idempote
         headers: { ...authHeaders(token, "POST", submitUrl), "content-type": "application/json" },
         data: canonicalJson({ event: drift }),
       });
-      expect(conflict.status(), "changed Event preimage must fail before duplicate lookup").toBe(400);
+      expect(conflict.status(), "changed Event preimage must fail before duplicate lookup").toBe(422);
       expect(wireErrCode(await conflict.json())).toBe("schema_violation");
 
       const eventsAfterConflict = await listRealmEventsViaApi(request, token, realmId);

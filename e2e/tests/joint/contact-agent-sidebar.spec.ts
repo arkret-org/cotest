@@ -39,11 +39,21 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
         jointRealm.bobSession,
       );
       const realAliceRow = realBobContacts.find(
-        (row) => row.peer === jointRealm.alice.id,
+        (row) =>
+          canonicalJson(row.peer) ===
+          canonicalJson({
+            kind: "human",
+            account_id: jointRealm.aliceSession.accountId,
+          }),
       );
-      expect(realAliceRow?.agents ?? []).toHaveLength(0);
+      expect(realAliceRow).toBeTruthy();
+      expect(realAliceRow?.contact_agents ?? []).toHaveLength(0);
 
       const alicePage = jointRealm.alicePage.page;
+      // The contact was established through the protocol API after Alice's
+      // shell had already loaded its sidebar cache. Reload the product client
+      // so the assertion observes the accepted contact projection.
+      await alicePage.reload({ waitUntil: "domcontentloaded" });
       await alicePage.getByTestId("realm-sidebar-tab-direct").click();
 
       const aliceGroups = alicePage.locator(".contact-sidebar-group");
@@ -80,7 +90,10 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
 
       const bobPage = jointRealm.bobPage.page;
       const allowedAgent = {
-        agent_id: `ak:did_core:web:agents.joint-e2e.local:${stamp}`,
+        actor_id: {
+          kind: "service",
+          service_id: `ak:did_core:web:agents.joint-e2e.local:${stamp}`,
+        },
         controller_account_id: jointRealm.aliceSession.accountId,
         display_name: `Alice Allowed Agent ${stamp}`,
         agent_slug: `allowed-${stamp.toString(36)}`,
@@ -88,7 +101,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
           realm_id: "ak:realm:AdrCf1FpSdW2-osrupL1Va1DkS3PNlzZsPum0wyLnQwz",
           main_strand_id: "ak:strand:AQAG6N7vDa1nxssksTCIdqNm-FTDJoKuBrHIclJ7FBy0",
           binding_event_ref: "ak:event:ARn7D_ihLMur4IPmD8Tz75ZThvC26r14I60hC2_uRS8q",
-          state: "active",
+          state: "found",
         },
       };
       // The live API assertion above owns the permission/filtering contract.
@@ -106,8 +119,17 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
             contacts?: Array<Record<string, unknown>>;
           };
           const contacts = (body.contacts ?? []).map((row) =>
-            row.peer === jointRealm.alice.id
-              ? { ...row, agents: [allowedAgent] }
+            canonicalJson(row.peer) ===
+            canonicalJson({
+              kind: "human",
+              account_id: jointRealm.aliceSession.accountId,
+            })
+              ? {
+                  ...row,
+                  direct_conversation:
+                    row.direct_conversation ?? allowedAgent.direct_conversation,
+                  contact_agents: [allowedAgent],
+                }
               : row,
           );
           await route.fulfill({
@@ -141,7 +163,7 @@ jointTest.describe("Contacts agent hierarchy @fully-implemented", () => {
       await expect(allowedAgentRow).toBeVisible();
       await expect(allowedAgentRow).toHaveAttribute(
         "data-controller",
-        jointRealm.alice.id,
+        canonicalJson(jointRealm.aliceSession.accountId),
       );
       await allowedAgentRow.click();
       await expect

@@ -2,7 +2,6 @@
 // Contract: e2e/scenarios/discovery/notifications.md
 // Spec: discovery/push-notifications.md §2-§4, discovery/client-preferences.md
 
-import { createHash } from "node:crypto";
 import { expect, test } from "../../helpers/arkret-test";
 import { cssStringEscape } from "../../helpers/dom";
 import { stepShot } from "../../helpers/screenshots";
@@ -474,7 +473,6 @@ test.describe("notifications", () => {
     );
 
     const plaintext = `sealed-keyword plaintext must stay client-side ${stamp}`;
-    const sidecarHash = mentionSidecarHash(realmId, bob.id);
     const strandId = await resolveDefaultStrandId(request, aliceToken, realmId);
     const encrypted = signedEventEnvelope({
       actorId: alice.id,
@@ -483,7 +481,6 @@ test.describe("notifications", () => {
       payload: {
         strand_id: strandId,
         track_name: "discussion",
-        mention_sidecar_digest: [sidecarHash],
         encrypted_content: encryptedEnvelope(
           "ak.message.v1",
           "opaque-ciphertext-for-sealed-keyword",
@@ -507,7 +504,6 @@ test.describe("notifications", () => {
     expect(wire).not.toContain(encrypted.event_id);
     expect(wire).not.toContain(plaintext);
     expect(wire).not.toContain("sealed-keyword");
-    expect(wire).not.toContain(sidecarHash);
     expect(wire).not.toContain(bob.id);
   });
 
@@ -658,10 +654,6 @@ test.describe("notifications", () => {
     }
   });
 });
-
-function mentionSidecarHash(realmId: string, did: string): string {
-  return createHash("sha256").update(`${realmId}|${did}`).digest("hex");
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

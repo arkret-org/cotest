@@ -79,6 +79,80 @@ function Test-DockerImagePresent {
     return $LASTEXITCODE -eq 0
 }
 
+function Get-FreeTcpPort {
+    $listener = [System.Net.Sockets.TcpListener]::new(
+        [System.Net.IPAddress]::Loopback,
+        0
+    )
+    $listener.Start()
+    try {
+        return ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
+    }
+    finally {
+        $listener.Stop()
+    }
+}
+
+function Start-CotestTestPostgres {
+    param(
+        [string]$Image = "postgres:16-alpine",
+        [int]$TimeoutSeconds = 120
+    )
+
+    $null = Get-Command docker -ErrorAction Stop
+    $port = Get-FreeTcpPort
+    $containerName = "cotest-conformance-$PID-pg"
+    $runOutput = @(
+        & docker run --rm -d --name $containerName `
+            -e "POSTGRES_USER=arkret" `
+            -e "POSTGRES_PASSWORD=arkret" `
+            -e "POSTGRES_DB=arkret" `
+            -p "127.0.0.1:$port`:5432" `
+            $Image 2>&1
+    )
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to start conformance PostgreSQL container: $($runOutput -join [Environment]::NewLine)"
+    }
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $lastError = "container did not report ready"
+    while ((Get-Date) -lt $deadline) {
+        $readyOutput = @(
+            & docker exec $containerName pg_isready -U arkret -d arkret 2>&1
+        )
+        if ($LASTEXITCODE -eq 0) {
+            $tcp = [System.Net.Sockets.TcpClient]::new()
+            try {
+                $connect = $tcp.ConnectAsync("127.0.0.1", $port)
+                if ($connect.Wait(1000) -and $tcp.Connected) {
+                    return [pscustomobject]@{
+                        ContainerName = $containerName
+                        Url = "postgresql://arkret:arkret@127.0.0.1:$port/arkret"
+                    }
+                }
+            }
+            catch {
+                $lastError = $_.Exception.Message
+            }
+            finally {
+                $tcp.Dispose()
+            }
+        }
+        else {
+            $lastError = $readyOutput -join [Environment]::NewLine
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    & docker rm -f $containerName 2>$null | Out-Null
+    throw "Timed out waiting for conformance PostgreSQL container $containerName. Last error: $lastError"
+}
+
+function Stop-CotestTestPostgres {
+    param([Parameter(Mandatory = $true)][string]$ContainerName)
+    & docker rm -f $ContainerName 2>$null | Out-Null
+}
+
 function Invoke-JointSmokeGate {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -2191,7 +2265,7 @@ if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
 }
 
 $originalEnv = @()
-foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN") {
+foreach ($name in "COTEST_SUT_MODE", "COTEST_SUT_MANIFEST", "COTEST_SUT_IMAGE", "COTEST_ARTIFACT_DIR", "COTEST_SERVICE_LOG_DIR", "COTEST_TRANSCRIPT_PATH", "SOLAND_BIN", "COTEST_SOLAND_DATABASE_URL") {
     $originalEnv += [pscustomobject]@{
         Name   = $name
         Exists = Test-Path "Env:$name"
@@ -2210,6 +2284,7 @@ $profileReport = [pscustomobject]@{
     quarantined_tests          = $quarantineEntries
 }
 $exitCode = 1
+$testPostgres = $null
 
 try {
     $env:COTEST_SUT_MODE = $Runtime
@@ -2227,6 +2302,13 @@ try {
         }
     }
 
+    if ($Profile -in @("all", "full-nightly") -and -not $env:COTEST_SOLAND_DATABASE_URL) {
+        Add-RawLogLine -Path $rawLog -Value "=== prepare conformance test PostgreSQL ==="
+        $testPostgres = Start-CotestTestPostgres
+        $env:COTEST_SOLAND_DATABASE_URL = $testPostgres.Url
+        Add-RawLogLine -Path $rawLog -Value "conformance test PostgreSQL: $($testPostgres.ContainerName)"
+    }
+
     $exitCode = 0
     foreach ($invocation in $invocations) {
         $invocationExitCode = Invoke-CargoTestInvocation -CargoArgs @($invocation.cargo_args) -RawLog $rawLog -Label $invocation.label
@@ -2236,6 +2318,9 @@ try {
     }
 }
 finally {
+    if ($testPostgres) {
+        Stop-CotestTestPostgres -ContainerName $testPostgres.ContainerName
+    }
     foreach ($entry in $originalEnv) {
         if ($entry.Exists) {
             [Environment]::SetEnvironmentVariable($entry.Name, $entry.Value)

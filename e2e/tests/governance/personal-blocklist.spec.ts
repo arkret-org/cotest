@@ -332,6 +332,12 @@ test.describe("personal blocklist", () => {
     });
     await addRealmMemberApi(request, aliceToken, realmId, bob.id);
     await addRealmMemberApi(request, aliceToken, realmId, carol.id);
+    await grantCapabilityEventApi(request, aliceToken, {
+      ownerId: alice.id,
+      realmId,
+      subjectId: bob.id,
+      actions: ["ak.strand.create", "ak.message.create"],
+    });
     await putBlocklist(request, aliceToken, alice.id, [
       canonicalActorBlockEntry(bob.id),
     ]);
@@ -635,7 +641,7 @@ async function blocklistAccountDataRow(
   const payload = entry.payload as Record<string, unknown>;
   return {
     ...entry,
-    content: payload.body,
+    content: payload.encrypted_payload,
   };
 }
 

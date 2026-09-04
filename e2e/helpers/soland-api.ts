@@ -378,7 +378,10 @@ export async function submitPrincipalSuccessorSealApi(
       candidate.realm_id === realmId && eventPrincipalId(candidate) === actorId,
   );
   const acceptedHistoryById = new Map<string, Record<string, unknown>>();
-  for (const candidate of [...events, ...visibleAcceptedHistory]) {
+  // Contact commits place the caller-signed Control Move in the pending
+  // Control index. It cannot appear in accepted history until this successor
+  // Seal covers it, so the exact locally held Event is the final history item.
+  for (const candidate of [...events, ...visibleAcceptedHistory, event]) {
     if (typeof candidate.event_id === "string") {
       acceptedHistoryById.set(candidate.event_id, candidate);
     }
@@ -2560,7 +2563,7 @@ function requiresActorFrontierRefresh(
     (status === 409 &&
       wireErrCode(body) === "cas_conflict" &&
       text.includes("actor_seq is older than the accepted actor frontier")) ||
-    (status === 400 &&
+    (status === 422 &&
       wireErrCode(body) === "schema_violation" &&
       (text.includes("actor-chain genesis must use actor_seq=0") ||
         text.includes(

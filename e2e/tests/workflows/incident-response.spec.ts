@@ -3,7 +3,7 @@
 // Spec refs:
 //   - models/strand-and-message.md §8 (reply / edit / redact)
 //   - discovery/push-notifications.md §3-§4 (routing, priority, DnD override)
-//   - models/realm-and-space.md §4 (status board / FSM cells)
+//   - models/common-fields.md §5.3 (canonical Strand stage)
 //   - models/morph.md §2-§4 (postmortem document morph)
 
 import { expect, test, type APIRequestContext } from "../../helpers/arkret-test";
@@ -11,17 +11,13 @@ import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
 import {
   accountActorId,
-  alignSignedEventToActorFrontierApi,
-  authHeaders,
   canonicalTimestamp,
   createRealmApi,
-  prepareSignedEventCbaApi,
   queryRealmEventsApi,
   signedEventEnvelope,
   submitSignedEventApi,
   retypeEventDerivedId,
   typedId,
-  wireErrCode,
 } from "../../helpers/soland-api";
 import {
   assertJointStackNotRequired,
@@ -170,10 +166,11 @@ test.describe("workflow: incident response", () => {
     }
   });
 
-  test("E-incident.status status FSM rejects Resolved before Mitigated and records accepted transitions in event log", async ({
+  test("E-incident.stage records the canonical direct stage transition when no workflow profile is installed", async ({
     request,
   }) => {
-    // spec: realm-and-space.md §4 FSM-style status cells.
+    // spec: common-fields.md §5.3.3-§5.3.4 — core stage has no directional
+    // FSM. A Realm profile may narrow it, but this fixture installs none.
     const stamp = Date.now();
     const oncall = uniqueUser("wf-incident-fsm");
     await ensureRegistered(request, oncall);
@@ -194,10 +191,7 @@ test.describe("workflow: incident response", () => {
           object: {
             schema: "ak.schema.strand.v1",
             realm_id: realmId,
-            metadata: {
-              title: "SEV-2 checkout outage",
-              fields: { status: "investigating" },
-            },
+            metadata: { title: "SEV-2 checkout outage" },
             stage: "in_progress",
             tracks: { discussion: { enabled: true, is_primary: true } },
             created_by: accountActorId(oncall.id),
@@ -213,71 +207,38 @@ test.describe("workflow: incident response", () => {
       "strand",
     );
 
-    const badResolvedEvent = signedEventEnvelope({
-      actorId: oncall.id,
-      realmId,
-      kind: "ak.strand.update",
-      payload: {
-        target_ref: incidentStrandId,
-        patch: { metadata: { fields: { status: "resolved" } } },
-      },
-    });
-    await prepareSignedEventCbaApi(request, token, badResolvedEvent);
-    await alignSignedEventToActorFrontierApi(request, token, badResolvedEvent);
-    const badResolved = await request.post(
-      `${solandBaseUrl()}/_arkret/self/events`,
-      {
-        headers: authHeaders(token),
-        data: badResolvedEvent,
-      },
-    );
-    expect(badResolved.status()).toBe(412);
-    expect(wireErrCode(await badResolved.json())).toBe(
-      "strand_status_transition_invalid",
-    );
-
     await submitSignedEventApi(
       request,
       token,
       signedEventEnvelope({
         actorId: oncall.id,
         realmId,
-        kind: "ak.strand.update",
+        kind: "ak.strand.stage.set",
         payload: {
-          target_ref: incidentStrandId,
-          patch: { metadata: { fields: { status: "mitigated" } } },
+          strand_id: incidentStrandId,
+          stage: "done",
+          expected_stage: "in_progress",
         },
       }),
-      { context: "advance incident to mitigated" },
-    );
-    await submitSignedEventApi(
-      request,
-      token,
-      signedEventEnvelope({
-        actorId: oncall.id,
-        realmId,
-        kind: "ak.strand.update",
-        payload: {
-          target_ref: incidentStrandId,
-          patch: { metadata: { fields: { status: "resolved" } } },
-        },
-      }),
-      { context: "advance incident to resolved" },
+      { context: "resolve incident directly at the protocol stage layer" },
     );
 
     const eventLog = await queryRealmEventsApi(request, token, realmId);
     const events = Array.isArray(eventLog.events) ? eventLog.events : [];
-    const statusUpdates = events.filter((event) => {
+    const stageUpdates = events.filter((event) => {
       if (!event || typeof event !== "object") {
         return false;
       }
       const record = event as Record<string, unknown>;
       return (
-        record.kind === "ak.strand.update" &&
+        record.kind === "ak.strand.stage.set" &&
         JSON.stringify(record.payload ?? {}).includes(incidentStrandId)
       );
     });
-    expect(statusUpdates.length).toBeGreaterThanOrEqual(2);
+    expect(stageUpdates).toHaveLength(1);
+    expect((stageUpdates[0]?.payload as Record<string, unknown>)?.stage).toBe(
+      "done",
+    );
   });
 
   test("E-incident.priority SEV-1 control and sanitized public update guard are active", async ({

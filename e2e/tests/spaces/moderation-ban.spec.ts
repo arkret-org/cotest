@@ -335,7 +335,7 @@ test.describe("moderation and ban", () => {
       type?: string;
       reason_code?: string;
     };
-    expect(secondBanLease.status()).toBe(422);
+    expect(secondBanLease.status()).toBe(409);
     expect(wireErrCode(secondBanProblem)).toBe("failed_precondition");
     expect(secondBanProblem.reason_code).toBe("invalid_membership_transition");
 

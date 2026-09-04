@@ -18,6 +18,7 @@ import {
 import { createRealmViaApi } from "../../helpers/api";
 import { solandBaseUrl } from "../../helpers/env";
 import { stepShot } from "../../helpers/screenshots";
+import { decodeIngressEvents } from "../../helpers/event-ingress";
 import { canonicalJson } from "../../helpers/soland-api";
 import {
   openDpopUserPage,
@@ -300,41 +301,44 @@ test.describe("workflow: kanban week-in-review", () => {
       // it opens a confirmation dialog; the archive submits from confirm.
       await today.hover();
       await today.getByTestId("list-archive-button").click();
+      const archiveWrite = patPage.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/_arkret/self/events" &&
+          decodeIngressEvents(response.request().postData()).some(
+            (event) => event.kind === "ak.space.archive",
+          ),
+        { timeout: 90_000 },
+      );
       await patPage.page.getByTestId("list-archive-confirm-button").click();
+      const archiveResponse = await archiveWrite;
+      expect(archiveResponse.status(), await archiveResponse.text()).toBeLessThan(400);
       const archivedLists = patPage.page.getByTestId("kanban-archived-lists");
       await archivedLists.locator("summary").click();
       await expect(
         patPage.page.getByTestId("kanban-archived-list-row").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
-      await expect
-        .poll(async () => {
-          const events = await readRealmEvents(request, realmId, patFlow.session);
-          return events.some((event) => event.kind === "ak.space.archive");
-        }, {
-          timeout: 90_000,
-        })
-        .toBe(true);
-
+      const restoreWrite = patPage.page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/_arkret/self/events" &&
+          decodeIngressEvents(response.request().postData()).some(
+            (event) => event.kind === "ak.space.restore",
+          ),
+        { timeout: 90_000 },
+      );
       await archivedLists
         .getByTestId("kanban-archived-list-row")
         .filter({ hasText: todayList })
         .first()
         .getByTestId("list-restore-button")
         .click();
+      const restoreResponse = await restoreWrite;
+      expect(restoreResponse.status(), await restoreResponse.text()).toBeLessThan(400);
       await expect(
         patPage.page.getByTestId("kanban-column").filter({ hasText: todayList }),
       ).toBeVisible({ timeout: 30_000 });
-      await expect
-        .poll(async () => {
-          const events = await readRealmEvents(request, realmId, patFlow.session);
-          return events.some((event) => event.kind === "ak.space.restore");
-        }, {
-          timeout: 30_000,
-        })
-        .toBe(true);
-      const controlMove = (await readRealmEvents(request, realmId, patFlow.session)).find(
-        (event) => event.kind === "ak.space.archive" || event.kind === "ak.strand.archive",
-      );
+      const controlMove = decodeIngressEvents(
+        archiveResponse.request().postData(),
+      ).find((event) => event.kind === "ak.space.archive");
       expect(controlMove, "workflow emitted a real Control Move comparison event").toBeDefined();
       expect(controlMove?.seal_basis, "Control Move carries seal_basis").toEqual(
         expect.any(Object),

@@ -153,6 +153,11 @@ test.describe("workflow: team onboarding", () => {
         seedMembers: [yuki.id],
       });
       await yukiPage.acceptInvite(realmId);
+      // Realm membership and even Realm ownership are not implicit action
+      // bundles (capabilities.md §3.2). Pinning is the registered medium-risk
+      // `ak.pin.add` action, so establish Mei's authority explicitly before
+      // driving the shared-pin UI.
+      await meiPage.grantRealmCapability(realmId, meiFlow.user.id, "ak.pin.add");
       await meiPage.sendTimelineMessage(realmId, welcome);
 
       // Mei pins the welcome via the message context menu. The

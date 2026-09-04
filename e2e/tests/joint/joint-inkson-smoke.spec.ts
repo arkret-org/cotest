@@ -22,6 +22,7 @@ import {
   selfPathHeadersForDpopSession,
 } from "../../helpers/users";
 import { coauthBaseUrl } from "../../helpers/env";
+import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import {
   decodeEventIngressBody,
   ingressEvents,
@@ -441,6 +442,12 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
         historyAccess: "since_join",
         encryptionProfile: "none",
       });
+      await grantInviteConsentArkret(
+        request,
+        bobFlow.session.grantJwt,
+        bob,
+        alice.id,
+      );
       const beforeJoin = `before Bob joined ${stamp}`;
       await alicePage.sendTimelineMessage(realmId, beforeJoin);
       await alicePage.inviteFromAdmin(realmId, bob.id);
@@ -486,6 +493,14 @@ test.describe("joint-inkson smoke @fully-implemented", () => {
       await expect(bobPage.page.getByTestId("realm-tree-list")).toContainText(
         `joint invite ${stamp}`,
         { timeout: 30_000 },
+      );
+
+      // Membership is not an authorization source (capabilities.md §3.2).
+      // Give Bob exactly the post-join action exercised below.
+      await alicePage.grantRealmCapability(
+        realmId,
+        bob.id,
+        "ak.message.create",
       );
 
       // `since_join` is an authorization boundary, not a presentation hint:

@@ -16,6 +16,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
+import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import {
   openDpopUserPage,
@@ -57,6 +58,20 @@ test.describe("workflow: sprint planning", () => {
     const meiClose = `Thanks both — I'll cover Story C. Regroup Friday. ${stamp}`;
 
     try {
+      await Promise.all([
+        grantInviteConsentArkret(
+          request,
+          bobFlow.session.grantJwt,
+          bob,
+          meiFlow.user.id,
+        ),
+        grantInviteConsentArkret(
+          request,
+          carolFlow.session.grantJwt,
+          carol,
+          meiFlow.user.id,
+        ),
+      ]);
       // Phase A — Mei spins up the sprint space with both engineers seeded.
       const realmId = await meiPage.createRealm({
         title: `Sprint 24 ${stamp}`,

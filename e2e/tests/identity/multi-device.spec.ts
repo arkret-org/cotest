@@ -18,6 +18,7 @@ import {
   assertJointStackNotRequired,
   createDpopUserSessionForAccount,
   openDpopUserPageForAccount,
+  openDpopUserPageFromSession,
   openUserPage,
   selfPathHeadersForDpopSession,
   type JointUserPage,
@@ -170,8 +171,18 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
     );
     expect(
       foundingSession,
-      "the recovery account must have a sealed PCR genesis and active policy",
+      "the recovery account must have a sealed PCR genesis",
     ).toBeTruthy();
+    const foundingFlow = await openDpopUserPageFromSession(
+      browser,
+      foundingSession,
+      { prepareMlsDevice: false },
+    );
+    expect(
+      foundingFlow,
+      "the founding device must be available to publish the genesis recovery policy",
+    ).toBeTruthy();
+    await foundingFlow!.page.completeRecoveryKeySetupIfPrompted(120_000);
 
     const replacement = await openFreshLoginBrowser(
       browser,
@@ -275,7 +286,10 @@ test.describe("fresh-browser device entry paths @fully-implemented", () => {
       });
       await expect(replacement.page.getByTestId("login-panel")).toHaveCount(0);
     } finally {
-      await replacement.close();
+      await Promise.allSettled([
+        replacement.close(),
+        foundingFlow!.page.close(),
+      ]);
     }
   });
 });

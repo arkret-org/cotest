@@ -557,7 +557,7 @@ test.describe("third-party invite", () => {
   // soland's reducer (`apply_invites.rs` reads that top-level component only).
   // Former blocker and current live-verification owner:
   // arkret-work/work/tailin/2026-08-02-account-status-allowlist-and-personal-blocklist-downstream.md
-  test("E3.1 expired token: reducer rejects claim with expired_invite_token", async ({
+  test("E3.1 expired token: claim failure is wire-indistinguishable", async ({
     request,
   }) => {
     // third-party-invites.md §4.3 step 2 / §6.1 — an invite past expires_at
@@ -610,7 +610,7 @@ test.describe("third-party invite", () => {
       }),
     );
     expect(claim.accepted).toHaveLength(0);
-    expect(claim.rejectReason).toBe("expired_invite_token");
+    expect(claim.rejectReason).toBe("not_found");
   });
 
   // Live since 2026-08-06. The canonical allowlist carrier landed in spec + SDK

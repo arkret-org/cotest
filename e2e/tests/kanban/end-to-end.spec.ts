@@ -613,8 +613,10 @@ test.describe("kanban end-to-end", () => {
       realmId,
       kind: "ak.strand.tracks.update",
       payload: {
-        strand_id: cardId,
-        patch: { discussion: { enabled: true } },
+        target_ref: cardId,
+        patch: {
+          "tracks.discussion.enabled": { $op: "set", value: true },
+        },
       },
     });
     await alignSignedEventToActorFrontierApi(
@@ -626,8 +628,15 @@ test.describe("kanban end-to-end", () => {
       `${solandBaseUrl()}/_arkret/self/events`,
       { headers: authHeaders(aliceToken), data: trackWrite },
     );
-    expect(response.status()).toBe(412);
-    expect(wireErrCode(await response.json())).toBe("strand_not_active");
+    const responseBody = await response.json();
+    expect(response.status(), JSON.stringify(responseBody)).toBe(409);
+    expect(wireErrCode(responseBody), JSON.stringify(responseBody)).toBe(
+      "failed_precondition",
+    );
+    expect(
+      responseBody.reason_code ?? responseBody.details?.reason_code,
+      JSON.stringify(responseBody),
+    ).toBe("strand_not_active");
   });
 
   test("column drag handles expose stable targets and reorder columns locally", async ({

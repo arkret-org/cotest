@@ -65,7 +65,10 @@ type DirectConversationSummary = {
   state: string;
 };
 type ContactAgentProjection = {
-  agent_id: string;
+  actor_id: ReturnType<typeof accountActorId> | {
+    kind: "service";
+    service_id: string;
+  };
   controller_account_id: { principal_id: string; station_id: string };
   display_name?: string;
   agent_slug?: string;
@@ -73,7 +76,7 @@ type ContactAgentProjection = {
 };
 
 export type ContactListRow = {
-  peer: string;
+  peer: string | Record<string, unknown>;
   peerIdentity: ContactPeer;
   state: ContactState;
   request_event_ref?: string;
@@ -90,6 +93,7 @@ export type ContactListRow = {
   effective_scopes?: string[];
   direct_conversation?: DirectConversationSummary;
   agents?: ContactAgentProjection[];
+  contact_agents?: ContactAgentProjection[];
   request_receipt?: Record<string, unknown>;
 };
 type ContactRequestOutcome = {
@@ -268,10 +272,17 @@ export async function requestContactArkret(
     }),
   });
   const accepted = await expectJsonOk<{
-    request_acceptance_receipt: Record<string, unknown> & {
+    status: "accepted" | "failed";
+    reason?: string;
+    request_acceptance_receipt?: Record<string, unknown> & {
       core: { request_event_ref: string };
     };
   }>(response, `contact request -> ${target}`);
+  if (accepted.status !== "accepted" || !accepted.request_acceptance_receipt) {
+    throw new Error(
+      `contact request -> ${target} was not accepted: ${JSON.stringify(accepted)}`,
+    );
+  }
   await submitPrincipalSuccessorSealApi(
     request,
     token,

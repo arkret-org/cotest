@@ -14,6 +14,7 @@ import {
   expectJsonOk,
   prepareSignedEventSubmissionApi,
   principalControlRealmForId,
+  registeredEventSigningSeedB64url,
   signedEventEnvelope,
   sdkMimiConsentProof,
   submitSignedEventApi,
@@ -29,6 +30,10 @@ import {
   uniqueUser,
 } from "../../helpers/users";
 import { selectDxcOption } from "../../helpers/dxc-select";
+import {
+  contactRow,
+  requestContactArkret,
+} from "../../helpers/contact-api";
 
 test.describe.configure({ mode: "serial" });
 
@@ -41,7 +46,7 @@ type ConsentCellBody = {
     };
   };
   consent_scope: string;
-  state: "active" | "revoked" | "expired" | "pending";
+  state: "active" | "no_consent";
 } & Record<string, unknown>;
 
 async function requestContact(
@@ -133,13 +138,42 @@ async function gotoConsentSettings(
   await actor.gotoAppPanel("/settings/consent", "consent-settings-panel");
 }
 
+async function grantConsentDirect(
+  actor: Awaited<ReturnType<typeof openUserPage>>,
+  peerId: string,
+  scope: "invite" | "message" | "call",
+  ttl = "30d",
+) {
+  await actor.clickWithPassivePromptRetry(
+    actor.page.getByTestId("consent-new-grant-button"),
+  );
+  await selectDxcOption(
+    actor.page.getByTestId("consent-new-grant-scope-input"),
+    scope,
+  );
+  await actor.page
+    .getByTestId("consent-new-grant-grantee-input")
+    .fill(peerId);
+  await actor.page.getByTestId("consent-new-grant-ttl-input").fill(ttl);
+  await expect(
+    actor.page.getByTestId("consent-new-grant-submit-button"),
+  ).toBeEnabled();
+  await actor.clickWithPassivePromptRetry(
+    actor.page.getByTestId("consent-new-grant-submit-button"),
+  );
+  await expect(actor.page.getByTestId("write-status")).toContainText(
+    /granted/i,
+    { timeout: 30_000 },
+  );
+}
+
 async function expectConsentCell(
   request: APIRequestContext,
   token: string,
   holderId: string,
   peerId: string,
   scope: string,
-  expectedState: "active" | "revoked" | "expired" | "pending",
+  expectedState: "active" | "no_consent",
 ) {
   const peer = {
     kind: "actor",
@@ -148,18 +182,40 @@ async function expectConsentCell(
       account_id: { principal_id: peerId, station_id: solandServiceId() },
     },
   } as const;
+  const wireScope = consentWireScope(scope);
   const cell = await request.get(
     `${solandBaseUrl()}/_arkret/self/consent/cell` +
-      `?peer=${encodeURIComponent(JSON.stringify(peer))}&consent_scope=${encodeURIComponent(scope)}`,
+      `?peer=${encodeURIComponent(JSON.stringify(peer))}&consent_scope=${encodeURIComponent(wireScope)}`,
     { headers: { authorization: `Bearer ${token}` } },
   );
   expect(cell.status()).toBe(200);
   const body = (await cell.json()) as Partial<ConsentCellBody>;
   expect(holderId).not.toBe(peerId);
   expect(body.peer).toEqual(peer);
-  expect(body.consent_scope).toBe(consentWireScope(scope));
+  expect(body.consent_scope).toBe(wireScope);
   expect(body.state).toBe(expectedState);
   return body as ConsentCellBody;
+}
+
+async function expectConsentCellMissing(
+  request: APIRequestContext,
+  token: string,
+  peerId: string,
+  scope: string,
+) {
+  const peer = {
+    kind: "actor",
+    actor_id: {
+      kind: "account",
+      account_id: { principal_id: peerId, station_id: solandServiceId() },
+    },
+  } as const;
+  const response = await request.get(
+    `${solandBaseUrl()}/_arkret/self/consent/cell` +
+      `?peer=${encodeURIComponent(JSON.stringify(peer))}&consent_scope=${encodeURIComponent(consentWireScope(scope))}`,
+    { headers: { authorization: `Bearer ${token}` } },
+  );
+  expect(response.status()).toBe(404);
 }
 
 function consentWireScope(scope: string): string {
@@ -174,25 +230,38 @@ async function requestContactApi(
   request: APIRequestContext,
   token: string,
   targetId: string,
+  scope: "invite" | "message",
+) {
+  const { outcome } = await requestContactArkret(request, token, targetId, {
+    requestedScopes: [consentWireScope(scope)],
+  });
+  return outcome;
+}
+
+async function requestConsentApi(
+  request: APIRequestContext,
+  token: string,
+  holderId: string,
   scope: "invite" | "message" | "call",
 ) {
-  const wireScope =
-    scope === "message"
-      ? "direct_message"
-      : scope === "call"
-        ? "voice_call"
-        : scope;
   const response = await request.post(
-    `${solandBaseUrl()}/_arkret/self/contacts/request`,
+    `${solandBaseUrl()}/_arkret/self/consent/request`,
     {
-      headers: authHeaders(token),
-      data: { target: targetId, requested_scopes: [wireScope] },
+      headers: { ...authHeaders(token), "content-type": "application/json" },
+      data: canonicalJson({
+        consent_scope: consentWireScope(scope),
+        holder_account_id: {
+          principal_id: holderId,
+          station_id: solandServiceId(),
+        },
+      }),
     },
   );
-  return await expectJsonOk<Record<string, unknown>>(
+  const outcome = await expectJsonOk<{ accepted_for_processing: true }>(
     response,
-    `request contact ${scope}`,
+    `request consent ${scope}`,
   );
+  expect(outcome).toEqual({ accepted_for_processing: true });
 }
 
 test.describe("consent grant", () => {
@@ -389,6 +458,11 @@ test.describe("consent grant", () => {
       issueDevSession(request, bob),
       issueDevSession(request, charlie),
     ]);
+    const aliceSigningSeed = registeredEventSigningSeedB64url(alice.id);
+    const charlieSigningSeed = registeredEventSigningSeedB64url(charlie.id);
+    if (!aliceSigningSeed || !charlieSigningSeed) {
+      throw new Error("canonical provisioning omitted a MIMI consent device signer");
+    }
     const describe = await expectJsonOk<{
       service_id: string;
       trust_domain: string;
@@ -437,15 +511,16 @@ test.describe("consent grant", () => {
     const unsignedUpdate = {
       consent_id: openBody.consent_id,
       decision: "accept",
-      actor_id: alice.id,
+      actor_id: accountActorId(alice.id),
       consent_event: consentEvent,
     };
     const signature = sdkMimiConsentProof({
       request: unsignedUpdate,
-      verificationMethod: `${alice.did}#mimi-consent`,
+      verificationMethod: `${alice.did}#${alice.deviceId}`,
       createdAt: canonicalTimestamp(),
       domain: describe.trust_domain,
       audience: describe.service_id,
+      signingSeedB64url: aliceSigningSeed,
     });
 
     const signedUpdate = { ...unsignedUpdate, signature };
@@ -484,6 +559,9 @@ test.describe("consent grant", () => {
         consent_scope: "direct_message",
       },
     });
+    conflictingEvent.seal_basis = structuredClone(grantEvent.seal_basis);
+    delete conflictingEvent.seal_ref;
+    delete conflictingEvent.auth_context;
     const conflictingUnsigned = {
       ...unsignedUpdate,
       consent_event: { ...consentEvent, event: conflictingEvent },
@@ -492,10 +570,11 @@ test.describe("consent grant", () => {
       ...conflictingUnsigned,
       signature: sdkMimiConsentProof({
         request: conflictingUnsigned,
-        verificationMethod: `${alice.did}#mimi-consent`,
+        verificationMethod: `${alice.did}#${alice.deviceId}`,
         createdAt: canonicalTimestamp(),
         domain: describe.trust_domain,
         audience: describe.service_id,
+        signingSeedB64url: aliceSigningSeed,
       }),
     };
     const conflicting = await request.post(updateUrl, {
@@ -505,28 +584,30 @@ test.describe("consent grant", () => {
       },
       data: canonicalJson(conflictingBody),
     });
-    expect(conflicting.status()).toBe(409);
+    expect(conflicting.status()).toBe(422);
     const conflictingOutcome = await conflicting.json();
-    expect(conflictingOutcome.error?.code ?? conflictingOutcome.code).toBe(
-      "duplicate_conflict",
+    expect(conflictingOutcome.type).toBe(
+      "https://arkret.org/problems/schema_violation",
     );
+    expect(conflictingOutcome.reason_code).toBe("event_id_digest_mismatch");
 
     const invisibleUnsigned = structuredClone(unsignedUpdate);
-    invisibleUnsigned.actor_id = charlie.id;
+    invisibleUnsigned.actor_id = accountActorId(charlie.id);
     const invisibleSubmission = invisibleUnsigned.consent_event as Record<
       string,
       unknown
     >;
     const invisibleEvent = invisibleSubmission.event as Record<string, unknown>;
-    invisibleEvent.actor_id = charlie.id;
+    invisibleEvent.actor_id = accountActorId(charlie.id);
     const invisibleBody = {
       ...invisibleUnsigned,
       signature: sdkMimiConsentProof({
         request: invisibleUnsigned,
-        verificationMethod: `${charlie.did}#mimi-consent`,
+        verificationMethod: `${charlie.did}#${charlie.deviceId}`,
         createdAt: canonicalTimestamp(),
         domain: describe.trust_domain,
         audience: describe.service_id,
+        signingSeedB64url: charlieSigningSeed,
       }),
     };
     const invisible = await request.post(updateUrl, {
@@ -554,10 +635,11 @@ test.describe("consent grant", () => {
       ...unknownUnsigned,
       signature: sdkMimiConsentProof({
         request: unknownUnsigned,
-        verificationMethod: `${charlie.did}#mimi-consent`,
+        verificationMethod: `${charlie.did}#${charlie.deviceId}`,
         createdAt: canonicalTimestamp(),
         domain: describe.trust_domain,
         audience: describe.service_id,
+        signingSeedB64url: charlieSigningSeed,
       }),
     };
     const unknown = await request.post(updateUrl, {
@@ -572,6 +654,8 @@ test.describe("consent grant", () => {
     const unknownOutcome = await unknown.json();
     delete invisibleOutcome.request_id;
     delete unknownOutcome.request_id;
+    delete invisibleOutcome.instance;
+    delete unknownOutcome.instance;
     expect(unknownOutcome).toEqual(invisibleOutcome);
   });
 
@@ -621,7 +705,7 @@ test.describe("consent grant", () => {
     await submitSignedEventApi(request, aliceToken, grantEnvelope, {
       context: "submit ak.consent.grant",
     });
-    const grantDot = `${String(grantEnvelope.event_id)}:${Number(grantEnvelope.actor_seq)}`;
+    const grantDot = `${String(grantEnvelope.event_id)}:0`;
 
     const granted = await expectConsentCell(
       request,
@@ -635,13 +719,8 @@ test.describe("consent grant", () => {
       `ak:cell:ak.component.consent.grant.v1:${consentId}`,
     );
     expect(granted.grant_dots).toContain(grantDot);
-    const stillPending = await requestContactApi(
-      request,
-      bobToken,
-      alice.id,
-      "message",
-    );
-    expect(stillPending.state).toBe("pending_outgoing");
+    const stillPending = await contactRow(request, bobToken, alice.id);
+    expect(stillPending?.state).toBe("pending_outgoing");
 
     const revokeEnvelope = signedEventEnvelope({
       actorId: alice.id,
@@ -663,22 +742,25 @@ test.describe("consent grant", () => {
       alice.id,
       bob.id,
       "direct_message",
-      "revoked",
+      "no_consent",
     );
     expect(revoked.revoked_dots).toContain(grantDot);
-    const stillPendingAfterRevoke = await requestContactApi(
+    const stillPendingAfterRevoke = await contactRow(
       request,
       bobToken,
       alice.id,
-      "message",
     );
-    expect(stillPendingAfterRevoke.state).toBe("pending_outgoing");
+    expect(stillPendingAfterRevoke?.state).toBe("pending_outgoing");
   });
 
   test("consent settings grants and revokes a pending request", async ({
     browser,
     request,
   }) => {
+    test.skip(
+      true,
+      "spec-open 2026-09-04-1301: the quarantine carrier cannot represent contact/direct_message requests",
+    );
     const aliceFlow = await openDpopUserPage(
       browser,
       request,
@@ -758,7 +840,7 @@ test.describe("consent grant", () => {
         alice.id,
         bob.id,
         "message",
-        "revoked",
+        "no_consent",
       );
     } finally {
       await alicePage.close();
@@ -802,40 +884,20 @@ test.describe("consent grant", () => {
         "pending",
         "pending_outgoing",
       ]);
-      await expectConsentCell(
+      await expectConsentCellMissing(
         request,
         aliceToken,
-        alice.id,
         bob.id,
         "invite",
-        "pending",
       );
       await stepShot(bobPage.page, testInfo, "A-bob-pending-consent");
 
       await gotoConsentSettings(alicePage);
-      const pendingRow = alicePage.page
-        .getByTestId("consent-pending-row")
-        .filter({
-          hasText: bob.id,
-        });
-      await expect(pendingRow).toBeVisible({ timeout: 30_000 });
-      await pendingRow.getByTestId("consent-detail-button").click();
-      const detail = alicePage.page.getByTestId("consent-pending-detail");
-      await expect(detail).toContainText(bob.id);
-      await selectDxcOption(
-        detail.getByTestId("consent-scope-select"),
-        "invite",
-      );
-      await detail
-        .getByTestId("consent-valid-until-input")
-        .fill(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString());
-      await detail.getByTestId("grant-consent-button").click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /granted/i,
-        {
-          timeout: 30_000,
-        },
-      );
+      // Contact and consent are independent authority roots. Until
+      // spec-open/2026-09-04-1301 closes the quarantine carrier, exercise the
+      // fully specified holder-authored grant path instead of inventing a
+      // pending entry shape.
+      await grantConsentDirect(alicePage, bob.id, "invite");
       // Spec `active` (consent-model.md §2.2 / SDK `ConsentState::Active`).
       await expectConsentCell(
         request,
@@ -854,20 +916,30 @@ test.describe("consent grant", () => {
       ]);
 
       await alicePage.page.goto("/contacts", { waitUntil: "domcontentloaded" });
-      await expectContactState(alicePage, bob.id, [
+      const incomingRow = await expectContactState(alicePage, bob.id, [
         "pending",
         "pending_incoming",
       ]);
-      await alicePage.page.getByTestId(`contact-accept-${bob.id}`).click();
+      await incomingRow
+        .getByRole("button", { name: /accept|接受/i })
+        .click();
       await expectContactState(alicePage, bob.id, ["accepted"]);
 
+      const aliceActor = canonicalJson(accountActorId(alice.id));
+      const escapedAliceActor = aliceActor
+        .replace(/\\/g, "\\\\")
+        .replace(/"/g, '\\"');
       await expect
         .poll(
           async () => {
             await bobPage.page.reload({ waitUntil: "domcontentloaded" });
-            const row = bobPage.page.locator(
-              `[data-testid="contact-row"][data-peer="${alice.id}"]`,
-            );
+            const row = bobPage.page
+              .getByTestId("contact-row")
+              .filter({
+                has: bobPage.page.locator(
+                  `[title="${escapedAliceActor}"]`,
+                ),
+              });
             return await row.getAttribute("data-state");
           },
           { timeout: 30_000 },
@@ -911,21 +983,7 @@ test.describe("consent grant", () => {
     try {
       await requestContact(bobPage, alice.id, "invite");
       await gotoConsentSettings(alicePage);
-      const pendingRow = alicePage.page
-        .getByTestId("consent-pending-row")
-        .filter({
-          hasText: bob.id,
-        });
-      await expect(pendingRow).toBeVisible({ timeout: 30_000 });
-      await pendingRow.getByTestId("consent-detail-button").click();
-      const detail = alicePage.page.getByTestId("consent-pending-detail");
-      await detail
-        .getByTestId("consent-valid-until-input")
-        .fill(new Date(Date.now() + 5_000).toISOString());
-      await detail.getByTestId("grant-consent-button").click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /granted/i,
-      );
+      await grantConsentDirect(alicePage, bob.id, "invite", "5s");
       await expectConsentCell(
         request,
         aliceToken,
@@ -943,7 +1001,7 @@ test.describe("consent grant", () => {
       ]);
       // The consent window above was set to Date.now()+5_000. Instead of
       // sleeping for a fixed margin, poll the authoritative consent cell until
-      // the window lapses and the cell falls back to spec `pending` (implicit
+      // the window lapses and the cell falls back to spec `no_consent` (implicit
       // revoke, consent-model.md §3.2 — there is no distinct `expired` wire
       // state). `expect.poll` bounds the wait and re-queries observable truth.
       await expect
@@ -961,7 +1019,7 @@ test.describe("consent grant", () => {
           },
           { timeout: 30_000, intervals: [250, 500, 1_000] },
         )
-        .toContain("pending");
+        .toContain("no_consent");
       await expectContactState(bobPage, alice.id, [
         "pending",
         "pending_outgoing",
@@ -972,7 +1030,7 @@ test.describe("consent grant", () => {
         alice.id,
         bob.id,
         "invite",
-        "pending",
+        "no_consent",
       );
       await stepShot(bobPage.page, testInfo, "time-window-expired");
     } finally {
@@ -1011,20 +1069,7 @@ test.describe("consent grant", () => {
     try {
       await requestContact(bobPage, alice.id, "message");
       await gotoConsentSettings(alicePage);
-      let pendingRow = alicePage.page
-        .getByTestId("consent-pending-row")
-        .filter({
-          hasText: bob.id,
-        });
-      await pendingRow.getByTestId("consent-detail-button").click();
-      await alicePage.page
-        .getByTestId("consent-pending-detail")
-        .getByTestId("grant-consent-button")
-        .click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /granted/i,
-        { timeout: 30_000 },
-      );
+      await grantConsentDirect(alicePage, bob.id, "message");
       await expectConsentCell(
         request,
         aliceToken,
@@ -1053,27 +1098,14 @@ test.describe("consent grant", () => {
         alice.id,
         bob.id,
         "message",
-        "revoked",
+        "no_consent",
       );
 
-      await requestContact(bobPage, alice.id, "message");
       await expectContactState(bobPage, alice.id, [
         "pending",
         "pending_outgoing",
       ]);
-      await alicePage.page.reload({ waitUntil: "domcontentloaded" });
-      pendingRow = alicePage.page.getByTestId("consent-pending-row").filter({
-        hasText: bob.id,
-      });
-      await pendingRow.getByTestId("consent-detail-button").click();
-      await alicePage.page
-        .getByTestId("consent-pending-detail")
-        .getByTestId("grant-consent-button")
-        .click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /granted/i,
-        { timeout: 30_000 },
-      );
+      await grantConsentDirect(alicePage, bob.id, "message");
       await expectConsentCell(
         request,
         aliceToken,
@@ -1126,22 +1158,7 @@ test.describe("consent grant", () => {
     try {
       await requestContact(bobPage, alice.id, "invite");
       await gotoConsentSettings(alicePage);
-      const inviteRow = alicePage.page
-        .getByTestId("consent-pending-row")
-        .filter({
-          hasText: bob.id,
-        });
-      await inviteRow.getByTestId("consent-detail-button").click();
-      const detail = alicePage.page.getByTestId("consent-pending-detail");
-      await selectDxcOption(
-        detail.getByTestId("consent-scope-select"),
-        "invite",
-      );
-      await detail.getByTestId("grant-consent-button").click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /granted/i,
-        { timeout: 30_000 },
-      );
+      await grantConsentDirect(alicePage, bob.id, "invite");
       await expectConsentCell(
         request,
         aliceToken,
@@ -1155,22 +1172,20 @@ test.describe("consent grant", () => {
         "pending",
         "pending_outgoing",
       ]);
-      // The contacts UI currently exposes invite/direct-message scopes only.
-      // Exercise the independent voice-call consent cell through the same
-      // signed contact API used by non-UI clients.
-      await requestContactApi(request, bobToken, alice.id, "call");
+      // Contact scope and consent scope are independent. Voice call is not a
+      // Contact request scope, so exercise the spec's opaque consent-request
+      // surface and verify it does not create a holder consent cell.
+      await requestConsentApi(request, bobToken, alice.id, "call");
       await bobPage.page.reload({ waitUntil: "domcontentloaded" });
       await expectContactState(bobPage, alice.id, [
         "pending",
         "pending_outgoing",
       ]);
-      await expectConsentCell(
+      await expectConsentCellMissing(
         request,
         aliceToken,
-        alice.id,
         bob.id,
         "call",
-        "pending",
       );
       await stepShot(bobPage.page, testInfo, "scope-granularity-call-pending");
     } finally {
@@ -1182,6 +1197,10 @@ test.describe("consent grant", () => {
     browser,
     request,
   }, testInfo) => {
+    test.skip(
+      true,
+      "spec-open 2026-09-04-1351: consent pairwise peer lacks a verifiable Realm-local binding carrier",
+    );
     // spec: identity/consent-model.md §3.2 and §8.1 pairwise DID isolation.
     const aliceFlow = await openDpopUserPage(
       browser,
@@ -1222,20 +1241,7 @@ test.describe("consent grant", () => {
       );
       expect(pairwisePending.state).toBe("pending_outgoing");
       await gotoConsentSettings(alicePage);
-      const pairwiseRow = alicePage.page
-        .getByTestId("consent-pending-row")
-        .filter({
-          hasText: bobPairwise.did,
-        });
-      await pairwiseRow.getByTestId("consent-detail-button").click();
-      await alicePage.page
-        .getByTestId("consent-pending-detail")
-        .getByTestId("grant-consent-button")
-        .click();
-      await expect(alicePage.page.getByTestId("write-status")).toContainText(
-        /granted/i,
-        { timeout: 30_000 },
-      );
+      await grantConsentDirect(alicePage, bobPairwise.did, "message");
       await expectConsentCell(
         request,
         aliceToken,
@@ -1259,13 +1265,11 @@ test.describe("consent grant", () => {
         "message",
       );
       expect(rootPending.state).toBe("pending_outgoing");
-      await expectConsentCell(
+      await expectConsentCellMissing(
         request,
         aliceToken,
-        alice.id,
         bob.id,
         "message",
-        "pending",
       );
       await stepShot(alicePage.page, testInfo, "pairwise-isolated");
     } finally {

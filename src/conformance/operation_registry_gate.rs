@@ -1485,6 +1485,8 @@ fn infer_method_from_line(line: &str) -> Option<String> {
             || line.contains(&format!("method: '{method}'"))
             || line.contains(&format!("method === \"{method}\""))
             || line.contains(&format!("method === '{method}'"))
+            || line.contains(&format!("method() === \"{method}\""))
+            || line.contains(&format!("request.method() === \"{method}\""))
         {
             return Some((*method).to_owned());
         }
@@ -1973,6 +1975,16 @@ mod tests {
     fn explicit_query_comparison_wins_over_neighboring_methods() {
         let line = r#"hit.method === "QUERY" && hit.path === "/_arkret/self/seals/frontier""#;
         assert_eq!(infer_method_from_line(line).as_deref(), Some("QUERY"));
+    }
+
+    #[test]
+    fn exact_method_comparisons_bind_to_their_own_path_lines() {
+        let lines = [
+            r#"(hit.method === "POST" && hit.path === "/_arkret/root/identity/recovery-policy") ||"#,
+            r#"(hit.method === "QUERY" && hit.path === "/_arkret/self/seals/frontier")"#,
+        ];
+        assert_eq!(infer_method_near(&lines, 0).as_deref(), Some("POST"));
+        assert_eq!(infer_method_near(&lines, 1).as_deref(), Some("QUERY"));
     }
 
     #[test]

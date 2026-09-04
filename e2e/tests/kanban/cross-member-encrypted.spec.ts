@@ -42,6 +42,7 @@ import {
   type Page,
 } from "../../helpers/arkret-test";
 import { solandBaseUrl } from "../../helpers/env";
+import { grantInviteConsentArkret } from "../../helpers/contact-api";
 import { stepShot } from "../../helpers/screenshots";
 import { selfPathGrantHeaders } from "../../helpers/session-grant-dpop";
 import {
@@ -622,6 +623,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         historyAccess: "since_join",
         encryptionProfile: "mls_rfc9420",
       });
+      await grantInviteConsentArkret(
+        request,
+        bobSession.grantJwt,
+        bob,
+        alice.id,
+      );
 
       // 2) Invite Bob before his browser has completed the founding-device
       // bootstrap or published a KeyPackage. The invite must persist even
@@ -820,6 +827,12 @@ test.describe("cross-member encrypted kanban @fully-implemented", () => {
         historyAccess: "all_history_for_current_members",
         encryptionProfile: "mls_rfc9420",
       });
+      await grantInviteConsentArkret(
+        request,
+        bobSession.grantJwt,
+        bob,
+        alice.id,
+      );
 
       // 2) Alice writes the board/list/card and encrypted private description
       // BEFORE Bob joins. This is the regression path: Bob's projection can see
