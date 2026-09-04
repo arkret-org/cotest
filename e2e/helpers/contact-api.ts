@@ -51,27 +51,20 @@ import {
 import type { JointUser } from "./users";
 import type { ContactPeer, InviteObject } from "./generated/spec-wire-objects";
 
-export type PreparedDirectConversationIdentity = {
-  user: JointUser;
-};
-
 // ── Contact list / request / respond wire types (subset we assert on). ──
-
-export type ContactState =
+type ContactState =
   | "pending_outgoing"
   | "pending_incoming"
   | "accepted"
   | "rejected"
   | "tombstoned";
-
-export type DirectConversationSummary = {
+type DirectConversationSummary = {
   realm_id: string;
   main_strand_id: string;
   binding_event_ref?: string;
   state: string;
 };
-
-export type ContactAgentProjection = {
+type ContactAgentProjection = {
   agent_id: string;
   controller_account_id: { principal_id: string; station_id: string };
   display_name?: string;
@@ -99,29 +92,21 @@ export type ContactListRow = {
   agents?: ContactAgentProjection[];
   request_receipt?: Record<string, unknown>;
 };
-
-export type ContactRequestOutcome = {
+type ContactRequestOutcome = {
   request_event_ref: string;
   request_acceptance_receipt: Record<string, unknown>;
   state: ContactState;
 };
-
-export type ContactRespondOutcome = {
+type ContactRespondOutcome = {
   response_event_ref: string;
   acceptance_receipt: Record<string, unknown>;
   state: ContactState;
 };
-
-export type ContactTombstoneOutcome = {
+type ContactTombstoneOutcome = {
   tombstone_event_ref: string;
   consent_revoke_refs: string[];
   state: ContactState;
   partial_revoke?: boolean;
-};
-
-export type ContactScopeUpdateOutcome = {
-  scope_update_event_ref?: string;
-  state?: ContactState;
 };
 
 export type DirectConversationResolveOutcome = {
@@ -146,9 +131,8 @@ export type DirectConversationResolveOutcome = {
 // invite-addressing.md §5.1: `disclosed_outcome` is a closed two-value enum
 // (`delivered | blocked`). Quarantine MUST NOT be disclosed at all — it is
 // reported as `status="deferred"` with no `disclosed_outcome`.
-export type InviteDeliveryOutcome = InviteDeliveryOutcomeView;
-
-export type InviteConsentGrant = {
+type InviteDeliveryOutcome = InviteDeliveryOutcomeView;
+type InviteConsentGrant = {
   consentId: string;
   eventRef: string;
   dot: string;
@@ -213,37 +197,6 @@ export async function grantInviteConsentArkret(
     )
     .toBe(true);
   return { consentId, eventRef, dot };
-}
-
-export async function revokeInviteConsentArkret(
-  request: APIRequestContext,
-  token: string,
-  holder: JointUser,
-  grant: InviteConsentGrant,
-  opts: { server?: SolandKey } = {},
-): Promise<void> {
-  const envelope = signedEventEnvelope({
-    actorId: holder.id,
-    realmId: principalControlRealmForId(holder.id),
-    kind: "ak.consent.revoke",
-    server: opts.server,
-    payload: {
-      consent_id: grant.consentId,
-      observed_dot_ids: [grant.dot],
-      revoked_at: canonicalTimestamp(),
-    },
-  });
-  await submitSignedEventApi(request, token, envelope, {
-    server: opts.server,
-    context: `revoke invite consent ${grant.consentId}`,
-  });
-  await submitPrincipalSuccessorSealApi(
-    request,
-    token,
-    holder.id,
-    envelope,
-    opts,
-  );
 }
 
 // ── Contact request / respond / list / tombstone. ──
@@ -467,8 +420,7 @@ export async function respondContactArkret(
     state: opts.action === "accept" ? "accepted" : "rejected",
   };
 }
-
-export async function listContactsArkret(
+async function listContactsArkret(
   request: APIRequestContext,
   token: string,
   opts: { server?: SolandKey } = {},
@@ -609,125 +561,6 @@ export async function tombstoneContactArkret(
   return { ...accepted, state: "tombstoned" };
 }
 
-export async function scopeUpdateContactArkret(
-  request: APIRequestContext,
-  token: string,
-  contact: string,
-  grantedScopes: string[],
-  opts: { server?: SolandKey } = {},
-): Promise<ContactScopeUpdateOutcome> {
-  const row = await contactRow(request, token, contact, {
-    server: opts.server,
-  });
-  const next = row?.next_prepare_input;
-  if (!next) {
-    throw new Error(`contact ${contact} omits its scope-update lineage`);
-  }
-
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/contacts/scope-update`;
-  const nonce = uuidV7();
-  const operationId = `ak:operation:contact.scope_update.${nonce}`;
-  const prepared = await expectJsonOk<{
-    reservation_handle: string;
-    event_draft: { unsigned_event_bytes: string };
-  }>(
-    await request.post(url, {
-      headers: {
-        ...authHeaders(token, "POST", url),
-        "content-type": "application/json",
-      },
-      data: canonicalJson({
-        phase: "prepare",
-        operation_id: operationId,
-        idempotency_key: nonce,
-        peer: row!.peerIdentity,
-        ...next,
-        granted_to_peer_scopes: grantedScopes,
-      }),
-    }),
-    `prepare contact scope update ${contact}`,
-  );
-  const signedEvent = JSON.parse(
-    Buffer.from(
-      prepared.event_draft.unsigned_event_bytes,
-      "base64url",
-    ).toString("utf8"),
-  ) as Record<string, unknown>;
-  refreshEventEnvelopeProof(signedEvent);
-  const response = await request.post(url, {
-    headers: {
-      ...authHeaders(token, "POST", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      phase: "commit",
-      operation_id: operationId,
-      idempotency_key: nonce,
-      reservation_handle: prepared.reservation_handle,
-      signed_event: signedEvent,
-    }),
-  });
-  const accepted = await expectJsonOk<ContactScopeUpdateOutcome>(
-    response,
-    `commit contact scope update ${contact}`,
-  );
-  await submitPrincipalSuccessorSealApi(
-    request,
-    token,
-    eventPrincipalId(signedEvent),
-    signedEvent,
-    { server: opts.server },
-  );
-  return {
-    ...accepted,
-    scope_update_event_ref:
-      accepted.scope_update_event_ref ?? String(signedEvent.event_id),
-    state: "accepted",
-  };
-}
-
-export async function resolveDirectConversationArkret(
-  request: APIRequestContext,
-  token: string,
-  peer: string,
-  opts: { server?: SolandKey } = {},
-): Promise<DirectConversationResolveOutcome> {
-  const row = await contactRow(request, token, peer, opts);
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/direct-conversations/resolve`;
-  const response = await request.post(url, {
-    headers: {
-      ...authHeaders(token, "POST", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson({
-      peer: row?.peerIdentity ?? { kind: "human", account_id: accountActorId(peer, opts.server).account_id },
-    }),
-  });
-  return await expectJsonOk<DirectConversationResolveOutcome>(
-    response,
-    `resolve direct conversation with ${peer}`,
-  );
-}
-
-export async function prepareDirectConversationIdentityArkret(
-  request: APIRequestContext,
-  user: JointUser,
-  opts: { server?: SolandKey } = {},
-): Promise<PreparedDirectConversationIdentity> {
-  void request;
-  void opts;
-  return { user };
-}
-
-export async function seedDirectConversationIdentityArkret(
-  request: APIRequestContext,
-  token: string,
-  user: JointUser,
-  opts: { server?: SolandKey } = {},
-): Promise<void> {
-  await uploadDirectConversationKeyPackage(request, token, user, opts);
-}
-
 async function uploadDirectConversationKeyPackage(
   request: APIRequestContext,
   token: string,
@@ -812,41 +645,6 @@ export type InviteReceivePolicy = {
   };
 };
 
-export async function getInviteReceivePolicyArkret(
-  request: APIRequestContext,
-  token: string,
-  opts: { server?: SolandKey } = {},
-): Promise<InviteReceivePolicy> {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/invite-receive-policy`;
-  const response = await request.get(url, {
-    headers: authHeaders(token, "GET", url),
-  });
-  return await expectJsonOk<InviteReceivePolicy>(
-    response,
-    "get invite-receive-policy",
-  );
-}
-
-export async function setInviteReceivePolicyArkret(
-  request: APIRequestContext,
-  token: string,
-  policy: InviteReceivePolicy,
-  opts: { server?: SolandKey } = {},
-): Promise<InviteReceivePolicy> {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/invite-receive-policy`;
-  const response = await request.put(url, {
-    headers: {
-      ...authHeaders(token, "PUT", url),
-      "content-type": "application/json",
-    },
-    data: canonicalJson(policy),
-  });
-  return await expectJsonOk<InviteReceivePolicy>(
-    response,
-    "set invite-receive-policy",
-  );
-}
-
 // ── Realm-pull (consent_grant evidence) invite delivery. ──
 
 export type IntroductionEvidence =
@@ -861,7 +659,7 @@ export type IntroductionEvidence =
 //   - payload.invite_delivery_target.account_id.station_id == recipient svc
 //   - payload.introduction_evidence_digest == sha256(canonical_json(evidence))
 //   - the invite id is retyped from the create Event id and omitted from payload
-export function buildInviteCreateEvent(args: {
+function buildInviteCreateEvent(args: {
   inviterId: string;
   realmId: string;
   inviteeId: string;
@@ -1033,36 +831,10 @@ export async function deliverInviteWithConsentGrant(
   });
 }
 
-// Low-trust `explicit_address` pull — no consent_grant evidence. Used for the
-// stranger / blocked scenarios, where §5.1 keeps the outcome opaque.
-export async function deliverInviteExplicitAddress(
-  request: APIRequestContext,
-  args: {
-    inviterId: string;
-    inviterToken: string;
-    realmId: string;
-    inviteeId: string;
-    originServer: SolandKey;
-    recipientServer: SolandKey;
-    idempotencyKey?: string;
-  },
-): Promise<{
-  outcome: InviteDeliveryOutcome;
-  inviteId: string;
-  sealBasis: Record<string, unknown>;
-}> {
-  return await deliverInvite(request, {
-    ...args,
-    evidence: { kind: "explicit_address" },
-    idempotencyKeyPrefix: "cotest-contact-graph-explicit",
-    context: "persist shared explicit-address invite",
-  });
-}
-
 // List the authenticated actor's pending invites with the canonical wire
 // shape. The authz endpoint serializes the SDK `Invite` whose id field is
 // `id` (NOT `invite_id`).
-export type AuthzInvite = InviteObject;
+type AuthzInvite = InviteObject;
 
 export async function listAuthzInvitesArkret(
   request: APIRequestContext,

@@ -62,8 +62,7 @@ export type JointUser = {
   handle: string;
   displayName: string;
 };
-
-export type UserSession = {
+type UserSession = {
   context: BrowserContext;
   page: Page;
   diagnosticsDir: string;
@@ -79,8 +78,7 @@ export type UserSession = {
   /// Present when the session was opened with an injected grant.
   grant?: SessionGrantMaterial;
 };
-
-export type SessionGrantMaterial = {
+type SessionGrantMaterial = {
   grantJwt: string;
   grantId: string;
   accountId: { principal_id: string; station_id: string };
@@ -89,8 +87,7 @@ export type SessionGrantMaterial = {
   /// bound to (`cnf.jkt`).
   dpopSeedB64url: string;
 };
-
-export type OpenUserOpts = {
+type OpenUserOpts = {
   sessionCredential?: string;
   server?: SolandKey;
   keepDeviceAuthorizationModal?: boolean;
@@ -139,14 +136,12 @@ export type DpopUserSession = {
   principalControlEvents: Array<Record<string, unknown>>;
   recoveryMaterialEvidence?: Record<string, unknown>;
 };
-
-export type DpopUserPageSession = {
+type DpopUserPageSession = {
   user: JointUser;
   session: DpopUserSession;
   page: JointUserPage;
 };
-
-export type CreateRealmOpts = {
+type CreateRealmOpts = {
   title: string;
   summary?: string;
   discoverability?: string;
@@ -2375,8 +2370,7 @@ export async function openUserPage(
   }
   return userPage;
 }
-
-export async function closeUser(session: UserSession) {
+async function closeUser(session: UserSession) {
   flushUserDiagnostics(session);
   try {
     await session.context.close();

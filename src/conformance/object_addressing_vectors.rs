@@ -556,8 +556,7 @@ pub fn run_resolve_target_common_fields_vector() -> Result<()> {
                 }
             }
         ],
-        "policy_revision": "rev-7",
-        "stale": false
+        "policy_revision": "rev-7"
     });
     let body: DirectoryTargetResolutionOutcome =
         serde_json::from_value(wire).map_err(|e| anyhow!("deserialise resolve_target res: {e}"))?;
@@ -617,8 +616,7 @@ pub fn run_resolve_target_realm_preview_vector() -> Result<()> {
             "realm_id": format!("ak:realm:{R}"),
             "title": "Acme HQ",
             "as_of": "2026-05-27T00:00:00.000Z",
-            "policy_revision": "rev-1",
-            "preview": { "member_count": 42 }
+            "policy_revision": "rev-1"
         },
         "join_rule": "invite",
         "as_of": "2026-05-27T00:00:00.000Z",

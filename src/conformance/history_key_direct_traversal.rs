@@ -154,7 +154,11 @@ pub fn run_history_key_direct_traversal_suite() -> Result<()> {
             .pointer("/since_join_lineage")
             .context("history-key fixture omits since_join_lineage")?,
     )?;
-    verify_direct_traversal_replay_kat(&fixture.direct_traversal_replay_kat)
+    tokio::runtime::Builder::new_current_thread()
+        .build()?
+        .block_on(verify_direct_traversal_replay_kat(
+            &fixture.direct_traversal_replay_kat,
+        ))
         .context("direct traversal replay KAT")?;
     verify_history_digest_and_sender_kats(&fixture).context("history digest and sender KATs")?;
     verify_governance_dependency_kats(&fixture).context("governance dependency KATs")?;
@@ -1982,7 +1986,7 @@ fn replay_registry() -> MemoryCellRegistry {
     registry
 }
 
-fn verify_direct_traversal_replay_kat(kat: &Value) -> Result<()> {
+async fn verify_direct_traversal_replay_kat(kat: &Value) -> Result<()> {
     let material = build_replay_kat_material(kat)?;
     let source = DirectCutMaterial::new(
         [
@@ -2013,7 +2017,7 @@ fn verify_direct_traversal_replay_kat(kat: &Value) -> Result<()> {
         &[],
         &replay_registry(),
         arkret_signatures::verify_frozen_notary_signature,
-        |_event, _suite, _dependencies| Ok(()),
+        |_event, _suite, _dependencies| Box::pin(async { Ok(()) }),
         |_seal, _notary, _context, _dependencies| Ok(()),
         replay_kat_projection,
         &mut |seal, _delta| {
@@ -2023,7 +2027,8 @@ fn verify_direct_traversal_replay_kat(kat: &Value) -> Result<()> {
             }
             Ok(())
         },
-    )?;
+    )
+    .await?;
     if replayed != 2 || committed_successors != 1 {
         bail!(
             "historical-key positive replay committed {replayed} Seals/{committed_successors} successors"
@@ -2100,7 +2105,7 @@ fn verify_direct_traversal_replay_kat(kat: &Value) -> Result<()> {
         &[],
         &replay_registry(),
         arkret_signatures::verify_frozen_notary_signature,
-        |_event, _suite, _dependencies| Ok(()),
+        |_event, _suite, _dependencies| Box::pin(async { Ok(()) }),
         |_seal, _notary, _context, _dependencies| Ok(()),
         replay_kat_projection,
         &mut |seal, _delta| {
@@ -2111,6 +2116,7 @@ fn verify_direct_traversal_replay_kat(kat: &Value) -> Result<()> {
             Ok(())
         },
     )
+    .await
     .expect_err("current same-method key must not verify a historical successor Seal");
     if substituted_replayed != 1
         || substituted_successors != 0

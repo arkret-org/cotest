@@ -76,8 +76,7 @@ export {
   sha256CanonicalJson,
   wireErrCode,
 };
-
-export type SignedEventEnvelopeArgs = {
+type SignedEventEnvelopeArgs = {
   actorId: string | ActorId;
   realmId: string;
   kind: string;
@@ -106,8 +105,7 @@ export type SignedEventEnvelopeArgs = {
   stationId?: string;
   server?: SolandKey;
 };
-
-export type EventProofMode = "dev-proof" | "detached-jws";
+type EventProofMode = "dev-proof" | "detached-jws";
 
 type RegisteredEventSigner = {
   verificationMethod: string;
@@ -493,8 +491,7 @@ export function principalControlRealmForId(principalId: string): string {
   }
   return realmId;
 }
-
-export function principalControlRealmForIdIfKnown(
+function principalControlRealmForIdIfKnown(
   principalId: string,
 ): string | undefined {
   return acceptedPrincipalControlRealms.get(requireDidCoreId(principalId));
@@ -546,7 +543,7 @@ export function serviceActorId(serviceId: string): ActorId {
 }
 
 /** Read the canonical Actor without accepting the retired scalar envelope. */
-export function eventActorId(
+function eventActorId(
   event: Record<string, unknown>,
 ): ActorId {
   const actor = event.actor_id as ActorId | undefined;
@@ -566,8 +563,7 @@ export function eventPrincipalId(event: Record<string, unknown>): string {
   const actor = eventActorId(event);
   return actor.kind === "account" ? actor.account_id.principal_id : actor.service_id;
 }
-
-export function eventSigningPrincipalId(event: Record<string, unknown>): string {
+function eventSigningPrincipalId(event: Record<string, unknown>): string {
   return eventPrincipalId({ actor_id: event.executed_by ?? event.actor_id });
 }
 
@@ -1114,101 +1110,6 @@ export async function writeJoinPolicyApi(
   return digest;
 }
 
-// Grant the exact-Realm `ak.realm.admin` capability required by current-v1
-// candidate review. The grant can later be revoked to exercise the
-// join-policy.md §7.5 authorization-basis rule.
-export async function grantRealmAdminCapabilityApi(
-  request: APIRequestContext,
-  ownerToken: string,
-  args: {
-    ownerId: string;
-    realmId: string;
-    subjectId: string;
-    server?: SolandKey;
-  },
-): Promise<string> {
-  const issuedAt = canonicalTimestamp();
-  const previousFrontier = await readRealmSealFrontier(
-    request,
-    ownerToken,
-    args.realmId,
-    args.server,
-  );
-  // `capability-grant.schema.json` is a closed object; annotating the literal
-  // makes an unregistered member or a misspelled resource kind a `tsc` error
-  // instead of a reducer rejection. `proofs` is attached after signing.
-  const unsignedGrant: Omit<CapabilityGrantObject, "id" | "proofs"> = {
-    schema: "ak.schema.capability.v1",
-    realm_id: args.realmId,
-    issuer_id: accountActorId(args.ownerId, args.server),
-    subject: accountActorId(args.subjectId, args.server),
-    actions: ["ak.realm.admin"],
-    resources: [{ kind: "realm", realm_id: args.realmId }],
-    issued_at: issuedAt,
-    issuer_authority_refs: [
-      {
-        kind: "realm_root",
-        realm_id: args.realmId,
-        cell_ref: "ak:cell:ak.component.realm.authority_root.v1:null",
-        controller_epoch_at_issuance: 0,
-        authority_generation: 0,
-      },
-    ],
-  };
-  const grantEvent = signedEventEnvelope({
-    actorId: args.ownerId,
-    realmId: args.realmId,
-    kind: "ak.capability.grant",
-    createdAt: issuedAt,
-    payload: {
-      // `capability_grant_payload`: the grant body is closed and carries no
-      // inner proof — the Event envelope proof is the sole durable issuer
-      // signature, and it already covers actor, scope, authority refs, payload
-      // and time.
-      grant: unsignedGrant,
-    },
-  });
-  await submitSignedEventApi(request, ownerToken, grantEvent, {
-    server: args.server,
-    context: `grant ak.realm.admin to ${args.subjectId}`,
-  });
-  const grantId = retypeEventDerivedId(String(grantEvent.event_id), "grant");
-  const proposalDigest = Array.isArray(grantEvent.proofs)
-    ? stringValue(
-        (grantEvent.proofs[0] as Record<string, unknown> | undefined)
-          ?.event_digest,
-      )
-    : undefined;
-  if (!proposalDigest) {
-    throw new Error(
-      `review capability grant ${grantId} is missing its proposal digest`,
-    );
-  }
-  await expect
-    .poll(
-      async () => {
-        const current = await readRealmSealFrontier(
-          request,
-          ownerToken,
-          args.realmId,
-          args.server,
-        );
-        return (
-          current.control_event_set_root !==
-            previousFrontier.control_event_set_root &&
-          !current.pending_proposal_digests.includes(proposalDigest)
-        );
-      },
-      {
-        message: `review capability grant ${grantId} reaches the control Seal frontier`,
-        timeout: 30_000,
-        intervals: [250, 500, 1_000, 2_000],
-      },
-    )
-    .toBe(true);
-  return grantId;
-}
-
 // Grant a Realm-scoped capability to a peer service DID.
 // sync/federation.md §4.4: the grant subject is a service DID; revoking it
 // makes the source Station stop pushing future events to that peer.
@@ -1272,7 +1173,7 @@ export async function grantServiceCapabilityApi(
 // id (`ak:event:*`). capabilities.md §10.3 requires `refs[authorized_by]` to
 // name the grant itself; the Event id remains useful only for Event-history
 // causality and diagnostics.
-export type CapabilityGrantEventArgs = {
+type CapabilityGrantEventArgs = {
   ownerId: string;
   realmId: string;
   subjectId: string;
@@ -1429,16 +1330,6 @@ const joinPolicyDigestCache = new Map<string, string>();
 // (soland-api.ts pushBootstrapEvent) and the reducer enforces strict prev+1
 // (apply_realm_policy.rs), so the first post-genesis write is revision 2.
 const joinPolicyRevisionCache = new Map<string, number>();
-
-export function nextJoinPolicyRevision(
-  server: SolandKey | undefined,
-  realmId: string,
-): number {
-  const key = joinWorkflowKey(server, realmId);
-  const next = (joinPolicyRevisionCache.get(key) ?? 1) + 1;
-  joinPolicyRevisionCache.set(key, next);
-  return next;
-}
 const knockRefCache = new Map<string, string>();
 function joinWorkflowKey(
   server: SolandKey | undefined,
@@ -1446,122 +1337,6 @@ function joinWorkflowKey(
   actorId?: string,
 ): string {
   return `${server ?? "default"}\0${realmId}\0${actorId ?? ""}`;
-}
-
-export async function submitKnockApi(
-  request: APIRequestContext,
-  token: string,
-  actorId: string,
-  realmId: string,
-  opts: { server?: SolandKey; createdAt?: string } = {},
-) {
-  const envelope = signedEventEnvelope({
-    actorId,
-    server: opts.server,
-    realmId,
-    kind: "ak.member.state",
-    actorSeq: 0,
-    prevRefs: [],
-    createdAt: opts.createdAt,
-    payload: {
-      realm_id: realmId,
-      member_id: accountActorId(actorId, opts.server),
-      membership: "knock",
-    },
-  });
-  const outcome = await submitSignedEventApi(request, token, envelope, {
-    server: opts.server,
-    context: `knock ${realmId}`,
-  });
-  const knockRef = String(envelope.event_id ?? "");
-  if (knockRef) {
-    knockRefCache.set(
-      joinWorkflowKey(opts.server, realmId, actorId),
-      knockRef,
-    );
-  }
-  return { ...outcome, event_id: knockRef };
-}
-
-// join-policy.md §5 — auto-resolve join: `ak.member.state{membership=join}`
-// carrying `gate_proofs[]`. The reducer validates the gates inline.
-export async function submitJoinWithProofsApi(
-  request: APIRequestContext,
-  token: string,
-  actorId: string,
-  realmId: string,
-  gateProofs: Array<Record<string, unknown>>,
-  opts: {
-    server?: SolandKey;
-    createdAt?: string;
-    sealBasis?: Record<string, unknown>;
-    invisibleActorFrontier?: {
-      nextActorSeq: number;
-      frontierEventIds: string[];
-    };
-  } = {},
-) {
-  const envelope = signedEventEnvelope({
-    actorId,
-    server: opts.server,
-    realmId,
-    kind: "ak.member.state",
-    createdAt: opts.createdAt,
-    sealBasis: opts.sealBasis,
-    payload: {
-      realm_id: realmId,
-      member_id: accountActorId(actorId, opts.server),
-      membership: "join",
-      gate_proofs: gateProofs,
-    },
-  });
-  await advanceEnvelopeToActorFrontier(
-    request,
-    token,
-    envelope,
-    opts.server,
-    true,
-    opts.invisibleActorFrontier,
-  );
-  return await rawSubmitSignedEventApi(request, token, envelope, {
-    server: opts.server,
-  });
-}
-
-// join-policy.md §3.1 `cooldown` gate — applicant leaves the Realm.
-export async function submitLeaveApi(
-  request: APIRequestContext,
-  token: string,
-  actorId: string,
-  realmId: string,
-  opts: {
-    server?: SolandKey;
-    createdAt?: string;
-    controlObserverToken?: string;
-  } = {},
-) {
-  const envelope = signedEventEnvelope({
-    actorId,
-    server: opts.server,
-    realmId,
-    kind: "ak.member.state",
-    createdAt: opts.createdAt,
-    payload: {
-      realm_id: realmId,
-      member_id: accountActorId(actorId, opts.server),
-      membership: "leave",
-    },
-  });
-  const response = await submitSignedEventApi(request, token, envelope, {
-    server: opts.server,
-    context: `leave ${realmId}`,
-    controlObserverToken: opts.controlObserverToken,
-  });
-  return {
-    ...response,
-    event_id: String(envelope.event_id),
-    actor_seq: Number(envelope.actor_seq),
-  };
 }
 
 export async function acceptInviteApi(
@@ -1746,7 +1521,7 @@ export async function queryRealmEventsApi(
 /// `composite[envelope.actor_id, payload.key]`, so the Event's actor is half the
 /// cell address: the holder signs, and the service cannot author it under its own
 /// DID. Omit `value` for the tombstone the DELETE endpoint requires.
-export function accountDataSetSubmission(args: {
+function accountDataSetSubmission(args: {
   actorId: string;
   key: string;
   expectedRevision: number;
@@ -1773,8 +1548,7 @@ export function accountDataSetSubmission(args: {
     }),
   };
 }
-
-export async function prepareAccountDataSetSubmissionApi(
+async function prepareAccountDataSetSubmissionApi(
   request: APIRequestContext,
   token: string,
   args: Parameters<typeof accountDataSetSubmission>[0],
@@ -3740,57 +3514,6 @@ export type InviteDeliveryOutcomeView = {
   retry_after_ms?: number;
 };
 
-// ── invite-addressing.md §7: the authenticated client dispatch path. ──
-//
-// `ak.self.invites.command.dispatch.v1` is the ONLY legal way for a client to
-// start private invite delivery. The client hands the raw
-// `introduction_evidence` plus the accepted `ak.invite.create` Event id to its
-// own Station; that server resolves the canonical Event and owns every service-to-service hop from
-// there. Local targets rerun the §7 receive verification from step 4, remote
-// targets enter the exact-body S2S outbox.
-
-// Event resolution remains a general helper for peer-delivery tests. The self
-// dispatch wire body intentionally carries only invite_event_id.
-export async function resolveSelfEventsApi(
-  request: APIRequestContext,
-  token: string,
-  eventIds: string[],
-  opts: { server?: SolandKey } = {},
-): Promise<{
-  events: Array<Record<string, unknown>>;
-  seals?: Array<Record<string, unknown>>;
-  missing: string[];
-  unauthorized?: string[];
-}> {
-  const url = `${solandBaseUrl(opts.server)}/_arkret/self/events/resolve`;
-  const response = await request.fetch(url, {
-    method: "QUERY",
-    data: canonicalJson({ event_ids: eventIds, include_payload: true }),
-    headers: {
-      ...authHeaders(token, "QUERY", url),
-      "content-type": "application/json",
-    },
-  });
-  return await expectJsonOk(response, `resolve events ${eventIds.join(",")}`);
-}
-
-export async function resolveAcceptedEventApi(
-  request: APIRequestContext,
-  token: string,
-  eventId: string,
-  opts: { server?: SolandKey } = {},
-): Promise<Record<string, unknown>> {
-  const outcome = await resolveSelfEventsApi(request, token, [eventId], opts);
-  const event = outcome.events.find(
-    (candidate) => stringValue(candidate.event_id) === eventId,
-  );
-  expect(
-    event,
-    `accepted Event ${eventId} must be readable through ak.self.events.read.resolve.v1`,
-  ).toBeTruthy();
-  return event!;
-}
-
 // Build the §7 dispatch body from the accepted Event id. The Station
 // resolves its own stored canonical Event bytes; clients never echo them.
 // `idempotency_key` defaults to the accepted `event_id` so an uncertain
@@ -3866,8 +3589,7 @@ export async function submitPeerInviteDeliveryApi(
     "submit peer invite delivery",
   );
 }
-
-export async function rawSubmitPeerInviteDeliveryApi(
+async function rawSubmitPeerInviteDeliveryApi(
   request: APIRequestContext,
   body: InviteDeliveryRequestBodyBodyBody,
   opts: {

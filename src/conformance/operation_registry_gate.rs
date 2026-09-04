@@ -1483,6 +1483,8 @@ fn infer_method_from_line(line: &str) -> Option<String> {
     for method in HTTP_METHODS {
         if line.contains(&format!("method: \"{method}\""))
             || line.contains(&format!("method: '{method}'"))
+            || line.contains(&format!("method === \"{method}\""))
+            || line.contains(&format!("method === '{method}'"))
         {
             return Some((*method).to_owned());
         }
@@ -1964,6 +1966,12 @@ mod tests {
     #[test]
     fn explicit_fetch_query_method_wins_over_neighboring_get_calls() {
         let line = r#"response: await request.fetch(`${base}/_arkret/self/events`, { method: "QUERY", data: { limit: 20 } })"#;
+        assert_eq!(infer_method_from_line(line).as_deref(), Some("QUERY"));
+    }
+
+    #[test]
+    fn explicit_query_comparison_wins_over_neighboring_methods() {
+        let line = r#"hit.method === "QUERY" && hit.path === "/_arkret/self/seals/frontier""#;
         assert_eq!(infer_method_from_line(line).as_deref(), Some("QUERY"));
     }
 

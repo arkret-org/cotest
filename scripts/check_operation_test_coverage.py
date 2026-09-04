@@ -725,6 +725,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"operation coverage inventory failed: {error}", file=sys.stderr)
         return 1
     if args.check:
+        try:
+            from check_api_only_migration import validate_repository
+
+            validate_repository(args.workspace_root.resolve())
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f"API-only migration gate failed: {error}", file=sys.stderr)
+            return 1
         if not check_output(generated, args.output):
             print(
                 f"{args.output} is stale; regenerate with {Path(__file__).name}",

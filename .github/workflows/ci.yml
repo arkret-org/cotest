@@ -103,7 +103,10 @@ jobs:
           python-version: "3.13"
       - name: generator unit tests
         working-directory: cotest
-        run: python -m unittest scripts.tests.test_operation_test_coverage
+        run: >-
+          python -m unittest
+          scripts.tests.test_operation_test_coverage
+          scripts.tests.test_api_only_migration
       - name: reject stale or manually edited inventory
         working-directory: cotest
         run: python scripts/check_operation_test_coverage.py --check

@@ -13,7 +13,8 @@ use arkret_wire::{
 };
 use ed25519_dalek::SigningKey;
 use garth::signal::{
-    SignalDecryptor, SignalReceiver, VerifiedSignalSenderAuthority, VerifiedSignalSenderKey,
+    BoxSignalDecryptFuture, SignalDecryptor, SignalReceiver, VerifiedSignalSenderAuthority,
+    VerifiedSignalSenderKey,
 };
 
 use super::signal_federation::envelope;
@@ -28,33 +29,35 @@ struct Recipient {
 }
 
 impl SignalDecryptor for Recipient {
-    fn open(
-        &self,
-        signal: &SignalEnvelope,
-        sender: &VerifiedSignalSenderKey,
-    ) -> garth::Result<Vec<u8>> {
-        let mut guard = self.state.lock().unwrap();
-        let (group, replay) = &mut *guard;
-        let authority = match sender.authority() {
-            VerifiedSignalSenderAuthority::AccountDevice {
-                device_authorize_event_id,
-                ..
-            } => arkret::mls::SignalSenderAuthority::AccountDevice {
-                public_key: sender.public_key(),
-                device_authorize_event_id,
-            },
-            VerifiedSignalSenderAuthority::Agent {
-                agent_key_authorize_event_id,
-                ..
-            } => arkret::mls::SignalSenderAuthority::Agent {
-                public_key: sender.public_key(),
-                verification_method: &signal.proof.verification_method,
-                agent_key_authorize_event_id,
-            },
-        };
-        group
-            .open_signal_envelope(signal, CONTENT_SCHEME, authority, &self.winner, replay)
-            .map_err(|error| garth::Error::Protocol(error.to_string()))
+    fn open<'a>(
+        &'a self,
+        signal: &'a SignalEnvelope,
+        sender: &'a VerifiedSignalSenderKey,
+    ) -> BoxSignalDecryptFuture<'a> {
+        Box::pin(async move {
+            let mut guard = self.state.lock().unwrap();
+            let (group, replay) = &mut *guard;
+            let authority = match sender.authority() {
+                VerifiedSignalSenderAuthority::AccountDevice {
+                    device_authorize_event_id,
+                    ..
+                } => arkret::mls::SignalSenderAuthority::AccountDevice {
+                    public_key: sender.public_key(),
+                    device_authorize_event_id,
+                },
+                VerifiedSignalSenderAuthority::Agent {
+                    agent_key_authorize_event_id,
+                    ..
+                } => arkret::mls::SignalSenderAuthority::Agent {
+                    public_key: sender.public_key(),
+                    verification_method: &signal.proof.verification_method,
+                    agent_key_authorize_event_id,
+                },
+            };
+            group
+                .open_signal_envelope(signal, CONTENT_SCHEME, authority, &self.winner, replay)
+                .map_err(|error| garth::Error::Protocol(error.to_string()))
+        })
     }
 }
 
@@ -200,8 +203,8 @@ impl Fixture {
     }
 }
 
-#[test]
-fn signal_recipient_real_mls_rejects_forged_proof_without_poisoning_sequence() {
+#[tokio::test]
+async fn signal_recipient_real_mls_rejects_forged_proof_without_poisoning_sequence() {
     let mut fixture = Fixture::new();
     let mut forged = fixture.seal(100);
     crate::harness::attach_signal_proof(&mut forged, &SigningKey::from_bytes(&BOB_SEED));
@@ -226,20 +229,22 @@ fn signal_recipient_real_mls_rejects_forged_proof_without_poisoning_sequence() {
     assert!(
         receiver
             .accept(&forged, &resolver, &fixture.recipient, forged.sent_at)
+            .await
             .is_err()
     );
     let valid = fixture.seal(1);
     assert_eq!(
         receiver
             .accept(&valid, &resolver, &fixture.recipient, valid.sent_at)
+            .await
             .unwrap()
             .payload_sequence,
         1
     );
 }
 
-#[test]
-fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
+#[tokio::test]
+async fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
     for mutation in [
         "station",
         "key",
@@ -287,6 +292,7 @@ fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
         let mut receiver = SignalReceiver::new();
         let error = receiver
             .accept(&candidate, &resolver, &fixture.recipient, now)
+            .await
             .unwrap_err()
             .to_string();
         let reason = match mutation {
@@ -312,6 +318,7 @@ fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
         assert_eq!(
             receiver
                 .accept(&valid, &current_resolver, &fixture.recipient, valid.sent_at)
+                .await
                 .unwrap()
                 .payload_sequence,
             1,
@@ -320,8 +327,8 @@ fn signal_recipient_requires_exact_account_leaf_key_authorization_and_winner() {
     }
 }
 
-#[test]
-fn signal_recipient_accepts_a_real_agent_leaf_without_a_synthetic_device() {
+#[tokio::test]
+async fn signal_recipient_accepts_a_real_agent_leaf_without_a_synthetic_device() {
     let mut template = envelope().unwrap();
     template.sender_device_id = None;
     template.proof.verification_method =
@@ -434,6 +441,7 @@ fn signal_recipient_accepts_a_real_agent_leaf_without_a_synthetic_device() {
     };
     let accepted = SignalReceiver::new()
         .accept(&signal, &resolver, &recipient, signal.sent_at)
+        .await
         .unwrap();
     assert_eq!(accepted.payload_sequence, 0);
     assert!(matches!(
