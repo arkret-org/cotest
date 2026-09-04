@@ -209,7 +209,12 @@ test.describe("conformance snapshot/query/scalability vectors @fully-implemented
       }),
     });
     expect(revoked.status()).toBeGreaterThanOrEqual(400);
-    expect(wireErrCode(await revoked.json())).toBe("snapshot_issuer_revoked");
+    // `snapshot_issuer_revoked` is a registered reason code, so it rides
+    // `reason_code`; the RFC 9457 `type` tail stays a registered top-level
+    // code (api-conventions.md 5.1).
+    const revokedBody = (await revoked.json()) as { reason_code?: unknown };
+    expect(wireErrCode(revokedBody)).toBe("capability_denied");
+    expect(revokedBody.reason_code).toBe("snapshot_issuer_revoked");
   });
 
   test("Phase C — query filters / sort / pagination return expected_rows in order", async ({

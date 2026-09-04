@@ -1194,7 +1194,10 @@ test.describe("applet bridge", () => {
       `tamper-proof-${stamp}`,
     );
     expect([400, 409]).toContain(denied.status());
-    expect(wireErrCode(await denied.json())).toBe("proof_invalid");
+    // `proof_invalid` is a registered reason code, not a top-level one.
+    const deniedBody = (await denied.json()) as { reason_code?: unknown };
+    expect(wireErrCode(deniedBody)).toBe("param_invalid");
+    expect(deniedBody.reason_code).toBe("proof_invalid");
   });
 
   test("E4.7 an exact successful install replay remains byte-stable", async ({

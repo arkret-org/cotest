@@ -91,7 +91,7 @@
    - `response.signer_did === vector.expected_signer_did`(spec §5 列出的 5 类签名者之一:Realm owner / creator / admin / trusted snapshot issuer / witness quorum)
    - 签名 transcript 覆盖范围(id / realm_id / reducer_profile / schema_profile_refs / state_digest / frontier / event_set_commitment / chunks descriptor / verification_hints / created_by / created_at)与 vector 声明一致 — 端点应返回 `signed_transcript_fields[]` 或等价信号,断言它与 spec §5 列表逐项相等
 8. 同一 manifest 再 POST 一次:`response.signature` 字段(若回显)对 Ed25519 vector MUST 完全相等(deterministic);ECDSA vector 若存在则 `r/s` 可不同但 `signature_valid` 仍为 true
-9. 把 vector `signer_did` 替换为已撤销的 DID(vector `expected_signer_did_revoked` 字段) → 端点 MUST 返回 4xx 与 `error.code === "snapshot_issuer_revoked"`(snapshot-schema §5 最大接受窗口规则)
+9. 把 vector `signer_did` 替换为已撤销的 DID(vector `expected_signer_did_revoked` 字段) → 端点 MUST 返回 4xx，`error.code` 是登记的顶层 code（`capability_denied`），`reason_code === "snapshot_issuer_revoked"`(snapshot-schema §5 最大接受窗口规则)
 
 ### Phase C — Query filters / sort / pagination (query-schema §2 / §3 / §6 / §8)
 
@@ -188,7 +188,7 @@
 - **fixture loader 实现**:用 `fileURLToPath(import.meta.url)` + `dirname` + `path.resolve(..., "..", "..", "..", "..", "arkret-spec", "spec", "v1", "artifacts", "fixtures")` 从 spec 文件位置走到 fixtures 目录。**不**新增 `helpers/conformance-fixtures.ts`;loader 写在 spec 文件顶部(与 encoding-vectors 风格一致)。
 - **signing key 注入**:Phase B 验证 signature 时 vector 自带 `signer_did` + `public_key_jwk`,不依赖 alice 的 dev key — snapshot 签名者通常是服务自己或 trusted issuer,不是 actor。Phase C 的 query authz filter 才用 alice 的 session token。
 - **vector id 命名**(参考 encoding-vectors §1.2):`ak.vector.snapshot.<scenario>.v1` / `ak.vector.query.<scenario>.v1` / `ak.vector.scalability.<scenario>.v1`,具体 scenario 名见各 Phase 步骤。
-- **error codes**:`snapshot_chunk_digest_mismatch`、`snapshot_issuer_revoked`、`query_schema_violation`、`scalability_limit_exceeded`、`payload_too_large`、`unknown_vector_id`、`unsupported_vector_version`、`cursor_query_mismatch` — 在 `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` 中应有对应条目(缺失属于 spec/registry 缺口,不属于 cotest 缺口)。
+- **error codes**（`snapshot_issuer_revoked` 是 `reason_codes[]` 成员，出现在 `reason_code` 而不是顶层 `error.code`）:`snapshot_chunk_digest_mismatch`、`snapshot_issuer_revoked`、`query_schema_violation`、`scalability_limit_exceeded`、`payload_too_large`、`unknown_vector_id`、`unsupported_vector_version`、`cursor_query_mismatch` — 在 `arkret-spec/spec/v1/artifacts/registry/error-code-registry.json` 中应有对应条目(缺失属于 spec/registry 缺口,不属于 cotest 缺口)。
 - **no new helper**:用现有 `request` fixture + `ensureRegistered` / `issueDevSession`;所有 loader / assertion 写在 spec 文件局部。
 
 ## 总耗时预估

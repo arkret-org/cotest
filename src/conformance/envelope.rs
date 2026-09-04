@@ -579,6 +579,17 @@ fn validate_event_envelope(
     };
 
     let Some(kind_info) = event_kinds.get(kind) else {
+        // An unregistered kind the Event itself declares as a fail-closed
+        // critical extension is an unsupported *declared capability*, not a
+        // malformed envelope: api-conventions.md §5.1 binds
+        // `requirements.critical_extensions[]` to `unsupported_feature` and
+        // forbids substituting the two codes for one another.
+        if declares_unsupported_critical_extension(event, context)? {
+            return Ok(EventEnvelopeDecision::reject(
+                "unsupported_feature",
+                "unknown critical extension must fail closed",
+            ));
+        }
         return Ok(EventEnvelopeDecision::reject(
             "schema_violation",
             "Event.kind is not registered",
@@ -752,35 +763,29 @@ fn validate_event_envelope(
         ));
     }
 
-    // Check critical_extensions in both event.critical_extensions and
-    // event.requirements.critical_extensions
-    let critical_extensions_iter = event
-        .get("critical_extensions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .chain(
-            event
-                .get("requirements")
-                .and_then(|r| r.get("critical_extensions"))
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten(),
-        );
-    for extension in critical_extensions_iter {
-        let id = required_str(extension, "id")?;
-        if extension.get("fail_closed").and_then(Value::as_bool) == Some(true)
-            && !context.supported_features.contains(id)
-        {
-            return Ok(EventEnvelopeDecision::reject(
-                "unsupported_feature",
-                "unknown critical extension must fail closed",
-            ));
-        }
+    if declares_unsupported_critical_extension(event, context)? {
+        return Ok(EventEnvelopeDecision::reject(
+            "unsupported_feature",
+            "unknown critical extension must fail closed",
+        ));
     }
 
     if let Some(error) = validate_event_payload(kind, content) {
         return Ok(EventEnvelopeDecision::reject("schema_violation", error));
+    }
+
+    // key-management.md 4.1: a non-bootstrap `ak.device.authorize` lives in the
+    // owning principal's Principal Control Realm. A service actor has no
+    // principal device directory, so it can never be authoring inside one --
+    // the envelope alone settles that direction of the rule.
+    if kind == "ak.device.authorize"
+        && content.get("authorized_by").is_some()
+        && !matches!(actor_id, arkret_wire::ActorId::Account { .. })
+    {
+        return Ok(EventEnvelopeDecision::reject(
+            "failed_precondition",
+            "ak.device.authorize was authored outside a Principal Control Realm",
+        ));
     }
 
     // Per spec encoding.md §1.6/§4 and the canonical `event_proof` schema
@@ -1100,6 +1105,37 @@ fn parse_hlc_millis(hlc: &str) -> Result<u64> {
         .map(|(millis, _)| millis)
         .ok_or_else(|| anyhow!("invalid HLC shape"))?;
     u64::from_str_radix(millis, 16).map_err(|error| anyhow!("invalid HLC millis: {error}"))
+}
+
+/// Whether the Event declares a fail-closed critical extension this receiver
+/// has not advertised. Both the legacy top-level `critical_extensions` and the
+/// current `requirements.critical_extensions` carriers are scanned.
+fn declares_unsupported_critical_extension(
+    event: &Value,
+    context: &EventEnvelopeContext,
+) -> Result<bool> {
+    let declared = event
+        .get("critical_extensions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .chain(
+            event
+                .get("requirements")
+                .and_then(|requirements| requirements.get("critical_extensions"))
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten(),
+        );
+    for extension in declared {
+        let id = required_str(extension, "id")?;
+        if extension.get("fail_closed").and_then(Value::as_bool) == Some(true)
+            && !context.supported_features.contains(id)
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn assert_event_decision(

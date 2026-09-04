@@ -247,7 +247,10 @@ async fn principal_signing_unlock_reaches_trust_anchor(
     token: &str,
     actor_id: &str,
 ) -> Result<()> {
-    crate::harness::expect_api_error(
+    // `untrusted_backup_signature` is a registered `reason_codes[]` member, so
+    // it rides `error.details.reason_code`; the RFC 9457 `type` tail is the
+    // registered top-level code (api-conventions.md §5.1).
+    let problem = crate::harness::expect_api_error(
         server
             .http()
             .post(server.url(&format!("/_arkret/self/keys/backups/{BACKUP_ID}/unlock")))
@@ -256,9 +259,18 @@ async fn principal_signing_unlock_reaches_trust_anchor(
                 proof: unlock_proof(actor_id, server.service_id())?,
             }),
         StatusCode::UNAUTHORIZED,
-        "untrusted_backup_signature",
+        "signature_invalid",
     )
     .await?;
+    let reason = problem
+        .extensions
+        .get("reason_code")
+        .and_then(serde_json::Value::as_str);
+    if reason != Some("untrusted_backup_signature") {
+        return Err(anyhow!(
+            "unlock refusal must carry reason_code untrusted_backup_signature, got {reason:?}"
+        ));
+    }
     Ok(())
 }
 

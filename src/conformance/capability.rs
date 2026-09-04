@@ -1421,6 +1421,25 @@ fn evaluate_unified_authority_constraints(fixture: &CapabilityCase) -> Result<()
                     bail!("{name}: a unified authority guard is no longer fail-closed");
                 }
             }
+            "agent_sidecar_write_requires_allowed_strand_ids" => {
+                // A grant whose action declares a required constraint but omits
+                // it is rejected before evaluation; the omission is the whole
+                // failure, so the declared set must actually be missing it.
+                let required = str_vec(case, "/required_constraints");
+                let declared = str_vec(case, "/declared_constraints");
+                let missing = required
+                    .iter()
+                    .any(|constraint| !declared.contains(constraint));
+                if !missing
+                    || case.pointer("/expected/accepted").and_then(Value::as_bool) != Some(false)
+                    || case
+                        .pointer("/expected/reason_code")
+                        .and_then(Value::as_str)
+                        != Some("agent_grant_constraint_missing")
+                {
+                    bail!("{name}: a required Agent grant constraint stopped failing closed");
+                }
+            }
             other => bail!("unknown unified authority fixture case {other}"),
         }
     }
