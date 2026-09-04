@@ -1767,6 +1767,7 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         )?)?,
         sidecar_id: sidecar,
         exchange_id: AgentSidecarExchangeId::new("Abcdefghijklmnopqrstuv")?,
+        origin: AgentSidecarExchangeOrigin::SourceTrackRouted,
         source_track_ref: AgentSidecarSourceTrackRef {
             realm_id: realm_id.clone(),
             strand_id: source_strand_id.clone(),
@@ -1776,6 +1777,7 @@ pub fn run_sidecar_hosted_projection_vector() -> Result<()> {
         source_hlc: Hlc::new("01970e589d21-0001-a13f9c2e")?,
         client_order_key: NonEmptyString::new("device-1-1").map_err(anyhow::Error::msg)?,
         addressed_agent_ids: vec![addressed_agent.clone()],
+        completion_policy: AgentSidecarExchangeCompletionPolicy::Coordinator,
         coordinator_agent_id: addressed_agent.clone(),
         coordinator_assignment_event_id: request_id.clone(),
         participating_agent_ids: vec![addressed_agent],
