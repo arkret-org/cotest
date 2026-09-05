@@ -551,10 +551,23 @@ fn mimi_families() -> Result<Vec<FamilyUnderTest>> {
         "strand_id": "ak:strand:Aepgr15HbtERKfqPAh9SrfWBdihSvX_c94JvujvBS2f-",
         "device_id": "ak:device:01904100-0000-7000-8000-000000000001"
     }))?;
+    // The signed request names both identities in full; the proof issuer is
+    // the complete Actor and holder_account_id is a binding field. Ruling
+    // `review/spec-done/2026-09-05-1240`.
     let request_consent: MimiRequestConsentRequestBody = serde_json::from_value(json!({
-        "requester_id": REQUESTER_ID,
-        "target": { "kind": "handle", "id": "bob:bob.example" },
-        "purpose": "direct_message"
+        "requester_actor_id": {
+            "kind": "account",
+            "account_id": {
+                "principal_id": REQUESTER_ID,
+                "station_id": "ak:did_core:web:requester-station.example"
+            }
+        },
+        "holder_account_id": {
+            "principal_id": "ak:did_core:web:bob.example",
+            "station_id": "ak:did_core:web:holder-station.example"
+        },
+        "purpose": "direct_message",
+        "proofs": []
     }))?;
 
     Ok(vec![

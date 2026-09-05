@@ -171,12 +171,16 @@ fn expect_reason(error: AgentParticipationError, expected: &str) -> Result<()> {
     Ok(())
 }
 
-fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<AgentSelectorClaim> {
+fn selector_claim(
+    case: &Value,
+    subject_account_id: AccountId,
+    slug_field: &str,
+) -> Result<AgentSelectorClaim> {
     Ok(AgentSelectorClaim {
         schema: SchemaId::AGENT_SELECTOR_CLAIM_V1.to_owned(),
         controller_subject_id: did_field(case, "controller_subject")?,
         agent_slug: required_str(case, slug_field)?.to_owned(),
-        subject_id: did_field(case, agent_field)?,
+        subject_account_id,
         issuer_id: DidCoreId::new("ak:did_core:web:directory.acme.example")?,
         vouching_id: Some(DidCoreId::new("ak:did_core:web:directory.acme.example")?),
         binding_state: HandleBindingState::Verified,
@@ -207,7 +211,7 @@ fn selector_claim(case: &Value, agent_field: &str, slug_field: &str) -> Result<A
 fn selector_outcome(claim: AgentSelectorClaim) -> Result<DirectoryAgentSelectorResolutionOutcome> {
     let outcome = DirectoryAgentSelectorResolutionOutcome {
         controller_subject_id: claim.controller_subject_id.clone(),
-        subject_id: claim.subject_id.clone(),
+        subject_account_id: claim.subject_account_id.clone(),
         agent_slug: claim.agent_slug.clone(),
         selector_claim: claim,
         source_refs: vec![arkret_wire::EventId::new(
@@ -246,19 +250,31 @@ fn member_identity_join<'a>(
 pub fn run_agent_mention_selector_vector() -> Result<()> {
     let fixture = participation_fixture()?;
     let vector = case(&fixture, VECTOR_ID_AGENT_MENTION_SELECTOR)?;
-    let claim = selector_claim(vector, "agent_subject", "agent_slug_at_time")?;
-    claim.validate()?;
-    let outcome = selector_outcome(claim.clone())?;
-
-    // The selector resolves an agent principal; the persisted mention target
-    // is that principal at the agent's Station, taken as a whole AccountId.
+    // The signed claim names one complete AccountId and the mention copies it
+    // verbatim; the Station is no longer supplied by the consumer. Ruling
+    // `review/spec-done/2026-09-05-1310`.
     let expected_subject = account_pointer(vector, "/persisted_mention/subject_account_id")?;
     let expected_controller =
         account_pointer(vector, "/persisted_mention/controller_subject_account_id")?;
-    if outcome.subject_id != expected_subject.principal_id
+    let claim = selector_claim(vector, expected_subject.clone(), "agent_slug_at_time")?;
+    claim.validate()?;
+    let outcome = selector_outcome(claim.clone())?;
+
+    if outcome.subject_account_id != expected_subject
         || outcome.controller_subject_id != expected_controller.principal_id
     {
-        bail!("fixture selector outcome and persisted mention name different principals");
+        bail!("fixture selector outcome and persisted mention name different targets");
+    }
+
+    // A Directory that keeps the agent principal and swaps the Station is a
+    // different target, not the same one: the outcome must equal the claim.
+    let mut retargeted = outcome.clone();
+    retargeted.subject_account_id = AccountId::new(
+        expected_subject.principal_id.clone(),
+        DidCoreId::new("ak:did_core:web:other.example")?,
+    );
+    if retargeted.validate().is_ok() {
+        bail!("a selector outcome that retargets the Station must not validate");
     }
     let mention = Mention::new(expected_subject.clone())
         .with_agent_selector_metadata(
@@ -289,13 +305,17 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
         bail!("agent selector mention lost original text snapshot");
     }
 
+    let changed_subject = AccountId::new(
+        did_field(vector, "changed_agent_subject")?,
+        expected_subject.station_id.clone(),
+    );
     let changed = selector_outcome(selector_claim(
         vector,
-        "changed_agent_subject",
+        changed_subject,
         "changed_agent_slug",
     )?)?;
-    if changed.subject_id == mention.subject_account_id.principal_id {
-        bail!("changed selector control must target a different agent DID");
+    if changed.subject_account_id == mention.subject_account_id {
+        bail!("changed selector control must target a different agent account");
     }
     if mention.subject_account_id
         != account_pointer(vector, "/expected/historical_target_after_slug_change")?

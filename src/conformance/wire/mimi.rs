@@ -21,6 +21,7 @@ const MIMI_INTEROP_VECTOR_IDS: &[&str] = &[
     "ak.vector.mimi.identifier_query_privacy.v1",
     "ak.vector.mimi.identifier_query_source_signature.v1",
     "ak.vector.mimi.consent_isolation.v1",
+    "ak.vector.mimi.consent_correlation_identity.v1",
     "ak.vector.mimi.proxy_download_policy.v1",
     "ak.vector.mimi.unsupported_draft_fail_closed.v1",
 ];
@@ -71,6 +72,9 @@ pub fn run_mimi_interop_fixture_suite() -> Result<()> {
                 validate_identifier_query_source_signature_case(case)?
             }
             "ak.vector.mimi.consent_isolation.v1" => validate_consent_isolation_case(case)?,
+            "ak.vector.mimi.consent_correlation_identity.v1" => {
+                validate_consent_correlation_identity_case(case)?
+            }
             "ak.vector.mimi.proxy_download_policy.v1" => validate_proxy_download_case(case)?,
             "ak.vector.mimi.unsupported_draft_fail_closed.v1" => {
                 validate_unsupported_draft_case(case, drafts)?
@@ -341,6 +345,75 @@ fn validate_consent_isolation_case(case: &Value) -> Result<()> {
         case,
         "consent_does_not_grant_space_read_or_write_capability",
     )
+}
+
+/// Ruling `review/spec-done/2026-09-05-1240`: the signed request names both
+/// identities in full and the correlation freezes exactly those, so every case
+/// here is checked for complete identities rather than principal cores. A case
+/// that carried a bare DID would pass a "some identity is present" check and is
+/// exactly what this ruling removed, so absence of a Station is an error.
+fn validate_consent_correlation_identity_case(case: &Value) -> Result<()> {
+    let name = required_str(case, "name")?;
+
+    if let Some(request) = case.get("request") {
+        let requester = request
+            .pointer("/requester_actor_id/account_id")
+            .ok_or_else(|| anyhow!("{name}: request requester_actor_id is not a complete Actor"))?;
+        require_account_components(requester, name, "requester_actor_id")?;
+        let holder = request
+            .get("holder_account_id")
+            .ok_or_else(|| anyhow!("{name}: request omits holder_account_id"))?;
+        require_account_components(holder, name, "holder_account_id")?;
+        if request.get("requester_id").is_some() || request.get("target").is_some() {
+            bail!("{name}: the retired bare requester_id / target carriers must not reappear");
+        }
+    }
+
+    if let Some(peer) = case.pointer("/update/grant_peer") {
+        match peer.get("kind").and_then(Value::as_str) {
+            Some("actor") => {
+                let actor = peer.pointer("/actor_id/account_id").ok_or_else(|| {
+                    anyhow!("{name}: grant peer actor is not a complete AccountId")
+                })?;
+                require_account_components(actor, name, "grant_peer")?;
+            }
+            // A Realm-local ephemeral pairwise actor is never a MIMI requester,
+            // so the case must expect a rejection rather than a match.
+            Some("pairwise_principal") => {
+                if required_str(case, "expected")? != "reject" {
+                    bail!("{name}: a pairwise_principal peer must never match a MIMI correlation");
+                }
+            }
+            other => bail!("{name}: unexpected grant peer kind {other:?}"),
+        }
+    }
+
+    if let Some(holder_actor) = case.pointer("/update/holder_actor/account_id") {
+        require_account_components(holder_actor, name, "holder_actor")?;
+    }
+
+    // The lost-response case pins the recovery strategy, because the consent
+    // list cannot return a correlation that has written no Event.
+    if case.get("response").and_then(Value::as_str) == Some("lost")
+        && required_str(case, "expected_recovery_strategy")? != "manual_confirmation"
+    {
+        bail!("{name}: a lost request response must recover by manual_confirmation");
+    }
+
+    if case.get("expected").is_none() && case.get("expected_recovery_strategy").is_none() {
+        bail!("{name}: every correlation identity case must declare an outcome");
+    }
+    Ok(())
+}
+
+fn require_account_components(account: &Value, name: &str, field: &str) -> Result<()> {
+    for component in ["principal_id", "station_id"] {
+        let value = account.get(component).and_then(Value::as_str).unwrap_or("");
+        if value.is_empty() {
+            bail!("{name}: {field} omits {component}; a bare principal cannot be compared");
+        }
+    }
+    Ok(())
 }
 
 fn validate_proxy_download_case(case: &Value) -> Result<()> {
