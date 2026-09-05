@@ -2272,7 +2272,9 @@ $processSolandBin = $null
 if ($Runtime -eq "process" -and -not $env:SOLAND_BIN) {
     Add-RawLogLine -Path $rawLog -Value "=== prepare process SUT ==="
     $buildOutput = @(
-        & cargo build --manifest-path $SutManifest --bin soland 2>&1
+        # `conformance-harness` is off in soland's default (production) build;
+        # this suite drives `/_arkret/_conformance/*`, so ask for it explicitly.
+        & cargo build --manifest-path $SutManifest -p soland --bin soland --features conformance-harness 2>&1
     )
     $buildExitCode = $LASTEXITCODE
     foreach ($line in $buildOutput) {

@@ -3150,7 +3150,11 @@ try {
             $started = Get-Date
             $service = Start-ManagedCommand `
                 -Name "prepare-soland" `
-                -Command ("cargo build --manifest-path {0} --bin soland" -f (Quote-PsLiteral $SutManifest)) `
+                # `conformance-harness` compiles the development-only
+                # `/_arkret/_conformance/*` namespace into the SUT. It is off in
+                # soland's default (production) build, and the e2e conformance
+                # suites drive those endpoints, so the harness build must ask for it.
+                -Command ("cargo build --manifest-path {0} -p soland --bin soland --features conformance-harness" -f (Quote-PsLiteral $SutManifest)) `
                 -WorkingDirectory (Split-Path -Parent $SutManifest) `
                 -LogDirectory $serviceLogDir
             $preparationTasks.Add([pscustomobject]@{ Name = "soland"; Service = $service; Started = $started; Artifact = $defaultSolandBinary; AllowUnchangedArtifact = $true; RepositoryRoots = @((Join-Path $workspaceRoot "soland"), (Join-Path $workspaceRoot "arkret-rust-sdk")) })
