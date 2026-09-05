@@ -5,7 +5,7 @@
 //! wake-up hint, so this scenario checks both sides of every write:
 //!
 //! 1. `ak.account.invite_delivery` after a notify decision;
-//! 2. `ak.account.invite_quarantine` after a quarantine decision; and
+//! 2. `ak.account.holder_quarantine` after a quarantine decision; and
 //! 3. the same quarantine cell after a matching consent revoke invalidates it.
 //!
 //! Both active holder devices independently read account-data list/resource
@@ -338,7 +338,7 @@ async fn grant_then_revoke_invite_consent(
         expires_at: Some(Utc::now() + ChronoDuration::days(1)),
         constraints: None,
         evidence_ref: None,
-        reason: Some("cotest_invite_quarantine_invalidation".to_owned()),
+        reason: Some("cotest_holder_quarantine_invalidation".to_owned()),
     };
     let grant_event = holder
         .author_event(
@@ -387,7 +387,7 @@ async fn grant_then_revoke_invite_consent(
             .map(ConsentObservedDot::new)
             .collect::<arkret_wire::Result<Vec<_>>>()?,
         revoked_at: Some(Utc::now()),
-        reason: Some("cotest_invite_quarantine_invalidation".to_owned()),
+        reason: Some("cotest_holder_quarantine_invalidation".to_owned()),
     };
     let mut revoke_event = holder
         .author_event(
@@ -613,15 +613,15 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     let quarantine_row = account_data_row_on_both_devices(
         &holder,
         &holder_secondary,
-        AccountDataKey::ACCOUNT_INVITE_QUARANTINE,
+        AccountDataKey::ACCOUNT_HOLDER_QUARANTINE,
     )
     .await?;
     ensure!(
-        quarantine_row.content["schema"] == "ak.schema.invite_quarantine.v1"
+        quarantine_row.content["schema"] == "ak.schema.holder_quarantine.v1"
             && quarantine_row.content["quarantine_entries"]
                 .as_array()
                 .is_some_and(|entries| !entries.is_empty()),
-        "invite_quarantine cell is not the closed non-empty v1 shape: {}",
+        "holder_quarantine cell is not the closed non-empty v1 shape: {}",
         quarantine_row.content
     );
     assert_service_account_data_fanout(&holder, server.service_id().as_str(), &quarantine_row)
@@ -641,12 +641,12 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     let invalidated_row = account_data_row_on_both_devices(
         &holder,
         &holder_secondary,
-        AccountDataKey::ACCOUNT_INVITE_QUARANTINE,
+        AccountDataKey::ACCOUNT_HOLDER_QUARANTINE,
     )
     .await?;
     ensure!(
         invalidated_row.revision == quarantine_row.revision + 1,
-        "consent revoke did not CAS-advance invite_quarantine revision"
+        "consent revoke did not CAS-advance holder_quarantine revision"
     );
     ensure!(
         invalidated_row.content["quarantine_entries"]

@@ -893,7 +893,7 @@ fn check_ledger_contract(contract: &LedgerContract) -> Result<()> {
     ensure!(
         !contract.wire_readable
             && !contract.is_account_data_cell
-            && contract.holder_observable_surface == "ak.account.invite_quarantine",
+            && contract.holder_observable_surface == "ak.account.holder_quarantine",
         "the ledger has no wire carrier; the quarantine cell stays the holder's only observable surface"
     );
     ensure!(
