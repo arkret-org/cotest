@@ -10,7 +10,7 @@
 //! PostgreSQL-backed Station is measured against the same bytes the offline
 //! fixture runner executes.
 //!
-//! Every assertion is taken from the **holder's** `ak.account.invite_quarantine`
+//! Every assertion is taken from the **holder's** `ak.account.holder_quarantine`
 //! cell, because the requester side is designed to be indistinguishable: an
 //! admitted quarantine, a quota drop, a TTL drop, an unknown holder and a policy
 //! deny all return the same opaque `deferred`. Checking the requester's response
@@ -49,7 +49,7 @@ const REQUIRE_EXPLICIT_CONSENT_CASE: &str =
 /// first and with repeats preserved: a repeat contact from an already-charged
 /// source is a second entry, not a second charge.
 async fn quarantined_sources(holder: &TestActorClient) -> Result<Vec<String>> {
-    let row = match account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_QUARANTINE).await {
+    let row = match account_data_row(holder, AccountDataKey::ACCOUNT_HOLDER_QUARANTINE).await {
         Ok(row) => row,
         // No cell at all is the legitimate "nothing was ever admitted" state.
         Err(_) => return Ok(Vec::new()),

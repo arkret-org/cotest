@@ -5,7 +5,7 @@
 //! wake-up hint, so this scenario checks both sides of every write:
 //!
 //! 1. `ak.account.invite_delivery` after a notify decision;
-//! 2. `ak.account.invite_quarantine` after a quarantine decision; and
+//! 2. `ak.account.holder_quarantine` after a quarantine decision; and
 //! 3. the same quarantine cell after a matching consent revoke invalidates it.
 //!
 //! Both active holder devices independently read account-data list/resource
@@ -613,7 +613,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     let quarantine_row = account_data_row_on_both_devices(
         &holder,
         &holder_secondary,
-        AccountDataKey::ACCOUNT_INVITE_QUARANTINE,
+        AccountDataKey::ACCOUNT_HOLDER_QUARANTINE,
     )
     .await?;
     ensure!(
@@ -641,7 +641,7 @@ pub async fn invite_service_fanout_live_run() -> Result<()> {
     let invalidated_row = account_data_row_on_both_devices(
         &holder,
         &holder_secondary,
-        AccountDataKey::ACCOUNT_INVITE_QUARANTINE,
+        AccountDataKey::ACCOUNT_HOLDER_QUARANTINE,
     )
     .await?;
     ensure!(
