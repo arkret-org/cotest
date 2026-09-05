@@ -26,7 +26,7 @@ use arkret_models_collaboration::events_payloads::agent::AgentKeyScope;
 use arkret_models_collaboration::sync_frames::account_sync::{
     NotificationDelta, NotificationDeltaAction,
 };
-use arkret_wire::{AgentHumanApprovalProblem, CapabilityActionId, ErrorEnvelope, ProfileId};
+use arkret_wire::{AgentHumanApprovalProblem, CapabilityActionId, Problem, ProfileId};
 use serde_json::Value;
 
 pub const VECTOR_ID_AGENT_PROVISION: &str = "ak.vector.agent.provision.v1";
@@ -1334,8 +1334,8 @@ impl MiniHumanApprovalGate {
     fn approval_required_response(&self) -> Result<Value> {
         let details = AgentHumanApprovalProblem::new(self.approval_request_id.clone())?;
         Ok(serde_json::to_value(
-            ErrorEnvelope::claim_required_human_approval("controller approval required", details)
-                .with_request_id("cotest-human-approval"),
+            Problem::claim_required_human_approval("controller approval required", details)
+                .with_instance("cotest-human-approval"),
         )?)
     }
 

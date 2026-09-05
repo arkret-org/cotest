@@ -187,17 +187,17 @@ fn generated_metadata_keeps_product_and_security_domains_separate() {
 
 #[test]
 fn unknown_remote_error_code_remains_round_trippable_wire_data() {
-    let detail = arkret_wire::ErrorDetail {
-        code: "vendor.example.future_error".to_owned(),
-        message: "future peer error".to_owned(),
-        retry_after_ms: None,
-        details: Default::default(),
-    };
-    assert_eq!(detail.error_code(), None);
-    let encoded = serde_json::to_value(&detail).expect("serialize open remote error");
-    let decoded: arkret_wire::ErrorDetail =
+    // The carrier is RFC 9457 `Problem`. `ErrorDetail` -- the `{code, message,
+    // retry_after_ms, details}` shape this used to assert on -- had no schema
+    // behind it and was removed with the compatibility envelope.
+    let problem =
+        arkret_wire::Problem::from_code("vendor.example.future_error", "future peer error");
+    assert_eq!(problem.error_code(), None);
+    let encoded = serde_json::to_value(&problem).expect("serialize open remote error");
+    let decoded: arkret_wire::Problem =
         serde_json::from_value(encoded).expect("deserialize open remote error");
-    assert_eq!(decoded.code, "vendor.example.future_error");
+    assert_eq!(decoded.code(), "vendor.example.future_error");
+    assert_eq!(decoded.detail, "future peer error");
 }
 
 #[test]

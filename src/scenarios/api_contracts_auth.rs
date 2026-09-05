@@ -151,7 +151,7 @@ pub async fn contact_edges_are_rejected() -> Result<()> {
     match alice.sdk().contacts_request(&self_request).await {
         Err(arkret_http_client::Error::Api { status, error }) => {
             assert_eq!(status, StatusCode::BAD_REQUEST.as_u16());
-            assert_eq!(error.error.code, "param_invalid");
+            assert_eq!(error.code(), "param_invalid");
         }
         Err(error) => return Err(error.into()),
         Ok(outcome) => {
