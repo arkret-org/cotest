@@ -515,13 +515,20 @@ fn apply_delta_entries(cells: &mut BTreeMap<CellRef, CellState>, delta: &[Value]
     Ok(())
 }
 
+/// The fixture's cells are declared as values, so this asks for the value-leaf
+/// shape explicitly.
+///
+/// `values_only` still runs the section 6.2.1 membership check: if the fixture
+/// starts naming a `cas_register` family it fails here rather than hashing a
+/// value leaf for a cell whose leaf is its head set.
 fn compute_root_str(cells: &BTreeMap<CellRef, CellState>) -> Result<String> {
-    Ok(
-        compute_state_root(cells, arkret_canonical::DigestSuite::Sha256)
-            .map_err(|err| anyhow!("state_root compute failed: {err}"))?
-            .as_str()
-            .to_owned(),
+    Ok(compute_state_root(
+        arkret_state::GovernanceView::values_only(cells),
+        arkret_canonical::DigestSuite::Sha256,
     )
+    .map_err(|err| anyhow!("state_root compute failed: {err}"))?
+    .as_str()
+    .to_owned())
 }
 
 fn cell_ref(raw: &str) -> Result<CellRef> {
