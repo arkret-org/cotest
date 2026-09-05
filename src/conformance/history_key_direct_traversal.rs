@@ -1880,14 +1880,36 @@ fn build_replay_kat_material(kat: &Value) -> Result<ReplayKatMaterial> {
     let digest_suite_cell = replay_kat_cell(CellFamilyId::REALM_DIGEST_SUITE_V1)?;
     let state = BTreeMap::from([
         (
-            notary_cell,
+            notary_cell.clone(),
             CellState::Value(serde_json::to_value(&notary)?),
         ),
-        (digest_suite_cell, CellState::Value(json!("sha256"))),
+        (digest_suite_cell.clone(), CellState::Value(json!("sha256"))),
     ]);
-    let state_root = compute_state_root(&state, arkret_canonical::DigestSuite::Sha256)?;
     let genesis_digest = Hash::new(
         genesis_event.event_digest_with_digest_suite(arkret_canonical::DigestSuite::Sha256)?,
+    )?;
+    // Both cells are `cas_register` families, so their state_root leaves are
+    // head sets rather than settled values (spec section 6.2.1). The genesis
+    // Event is what wrote them, so it is the head of each.
+    let cas_heads = arkret_state::CasHeadsByCell::from([
+        (
+            notary_cell,
+            vec![arkret_state::lattice::cas_register::CasHead {
+                move_id: genesis_digest.clone(),
+                value: serde_json::to_value(&notary)?,
+            }],
+        ),
+        (
+            digest_suite_cell,
+            vec![arkret_state::lattice::cas_register::CasHead {
+                move_id: genesis_digest.clone(),
+                value: json!("sha256"),
+            }],
+        ),
+    ]);
+    let state_root = compute_state_root(
+        arkret_state::GovernanceView::new(&state, &cas_heads),
+        arkret_canonical::DigestSuite::Sha256,
     )?;
     let genesis_seal = replay_kat_seal(
         ReplayKatSealInput {
