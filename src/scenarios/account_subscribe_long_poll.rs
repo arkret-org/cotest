@@ -676,6 +676,10 @@ async fn accept_invite_join_now(
         serde_json::to_value(
             arkret_models_collaboration::governance::membership_invite::InviteAcceptPayload {
                 invite_id: arkret_identifiers::InviteId::new(invite_id)?,
+                // Directed accept: the stored account is the only signed source
+                // the ak.component.invite.live_target.v1 release write can
+                // derive its subject from (governance-objects.md section 5.3).
+                invitee_account_id: Some(client_account_id(invitee)?),
                 extensions: Default::default(),
             },
         )?,

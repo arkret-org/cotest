@@ -1,4 +1,4 @@
-//! Live acceptance for the per-holder new-source quota that guards the invite
+//! Live acceptance for the per-holder new-source quota that guards the holder
 //! quarantine inbox (`identity/consent-model.md` sections 6.1.1.1 to 6.1.1.4).
 //!
 //! Covers `ak.vector.invite.new_source_quota_holder_admission.v1` and
@@ -10,7 +10,7 @@
 //! PostgreSQL-backed Station is measured against the same bytes the offline
 //! fixture runner executes.
 //!
-//! Every assertion is taken from the **holder's** `ak.account.invite_quarantine`
+//! Every assertion is taken from the **holder's** `ak.account.holder_quarantine`
 //! cell, because the requester side is designed to be indistinguishable: an
 //! admitted quarantine, a quota drop, a TTL drop, an unknown holder and a policy
 //! deny all return the same opaque `deferred`. Checking the requester's response
@@ -49,7 +49,7 @@ const REQUIRE_EXPLICIT_CONSENT_CASE: &str =
 /// first and with repeats preserved: a repeat contact from an already-charged
 /// source is a second entry, not a second charge.
 async fn quarantined_sources(holder: &TestActorClient) -> Result<Vec<String>> {
-    let row = match account_data_row(holder, AccountDataKey::ACCOUNT_INVITE_QUARANTINE).await {
+    let row = match account_data_row(holder, AccountDataKey::ACCOUNT_HOLDER_QUARANTINE).await {
         Ok(row) => row,
         // No cell at all is the legitimate "nothing was ever admitted" state.
         Err(_) => return Ok(Vec::new()),
@@ -334,6 +334,210 @@ async fn set_consent_profile(holder: &TestActorClient, profile: ConsentProfile) 
     ensure!(
         updated.consent_profile == profile,
         "Station rewrote the holder consent_profile"
+    );
+    Ok(())
+}
+
+/// Pending-review entries of one `surface_kind`, oldest first, as
+/// `(source_peer_principal_id, consent_scope)` pairs.
+async fn quarantine_entries_of(
+    holder: &TestActorClient,
+    surface_kind: &str,
+) -> Result<Vec<(String, String)>> {
+    let row = match account_data_row(holder, AccountDataKey::ACCOUNT_HOLDER_QUARANTINE).await {
+        Ok(row) => row,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let entries = row.content["quarantine_entries"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    Ok(entries
+        .iter()
+        .filter(|entry| entry["surface_kind"] == surface_kind)
+        .filter_map(|entry| {
+            Some((
+                entry["source_peer_principal_id"].as_str()?.to_owned(),
+                entry["consent_scope"].as_str()?.to_owned(),
+            ))
+        })
+        .collect())
+}
+
+/// Submit `ak.self.consent.command.request.v1` and assert the opaque outcome.
+///
+/// The response is byte-identical for admission, quota drop, TTL drop, unknown
+/// holder and policy deny, so it is asserted as a constant here and every real
+/// assertion is taken from the holder's cell.
+async fn request_consent(
+    requester: &TestActorClient,
+    holder: &TestActorClient,
+    service_did: &str,
+    consent_scope: &str,
+) -> Result<()> {
+    let outcome = expect_json(
+        requester
+            .post("/_arkret/self/consent/request")
+            .json(&serde_json::json!({
+                "holder_account_id": {
+                    "principal_id": actor_core_id(&holder.actor)?,
+                    "station_id": actor_core_id(service_did)?,
+                },
+                "consent_scope": consent_scope,
+            })),
+        StatusCode::OK,
+    )
+    .await?;
+    ensure!(
+        outcome == serde_json::json!({ "accepted_for_processing": true }),
+        "consent request returned something other than the closed opaque outcome: {outcome}"
+    );
+    Ok(())
+}
+
+/// `ak.vector.invite.quarantine_disclosure_indistinguishable.v1`, the
+/// `consent_request` branch.
+///
+/// `ak.self.consent.command.request.v1` is no longer a shell: a non-invite scope
+/// that clears the section 6.1.1 chokepoint writes exactly one entry whose
+/// `surface_kind` is `consent_request`, that entry carries neither Event ref nor
+/// digest, and a repeat while it is live is a no-op rather than a second entry.
+pub async fn consent_request_quarantine_branch_run() -> Result<()> {
+    let case = canonical_admission_case(REPLAYABLE_ADMISSION_CASE)?;
+    let server = spawn_under_canonical_ceiling("consent-request-quarantine", &case).await?;
+    let holder = holder_with_quarantine_policy(&server, "bob-consent-request").await?;
+    let requester = inviter(&server, "alice-consent-request", 0xf1).await?;
+    let service_did = server.service_did().as_str().to_owned();
+
+    request_consent(&requester, &holder, &service_did, "direct_message").await?;
+    let requester_core = actor_core_id(&requester.actor)?;
+    ensure!(
+        quarantine_entries_of(&holder, "consent_request").await?
+            == vec![(requester_core.clone(), "direct_message".to_owned())],
+        "a consent request that cleared the chokepoint must write exactly one consent_request entry"
+    );
+    ensure!(
+        quarantine_entries_of(&holder, "invite_delivery")
+            .await?
+            .is_empty(),
+        "a consent request must not be recorded as an invite delivery"
+    );
+
+    // Section 6.1.1.4, consent_request branch: deduplication is live-entry
+    // uniqueness over (account_id, source_peer_principal_id, consent_scope).
+    // The operation has no idempotency key and no nonce, so there is nothing
+    // else it could dedupe on.
+    request_consent(&requester, &holder, &service_did, "direct_message").await?;
+    ensure!(
+        quarantine_entries_of(&holder, "consent_request")
+            .await?
+            .len()
+            == 1,
+        "a repeat request while the entry is live must be a no-op, not a second entry"
+    );
+
+    // A different scope is a different live key, so it is a second pending item.
+    request_consent(&requester, &holder, &service_did, "voice_call").await?;
+    ensure!(
+        quarantine_entries_of(&holder, "consent_request").await?
+            == vec![
+                (requester_core.clone(), "direct_message".to_owned()),
+                (requester_core, "voice_call".to_owned()),
+            ],
+        "a second scope from the same requester is its own live key"
+    );
+
+    // The registered body pins the scope away from `invite`: an invite belongs
+    // to invite delivery, and this branch has no representation for it. Caller
+    // shape rejection is not a holder signal.
+    let refused = requester
+        .post("/_arkret/self/consent/request")
+        .json(&serde_json::json!({
+            "holder_account_id": {
+                "principal_id": actor_core_id(&holder.actor)?,
+                "station_id": actor_core_id(&service_did)?,
+            },
+            "consent_scope": "invite",
+        }))
+        .send()
+        .await?;
+    ensure!(
+        refused.status().is_client_error(),
+        "an invite-scope consent request must be refused at the request boundary, got {}",
+        refused.status()
+    );
+
+    // The cell is the only observable, and the refused request added nothing.
+    ensure!(
+        quarantine_entries_of(&holder, "consent_request")
+            .await?
+            .len()
+            == 2,
+        "a refused invite-scope request must not touch the cell"
+    );
+    Ok(())
+}
+
+/// `contact-and-direct-conversation.md` section 1.1 -- Contact shares the
+/// chokepoint, not the carrier.
+///
+/// The carrier half is asserted live here: a stranger's first Contact request
+/// forms the Contact `pending_incoming` head and leaves the holder quarantine
+/// cell at zero entries, on either `surface_kind`. Giving Contact a quarantine
+/// entry would put a second parallel review carrier in front of the same fact
+/// and let it fight the Contact state machine.
+///
+/// The billing half -- that the same first contact consumes one shared
+/// new-source slot -- is asserted offline by
+/// `conformance::invite_new_source_quota` against
+/// `chokepoint_contract.contact_delivery_consumes_a_new_source_slot`. It is not
+/// asserted live here because both actors share one Station in this harness,
+/// and soland stores a same-Station Contact pair as a single directional record
+/// whose establishment cannot be dropped for the holder alone without also
+/// erasing the requester's own `pending_outgoing` view. See
+/// `arkret-work/work/active/
+/// 2026-09-05-1450-soland-same-station-contact-request-bypasses-the-shared-new-source-quota.md`.
+pub async fn contact_first_contact_bills_the_shared_quota_run() -> Result<()> {
+    let case = canonical_admission_case(REPLAYABLE_ADMISSION_CASE)?;
+    let server = spawn_under_canonical_ceiling("contact-shared-quota", &case).await?;
+    let holder = holder_with_quarantine_policy(&server, "bob-contact-shared-quota").await?;
+    let stranger = inviter(&server, "alice-contact-shared-quota", 0xf5).await?;
+
+    stranger
+        .request_contact(&holder.actor)
+        .await
+        .context("a stranger's first Contact request")?;
+    ensure!(
+        quarantine_entries_of(&holder, "consent_request")
+            .await?
+            .is_empty()
+            && quarantine_entries_of(&holder, "invite_delivery")
+                .await?
+                .is_empty(),
+        "a Contact request has its own pending_incoming state and MUST NOT get a second parallel review carrier"
+    );
+    let contacts = expect_json(holder.get("/_arkret/self/contacts"), StatusCode::OK).await?;
+    ensure!(
+        serde_json::to_string(&contacts)?.contains(&actor_core_id(&stranger.actor)?),
+        "the first Contact request must still form the holder's pending_incoming head: {contacts}"
+    );
+
+    // An ordinary invite delivery still writes its own branch into the same
+    // cell, so the emptiness above is the Contact rule and not a dead cell.
+    let inviter_peer = inviter(&server, "alice-contact-shared-quota-invite", 0xf6).await?;
+    let dispatched =
+        create_and_dispatch_explicit_invite(&inviter_peer, &holder, "contact carrier control")
+            .await?;
+    assert_opaque_deferred(&dispatched.outcome)?;
+    ensure!(
+        quarantine_entries_of(&holder, "invite_delivery")
+            .await?
+            .len()
+            == 1
+            && quarantine_entries_of(&holder, "consent_request")
+                .await?
+                .is_empty(),
+        "invite delivery writes the invite_delivery branch while Contact writes nothing here"
     );
     Ok(())
 }

@@ -229,7 +229,10 @@ test.describe("chat advanced", () => {
             kind: "ak.content.text",
             body,
             mentions: [
-              { kind: "mention", subject_id: fixture.bob.id },
+              {
+                kind: "mention",
+                subject_account_id: accountActorId(fixture.bob.id).account_id,
+              },
             ],
           },
         },
@@ -249,7 +252,12 @@ test.describe("chat advanced", () => {
     );
     expect(mention?.payload).toMatchObject({
       content: {
-        mentions: [{ kind: "mention", subject_id: fixture.bob.id }],
+        mentions: [
+          {
+            kind: "mention",
+            subject_account_id: accountActorId(fixture.bob.id).account_id,
+          },
+        ],
       },
     });
     expect(mention?.payload).not.toHaveProperty("mention_routing_hint");
@@ -282,7 +290,10 @@ test.describe("chat advanced", () => {
           kind: "ak.content.text",
           body,
           mentions: [
-            { kind: "mention", subject_id: fixture.bob.id },
+            {
+              kind: "mention",
+              subject_account_id: accountActorId(fixture.bob.id).account_id,
+            },
           ],
         },
       },
@@ -352,7 +363,12 @@ test.describe("chat advanced", () => {
     expect(rootProjection).toMatchObject({
       payload: {
         content: {
-          mentions: [{ kind: "mention", subject_id: fixture.bob.id }],
+          mentions: [
+            {
+              kind: "mention",
+              subject_account_id: accountActorId(fixture.bob.id).account_id,
+            },
+          ],
         },
       },
     });

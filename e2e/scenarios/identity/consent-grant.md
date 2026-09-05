@@ -99,7 +99,7 @@
 - **E1.1 time window (not_before/valid_until) 失效**:alice grant 一个 `valid_until = now + 5s` 的 consent,bob 在 5s 内能 contact;5s 后再发新请求被 gate(consent 已自然过期,不需要 revoke);spec §2 time window 段
 - **E1.2 revoke 后再次 grant**:在 Phase F 之后,alice 重新 grant 同一 peer 同一 scope,bob 再次能 contact;验证 or-set add-after-remove 在 LWW / add-wins 规则下的收敛(具体规则看 spec §3)
 - **E1.3 scope 粒度 (invite/message/call) 隔离**:alice 只 grant `scope=message`,bob 试图发起 `scope=call` 的请求应该被 gate(`pending`),而 `scope=message` 请求放行;spec §2 scope 段
-- **E1.4 pairwise DID 上的 consent (privacy 增强)**:alice 对 bob 的 pairwise DID(而非 root DID)grant consent,bob 用 pairwise DID 走 contact 流程能通过,用其他 pairwise / root DID 则被 gate;验证 consent cell 的 key 是 (holder, peer) 元组而非仅 holder;spec §4 pairwise 段
+- **E1.4 pairwise consent 隔离**：由 Rust live scenario 承担，不在浏览器侧跑——Realm-local ephemeral pairwise actor 只作为 minimal-metadata Realm 内一条 accepted LeafNode 存在，没有账号 / PCR / session，无法驱动浏览器。`cotest/tests/consent_pairwise_isolation_live.rs` 在真实 minimal-metadata Realm 内接纳一个真实 pairwise actor，证明 `{kind:"pairwise_principal",realm_id,principal_id}` 与 root Account 的 `{kind:"actor"}` cell 相互不可见，且同一 key 换 Realm 即另一个 peer；spec `identity/consent-model.md` §3.2 / §6.1 查询步骤 1
 
 后三条建议拆成独立的小 spec(`identity/consent-grant.2`、`identity/consent-grant.3`、`identity/consent-grant.4`),保持主 scenario 紧凑。
 

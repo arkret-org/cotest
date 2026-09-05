@@ -703,25 +703,57 @@ fn validate_fork_resolution_peer_alignment(vector: &Value, vector_name: &str) ->
             }
         }
     }
-    for required in [
+    // Every registered case is named here. A case the list omits can be deleted
+    // from the fixture without any gate noticing, which is how
+    // `stale_peer_receives_resolution_before_alignment_challenge` -- the case
+    // pinning that a resolution fanout is exempt from peer_stale -- came to be
+    // carried without being required.
+    const REQUIRED_ALIGNED: &[&str] = &[
         "winner_single_element_aligns",
         "void_all_empty_set_aligns",
         "collision_subject_aligns_on_exact_point_resolve",
-    ] {
-        if !aligned.contains(required) {
+        "collision_subject_void_all_aligns_on_empty_point_resolve",
+        "stale_peer_receives_resolution_before_alignment_challenge",
+    ];
+    const REQUIRED_NOT_ALIGNED: &[&str] = &[
+        "extra_sibling_does_not_align",
+        "missing_winner_does_not_align",
+        "void_all_with_residual_sibling_does_not_align",
+        "undisclosed_position_does_not_align",
+        "carried_event_id_not_recomputed_is_rejected",
+        "actor_wide_scan_page_is_not_an_alignment_face",
+        "another_peer_alignment_does_not_clear_this_peer",
+    ];
+    for required in REQUIRED_ALIGNED {
+        if !aligned.contains(*required) {
             bail!("vector {vector_name} must cover the aligning case {required}");
         }
     }
-    for required in [
-        "extra_sibling_does_not_align",
-        "missing_winner_does_not_align",
-        "undisclosed_position_does_not_align",
-        "actor_wide_scan_page_is_not_an_alignment_face",
-        "another_peer_alignment_does_not_clear_this_peer",
-    ] {
-        if !not_aligned.contains(required) {
+    for required in REQUIRED_NOT_ALIGNED {
+        if !not_aligned.contains(*required) {
             bail!("vector {vector_name} must cover the non-aligning case {required}");
         }
+    }
+    // The two lists MUST name every registered case. A case the lists omit can
+    // be deleted from the fixture without any gate noticing, which is how
+    // `stale_peer_receives_resolution_before_alignment_challenge` -- the case
+    // pinning that a resolution fanout is exempt from peer_stale -- came to be
+    // carried while nothing required it.
+    let unlisted = aligned
+        .iter()
+        .filter(|name| !REQUIRED_ALIGNED.contains(&name.as_str()))
+        .chain(
+            not_aligned
+                .iter()
+                .filter(|name| !REQUIRED_NOT_ALIGNED.contains(&name.as_str())),
+        )
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unlisted.is_empty() {
+        bail!(
+            "vector {vector_name} carries case(s) {} that no required list names",
+            unlisted.join(", ")
+        );
     }
     Ok(())
 }

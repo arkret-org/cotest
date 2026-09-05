@@ -542,6 +542,61 @@ export function accountActorId(
   };
 }
 
+/// Canonical composite cell subject: `base64url_nopad(sha256(canonical_json([...])))`
+/// over the components in the order the family's `cell_subject` declares
+/// (encoding.md section 9.5).
+export function compositeCellSubject(parts: unknown[]): string {
+  return createHash("sha256").update(canonicalJson(parts), "utf8").digest(
+    "base64url",
+  );
+}
+
+/// The Realm live-target slot for one invitee account.
+///
+/// governance-objects.md section 5.3: the subject is the single-component
+/// canonical_json composite over `payload.invitee_account_id` and carries no
+/// `realm_id` — the cell is already located by the Event envelope's Realm.
+export function inviteLiveTargetCell(
+  accountId: Record<string, unknown>,
+): string {
+  const subject = compositeCellSubject([canonicalJson(accountId)]);
+  return `ak:cell:ak.component.invite.live_target.v1:${subject}`;
+}
+
+/// The `head_eq` guard an invite Move owes on the live-target slot.
+///
+/// `ak.invite.create` asserts the registered free value; every registered
+/// release asserts the stored value, which is the occupying create Event id in
+/// `ak:event:` form. `invite_id` and `create_event_id` are the same 33-octet
+/// token under two prefixes, and only the `ak:event:` spelling ever matches —
+/// the other silently strands the slot, so the retype happens here once.
+function inviteLiveTargetPreconditions(
+  kind: string,
+  payload: Record<string, unknown>,
+): Array<Record<string, unknown>> | undefined {
+  const account = payload.invitee_account_id;
+  if (!account || typeof account !== "object") return undefined;
+  const cell = inviteLiveTargetCell(account as Record<string, unknown>);
+  if (kind === "ak.invite.create") {
+    return [{ cell_id: cell, predicate: { op: "head_eq", value: "__unset__" } }];
+  }
+  if (
+    kind !== "ak.invite.accept" && kind !== "ak.invite.cancel" &&
+    kind !== "ak.invite.revoke"
+  ) {
+    return undefined;
+  }
+  const inviteId = payload.invite_id;
+  if (typeof inviteId !== "string" || !inviteId.startsWith("ak:invite:")) {
+    return undefined;
+  }
+  const createEventId = `ak:event:${inviteId.slice("ak:invite:".length)}`;
+  return [{
+    cell_id: cell,
+    predicate: { op: "head_eq", value: createEventId },
+  }];
+}
+
 export function serviceActorId(serviceId: string): ActorId {
   return { kind: "service", service_id: requireDidCoreId(serviceId) };
 }
@@ -1379,6 +1434,15 @@ export async function acceptInviteApi(
   opts: {
     server?: SolandKey;
     sealBasis?: Record<string, unknown>;
+    /// Set `false` for a third-party invite, which stores no account.
+    ///
+    /// governance-objects.md section 5.3 binds the optional
+    /// `invitee_account_id` to the persisted pre-state with
+    /// `stored_field_matches_payload`: a directed invite that omits it strands
+    /// its live-target slot, and a third-party invite that carries one is
+    /// forging a release of somebody else's. Directed is the default because
+    /// it is the shape every scenario here accepts.
+    directed?: boolean;
   } = {},
 ) {
   let sealBasis = opts.sealBasis;
@@ -1399,7 +1463,12 @@ export async function acceptInviteApi(
     kind: "ak.invite.accept",
     actorSeq: 0,
     sealBasis,
-    payload: { invite_id: inviteId },
+    payload: {
+      invite_id: inviteId,
+      ...(opts.directed === false ? {} : {
+        invitee_account_id: accountActorId(actorId, opts.server).account_id,
+      }),
+    },
   }), { server: opts.server, context: `accept invite ${inviteId}` });
 }
 
@@ -1433,11 +1502,15 @@ export async function sendMessageApi(
     server?: SolandKey;
     encrypted?: boolean;
     createdAt?: string;
+    // A bare string is the mention subject's principal DID; it is completed
+    // with this server's Station to form the whole AccountId the wire needs
+    // (identity-handles.md 3.8). Pass the object form to address another
+    // Station explicitly.
     mentions?: Array<
       | string
       | {
           kind: "mention";
-          subject_id: string;
+          subject_account_id: { principal_id: string; station_id: string };
           handle_at_time?: string;
           mention_text_original?: string;
         }
@@ -1465,7 +1538,11 @@ export async function sendMessageApi(
           ? {
               mentions: opts.mentions.map((mention) =>
                 typeof mention === "string"
-                  ? { kind: "mention", subject_id: mention }
+                  ? {
+                      kind: "mention",
+                      subject_account_id: accountActorId(mention, opts.server)
+                        .account_id,
+                    }
                   : mention,
               ),
             }
@@ -1739,7 +1816,12 @@ export function signedEventEnvelope(
     hlc,
     prev_refs: args.prevRefs ?? [],
     refs: args.refs ?? [],
-    preconditions: args.preconditions,
+    // An invite Move that writes the live-target slot MUST carry that cell's
+    // head_eq. Deriving it here keeps every harness-authored invite conformant
+    // without each scenario re-spelling the cell; an explicit precondition list
+    // still wins, which is how a negative case proves a wrong guard is refused.
+    preconditions: args.preconditions ??
+      inviteLiveTargetPreconditions(args.kind, payload),
     seal_ref: args.sealRef,
     seal_basis: args.sealBasis,
     auth_context: args.authContext,

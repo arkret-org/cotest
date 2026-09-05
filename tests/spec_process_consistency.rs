@@ -34,13 +34,22 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
         let writes = contracts[kind]["cell_writes"]
             .as_array()
             .unwrap_or_else(|| panic!("{kind} must declare cell_writes"));
+        // governance-objects.md section 5.3: every directed invite Move also
+        // touches the Realm live-target slot, which is the sole truth source
+        // for "one live directed invite per invitee". accept keeps the slot
+        // release last so the member join stays adjacent to the lifecycle
+        // write it is atomic with.
         let expected_families: &[&str] = if kind == "ak.invite.accept" {
             &[
                 "ak.component.invite.lifecycle.v1",
                 "ak.component.member.state.v1",
+                "ak.component.invite.live_target.v1",
             ]
         } else {
-            &["ak.component.invite.lifecycle.v1"]
+            &[
+                "ak.component.invite.lifecycle.v1",
+                "ak.component.invite.live_target.v1",
+            ]
         };
         let actual_families: Vec<_> = writes
             .iter()
@@ -54,9 +63,19 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
             actual_families, expected_families,
             "{kind} exact registered write set"
         );
+        // The write count is branch-dependent, not per kind: accept and revoke
+        // derive the slot write only when the payload carries
+        // `invitee_account_id`, so the fixture records the maximal branch under
+        // its own key rather than one number per kind.
+        let counted_branch = match kind {
+            "ak.invite.accept" => "ak.invite.accept.directed",
+            "ak.invite.revoke" => "ak.invite.revoke.directed_terminal",
+            other => other,
+        };
         assert_eq!(
-            vector["expected"]["registered_write_counts"][kind],
-            serde_json::json!(writes.len())
+            vector["expected"]["registered_write_counts"][counted_branch],
+            serde_json::json!(writes.len()),
+            "{kind} maximal registered write count"
         );
         assert_eq!(contracts[kind]["plane"], "control");
         assert_eq!(contracts[kind]["sealed"], true);
@@ -138,8 +157,214 @@ fn invite_lifecycle_and_acceptance_membership_writes_are_exact() {
             "token_invite_cancel_revoked_is_invite_kind_requires_revoke",
             "token_invite_revoke_revoked_is_accepted",
             "claimed_invite_accept_is_accepted",
+            "direct_create_and_accept_release_the_live_target_slot",
+            "send_failed_revoke_keeps_the_live_target_slot_claimed",
         ],
     );
+}
+
+/// `ak.vector.invite.live_target_uniqueness.v1` (`conformance-vectors.md`
+/// section 23.4.1).
+///
+/// Every claim in the vector is checked against the registry, the schemas and
+/// the SDK's own projection rather than restated: the fixture names the
+/// variants, and this test proves the artifacts they describe actually say what
+/// they claim. The one that matters most is the prefix: the slot value is the
+/// literal `ak:event:` create id, so a release Move that spells its `head_eq`
+/// as `ak:invite:` can never match and would strand the account forever.
+#[test]
+fn invite_live_target_uniqueness_is_carried_by_the_registered_slot() {
+    const FAMILY: &str = "ak.component.invite.live_target.v1";
+    let catalog = read_json(
+        &spec_artifacts_root()
+            .join("registry")
+            .join("contract-registry.json"),
+    );
+    let contracts = &catalog["event_kind_registry"]["cell_contracts"];
+
+    // The claim write stores `envelope.event_id` verbatim and the subject is a
+    // single-component canonical_json composite over the invitee account.
+    // encoding.md section 4.1 forbids `realm_id` in a subject: the cell is
+    // already located by the envelope's Realm.
+    let claim = live_target_write(&contracts["ak.invite.create"], FAMILY);
+    assert_eq!(claim["lattice"].as_str(), Some("cas_register"));
+    assert_eq!(claim["bottom"].as_str(), Some("reject"));
+    assert_eq!(claim["initial_value"].as_str(), Some("__unset__"));
+    assert_eq!(
+        claim
+            .pointer("/effect_projection/value/envelope_field")
+            .and_then(Value::as_str),
+        Some("event_id"),
+        "the slot value is the create Event id, not a retyped invite_id"
+    );
+    let components = claim
+        .pointer("/cell_subject/components")
+        .and_then(Value::as_array)
+        .expect("single-component composite subject");
+    assert_eq!(components.len(), 1);
+    assert_eq!(
+        components[0]["field"].as_str(),
+        Some("payload.invitee_account_id")
+    );
+    assert_eq!(components[0]["kind"].as_str(), Some("canonical_json"));
+    assert!(
+        !serde_json::to_string(&claim["cell_subject"])
+            .expect("subject serializes")
+            .contains("realm_id"),
+        "encoding.md section 4.1 forbids realm_id inside a cell subject"
+    );
+
+    // Release writes: cancel is unconditional (its account is required),
+    // accept and revoke are gated on the optional account being present, and
+    // every one of them sets the registered free value back.
+    for (kind, condition_field) in [
+        ("ak.invite.accept", Some("payload.invitee_account_id")),
+        ("ak.invite.cancel", None),
+        ("ak.invite.revoke", Some("payload.invitee_account_id")),
+    ] {
+        let release = live_target_write(&contracts[kind], FAMILY);
+        assert_eq!(
+            release
+                .pointer("/effect_projection/value/const")
+                .and_then(Value::as_str),
+            Some("__unset__"),
+            "{kind} releases the slot by setting the registered free value"
+        );
+        assert_eq!(
+            release.pointer("/condition/field").and_then(Value::as_str),
+            condition_field,
+            "{kind} release condition"
+        );
+    }
+
+    // A third-party create never claims the slot, which is what keeps 3PID
+    // invites out of the directed uniqueness rule entirely.
+    assert!(
+        contracts["ak.invite.third_party"]["cell_writes"]
+            .as_array()
+            .expect("third_party cell_writes")
+            .iter()
+            .all(|write| write["cell_family"].as_str() != Some(FAMILY)),
+        "a third-party invite MUST NOT claim the directed live-target slot"
+    );
+
+    // Both directions of the forgery/leak guard are the same predicate.
+    for kind in ["ak.invite.accept", "ak.invite.revoke"] {
+        let requirements = contracts[kind]["pre_state_requirements"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{kind} must declare pre_state_requirements"));
+        assert!(
+            requirements.iter().all(|requirement| {
+                requirement
+                    .pointer("/predicate/kind")
+                    .and_then(Value::as_str)
+                    == Some("stored_field_matches_payload")
+            }),
+            "{kind} binds its optional invitee to the persisted pre-state"
+        );
+    }
+    // `send_failed` keeps the invite live, so the schema forbids the field that
+    // would derive a release write at all.
+    let revoke_payload = read_json(
+        &spec_artifacts_root()
+            .join("schemas")
+            .join("event-payload.schema.json"),
+    );
+    let guard = revoke_payload
+        .pointer("/$defs/invite_revoke_payload/allOf")
+        .and_then(Value::as_array)
+        .expect("invite_revoke_payload declares its send_failed guard");
+    assert!(
+        guard.iter().any(|clause| {
+            clause
+                .pointer("/if/properties/target_state/const")
+                .and_then(Value::as_str)
+                == Some("send_failed")
+                && clause
+                    .pointer("/then/not/required")
+                    .and_then(Value::as_array)
+                    .is_some_and(|required| {
+                        required
+                            .iter()
+                            .any(|field| field.as_str() == Some("invitee_account_id"))
+                    })
+        }),
+        "send_failed MUST NOT carry invitee_account_id"
+    );
+
+    // The rejection is closed and never bypassed into cas_conflict.
+    let fixture =
+        read_json(&spec_artifacts_root().join("fixtures/protocol-edge-cases-fixture.json"));
+    let vector = find_vector(&fixture, "ak.vector.invite.live_target_uniqueness.v1");
+    assert_eq!(
+        vector["expected"]["occupied_error"]["code"].as_str(),
+        Some("failed_precondition")
+    );
+    assert_eq!(
+        vector["expected"]["occupied_error"]["reason_code"].as_str(),
+        Some(arkret_wire::ReasonCode::INVITE_LIVE_TARGET_OCCUPIED)
+    );
+    assert_eq!(
+        vector["expected"]["live_states"],
+        serde_json::json!(["pending", "send_failed"]),
+        "claimed is unreachable for a directed invite"
+    );
+    let dtos = read_json(
+        &spec_artifacts_root()
+            .join("schemas")
+            .join("service-operation-dtos.schema.json"),
+    );
+    let problem = &dtos["$defs"]["InviteLiveTargetOccupiedProblem"];
+    assert_eq!(
+        problem["required"],
+        serde_json::json!(["reason_code", "invite_id", "create_event_id"])
+    );
+    assert_eq!(problem["additionalProperties"], serde_json::json!(false));
+
+    // The SDK DTO derives one member from the other, so the pair cannot
+    // disagree, and the head_eq value is always the `ak:event:` spelling.
+    let create_event_id =
+        arkret_identifiers::EventId::new("ak:event:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe")
+            .expect("fixture create Event id");
+    let details = arkret_wire::InviteLiveTargetOccupiedProblem::new(create_event_id.clone());
+    assert_eq!(
+        details.invite_id().as_str(),
+        "ak:invite:AUf4Nwr-Lqj1RlqDi4awPbskicm37buT2CswWBfZbgLe"
+    );
+    let slot = arkret_schema::InviteLiveTargetSlot::held_by_invite(details.invite_id());
+    assert_eq!(
+        slot.head_eq_value().expect("registered contract"),
+        serde_json::json!(create_event_id.as_str()),
+        "a release head_eq spelled as invite_id would never match the slot"
+    );
+    assert_eq!(
+        arkret_schema::invite_live_target_unset_value().expect("registered contract"),
+        serde_json::json!("__unset__")
+    );
+
+    assert_vector_variants(
+        "protocol-edge-cases-fixture.json",
+        "ak.vector.invite.live_target_uniqueness.v1",
+        &[
+            "second_directed_create_for_the_same_account_is_rejected_with_zero_writes",
+            "concurrent_directed_creates_resolve_to_one_slot_holder",
+            "terminal_release_then_reinvite_is_accepted",
+            "expired_at_wall_clock_alone_does_not_release_the_slot",
+            "send_failed_holder_requires_revoke_before_a_new_create",
+            "third_party_revoke_forging_invitee_account_id_is_reducer_projection_failed",
+            "directed_revoke_omitting_invitee_account_id_is_reducer_projection_failed",
+            "release_head_eq_spelled_as_invite_id_is_failed_precondition",
+        ],
+    );
+}
+
+fn live_target_write<'a>(contract: &'a Value, family: &str) -> &'a Value {
+    contract["cell_writes"]
+        .as_array()
+        .expect("registered cell_writes")
+        .iter()
+        .find(|write| write["cell_family"].as_str() == Some(family))
+        .unwrap_or_else(|| panic!("contract must declare a {family} write"))
 }
 
 #[test]

@@ -5,7 +5,7 @@
 
 use anyhow::{Result, anyhow, bail};
 use arkret_identifiers::{DidCoreId, Hash, RealmId};
-use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode};
+use arkret_models_collaboration::events_payloads::mention::{Mention, MentionNode, MentionTarget};
 use arkret_models_collaboration::governance::agent_participation::{
     AgentParticipationEntry, AgentParticipationError, AgentParticipationOutcome, ParticipationBits,
     ParticipationNextReplaceInput, ParticipationScope, effective_participation, fold_ceiling_chain,
@@ -14,13 +14,15 @@ use arkret_models_collaboration::governance::agent_participation::{
 use arkret_models_discovery::DirectoryAgentSelectorResolutionOutcome;
 use arkret_models_identity::claim_presentation::AgentSelectorClaim;
 use arkret_models_identity::handle::{Handle, HandleBindingState, HandleVisibility};
-use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId};
+use arkret_wire::{
+    AccountId, ActorId, Audience, PayloadProof, PayloadProofPurpose, ProfileId, SchemaId,
+};
 use chrono::{TimeZone, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
 use super::schema_validation_fixture::SchemaEnv;
-use super::{expected_str, required_str, required_u64};
+use super::{expected_bool, expected_str, required_str, required_u64};
 
 pub const VECTOR_ID_AGENT_MENTION_SELECTOR: &str = "ak.vector.agent.mention_selector.v1";
 pub const VECTOR_ID_AGENT_PARTICIPATION_CEILING_TIGHTEN: &str =
@@ -139,6 +141,19 @@ fn did_field(value: &Value, field: &str) -> Result<DidCoreId> {
     DidCoreId::new(required_str(value, field)?).map_err(Into::into)
 }
 
+/// Read a complete `AccountId` from the fixture. Mention subjects are never
+/// carried as a bare principal string, so the fixture side is typed too.
+fn account_pointer(value: &Value, pointer: &str) -> Result<AccountId> {
+    let raw = value
+        .pointer(pointer)
+        .cloned()
+        .ok_or_else(|| anyhow!("case missing account pointer {pointer}"))?;
+    let account: AccountId = serde_json::from_value(raw)
+        .map_err(|err| anyhow!("invalid account at {pointer}: {err}"))?;
+    account.validate()?;
+    Ok(account)
+}
+
 fn participation_reason(error: AgentParticipationError) -> String {
     let message = error.to_string();
     message
@@ -214,6 +229,20 @@ fn resolve_selector(
     Some(candidate)
 }
 
+/// The `identity-handles.md` §3.8.2 step-1 join: keep the MemberIdentity
+/// candidates whose `subject_actor_id` is the `account` branch, then compare
+/// that account with the mention subject over both components. The `service`
+/// branch never participates.
+fn member_identity_join<'a>(
+    candidates: &'a [ActorId],
+    subject_account_id: &AccountId,
+) -> Vec<&'a ActorId> {
+    candidates
+        .iter()
+        .filter(|candidate| candidate.as_account_id() == Some(subject_account_id))
+        .collect()
+}
+
 pub fn run_agent_mention_selector_vector() -> Result<()> {
     let fixture = participation_fixture()?;
     let vector = case(&fixture, VECTOR_ID_AGENT_MENTION_SELECTOR)?;
@@ -221,9 +250,19 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
     claim.validate()?;
     let outcome = selector_outcome(claim.clone())?;
 
-    let mention = Mention::new(outcome.subject_id.clone())
+    // The selector resolves an agent principal; the persisted mention target
+    // is that principal at the agent's Station, taken as a whole AccountId.
+    let expected_subject = account_pointer(vector, "/persisted_mention/subject_account_id")?;
+    let expected_controller =
+        account_pointer(vector, "/persisted_mention/controller_subject_account_id")?;
+    if outcome.subject_id != expected_subject.principal_id
+        || outcome.controller_subject_id != expected_controller.principal_id
+    {
+        bail!("fixture selector outcome and persisted mention name different principals");
+    }
+    let mention = Mention::new(expected_subject.clone())
         .with_agent_selector_metadata(
-            outcome.controller_subject_id.clone(),
+            expected_controller.clone(),
             Handle::parse(required_str(vector, "controller_handle")?)?,
             outcome.agent_slug.clone(),
         )
@@ -231,11 +270,14 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
         .with_resolved_at(Utc.with_ymd_and_hms(2026, 6, 19, 0, 2, 0).unwrap());
     let node = MentionNode::mention(mention.clone());
 
-    let expected_subject = did_field(vector, "agent_subject")?;
-    if mention.subject_id != expected_subject || node.target_id() != expected_subject.as_str() {
-        bail!("agent selector mention did not persist agent DID as authoritative subject_id");
+    if mention.subject_account_id != expected_subject
+        || node.target() != MentionTarget::Subject(&expected_subject)
+    {
+        bail!(
+            "agent selector mention did not persist the agent's complete AccountId as authoritative subject_account_id"
+        );
     }
-    if mention.controller_subject_id.as_ref() != Some(&claim.controller_subject_id) {
+    if mention.controller_subject_account_id.as_ref() != Some(&expected_controller) {
         bail!("agent selector mention lost controller audit metadata");
     }
     if mention.agent_slug_at_time.as_deref() != Some(required_str(vector, "agent_slug_at_time")?) {
@@ -252,10 +294,12 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
         "changed_agent_subject",
         "changed_agent_slug",
     )?)?;
-    if changed.subject_id == mention.subject_id {
+    if changed.subject_id == mention.subject_account_id.principal_id {
         bail!("changed selector control must target a different agent DID");
     }
-    if mention.subject_id.as_str() != expected_str(vector, "historical_target_after_slug_change")? {
+    if mention.subject_account_id
+        != account_pointer(vector, "/expected/historical_target_after_slug_change")?
+    {
         bail!("historical mention target was rewritten after slug change");
     }
 
@@ -264,6 +308,34 @@ pub fn run_agent_mention_selector_vector() -> Result<()> {
     }
     if resolve_selector(&[]).is_some() {
         bail!("unavailable agent selector resolution did not fail closed");
+    }
+
+    // Step 6 (negative, normative) — a Realm member sharing the agent's
+    // principal but hosted by another Station MUST NOT match this mention:
+    // no notification target, no authorization hit, and no §3.8.2
+    // MemberIdentity join hit.
+    let other_station = account_pointer(vector, "/expected/same_principal_other_station_account")?;
+    if expected_bool(vector, "same_principal_other_station_matches")? {
+        bail!("fixture must assert that a same-principal other-Station account does not match");
+    }
+    if other_station.principal_id != expected_subject.principal_id
+        || other_station.station_id == expected_subject.station_id
+    {
+        bail!("fixture negative account must share the principal and differ in Station");
+    }
+    if other_station == mention.subject_account_id
+        || MentionTarget::Subject(&other_station) == node.target()
+    {
+        bail!("mention target equality MUST cover principal_id and station_id");
+    }
+    let roster = vec![
+        ActorId::account(expected_subject.clone()),
+        ActorId::account(other_station.clone()),
+        ActorId::service(DidCoreId::new("ak:did_core:web:station.acme.example")?),
+    ];
+    let joined = member_identity_join(&roster, &mention.subject_account_id);
+    if joined != vec![&roster[0]] {
+        bail!("§3.8.2 MemberIdentity join MUST select only the addressed account; got {joined:?}");
     }
     Ok(())
 }

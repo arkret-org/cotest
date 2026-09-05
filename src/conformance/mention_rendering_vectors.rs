@@ -4,10 +4,11 @@
 //! `identity/identity-handles.md §3.8.1 / §3.8.2`.
 //!
 //! R3.2 mention node shape:
-//!   `{kind="mention", subject_id (MUST), handle_at_time?, display_name_at_time?,
-//!     mention_text_original?, resolved_at?}`.
-//! `subject_id` is the ONLY authoritative field for actor attribution; the
-//! handle / display strings are audit metadata.
+//!   `{kind="mention", subject_account_id (MUST), handle_at_time?,
+//!     display_name_at_time?, mention_text_original?, resolved_at?}`.
+//! `subject_account_id` is the ONLY authoritative field for actor attribution
+//! and carries the complete `AccountId`; the handle / display strings are
+//! audit metadata.
 //!
 //! Rendering (§3.8.2) is driven through the SDK
 //! [`arkret::identity::render_mention`] helper, which runs §3.2.1 over the
@@ -117,9 +118,13 @@ fn empty_selection<'a>(
 // ── VECT-COT-2.2 — new shape accepted ───────────────────────────────────────
 
 pub fn run_new_shape_accepted_vector() -> Result<()> {
+    let expected = subject_account(&subject()?)?;
     let value = json!({
         "kind": "mention",
-        "subject_id": "ak:did_core:web:alice.principal.example",
+        "subject_account_id": {
+            "principal_id": "ak:did_core:web:alice.principal.example",
+            "station_id": "ak:did_core:web:station.acme.example"
+        },
         "handle_at_time": "alice:acme.example",
         "display_name_at_time": "Alice Zhang",
         "mention_text_original": "@alice:acme.example",
@@ -127,21 +132,35 @@ pub fn run_new_shape_accepted_vector() -> Result<()> {
     });
     let mention: Mention =
         serde_json::from_value(value).map_err(|e| anyhow!("new mention shape MUST parse: {e}"))?;
-    if mention.subject_id.as_str() != "ak:did_core:web:alice.principal.example" {
-        bail!("subject_id drifted under parse");
+    if mention.subject_account_id != expected {
+        bail!("subject_account_id drifted under parse");
     }
     if mention.handle_at_time.as_ref().map(Handle::canonical) != Some("alice:acme.example") {
         bail!("handle_at_time audit metadata drifted");
     }
-    // Minimal shape (kind + subject_id) MUST also accept; audit metadata omitted.
+    // Minimal shape (kind + subject_account_id) MUST also accept; audit
+    // metadata omitted.
     let minimal: Mention = serde_json::from_value(json!({
         "kind": "mention",
-        "subject_id": "ak:did_core:web:bob.principal.example"
+        "subject_account_id": {
+            "principal_id": "ak:did_core:web:bob.principal.example",
+            "station_id": "ak:did_core:web:station.acme.example"
+        }
     }))
     .map_err(|e| anyhow!("minimal mention MUST parse: {e}"))?;
     let wire = serde_json::to_value(&minimal).map_err(|e| anyhow!("serialise: {e}"))?;
     if wire.get("handle_at_time").is_some() {
         bail!("unset handle_at_time MUST be omitted on the wire");
+    }
+    // A bare principal carrier is no longer a legal mention subject: the
+    // Station component is required (identity-handles.md §3.8).
+    if serde_json::from_value::<Mention>(json!({
+        "kind": "mention",
+        "subject_account_id": "ak:did_core:web:bob.principal.example"
+    }))
+    .is_ok()
+    {
+        bail!("a bare principal mention subject MUST be rejected");
     }
     Ok(())
 }
@@ -254,14 +273,22 @@ pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()
     let s = subject()?;
     let account = subject_account(&s)?;
     // A mention whose audit `handle_at_time` is deliberately nonsense /
-    // stale. Actor attribution MUST come from `subject_id` only.
-    let mention = Mention::new(s.clone())
+    // stale. Actor attribution MUST come from `subject_account_id` only.
+    let mention = Mention::new(account.clone())
         .with_handle_at_time(Handle::parse("mallory:evil.example").map_err(|e| anyhow!("h: {e}"))?)
         .with_display_name_at_time("Totally Not Alice")
         .with_mention_text_original("@mallory:evil.example");
 
-    if mention.subject_id != s {
-        bail!("attribution field (subject_id) MUST be the authoritative subject");
+    if mention.subject_account_id != account {
+        bail!("attribution field (subject_account_id) MUST be the authoritative subject");
+    }
+    // The same principal hosted by another Station is a different subject.
+    let other_station = AccountId::new(
+        s.clone(),
+        DidCoreId::new("ak:did_core:web:other-station.acme.example")?,
+    );
+    if mention.subject_account_id == other_station {
+        bail!("mention subject equality MUST cover the Station component");
     }
 
     // Render: the authoritative selection over Alice's real claim MUST win
@@ -276,7 +303,7 @@ pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()
     match render {
         MentionRender::Verified { handle } if handle.canonical() == "alice:acme.example" => {}
         other => bail!(
-            "render MUST resolve from subject_id, NOT the bogus handle_at_time; got {other:?}"
+            "render MUST resolve from subject_account_id, NOT the bogus handle_at_time; got {other:?}"
         ),
     }
 
@@ -285,8 +312,10 @@ pub fn run_actor_attribution_independent_of_handle_at_time_vector() -> Result<()
     if wire.get("handle_at_time").and_then(|v| v.as_str()) != Some("mallory:evil.example") {
         bail!("handle_at_time MUST round-trip as opaque audit metadata");
     }
-    if wire.get("subject_id").and_then(|v| v.as_str()) != Some(s.as_str()) {
-        bail!("subject_id MUST round-trip as the authoritative reference");
+    if wire.get("subject_account_id")
+        != Some(&serde_json::to_value(&account).map_err(|e| anyhow!("serialise account: {e}"))?)
+    {
+        bail!("subject_account_id MUST round-trip as the authoritative reference");
     }
     Ok(())
 }

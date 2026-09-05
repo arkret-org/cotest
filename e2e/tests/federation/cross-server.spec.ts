@@ -32,6 +32,7 @@ import {
 import { stepShot } from "../../helpers/screenshots";
 import {
   acceptInviteApi,
+  accountActorId,
   advanceEnvelopeToActorFrontier,
   authHeaders,
   canonicalJson,
@@ -582,6 +583,11 @@ test.describe("cross-server federation", () => {
         kind: "ak.invite.accept",
         payload: {
           invite_id: server2Invite.id,
+          // Directed invite: the stored account is the only signed source the
+          // live-target release write can derive its subject from, and
+          // omitting it fails the registered pre-state requirement
+          // (governance-objects.md section 5.3).
+          invitee_account_id: accountActorId(bob.id, "server2").account_id,
         },
       });
       await submitSignedEventApi(request, bobToken, acceptanceEvent, {
