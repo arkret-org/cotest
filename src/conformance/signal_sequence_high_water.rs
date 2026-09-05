@@ -118,20 +118,6 @@ fn validate_allocator_cases(allocator: &Value) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn signal_sequence_domain_requires_the_complete_actor() {
-        let fixture = load_fixture_value(FIXTURE).unwrap();
-        validate_allocator_cases(&fixture["allocator"]).unwrap();
-        let mut old = fixture["allocator"].clone();
-        old["ordinary_domain"] = serde_json::json!(["sender_device_id", "canonical_scope_ref"]);
-        assert!(validate_allocator_cases(&old).is_err());
-    }
-}
-
 fn validate_receiver_cases(cases: &Value) -> Result<()> {
     for case in cases
         .as_array()
@@ -168,4 +154,18 @@ fn validate_receiver_cases(cases: &Value) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn signal_sequence_domain_requires_the_complete_actor() {
+        let fixture = load_fixture_value(FIXTURE).unwrap();
+        validate_allocator_cases(&fixture["allocator"]).unwrap();
+        let mut old = fixture["allocator"].clone();
+        old["ordinary_domain"] = serde_json::json!(["sender_device_id", "canonical_scope_ref"]);
+        assert!(validate_allocator_cases(&old).is_err());
+    }
 }

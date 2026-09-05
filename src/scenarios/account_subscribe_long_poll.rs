@@ -514,7 +514,7 @@ pub async fn cancelled_pending_invite_disappears_from_invite_views() -> Result<(
     )
     .await?;
 
-    cancel_invite_now(&alice, &realm_id, &invite_id, &bob_client).await?;
+    cancel_invite_now(&alice, &realm_id, &invite_id, bob_client).await?;
 
     eventually(
         "cancelled invite is hidden from invite listings",

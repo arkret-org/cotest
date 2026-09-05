@@ -218,14 +218,6 @@ pub fn run_signal_device_authorization_domain_vector() -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn signal_federation_fixture_preserves_full_actor_authorization() {
-        super::run_signal_federation_fixture_suite().unwrap();
-    }
-}
-
 pub fn run_signal_federation_fixture_suite() -> Result<()> {
     let fixture = load_fixture_value(FIXTURE)?;
     validate_profile(&fixture, ProfileId::SIGNAL_PEER_RELAY_V1)?;
@@ -505,4 +497,12 @@ fn validate_role_case_contract(case: &Value) -> Result<()> {
         other => bail!("unknown Signal role fixture {other}"),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn signal_federation_fixture_preserves_full_actor_authorization() {
+        super::run_signal_federation_fixture_suite().unwrap();
+    }
 }

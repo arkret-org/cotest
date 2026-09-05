@@ -1508,8 +1508,8 @@ mod realm_bootstrap_tests {
             arkret_wire::cba::PredicateOp::HeadEq
         );
         assert_eq!(precondition.predicate.value, Some(Value::Null));
-        assert!(membership.payload.get("delivery_status").is_none());
-        assert!(membership.payload.get("delivery_binding").is_none());
+        assert!(!membership.payload.contains_key("delivery_status"));
+        assert!(!membership.payload.contains_key("delivery_binding"));
     }
 
     #[test]
@@ -1526,8 +1526,8 @@ mod realm_bootstrap_tests {
                 }
             }))
         );
-        assert!(membership.payload.get("delivery_status").is_none());
-        assert!(membership.payload.get("delivery_binding").is_none());
+        assert!(!membership.payload.contains_key("delivery_status"));
+        assert!(!membership.payload.contains_key("delivery_binding"));
     }
 
     #[test]

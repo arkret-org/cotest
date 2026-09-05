@@ -953,10 +953,10 @@ fn probe_postgres_ready(connect_url: &str, deadline: Duration) -> bool {
     // Unix-socket server started by the image during database initialization.
     config.connect_timeout(Duration::from_secs(2));
     while Instant::now() < cutoff {
-        if let Ok(mut client) = config.connect(postgres::NoTls) {
-            if client.simple_query("SELECT 1").is_ok() {
-                return true;
-            }
+        if let Ok(mut client) = config.connect(postgres::NoTls)
+            && client.simple_query("SELECT 1").is_ok()
+        {
+            return true;
         }
         thread::sleep(Duration::from_millis(500));
     }
