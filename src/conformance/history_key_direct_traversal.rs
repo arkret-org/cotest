@@ -491,10 +491,15 @@ fn verify_rhrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixtur
     let ProjectedOp::Direct(rotate_op) = rotate_write.op else {
         bail!("RHRK rotate must project a direct CAS operation");
     };
-    if rotate_op.from.as_ref() != Some(&kat["projected_rotate_op"]["from"])
-        || rotate_op.value.as_ref() != Some(&kat["projected_rotate_op"]["to"])
-    {
-        bail!("RHRK production projector lost the exact from/to transition");
+    // event-auth-state-resolution.md section 9.3.1.4 deleted the rule that copied
+    // a Move's head_eq into `op.from`. A projected cas_register set carries the
+    // written value only; causality is the head identities Seal admission
+    // derives from the Move's own signed basis.
+    if rotate_op.from.is_some() {
+        bail!("a projected cas_register set must not carry op.from");
+    }
+    if rotate_op.value.as_ref() != Some(&kat["projected_rotate_op"]["to"]) {
+        bail!("RHRK production projector lost the exact rotated value");
     }
     let register_id = Hash::new(
         register_event.proofs[0]
@@ -512,11 +517,13 @@ fn verify_rhrk_production_projection_and_join(fixture: &HistoryKeyRecoveryFixtur
             .as_str()
             .to_owned(),
     )?;
+    // The rotate's signed basis covered the register write, so it supersedes
+    // that identity (section 9.3.1.3 items 1 and 4).
     let joined = CasRegister.join(
         &register_write.cell_id,
         &[
             SealedOp::new(register_id.clone(), register_op.clone()),
-            SealedOp::new(rotate_id.clone(), rotate_op),
+            SealedOp::superseding(rotate_id.clone(), rotate_op, vec![register_id.clone()]),
         ],
     );
     if joined != CellState::Value(kat["projected_rotate_op"]["to"].clone()) {
